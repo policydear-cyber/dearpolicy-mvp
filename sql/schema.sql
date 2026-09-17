@@ -167,16 +167,10 @@ CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw
 -- (or policy_id), so a query/constraint check that filters or joins purely on
 -- one of these other foreign-key columns still had no covering index
 -- (flagged by Supabase's performance advisor). Mirrors the migration applied
--- directly to the hosted Supabase project.
-CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_conversation_id ON chat_analysis_jobs(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_family_member_id ON chat_analysis_jobs(family_member_id);
-CREATE INDEX IF NOT EXISTS idx_chat_conversations_family_member_id ON chat_conversations(family_member_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_claim_session_id ON chat_messages(claim_session_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);
+-- directly to the hosted Supabase project. (A few more of these land later in
+-- this file, and in chat-upgrade.sql / coverage-ledger.sql, next to the
+-- tables/columns they depend on, which are created after this point.)
 CREATE INDEX IF NOT EXISTS idx_chat_messages_family_member_id ON chat_messages(family_member_id);
-CREATE INDEX IF NOT EXISTS idx_claim_sessions_family_member_id ON claim_sessions(family_member_id);
-CREATE INDEX IF NOT EXISTS idx_coverage_rules_family_member_id ON coverage_rules(family_member_id);
-CREATE INDEX IF NOT EXISTS idx_coverage_rules_policy_id ON coverage_rules(policy_id);
 CREATE INDEX IF NOT EXISTS idx_policies_family_member_id ON policies(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_policy_chunks_family_member_id ON policy_chunks(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_policy_corrections_account_id ON policy_corrections(account_id);
@@ -186,7 +180,6 @@ CREATE INDEX IF NOT EXISTS idx_policy_coverages_policy_id ON policy_coverages(po
 CREATE INDEX IF NOT EXISTS idx_policy_detected_people_account_id ON policy_detected_people(account_id);
 CREATE INDEX IF NOT EXISTS idx_policy_detected_people_matched_family_member_id ON policy_detected_people(matched_family_member_id);
 CREATE INDEX IF NOT EXISTS idx_policy_members_family_member_id ON policy_members(family_member_id);
-CREATE INDEX IF NOT EXISTS idx_policy_reference_coverages_policy_id ON policy_reference_coverages(policy_id);
 CREATE INDEX IF NOT EXISTS idx_premium_records_family_member_id ON premium_records(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_premium_records_source_document_id ON premium_records(source_document_id);
 
@@ -335,3 +328,10 @@ CREATE TABLE IF NOT EXISTS model_usage (
   ok boolean NOT NULL DEFAULT true
 );
 CREATE INDEX IF NOT EXISTS idx_model_usage_month ON model_usage(account_id, at);
+
+-- Remaining single-column FK indexes: these depend on tables/columns created
+-- later in this file (claim_sessions and the claim_session_id column it's
+-- referenced by, and policy_reference_coverages).
+CREATE INDEX IF NOT EXISTS idx_claim_sessions_family_member_id ON claim_sessions(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_claim_session_id ON chat_messages(claim_session_id);
+CREATE INDEX IF NOT EXISTS idx_policy_reference_coverages_policy_id ON policy_reference_coverages(policy_id);

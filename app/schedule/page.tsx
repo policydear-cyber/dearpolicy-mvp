@@ -101,7 +101,7 @@ export default function SchedulePage(){
       try{
         const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({policyId:doc.id})});
         const payload=await response.json();
-        if(!response.ok||payload.error)throw new Error(payload.error??"That document could not be read.");
+        if(!response.ok||payload.error)throw new Error("That document could not be read.");
         found+=Number(payload.stored??0);
         setStatus(`Read ${payload.name} — ${payload.stored} benefit${payload.stored===1?"":"s"} found. ${found} so far.`);
         await load();
@@ -125,7 +125,7 @@ export default function SchedulePage(){
       try{
         const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({})});
         const payload=await response.json();
-        if(!response.ok||payload.error)throw new Error(payload.error??"That document could not be read.");
+        if(!response.ok||payload.error)throw new Error("That document could not be read.");
         if(payload.done&&payload.stored==null){setUnread([]);break;}
         setStatus(`Read ${payload.name} — ${payload.stored} benefit${payload.stored===1?"":"s"} found.`);
         await checkUnread();
@@ -157,7 +157,7 @@ export default function SchedulePage(){
             offsetDays:draft.offsetDays===""?null:Number(draft.offsetDays),
             maximumDays:draft.maximumDays===""?null:Number(draft.maximumDays)}})});
       const payload=await response.json().catch(()=>({error:"That correction could not be saved."}));
-      if(!response.ok||payload.error)throw new Error(payload.error??"That correction could not be saved.");
+      if(!response.ok||payload.error)throw new Error("That correction could not be saved.");
       setOpenId("");setDraft(null);setStatus(`Saved. DearPolicy will use your version of “${benefit.benefitName}” from now on.`);
       await load();
     }catch(e){setStatus(e instanceof Error?e.message:"That correction could not be saved.");}

@@ -91,7 +91,7 @@ export default function PoliciesPage() {
       if (pdfPassword) form.set("pdfPassword", pdfPassword);
       const response = await fetch("/api/policies/upload", { method: "POST", body: form });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Upload failed");
+      if (!response.ok) throw new Error("Upload failed");
       setStatus("Upload received. DearPolicy is analysing it in the background; live progress appears below.");
       setFile(null);
       setPdfPassword("");
@@ -114,7 +114,7 @@ export default function PoliciesPage() {
         body: JSON.stringify({ policyId: policy.id }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Re-analysis failed");
+      if (!response.ok) throw new Error("Re-analysis failed");
       await refresh();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Re-analysis failed. Password-protected PDFs should be uploaded again with the password.");
@@ -126,27 +126,33 @@ export default function PoliciesPage() {
   // Uploading your own welcome booklet says you hold that cover. Asking who it
   // belongs to is the one question the document itself cannot answer.
   async function declareOwner(policyId: string, familyMemberId: string) {
-    const response = await fetch("/api/policies/link-person", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ policyId, familyMemberId, declared: true }),
-    });
-    const payload = await response.json();
     const who = family.find((m) => m.id === familyMemberId)?.display_name ?? "that profile";
-    setStatus(response.ok
-      ? `Saved — this policy is ${who}'s. Its benefits will now be used in answers. Upload a schedule or statement when you have one to confirm the amounts.`
-      : payload.error ?? "Could not save that");
-    if (response.ok) await refresh();
+    try {
+      const response = await fetch("/api/policies/link-person", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ policyId, familyMemberId, declared: true }),
+      });
+      if (!response.ok) throw new Error("Could not save that");
+      setStatus(`Saved — this policy is ${who}'s. Its benefits will now be used in answers. Upload a schedule or statement when you have one to confirm the amounts.`);
+      await refresh();
+    } catch {
+      setStatus("Could not save that. Please try again in a moment.");
+    }
   }
 
   async function linkPerson(policyId: string, detectedName: string, familyMemberId: string) {
-    const response = await fetch("/api/policies/link-person", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ policyId, detectedName, familyMemberId }),
-    });
-    const payload = await response.json();
-    setStatus(response.ok ? `Linked ${detectedName} to the selected family profile.` : payload.error ?? "Could not link person");
-    if (response.ok) await refresh();
+    try {
+      const response = await fetch("/api/policies/link-person", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ policyId, detectedName, familyMemberId }),
+      });
+      if (!response.ok) throw new Error("Could not link person");
+      setStatus(`Linked ${detectedName} to the selected family profile.`);
+      await refresh();
+    } catch {
+      setStatus("Could not link person. Please try again in a moment.");
+    }
   }
 
   async function deleteDocument(policy: Policy) {
@@ -157,7 +163,7 @@ export default function PoliciesPage() {
     try {
       const response = await fetch(`/api/policies/${policy.id}`, { method: "DELETE" });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Could not delete document");
+      if (!response.ok) throw new Error("Could not delete document");
       setStatus(`${label} was deleted. The portfolio has been recalculated.`);
       await refresh();
     } catch (error) {
@@ -217,7 +223,7 @@ export default function PoliciesPage() {
           {processing && <div className="document-progress" aria-live="polite">
             <div className="document-progress-copy"><strong>{policy.processing_message ?? "Analysis in progress…"}</strong><span>{pct}%</span></div>
             <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(2, pct)}%` }}/></div>
-            <small>{policy.processing_status === "queued" ? "Waiting for the current local-AI job to finish." : "DearPolicy saves each completed stage before moving to the next one."}</small>
+            <small>{policy.processing_status === "queued" ? "Waiting for the current analysis job to finish." : "DearPolicy saves each completed stage before moving to the next one."}</small>
           </div>}
 
           {!processing && policy.needs_review && <div className="accuracy-warning"><b>Needs review</b><span>{policy.review_reason ?? "Some extracted personal information could not be fully source-verified."}</span></div>}

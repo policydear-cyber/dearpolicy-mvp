@@ -38,3 +38,5 @@ ALTER TABLE coverage_rules ADD COLUMN IF NOT EXISTS minimum_value numeric;
 ALTER TABLE policies ADD COLUMN IF NOT EXISTS ledger_read_at timestamptz;
 CREATE INDEX IF NOT EXISTS idx_coverage_rules_member ON coverage_rules(account_id, family_member_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_coverage_rules_seed ON coverage_rules(account_id, seed_key) WHERE seed_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_coverage_rules_family_member_id ON coverage_rules(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_coverage_rules_policy_id ON coverage_rules(policy_id);

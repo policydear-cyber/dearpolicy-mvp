@@ -70,3 +70,12 @@ ON CONFLICT(id) DO NOTHING;
 UPDATE chat_messages m SET conversation_id=
   md5('dearpolicy-old-chat:' || m.account_id::text || ':' || coalesce(m.family_member_id::text,'family'))::uuid
 WHERE m.conversation_id IS NULL;
+
+-- Single-column FK indexes flagged by Supabase's performance advisor (the
+-- composite indexes above lead with account_id, which doesn't cover a lookup
+-- that filters on one of these columns alone). Appended here rather than in
+-- schema.sql because these tables/columns don't exist until this file runs.
+CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_conversation_id ON chat_analysis_jobs(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_family_member_id ON chat_analysis_jobs(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_family_member_id ON chat_conversations(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);

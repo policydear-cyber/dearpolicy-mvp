@@ -49,7 +49,7 @@ function ChatContent(){
   async function refreshHistory(cursor?:string|null){
     const response=await fetch("/api/chat/history?scope=all"+(cursor?"&cursor="+cursor:""));
     const data=await response.json();
-    if(!response.ok)throw new Error(data.error??"Could not load chat history");
+    if(!response.ok)throw new Error("Could not load chat history");
     setHistory(previous=>cursor?[...previous,...data.conversations]:data.conversations);
     setHistoryCursor(data.nextCursor??null);
   }
@@ -143,7 +143,7 @@ function ChatContent(){
     if(id===conversationId)reset();
     try{
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:id})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not delete chat");
+      const data=await response.json();if(!response.ok)throw new Error("Could not delete chat");
       await refreshHistory();
     }catch(e){setHistoryError(e instanceof Error?e.message:"Could not delete chat");}
   }
@@ -153,7 +153,7 @@ function ChatContent(){
     try{
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({scope:"all"})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not clear history");
+      const data=await response.json();if(!response.ok)throw new Error("Could not clear history");
       await refreshHistory();
     }catch(e){setHistoryError(e instanceof Error?e.message:"Could not clear history");}
   }
@@ -168,9 +168,9 @@ function ChatContent(){
   useEffect(()=>{
     const abort=new AbortController();
     fetch("/api/chat/history?scope=all",{signal:abort.signal,cache:"no-store"}).then(async response=>{
-      const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not load history");
+      const data=await response.json();if(!response.ok)throw new Error("Could not load history");
       if(!abort.signal.aborted){setHistory(data.conversations);setHistoryCursor(data.nextCursor??null);setHistoryError("");}
-    }).catch(e=>{if(!abort.signal.aborted)setHistoryError(e.message);});
+    }).catch(()=>{if(!abort.signal.aborted)setHistoryError("Could not load your chat history.");});
     return()=>abort.abort();
   },[]);
   useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages,busy]);
@@ -188,7 +188,7 @@ function ChatContent(){
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {new Date(chat.updated_at).toLocaleDateString()}</small></button>
         <button className="mini-button danger" onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>Delete</button>
       </li>)}</ul>}
-      {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(e=>setHistoryError(e.message))}>Load more chats</button>:null}
+      {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(()=>setHistoryError("Could not load more chats."))}>Load more chats</button>:null}
       {historyError?<p role="alert">{historyError}</p>:null}
     </details>
     <div className="chat-window" aria-live="polite">
@@ -225,7 +225,7 @@ function ChatContent(){
           <div className={"thinking-bar "+(progressDetail?"determinate":"indeterminate")}>
             <span style={progressDetail?{width:Math.max(4,Math.round((progressDetail.completed/Math.max(1,progressDetail.total))*100))+"%"}:undefined}/>
           </div>
-          <small>{progressDetail?progressDetail.completed+" of "+progressDetail.total+" policy contracts read":"Reading your uploaded policy evidence locally"} · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
+          <small>{progressDetail?progressDetail.completed+" of "+progressDetail.total+" policy contracts read":"Reading your uploaded policy evidence"} · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
         </div></div>:null}
       {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> Please try again in a moment — if this keeps happening, contact support.</span></div>:null}<div ref={end}/>
     </div>

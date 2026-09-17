@@ -21,9 +21,9 @@ export async function POST(request: Request) {
 
     if (!(file instanceof File)) return NextResponse.json({ error: "PDF file is required." }, { status: 400 });
     if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
-      return NextResponse.json({ error: "The local MVP currently accepts PDF files only." }, { status: 400 });
+      return NextResponse.json({ error: "DearPolicy currently accepts PDF files only." }, { status: 400 });
     }
-    if (file.size > 50 * 1024 * 1024) return NextResponse.json({ error: "PDF exceeds the 50 MB local MVP limit." }, { status: 400 });
+    if (file.size > 50 * 1024 * 1024) return NextResponse.json({ error: "PDF exceeds the 50 MB upload limit." }, { status: 400 });
 
     const accountId = devAccountId();
     if (!familyMemberId) {

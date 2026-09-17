@@ -24,7 +24,7 @@ export default function RecordsPage() {
     try {
       const form = new FormData(); form.set("file",file); if(memberId) form.set("familyMemberId",memberId); if(password) form.set("pdfPassword",password);
       const response = await fetch("/api/policies/upload",{method:"POST",body:form}); const payload=await response.json();
-      if(!response.ok) throw new Error(payload.error ?? "Upload failed");
+      if(!response.ok) throw new Error("Upload failed");
       const role=payload.result?.extraction?.documentRole ?? "document"; const count=payload.result?.extraction?.paymentRecords?.length ?? 0;
       setStatus(`Processed as ${String(role).replaceAll("_"," ")}. Found ${count} explicit payment record${count===1?"":"s"}.`);
       setFile(null); setPassword(""); await refresh();

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     await query(
       `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
-       processing_message='Waiting for local AI processing…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
+       processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
        WHERE id=$1 AND account_id=$2`,
       [body.policyId, accountId],
     );
