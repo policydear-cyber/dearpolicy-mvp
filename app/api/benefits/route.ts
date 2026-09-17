@@ -1,0 +1,195 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { devAccountId,query } from "@/lib/db/client";
+import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { loadPolicyInventory } from "@/lib/policies/inventory";
+import { formatMoney } from "@/lib/format/currency";
+
+export const runtime="nodejs";
+
+/** The benefit schedule: every payout rule DearPolicy has read out of the
+ * household's documents, in plain English, with the page it came from.
+ *
+ * This is the screen that makes imperfect extraction acceptable. A rule that
+ * was misread is visible before a claim happens, and correcting it once makes
+ * that household permanently right — the correction is stored, not re-derived,
+ * so re-reading the document can never quietly undo it. */
+type Row={
+  id:string;policy_id:string;product_name:string|null;benefit_name:string;traits:string[];
+  formula_kind:string;formula_value:string|null;currency:string|null;fact_key:string|null;
+  offset_days:number|null;maximum_days:number|null;source_page:number|null;quote:string;
+  conditions:unknown;requirements:unknown;needs_review:boolean;reviewed_at:string|null;basis_inferred:boolean;
+  original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;
+  owner_names:string[]|null;
+};
+
+export async function GET(request:Request){
+  try{
+    const url=new URL(request.url);
+    const member=url.searchParams.get("familyMemberId");
+    const accountId=devAccountId();
+    await ensureBenefitSchema();
+    const rows=await query<Row>(
+      `SELECT b.id,b.policy_id,b.product_name,b.benefit_name,b.traits,b.formula_kind,b.formula_value::text,
+              b.currency,b.fact_key,b.offset_days,b.maximum_days,b.source_page,b.quote,
+              b.conditions,b.requirements,b.needs_review,b.reviewed_at::text,b.basis_inferred,
+              p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,
+              owners.names AS owner_names
+         FROM policy_benefits b
+         JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id
+         LEFT JOIN LATERAL (
+              SELECT array_agg(f.display_name ORDER BY f.display_name) AS names
+                FROM policy_members pm
+                JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id
+               WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id
+         ) owners ON true
+        WHERE b.account_id=$1
+          AND ($2::uuid IS NULL OR EXISTS (
+                SELECT 1 FROM policy_members pm
+                 WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id AND pm.family_member_id=$2::uuid))
+        ORDER BY b.needs_review DESC,coalesce(b.product_name,p.original_filename),b.benefit_name`,
+      [accountId,member||null]);
+    /** What, if anything, this row needs from the person reading the screen.
+     *
+     * "Needs review" was an internal flag doing duty as a label, and it lumped
+     * together three unrelated things: a rule DearPolicy read from a table
+     * heading and will not use until someone says it is right, a rule missing
+     * one fact before it can be calculated, and a row whose amount could not be
+     * read at all. Only the first two are anyone's job; the third is DearPolicy
+     * admitting a limit, and calling that "waiting to be checked" put work on
+     * the person that they could not do. */
+    const attentionFor=(input:{needsConfirmation:boolean;formulaKind:string;maximumDays:number|null;factKey:string|null})=>{
+      if(input.needsConfirmation)return "confirm" as const;
+      // A daily rate whose own row never said how many days it pays for.
+      if(input.formulaKind==="daily"&&input.maximumDays==null)return "confirm" as const;
+      if(input.formulaKind==="none")return "unreadable" as const;
+      return null;
+    };
+    // Which sum insured each rule would be calculated against — the join that
+    // decides whether a "% of Sum Insured" row ever becomes money. Shown, so a
+    // wrong or missing join is a thing a person can see and fix.
+    const inventory=await loadPolicyInventory(accountId,(await query<{id:string;display_name:string;preferred_name:string|null;relationship:string}>(
+      "SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1",[accountId])).rows).catch(()=>null);
+    const contractsByDocument=new Map<string,typeof inventory extends null?never:NonNullable<typeof inventory>["contracts"]>();
+    for(const contract of inventory?.contracts??[])
+      for(const doc of [...contract.documents,...contract.references])contractsByDocument.set(doc.id,[...(contractsByDocument.get(doc.id)??[]),contract]);
+    const benefits=rows.rows.map(row=>{
+      const value=row.formula_value==null?null:Number(row.formula_value);
+      const formula={
+        formulaKind:row.formula_kind as never,formulaValue:Number.isFinite(value as number)?value:null,
+        currency:row.currency,factKey:row.fact_key,offsetDays:row.offset_days,maximumDays:row.maximum_days,
+      };
+      const needsConfirmation=row.basis_inferred&&!row.reviewed_at;
+      const attention=attentionFor({needsConfirmation,formulaKind:row.formula_kind,maximumDays:row.maximum_days,factKey:row.fact_key});
+      const stub={id:row.id,policyId:row.policy_id,productName:row.product_name??row.document_product,benefitName:row.benefit_name,
+        traits:[],...formula,sourcePage:row.source_page,quote:row.quote,conditions:[],requirements:[],needsReview:row.needs_review} as unknown as CatalogBenefit;
+      const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
+        const coverage=coverageForBenefit(contract,stub);
+        return coverage?{owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
+          :{owner:contract.ownerName,plan:null,amount:null};
+      });
+      return {
+        id:row.id,policyId:row.policy_id,
+        productName:row.product_name??row.document_product,
+        // For a "% of Sum Insured" rule: whose sum insured, from which plan.
+        calculatedAgainst,
+        benefitName:row.benefit_name,
+        traits:Array.isArray(row.traits)?row.traits:[],
+        ...formula,
+        // The whole point of the screen: the rule as a sentence, not a schema.
+        pays:describeBenefitFormula(formula),
+        sourcePage:row.source_page,quote:row.quote,
+        conditions:Array.isArray(row.conditions)?row.conditions.map(String):[],
+        requirements:Array.isArray(row.requirements)?row.requirements:[],
+        needsReview:row.needs_review,reviewedAt:row.reviewed_at,
+        // Read from a heading above the row rather than from the row itself, and
+        // not yet confirmed. DearPolicy shows it but will not calculate from it.
+        needsConfirmation,attention,
+        documentName:row.original_filename,insurer:row.insurer,documentRole:row.document_role,
+        // A booklet nobody has claimed yet has no owner. Saying so is more
+        // useful than printing an empty cell.
+        owners:row.owner_names??[],
+      };
+    });
+    return NextResponse.json({
+      benefits,
+      summary:{
+        total:benefits.length,
+        // The only number that is a to-do for the person reading the screen.
+        needsYou:benefits.filter(b=>b.attention==="confirm").length,
+        unreadable:benefits.filter(b=>b.attention==="unreadable").length,
+        usable:benefits.filter(b=>b.attention==null).length,
+        documents:new Set(benefits.map(b=>b.policyId)).size,
+        unclaimed:benefits.filter(b=>!b.owners.length).length,
+      },
+    });
+  }catch(error){
+    return NextResponse.json({error:error instanceof Error?error.message:"Could not load the benefit schedule"},{status:500});
+  }
+}
+
+const Patch=z.object({
+  id:z.string().uuid(),
+  benefitName:z.string().min(1).max(200).optional(),
+  formula:z.object({
+    kind:z.enum(["none","sum_insured","fixed","expense_cap","daily"]),
+    value:z.number().finite().nullable(),
+    currency:z.string().max(16).nullable(),
+    factKey:z.string().max(64).nullable(),
+    offsetDays:z.number().int().nullable(),
+    maximumDays:z.number().int().nullable(),
+  }).optional(),
+  needsReview:z.boolean().optional(),
+});
+
+export async function PATCH(request:Request){
+  try{
+    const body=Patch.parse(await request.json());
+    const accountId=devAccountId();
+    await ensureBenefitSchema();
+    const existing=await query<{id:string}>("SELECT id FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
+    if(!existing.rows[0])return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
+    if(body.formula){
+      const checked=reviewedBenefitFormula(body.formula);
+      if(!checked.ok)return NextResponse.json({error:checked.error},{status:400});
+      const f=checked.formula;
+      await query(
+        `UPDATE policy_benefits
+            SET benefit_name=coalesce($3,benefit_name),formula_kind=$4,formula_value=$5,currency=$6,
+                fact_key=$7,offset_days=$8,maximum_days=$9,needs_review=$10,reviewed_at=now(),updated_at=now()
+          WHERE id=$1 AND account_id=$2`,
+        [body.id,accountId,body.benefitName??null,f.formulaKind,f.formulaValue,f.currency,
+         f.factKey,f.offsetDays,f.maximumDays,body.needsReview??false]);
+    }else if(body.benefitName!=null||body.needsReview!=null){
+      await query(
+        `UPDATE policy_benefits
+            SET benefit_name=coalesce($3,benefit_name),needs_review=coalesce($4,needs_review),
+                reviewed_at=CASE WHEN $4 IS FALSE THEN now() ELSE reviewed_at END,updated_at=now()
+          WHERE id=$1 AND account_id=$2`,
+        [body.id,accountId,body.benefitName??null,body.needsReview??null]);
+    }else{
+      return NextResponse.json({error:"Nothing to change."},{status:400});
+    }
+    return NextResponse.json({ok:true});
+  }catch(error){
+    if(error instanceof z.ZodError)return NextResponse.json({error:"That correction could not be read."},{status:400});
+    return NextResponse.json({error:error instanceof Error?error.message:"Could not save the correction"},{status:500});
+  }
+}
+
+const Remove=z.object({id:z.string().uuid()});
+/** A row that is not a benefit at all — a heading the parser mistook for one.
+ * Only the catalogue is affected: the document, its pages and any confirmed
+ * cover are untouched, and re-indexing the document rebuilds the row. */
+export async function DELETE(request:Request){
+  try{
+    const body=Remove.parse(await request.json());
+    await ensureBenefitSchema();
+    const result=await query("DELETE FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,devAccountId()]);
+    if(!result.rowCount)return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
+    return NextResponse.json({ok:true});
+  }catch(error){
+    if(error instanceof z.ZodError)return NextResponse.json({error:"That request could not be read."},{status:400});
+    return NextResponse.json({error:error instanceof Error?error.message:"Could not remove the benefit"},{status:500});
+  }
+}

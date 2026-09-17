@@ -1,0 +1,9 @@
+paddleocr[doc-parser]==3.7.0
+# PaddleOCR-VL's CLI exports its test result as a Word document. The
+# doc-parser extra does not currently install this runtime dependency.
+python-docx>=1.1.2,<2
+
+# The bridge renders PDF pages to images with PyMuPDF (imported as `fitz`)
+# before handing them to PaddleOCR. It is not pulled in by the doc-parser extra,
+# so a working PaddleOCR install still fails on the first scanned PDF without it.
+pymupdf>=1.24,<2

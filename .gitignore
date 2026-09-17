@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.local
+data
+*.log
+.DS_Store
+paddleocr-service/.venv
+paddleocr-service/output

@@ -1,0 +1,72 @@
+{
+ "name": "Group personal accident benefit summary \u2014 indemnity and fracture schedules (redacted)",
+ "note": "Page text exactly as DearPolicy stores it. Both tables state their basis only in the heading: 'Compensation Schedule (% of Sum Insured)'. Nothing identifying the household appears on these pages.",
+ "pages": [
+  {
+   "page": 6,
+   "text": "C. Total and Permanent Dismemberment due to Accident (continued)\nCompensation\nSchedule of Indemnities\n(% of Sum Insured)\n1.\tLoss of or Permanent Total Loss of use of at least one limb\t100%\n2.\tPermanent Total Loss of\t(a) Sight in at least one eye\t100%\n(b) Whole eye\t100%\n(c) Sight in one eye,\t50%\nexcept perception of light\n(d) Lens of one eye\t50%\n3.\tPermanent and Incurable Insanity\t100%\n4.\tLoss of arm (at shoulder, between shoulder and elbow, at elbow, between elbow and wrist)\t100%\n5.\tLoss of leg (at hip, between knee and hip, at knee, between knee and ankle)\t100%\n6.\tLoss of hand at wrist\t100%\n100%\n7.\tLoss of or Permanent Total Loss of both hands\n8.\tLoss of or Permanent Total Loss of use of four fingers and thumb\t(a) Both Hands\t100%\n70%\n(b) Right Hand\n(c) Left Hand\t50%\n100%\n9.\tLoss of or Permanent Total Loss of all fingers and both thumbs\n10. Loss of or Permanent Total Loss of use of four fingers of\t(a) Right Hand\t40%\n30%\n(b) Left Hand\n11. Loss of or Permanent Total Loss of use of\t(a) RightThumb\t30%\n15%\n(b) LeftThumb\n(c) One Phalanx of Right Thumb\t20%\n(d) One Phalanx of Left Thumb\t10%\n12. Loss of or Permanent Total Loss of use of fingers\t(a) Three Right Phalanges\t20%\n(b) Two Right Phalanges\t15%\n(c) One Right Phalanx\t10%\n(d) Three Left Phalanges\t15%\n(e) Two Left Phalanges\t10%\n(f)\tOne Left Phalanx\t5%\n13. Loss of one phalanx of\t(a) Right index finger\t12%\n(b) Left index finger\t7.5%\n14. Loss of or Permanent Total Loss of use of any other finger\t(a) Right hand\t6%\n(b) Left hand\t5%\n15. Loss of or Permanent Total Loss of one phalanx of any other finger\t4%\n16. Loss of or Permanent Total Loss of use of a great toe\t5%\n17. Loss of or Permanent Total Loss of use of a great toe\t(a) Two Phalanges\t5%\n(b) One Phalanx\t3%\n18. Loss of any toe other than great toe\t3%\n19. Loss of all toes on either foot\t20%\n20. Loss of or Permanent Total Loss of hearing in both ears\t75%\n21. Loss of or Permanent Total Loss of hearing one ear\t25%\n22. Loss of speech\t50%\nNote: If the Insured Person is left-handed, the percentage of the various disabilities of right hand and left hand shall be transposed.\nSingapore Life Ltd. 4 Shenton Way, #01-01, SGX Centre 2 Singapore 068807 singlife.com\nCompany Reg.No. 196900499K GST Reg.No. MR-8500166-8"
+  },
+  {
+   "page": 8,
+   "text": "E. Simple Fracture or Other Fracture due to Accident\nIf an Insured Person sustains bodily injury as a result of an Accident, which results in a Simple Fracture or Other Fracture of the nature\nmentioned in the table below, we will pay the relevant amount specified in the table:-\nSimple Fracture or Other Fracture due to Accident\nCompensation\nSchedule\n(% of Sum Insured)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg, Ankle or Knee (Other Fracture)\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\nArm, Elbow, Wrist or Ribs (Other Fracture)\t20%\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nF.\tDisappearance\nIf an Insured Person:\n(i)\tdisappears as a result of the sinking or wrecking of the ship, aeroplane or vehicle in which he was travelling at the time of the Accident; and\n(ii)\this body is not found within l year from the date of his disappearance; and\n(iii) there is sufficient evidence leading to the conclusion that the Insured Person sustained bodily injury as a result of an Accident, which\ncaused his death, then we will pay the Sum Insured. However, the person(s) to whom the Benefit is paid shall sign an undertaking\nto refund\nsuch sum(s) so paid, to the Company, if the Insured Person is subsequently found to be alive.\nG. Ambulance Cost\nIf an Insured Person sustains bodily injury as a result of an Accident, which necessitates the use of an ambulance, we will reimburse the actual\nground ambulance costs on a per event per Insured Person basis, incurred by the Insured Person up to maximum of $500 for transportation\n(including the medical supplies used) to the Hospital.\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nH. Mobility aid upon accidental total & permanent disablement\nIf an Insured Person who sustains bodily injury as a result of an Accident and suffers total and permanent disability and needs to and can\noperate:\n(i)\ta self-powered, climbing wheelchair; and/or\n(ii)\this motor vehicle with the controls suitably adjusted; and/or\n(iii) a lift, necessary ramps, railings and holds installed to his/her usual place of residence;\nWe will, upon receipt of relevant documents as required under clause 14 (including proof of need and total and permanent disability certified\nby a Registered Medical Practitioner), pay up to $10,000 of the costs of such equipment and the installation thereof, whichever is lesser.\nThis Benefit can only be claimed either under the Core Scheme or Voluntary Scheme.\nSingapore Life Ltd. 4 Shenton Way, #01-01, SGX Centre 2 Singapore 068807 singlife.com\nCompany Reg.No. 196900499K GST Reg.No. MR-8500166-8"
+  }
+ ],
+ "expected": [
+  {
+   "page": 6,
+   "label": "Loss of or Permanent Total Loss of use of at least one limb",
+   "value": "100%",
+   "kind": "sum_insured",
+   "amount": 1
+  },
+  {
+   "page": 6,
+   "label": "Permanent Total Loss of (b) Whole eye",
+   "value": "100%",
+   "kind": "sum_insured",
+   "amount": 1
+  },
+  {
+   "page": 6,
+   "label": "Permanent Total Loss of (c) Sight in one eye",
+   "value": "50%",
+   "kind": "sum_insured",
+   "amount": 0.5
+  },
+  {
+   "page": 6,
+   "label": "Loss of or Permanent Total Loss of hearing in both ears",
+   "value": "75%",
+   "kind": "sum_insured",
+   "amount": 0.75
+  },
+  {
+   "page": 6,
+   "label": "Loss of speech",
+   "value": "50%",
+   "kind": "sum_insured",
+   "amount": 0.5
+  },
+  {
+   "page": 8,
+   "label": "Neck, Skull or Spine (Full Break)",
+   "value": "100%",
+   "kind": "sum_insured",
+   "amount": 1
+  },
+  {
+   "page": 8,
+   "label": "Hip",
+   "value": "75%",
+   "kind": "sum_insured",
+   "amount": 0.75
+  },
+  {
+   "page": 8,
+   "label": "Arm, Elbow, Wrist or Ribs (Other Fracture)",
+   "value": "20%",
+   "kind": "sum_insured",
+   "amount": 0.2
+  }
+ ]
+}

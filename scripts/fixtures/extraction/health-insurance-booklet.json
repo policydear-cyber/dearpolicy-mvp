@@ -1,0 +1,75 @@
+{
+ "name": "National health insurance booklet \u2014 benefit table, premium example and pro-ration tables (public MOH/CPF material)",
+ "note": "Page 6 is a real benefit table. Pages 21, 23 and 30 are a premium computation, a pro-ration factor table and a worked claim example: every figure on them is money the household PAYS or an intermediate step, and reading any of it as cover would tell them they hold a benefit they do not.",
+ "pages": [
+  {
+   "page": 6,
+   "text": "Table A: MediShield Life Benefits (continued)\n(Applicable for admissions or treatments received on or after 1 June 2026)\nOutpatient Benefits\tClaim Limits\nPatients receiving treatment for one primary cancer\n$200 - $12,800 per month,\n-\tCancer drug treatment\tdepending on cancer drug\n5\ntreatment\n-\tCancer drug services\t$4,500 per calendar year\n6\nPatients receiving treatment for multiple primary cancers\nSum of the highest cancer drug\ntreatment limit amongst the\n-\tCancer drug treatment\nclaimable treatments received for\neach primary cancer per month\n-\tCancer drug services\t$9,000 per calendar year\nRadiotherapy for cancer\n-\tExternal (except Hemi-body)\t$400 per treatment\n-\tBrachytherapy\t$620 per treatment\n-\tHemi-body\t$620 per treatment\n-\tStereotactic\t$460 per treatment\n4\n-\tProton beam therapy \u2013 Category 1\t$400 per treatment\n4\n-\tProton beam therapy \u2013 Category 2\t$620 per treatment\n4\n-\tProton beam therapy \u2013 Category 3\t$460 per treatment\n-\tRadiosurgery, including proton beam\n4\t$15,700 per treatment course\ntherapy \u2013 Category 4\n4\nRefer to the MOH website for the approved indications for use of proton beam therapy.\n5\nRefer to the Cancer Drug List on the MOH website for the applicable claim limit.\n6\nDefined as two or more cancers arising from different sites and/or are of a different histology or\nmorphology group. The claim limits for patients receiving treatment for multiple primary cancers are\naccorded on an application basis; doctors are to send the application form to MOH for assessment.\n6"
+  },
+  {
+   "page": 21,
+   "text": "5. Examples of MediShield Life premiums computation\nwithout Phased Support (i.e. 1 April 2027 onwards)\nInsured A (with Additional Premiums)\nAge Next Birthday: 41\n1\nStandard MediShield Life premium\t$637.00\n2\nAdd: Additional Premium at 30% of Standard MediShield Life premium\t$191.10\nPremium before Subsidies\t$828.10\n4\nLess: Premium Subsidies at 30.0%\t-$248.43\nLESS: Total Government Subsidies\t-$248.43\nNet Premium Payable with MediSave (Inclusive of GST)\t$579.67\nInsured B\nAge Next Birthday: 70\n1\nStandard MediShield Life premium\t$1,326.00\n3\nLess: Premium Rebate\t-$40.00\nPremium before Subsidies\t$1,286.00\n4\nLess: Premium Subsidies at 40.0%\t-$514.40\n6\nLess: Merdeka Generation Subsidies at 5%\t-$64.30\nLESS: Total Government Subsidies\t-$578.70\nNet Premium Payable with MediSave (Inclusive of GST)\t$707.30\nInsured C\nAge Next Birthday: 75\n1\nStandard MediShield Life premium\t$1,816.00\nPremium before Subsidies\t$1,816.00\n5\nLess: Pioneer Generation Subsidies at 49.00%\t-$889.84\nLESS: Total Government Subsidies\t-$889.84\nNet Premium Payable with MediSave (Inclusive of GST)\t$926.16\n1\nRefer to Table B.\n2\nRefer to Section 3.3.\n3\nRefer to Table C. Based on entry age 51-60 (as of next birthday).\n4\nRefer to Table D.\n5\nRefer to Table E.\n6\nRefer to Table F.\n21"
+  },
+  {
+   "page": 23,
+   "text": "6.1 What is the pro-ration factor?\nMediShield Life benefits are designed to cover subsidised bills incurred by\nSingapore Citizens at public hospitals. Hence, non-subsidised bills, which are\ntypically larger than subsidised bills, are pro-rated before the claims under\nMediShield Life are computed. This is to ensure that policyholders receive\ncomparable MediShield Life payouts, regardless of whether they opt for\nsubsidised or non-subsidised care. Similarly, Permanent Residents who receive\nless subsidies than Singapore Citizens at public hospitals will also have their\nbills\tpro-rated\tbefore\tclaims\tunder\tMediShield\tLife\tare\tcomputed.\tThe\napplicable pro-ration factors are shown in Tables G, H and I.\nTable G: Pro-ration Factors for Hospitalisation Charges\n(Applicable for admissions or treatments received on or after 1 April 2025)\nSingapore\tPermanent\nWard Class / Subsidy Status\nCitizen\tResident\nClass C\t100%\t50%\nClass B2\t100%\t50%\nClass B2+\t100%\t50%\nClass B1\t34%\t29%\nClass A\t27%\t25%\nPrivate hospital\t16%\t16%\nCommunity hospital (subsidised)\t100%\t60%\nCommunity hospital (non-subsidised)\t45%\t37%\nInpatient palliative care service (subsidised)\t100%\t60%\nInpatient palliative care service (non-subsidised)\t45%\t37%\nShort stay ward (subsidised)\t100%\t50%\nShort stay ward (non-subsidised)\t27%\t25%\nDay surgery (subsidised)\t100%\t54%\nDay surgery (public hospital non-subsidised)\t33%\t33%\nDay surgery (private hospital)\t21%\t21%\n23"
+  },
+  {
+   "page": 30,
+   "text": "Example 2: Claim computation for a Singapore Citizen aged 60 who stays\nin a Ward A (excluding IP/rider coverage)\nLength of stay: 18 days\nProcedure performed: Hip replacement\nPro-ration factor (hospitalisation charges): 27%\nPro-ration factor (surgical charges): 25%\nPro-rated\tMediShield Life\n1\nHospital bill\tHospital bill\tclaim\ncomputation\nDaily ward & treatment\n2\n$3,240\t$3,240\ncharges (18 days\t$12,000\n($12,000 x 27%)\nnormal ward)\n3\nSurgical procedure\t$2,125\t$2,125\n$8,500\n(Table 5C)\t($8,500 x 25%)\n$1,000\n4\nImplant\t$4,000\t$1,000\n($4,000 x 25%)\nTotal\t$24,500\t$6,365\t$6,365\n5\nLess deductible\t-\t-\t($3,500)\nClaimable amount\n-\t-\t$2,865\n(less deductible)\n6\nLess co-insurance\t-\t-\t($218.25)\nMediShield Life pays\t-\t-\t$2,646.75 (11%)\nMediSave and/or Cash\t-\t-\t$21,853.25 (89%)\n1\nAs the insured member stayed in Ward A, the MediShield Life claim is computed based on 27% of the bill\nfor daily ward & treatment charges (refer to Table G), and 25% for surgical charges (refer to Table H).\n2\nLower of the claim limit in Table A for Daily Ward & Treatment Charges, ($830 x 18 days) + ($800 x 2 days)\n= $16,540, or 27% of charges incurred of $12,000 = $3,240. Therefore, the claimable amount is $3,240.\n3\nLower of the claim limit in Table A for surgical procedure, $3,270 (Table 5C), or 25% of charges incurred of\n$8,500 = $2,125. Therefore, the claimable amount is $2,125.\n4\nLower of the claim limit in Table A for implant, $7,000, or 25% of charges incurred of $4,000 = $1,000.\nTherefore, the claimable amount is $1,000.\n5\nThe insured member is below 80 years old, subject to deductible of $3,500 for Ward A.\n6\nCo-insurance = ($1,500 x 10%) + ($1,365 x 5%) = $218.25.\n30"
+  }
+ ],
+ "expected": [
+  {
+   "page": 6,
+   "label": "Cancer drug services",
+   "value": "$4,500 per calendar year",
+   "kind": "fixed",
+   "amount": 4500
+  },
+  {
+   "page": 6,
+   "label": "External (except Hemi-body)",
+   "value": "$400 per treatment",
+   "kind": "fixed",
+   "amount": 400
+  },
+  {
+   "page": 6,
+   "label": "Brachytherapy",
+   "value": "$620 per treatment",
+   "kind": "fixed",
+   "amount": 620
+  }
+ ],
+ "mustNotProduce": [
+  {
+   "page": 21,
+   "label": "Standard MediShield Life premium"
+  },
+  {
+   "page": 21,
+   "label": "Premium before Subsidies"
+  },
+  {
+   "page": 23,
+   "label": "Class C"
+  },
+  {
+   "page": 23,
+   "label": "Class B1"
+  },
+  {
+   "page": 23,
+   "label": "Private hospital"
+  },
+  {
+   "page": 30,
+   "label": "Total"
+  },
+  {
+   "page": 30,
+   "label": "Implant"
+  }
+ ]
+}

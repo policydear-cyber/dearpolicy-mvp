@@ -1,0 +1,1015 @@
+import assert from "node:assert/strict";
+import { applyExplicitDeferrals,hasQuote,knownValue,mergeInterpretation,modelFactContext,numberStated,reportedConditionStatement,type Interpretation } from "@/lib/chat/facts";
+import { aggregatePotentialPayouts,assessmentFromBenefit,calculatePolicyFormula,evaluateRequirement,evidenceWindows,validateAnalysis } from "@/lib/chat/policy-analysis";
+import { analysisSources,buildContracts,passageBudget,productIdentity,referenceMatchReason,referenceMatches,type InventoryDocument,type PolicyContract } from "@/lib/policies/inventory";
+import { contractReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,pagesSpanned,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
+import { assessCurrentness,contractCurrentness,matchPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
+import { deterministicDocumentRole } from "@/lib/documents/intelligence";
+import { detectHighConfidenceReferenceRole } from "@/lib/ai/extract-policy";
+import type { OwnedCoverage } from "@/lib/coverage/facts";
+import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassification,SubjectFacts } from "@/lib/chat/types";
+import { resolveClaimDate } from "@/lib/claims/dates";
+import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
+import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
+import { assessCatalogBenefit,benefitTraits,eventTraits,matchBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
+import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
+import { z } from "zod";
+import { readingBudget } from "@/lib/chat/workflow";
+import { allocateReadingWindows,candidateFromWindows,rankCandidates } from "@/lib/policies/relevance";
+
+export function runSystemRegressions(){
+  let cases=0;const test=(name:string,fn:()=>void)=>{try{fn();cases++;}catch(error){throw new Error(name,{cause:error});}};
+  const now=new Date("2026-09-14T12:00:00Z"),person="person-a";
+  const document=(override:Partial<InventoryDocument>={}):InventoryDocument=>({
+    id:"schedule",insurer:"Example Insurer",product_name:"Flexible Plan",policy_number:"P-100",group_policy_number:null,
+    policy_type:"other",document_role:"personal_schedule",personal_coverage_confirmed:true,document_authority:95,
+    needs_review:false,processing_status:"ready",original_filename:"schedule.pdf",updated_at:"2026-09-14",
+    effective_date:"2022-01-01",renewal_or_expiry_date:null,member_ids:[person],products:["Flexible Plan"],header:"",
+    page_total:2,chunk_total:2,...override});
+  const coverage=(override:Partial<OwnedCoverage>={}):OwnedCoverage=>({
+    id:"cover-a",policyId:"schedule",familyMemberId:person,category:"Other",amount:350000,currency:"SGD",productName:"Flexible Plan",
+    sourcePage:1,evidenceText:"Verified cover",insurer:"Example Insurer",policyName:"Flexible Plan",policyNumber:"P-100",groupPolicyNumber:null,
+    documentRole:"personal_schedule",effectiveDate:"2022-01-01",renewalOrExpiryDate:null,...override});
+  const contract:PolicyContract={id:"contract",ownerId:person,ownerName:"Person A",name:"Flexible Plan",insurer:"Example Insurer",
+    documents:[document()],references:[document({id:"wording",personal_coverage_confirmed:false,document_role:"policy_wording"})],
+    coverages:[coverage()],confirmed:true,effectiveDate:"2022-01-01",ownershipBasis:"evidence"};
+  const source=(text:string,overrides:Partial<PolicySource>={}):PolicySource=>({
+    id:"source-a",policyId:"wording",text,pageStart:1,pageEnd:1,productScopes:["Flexible Plan"],
+    citation:{chunkId:"source-a",policyId:"wording",policyName:"Flexible Plan",pageStart:1,pageEnd:1},...overrides});
+  const benefit=(text="We pay 100% of Sum Insured for a qualifying critical illness.",overrides:Partial<PolicyBenefit>={}):PolicyBenefit=>({
+    title:"Defined benefit",coverageId:"cover-a",evidence:[{sourceId:"source-a",quote:text}],
+    formula:{kind:"sum_insured",value:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:{sourceId:"source-a",quote:text}},
+    requirements:[],conditions:[],...overrides});
+  const fact=(value:string|number|boolean|null,state:"known"|"unknown"|"pending"="known")=>({value,state,quote:String(value),recordedAt:now.toISOString(),source:"user" as const});
+  const initial:ConversationState={subjects:{[person]:{diagnosis:fact("stage 2 breast cancer")}},intent:"claim",activeQuery:"Cancer claim",
+    pending:{id:"hospitalised",factKey:"hospitalised",subjectId:person,type:"text",text:"Were you admitted?",why:"Hospital cash"}};
+  const parsed:Interpretation={intent:"follow_up",newTopic:false,searchTerms:[],facts:[]};
+  test("Counterfactual language cannot create a death claim",()=>{
+    const message="He almost died in the motorbike accident.";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"death",value:true,state:"known",quote:message},
+      {subjectId:person,key:"eventType",value:"death",state:"known",quote:message},
+    ],scenarioCandidates:[{subjectId:person,label:"Death",family:"death",traits:["death","accident"],quote:message}]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"death"),null);
+    assert.notEqual(knownValue(state.subjects[person],"eventType"),"death");
+    assert.equal(state.scenarios?.[person]?.length??0,0);
+  });
+  test("Murder is retained as a reported death and location, not assumed accidental",()=>{
+    const message="Desmond was murdered in Thailand";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"claim",facts:[]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"death"),true);
+    assert.equal(knownValue(state.subjects[person],"eventType"),"death");
+    assert.equal(knownValue(state.subjects[person],"causeOfDeath"),"murdered");
+    assert.equal(knownValue(state.subjects[person],"eventLocation"),"Thailand");
+    assert.equal(knownValue(state.subjects[person],"accidentalDeath"),null);
+    assert.ok(state.scenarios?.[person]?.some(s=>s.label==="Reported homicide"&&s.traits.includes("violent")));
+  });
+  test("A factual homicide report remains a claim when the same turn asks about cover",()=>{
+    const message="Desmond was murdered in Thailand. What can I claim?";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"policy_question",facts:[]},message,subjectIds:[person],now});
+    assert.equal(state.intent,"claim");assert.equal(knownValue(state.subjects[person],"death"),true);
+    assert.equal(knownValue(state.subjects[person],"eventLocation"),"Thailand");
+  });
+  test("A reported condition survives a weak model interpretation",()=>{
+    const message="Charmaine caught dengue";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"policy_question",facts:[]},message,subjectIds:[person],now});
+    assert.equal(state.intent,"claim");assert.equal(knownValue(state.subjects[person],"diagnosis"),"dengue");
+    assert.ok(state.scenarios?.[person]?.some(s=>s.family==="illness"&&s.traits.includes("diagnosis")));
+  });
+  test("Condition grammar is general but rejects hypotheticals",()=>{
+    assert.equal(reportedConditionStatement("Alex contracted leptospirosis")?.condition,"leptospirosis");
+    assert.equal(reportedConditionStatement("If Alex caught dengue, would it pay?"),null);
+  });
+  test("A hypothetical murder question does not report a death",()=>{
+    const message="If Desmond was murdered in Thailand, would the policy pay?";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,intent:"policy_question",facts:[
+      {subjectId:person,key:"death",value:true,state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"death"),null);
+  });
+  test("An accident and a later death are not silently made causal",()=>{
+    const message="He had a motorbike accident last week. He died yesterday.";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"death",value:true,state:"known",quote:"He died yesterday."},
+      {subjectId:person,key:"accidentalDeath",value:true,state:"known",quote:message},
+      {subjectId:person,key:"causeOfDeath",value:"motorbike accident",state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"death"),true);
+    assert.equal(knownValue(state.subjects[person],"accidentalDeath"),null);
+    assert.equal(knownValue(state.subjects[person],"causeOfDeath"),null);
+  });
+  test("An explicitly causal accidental death is retained",()=>{
+    const message="He died from injuries caused by the motorbike accident.";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"death",value:true,state:"known",quote:message},
+      {subjectId:person,key:"accidentalDeath",value:true,state:"known",quote:message},
+      {subjectId:person,key:"causeOfDeath",value:"motorbike accident",state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"death"),true);
+    assert.equal(knownValue(state.subjects[person],"accidentalDeath"),true);
+    assert.equal(knownValue(state.subjects[person],"causeOfDeath"),"motorbike accident");
+  });
+  test("A reported death remains the terminal event during later injury detail",()=>{
+    const prior:ConversationState={...initial,subjects:{[person]:{
+      death:fact(true),eventType:fact("death"),causeOfDeath:fact("motorbike accident"),accidentalDeath:fact(true),
+    }}};
+    const message="The accident also injured his wrist.";
+    const state=mergeInterpretation({state:prior,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"eventType",value:"accident",state:"known",quote:message},
+      {subjectId:person,key:"injured",value:true,state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"eventType"),"death");
+    assert.equal(knownValue(state.subjects[person],"injured"),true);
+  });
+  test("An explicit alive correction clears stale death causality",()=>{
+    const prior:ConversationState={...initial,subjects:{[person]:{
+      death:fact(true),deathDate:fact("2026-09-13"),eventType:fact("death"),causeOfDeath:fact("motorbike accident"),accidentalDeath:fact(true),
+    }}};
+    const message="Actually, he is alive after the accident.";
+    const state=mergeInterpretation({state:prior,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"death",value:false,state:"known",quote:message},
+      {subjectId:person,key:"eventType",value:"accident",state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"death"),false);
+    assert.equal(knownValue(state.subjects[person],"eventType"),"accident");
+    assert.equal(state.subjects[person].deathDate,undefined);
+    assert.equal(state.subjects[person].causeOfDeath,undefined);
+    assert.equal(state.subjects[person].accidentalDeath,undefined);
+  });
+  test("A short answer can resolve a pending cause-of-death question",()=>{
+    const prior:ConversationState={...initial,subjects:{[person]:{death:fact(true),eventType:fact("death")}},
+      pending:{id:"cause",factKey:"accidentalDeath",subjectId:person,type:"text",text:"Was the death caused by an accident?",why:"Accidental death wording"}};
+    const state=mergeInterpretation({state:prior,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"accidentalDeath",value:true,state:"known",quote:"Yes."},
+    ]},message:"Yes.",subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"accidentalDeath"),true);
+  });
+  test("Unknown future nights can answer an admission question",()=>{
+    const state=applyExplicitDeferrals(initial,"still not sure how many nights she needs to be warded for",[person],now);
+    assert.equal(state.subjects[person].hospitalNights.state,"pending");assert.equal(knownValue(state.subjects[person],"hospitalised"),true);
+    assert.equal(knownValue(state.subjects[person],"hospitalStayOngoing"),true);
+  });
+  test("Unknown wording is not anchored to the start of a message",()=>{
+    const state=applyExplicitDeferrals(initial,"i still don’t know how many nights",[person],now);
+    assert.equal(state.subjects[person].hospitalNights.state,"pending");
+  });
+  test("A pending bill never becomes zero",()=>{
+    const state=applyExplicitDeferrals(initial,"I still don't know how much the hospital bill will be",[person],now);
+    assert.equal(knownValue(state.subjects[person],"hospitalBill"),null);assert.equal(state.subjects[person].hospitalBill.state,"pending");
+  });
+  test("An ongoing stay is not a completed duration",()=>{
+    const message="She is still in hospital after two nights.";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"hospitalStayOngoing",value:true,state:"known",quote:message},
+      {subjectId:person,key:"hospitalNights",value:2,state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"hospitalNights"),null);
+  });
+  test("Known facts can later replace an unknown",()=>{
+    const uncertain=applyExplicitDeferrals(initial,"I still don't know how many nights",[person],now);
+    const message="She was discharged after twelve nights.";
+    const state=mergeInterpretation({state:uncertain,interpretation:{...parsed,facts:[
+      {subjectId:person,key:"hospitalNights",value:12,state:"known",quote:message},
+      {subjectId:person,key:"hospitalStayOngoing",value:false,state:"known",quote:message},
+    ]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"hospitalNights"),12);
+  });
+  test("A follow-up preserves the original claim question",()=>{
+    const state=mergeInterpretation({state:initial,interpretation:parsed,message:"I still don't know",subjectIds:[person],now});
+    assert.equal(state.activeQuery,"Cancer claim");
+  });
+  test("Unquoted model facts are rejected",()=>{
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[{subjectId:person,key:"hospitalBill",value:999,state:"known",quote:"A made-up bill"}]},message:"No bill yet",subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"hospitalBill"),null);
+  });
+  test("Another subject's facts are rejected",()=>{
+    const message="Bill SGD 220";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[{subjectId:"someone-else",key:"hospitalBill",value:220,state:"known",quote:message}]},message,subjectIds:[person],now});
+    assert.equal(state.subjects["someone-else"],undefined);
+  });
+  test("Semantic values cannot replace an explicitly stated diagnosis",()=>{
+    const message="Stage 2 breast cancer";
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[{subjectId:person,key:"diagnosis",value:"qualifying Major Cancer",state:"known",quote:message}]},message,subjectIds:[person],now});
+    assert.equal(knownValue(state.subjects[person],"diagnosis"),"stage 2 breast cancer");
+  });
+  test("Relative dates are anchored to the message time",()=>{
+    const state=mergeInterpretation({state:initial,interpretation:{...parsed,facts:[{subjectId:person,key:"diagnosisDate",value:"yesterday",state:"known",quote:"yesterday"}]},message:"Diagnosed yesterday",subjectIds:[person],now,timeZone:"Asia/Singapore"});
+    assert.equal(knownValue(state.subjects[person],"diagnosisDate"),"2026-09-13");
+  });
+  test("A later follow-up does not move a saved diagnosis date",()=>{
+    const state=mergeInterpretation({state:{...initial,subjects:{[person]:{diagnosisDate:fact("2026-09-13")}}},interpretation:parsed,message:"Still waiting for a bill",subjectIds:[person],now:new Date("2026-09-18T12:00:00Z")});
+    assert.equal(knownValue(state.subjects[person],"diagnosisDate"),"2026-09-13");
+  });
+  test("Number proof supports written numbers and rejects substring matches",()=>{
+    assert.equal(numberStated("two hundred and twenty",220),true);assert.equal(numberStated("twenty two nights",22),true);
+    assert.equal(numberStated("SGD 220",2),false);assert.equal(numberStated("-100",100),false);
+  });
+  test("Model context remains bounded while storage retains all facts",()=>{
+    const facts:SubjectFacts={};for(let i=0;i<500;i++)facts["fact"+i]=fact("A long fact value "+i);
+    const state={subjects:{[person]:facts}};const context=modelFactContext(state,[person],1800);
+    assert.ok(JSON.stringify(context).length<2100);assert.ok(context.omittedFactCount>0);assert.equal(Object.keys(state.subjects[person]).length,500);
+  });
+  test("Source-backed full insured amount is calculated in the application",()=>{
+    const b=benefit();assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote)],facts:{}})?.amount,350000);
+  });
+  test("Unknown hospital nights do not delay a separate lump sum",()=>{
+    const b=benefit(),facts={hospitalNights:fact(null,"pending")};
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote)],facts})?.amount,350000);
+  });
+  test("False formulas and source IDs cannot create payouts",()=>{
+    const b=benefit();b.formula.value=1.5;
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote)],facts:{}}),null);
+    b.formula.value=1;b.formula.evidence!.sourceId="fake-source";
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote)],facts:{}}),null);
+  });
+  test("An unowned coverage identifier cannot create a benefit",()=>{
+    const b=benefit(undefined,{coverageId:"unowned"});
+    assert.equal(validateAnalysis({benefits:[b],observations:[],nextSteps:[]},[source(b.evidence[0].quote)],contract).benefits.length,0);
+  });
+  test("An unknown product section cannot authorise multi-product arithmetic",()=>{
+    const b=benefit(),c={...contract,references:[document({id:"wording",product_name:"Group booklet",products:["Flexible Plan","Different Plan"],personal_coverage_confirmed:false})]};
+    assert.equal(calculatePolicyFormula({benefit:b,contract:c,sources:[source(b.evidence[0].quote,{productScopes:[]})],facts:{}}),null);
+  });
+  test("A different product section cannot supply the formula",()=>{
+    const b=benefit();assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote,{productScopes:["Different Plan"]})],facts:{}}),null);
+  });
+  test("Confirmed sum insured is not silently reduced by unsupported deductions",()=>{
+    const b=benefit("We pay the Sum Insured less previous benefits.");
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote)],facts:{}}),null);
+  });
+  test("Reimbursement uses the actual bill and verified cap",()=>{
+    const text="We reimburse ambulance expenses up to S$500 per incident.",b=benefit(text);
+    b.formula={...b.formula,kind:"expense_cap",value:500,factKey:"ambulanceBill"};
+    const result=calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{ambulanceBill:{...fact(220),quote:"Ambulance bill SGD 220"}}});
+    assert.equal(result?.amount,220);
+  });
+  test("An unknown reimbursement bill cannot become the policy cap",()=>{
+    const text="We reimburse ambulance expenses up to S$500 per incident.",b=benefit(text);
+    b.formula={...b.formula,kind:"expense_cap",value:500,factKey:"ambulanceBill"};
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{ambulanceBill:fact(null,"pending")}}),null);
+  });
+  test("Cross-currency bills are not converted or mislabeled",()=>{
+    const text="We reimburse ambulance expenses up to S$500 per incident.",b=benefit(text);
+    b.formula={...b.formula,kind:"expense_cap",value:500,factKey:"ambulanceBill"};
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{ambulanceBill:{...fact(220),quote:"Ambulance bill USD 220"}}}),null);
+    b.formula.currency="USD";
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{ambulanceBill:fact(220)}}),null);
+  });
+  test("Completed daily cash applies source rate, waiting days and day cap",()=>{
+    const text="Daily hospital cash benefit S$30 per day after the 10th day, maximum of 30 continuous days.",b=benefit(text);
+    b.formula={...b.formula,kind:"daily",value:30,factKey:"hospitalNights",offsetDays:10,maximumDays:30};
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{hospitalNights:fact(45)}})?.amount,900);
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{hospitalNights:fact(12),hospitalStayOngoing:fact(true)}}),null);
+  });
+  test("A model cannot demand hospital duration from a cancer lump-sum clause",()=>{
+    const b=benefit();b.requirements=[{factKey:"hospitalNights",operator:"present",value:null,question:"How many hospital nights?",why:"Required for cancer",evidence:b.evidence[0]}];
+    assert.equal(validateAnalysis({benefits:[b],observations:[],nextSteps:[]},[source(b.evidence[0].quote)],contract).benefits[0].requirements.length,0);
+  });
+  test("An unknown required fact is deferred instead of repeated",()=>{
+    const r={factKey:"hospitalNights",operator:"present" as const,value:null,question:"How long?",why:"Daily benefit",evidence:{sourceId:"source-a",quote:"hospital stay"}};
+    assert.equal(evaluateRequirement(r,{hospitalNights:fact(null,"unknown")},contract,now),"deferred");
+  });
+  test("Conditional requirements are asked only on the applicable branch",()=>{
+    const r={factKey:"racingAuthoritySanctioned",operator:"equals" as const,value:true,question:"Was it sanctioned?",why:"Racing exception",evidence:{sourceId:"source-a",quote:"racing sanctioned by the authority"},
+      appliesWhen:[{factKey:"competitiveRacing",value:true}]};
+    assert.equal(evaluateRequirement(r,{competitiveRacing:fact(false)},contract,now),"met");
+    assert.equal(evaluateRequirement(r,{competitiveRacing:fact(true)},contract,now),"missing");
+    assert.equal(evaluateRequirement(r,{competitiveRacing:fact(true),racingAuthoritySanctioned:fact(null,"unknown")},contract,now),"deferred");
+  });
+  test("User-reported definition approval is not documentary proof",()=>{
+    const b=benefit();b.requirements=[{factKey:"medicalDefinitionConfirmed",operator:"equals",value:true,question:"Definition met?",why:"Defined critical illness",evidence:b.evidence[0]}];
+    const valid=validateAnalysis({benefits:[b],observations:[],nextSteps:[]},[source(b.evidence[0].quote)],contract);
+    const assessment=assessmentFromBenefit({benefit:valid.benefits[0],contract,sources:[source(b.evidence[0].quote)],facts:{medicalDefinitionConfirmed:fact(true)},now});
+    assert.equal(assessment.checks[0].result,"document");assert.equal(assessment.item.status,"potentially_applicable");
+    assert.equal(assessment.item.amountText,"S$350,000");assert.equal(assessment.item.amountLabel,"Potential payout");
+  });
+  test("A reported homicide requires documentary accidental-death classification",()=>{
+    const r={factKey:"accidentalDeath",operator:"equals" as const,value:true,question:"Was this accidental?",why:"Accidental death wording",evidence:{sourceId:"source-a",quote:"Death due to Accident"}};
+    assert.equal(evaluateRequirement(r,{death:fact(true),causeOfDeath:fact("murdered")},contract,now),"document");
+  });
+  test("A classified homicide keeps accidental death as an evidence-dependent candidate and shows the calculable amount",()=>{
+    const text="Death due to Accident. We pay 100% of Sum Insured.",b=benefit(text);
+    b.requirements=[{factKey:"accidentalDeath",operator:"equals",value:true,question:"",why:"Death must satisfy the policy's Accident definition.",evidence:b.evidence[0]}];
+    const scenario:ScenarioClassification={subjectId:person,label:"Reported homicide",family:"death",traits:["death","sudden","external","violent","unintentional_to_insured"],quote:"He was murdered.",recordedAt:now.toISOString(),source:"system-derived"};
+    const assessed=assessmentFromBenefit({benefit:b,contract,sources:[source(text)],facts:{death:fact(true),causeOfDeath:fact("murdered")},scenarios:[scenario],now});
+    assert.equal(assessed.checks[0].result,"inferred");assert.equal(assessed.item.status,"potentially_applicable");
+    assert.equal(assessed.item.amountText,"S$350,000");assert.match(assessed.item.conditions.join(" "),/claim evidence must confirm/i);
+  });
+  test("An explicit failed requirement rules out that benefit and its amount",()=>{
+    const text="Death due to Accident. We pay 100% of Sum Insured.",b=benefit(text);
+    b.requirements=[{factKey:"accidentalDeath",operator:"equals",value:true,question:"",why:"Death must be accidental.",evidence:b.evidence[0]}];
+    const assessed=assessmentFromBenefit({benefit:b,contract,sources:[source(text)],facts:{accidentalDeath:fact(false)},now});
+    assert.equal(assessed.checks[0].result,"not_met");assert.equal(assessed.item.status,"not_applicable");assert.equal(assessed.item.amountText,null);
+  });
+  test("Potential totals add independent lump sums but do not treat reimbursement as freely additive",()=>{
+    const totals=aggregatePotentialPayouts([
+      {title:"Life",status:"potentially_applicable",amountText:"S$1,000,000",amountLabel:"Potential payout",calculatedAmount:1_000_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[]},
+      {title:"PA",status:"potentially_applicable",amountText:"S$600,000",amountLabel:"Potential payout",calculatedAmount:600_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[]},
+      {title:"Medical",status:"potentially_applicable",amountText:"S$2,000",amountLabel:"Potential reimbursement",calculatedAmount:2_000,currency:"SGD",calculationKind:"expense_cap",aggregation:"reimbursement",reason:"",conditions:[]},
+    ]);
+    assert.deepEqual(totals,[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
+  });
+  test("A schedule-only benefit is labelled as confirmed cover, not a calculated claim",()=>{
+    const text="Group Term Life Death As of 06/10/2022",b=benefit(text);
+    b.formula={kind:"none",value:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence:null};
+    const personal=source(text,{citation:{chunkId:"source-a",policyId:"schedule",policyName:"Flexible Plan",pageStart:1,pageEnd:1,personalEvidence:true}});
+    const item=assessmentFromBenefit({benefit:b,contract,sources:[personal],facts:{death:fact(true)},now}).item;
+    assert.equal(item.status,"needs_document");assert.equal(item.amountText,"S$350,000");
+    assert.equal(item.amountLabel,"Confirmed cover amount — payout rule not yet verified");assert.match(item.reason,/insured amount of S\$350,000/);
+  });
+  test("Illustrated non-guaranteed values cannot become guaranteed observations",()=>{
+    const text="The projected non-guaranteed maturity value is SGD 100000.";
+    assert.equal(validateAnalysis({benefits:[],observations:[{text:"The guaranteed maturity value is SGD 100000.",evidence:[{sourceId:"source-a",quote:text}]}],nextSteps:[]},[source(text)],contract).observations.length,0);
+  });
+  test("Normal answers cannot invent a derived numeric total",()=>{
+    const text="The guaranteed benefit is SGD 100000.";
+    assert.equal(validateAnalysis({benefits:[],observations:[{text:"You receive SGD 200000.",evidence:[{sourceId:"source-a",quote:text}]}],nextSteps:[]},[source(text)],contract).observations.length,0);
+  });
+  test("Shared exact insurer/product wording can support separate owned contracts",()=>{
+    assert.equal(referenceMatches(document(),document({id:"reference",policy_number:null,personal_coverage_confirmed:false,document_role:"policy_wording"})),true);
+  });
+  test("Insurer, policy number and product contradictions remain separate",()=>{
+    assert.equal(referenceMatches(document(),document({id:"reference",insurer:"Other Insurer",personal_coverage_confirmed:false,document_role:"policy_wording"})),false);
+    assert.equal(referenceMatches(document(),document({id:"reference",policy_number:"P-200",personal_coverage_confirmed:false,document_role:"policy_wording"})),false);
+    assert.notEqual(productIdentity("Shield Plan A"),productIdentity("Shield Plan B"));
+  });
+  test("A group summary missing metadata can link only through product and distinctive scheme context",()=>{
+    const owner=document({group_policy_number:"G007500",header:"MINDEF MHA Group Insurance Scheme",products:["Group Term Life"],product_name:"MINDEF MHA Group Insurance Scheme"});
+    const matching=document({id:"matching",personal_coverage_confirmed:false,document_role:"product_summary",group_policy_number:null,policy_number:null,
+      product_name:"Group Term Life",products:["Group Term Life"],header:"MINDEF and MHA Group Term Life Product Summary"});
+    const other=document({id:"other",personal_coverage_confirmed:false,document_role:"product_summary",group_policy_number:null,policy_number:null,
+      product_name:"Group Term Life",products:["Group Term Life"],header:"Corporate Employee Group Term Life Product Summary"});
+    assert.equal(referenceMatches(owner,matching),true);assert.equal(referenceMatches(owner,other),false);
+  });
+  test("A combined personal certificate and Part 2 guide keeps the personal extraction path",()=>{
+    const pages=[{pageNumber:1,text:"Certificate of Group Insurance. Particulars of Insured: Person A. Sum Insured SGD 100000. Effective Date 2022-10-06."},
+      {pageNumber:2,text:"Certificate of Insurance Part 2: Highlights of Cover. Group Term Life benefits."}];
+    assert.equal(detectHighConfidenceReferenceRole(pages),null);
+    assert.equal(deterministicDocumentRole(pages,"benefit_guide"),"certificate");
+  });
+  test("Other people's personalised schedules are never reference wording",()=>{
+    assert.equal(referenceMatches(document(),document({id:"someone-else",member_ids:["other"]})),false);
+  });
+  test("A certificate alone is not matching policy wording",()=>{
+    const people=[{id:person,display_name:"Person A",preferred_name:null,relationship:"self"}];
+    const contracts=buildContracts([document()],people,[coverage()]);
+    assert.equal(contracts.length,1);assert.equal(contracts[0].references.length,0);
+  });
+  test("An amendment supersedes the matching coverage rather than adding it",()=>{
+    const people=[{id:person,display_name:"Person A",preferred_name:null,relationship:"self"}];
+    const contracts=buildContracts([document(),document({id:"amendment",document_role:"endorsement",document_authority:100})],people,
+      [coverage(),coverage({id:"amended",policyId:"amendment",amount:400000})]);
+    assert.equal(contracts.length,1);assert.equal(contracts[0].coverages.length,1);assert.equal(contracts[0].coverages[0].amount,400000);
+  });
+  for(const count of [90,900])test("Mixed family inventory contains all "+count+" policies",()=>{
+    const types=["Savings","Investment","Motor","Travel","Death","Critical Illness","Home","Long-term Care","Other"];
+    const people=Array.from({length:9},(_,i)=>({id:"person-"+i,display_name:"Person "+i,preferred_name:null,relationship:"family"}));
+    const docs=Array.from({length:count},(_,i)=>document({id:"doc-"+i,policy_number:"P-"+i,member_ids:[people[i%9].id],product_name:"Plan "+i,policy_type:types[i%types.length],products:["Plan "+i]}));
+    const covers=docs.map((d,i)=>coverage({id:"cover-"+i,policyId:d.id,familyMemberId:d.member_ids[0],productName:d.product_name,category:types[i%types.length]}));
+    const contracts=buildContracts(docs,people,covers);
+    assert.equal(contracts.length,count);assert.equal(contracts.at(-1)?.documents[0].id,"doc-"+(count-1));
+    assert.equal(contracts.filter(c=>c.ownerId===people[0].id).length,count/9);
+  });
+  test("Evidence windows preserve all ordinary chunks without a giant context",()=>{
+    const sources=Array.from({length:120},(_,i)=>source("A".repeat(1800),{id:"source-"+i}));
+    const windows=evidenceWindows(sources);assert.equal(windows.flat().length,120);
+    assert.ok(windows.every(w=>w.reduce((n,s)=>n+s.text.length+120,0)<=3300));
+  });
+  test("Policy reading keeps lexical or sufficiently close per-contract evidence",()=>{
+    const lexical=source("Lexical",{id:"lexical",lexicalMatch:true,semanticDistance:1.1});
+    const semantic=source("Semantic",{id:"semantic",lexicalMatch:false,semanticDistance:0.4});
+    const unrelated=source("Unrelated",{id:"unrelated",lexicalMatch:false,semanticDistance:1.2});
+    assert.deepEqual(analysisSources([lexical,semantic,unrelated],0.72).map(s=>s.id),["lexical","semantic"]);
+    assert.equal(analysisSources([source("Legacy")]).length,1);
+  });
+  test("Oversized legacy chunks are split without being discarded",()=>{
+    const marker="END-OF-POLICY",windows=evidenceWindows([source("A".repeat(9000)+marker)]),parts=windows.flat();
+    assert.ok(parts.length>1);assert.ok(parts.every(part=>part.text.length+120<=3300));assert.ok(parts.some(part=>part.text.includes(marker)));
+  });
+  test("Family-local dates remain stable at UTC day boundaries",()=>{
+    assert.equal(resolveClaimDate("yesterday",{now:new Date("2026-09-13T17:00:00Z"),timeZone:"Asia/Singapore"})?.date,"2026-09-13");
+  });
+  test("Review coverage counts only the pages and passages actually read",()=>{
+    const documents=[document({id:"schedule",page_total:4,chunk_total:4}),document({id:"wording",personal_coverage_confirmed:false,document_role:"policy_wording",page_total:20,chunk_total:12})];
+    const retrieved=[source("A",{id:"a",policyId:"wording",pageStart:3,pageEnd:4}),source("B",{id:"b",policyId:"wording",pageStart:9,pageEnd:9}),source("C",{id:"c",policyId:"schedule",pageStart:1,pageEnd:1})];
+    const coverage=contractReviewCoverage({documents,retrieved,read:[retrieved[0],retrieved[2]],windowsAnalyzed:2,windowsFailed:0,hasWording:true});
+    assert.equal(coverage.pagesTotal,24);assert.equal(coverage.passagesTotal,16);
+    assert.equal(coverage.pagesRetrieved,4);assert.equal(coverage.pagesRead,3);
+    assert.equal(coverage.passagesRetrieved,3);assert.equal(coverage.passagesRead,2);
+    assert.equal(coverage.completeness,"partial_retrieval");
+  });
+  test("A windowed fragment of one passage is not counted as extra evidence",()=>{
+    const documents=[document({id:"wording",personal_coverage_confirmed:false,document_role:"policy_wording",page_total:1,chunk_total:1})];
+    const whole=source("A",{id:"only",policyId:"wording"});
+    const read=[{...whole,id:"only#part-1"},{...whole,id:"only#part-2"}];
+    const coverage=contractReviewCoverage({documents,retrieved:[whole],read,windowsAnalyzed:2,windowsFailed:0,hasWording:true});
+    assert.equal(coverage.passagesRead,1);assert.equal(coverage.completeness,"full_text_reviewed");
+  });
+  test("An unprocessed or wording-free contract is never a complete review",()=>{
+    const ready=document({id:"schedule",page_total:1,chunk_total:1});
+    const pending=document({id:"scan",processing_status:"processing",page_total:0,chunk_total:0});
+    const read=[source("A",{id:"a",policyId:"schedule"})];
+    assert.equal(contractReviewCoverage({documents:[ready,pending],retrieved:read,read,windowsAnalyzed:1,windowsFailed:0,hasWording:true}).completeness,"not_processed");
+    assert.equal(contractReviewCoverage({documents:[ready],retrieved:read,read,windowsAnalyzed:1,windowsFailed:0,hasWording:false}).completeness,"no_wording");
+    assert.equal(contractReviewCoverage({documents:[ready],retrieved:read,read,windowsAnalyzed:1,windowsFailed:1,hasWording:true}).completeness,"partial_retrieval");
+  });
+  test("A negative coverage conclusion needs every contract fully reviewed",()=>{
+    const full=contractReviewCoverage({documents:[document({id:"d1",page_total:1,chunk_total:1})],
+      retrieved:[source("A",{id:"a",policyId:"d1"})],read:[source("A",{id:"a",policyId:"d1"})],windowsAnalyzed:1,windowsFailed:0,hasWording:true});
+    const partial=contractReviewCoverage({documents:[document({id:"d2",page_total:8,chunk_total:8})],
+      retrieved:[source("A",{id:"a",policyId:"d2"})],read:[source("A",{id:"a",policyId:"d2"})],windowsAnalyzed:1,windowsFailed:0,hasWording:true});
+    assert.equal(negativeConclusionPermitted(summarizeReviewCoverage([full])),true);
+    assert.equal(negativeConclusionPermitted(summarizeReviewCoverage([full,partial])),false);
+    assert.equal(negativeConclusionPermitted(summarizeReviewCoverage([])),false);
+    assert.equal(negativeConclusionPermitted(undefined),false);
+    assert.match(summarizeReviewCoverage([full,partial]).statement,/^Partial review: 2 of 9 processed pages/);
+    assert.match(summarizeReviewCoverage([full]).statement,/^Complete review/);
+  });
+  test("Multi-page passages count every page they span",()=>{
+    assert.equal(pagesSpanned([{pageStart:4,pageEnd:6},{pageStart:6,pageEnd:6}]).size,3);
+    assert.equal(pagesSpanned([{pageStart:0,pageEnd:0}]).size,0);
+  });
+  test("Generated prose cannot claim no coverage, but may call a review incomplete",()=>{
+    assert.equal(negativeCoverageClaim("This event is not covered by the policy."),true);
+    assert.equal(negativeCoverageClaim("There is no cover for theft."),true);
+    assert.equal(negativeCoverageClaim("An unread section is an incomplete review, so it does not mean the event is not covered."),false);
+    assert.equal(negativeCoverageClaim("I found two benefits that may respond."),false);
+  });
+  test("Currentness reports payment recency without touching ownership",()=>{
+    const fresh=assessCurrentness({now,lastEvidenceOn:"2026-06-01",renewalOrExpiryDate:"2027-01-01"});
+    assert.equal(fresh.state,"verified_recent");assert.equal(fresh.label,"Active status evidenced");
+    const stale=assessCurrentness({now,lastEvidenceOn:"2023-01-01",renewalOrExpiryDate:null});
+    assert.equal(stale.state,"not_recently_verified");assert.match(stale.detail,/Ownership stays confirmed/);
+    const none=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:null});
+    assert.equal(none.state,"unknown");assert.match(none.detail,/Ownership stays confirmed/);
+    const expired=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:"2025-01-01"});
+    assert.equal(expired.state,"expiry_date_passed");assert.match(expired.detail,/Ownership stays confirmed/);
+    // A later receipt outranks a passed printed expiry date.
+    assert.equal(assessCurrentness({now,lastEvidenceOn:"2026-08-01",renewalOrExpiryDate:"2025-01-01"}).state,"verified_recent");
+    assert.equal(assessCurrentness({now,lastEvidenceOn:"not-a-date",renewalOrExpiryDate:"not-a-date"}).state,"unknown");
+    for(const state of [fresh,stale,none,expired])assert.equal(state.state==="verified_recent",state.label==="Active status evidenced");
+  });
+  test("Premium evidence must belong to the same person and contract",()=>{
+    const rows:PremiumEvidenceRow[]=[
+      {policy_id:"other-document",family_member_id:person,insurer:"Example Insurer",policy_number:"P-999",latest:"2026-09-01"},
+      {policy_id:null,family_member_id:"person-b",insurer:"Example Insurer",policy_number:"P-100",latest:"2026-09-02"},
+      {policy_id:null,family_member_id:null,insurer:"Another Insurer",policy_number:"P-100",latest:"2026-09-03"},
+    ];
+    assert.equal(matchPremiumEvidence(contract,rows),null);
+    assert.equal(matchPremiumEvidence(contract,[...rows,{policy_id:"schedule",family_member_id:null,insurer:null,policy_number:null,latest:"2026-05-05"}]),"2026-05-05");
+    assert.equal(matchPremiumEvidence(contract,[...rows,{policy_id:null,family_member_id:person,insurer:"Example Insurer",policy_number:"P-100",latest:"2026-04-04"}]),"2026-04-04");
+    assert.equal(contractCurrentness(contract,[],now).state,"unknown");
+    assert.equal(contractCurrentness({...contract,documents:[document({renewal_or_expiry_date:"2024-01-01"})]},[],now).state,"expiry_date_passed");
+  });
+  test("Missing premium evidence never removes a confirmed coverage amount",()=>{
+    const assessed=assessmentFromBenefit({benefit:benefit(),contract,sources:[source("We pay 100% of Sum Insured for a qualifying critical illness.")],facts:{},now});
+    assert.equal(contractCurrentness(contract,[],now).state,"unknown");
+    assert.equal(assessed.item.amountText,"S$350,000");
+    assert.equal(assessed.item.status,"potentially_applicable");
+  });
+  test("Retrieval depth scales with the size of the document",()=>{
+    delete process.env.RAG_MIN_PASSAGES_PER_DOCUMENT;delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+    assert.equal(passageBudget(0),6,"An unprocessed document keeps the floor");
+    assert.equal(passageBudget(2),2,"Never ask for more passages than the document stores");
+    assert.equal(passageBudget(10),6,"Small documents keep the floor");
+    assert.equal(passageBudget(40),14,"A forty-passage booklet is no longer read six passages at a time");
+    assert.equal(passageBudget(500),16,"The ceiling keeps local-model work bounded");
+    process.env.RAG_MAX_PASSAGES_PER_DOCUMENT="10";
+    assert.equal(passageBudget(500),10,"The ceiling is tunable for a slower machine");
+    delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+  });
+  test("One shared group summary supports every family member who owns that group cover",()=>{
+    const scheme=(over:Partial<InventoryDocument>)=>document({insurer:"Singapore Life Ltd",group_policy_number:"G007500",...over});
+    const desmond=scheme({id:"cert-desmond",policy_number:"CERT-D",member_ids:["desmond"]});
+    const charmaine=scheme({id:"cert-charmaine",policy_number:"CERT-C",member_ids:["charmaine"]});
+    const summary=scheme({id:"summary",personal_coverage_confirmed:false,document_role:"benefit_guide",policy_number:null,document_authority:60});
+    for(const owner of [desmond,charmaine]){
+      const outcome=referenceMatchReason(owner,summary);
+      assert.equal(outcome.matches,true,"The shared summary must bind to "+owner.id);
+      assert.match(outcome.reason,/G007500/);
+    }
+    // It binds through the contract builder too, not only the matcher.
+    const people=[{id:"desmond",display_name:"Desmond",preferred_name:null,relationship:"self"},
+      {id:"charmaine",display_name:"Charmaine",preferred_name:null,relationship:"spouse"}];
+    const contracts=buildContracts([desmond,charmaine,summary],people,
+      [coverage({id:"c-d",policyId:"cert-desmond",familyMemberId:"desmond"}),coverage({id:"c-c",policyId:"cert-charmaine",familyMemberId:"charmaine"})]);
+    assert.equal(contracts.length,2);
+    assert.equal(contracts.every(c=>c.references.some(r=>r.id==="summary")),true,"Both people must reach the same wording");
+    assert.equal(contracts.every(c=>c.confirmed),true);
+  });
+  test("A combined certificate keeps its own wording sections for each owner",()=>{
+    const combined=document({id:"combined",member_ids:["desmond","charmaine"],has_reference_sections:true,group_policy_number:"G007500"});
+    const people=[{id:"desmond",display_name:"Desmond",preferred_name:null,relationship:"self"},
+      {id:"charmaine",display_name:"Charmaine",preferred_name:null,relationship:"spouse"}];
+    const contracts=buildContracts([combined],people,
+      [coverage({id:"c-d",policyId:"combined",familyMemberId:"desmond"}),coverage({id:"c-c",policyId:"combined",familyMemberId:"charmaine"})]);
+    assert.equal(contracts.length,2,"One PDF naming two people is two contracts, not one");
+    assert.equal(contracts.every(c=>c.documents.some(d=>d.id==="combined"&&d.has_reference_sections===true)),true);
+    assert.equal(referenceMatchReason(combined,combined).matches,true);
+  });
+  test("A wording document that cannot bind explains why",()=>{
+    const owner=document({insurer:"Singapore Life Ltd",group_policy_number:"G007500"});
+    assert.match(referenceMatchReason(owner,document({id:"other",personal_coverage_confirmed:false,document_role:"policy_wording",insurer:"Another Insurer"})).reason,/Insurer differs/);
+    assert.match(referenceMatchReason(owner,document({id:"other",personal_coverage_confirmed:false,document_role:"policy_wording",insurer:"Singapore Life Ltd",group_policy_number:"G999999"})).reason,/Group policy number differs/);
+    assert.match(referenceMatchReason(owner,document({id:"other",personal_coverage_confirmed:false,document_role:"claim_form",insurer:"Singapore Life Ltd"})).reason,/is not a wording role/);
+    assert.match(referenceMatchReason(owner,document({id:"other",insurer:"Singapore Life Ltd"})).reason,/personalised evidence/);
+    assert.equal(referenceMatches(owner,document({id:"other",personal_coverage_confirmed:false,document_role:"policy_wording",insurer:"Another Insurer"})),false);
+  });
+  test("Output cut off mid-JSON is salvaged back to its last complete element",()=>{
+    const cut='{"intent": "claim", "newTopic": true, "searchTerms": ["claim","benefits"], "facts": [{"subjectId":"s1","key":"eventType","value":"fall from stairs","state":"known","quote":"fell down from the stairs"}, {"subjectId": "s1", "key": "fract';
+    const repaired=repairTruncatedJson(cut);
+    assert.ok(repaired,"A truncated document must be recoverable");
+    const parsed=JSON.parse(repaired!);
+    assert.equal(parsed.intent,"claim");
+    assert.equal(parsed.facts.length,1,"The incomplete trailing fact is dropped, the complete one is kept");
+    assert.equal(parsed.facts[0].key,"eventType");
+    assert.deepEqual(parsed.searchTerms,["claim","benefits"]);
+  });
+  test("Salvage leaves valid and unrecoverable output alone",()=>{
+    assert.equal(repairTruncatedJson('{"intent":"claim"}'),null,"Balanced JSON was not truncated");
+    assert.equal(repairTruncatedJson("not json at all"),null);
+    assert.equal(repairTruncatedJson('{"facts": [{"quote": "he said \\"ouch\\", then fell"'),null,"Nothing complete to keep");
+    // A brace inside a string must not be mistaken for structure.
+    const nested=repairTruncatedJson('{"a":[{"q":"a { b [ c"},{"q":"cut');
+    assert.deepEqual(JSON.parse(nested!),{a:[{q:"a { b [ c"}]});
+  });
+  test("Reading work per turn is bounded",()=>{
+    for(const key of ["RAG_MAX_EVIDENCE_WINDOWS","RAG_ANALYSIS_BUDGET_MS"])delete process.env[key];
+    assert.equal(readingBudget().maximumWindows,8);
+    assert.equal(readingBudget().millisecondBudget,300_000,"A turn cannot read for an unbounded time");
+    process.env.RAG_MAX_EVIDENCE_WINDOWS="24";process.env.RAG_ANALYSIS_BUDGET_MS="60000";
+    assert.equal(readingBudget().maximumWindows,24);
+    assert.equal(readingBudget().millisecondBudget,60_000);
+    process.env.RAG_MAX_EVIDENCE_WINDOWS="0";
+    assert.equal(readingBudget().maximumWindows,8,"An out-of-range setting falls back to the default");
+    for(const key of ["RAG_MAX_EVIDENCE_WINDOWS","RAG_ANALYSIS_BUDGET_MS"])delete process.env[key];
+  });
+  test("Model calls go to the contracts retrieval actually matched",()=>{
+    const windowsFor=(id:string,count:number,over:Partial<PolicySource>={})=>
+      Array.from({length:count},(_,i)=>[source("text",{id:id+"-"+i,policyId:id,...over})]);
+    const candidates=[
+      candidateFromWindows("weak-a",windowsFor("weak-a",3,{lexicalMatch:false,semanticDistance:0.68})),
+      candidateFromWindows("strong",windowsFor("strong",4,{lexicalMatch:true,semanticDistance:0.30})),
+      candidateFromWindows("closer",windowsFor("closer",3,{lexicalMatch:false,semanticDistance:0.41})),
+      candidateFromWindows("empty",[]),
+    ];
+    assert.deepEqual(rankCandidates(candidates).map(c=>c.contractId),["strong","closer","weak-a","empty"],
+      "Lexical match first, then the closest semantic passage, with no-evidence contracts last");
+    const allocation=allocateReadingWindows(candidates,6,6);
+    assert.equal(allocation.get("empty"),0,"A contract with no retrieved evidence never costs a model call");
+    assert.equal(allocation.get("strong"),2,"The lexically matched contract is read first and deepest");
+    assert.equal((allocation.get("closer")??0)>=1,true,"Every candidate still gets its best passage read");
+    assert.equal((allocation.get("weak-a")??0)>=1,true);
+    assert.equal([...allocation.values()].reduce((a,b)=>a+b,0),6,"The whole budget is spent, and no more");
+  });
+  test("Ten policies each get their best section before any gets a second",()=>{
+    const candidates=Array.from({length:10},(_,i)=>
+      candidateFromWindows("c"+i,Array.from({length:4},(_,w)=>[source("t",{id:"c"+i+"-"+w,policyId:"c"+i,lexicalMatch:true,semanticDistance:0.2+i/100})])));
+    const allocation=allocateReadingWindows(candidates,12,12);
+    assert.equal([...allocation.values()].every(v=>v>=1),true,"No contract may be skipped entirely while budget remains");
+    assert.equal([...allocation.values()].reduce((a,b)=>a+b,0),12);
+    assert.equal(allocation.get("c0"),2,"Spare budget deepens the closest match");
+    assert.equal(allocation.get("c9"),1);
+  });
+  test("A single contract may use the whole budget",()=>{
+    const only=[candidateFromWindows("solo",Array.from({length:20},(_,w)=>[source("t",{id:"s"+w,policyId:"solo",lexicalMatch:true})]))];
+    assert.equal(allocateReadingWindows(only,12,12).get("solo"),12);
+    assert.equal(allocateReadingWindows(only,12,3).get("solo"),3,"A per-contract cap is still respected");
+    assert.equal(allocateReadingWindows([],12,12).size,0);
+  });
+    test("The reading schema cannot ask for more text than the output budget allows",()=>{
+    const json=JSON.stringify(z.toJSONSchema(PolicyAnalysisSchema));
+    const longest=[...json.matchAll(/"maxLength":(\d+)/g)].map(m=>Number(m[1]));
+    assert.ok(longest.length,"The schema must still bound every free-text field");
+    assert.ok(Math.max(...longest)<=260,
+      "Verbatim quotes are the bulk of the output tokens; the longest field is "+Math.max(...longest));
+    // Worst-case text the model could be asked to emit, at roughly 4 chars/token.
+    const characters=longest.reduce((total,value)=>total+value,0);
+    assert.ok(characters/4<readingOutputTokens()*3,
+      "The schema's worst case ("+Math.round(characters/4)+" tokens of text) is far beyond the "+readingOutputTokens()+"-token budget");
+    delete process.env.RAG_READING_OUTPUT_TOKENS;
+    assert.equal(readingOutputTokens(),900);
+    process.env.RAG_READING_OUTPUT_TOKENS="500";
+    assert.equal(readingOutputTokens(),500);
+    process.env.RAG_READING_OUTPUT_TOKENS="oops";
+    assert.equal(readingOutputTokens(),900,"A bad setting falls back to the default");
+    delete process.env.RAG_READING_OUTPUT_TOKENS;
+  });
+  test("One misshapen field no longer discards a whole evidence section",()=>{
+    const quote={sourceId:"source-a",quote:"We pay 25% of the S$5,000 benefit limit."};
+    const raw={
+      benefits:[
+        // conditions arrived as a bare string - the shape Qwen actually returned.
+        {title:"Simple Fracture",coverageId:"cover-a",evidence:quote,requirements:[],conditions:"Subject to the policy definition.",
+         formula:{kind:"sum_insured",value:0.25,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:quote}},
+        {title:"Unusable",coverageId:null,evidence:[],requirements:[],conditions:[],
+         formula:{kind:"none",value:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence:null}},
+      ],
+      observations:{text:"A lone object where a list belongs.",evidence:[quote]},
+      nextSteps:"not a list",
+    };
+    const coerced=PolicyAnalysisSchema.parse(coercePolicyAnalysis(raw));
+    assert.equal(coerced.benefits.length,1,"The salvageable benefit survives");
+    assert.equal(coerced.benefits[0].title,"Simple Fracture");
+    assert.deepEqual(coerced.benefits[0].evidence,[quote],"A single quote is read as a list of one");
+    assert.deepEqual(coerced.benefits[0].conditions,[],"An unquoted condition is dropped, never invented");
+    assert.equal(coerced.benefits[0].formula.kind,"sum_insured");
+    assert.equal(coerced.observations.length,1);
+    assert.deepEqual(coerced.nextSteps,[]);
+    assert.deepEqual(coercePolicyAnalysis("nonsense"),{benefits:[],observations:[],nextSteps:[]});
+    assert.deepEqual(coercePolicyAnalysis(null),{benefits:[],observations:[],nextSteps:[]});
+    assert.equal(coercePolicyAnalysis({benefits:[{title:"No evidence",coverageId:"cover-a",evidence:[],requirements:[],conditions:[],
+      formula:{kind:"none",value:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence:null}}]}).benefits.length,0,
+      "A benefit with no quoted evidence is still rejected");
+  });
+  test("A failed section is explained in plain language, never as validation output",()=>{
+    const zodish=new Error('[{"expected":"array","code":"invalid_type","path":["benefits",0,"conditions"]}]');
+    const cases:[unknown,string][]=[
+      [new TruncatedModelOutput("x","raw",false,zodish),"the model’s answer for that section was not in the expected form"],
+      [new TruncatedModelOutput("x","raw",true),"the model ran out of room part-way through that section"],
+      [new Error("qwen3:8b chat timed out after 150 seconds"),"the local model timed out on that section"],
+      [new Error('Model returned invalid structured JSON: {"a":'),"the local model did not return usable structured output for that section"],
+      [new Error("something else entirely"),"the local model could not complete that section"],
+      // A hosted provider's own explanation is the diagnosis, in its words.
+      [new Error('Model request failed (403): This API method requires billing to be enabled. Please enable billing on project #123'),
+        "the local model refused the request: This API method requires billing to be enabled. Please enable billing on project #123. Check the key in .env.local and the key's API restrictions in Google Cloud"],
+      [new Error("Model request failed (404): models/gemini-9 is not found"),"the local model does not recognise the model name set in .env.local"],
+    ];
+    for(const [error,expected] of cases){
+      const reason=readableModelFailure(error);
+      assert.equal(reason,expected);
+      assert.equal(/[{}\[\]"]|invalid_type|"path"|received|ZodError/.test(reason),false,"No validation output may reach the user: "+reason);
+    }
+  });
+  test("A benefit is filed under the events that can trigger it",()=>{
+    assert.deepEqual(benefitTraits("Simple Fracture","We pay 25% of the benefit limit for a fracture caused by an accident.").sort(),
+      ["accident","bodily_injury"]);
+    assert.ok(benefitTraits("Ambulance Fee","We reimburse ambulance costs up to S$500 per incident.").includes("medical_expense"));
+    assert.ok(benefitTraits("Death Benefit","On death we pay the full Sum Insured.").includes("death"));
+    assert.ok(benefitTraits("Daily Hospital Cash","S$30 per day of hospital confinement.").includes("hospitalisation"));
+    assert.deepEqual(benefitTraits("Administration","Forms must be submitted to the Company."),["other"]);
+  });
+  test("A fall down the stairs never surfaces a death or disability benefit",()=>{
+    const facts:SubjectFacts={
+      injured:fact(true),fractureBodyPart:fact("ankle"),ambulanceUsed:fact(true),
+      hospitalNights:fact(3),hospitalBill:fact(8423),
+    };
+    const traits=eventTraits(facts);
+    assert.ok(traits.includes("bodily_injury")&&traits.includes("hospitalisation")&&traits.includes("medical_expense"));
+    assert.equal(traits.includes("death"),false);
+    const entry=(name:string,quote:string):CatalogBenefit=>({id:name,policyId:"wording",productName:"Flexible Plan",benefitName:name,
+      traits:benefitTraits(name,quote),formulaKind:"none",formulaValue:null,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:1,quote,conditions:[],requirements:[],needsReview:false});
+    const catalog=[
+      entry("Death Benefit","On death we pay the full Sum Insured."),
+      entry("Total and Permanent Disablement","We pay 150% of the Sum Insured for total and permanent disablement."),
+      entry("Simple Fracture","We pay 25% of the S$5,000 benefit limit for a fracture caused by an accident."),
+      entry("Ambulance Fee","We reimburse the ambulance cost up to S$500 per incident."),
+    ];
+    const matched=matchBenefits(catalog,traits).map(entry=>entry.benefit.benefitName);
+    assert.ok(matched.includes("Simple Fracture")&&matched.includes("Ambulance Fee"));
+    assert.equal(matched.includes("Death Benefit"),false,"A broken ankle is not a death claim");
+    assert.equal(matched.includes("Total and Permanent Disablement"),false,"and it is not a disability claim either");
+  });
+  test("A payout rule is only accepted when the quoted clause proves it",()=>{
+    const ok=validateCatalogFormula({kind:"sum_insured",value:0.25,currency:"SGD",
+      quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null});
+    assert.equal(ok.formulaKind,"sum_insured");assert.equal(ok.formulaValue,0.25);
+    // The clause says 25%, the model claimed 50%.
+    assert.equal(validateCatalogFormula({kind:"sum_insured",value:0.5,currency:"SGD",
+      quote:"We pay 25% of the Sum Insured for a simple fracture.",factKey:null,offsetDays:null,maximumDays:null}).formulaKind,"none");
+    // A deduction makes the arithmetic unsupported.
+    assert.equal(validateCatalogFormula({kind:"sum_insured",value:1,currency:"SGD",
+      quote:"We pay the Sum Insured less any amount previously paid.",factKey:null,offsetDays:null,maximumDays:null}).formulaKind,"none");
+    const cap=validateCatalogFormula({kind:"expense_cap",value:500,currency:"SGD",
+      quote:"We reimburse the ambulance cost up to S$500 per incident.",factKey:"ambulanceBill",offsetDays:null,maximumDays:null});
+    assert.equal(cap.formulaKind,"expense_cap");assert.equal(cap.factKey,"ambulanceBill");
+    // A cap is not a fixed payout.
+    assert.equal(validateCatalogFormula({kind:"fixed",value:500,currency:"SGD",
+      quote:"We reimburse the ambulance cost up to S$500 per incident.",factKey:null,offsetDays:null,maximumDays:null}).formulaKind,"none");
+    const daily=validateCatalogFormula({kind:"daily",value:30,currency:"SGD",
+      quote:"Daily hospital cash of S$30 per day after the 3rd day, maximum of 30 days.",factKey:"hospitalNights",offsetDays:3,maximumDays:30});
+    assert.equal(daily.formulaKind,"daily");assert.equal(daily.offsetDays,3);assert.equal(daily.maximumDays,30);
+    assert.equal(validateCatalogFormula({kind:"fixed",value:9999,currency:"SGD",
+      quote:"We pay a benefit of S$500.",factKey:null,offsetDays:null,maximumDays:null}).formulaKind,"none","A number absent from the quote is never used");
+  });
+  test("Amounts are arithmetic on stored rules, identical every time",()=>{
+    const cover=coverage({amount:5000,currency:"SGD",productName:"Flexible Plan"});
+    const fracture:CatalogBenefit={id:"b1",policyId:"wording",productName:"Flexible Plan",benefitName:"Simple Fracture",
+      traits:["bodily_injury","accident"],formulaKind:"sum_insured",formulaValue:0.25,currency:"SGD",
+      factKey:null,offsetDays:null,maximumDays:null,sourcePage:14,quote:"We pay 25% of the Sum Insured.",conditions:[],requirements:[],needsReview:false};
+    const first=assessCatalogBenefit({benefit:fracture,coverage:cover,ownerName:"Person A",facts:{}});
+    const again=assessCatalogBenefit({benefit:fracture,coverage:cover,ownerName:"Person A",facts:{}});
+    assert.equal(first.item.amountText,"S$1,250");
+    assert.equal(first.item.status,"likely_applicable");
+    assert.match(first.item.reason,/page 14/);
+    assert.deepEqual(first.item,again.item,"The same question must give the same answer");
+    const ambulance:CatalogBenefit={...fracture,id:"b2",benefitName:"Ambulance Fee",traits:["medical_expense"],
+      formulaKind:"expense_cap",formulaValue:500,factKey:"ambulanceBill",quote:"Up to S$500 per incident."};
+    assert.equal(assessCatalogBenefit({benefit:ambulance,coverage:cover,ownerName:"Person A",
+      facts:{ambulanceBill:fact(220)}}).item.amountText,"S$220.00","The bill, not the cap, when the bill is lower");
+    assert.equal(assessCatalogBenefit({benefit:ambulance,coverage:cover,ownerName:"Person A",
+      facts:{ambulanceBill:fact(900)}}).item.amountText,"S$500.00","and the cap when the bill is higher");
+    const unknown=assessCatalogBenefit({benefit:ambulance,coverage:cover,ownerName:"Person A",facts:{}});
+    assert.equal(unknown.item.amountText,null);
+    assert.equal(unknown.item.status,"needs_document");
+    assert.ok(unknown.missing.some(entry=>/ambulance/i.test(entry)));
+    const cash:CatalogBenefit={...fracture,id:"b3",benefitName:"Daily Hospital Cash",traits:["hospitalisation"],
+      formulaKind:"daily",formulaValue:30,factKey:"hospitalNights",offsetDays:3,maximumDays:30,quote:"S$30 per day after the 3rd day."};
+    assert.equal(assessCatalogBenefit({benefit:cash,coverage:cover,ownerName:"Person A",
+      facts:{hospitalNights:fact(10)}}).item.amountText,"S$210.00","(10 - 3) x S$30");
+    assert.equal(assessCatalogBenefit({benefit:cash,coverage:cover,ownerName:"Person A",
+      facts:{hospitalNights:fact(2)}}).item.amountText,"S$0.00","Below the waiting period pays nothing");
+  });
+  test("Uploading a policy is a statement that you hold it",()=>{
+    const booklet=document({id:"booklet",personal_coverage_confirmed:false,document_authority:40,
+      document_role:"benefit_guide",product_name:"CareShield Life",member_ids:[person],declared_member_ids:[person]});
+    const people=[{id:person,display_name:"Person A",preferred_name:null,relationship:"self"}];
+    const contracts=buildContracts([booklet],people,[]);
+    assert.equal(contracts.length,1,"A declared booklet is a contract, not an unusable reference");
+    assert.equal(contracts[0].ownershipBasis,"declared");
+    assert.equal(contracts[0].confirmed,false,"but no schedule has proved an amount");
+    // Nobody declared it -> it stays reference wording and creates no contract.
+    assert.equal(buildContracts([{...booklet,declared_member_ids:[]}],people,[]).length,0);
+    // A real schedule always outranks a declaration.
+    const schedule=document({id:"schedule",declared_member_ids:[person]});
+    assert.equal(buildContracts([schedule],people,[coverage()])[0].ownershipBasis,"evidence");
+  });
+  test("A declared policy pays its own printed figures, but never a share of an unknown sum insured",()=>{
+    const flat:CatalogBenefit={id:"b1",policyId:"booklet",productName:"CareShield Life",benefitName:"Monthly payout",
+      traits:["disability"],formulaKind:"fixed",formulaValue:600,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:4,quote:"We pay a benefit of S$600 each month.",conditions:[],requirements:[],needsReview:false};
+    const declared=assessCatalogBenefit({benefit:flat,coverage:null,ownerName:"Person A",facts:{},declaredOnly:true});
+    assert.equal(declared.item.amountText,"S$600.00","The document's own figure applies to the person who holds it");
+    assert.equal(declared.item.amountLabel,"Amount printed in the policy document — not yet confirmed against your own schedule");
+    assert.match(declared.item.reason,/page 4 of the document you uploaded/);
+    assert.equal(declared.item.aggregation,"reimbursement","An unconfirmed figure is never summed into a household total");
+    // A percentage of "the sum insured" is not computable without their schedule.
+    const share:CatalogBenefit={...flat,id:"b2",benefitName:"Death Benefit",traits:["death"],
+      formulaKind:"sum_insured",formulaValue:1,quote:"We pay the full Sum Insured."};
+    const unresolved=assessCatalogBenefit({benefit:share,coverage:null,ownerName:"Person A",facts:{},declaredOnly:true});
+    assert.equal(unresolved.item.amountText,null);
+    assert.ok(unresolved.missing.some(entry=>/your own sum insured/.test(entry)),
+      "It must say exactly what is needed: "+JSON.stringify(unresolved.missing));
+    // With a schedule the same rule becomes a real, addable payout.
+    const withSchedule=assessCatalogBenefit({benefit:share,coverage:coverage({amount:350000,currency:"SGD"}),ownerName:"Person A",facts:{}});
+    assert.equal(withSchedule.item.amountText,"S$350,000");
+    assert.equal(withSchedule.item.aggregation,"additive");
+    assert.equal(withSchedule.item.amountLabel,"Potential payout");
+  });
+  test("A two-column page is read down each column, not across both",()=>{
+    // Left and right columns share baselines, which is exactly what made the
+    // old space-joined text interleave into nonsense.
+    const at=(text:string,x:number,y:number,w=40):TextItem=>({text,x,y,w});
+    const items=[at("People may develop",40,700),at("All Singapore Citizens",330,700),
+      at("severe disability",40,684),at("are covered from age 30",330,684)];
+    const bands=columnBands(items,612);
+    assert.equal(bands.length,2,"A gutter between the columns must be found");
+    const {text,lines}=renderPageLayout(items,612);
+    assert.deepEqual(lines.map(l=>l.text),
+      ["People may develop","severe disability","All Singapore Citizens","are covered from age 30"]);
+    assert.ok(text.indexOf("severe disability")<text.indexOf("All Singapore Citizens"),
+      "The left column must be finished before the right one starts");
+  });
+  test("A benefit schedule row survives as a label and an amount",()=>{
+    const at=(text:string,x:number,y:number,w=60):TextItem=>({text,x,y,w});
+    const {lines}=renderPageLayout([
+      at("Benefit",60,700),at("Limit",380,700),
+      at("Simple fracture - wrist",60,680,150),at("25% of S$5,000",380,680),
+      at("Ambulance fee",60,660,110),at("Up to S$500 per incident",380,660),
+      at("This section explains how to claim.",60,600,300),
+    ],612);
+    const rows=benefitRows(lines);
+    assert.deepEqual(rows.map(r=>r.label),["Simple fracture - wrist","Ambulance fee"]);
+    assert.deepEqual(rows.map(r=>r.value),["25% of S$5,000","Up to S$500 per incident"]);
+    assert.equal(rows.some(r=>/explains how to claim/.test(r.label)),false,"Prose is not a table row");
+  });
+  test("A stored page can be re-read as a table without reopening the PDF",()=>{
+    const stored="Benefit\tLimit\nSimple fracture - wrist\t25% of S$5,000\nAmbulance fee\tUp to S$500\nPlain prose with no amount";
+    const rows=benefitRowsFromText(stored);
+    assert.equal(rows.length,2);
+    assert.equal(rows[0].label,"Simple fracture - wrist");
+    assert.equal(rows[1].value,"Up to S$500");
+    assert.deepEqual(benefitRowsFromText(""),[]);
+  });
+  test("Layout text still satisfies every exact-quote check",()=>{
+    // Quote validation normalises whitespace, so tabs and newlines are safe.
+    const at=(text:string,x:number,y:number,w=60):TextItem=>({text,x,y,w});
+    const {text,lines}=renderPageLayout([
+      at("Benefit",60,700,90),at("Limit",300,700),
+      at("Simple fracture",60,680,90),at("25% of Sum Insured",300,680,120),
+      at("A sentence that runs across the whole width of the page",60,660,360),
+    ],612);
+    assert.ok(text.includes("\t"),"Cells are preserved for later table recovery");
+    assert.equal(lines[1].cells.length,2);
+    assert.equal(hasQuote(text,"Simple fracture 25% of Sum Insured"),true,
+      "A quote spanning two cells still matches, because whitespace is normalised");
+    assert.equal(hasQuote(text,"A sentence that runs across the whole width of the page"),true);
+  });
+  test("A single-column page and an empty page are handled",()=>{
+    const at=(text:string,x:number,y:number,w=60):TextItem=>({text,x,y,w});
+    assert.equal(columnBands([at("One column of text",60,700,300)],612).length,1);
+    assert.deepEqual(renderPageLayout([],612),{text:"",lines:[]});
+    assert.deepEqual(renderPageLayout([at("   ",60,700)],612),{text:"",lines:[]});
+    assert.deepEqual(lineFrom([at("a",10,700,5),at("b",20,700,5)]).cells,["a b"],"A word gap is a space, not a cell break");
+    assert.deepEqual(lineFrom([at("a",10,700,5),at("b",15,700,5)]).cells,["ab"],"Adjacent glyphs are one word");
+    assert.deepEqual(lineFrom([at("a",10,700,5),at("b",90,700,5)]).cells,["a","b"],"A wide gap is a cell break");
+  });
+  test("A schedule cell states its own payout rule, parsed without a model",()=>{
+    const cases:[string,string,number][]=[
+      // The exact MINDEF/MHA fixture: both halves are printed in the one cell,
+      // so the figure is computable with no schedule and no model.
+      ["25% of S$5,000","fixed",1250],
+      ["50% of S$1,200.50","fixed",600.25],
+      ["100% of the Sum Insured","sum_insured",1],
+      ["150% of Sum Insured","sum_insured",1.5],
+      ["Up to S$500 per incident","expense_cap",500],
+      ["maximum of S$10,000","expense_cap",10000],
+      ["S$30 per day","daily",30],
+      ["$689/month","fixed",689],
+      ["S$5,000","fixed",5000],
+    ];
+    for(const [cell,kind,value] of cases){
+      const parsed=parseBenefitValue(cell);
+      assert.ok(parsed,"should parse: "+cell);
+      assert.equal(parsed!.kind,kind,cell);
+      assert.equal(parsed!.value,value,cell);
+      assert.equal(parsed!.currency,"SGD",cell);
+    }
+    // The same cell must always give the same rule.
+    assert.deepEqual(parseBenefitValue("25% of S$5,000"),parseBenefitValue("25% of S$5,000"));
+  });
+  test("A cell that does not state a rule is left for review, never guessed",()=>{
+    for(const cell of ["Up to 30 days","As charged","Nil","Not covered","",
+      "Sum Insured less any amount previously paid","S$500 minus the deductible",
+      "S$1,000 to S$5,000","a very long sentence about how the company will consider paying a benefit in certain circumstances"])
+      assert.equal(parseBenefitValue(cell),null,"must not invent a rule from: "+JSON.stringify(cell));
+  });
+  test("A reimbursement is only bound to a bill it can actually name",()=>{
+    assert.equal(expenseFactKey("Ambulance fee"),"ambulanceBill");
+    assert.equal(expenseFactKey("Hospital room and board"),"hospitalBill");
+    assert.equal(expenseFactKey("Vehicle repair cost"),"vehicleRepairBill");
+    assert.equal(expenseFactKey("Miscellaneous charges"),"outOfPocket");
+    assert.equal(expenseFactKey("Total and Permanent Disablement"),null,
+      "An unnamed expense must stay unbound rather than be compared to the wrong bill");
+  });
+  test("A daily benefit takes its waiting period and cap from its own row",()=>{
+    assert.deepEqual(dailyLimitsFrom("Daily hospital cash\tS$30 per day after the 3rd day, maximum of 30 days"),
+      {offsetDays:3,maximumDays:30});
+    assert.deepEqual(dailyLimitsFrom("Hospital cash\tS$50 per day from the 2nd night, up to 60 nights"),
+      {offsetDays:1,maximumDays:60});
+    assert.deepEqual(dailyLimitsFrom("Hospital cash\tS$30 per day"),{offsetDays:0,maximumDays:null},
+      "No cap stated means no cap known — not an unlimited benefit");
+  });
+  test("A schedule of bare percentages takes its basis from its own heading",()=>{
+    // The most common benefit table there is: a personal-accident schedule whose
+    // amounts are bare percentages, with the basis printed once, above them.
+    const page=["C. Total and Permanent Dismemberment due to Accident","Compensation","Schedule of Indemnities","(% of Sum Insured)",
+      "1.\tLoss of or Permanent Total Loss of use of at least one limb\t100%",
+      "22.\tLoss of speech\t50%"].join("\n");
+    const bases=percentageBases(page);
+    assert.equal(bases.length,1);
+    assert.deepEqual(bases[0].basis,{kind:"sum_insured"});
+    const rows=benefitRowsFromText(page);
+    const speech=rows.find(row=>/speech/.test(row.label))!;
+    assert.equal(parseBenefitValue(speech.value),null,"Out of its table, '50%' is fifty percent of nothing");
+    const parsed=parseBenefitValue(speech.value,{percentageBasis:basisForRow(bases,speech.index)})!;
+    assert.equal(parsed.kind,"sum_insured");assert.equal(parsed.value,0.5);
+    assert.equal(parsed.inferred,true,"A rule read from a heading is marked as such, so it is confirmed before it is used");
+  });
+  test("A percentage of a printed limit is calculated; a heading only applies below itself",()=>{
+    const page=["Simple Fracture Benefit Limit: S$5,000","Schedule\tCompensation","(% of S$5,000)",
+      "Neck, Skull or Spine (Full Break)\t100%","Arm, Elbow, Wrist or Ribs\t25%"].join("\n");
+    const bases=percentageBases(page);
+    const rows=benefitRowsFromText(page);
+    const wrist=rows.find(row=>/Wrist/.test(row.label))!;
+    const parsed=parseBenefitValue(wrist.value,{percentageBasis:basisForRow(bases,wrist.index)})!;
+    assert.equal(parsed.kind,"fixed");
+    assert.equal(parsed.value,1250,"25% of the S$5,000 limit printed above the table");
+    // A row ABOVE a heading never borrows it.
+    const mixed=["Benefit\tAmount","Accidental Hospital Recuperation\tS$250","(% of Sum Insured)","Loss of speech\t50%"].join("\n");
+    const mixedBases=percentageBases(mixed),mixedRows=benefitRowsFromText(mixed);
+    const above=mixedRows.find(row=>/Recuperation/.test(row.label))!;
+    assert.equal(basisForRow(mixedBases,above.index),null,"A table above the heading keeps its own meaning");
+    const below=mixedRows.find(row=>/speech/.test(row.label))!;
+    assert.deepEqual(basisForRow(mixedBases,below.index),{kind:"sum_insured"});
+  });
+  test("A sentence mentioning the sum insured is not a table heading",()=>{
+    for(const page of ["We will pay 100% of the Sum Insured on death.\nLoss of speech\t50%",
+      "The benefit is calculated as a percentage of the Sum Insured stated in your certificate, subject to the terms below.\nLoss of speech\t50%"]){
+      assert.deepEqual(percentageBases(page),[],"Only a heading-shaped cell may set the basis: "+page.slice(0,40));
+    }
+  });
+  test("A premium rate table is never read as cover",()=>{
+    const page=["Age next birthday\tAnnual premium","34 and below\t$18","35-39\t$30","40-44\t$50"].join("\n");
+    assert.deepEqual(benefitRowsFromText(page).map(row=>row.label),[],
+      "'35-39 pays S$30' is a premium, and showing it as cover would be a lie about what the family has");
+    // A year IS a real label: CareShield Life prints its payout that way.
+    assert.deepEqual(benefitRowsFromText("Year\tMonthly payout\n2026\t$689").map(row=>row.label),["2026"]);
+  });
+  test("A sub-row is named by the benefit it belongs to",()=>{
+    const page=["2.\tPermanent Total Loss of\t(a) Sight in at least one eye\t100%","(b) Whole eye\t100%","(c) Sight in one eye,\t50%",
+      "3.\tPermanent and Incurable Insanity\t100%"].join("\n");
+    const labels=benefitRowsFromText(page).map(row=>row.label);
+    assert.equal(labels[1],"2. Permanent Total Loss of (b) Whole eye","'(b) Whole eye' alone is not something a person can check");
+    assert.equal(labels[2],"2. Permanent Total Loss of (c) Sight in one eye,");
+    assert.equal(labels[3],"3. Permanent and Incurable Insanity","A new numbered benefit closes the previous group");
+  });
+  test("A heading that wraps across two lines still says what the percentages are of",()=>{
+    // A narrow column splits its own heading. The table below it is unchanged.
+    const page=["Compensation","Schedule of Indemnities\t(% of Sum","Insured)","1. Loss of one limb\t100%"].join("\n");
+    const bases=percentageBases(page);
+    assert.deepEqual(bases.map(entry=>entry.basis),[{kind:"sum_insured"}]);
+    const row=benefitRowsFromText(page)[0];
+    assert.equal(parseBenefitValue(row.value,{percentageBasis:basisForRow(bases,row.index)})!.value,1);
+  });
+  test("A benefit heading with no amount of its own still names the rows beneath it",()=>{
+    const page=["2. Permanent Total Loss of","(a) Sight in at least one eye\t100%","(b) Whole eye\t100%",
+      "3. Permanent and Incurable Insanity\t100%"].join("\n");
+    const labels=benefitRowsFromText(page).map(row=>row.label);
+    assert.deepEqual(labels,["2. Permanent Total Loss of (a) Sight in at least one eye",
+      "2. Permanent Total Loss of (b) Whole eye","3. Permanent and Incurable Insanity"]);
+  });
+  test("A benefit name that runs onto the next line is read whole",()=>{
+    const wrapped=benefitRowsFromText(["4. Loss of arm (at shoulder, between shoulder and elbow,\t100%",
+      "at elbow, between elbow and wrist)"].join("\n"));
+    assert.equal(wrapped[0].label,"4. Loss of arm (at shoulder, between shoulder and elbow, at elbow, between elbow and wrist)");
+    const ampersand=benefitRowsFromText(["Mobility aid upon Accidental Total &\tUp to S$10,000","Permanent Disablement*"].join("\n"));
+    assert.equal(ampersand[0].label,"Mobility aid upon Accidental Total & Permanent Disablement*");
+    // A sentence that follows a complete row is not part of its name.
+    const prose=benefitRowsFromText(["Ambulance Cost\tUp to S$500 per incident",
+      "This Benefit can only be claimed either under the Core Scheme or Voluntary Scheme."].join("\n"));
+    assert.equal(prose[0].label,"Ambulance Cost");
+  });
+  test("An amount that runs onto the next line finishes the amount, not the name",()=>{
+    const rows=benefitRowsFromText(["Comatose State Lump Sum Benefit\t15% of Sum Insured","or up to S$50,000, whichever is lesser"].join("\n"));
+    assert.equal(rows[0].label,"Comatose State Lump Sum Benefit","The second line is money, not part of the benefit's name");
+    assert.match(rows[0].value,/whichever is lesser/);
+    assert.equal(parseBenefitValue(rows[0].value),null,
+      "A choice between two figures is not a rule DearPolicy can calculate, and 15% of the sum insured is the larger, wrong one");
+  });
+  test("Money the household pays is never read as money it receives",()=>{
+    assert.deepEqual(benefitRowsFromText(["Standard MediShield Life premium\t$637.00","Premium before Subsidies\t$828.10"].join("\n")),[]);
+    // A waiver or a refund of premium really is a benefit.
+    assert.deepEqual(benefitRowsFromText("Premium Waiver Benefit\t100% of Sum Insured").map(row=>row.label),["Premium Waiver Benefit"]);
+  });
+  test("A pro-ration factor table is never read as cover",()=>{
+    const page=["Table G: Pro-ration Factors for Hospitalisation Charges","Ward Class / Subsidy Status\tCitizen\tResident",
+      "Class C\t100%\t50%","Class B1\t34%\t29%",
+      "Table A: MediShield Life Benefits","Cancer drug services\t$4,500 per calendar year"].join("\n");
+    const labels=benefitRowsFromText(page).map(row=>row.label);
+    assert.deepEqual(labels,["Cancer drug services"],
+      "'Class B1 34%' scales a bill before a claim is computed; it is not cover");
+  });
+  test("A rule read from a heading still produces a figure, marked indicative and kept out of the total",()=>{
+    // Withholding the number protects nobody: a person who cannot see it cannot
+    // check it against their own policy, and the amount is the product.
+    const inferred:CatalogBenefit={id:"h1",policyId:"w",productName:"Group Personal Accident",benefitName:"Loss of speech",
+      traits:["bodily_injury"],formulaKind:"sum_insured",formulaValue:0.5,currency:"SGD",factKey:null,
+      offsetDays:null,maximumDays:null,sourcePage:6,quote:"Loss of speech 50%",
+      conditions:[],requirements:[],needsReview:true,basisInferred:true,needsConfirmation:true};
+    const unconfirmed=assessCatalogBenefit({benefit:inferred,coverage:coverage({amount:600_000,documentRole:"certificate"}),ownerName:"Person A",facts:{}});
+    assert.equal(unconfirmed.item.amountText,"S$300,000","The figure is shown");
+    assert.equal(unconfirmed.item.estimateBasis,"indicative","…and labelled for what it is");
+    assert.match(unconfirmed.item.reason,/heading above this row/);
+    assert.ok(unconfirmed.missing.some(entry=>/confirmation of what this benefit pays/.test(entry)));
+    // It is shown, and it is not added up.
+    assert.deepEqual(aggregatePotentialPayouts([unconfirmed.item]),[],
+      "One rate read from a table heading must not inflate what the household is told it can claim");
+    // Once a person confirms it on the Benefits page it counts like any other rule.
+    const confirmed={...inferred,needsReview:false,basisInferred:false,needsConfirmation:false};
+    const settled=assessCatalogBenefit({benefit:confirmed,coverage:coverage({amount:600_000,documentRole:"certificate"}),ownerName:"Person A",facts:{}});
+    assert.equal(settled.item.amountText,"S$300,000");
+    assert.equal(settled.item.estimateBasis,"confirmed");
+    assert.equal(aggregatePotentialPayouts([settled.item])[0].amountText,"S$300,000");
+  });
+  test("A sum insured that did not come from the person's own schedule is an estimate, not a claim",()=>{
+    const rule:CatalogBenefit={id:"d1",policyId:"w",productName:"Group Term Life",benefitName:"Death Benefit",
+      traits:["death"],formulaKind:"sum_insured",formulaValue:1,currency:"SGD",factKey:null,
+      offsetDays:null,maximumDays:null,sourcePage:9,quote:"On death we pay the Sum Insured.",
+      conditions:[],requirements:[],needsReview:false};
+    const own=assessCatalogBenefit({benefit:rule,coverage:coverage({amount:1_000_000,documentRole:"personal_schedule"}),ownerName:"Person A",facts:{}});
+    assert.equal(own.item.amountText,"S$1,000,000");
+    assert.equal(own.item.estimateBasis,"confirmed");
+    const secondhand=assessCatalogBenefit({benefit:rule,coverage:coverage({amount:1_000_000,documentRole:"policy_wording"}),ownerName:"Person A",facts:{}});
+    assert.equal(secondhand.item.amountText,"S$1,000,000","The figure is still given — that is the whole point of the product");
+    assert.equal(secondhand.item.estimateBasis,"estimated");
+    assert.match(secondhand.item.reason,/rather than in your own schedule or certificate/);
+    // Both are real enough to add up; only an indicative reading is not.
+    assert.equal(aggregatePotentialPayouts([secondhand.item])[0].amountText,"S$1,000,000");
+  });
+  test("A daily row with no stated cap asks for the cap instead of paying out",()=>{
+    const uncapped:CatalogBenefit={id:"d1",policyId:"w",productName:"Plan",benefitName:"Daily hospital cash",
+      traits:["hospitalisation"],formulaKind:"daily",formulaValue:30,currency:"SGD",factKey:"hospitalNights",
+      offsetDays:0,maximumDays:null,sourcePage:9,quote:"Daily hospital cash S$30 per day",conditions:[],requirements:[],needsReview:true};
+    const assessed=assessCatalogBenefit({benefit:uncapped,coverage:coverage(),ownerName:"Person A",facts:{hospitalNights:fact(10)}});
+    assert.equal(assessed.item.amountText,null);
+    assert.ok(assessed.missing.some(entry=>/maximum number of days/.test(entry)));
+    // With the cap present it pays, deterministically.
+    const capped={...uncapped,maximumDays:30};
+    assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
+      facts:{hospitalNights:fact(10)}}).item.amountText,"S$300.00");
+  });
+console.log("DearPolicy contextual system regressions passed ("+cases+" checks, including 90- and 900-policy inventories).");
+}

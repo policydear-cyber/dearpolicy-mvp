@@ -1,0 +1,470 @@
+DearPolicy 1.0.0-rc.1 — the release candidate
+
+WHAT TO DO AFTER THIS UPDATE
+
+   1. npm install                      (pdf-lib was added)
+   2. Restart the dev server           (the .env.local changes need it)
+   3. Open Benefits -> "Re-read all documents"
+      Rules are now stored with what they REQUIRE (an accident-only benefit
+      needs an accident), so every document needs one fresh read.
+
+The sidebar now shows three lights: Database, Local model, Reading model.
+If one is red it says what to run.
+
+WHAT CHANGED SINCE 0.8.2, IN ONE BREATH
+
+   - Benefits page: every rule in plain English with its page; correct any
+     row and your version sticks.
+   - Documents are read on upload and categorised by meaning (Groq reads,
+     if you set the key; your chat never leaves the machine).
+   - Chat asks the facts first - accident or illness? admitted? how many
+     nights? - one at a time, then gives figures. Never figures first.
+   - Figures are labelled confirmed / estimated / indicative. Indicative ones
+     show but do not add up. Everything says "subject to the insurer's
+     assessment".
+   - Accident-only benefits are never offered for an illness, and it tells
+     you which ones it ruled out and why.
+   - One card per benefit per person, even when two documents state it.
+   - "What if I break my wrist?" is answered from your policies too.
+   - Claim pack PDF from the Claims page, or straight from the chat answer.
+   - "Whose document is this?" on the portfolio for anything unclaimed.
+   - Premium tables, pro-ration factors and worked examples are no longer
+     read as benefits (59 false rows gone from one booklet alone).
+
+KNOWN LIMITS
+
+   - Insurer claim forms are not filled in yet (no form to test against).
+   - Some rule shapes (per-year caps, deductibles, co-insurance) are stored
+     for you to confirm rather than calculated.
+   - The Groq reading path was verified against a simulated Groq; if the
+     first re-read errors, send the message.
+
+
+DearPolicy 0.8.2 — A Failure You Can Read
+
+ABOUT THAT BLANK DASHBOARD
+
+The dashboard was crashing before it could show you the error. It asked for
+data.coverages.filter(...) and the safety check only covered "data", not
+"coverages" - so when the API returned an error instead of your portfolio, the
+page threw and you got a white screen instead of the reason.
+
+Now you will see the actual message. Run this first when anything 500s:
+
+   npm run db:check
+
+It tells you whether PostgreSQL is running, whether .env.local points at it,
+and whether every table is present - then names the command that fixes it.
+Nine times out of ten a 500 here means Docker Desktop is not running:
+
+   1. Open Docker Desktop, wait until it says running
+   2. npm run db:start
+   3. npm run db:status     (wait for healthy)
+   4. npm run db:check
+
+AND NOW THE ROWS ACTUALLY TURN INTO AMOUNTS
+
+Reading the page as a table was half the job. The payout rule still had to get
+past patterns written for sentences - which is why a cell reading
+
+   25% of S$5,000
+
+was thrown away, for not saying "of the Sum Insured".
+
+Those cells are now read directly:
+
+   25% of S$5,000            ->  S$1,250   (both halves are on the page)
+   100% of the Sum Insured   ->  100% of your schedule amount
+   Up to S$500 per incident  ->  reimbursement capped at S$500
+   S$30 per day              ->  daily rate, cap taken from the same row
+   As charged / Nil / ranges ->  left for review, never guessed
+
+A page whose schedule reads cleanly skips the AI pass altogether, so indexing is
+quicker too.
+
+THE REASON EVERYTHING SAID "NEEDS CHECKING"
+
+DearPolicy was reading every PDF by gluing all the words together with spaces.
+That throws away where each word sits on the page. A benefit table like
+
+   Simple fracture - wrist        25% of S$5,000
+   Ambulance fee                  Up to S$500 per incident
+
+became one long run-on sentence, so nothing could work out which amount
+belonged to which benefit. That is why you kept getting benefits with no
+figures.
+
+It now keeps the position of every word, finds the columns, and reads the page
+as rows and cells. On your CareShield booklet this recovered the payout table
+that was previously invisible:
+
+   2026 -> $689   2027 -> $717   2028 -> $745   2029 -> $775   2030 -> $806
+
+Before: 27 amounts found, none attached to anything. After: 5 clean rows.
+
+TO PICK THIS UP: click Re-analyse on a document, or run
+
+   npm run policies:index
+
+YOU WERE RIGHT
+
+"A brochure never proves you own S$600,000" is a rule about the AMOUNT.
+DearPolicy was applying it to the POLICY, so uploading your own CareShield
+welcome booklet got you nothing. People do not collect other insurers'
+booklets - uploading one says you hold that cover.
+
+Now, on the Policies page, any document with no named policyholder asks:
+
+   "Whose policy is this?"   [ Desmond ] [ Charmaine ] ...
+
+Click a name and its benefits are used in answers from then on. A figure the
+document itself prints - "S$600 each month" - is shown as that person's, marked
+"Amount printed in the policy document - not yet confirmed against your own
+schedule", and kept out of the headline total until a schedule confirms it.
+
+The one thing a claim still cannot do is turn "100% of the Sum Insured" into a
+number, because that sum is on a schedule nobody has uploaded yet. There it says
+so plainly and asks you for it.
+
+WHAT 0.6.3 FIXED (your CareShield booklet)
+
+R. "Cannot perform Construct on a detached ArrayBuffer". PDF.js takes ownership
+   of the file bytes it is given and leaves nothing behind. DearPolicy reads a
+   PDF twice - once for the text, then again to render picture pages for OCR -
+   so any PDF containing images failed on the second pass. Your booklet has 3
+   image pages out of 7, which is exactly why it stopped. PDF.js now gets its
+   own copy.
+
+   Click Re-analyse on that document and it should go through.
+
+S. One booklet often describes several products. Benefit rules were being filed
+   under the document's single product name, so a rule from one product could be
+   attached to another product's sum insured - which is how an accident rule got
+   quoted against a term-life death benefit in your chat. Each page's product
+   section is now tracked and benefits are filed under the right one.
+
+INDEXING IS NOW PART OF UPLOADING
+
+You no longer run a command. When you upload a policy, DearPolicy reads its
+benefit rules as part of processing it and shows you the progress:
+
+   "Reading the benefit rules - page 12 of 40..."
+
+It is the slow part, and it happens once, while you already expect to wait.
+After that every question about that policy is answered from the stored rules.
+
+Reprocessing a document rebuilds its rules. If this step fails, nothing is
+broken - the document still works the old way.
+
+FOR THE DOCUMENTS YOU ALREADY UPLOADED, run this once:
+
+   npm run db:setup
+   npm run policies:index
+
+New uploads from now on need neither.
+
+IT STILL FEELS LIKE A CHAT
+
+Answering from a stored table does not mean answering like one. Every reply now
+ends with a short AI narration that reflects back what you said happened, leads
+with the figure, and explains in plain words what could still change it. Where
+one missing fact is all that stands between a benefit and a real number, it asks
+you for that fact instead of handing you a verdict.
+
+The division of labour is the whole point: the code decides what is covered and
+what it pays, the AI only chooses the words - and it still cannot invent a
+number, drop a total, promise approval or claim something is not covered. Ask
+the same question twice and the amounts are identical; the wording will differ,
+the way a person would phrase it differently.
+
+THE ANSWER TO "DO I REALLY NEED AN AI?"
+
+For reading your policy documents: yes. Every insurer writes differently and
+that is what a language model is genuinely good at.
+
+For answering your questions: no, and that was the mistake. DearPolicy was
+re-reading the raw policy text with the model EVERY time you asked something.
+That is why answers took minutes and why the same question could give different
+results.
+
+A policy is a contract with fixed rules. "Simple Fracture pays 25% of the
+S$5,000 limit, page 14" does not change between questions. So it is now read
+once and stored, and questions are answered from that table by ordinary code.
+
+FOR DOCUMENTS ALREADY UPLOADED, run this once:
+
+   npm run db:setup
+   npm run policies:index
+
+New uploads index themselves during processing, so this is a one-time backfill.
+
+AFTER THAT:
+
+ - Questions answer in about a second, with no model reading involved.
+ - The same question gives the same answer every time.
+ - Amounts are calculated by DearPolicy from your schedule and the quoted
+   clause, with the page number shown.
+ - A broken ankle can no longer surface a death or disability benefit: what
+   triggers a benefit is decided by rules you can read, not by the model.
+
+If you have not run the indexer, questions still work the old (slow) way, so
+nothing breaks in the meantime.
+
+WHAT 0.5.4 FIXED (from your fall-down-the-stairs test)
+
+O. The chat printed a raw validation error at you. That is fixed: a section that
+   cannot be read now says so in plain English, and no model or validation
+   output is ever shown.
+
+P. Those two failed sections were not really failures. Qwen had returned one
+   field in the wrong form (a sentence where DearPolicy expected a list), and the
+   whole section was thrown away and re-read at double the budget - which is
+   where much of the five minutes went. The reply is now repaired first, keeping
+   whatever is valid and dropping only what is not. A wrong shape is no longer
+   retried, because more room cannot fix it.
+
+Q. Duplicate benefit cards are collapsed, and the model is now asked to use the
+   benefit name the policy actually prints (Simple Fracture, Ambulance Fee)
+   instead of a generic category.
+
+Expect this question to come back faster, with fewer and better-named cards.
+
+WHAT 0.5.3 FIXED (the 24-seconds-per-section problem)
+
+N. Your benchmark settled it. Generation ran at 49 tokens/sec in every case; the
+   only difference was how much the model wrote — 105 tokens for a simple schema
+   (2.1s) versus 1198 for the real one (24.5s). Time = tokens written.
+
+   Most of those tokens were verbatim policy quotes. DearPolicy only needs a
+   quote long enough to find the clause in the page, so quotes are now capped at
+   260 characters instead of 900, with fewer quotes per benefit and tighter
+   limits everywhere else. Expect roughly a third of the output, and roughly a
+   third of the time.
+
+   The two knobs, in .env.local:
+
+      RAG_READING_OUTPUT_TOKENS=900    (lower = faster, try 600)
+      RAG_MAX_EVIDENCE_WINDOWS=8       (lower = faster, try 4)
+
+   My 0.5.2 theory about schema bounds was wrong — 24.5s vs 24.7s. It has been
+   removed rather than left in the code.
+
+WHAT WAS TRIED AND REMOVED IN 0.5.2
+
+M. Your benchmark showed the GPU was fine: 48 tokens/sec, model fully in VRAM,
+   0.8s for a call with a simple output schema. The problem was the schema
+   DearPolicy sends. Ollama turns it into a grammar that constrains every token,
+   and length limits like "quote: max 900 characters" and the integer bounds get
+   expanded into huge rules. That grammar, not the model, was the 2 minutes.
+
+   The schema sent to the model now carries only the SHAPE. Every reply is still
+   checked against the full schema afterwards, so nothing looser is accepted.
+
+   Run the benchmark again — it now times the real schema with and without those
+   bounds, so you can see the difference directly.
+
+WHAT 0.5.1 CHANGED (what happens with 10 policies)
+
+J. Model calls now go to the contracts retrieval actually matched, in relevance
+   order, instead of being split evenly. With ten policies, each candidate gets
+   its best section read first, then spare budget deepens the strongest match.
+   Contracts with no retrieved evidence cost nothing, and any contract left
+   unopened is named in the answer.
+
+K. Cheaper calls: LLM_NUM_BATCH default raised from 64 to 256, and output per
+   section capped by RAG_READING_OUTPUT_TOKENS (default 1400).
+
+L. NEW, run this first:
+
+      npm run model:benchmark
+
+   It times one real reading call and tells you how many tokens/sec you get,
+   whether the 9B model actually fits in the RTX 5060's 8 GB or is spilling to
+   the CPU, and how long a question will take. If it reports that the model is
+   partly on the CPU, that is the whole story — a smaller model (qwen3:8b) will
+   do more for speed than any setting.
+
+WHAT 0.5.0 FIXED (the 14-minute answer)
+
+H. DearPolicy was unloading the 9B model from the GPU after EVERY evidence
+   section and loading it again for the next one. Reading ten sections meant ten
+   full model loads, which is where the minutes went. The model now stays loaded
+   for the whole analysis and is released once at the end.
+
+I. A question can no longer run without a ceiling. Reading stops after 12
+   evidence sections or 5 minutes, whichever comes first, and the answer says
+   plainly that sections were left unread. Tune in .env.local:
+
+      RAG_MAX_EVIDENCE_WINDOWS=12
+      RAG_ANALYSIS_BUDGET_MS=300000
+      RAG_MAX_PASSAGES_PER_DOCUMENT=16
+      LLM_KEEP_ALIVE=5m
+
+   For faster answers while testing, try RAG_MAX_EVIDENCE_WINDOWS=6.
+
+WHAT 0.4.9 FIXED
+
+F. The "Model returned invalid structured JSON" error. The model was running out
+   of output room part-way through reading a long, detailed message, because
+   every fact repeated a 36-character id. Ids are now short handles, the budget
+   is doubled, cut-off output is salvaged, and a genuine shortfall is retried
+   once. You should no longer see raw JSON in the chat.
+
+G. The chat now shows a proper thinking indicator while analysis runs: animated
+   dots, the current stage, a progress bar, contracts read and elapsed time.
+
+WHAT 0.4.8 ADDED
+
+A. DearPolicy was reading only six passages per document. On a 40-page booklet
+   that meant the benefit table proving the payout was often never read, which
+   is why an answer could come back with no claim amount at all. The budget now
+   scales with the size of the document (up to 24 passages). Long documents will
+   take noticeably longer to analyse; that is deliberate.
+
+B. Evidence batches the local model failed to finish were being counted as text
+   that had been read. They are not any more, and the reported cause is shown.
+
+C. When an amount is calculated, the answer now leads with it and states the
+   specific reasons the settled figure could differ — the outstanding policy
+   definition, an unconfirmed fact, unverified active status, a reimbursement
+   held separately, or unread sections.
+
+D. If DearPolicy needs something, it now asks. A documentary condition becomes
+   the question, and a contract with no matching wording prompts you to upload
+   the policy wording or benefit summary.
+
+E. New: npm run policies:report
+   Prints which documents belong to which family member, which wording is bound
+   to each contract and why, and why any wording was NOT bound. Read-only.
+
+If analysis feels too slow on the RTX 5060, lower the ceiling in .env.local:
+
+   RAG_MAX_PASSAGES_PER_DOCUMENT=12
+
+WHAT 0.4.7 ADDED
+
+1. Every answer now shows how much of your policy text was actually read:
+   "Complete policy review" or "Partial policy review", with the exact page
+   and passage counts per contract. DearPolicy can only say something is
+   "not covered" when every processed page was read. Otherwise it says the
+   review is incomplete — an unread section is never treated as proof that
+   the event is uninsured.
+
+2. Each contract now shows "Active status evidenced" or "Active status not
+   recently verified", based on premium receipts and renewal notices matched
+   to that same contract, insurer and insured person. This never changes
+   ownership or a confirmed insured amount: a missing receipt cannot erase
+   cover you have proved with a certificate or schedule.
+
+WHAT THIS UPDATE DOES NOT REQUIRE
+
+- No database upgrade. You do NOT need to run npm run db:setup again.
+- No new OCR installation. You do NOT need to run INSTALL-OCR.cmd again.
+- No re-uploading or re-analysis of your policy documents.
+- No new npm packages were added; npm install is quick and safe to run.
+
+These files are for the DearPolicy copy running locally on your Windows computer.
+
+1. Stop DearPolicy in its Command Prompt window:
+
+   Ctrl + C
+
+2. Make a backup copy of your existing DearPolicy project folder.
+
+3. Extract the new ZIP.
+
+4. Open the extracted dearpolicy-next folder. Copy EVERYTHING inside it into your existing DearPolicy project folder, for example:
+
+   C:\Users\i7107\Downloads\dearpolicy-mvp\dearpolicy-mvp
+
+   Choose "Replace the files in the destination" when Windows asks. Do not delete your local storage/data folders or .env.local file.
+
+5. In Command Prompt, change to that project folder and install the updated packages:
+
+   node -v
+   npm install
+
+   PDF.js 6.2.108 requires Node.js 22.13 or newer. If node -v shows an older version, update Node.js before running npm install.
+
+6. Only if you have NOT installed OCR before: double-click INSTALL-OCR.cmd once.
+
+   If you already ran it for 0.4.6, skip this step. Keep its window open until
+   it says SUCCESS. It creates a private PaddleOCR installation for DearPolicy
+   and checks the RTX GPU automatically. You do not need to type Python or
+   PaddleOCR installation commands.
+
+7. Start the local PostgreSQL database. Open Docker Desktop first and wait until it says it is running, then run:
+
+   npm run db:start
+   npm run db:status
+
+   Wait until the db service says healthy. If Docker reports that port 5432 is already in use, do not delete anything; close the other PostgreSQL service or ask for help.
+
+8. Apply the database upgrade (0.6.0 adds the benefit table, so run this):
+
+   npm run db:setup
+
+   0.4.7 adds no new tables or columns, so if you already ran this for 0.4.6 you can skip it. The upgrade is additive and repeatable in any case; it migrates older chat/claim sessions and does not delete uploaded policies.
+
+9. Optional but recommended checks:
+
+   npm run typecheck
+   npm run ocr:test
+   npm run claims:test
+   npm run system:test
+
+   system:test uses a disposable test database and simulated local-model replies. It does not change your real policies or use your GPU.
+
+10. Start DearPolicy:
+
+   npm run dev
+
+11. Open:
+
+   http://localhost:3000
+
+What to try:
+
+- Ask a natural multi-fact question rather than following a script.
+- Say that one fact is not yet known, then supply it later.
+- Ask about an independent benefit while another fact remains unknown.
+- Ask about people naturally: “Charmaine caught dengue”, “my wife’s flight was delayed” and then “what can she claim?” No profile selector is required.
+- Ask “What policies does my family have?” to review a mixed household portfolio.
+- Open Previous chats, delete one chat, then test Clear all chat history.
+- Report a death in ordinary language, including homicide wording and a location. DearPolicy should retain those facts without assuming the death was accidental.
+- Try unrelated scenarios such as a flight delay, vehicle damage, theft, illness or hospital admission. DearPolicy should classify the event, inspect each owned contract and show policy-specific results.
+- Where uploaded wording proves the formula, confirm that each card says Potential payout or Potential reimbursement. Additive lump sums should also appear in the potential total at the top.
+- Look for the review banner above "Policy review". On a long scanned booklet it should say Partial policy review with the pages read, and the answer should never say the event is not covered.
+- Open Policy review and check the new "Evidence read" and "Active status" columns.
+- Ask "What policies does my family have?" and check the new Active status column. With no premium receipt uploaded it should read "Active status not recently verified" while the confirmed cover amount stays exactly as before.
+- Upload a recent premium receipt or renewal notice for one policy, then ask again. Only that contract should change to "Active status evidenced".
+
+Chat deletion removes conversation/history data only. Uploaded policy documents and verified coverage records remain intact.
+
+Important:
+
+- Keep Ollama running and retain your existing .env.local settings for Qwen, BGE-M3, PostgreSQL and local document storage. Qwen3.5 9B is recommended, but OCR also works while you are still using Qwen3 8B.
+- Analysis is intentionally not instant when documents must be read. The progress display reports actual stages and contracts reviewed.
+- Long legacy evidence chunks are split into bounded reading windows; they are no longer skipped merely because one stored chunk is oversized.
+- DearPolicy does not rely on one universal insurance manual and does not claim it has learned every policy 100%. It uses a broad event classifier to find candidate clauses, then the uploaded contract remains the authority for eligibility and payout.
+- DearPolicy uses the PDF's original text whenever it is reliable. PaddleOCR-VL automatically reads only image-backed pages with missing text. Qwen and BGE-M3 are unloaded before OCR and reload automatically when needed, preserving the 8 GB GPU safeguards.
+
+VERIFIED IN THE DEVELOPMENT SANDBOX FOR 0.8.2
+
+   npm run typecheck        passed
+   npm run ocr:test         passed
+   npm run claims:test      passed (97 contextual checks, 34 event/person/date,
+                            15 real-PDF death wording, 10 API fixtures)
+   npm run system:test      passed (42 real-SQL/API checks on a disposable
+                            PostgreSQL/pgvector database)
+   npm run build            passed
+
+STILL NEEDS TESTING ON YOUR WINDOWS MACHINE
+
+- The PaddleOCR GPU run on the RTX 5060 is still pending confirmation from
+  0.4.6. It was not run in the development sandbox and is unchanged by 0.4.7.
+- Real output quality on your own scanned and native-text policies.
+- The new review-completeness figures against a genuinely long policy booklet.
+- Whether the deeper retrieval makes analysis too slow on the RTX 5060, and
+  whether the evidence-batch failures seen on the lung-cancer question stop
+  once more of the booklet is read.

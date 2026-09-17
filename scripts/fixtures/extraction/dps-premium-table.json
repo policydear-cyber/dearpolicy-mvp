@@ -1,0 +1,33 @@
+{
+ "name": "Dependants' Protection Scheme leaflet \u2014 premium rate table (public CPF material)",
+ "note": "This page is a PREMIUM table, not a benefit schedule. Its left column is age bands. Reading it as cover would tell the household that being 35-39 pays them S$30, so the fixture asserts those rows are never produced.",
+ "pages": [
+  {
+   "page": 1,
+   "text": "DEPENDANTS\u2019 PROTECTION SCHEME\nINFORMATION LEAFLET\n1.\tWhat is Dependants\u2019 Protection Scheme (DPS)?\tpremium in cash or other available payment modes within 60 days\nfrom the policy renewal date to renew your coverage. Your policy\nDPS is an affordable term life insurance that provides insured\twill lapse if it is not renewed and application to re-join the scheme\nmembers and their families with some money to get through the\nis subject to you being in good health.\nfirst few years should the insured members pass away, suffer from\nTerminal Illness or Total Permanent Disability. The scheme covers\n5.\tWill I be informed when my cover is renewed?\nthem for a sum assured of $70,000 up to the end of the policy year\nduring which they turn 60 years old. From the policy anniversary in\tA notification letter will be sent to you 1 month before your renewal\nwhich they are 60 age last birthday up to the end of the policy year\ndate. If your CPF account does not have sufficient funds for full\nduring which they turn 65 years old, the sum assured is $55,000.\tpremium deduction, we will send a notification to you.\nCPF members who are Singapore Citizens or Permanent\nYou can also check your CPF transaction records online anytime\nResidents, between the age of 21 and 65, are automatically\nfor your premium deductions, as well as view your yearly CPF\nextended with a DPS cover upon:\nstatement of account.\na)\tthe first valid working CPF contribution, or\nYou should report any changes in correspondence address, email\nb)\ta valid working CPF contribution if their DPS cover had\nlapsed on/after 1 April 2021, or\tand contact number to us for timely and accurate updates to any\nchanges in the status of your DPS cover.\nc)\ta valid working CPF contribution after their Singapore\nCitizenship/Permanent Residency is restored\n6.\tWhat is the claim criteria?\nThose who are below the age of 21, but 16 or above can apply for\nA DPS claim can be made when a policyholder passes away or is\na DPS cover.\ncertified by a registered medical practitioner under the Medical\nThe scheme is optional and insured members can choose to\tRegistration Act to be suffering from terminal illness or total\nterminate their cover by completing the opt-out form. CPF\npermanent disability.\nmembers who have opted out of the scheme will need to apply for\na new cover if they wish to re-join.\ta)\tTerminal illness refers to an illness that is likely to result in the\ndeath of the member within 12 months\n2.\tDo I have to declare my health condition for the cover?\nb)\tTotal permanent disability refers to (i) the inability to take part\nYes, the eligibility for a DPS cover is subject to you being in good\tin any employment permanently, or (ii) the total permanent\nloss of physical function of any of the following:\nhealth. You must declare and fully disclose all information\nregarding your health, including, but not limited to:\t\u2022\tBoth eyes, or\n\u2022\tTwo limbs, or\n\u2022\tAll your past and current illnesses;\n\u2022\tOne eye and one limb\n\u2022\tAny surgery/treatment/medical test that you had previously\nundergone or will be undergoing ; and\tPlease refer to DPS Terms and Conditions for the eligible benefits\n\u2022\tAny physical or mental impairment.\tand full details.\nOtherwise, it may affect the future claims and the insurance policy\t7.\tWhat are the claim exclusions?\nmay not be valid.\nYou cannot claim the benefits under DPS if any of the following\n3.\tWhat is the premium I must pay?\tevents occur within the first policy year:\nAge Last Birthday\tYearly Premium\tSum Assured\ta)\tyou committed self-inflicted injury or suicide;\nb)\tyou committed a criminal offence punishable by death; or\nc)\tthe claim arose out of your intentional criminal act.\n34 and below\t$18\n35-39\t$30\tYou also cannot claim the benefits under DPS if:\n$70,000\n40-44\t$50\n45-49\t$93\td)\tyou suffer from serious illness, Terminal Illness, or Total\nPermanent Disability before the commencement of the policy;\n50-54\t$188\ne)\tyou have provided false or misleading statement or\n55-59\t$298\ninformation; or\n60-64\t$298\t$55,000\nf)\tyour claim arose from wars or any warlike operations or\nparticipation in any riot.\n4.\tHow do I pay the premium?\nUnder (a) to (d), the policy will be cancelled and all the premiums\nyou paid will be refunded with interest to your CPF account.\nFor your convenience, premium is automatically deducted every\nyear from your CPF account by default unless a separate\nPlease refer to our website for the list of serious illnesses.\narrangement has been made.\nIf your cover is subject to exclusions before 01/05/2016, the same\nFor payment via CPF, if the funds in your CPF account is\nexclusions will apply to a claim under Total Permanent Disability.\ninsufficient to pay the premium for full coverage but sufficient to\npay for partial coverage (the minimum sum assured is $5,000), you\t8.\tHow do I apply for a claim?\ncan either be insured for a lower amount or you can pay the\ta)\tDeath\ndifference in cash or other available payment modes within 60\tThe documents required are:\ndays from the policy renewal date to top up to the full sum assured.\t(I)\tDeath claim form (available on our website)\n(II)\tCertified true copy of the death certificate\nIf the funds in your CPF account is insufficient to pay for the\n(III)\tLetter from Immigration and Checkpoint Authority (ICA)\nminimum coverage of $5,000, you will be required to pay the\tfor death occurring overseas\nDPSInforma\ufffdon Leaflet- 0825"
+  }
+ ],
+ "expected": [],
+ "mustNotProduce": [
+  {
+   "page": 1,
+   "label": "34 and below"
+  },
+  {
+   "page": 1,
+   "label": "35-39"
+  },
+  {
+   "page": 1,
+   "label": "40-44"
+  },
+  {
+   "page": 1,
+   "label": "45-49"
+  },
+  {
+   "page": 1,
+   "label": "50-54"
+  }
+ ]
+}

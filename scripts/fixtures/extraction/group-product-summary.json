@@ -1,0 +1,72 @@
+{
+ "name": "Group insurance product summary \u2014 benefits and fracture limit (redacted)",
+ "note": "The same fracture scale as the benefit summary, but stated here against a printed limit: 'Compensation (% of S$5,000)'. Two of the household's own documents give this scale different bases, which is why a heading-derived rule is never turned into money before a person confirms it.",
+ "pages": [
+  {
+   "page": 5,
+   "text": "Insurance Benefits\n(For details on the plan benefits, please refer to singlife.com/MINDEFandMHA)\n\u2022\tDeath\t100% of Sum Insured\n4\n\u2022\tTotal and Permanent Disability Benefit (TPD)\t100% of Sum Insured\n3\n\u2022\tAdvance Payment Benefit\t100% Sum Insured (up to S$400,000)\nth\n\u2022\tDaily Hospital Cash Benefit\tS$30 per day from the 11\tday onwards.\nMax: 30 days of continuous hospitalisation\nExclusions\n\u2022\tNo Benefit is payable under Daily Hospital Cash Benefit for hospitalisation\ndirectly or indirectly due to self-inflicted injuries (including due to\nsuicide/attempted suicide) and/or pregnancy/maternity reasons.\n\u2022\tNo Benefit is payable under Death, TPD and/or Advance Payment Benefit in\nrespect of any death, loss, injury or disability caused directly or indirectly,\nwholly or partly, by suicide or any attempted suicide or self-inflicted injury\nor illness while sane or insane within the first 12 months from the date of\ninception or reinstatement of a lapsed policy.\n\u2022\tFor persons insured up to S$250,000 without medical check-up and\nunderwriting (or reinstated for coverage), no Benefit is payable under Death,\nTPD and/or Advance Payment Benefit should any death, loss, injury or disability\nbe caused directly or indirectly, wholly or partly by any condition which\nexisted prior to the Policy\u2019s effective date. However, this exclusion does not\napply if the Insured Person has already been insured continuously for 12\nmonths under this policy.\nLimitations to policy cover (Group Risk)\n\u2022\tIn the event of claims arising from any number of Insured Persons as a result\nof Acts of Terrorism, Singlife\u2019s maximum liability is subject to the sub-limit\nof 0.75% of the Aggregate Sum Insured per policy year.\n\u2022\tIn the event of War resulting in claims from any number of Insured Persons,\nSinglife\u2019s maximum liability is subject to the sub-limit of 0.75% of the\nAggregate Sum Insured per policy year.\n\u2022\tNote: No limitations will apply to claims arising from Sea, Land and Air\nConveyance.\nRenewal & Termination of Coverage\n\u2022\tInsurance coverage will automatically be renewed every policy year (at the\nprevailing rates) until the Insured Member/Insured Affiliate Member/Insured\nSpouse has attained age 70 (ANB) and/or their children have attained age 25\n(ANB) or get married, whichever is earlier. If you have attained the maximum\nANB stated during the policy year, the insurance will only be terminated at\nthe end of the prevailing policy year.\n\u2022\tIn the event of a divorce, your former spouse will no longer be eligible for\ncoverage under this scheme. The Insured Member/Insured Affiliate Member\nwill need to notify Singlife to terminate the policy accordingly after the divorce.\nPage 4 of 36"
+  },
+  {
+   "page": 13,
+   "text": "Insurance Benefits (continued)\n(For details on the plan benefits, please refer to singlife.com/MINDEFandMHA)\n\u2022\tSimple Fracture due to Accident\nIf an Insured Person sustains bodily injury as a result of an Accident, which\nresults in a Simple Fracture of the nature mentioned in the table below, we\nwill pay the relevant amount specified in the table below:\nSimple Fracture Benefit Limit: S$5,000\nSchedule\tCompensation\n(% of S$5,000)\nNeck, Skull or Spine (Full Break)\t100%\nHip\t75%\nJaw, Pelvis, Leg^, Ankle or Knee\t50%\nCheekbone, Shoulder or Hairline Fracture of Skull or Spine\t30%\n#\nArm , Elbow, Wrist or Ribs\t25%\n^\tFor the avoidance of doubt, any fractures of toe and foot are not covered\n#\nFor the avoidance of doubt, any fractures of thumb, finger and palm are not\ncovered\n\u2022\tDisappearance\t100% of Sum Insured\n\u2022\tAmbulance Cost*\tUp to S$500 per incident\n\u2022\tMobility aid upon Accidental Total &\tUp to S$10,000\nPermanent Disablement*\n\u2022\tHome Rehabilitation Renovation Expenses*\tUp to S$10,000\n\u2022\tAccidental Hospital Recuperation Benefit*\tS$250\n\u2022\tChild Education Fund Benefit*\tS$5,000 per child (up to 2 children)\n\u2022\tCompassionate Death Allowance Benefit*\tUp to S$2,000\n\u2022\tComatose State Lump Sum Benefit\t15% of Sum Insured or\nup to S$50,000, whichever is lesser\n\u2022\tDeath due to natural catastrophe\t15% of Sum Insured\nor up to S$50,000, whichever is lesser\n*This Benefit can only be claimed either under the Core Scheme or Voluntary\nScheme.\nPage 12 of 36"
+  }
+ ],
+ "expected": [
+  {
+   "page": 5,
+   "label": "Death",
+   "value": "100% of Sum Insured",
+   "kind": "sum_insured",
+   "amount": 1
+  },
+  {
+   "page": 5,
+   "label": "Total and Permanent Disability Benefit (TPD)",
+   "value": "100% of Sum Insured",
+   "kind": "sum_insured",
+   "amount": 1
+  },
+  {
+   "page": 13,
+   "label": "Neck, Skull or Spine (Full Break)",
+   "value": "100%",
+   "kind": "fixed",
+   "amount": 5000
+  },
+  {
+   "page": 13,
+   "label": "Hip",
+   "value": "75%",
+   "kind": "fixed",
+   "amount": 3750
+  },
+  {
+   "page": 13,
+   "label": "Arm , Elbow, Wrist or Ribs",
+   "value": "25%",
+   "kind": "fixed",
+   "amount": 1250
+  },
+  {
+   "page": 13,
+   "label": "Disappearance",
+   "value": "100% of Sum Insured",
+   "kind": "sum_insured",
+   "amount": 1
+  },
+  {
+   "page": 13,
+   "label": "Ambulance Cost",
+   "value": "Up to S$500 per incident",
+   "kind": "expense_cap",
+   "amount": 500
+  },
+  {
+   "page": 13,
+   "label": "Accidental Hospital Recuperation Benefit",
+   "value": "S$250",
+   "kind": "fixed",
+   "amount": 250
+  }
+ ]
+}
