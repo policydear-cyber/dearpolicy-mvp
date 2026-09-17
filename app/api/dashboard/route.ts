@@ -119,5 +119,5 @@ export async function GET(request:Request){
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   return NextResponse.json({family:familyResult.rows,activeMember:active,coverages:categories,premiums:{monthly,annual,items:premiumItems},reminders,unclaimed:unclaimed.rows,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}});
- }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Dashboard error"},{status:500});}
+ }catch(error){return NextResponse.json({error:"Dashboard error"},{status:500});}
 }

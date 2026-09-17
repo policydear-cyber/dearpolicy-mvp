@@ -42,6 +42,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Link failed" }, { status: 500 });
+    return NextResponse.json({ error: "Link failed" }, { status: 500 });
   }
 }

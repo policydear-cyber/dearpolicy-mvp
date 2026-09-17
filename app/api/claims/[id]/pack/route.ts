@@ -17,7 +17,7 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
          FROM claim_sessions cs JOIN family_members f ON f.id=cs.family_member_id AND f.account_id=cs.account_id
         WHERE cs.id=$1 AND cs.account_id=$2`,[id,accountId]);
     const row=result.rows[0];
-    if(!row)return NextResponse.json({error:"That claim is not on this computer."},{status:404});
+    if(!row)return NextResponse.json({error:"That claim could not be found."},{status:404});
     if(!row.decision_packet)
       return NextResponse.json({error:"This claim has not been assessed yet. Finish answering DearPolicy's questions and the claim pack can be prepared."},{status:409});
     const packet:ClaimDecisionPacket={...row.decision_packet,
@@ -35,6 +35,6 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
       "cache-control":"no-store",
     }});
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"The claim pack could not be prepared"},{status:500});
+    return NextResponse.json({error:"The claim pack could not be prepared"},{status:500});
   }
 }

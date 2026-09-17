@@ -125,7 +125,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       await progress(args, "classifying", 39, "Recognised as a reference document. Personal-name AI analysis is not needed.", "extracting");
     } else {
       await progress(args, "classifying", 36, "Checking document type and selecting the strongest evidence pages…", "extracting");
-      await progress(args, "ai_extraction", 42, "Local AI is reading a compact evidence sample. This is the most GPU-intensive step…", "extracting");
+      await progress(args, "ai_extraction", 42, "Reading a compact evidence sample from this document…", "extracting");
     }
 
     const raw = await extractPolicyStructure(pages);

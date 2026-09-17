@@ -40,6 +40,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, status: "queued" }, { status: 202 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Re-analysis failed" }, { status: 500 });
+    return NextResponse.json({ error: "Re-analysis failed" }, { status: 500 });
   }
 }

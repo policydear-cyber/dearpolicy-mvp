@@ -57,7 +57,7 @@ export async function DELETE(
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Could not delete document" },
+      { error: "Could not delete document" },
       { status: 500 },
     );
   } finally {
@@ -68,7 +68,7 @@ export async function DELETE(
   try {
     await deletePolicyFile(policy.storage_key);
   } catch (error) {
-    storageWarning = error instanceof Error ? error.message : "The local PDF could not be removed";
+    storageWarning = "The document file could not be removed";
   }
 
   return NextResponse.json({

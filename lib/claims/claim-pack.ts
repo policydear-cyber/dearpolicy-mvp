@@ -101,7 +101,7 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
     title:"Claim summary",
     subtitle:args.claimantName+" · prepared "+generated.toLocaleDateString("en-SG",{day:"numeric",month:"long",year:"numeric"}),
     sections,
-    footer:"Prepared by DearPolicy from the documents on this computer. Figures are calculated from the policy wording quoted in this pack and from the facts reported by the claimant. They are not an offer, an admission of liability, or a decision by any insurer.",
+    footer:"Prepared by DearPolicy. Figures are calculated from the policy wording quoted in this pack and from the facts reported by the claimant. They are not an offer, an admission of liability, or a decision by any insurer.",
   } satisfies ClaimPackContent;
 }
 

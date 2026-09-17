@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const storageKey = await savePolicyFile({ accountId, familyMemberId, policyId, filename: file.name, bytes });
     await query(
       `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message)
-       VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting for local AI processing…')`,
+       VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting to be analysed…')`,
       [policyId, accountId, familyMemberId, file.name, storageKey, fileHash],
     );
 
@@ -71,6 +71,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ policyId, status: "queued" }, { status: 202 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

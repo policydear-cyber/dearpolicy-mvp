@@ -269,9 +269,9 @@ export function readableModelFailure(error: unknown) {
   if (/\(401\)|\(403\)|invalid.*api key|api key not valid|authentication/i.test(message)) {
     // The provider's sentence is the diagnosis; keep it, minus the noise.
     const said = message.replace(/^Model request failed \(\d+\):\s*/, "").trim();
-    return who + " refused the request: " + (said || "the API key was not accepted") + ". Check the key in .env.local and the key's API restrictions in Google Cloud";
+    return who + " refused the request: " + (said || "the API key was not accepted") + (hosted ? ". Check the API key in the hosting dashboard's environment variables and its API restrictions in Google Cloud" : ". Check the key in .env.local and the key's API restrictions in Google Cloud");
   }
-  if (/\(404\)|not found|does not exist|unknown model|is not supported/i.test(message)) return who + " does not recognise the model name set in .env.local";
+  if (/\(404\)|not found|does not exist|unknown model|is not supported/i.test(message)) return who + (hosted ? " does not recognise the model name set in the hosting environment variables" : " does not recognise the model name set in .env.local");
   if (/\(429\)|busy|rate limit|quota/i.test(message)) return who + " is rate-limited right now; it usually clears in under a minute";
   if (/timed out/i.test(message)) return who + " timed out on that section";
   if (/invalid structured JSON/i.test(message)) return who + " did not return usable structured output for that section";

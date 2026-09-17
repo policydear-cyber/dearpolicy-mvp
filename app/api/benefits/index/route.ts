@@ -46,7 +46,7 @@ export async function GET(request:Request){
     return NextResponse.json({unread:await unreadDocuments(accountId),...(all?{all:await allDocuments(accountId)}:{}),
       reader:readingModelLabel()});
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not check which documents still need reading"},{status:500});
+    return NextResponse.json({error:"Could not check which documents still need reading"},{status:500});
   }
 }
 
@@ -75,6 +75,6 @@ export async function POST(request:Request){
     return NextResponse.json({policyId:target.id,name:target.name,stored,remaining,done:remaining===0});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That request could not be read."},{status:400});
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not read that document's benefit rules"},{status:500});
+    return NextResponse.json({error:"Could not read that document's benefit rules"},{status:500});
   }
 }

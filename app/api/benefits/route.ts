@@ -124,7 +124,7 @@ export async function GET(request:Request){
       },
     });
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not load the benefit schedule"},{status:500});
+    return NextResponse.json({error:"Could not load the benefit schedule"},{status:500});
   }
 }
 
@@ -173,7 +173,7 @@ export async function PATCH(request:Request){
     return NextResponse.json({ok:true});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That correction could not be read."},{status:400});
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not save the correction"},{status:500});
+    return NextResponse.json({error:"Could not save the correction"},{status:500});
   }
 }
 
@@ -190,6 +190,6 @@ export async function DELETE(request:Request){
     return NextResponse.json({ok:true});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That request could not be read."},{status:400});
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not remove the benefit"},{status:500});
+    return NextResponse.json({error:"Could not remove the benefit"},{status:500});
   }
 }

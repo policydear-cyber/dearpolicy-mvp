@@ -11,7 +11,7 @@ export async function GET(request:Request){
     if(!["all","family"].includes(scope))z.string().uuid().parse(scope);
     const cursor=url.searchParams.get("cursor");if(cursor)z.string().uuid().parse(cursor);
     return NextResponse.json(await listConversations(accountId,scope,cursor));
-  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"History lookup failed"},{status:error instanceof z.ZodError?400:500});}
+  }catch(error){return NextResponse.json({error:"History lookup failed"},{status:error instanceof z.ZodError?400:500});}
 }
 const DeleteSchema=z.object({
   conversationId:z.string().uuid().optional(),
@@ -27,5 +27,5 @@ export async function DELETE(request:Request){
     }
     await deleteHistory(accountId,body.conversationId?{id:body.conversationId}:{all:body.scope==="all",memberId:body.familyMemberId??null});
     return NextResponse.json({deleted:true});
-  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"History deletion failed"},{status:error instanceof z.ZodError?400:error instanceof ChatConflict?404:500});}
+  }catch(error){return NextResponse.json({error:"History deletion failed"},{status:error instanceof z.ZodError?400:error instanceof ChatConflict?404:500});}
 }

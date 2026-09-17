@@ -38,6 +38,6 @@ export async function GET(request: Request) {
     );
     return NextResponse.json({ policies: result.rows });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Database error" }, { status: 500 });
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

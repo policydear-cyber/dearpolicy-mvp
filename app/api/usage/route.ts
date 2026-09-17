@@ -14,6 +14,6 @@ export async function GET(){
     });
     return NextResponse.json({usage,routing});
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not load usage"},{status:500});
+    return NextResponse.json({error:"Could not load usage"},{status:500});
   }
 }

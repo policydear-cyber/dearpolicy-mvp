@@ -11,5 +11,5 @@ export async function GET(_request:Request,{params}:{params:Promise<{id:string}>
   const row=result.rows[0];if(!row)return NextResponse.json({error:"Claim session not found"},{status:404});
   const facts:ClaimFacts={...EMPTY_CLAIM_FACTS,...row.facts,injuries:Array.isArray(row.facts?.injuries)?row.facts.injuries:[],uncertainFacts:Array.isArray(row.facts?.uncertainFacts)?row.facts.uncertainFacts:[]};
   return NextResponse.json({claim:{...row,facts,knownFacts:factsToLabels(facts)}});
- }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Claim session lookup failed"},{status:500});}
+ }catch(error){return NextResponse.json({error:"Claim session lookup failed"},{status:500});}
 }

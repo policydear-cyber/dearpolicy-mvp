@@ -17,5 +17,5 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
       "SELECT id,request_json FROM chat_analysis_jobs WHERE account_id=$1 AND conversation_id=$2 AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",[accountId,id]);
     return NextResponse.json({conversation,messages,nextCursor:hasMore?messages[0]?.id:null,
       pendingJob:jobs.rows[0]?{id:jobs.rows[0].id,message:jobs.rows[0].request_json.question??"Previous policy question"}:null});
-  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Chat lookup failed"},{status:error instanceof z.ZodError?400:500});}
+  }catch(error){return NextResponse.json({error:"Chat lookup failed"},{status:error instanceof z.ZodError?400:500});}
 }

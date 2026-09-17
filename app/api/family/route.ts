@@ -19,7 +19,7 @@ export async function GET() {
     );
     return NextResponse.json({ family: result.rows });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Database error" }, { status: 500 });
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }
 
@@ -37,6 +37,6 @@ export async function POST(request: Request) {
     );
     return NextResponse.json({ member: result.rows[0] }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Database error" }, { status: 500 });
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

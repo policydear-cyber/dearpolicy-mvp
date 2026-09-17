@@ -12,5 +12,5 @@ export async function GET(request:Request){
          FROM claim_sessions cs JOIN family_members f ON f.id=cs.family_member_id AND f.account_id=cs.account_id
         WHERE ${where} ORDER BY cs.updated_at DESC LIMIT 30`,params);
     return NextResponse.json({claims:result.rows});
-  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Claims lookup failed"},{status:500});}
+  }catch(error){return NextResponse.json({error:"Claims lookup failed"},{status:500});}
 }

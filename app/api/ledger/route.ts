@@ -40,7 +40,7 @@ export async function GET(request:Request){
     return NextResponse.json({rows:shown,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
       reading:{pending,inProgress:ledgerReadingInProgress(accountId)}});
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not load the coverage ledger"},{status:500});
+    return NextResponse.json({error:"Could not load the coverage ledger"},{status:500});
   }
 }
 
@@ -70,7 +70,7 @@ export async function PATCH(request:Request){
     const people=(await family(accountId)).rows;
     return NextResponse.json({row:row?shape(row,people):null});
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not update the row"},{status:400});
+    return NextResponse.json({error:"Could not update the row"},{status:400});
   }
 }
 
@@ -104,6 +104,6 @@ export async function POST(request:Request){
     const people=(await family(accountId)).rows;
     return NextResponse.json({row:row?shape(row,people):null});
   }catch(error){
-    return NextResponse.json({error:error instanceof Error?error.message:"Could not add the row"},{status:400});
+    return NextResponse.json({error:"Could not add the row"},{status:400});
   }
 }

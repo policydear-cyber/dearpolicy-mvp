@@ -14,6 +14,6 @@ export async function GET() {
     );
     return NextResponse.json({ records: result.rows });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Database error" }, { status: 500 });
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

@@ -18,6 +18,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!result.rows[0]) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     return NextResponse.json({ member: result.rows[0] });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Database error" }, { status: 500 });
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }

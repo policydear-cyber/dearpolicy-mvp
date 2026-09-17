@@ -33,6 +33,6 @@ export async function POST(request:Request){
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Invalid request",issues:error.issues},{status:400});
     if(error instanceof ChatConflict)return NextResponse.json({error:error.message},{status:409});
-    return NextResponse.json({error:error instanceof Error?error.message:"Chat failed"},{status:500});
+    return NextResponse.json({error:"Chat failed"},{status:500});
   }
 }
