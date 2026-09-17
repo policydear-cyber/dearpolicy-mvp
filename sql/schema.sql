@@ -163,6 +163,33 @@ CREATE INDEX IF NOT EXISTS idx_premium_policy ON premium_records(policy_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw
   ON policy_chunks USING hnsw (embedding vector_cosine_ops);
 
+-- Single-column FK indexes: the composite indexes above lead with account_id
+-- (or policy_id), so a query/constraint check that filters or joins purely on
+-- one of these other foreign-key columns still had no covering index
+-- (flagged by Supabase's performance advisor). Mirrors the migration applied
+-- directly to the hosted Supabase project.
+CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_conversation_id ON chat_analysis_jobs(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_family_member_id ON chat_analysis_jobs(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_chat_conversations_family_member_id ON chat_conversations(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_claim_session_id ON chat_messages(claim_session_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_family_member_id ON chat_messages(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_claim_sessions_family_member_id ON claim_sessions(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_coverage_rules_family_member_id ON coverage_rules(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_coverage_rules_policy_id ON coverage_rules(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policies_family_member_id ON policies(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_policy_chunks_family_member_id ON policy_chunks(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_policy_corrections_account_id ON policy_corrections(account_id);
+CREATE INDEX IF NOT EXISTS idx_policy_corrections_policy_id ON policy_corrections(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_coverages_family_member_id ON policy_coverages(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_policy_coverages_policy_id ON policy_coverages(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_detected_people_account_id ON policy_detected_people(account_id);
+CREATE INDEX IF NOT EXISTS idx_policy_detected_people_matched_family_member_id ON policy_detected_people(matched_family_member_id);
+CREATE INDEX IF NOT EXISTS idx_policy_members_family_member_id ON policy_members(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_policy_reference_coverages_policy_id ON policy_reference_coverages(policy_id);
+CREATE INDEX IF NOT EXISTS idx_premium_records_family_member_id ON premium_records(family_member_id);
+CREATE INDEX IF NOT EXISTS idx_premium_records_source_document_id ON premium_records(source_document_id);
+
 
 -- Backfill the new many-to-many link for documents uploaded with older DearPolicy builds.
 INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
