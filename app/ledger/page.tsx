@@ -52,9 +52,9 @@ export default function CoveragePage(){
     try{
       const res=await fetch("/api/ledger"+(who?"?familyMemberId="+who:""));
       const data=await res.json();
-      if(!res.ok)throw new Error(data.error??"Could not load the coverage ledger");
+      if(!res.ok)throw new Error("Could not load the coverage ledger");
       setRows(data.rows);setSummary(data.summary);setFamily(data.family);setEvents(data.events);setReading(data.reading??{pending:0,inProgress:false});
-    }catch(e){setError(e instanceof Error?e.message:"Could not load the coverage ledger");}
+    }catch{setError("Could not load the coverage ledger");}
   };
   useEffect(()=>{void load();},[]); // eslint-disable-line react-hooks/exhaustive-deps
   // DearPolicy checks its own work — it should never wait for a click. If a
@@ -85,31 +85,37 @@ export default function CoveragePage(){
     try{
       const res=await fetch("/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id,...body})});
       const data=await res.json();
-      if(!res.ok)throw new Error(data.error??"Could not update the row");
+      if(!res.ok)throw new Error("Could not update the row");
       setRows(current=>current.map(r=>r.id===id?(data.row??r):r).filter(r=>r.status!=="rejected"));
       await load();
-    }catch(e){setError(e instanceof Error?e.message:"Could not update the row");}
+    }catch{setError("Could not update the row");}
     finally{setBusy(null);}
   };
   const save=async()=>{
     if(!editing||!draft)return;
-    const amount=draft.amount.trim()===""?null:Number(draft.amount.replace(/[^0-9.]/g,""));
-    const sumBasis=draft.sumBasis.trim()===""?null:Number(draft.sumBasis.replace(/[^0-9.]/g,""));
+    const amountText=draft.amount.trim().replace(/[^0-9.]/g,"");
+    const sumBasisText=draft.sumBasis.trim().replace(/[^0-9.]/g,"");
+    if(draft.amount.trim()!==""&&amountText===""){setError("Enter a number for the amount, or leave it blank.");return;}
+    if(draft.sumBasis.trim()!==""&&sumBasisText===""){setError("Enter a number for the sum basis, or leave it blank.");return;}
+    const amount=amountText===""?null:Number(amountText);
+    const sumBasis=sumBasisText===""?null:Number(sumBasisText);
     await patch(editing.id,{paysKind:draft.paysKind,amount:draft.paysKind==="percent_of_sum"&&amount!=null?amount/100:amount,sumBasis,eventType:draft.eventType,planName:draft.planName,status:"confirmed"});
     setEditing(null);setDraft(null);
   };
   const add=async()=>{
+    const amountText=addDraft.amount.trim().replace(/[^0-9.]/g,"");
+    if(addDraft.amount.trim()!==""&&amountText===""){setError("Enter a number for the amount, or leave it blank.");return;}
     setBusy("add");setError(null);
     try{
-      const amount=addDraft.amount.trim()===""?null:Number(addDraft.amount.replace(/[^0-9.]/g,""));
+      const amount=amountText===""?null:Number(amountText);
       const res=await fetch("/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:addDraft.familyMemberId||member||family[0]?.id,planName:addDraft.planName,eventType:addDraft.eventType,paysKind:addDraft.paysKind,
           amount:addDraft.paysKind==="percent_of_sum"&&amount!=null?amount/100:amount})});
       const data=await res.json();
-      if(!res.ok)throw new Error(data.error??"Could not add the row");
+      if(!res.ok)throw new Error("Could not add the row");
       setAdding(false);setAddDraft({familyMemberId:"",planName:"",eventType:"death",paysKind:"lump_sum",amount:""});
       await load();
-    }catch(e){setError(e instanceof Error?e.message:"Could not add the row");}
+    }catch{setError("Could not add the row");}
     finally{setBusy(null);}
   };
   const readNow=async()=>{
@@ -117,10 +123,10 @@ export default function CoveragePage(){
     try{
       const res=await fetch("/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"read"})});
       const data=await res.json();
-      if(!res.ok)throw new Error(data.error??"Could not read the documents");
+      if(!res.ok)throw new Error("Could not read the documents");
       setNotice((data.documents?data.documents+" document"+(data.documents===1?"":"s")+" read. ":"")+(data.added?data.added+" new row"+(data.added===1?"":"s")+" added.":"Nothing new found."));
       await load();
-    }catch(e){setError(e instanceof Error?e.message:"Could not read the documents");}
+    }catch{setError("Could not read the documents");}
     finally{setBusy(null);}
   };
 
@@ -136,7 +142,7 @@ export default function CoveragePage(){
         <button className="button primary" onClick={()=>setAdding(a=>!a)}>{adding?"Close":"Add a row"}</button>
       </div>
     </header>
-    {error?<div className="alert error"><strong>Something went wrong.</strong><span> Please try again in a moment — if this keeps happening, contact support.</span></div>:null}
+    {error?<div className="alert error" role="alert">{error}</div>:null}
     {notice?<div className="schedule-status">{notice}</div>:null}
     {reading.pending&&!notice?<div className="unread-documents"><div><strong>Reading {reading.pending} document{reading.pending===1?"":"s"} into the ledger…</strong><span>This started automatically — the page will update on its own when it's done.</span></div></div>:null}
     {adding?<div className="upload-panel" style={{marginBottom:16}}>
