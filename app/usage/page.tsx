@@ -19,7 +19,7 @@ export default function UsagePage(){
   const pct=(n:number,d:number)=>Math.min(100,Math.round(n/Math.max(1,d)*100));
   return <div className="page">
     <header className="page-header compact"><div><div className="eyebrow">USAGE & COST</div><h1>What this household costs to run.</h1><p className="lead">Every model call is counted — hosted or local — so the plan price is checked against real numbers, not a guess. Local calls cost nothing but are counted as what a hosted bill would be.</p></div></header>
-    {error&&<div className="alert error"><strong>Usage could not be loaded.</strong><span>{error}</span></div>}
+    {error&&<div className="alert error"><strong>Usage could not be loaded.</strong><span>Please try refreshing in a moment — if this keeps happening, contact support.</span></div>}
     {usage&&plan&&<>
       {!!usage.warnings.length&&<div className="usage-warnings">{usage.warnings.map((w,i)=><p key={i}>{w}</p>)}</div>}
       <section className="schedule-summary">
@@ -35,7 +35,7 @@ export default function UsagePage(){
           {!usage.byRole.length&&<tr><td colSpan={5}><em>No model calls yet this month.</em></td></tr>}
         </tbody></table></div>
       </section>
-      <section className="section"><div className="section-heading"><div><div className="eyebrow">WHICH MODEL DOES WHAT</div><h2>Routing</h2></div><small>Set READING_MODEL, JUDGEMENT_MODEL and NARRATION_MODEL in .env.local</small></div>
+      <section className="section"><div className="section-heading"><div><div className="eyebrow">WHICH MODEL DOES WHAT</div><h2>Routing</h2></div><small>Which model handles each job, and what it costs</small></div>
         <div className="schedule-table-scroll"><table className="schedule-table"><thead><tr><th>Job</th><th>Model</th><th>Where</th><th>List price</th></tr></thead><tbody>
           {routing.map(r=><tr key={r.role}><td><strong>{ROLE_COPY[r.role]??r.role}</strong></td><td>{r.model}</td><td>{r.hosted?"Hosted":"This computer"}</td><td>{r.price}</td></tr>)}
         </tbody></table></div>

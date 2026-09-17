@@ -227,7 +227,7 @@ function ChatContent(){
           </div>
           <small>{progressDetail?progressDetail.completed+" of "+progressDetail.total+" policy contracts read":"Reading your uploaded policy evidence locally"} · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
         </div></div>:null}
-      {error?<div className="alert error" role="alert">{error}</div>:null}<div ref={end}/>
+      {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> Please try again in a moment — if this keeps happening, contact support.</span></div>:null}<div ref={end}/>
     </div>
     <form className="chat-composer" onSubmit={ask}><textarea aria-label="Message to DearPolicy" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ask a question, answer a missing fact, or tell me what you don’t know yet…" rows={3}/>
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>

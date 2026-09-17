@@ -136,7 +136,7 @@ export default function CoveragePage(){
         <button className="button primary" onClick={()=>setAdding(a=>!a)}>{adding?"Close":"Add a row"}</button>
       </div>
     </header>
-    {error?<div className="alert error"><strong>Something went wrong.</strong><span>{error}</span></div>:null}
+    {error?<div className="alert error"><strong>Something went wrong.</strong><span> Please try again in a moment — if this keeps happening, contact support.</span></div>:null}
     {notice?<div className="schedule-status">{notice}</div>:null}
     {reading.pending&&!notice?<div className="unread-documents"><div><strong>Reading {reading.pending} document{reading.pending===1?"":"s"} into the ledger…</strong><span>This started automatically — the page will update on its own when it's done.</span></div></div>:null}
     {adding?<div className="upload-panel" style={{marginBottom:16}}>
