@@ -45,5 +45,9 @@ export async function query<T extends QueryResultRow>(text: string, params: unkn
 }
 
 export function devAccountId() {
-  return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001";
+  // An env var that exists but is blank (e.g. a placeholder saved empty in a
+  // hosting dashboard) must not become "" here — Postgres rejects "" as a uuid
+  // with a raw, confusing error, so treat blank the same as unset.
+  const configured = process.env.DEV_ACCOUNT_ID?.trim();
+  return configured || "00000000-0000-0000-0000-000000000001";
 }

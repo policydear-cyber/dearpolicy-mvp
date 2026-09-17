@@ -65,17 +65,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute("data-theme", next);
     try { localStorage.setItem("dearpolicy-theme", next); } catch {}
   };
-  // Everything DearPolicy needs runs on this computer. When something is down
-  // the person can fix it in a minute — if they are told which thing and how.
+  // DearPolicy runs either on this computer or on a server the person
+  // controls. When something is down the person can fix it in a minute — if
+  // they are told which thing and how, in words that match where it runs.
   const [services, setServices] = useState<ServiceState[]>([]);
+  const [hosted, setHosted] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
       try {
         const payload = await (await fetch("/api/health")).json();
-        if (!cancelled) setServices(payload.services ?? []);
+        if (!cancelled) { setServices(payload.services ?? []); setHosted(!!payload.hosted); }
       } catch {
-        if (!cancelled) setServices([{ ok: false, label: "DearPolicy", detail: "The app server is not answering", fix: "Run: npm run dev" }]);
+        if (!cancelled) setServices([{ ok: false, label: "DearPolicy", detail: "The app server is not answering", fix: "Refresh the page, or try again in a minute." }]);
       }
     };
     void check();
@@ -113,8 +115,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               {down.map((s) => <p key={s.label}><b>{s.label}:</b> {s.detail}{s.fix ? ` — ${s.fix}` : ""}</p>)}
             </div>
           )}
-          <div className="privacy-pill">Local-first</div>
-          <p>Your documents and questions stay on this computer. Only the one-time reading of each document uses the reading model.</p>
+          <div className="privacy-pill">{hosted ? "Hosted & encrypted" : "Local-first"}</div>
+          <p>{hosted
+            ? "Your documents and questions are kept private to your account and processed on DearPolicy\u2019s hosted servers."
+            : "Your documents and questions stay on this computer. Only the one-time reading of each document uses the reading model."}</p>
         </div>
       </aside>
       <main className="main-content">

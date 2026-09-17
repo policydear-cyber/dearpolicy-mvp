@@ -12,9 +12,12 @@ export const runtime="nodejs";
  * message must say what to do, not print a connection string. */
 export type ServiceState={ok:boolean;label:string;detail:string;fix?:string};
 export async function GET(){
+  // A hosted deployment has no Docker Desktop and no project folder to run a
+  // command in, so the fix text the person sees has to match where they are.
+  const hostedDb=!!process.env.SUPABASE_URL;
   const database:ServiceState=await query("SELECT 1").then(()=>({ok:true,label:"Database",detail:"Connected"}))
     .catch(error=>({ok:false,label:"Database",detail:/ECONNREFUSED/.test(String(error?.message))?"Not running":"Cannot connect",
-      fix:"Open Docker Desktop, then run: npm run db:start"}));
+      fix:hostedDb?"Check the DATABASE_URL environment variable in your hosting dashboard.":"Open Docker Desktop, then run: npm run db:start"}));
   const base=(process.env.OLLAMA_BASE_URL??"http://127.0.0.1:11434").replace(/\/$/,"");
   const model=process.env.LLM_MODEL??"";
   const local:ServiceState=await fetch(base+"/api/tags",{signal:AbortSignal.timeout(2500)}).then(async response=>{
@@ -33,7 +36,7 @@ export async function GET(){
   const localState:ServiceState=hosted?{ok:true,label:"Local model",detail:"Not needed — all jobs hosted"}:local;
   const judgement:ServiceState={ok:true,label:"Answering model",detail:describeChoice(modelFor("judgement"))};
   const services=hosted?[database,reading,judgement]:[database,localState,reading];
-  return NextResponse.json({ok:services.every(s=>s.ok),services,
+  return NextResponse.json({ok:services.every(s=>s.ok),services,hosted,
     // Kept for anything that read the old shape.
     app:"ok",database:database.ok?"ok":database.detail,llm:local.ok?"ok":local.detail,embeddings:local.ok?"ok":local.detail});
 }

@@ -211,7 +211,7 @@ export default function SchedulePage(){
       <p className="lead">Every payout rule DearPolicy read out of your documents, with the page it came from. Most rows need nothing from you. A row marked <b>confirm this</b> is one DearPolicy will not calculate with until you answer — usually because the amount was printed in the table heading rather than the row, and your own documents state those differently. Answering takes one click and lasts: your version survives the document being read again.</p>
     </div></header>
 
-    {error&&<div className="alert error" role="alert"><strong>The benefit schedule could not be loaded.</strong><span>{error}</span><small>Your documents are untouched. If this mentions a missing table or column, run <code>npm run db:setup</code> in the project folder.</small></div>}
+    {error&&<div className="alert error" role="alert"><strong>The benefit schedule could not be loaded.</strong><span>Something went wrong reaching your data.</span><small>Your documents are untouched. Please try refreshing in a moment — if this keeps happening, contact support.</small></div>}
 
     {!!unread.length&&<section className="unread-documents">
       <div><strong>{unread.length} document{unread.length===1?"":"s"} {unread.length===1?"has":"have"} not been read yet</strong>

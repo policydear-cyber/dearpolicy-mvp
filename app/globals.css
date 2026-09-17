@@ -622,7 +622,9 @@ table { font-variant-numeric: tabular-nums; }
   .brand, .sidebar-footer { display: none; }
   .mobile-bar { display: flex; align-items: center; justify-content: space-between; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
   .mobile-bar .brand-logo { height: 22px; }
-  .nav { display: flex; gap: 0; overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  /* Nine tabs never fit a phone width; the scrollbar is hidden for a clean
+     look, so a right-edge fade is the only hint the bar keeps going. */
+  .nav { display: flex; gap: 0; overflow-x: auto; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none; mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%); -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%); }
   .nav::-webkit-scrollbar { display: none; }
   .nav-item { flex: 1 0 72px; min-height: var(--nav-h); padding: 8px 4px; border-radius: 0; border: 0; display: grid; justify-items: center; align-content: center; gap: 3px; font-size: var(--fs-xs); line-height: 1.1; color: var(--muted); scroll-snap-align: center; text-align: center; }
   .nav-item:hover { background: transparent; }
