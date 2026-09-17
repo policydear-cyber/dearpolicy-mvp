@@ -284,3 +284,75 @@ export async function hostedStructuredCompletion(choice:ModelChoice,args:{system
   if(choice.provider==="gemini")return geminiGenerate(choice,args);
   return openAiCompatible(choice,args);
 }
+
+// ---------------------------------------------------------------------------
+// Document (PDF page) reading, for scanned pages that have no usable text
+// layer. Used in place of a locally-run OCR program: production runs on
+// Vercel, which cannot spawn a local Python/PaddleOCR process (no GPU, no
+// persistent disk to install it on, and a much shorter execution window than
+// a 30-minute OCR job needs). Anthropic and Gemini both accept a PDF
+// document natively and return its text — no separate image-rendering step
+// needed. Local development keeps using PaddleOCR by default; see
+// lib/documents/ocr.ts for how the two paths are chosen.
+// ---------------------------------------------------------------------------
+export type HostedDocumentReply = { text: string; truncated: boolean; usage: { input: number; output: number; cached?: number } };
+
+const HOSTED_DOCUMENT_PROVIDERS: Provider[] = ["anthropic", "gemini"];
+export function supportsHostedDocumentReading(provider: Provider) {
+  return HOSTED_DOCUMENT_PROVIDERS.includes(provider);
+}
+
+async function anthropicDocumentText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
+  const key = apiKeyFor("anthropic");
+  if (!key) throw new Error("No API key configured for anthropic");
+  const timeoutMs = args.timeoutMs ?? 120_000;
+  const body = JSON.stringify({
+    model: choice.model,
+    max_tokens: args.maxOutputTokens ?? 4096,
+    temperature: 0,
+    system: [{ type: "text", text: args.system }],
+    messages: [{
+      role: "user",
+      content: [
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: args.pdfBase64 } },
+        { type: "text", text: args.user },
+      ],
+    }],
+  });
+  const response = await withRetries((signal) => fetch((process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "") + "/v1/messages", {
+    method: "POST", signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body,
+  }), timeoutMs);
+  if (!response.ok) throw new Error("Model request failed (" + response.status + "): " + providerMessage(await response.text()));
+  const payload = AnthropicShape.parse(await response.json());
+  const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
+  return { text, truncated: payload.stop_reason === "max_tokens", usage: { input: payload.usage?.input_tokens ?? 0, output: payload.usage?.output_tokens ?? 0, cached: payload.usage?.cache_read_input_tokens } };
+}
+
+async function geminiDocumentText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
+  const key = apiKeyFor("gemini");
+  if (!key) throw new Error("No API key configured for gemini");
+  const timeoutMs = args.timeoutMs ?? 120_000;
+  const model = pickGeminiModel(choice.model, await geminiModelNames(key));
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: args.system }] },
+    contents: [{ role: "user", parts: [{ inlineData: { mimeType: "application/pdf", data: args.pdfBase64 } }, { text: args.user }] }],
+    generationConfig: { temperature: 0, ...(args.maxOutputTokens ? { maxOutputTokens: args.maxOutputTokens } : {}) },
+  });
+  const endpoint = geminiEndpoint(model, key) + "?key=" + encodeURIComponent(key);
+  const response = await withRetries((signal) => fetch(endpoint, { method: "POST", signal, headers: { "content-type": "application/json", "x-goog-api-key": key }, body }), timeoutMs);
+  if (!response.ok) throw new Error("Model request failed (" + response.status + "): " + providerMessage(await response.text()));
+  const payload = GeminiShape.parse(await response.json());
+  if (payload.promptFeedback?.blockReason) throw new Error("The model declined this page: " + payload.promptFeedback.blockReason);
+  const candidate = payload.candidates?.[0];
+  const text = (candidate?.content?.parts ?? []).map((part) => part.text ?? "").join("");
+  return { text, truncated: candidate?.finishReason === "MAX_TOKENS", usage: { input: payload.usageMetadata?.promptTokenCount ?? 0, output: payload.usageMetadata?.candidatesTokenCount ?? 0, cached: payload.usageMetadata?.cachedContentTokenCount } };
+}
+
+/** Reads a (small, single- or few-page) PDF document natively, returning its
+ * text. Throws a clear error for providers that do not support document
+ * input yet rather than guessing. */
+export async function hostedDocumentToText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
+  if (choice.provider === "anthropic") return anthropicDocumentText(choice, args);
+  if (choice.provider === "gemini") return geminiDocumentText(choice, args);
+  throw new Error(describeChoice(choice) + " does not support reading scanned PDF pages yet. Use an Anthropic or Gemini preset for MODEL_PRESET/READING_MODEL, or run local PaddleOCR instead.");
+}

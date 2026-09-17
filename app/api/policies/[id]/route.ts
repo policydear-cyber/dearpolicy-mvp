@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { devAccountId, pool } from "@/lib/db/client";
-import { deletePolicyFile } from "@/lib/storage/local";
+import { deletePolicyFile } from "@/lib/storage";
 
 export const runtime = "nodejs";
 

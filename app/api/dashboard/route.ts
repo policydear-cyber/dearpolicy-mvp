@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { runAfterResponse } from "@/lib/http/background";
 import { devAccountId,query } from "@/lib/db/client";
 import { annualisePremium,COVERAGE_CATEGORIES,monthlyEquivalent,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 
 export const runtime="nodejs";
+export const maxDuration=60;
 type PremiumRow={id:string;policy_id:string|null;family_member_id:string|null;insurer:string|null;product_name:string|null;policy_number:string|null;amount:string;currency:string;frequency:string|null;payment_date:string|null;period_start:string|null;created_at:string};
 
 function canonicalProduct(value:string|null|undefined){
@@ -30,10 +32,13 @@ export async function GET(request:Request){
  try{
   const accountId=devAccountId(); const url=new URL(request.url);
   // The person should never have to ask DearPolicy to read a document or
-  // check its own work — opening the app is enough. This runs in the
-  // background (not awaited) so the dashboard itself is never slowed down
-  // by it; readPendingDocuments dedupes concurrent calls on its own.
-  void (async()=>{
+  // check its own work — opening the app is enough. after() runs this once
+  // the response has been sent, without holding up the dashboard, but — unlike
+  // a bare fire-and-forget promise — it is kept alive by the hosting platform
+  // (Vercel's waitUntil under the hood) instead of racing the serverless
+  // function being frozen the instant the response goes out.
+  // readPendingDocuments dedupes concurrent calls on its own.
+  runAfterResponse(async()=>{
     try{
       const { pendingDocumentCount,readPendingDocuments }=await import("@/lib/ledger/extract");
       const pending=await pendingDocumentCount(accountId);
@@ -42,7 +47,7 @@ export async function GET(request:Request){
       const { seedLedger }=await import("@/lib/ledger/store");
       await seedLedger(accountId);
     }catch(error){console.warn("Background coverage-ledger read failed:",error instanceof Error?error.message:error);}
-  })();
+  });
   const familyResult=await query<{id:string;display_name:string;relationship:string;policy_count:number}>(`SELECT f.id,f.display_name,f.relationship,count(DISTINCT pm.policy_id)::int AS policy_count FROM family_members f LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id WHERE f.account_id=$1 GROUP BY f.id ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END,f.created_at`,[accountId]);
   const requested=url.searchParams.get("familyMemberId"); const active=familyResult.rows.find((m)=>m.id===requested)??familyResult.rows[0]??null;
   if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:0,annual:0,items:[]},reminders:[],unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0}});

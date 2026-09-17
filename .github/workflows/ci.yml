@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
-      DEV_ACCOUNT_ID: 00000000-0000-0000-0000-000000000000
+      DEV_ACCOUNT_ID: 00000000-0000-0000-0000-000000000001
       MODEL_PRESET: ollama
       LLM_BASE_URL: http://localhost:11434/v1
       LLM_API_KEY: ci

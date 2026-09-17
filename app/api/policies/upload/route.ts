@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { runAfterResponse } from "@/lib/http/background";
 import { createHash, randomUUID } from "node:crypto";
 import { devAccountId, query } from "@/lib/db/client";
-import { savePolicyFile } from "@/lib/storage/local";
+import { savePolicyFile } from "@/lib/storage";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 
 export const runtime = "nodejs";
+// Reading a scanned PDF (hosted OCR + LLM extraction) can take a couple of
+// minutes for a long policy document; give the background job room to finish
+// inside after() rather than being cut off.
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {
@@ -51,14 +56,18 @@ export async function POST(request: Request) {
       [policyId, accountId, familyMemberId, file.name, storageKey, fileHash],
     );
 
-    void enqueuePolicyProcessing({
+    // after() keeps this alive past the response (Vercel's waitUntil under the
+    // hood) instead of racing the serverless function being frozen the
+    // instant "queued" is returned to the browser, which is what a bare
+    // fire-and-forget promise would do.
+    runAfterResponse(() => enqueuePolicyProcessing({
       accountId,
       familyMemberId,
       policyId,
       storageKey,
       pdfPassword: pdfPassword || undefined,
       linkUploadMember: explicitFamilyMember,
-    });
+    }));
 
     return NextResponse.json({ policyId, status: "queued" }, { status: 202 });
   } catch (error) {

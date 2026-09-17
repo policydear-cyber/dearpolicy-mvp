@@ -1,5 +1,5 @@
 import { query } from "@/lib/db/client";
-import { readPolicyFile } from "@/lib/storage/local";
+import { readPolicyFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
@@ -91,6 +91,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         "extracting",
       );
       pages = await completePdfPagesWithOcr({
+        accountId: args.accountId,
         bytes: fileBytes,
         password: args.pdfPassword,
         pages,

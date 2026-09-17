@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { unloadOllamaModelDirect, withOllamaLock } from "@/lib/ai/ollama-runtime";
 import type { PdfPage } from "@/lib/documents/pdf";
+import { modelFor, supportsHostedDocumentReading } from "@/lib/ai/providers";
+import { completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 
 type BridgePage = { pageNumber: number; text: string };
 type BridgeResult = { ok: boolean; pages?: BridgePage[]; error?: string };
@@ -94,7 +96,7 @@ async function runBridge(args: {
   });
 }
 
-export async function completePdfPagesWithOcr(args: {
+async function completePdfPagesWithLocalOcr(args: {
   bytes: Uint8Array;
   password?: string;
   pages: PdfPage[];
@@ -139,4 +141,35 @@ export async function completePdfPagesWithOcr(args: {
   } finally {
     await rm(temporary, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+/** True when a hosted, document-capable model is configured for the
+ * "reading" job (MODEL_PRESET or READING_MODEL) — i.e. this deployment has
+ * no local PaddleOCR install to fall back to, which is the normal case in
+ * production (Vercel cannot run the local Python/GPU OCR bridge at all). */
+function hostedOcrAvailable() {
+  const choice = modelFor("reading");
+  return choice.provider !== "ollama" && supportsHostedDocumentReading(choice.provider);
+}
+
+/** Fills in text for scanned (image-only) pages. Prefers a hosted,
+ * document-capable model when one is configured — this is what production
+ * uses, since Vercel cannot spawn the local PaddleOCR process. Falls back to
+ * local PaddleOCR only when no hosted reading model is configured, which is
+ * the normal local-development setup. */
+export async function completePdfPagesWithOcr(args: {
+  accountId: string;
+  bytes: Uint8Array;
+  password?: string;
+  pages: PdfPage[];
+  pageNumbers?: number[];
+}) {
+  if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "")) return args.pages;
+  const pageNumbers = args.pageNumbers ?? pagesNeedingOcr(args.pages);
+  if (!pageNumbers.length) return args.pages;
+
+  if (hostedOcrAvailable()) {
+    return completePdfPagesWithHostedOcr({ accountId: args.accountId, bytes: args.bytes, pages: args.pages, pageNumbers });
+  }
+  return completePdfPagesWithLocalOcr(args);
 }
