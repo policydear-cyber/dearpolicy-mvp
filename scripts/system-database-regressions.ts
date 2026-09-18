@@ -1387,6 +1387,11 @@ async function main(){
     await test("A household past its spend limit is stopped before the next hosted call, in plain words",async()=>{
       const { assertUnderSpendCap,SpendCapReached }=await import("@/lib/ai/ledger");
       const { readableModelFailure }=await import("@/lib/ai/llm");
+      // This test sets the month's spend to the cent, so it needs the month to
+      // start empty. Every earlier turn in this suite is now a priced call, and
+      // without this the $14.99 below lands on top of them and trips the cap
+      // before the first assertion gets to check that it does not.
+      await db.query("DELETE FROM model_usage WHERE account_id=$1",[account]);
       await db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced) VALUES($1,'reading','anthropic','claude-sonnet-5',1000000,200000,14.99,true)",[account]);
       process.env.PLAN_HARD_STOP_USD="15";
       try{
