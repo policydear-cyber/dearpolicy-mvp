@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { devAccountId, isUuid, pool } from "@/lib/db/client";
 import { deletePolicyFile } from "@/lib/storage";
+import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 
 export const runtime = "nodejs";
 
@@ -70,6 +71,15 @@ export async function DELETE(
     await deletePolicyFile(policy.storage_key);
   } catch (error) {
     storageWarning = "The document file could not be removed";
+  }
+
+  // The database rows are gone by cascade, but the vector index is a separate
+  // store: without this, a deleted document's sentences would keep coming back
+  // as evidence for questions the person asks afterwards.
+  if (pineconeEnabled()) {
+    await deletePolicyPassages({ accountId, policyId }).catch((error) => {
+      console.warn("Pinecone cleanup failed for deleted policy " + policyId + ":", error instanceof Error ? error.message : error);
+    });
   }
 
   return NextResponse.json({

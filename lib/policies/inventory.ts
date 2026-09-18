@@ -2,6 +2,7 @@ import { query } from "@/lib/db/client";
 import { canonicalDeathInsurer } from "@/lib/claims/death-evidence";
 import { canonicalProduct, confirmedOwnedCoverages, type OwnedCoverage } from "@/lib/coverage/facts";
 import { embedTexts,toPgVector } from "@/lib/ai/embeddings";
+import { pineconeEnabled,searchPolicyPassages } from "@/lib/rag/pinecone";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { PolicySource } from "@/lib/chat/types";
 import { fullyHosted } from "@/lib/ai/providers";
@@ -226,13 +227,30 @@ export function analysisSources(sources:PolicySource[],maximumSemanticDistance?:
 export async function retrieveContractSources(args:{accountId:string;contracts:PolicyContract[];question:string;searchTerms:string[]}) {
   const documents=[...new Map(args.contracts.flatMap(c=>[...c.documents,...c.references]).filter(d=>d.processing_status==="ready").map(d=>[d.id,d])).values()];
   if(!documents.length)return new Map<string,PolicySource[]>();
-  let vector:string|null=null;
-  try{const [embedding]=await embedTexts([args.question+" "+args.searchTerms.join(" ")]);vector=toPgVector(embedding);}catch{/* Indexed lexical retrieval still works when embeddings are unavailable. */}
   const ids=documents.map(d=>d.id);
   const caps=documents.map(d=>passageBudget(d.chunk_total));
+  const searchText=args.question+" "+args.searchTerms.join(" ");
+  // The semantic half of retrieval. Pinecone holds the vectors and embeds both
+  // sides, so this asks it which stored passages read like an answer and gets
+  // back chunk ids; the text itself still comes from Postgres below. A local
+  // Ollama install can still answer this instead, which is what the pgvector
+  // branch is for. Either way a failure only costs semantic ranking: indexed
+  // lexical retrieval carries the query on its own.
+  let semanticIds:string[]=[];
+  let semanticDistances:number[]=[];
+  let vector:string|null=null;
+  if(pineconeEnabled()){
+    try{
+      const hits=await searchPolicyPassages({accountId:args.accountId,policyIds:ids,text:searchText,
+        topK:Math.min(Math.max(caps.reduce((total,cap)=>total+cap,0),20),100)});
+      semanticIds=hits.map(h=>h.chunkId);semanticDistances=hits.map(h=>h.distance);
+    }catch(error){console.warn("Pinecone retrieval failed:",error instanceof Error?error.message:error);}
+  } else {
+    try{const [embedding]=await embedTexts([searchText]);vector=toPgVector(embedding);}catch{/* Indexed lexical retrieval still works when embeddings are unavailable. */}
+  }
   const r=await query<{id:string;policy_id:string;page_start:number;page_end:number;text:string;lexical_match:boolean;semantic_distance:number|null}>(
-    "WITH wanted AS (SELECT * FROM unnest($2::uuid[],$5::int[]) AS t(id,cap)), terms AS (SELECT websearch_to_tsquery('english',$3) AS q) SELECT DISTINCT c.id,c.policy_id,c.page_start,c.page_end,c.text,c.lexical_match,c.semantic_distance FROM wanted w CROSS JOIN LATERAL (SELECT x.id,x.policy_id,x.page_start,x.page_end,x.text,(x.search_vector @@ terms.q) AS lexical_match,CASE WHEN $4::vector IS NOT NULL THEN (x.embedding <=> $4::vector)::double precision ELSE NULL END AS semantic_distance FROM policy_chunks x,terms WHERE x.account_id=$1 AND x.policy_id=w.id ORDER BY (CASE WHEN x.search_vector @@ terms.q THEN 1 ELSE 0 END) DESC,ts_rank_cd(x.search_vector,terms.q) DESC,CASE WHEN $4::vector IS NOT NULL THEN x.embedding <=> $4::vector ELSE NULL END NULLS LAST,x.page_start,x.id LIMIT w.cap) c",
-    [args.accountId,ids,searchExpression(args.question,args.searchTerms),vector,caps]);
+    "WITH wanted AS (SELECT * FROM unnest($2::uuid[],$5::int[]) AS t(id,cap)), terms AS (SELECT websearch_to_tsquery('english',$3) AS q), semantic AS (SELECT * FROM unnest($6::uuid[],$7::float8[]) AS s(id,distance)) SELECT DISTINCT c.id,c.policy_id,c.page_start,c.page_end,c.text,c.lexical_match,c.semantic_distance FROM wanted w CROSS JOIN LATERAL (SELECT x.id,x.policy_id,x.page_start,x.page_end,x.text,(x.search_vector @@ terms.q) AS lexical_match,COALESCE(s.distance,CASE WHEN $4::vector IS NOT NULL THEN (x.embedding <=> $4::vector)::double precision ELSE NULL END) AS semantic_distance FROM policy_chunks x CROSS JOIN terms LEFT JOIN semantic s ON s.id=x.id WHERE x.account_id=$1 AND x.policy_id=w.id ORDER BY (CASE WHEN x.search_vector @@ terms.q THEN 1 ELSE 0 END) DESC,ts_rank_cd(x.search_vector,terms.q) DESC,COALESCE(s.distance,CASE WHEN $4::vector IS NOT NULL THEN (x.embedding <=> $4::vector)::double precision ELSE NULL END) NULLS LAST,x.page_start,x.id LIMIT w.cap) c",
+    [args.accountId,ids,searchExpression(args.question,args.searchTerms),vector,caps,semanticIds,semanticDistances]);
   const pages=await query<{policy_id:string;page_number:number;text:string}>(
     "SELECT policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) ORDER BY policy_id,page_number",[args.accountId,ids]);
   const productsByDoc=new Map<string,Set<string>>();

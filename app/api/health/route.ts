@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query } from "@/lib/db/client";
 import { readingProvider,readingModelLabel } from "@/lib/ai/reading-model";
 import { describeChoice,fullyHosted,modelFor } from "@/lib/ai/providers";
+import { describePineconeState,pineconeEnabled } from "@/lib/rag/pinecone";
 
 export const runtime="nodejs";
 
@@ -35,8 +36,14 @@ export async function GET(){
   const hosted=fullyHosted();
   const localState:ServiceState=hosted?{ok:true,label:"Local model",detail:"Not needed — all jobs hosted"}:local;
   const judgement:ServiceState={ok:true,label:"Answering model",detail:describeChoice(modelFor("judgement"))};
-  const services=hosted?[database,reading,judgement]:[database,localState,reading];
+  // Semantic search lives in Pinecone. When it is off, questions still find
+  // documents by keyword, so this is reported as a state rather than a fault --
+  // but the person should be able to see which of the two they are getting.
+  const pineconeState=await describePineconeState();
+  const search:ServiceState={...pineconeState,label:"Semantic search"};
+  const services=hosted?[database,reading,judgement,search]:[database,localState,reading,search];
   return NextResponse.json({ok:services.every(s=>s.ok),services,hosted,
     // Kept for anything that read the old shape.
-    app:"ok",database:database.ok?"ok":database.detail,llm:local.ok?"ok":local.detail,embeddings:local.ok?"ok":local.detail});
+    app:"ok",database:database.ok?"ok":database.detail,llm:local.ok?"ok":local.detail,
+    embeddings:pineconeEnabled()?(search.ok?"ok":search.detail):(local.ok?"ok":local.detail)});
 }

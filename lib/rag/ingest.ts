@@ -4,6 +4,7 @@ import { extractPdfPages } from "@/lib/documents/pdf";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
 import { embeddingsEnabled, toPgVector, withEmbeddingSession } from "@/lib/ai/embeddings";
+import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
 import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { normalizeCoverageCategory } from "@/lib/insurance";
@@ -220,11 +221,53 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const chunks = chunkPages(pages);
     await query("DELETE FROM policy_chunks WHERE policy_id=$1 AND account_id=$2", [args.policyId, args.accountId]);
-    await progress(args, "indexing", 69, `Preparing ${chunks.length} search section${chunks.length === 1 ? "" : "s"} for BGE-M3…`, "indexing");
+    // Re-reading a document must not leave the previous read's sentences in the
+    // vector index, where they would go on answering questions about pages that
+    // no longer exist.
+    if (pineconeEnabled()) await deletePolicyPassages({ accountId: args.accountId, policyId: args.policyId })
+      .catch((error) => console.warn("Pinecone cleanup failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error));
+    await progress(args, "indexing", 69, `Preparing ${chunks.length} search section${chunks.length === 1 ? "" : "s"}…`, "indexing");
 
     const configuredBatchSize = Number.parseInt(process.env.EMBED_BATCH_SIZE ?? "4", 10);
     const batchSize = Number.isFinite(configuredBatchSize) ? Math.min(Math.max(configuredBatchSize, 1), 12) : 4;
-    if (!embeddingsEnabled()) {
+    if (pineconeEnabled()) {
+      // Pinecone holds the vectors and does the embedding, so this stores each
+      // passage once in Postgres -- still the one source of truth for the text
+      // itself -- and sends the same text to Pinecone for semantic search.
+      // Indexing is part of the upload the person is already waiting through,
+      // never a separate command they have to know about.
+      const stored: { chunkId: string; policyId: string; pageStart: number; pageEnd: number; heading: string | null; text: string }[] = [];
+      for (const c of chunks) {
+        const inserted = await query<{ id: string }>(
+          `INSERT INTO policy_chunks(account_id,family_member_id,policy_id,page_start,page_end,heading,text)
+           VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+          [args.accountId, args.familyMemberId, args.policyId, c.pageStart, c.pageEnd, c.heading, c.text],
+        );
+        const chunkId = inserted.rows[0]?.id;
+        if (chunkId) stored.push({ chunkId, policyId: args.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, heading: c.heading, text: c.text });
+      }
+      try {
+        await indexPolicyPassages({
+          accountId: args.accountId, policyId: args.policyId, passages: stored,
+          report: (indexed, total) => { void progress(args, "indexing", 70 + (indexed / Math.max(total, 1)) * 24,
+            `Building semantic search index ${indexed} of ${total}…`, "indexing"); },
+        });
+      } catch (error) {
+        // Semantic search improves on keyword search; it is not a precondition
+        // for it. Every passage is already stored and findable, so record the
+        // gap where the person can see it and let the upload finish.
+        const detail = error instanceof Error ? error.message : "Unknown indexing error";
+        console.warn("Pinecone indexing failed for policy " + args.policyId + ":", detail);
+        await query(
+          `UPDATE policies SET needs_review=true,
+             review_reason=coalesce(nullif(review_reason,''),'') ||
+               CASE WHEN coalesce(review_reason,'')='' THEN '' ELSE '; ' END ||
+               'Semantic search could not be built for this document, so questions about it rely on keyword matching until it is re-analysed'
+           WHERE id=$1 AND account_id=$2`,
+          [args.policyId, args.accountId],
+        ).catch(() => { /* Never let the note itself fail the upload. */ });
+      }
+    } else if (!embeddingsEnabled()) {
       // Full-text search only. The stored benefit rules answer questions; the
       // page text is still searchable for the fallback reading path.
       await progress(args, "indexing", 80, `Saving ${chunks.length} searchable section${chunks.length === 1 ? "" : "s"}…`, "indexing");
