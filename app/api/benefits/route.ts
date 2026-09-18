@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { devAccountId,isUuid,query } from "@/lib/db/client";
-import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,looksLikeCoverageLine,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { applyImpliedScaleLimit } from "@/lib/insurance/scale-limit";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { formatMoney } from "@/lib/format/currency";
 
@@ -74,16 +75,34 @@ export async function GET(request:Request){
     const contractsByDocument=new Map<string,typeof inventory extends null?never:NonNullable<typeof inventory>["contracts"]>();
     for(const contract of inventory?.contracts??[])
       for(const doc of [...contract.documents,...contract.references])contractsByDocument.set(doc.id,[...(contractsByDocument.get(doc.id)??[]),contract]);
-    const benefits=rows.rows.map(row=>{
+    // The screen must show the same rules the answers use, or correcting one
+    // here fixes nothing there. Both of the transforms the answer path applies
+    // at load run here too: a certificate's cover line is not a benefit, and a
+    // scale stated as percentages is resolved against the limit the
+    // household's own documents imply.
+    const asCatalog=(row:Row):CatalogBenefit=>{
       const value=row.formula_value==null?null:Number(row.formula_value);
-      const formula={
-        formulaKind:row.formula_kind as never,formulaValue:Number.isFinite(value as number)?value:null,
+      return {id:row.id,policyId:row.policy_id,productName:row.product_name??row.document_product,
+        benefitName:row.benefit_name,traits:(Array.isArray(row.traits)?row.traits:[]) as CatalogBenefit["traits"],
+        formulaKind:row.formula_kind as CatalogBenefit["formulaKind"],
+        formulaValue:Number.isFinite(value as number)?value:null,
         currency:row.currency,factKey:row.fact_key,offsetDays:row.offset_days,maximumDays:row.maximum_days,
+        sourcePage:row.source_page,quote:row.quote,
+        conditions:Array.isArray(row.conditions)?row.conditions.map(String):[],
+        requirements:(Array.isArray(row.requirements)?row.requirements:[]) as CatalogBenefit["requirements"],
+        needsReview:row.needs_review,basisInferred:row.basis_inferred,
+        needsConfirmation:row.basis_inferred&&!row.reviewed_at,reviewedAt:row.reviewed_at};
+    };
+    const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name));
+    const resolved=new Map(applyImpliedScaleLimit(usableRows.map(asCatalog)).map(entry=>[entry.id,entry]));
+    const benefits=usableRows.map(row=>{
+      const stub=resolved.get(row.id)!;
+      const formula={
+        formulaKind:stub.formulaKind,formulaValue:stub.formulaValue,
+        currency:stub.currency,factKey:stub.factKey,offsetDays:stub.offsetDays,maximumDays:stub.maximumDays,
       };
-      const needsConfirmation=row.basis_inferred&&!row.reviewed_at;
-      const attention=attentionFor({needsConfirmation,formulaKind:row.formula_kind,maximumDays:row.maximum_days,factKey:row.fact_key});
-      const stub={id:row.id,policyId:row.policy_id,productName:row.product_name??row.document_product,benefitName:row.benefit_name,
-        traits:[],...formula,sourcePage:row.source_page,quote:row.quote,conditions:[],requirements:[],needsReview:row.needs_review} as unknown as CatalogBenefit;
+      const needsConfirmation=stub.needsConfirmation===true;
+      const attention=attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
       const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
         return coverage?{owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
@@ -100,8 +119,8 @@ export async function GET(request:Request){
         // The whole point of the screen: the rule as a sentence, not a schema.
         pays:describeBenefitFormula(formula),
         sourcePage:row.source_page,quote:row.quote,
-        conditions:Array.isArray(row.conditions)?row.conditions.map(String):[],
-        requirements:Array.isArray(row.requirements)?row.requirements:[],
+        conditions:stub.conditions,
+        requirements:stub.requirements,
         needsReview:row.needs_review,reviewedAt:row.reviewed_at,
         // Read from a heading above the row rather than from the row itself, and
         // not yet confirmed. DearPolicy shows it but will not calculate from it.
