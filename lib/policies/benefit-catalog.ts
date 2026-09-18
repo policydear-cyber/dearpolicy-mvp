@@ -776,11 +776,29 @@ export function planClaimQuestions(args:{matches:BenefitMatch[];facts:SubjectFac
   }
   return plan;
 }
+/** The event happened before the cover on file started.
+ *
+ * Said as a condition, never as a refusal. A group certificate usually prints
+ * the CURRENT period's effective date, not the date the member first joined the
+ * scheme, so treating it as the start of cover would deny claims that are
+ * perfectly good. The person is told what the document says and asked for the
+ * original commencement date, which is the fact that actually settles it. */
+export function eventPredatesCover(contract:PolicyContract,facts:SubjectFacts){
+  if(!contract.effectiveDate)return null;
+  const dates=["deathDate","accidentDate","diagnosisDate","eventDate"]
+    .map(key=>knownValue(facts,key)).filter((value):value is string=>typeof value==="string"&&/^\d{4}-\d{2}-\d{2}/.test(value));
+  if(!dates.length)return null;
+  const earliest=dates.sort()[0];
+  if(earliest>=contract.effectiveDate.slice(0,10))return null;
+  return "The cover on file starts on "+contract.effectiveDate.slice(0,10)+" and what you described is dated "+earliest.slice(0,10)
+    +". If this scheme has been renewed continuously from an earlier date, it still responds \u2014 tell DearPolicy when the cover first started.";
+}
 export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];facts:SubjectFacts;traits:ScenarioTrait[];
   /** Supplied by the caller when a diagnosis was reported, so the critical
    * illness door can be closed on a condition the schedules do not name. */
   events?:ClaimEventType[]}){
   const events=args.events??reportedClaimEvents(args.facts,args.traits);
+  const predatesCover=eventPredatesCover(args.contract,args.facts);
   const documentIds=new Set([...args.contract.documents,...args.contract.references].map(d=>d.id));
   const mine=preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId)));
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];
@@ -798,6 +816,7 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
     if(seen.has(key))continue;seen.add(key);
     const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:args.facts,declaredOnly,
       contractId:args.contract.id,contractName:args.contract.name,insurer:args.contract.insurer,events});
+    if(predatesCover)item.conditions=[...new Set([...item.conditions,predatesCover])];
     items.push(item);
     citations.push({chunkId:"benefit:"+benefit.id,policyId:benefit.policyId,
       policyName:benefit.productName??args.contract.name,insurer:args.contract.insurer??undefined,

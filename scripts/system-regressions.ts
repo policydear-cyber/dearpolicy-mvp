@@ -13,7 +13,7 @@ import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassificatio
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
-import { assessCatalogBenefit,benefitTraits,eventTraits,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import type { ClaimItem } from "@/types";
@@ -1050,6 +1050,18 @@ export function runSystemRegressions(){
     const capped={...uncapped,maximumDays:3};
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
+  });
+  test("An event before the cover on file is flagged, never silently denied",()=>{
+    // A group certificate prints the current period's effective date, not the
+    // day the member joined the scheme. Treating it as the start of cover would
+    // deny claims that are perfectly good, so the person is told what the
+    // document says and asked for the date that actually settles it.
+    const early=eventPredatesCover(contract,{deathDate:fact("2021-03-04")});
+    assert.match(String(early),/cover on file starts on 2022-01-01/);
+    assert.match(String(early),/renewed continuously from an earlier date/);
+    assert.equal(eventPredatesCover(contract,{deathDate:fact("2023-03-04")}),null);
+    assert.equal(eventPredatesCover(contract,{}),null,"no date reported says nothing either way");
+    assert.equal(eventPredatesCover({...contract,effectiveDate:null},{deathDate:fact("2021-03-04")}),null);
   });
   test("Confidence is a claim about the evidence, not about whether a number exists",()=>{
     const card=(override:Partial<ClaimItem>={}):ClaimItem=>({title:"A · Death Benefit",status:"likely_applicable",
