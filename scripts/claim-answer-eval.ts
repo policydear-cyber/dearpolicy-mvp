@@ -172,6 +172,17 @@ const cases:Case[]=[
     total:"S$1,000,000",
   },
   {
+    question:"i was warded for dengue (nights not known yet)",
+    facts:{diagnosis:fact("dengue fever"),eventType:fact("diagnosis"),hospitalised:fact(true)},
+    // The complaint this answers: "still doesn't tell me what i can claim".
+    // The number of nights is not known, so no payout can be calculated -- but
+    // the rule is known, and showing the rule IS the answer. It is labelled as
+    // the rule rather than as a payout, and never added to a total.
+    pays:{"Daily Hospital Cash":"S$30.00 per day after the first 2 days, up to 30 days"},
+    never:["Group Living Care","Early Critical Illness Benefit","Death Benefit"],
+    total:null,
+  },
+  {
     question:"charmaine died in an accident in japan (certificate only, no benefit table read yet)",
     facts:{death:fact(true),accidentalDeath:fact(true),eventType:fact("accident")},
     withoutBenefitRules:true,

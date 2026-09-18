@@ -341,6 +341,16 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
       :"This benefit can respond to what happened, but "+(missing[0]??"its payout rule")+" is still needed before an amount can be calculated.",
     conditions:[...new Set(conditions)],
   };
+  // No figure yet, but the rule is known. Showing the rule is the answer: a
+  // person who is told nothing cannot check anything, and "DearPolicy exists to
+  // give them the number" applies just as much to the number their policy
+  // prints as to the one it settles. It is labelled as the rule, not as a
+  // payout, and it is never added to a total.
+  if(item.amountText==null&&benefit.formulaKind!=="none"){
+    item.amountText=describeBenefitFormula(benefit);
+    item.amountLabel="What this benefit pays";
+    item.status="potentially_applicable";
+  }
   return {item,missing};
 }
 

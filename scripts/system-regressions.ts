@@ -733,9 +733,16 @@ export function runSystemRegressions(){
       facts:{ambulanceBill:fact(220)}}).item.amountText,"S$220.00","The bill, not the cap, when the bill is lower");
     assert.equal(assessCatalogBenefit({benefit:ambulance,coverage:cover,ownerName:"Person A",
       facts:{ambulanceBill:fact(900)}}).item.amountText,"S$500.00","and the cap when the bill is higher");
+    // Nothing is known about the bill yet, so no payout can be calculated. The
+    // rule is known, though, and showing the rule is the answer: the person is
+    // told what their policy pays, it is labelled as the rule rather than as a
+    // payout, and it carries no amount that could be added to a total.
     const unknown=assessCatalogBenefit({benefit:ambulance,coverage:cover,ownerName:"Person A",facts:{}});
-    assert.equal(unknown.item.amountText,null);
-    assert.equal(unknown.item.status,"needs_document");
+    assert.equal(unknown.item.amountText,"Reimburses the ambulance bill, up to S$500.00");
+    assert.equal(unknown.item.amountLabel,"What this benefit pays");
+    assert.equal(unknown.item.status,"potentially_applicable");
+    assert.equal(unknown.item.calculatedAmount,undefined,"a rule is not a payout and is never summed");
+    assert.deepEqual(aggregatePotentialPayouts([unknown.item]),[]);
     assert.ok(unknown.missing.some(entry=>/ambulance/i.test(entry)));
     const cash:CatalogBenefit={...fracture,id:"b3",benefitName:"Daily Hospital Cash",traits:["hospitalisation"],
       formulaKind:"daily",formulaValue:30,factKey:"hospitalNights",offsetDays:3,maximumDays:30,quote:"S$30 per day after the 3rd day."};
@@ -771,7 +778,13 @@ export function runSystemRegressions(){
     const share:CatalogBenefit={...flat,id:"b2",benefitName:"Death Benefit",traits:["death"],
       formulaKind:"sum_insured",formulaValue:1,quote:"We pay the full Sum Insured."};
     const unresolved=assessCatalogBenefit({benefit:share,coverage:null,ownerName:"Person A",facts:{},declaredOnly:true});
-    assert.equal(unresolved.item.amountText,null);
+    // The rule is shown, because the person is entitled to know their policy
+    // pays the whole sum insured. What cannot be shown is a figure, because
+    // nothing on file says what that sum insured is.
+    assert.equal(unresolved.item.amountText,"100% of the sum insured on your schedule");
+    assert.equal(unresolved.item.amountLabel,"What this benefit pays");
+    assert.equal(unresolved.item.calculatedAmount,undefined);
+    assert.deepEqual(aggregatePotentialPayouts([unresolved.item]),[]);
     assert.ok(unresolved.missing.some(entry=>/your own sum insured/.test(entry)),
       "It must say exactly what is needed: "+JSON.stringify(unresolved.missing));
     // With a schedule the same rule becomes a real, addable payout.
