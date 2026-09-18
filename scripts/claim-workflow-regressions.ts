@@ -52,6 +52,13 @@ export async function runClaimWorkflowRegressions() {
       Object.assign(row, { status: params[0], event_type: params[1], event_summary: params[2], facts: JSON.parse(String(params[3])), pending_question: params[4] ? JSON.parse(String(params[4])) : null, decision_packet: params[5] ? JSON.parse(String(params[5])) : null }); return { rows: [], rowCount: 1 };
     }
     if (/INSERT INTO chat_messages/.test(sql)) { assert.equal(params[0], account); assert.equal(params[1], expectedMember); savedChats.push({ person: String(params[1]), role: sql.includes("'user'") ? "user" : "assistant", text: String(params[3]) }); return { rows: [], rowCount: 1 }; }
+    // lib/db/client.ts makes sure the single-household accounts row exists
+    // before the app's first real query. It means to skip that against a
+    // fixture mock, but the guard it uses is "no DATABASE_URL", and CI sets
+    // one -- so every run of this suite died on its very first query instead
+    // of on a test. A strict mock has to answer for it like any other
+    // statement.
+    if (/INSERT INTO accounts/.test(sql)) return { rows: [], rowCount: 0 };
     throw new Error(`Unexpected fixture SQL: ${sql}`);
   };
   const originalQuery = pool.query;
