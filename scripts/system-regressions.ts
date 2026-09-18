@@ -1038,6 +1038,24 @@ export function runSystemRegressions(){
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
   });
+  test("A benefit read live out of a booklet gets the same gate as one read at upload",()=>{
+    const text="Group Living Care pays 100% of the Sum Insured on diagnosis of a Critical Illness. Cover ends on death.";
+    const livingCare=benefit(text);
+    livingCare.title="Group Living Care";
+    const onDeath=assessmentFromBenefit({benefit:livingCare,contract,sources:[source(text)],
+      facts:{death:fact(true)},now,events:["death"]});
+    assert.equal(onDeath.item.status,"not_applicable");
+    assert.equal(onDeath.item.amountText,null,"no figure is put on a benefit written for a different event");
+    assert.match(onDeath.item.reason,/pays the person who was diagnosed, while they are alive/);
+    // And the same benefit still answers the event it IS written for.
+    const onDiagnosis=assessmentFromBenefit({benefit:livingCare,contract,sources:[source(text)],
+      facts:{diagnosis:fact("stage 2 breast cancer")},now,events:["critical_illness"]});
+    assert.notEqual(onDiagnosis.item.status,"not_applicable");
+    assert.equal(onDiagnosis.item.payingEvent,"critical_illness");
+    // Every figure from this path is tied to a cover, so two readings of the
+    // same cover can be recognised as one.
+    assert.ok(onDiagnosis.item.coverKey?.startsWith("policy:P100"));
+  });
   test("A critical-illness benefit is defined by its schedule, not by how serious the illness is",()=>{
     // The answer that started this: dengue offered S$650,000 of critical
     // illness cover. Dengue is severe, and severity is not the test.

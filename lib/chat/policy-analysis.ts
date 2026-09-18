@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { benefitTriggerEvents,coverKey,payingEvent,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { z } from "zod";
 import { structuredCompletion } from "@/lib/ai/llm";
 import { query } from "@/lib/db/client";
@@ -365,7 +366,12 @@ export function evaluateRequirement(requirement:PolicyRequirement,facts:SubjectF
   }
   void now;return "review" as const;
 }
-export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:PolicyContract;sources:PolicySource[];facts:SubjectFacts;now:Date;scenarios?:ScenarioClassification[]}) {
+export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:PolicyContract;sources:PolicySource[];facts:SubjectFacts;now:Date;
+  scenarios?:ScenarioClassification[];
+  /** What kind of claim this is. A benefit read live out of a booklet gets the
+   * same gate as one read at upload: a critical-illness clause is not a death
+   * benefit however the reader summarised it. */
+  events?:ClaimEventType[]}) {
   const checks=args.benefit.requirements.map(r=>({r,result:evaluateRequirement(r,args.facts,args.contract,args.now,args.scenarios)}));
   const calculation=calculatePolicyFormula(args);
   const evidenceText=args.benefit.evidence.map(e=>e.quote).join(" ");
@@ -381,13 +387,21 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
   conditions.push("The retrieved passages are a partial policy review; remaining definitions, exclusions, prior claims and current cover status still need checking.");
   const review=checks.some(c=>c.result==="review"),notMet=checks.some(c=>c.result==="not_met");
   const coverage=args.contract.coverages.find(c=>c.id===args.benefit.coverageId);
+  const triggers=benefitTriggerEvents(args.benefit.title,evidenceText);
+  const wrongEvent=args.events?.length?ruledOutByEvent(triggers,args.events):null;
+  if(wrongEvent)conditions.push("This benefit "+wrongEvent+".");
   const confirmedAmount=coverage?.amount!=null?formatMoney(coverage.amount,coverage.currency):null;
-  const canShowCalculation=!!calculation&&!review&&!notMet&&args.contract.confirmed;
+  const canShowCalculation=!!calculation&&!review&&!notMet&&!wrongEvent&&args.contract.confirmed;
   const item:ClaimItem={
     title:args.contract.ownerName+" · "+args.benefit.title,
-    status:notMet||((calculation?.amount??1)===0&&args.benefit.formula.kind==="daily")?"not_applicable":
+    coverKey:coverKey({policyNumber:coverage?.policyNumber,groupPolicyNumber:coverage?.groupPolicyNumber,
+      insurer:coverage?.insurer??args.contract.insurer??null,
+      productName:canonicalProduct(coverage?.productName??coverage?.policyName??args.contract.name),
+      contractId:args.contract.id,contractName:args.contract.name}),
+    ...(payingEvent(triggers,args.events??[])?{payingEvent:payingEvent(triggers,args.events??[])!}:{}),
+    status:wrongEvent||notMet||((calculation?.amount??1)===0&&args.benefit.formula.kind==="daily")?"not_applicable":
       canShowCalculation?"potentially_applicable":"needs_document",
-    amountText:canShowCalculation?formatMoney(calculation.amount,calculation.currency):ownershipOnly?confirmedAmount:null,
+    amountText:canShowCalculation?formatMoney(calculation.amount,calculation.currency):wrongEvent?null:ownershipOnly?confirmedAmount:null,
     amountLabel:canShowCalculation?(args.benefit.formula.kind==="expense_cap"?"Potential reimbursement":"Potential payout"):
       ownershipOnly&&confirmedAmount?"Confirmed cover amount — payout rule not yet verified":undefined,
     ...(canShowCalculation?{calculatedAmount:calculation.amount,currency:calculation.currency,
@@ -395,7 +409,8 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
       aggregation:args.benefit.formula.kind==="expense_cap"?"reimbursement" as const:"additive" as const,
       calculationId:createHash("sha256").update(JSON.stringify([args.contract.id,args.benefit.coverageId,args.benefit.formula.kind,args.benefit.formula.value,
         args.benefit.formula.factKey,normalText(args.benefit.formula.evidence?.quote??"")])).digest("hex")}:{}),
-    reason:ownershipOnly?"The personalised evidence confirms "+(coverage?.productName??coverage?.category??args.contract.name)+(confirmedAmount?" with an insured amount of "+confirmedAmount:"")+". I could not verify the claim formula in matching wording, so the insured amount is not being presented as a payout.":
+    reason:wrongEvent?"This benefit "+wrongEvent+", so DearPolicy is not putting a figure on it here.":
+      ownershipOnly?"The personalised evidence confirms "+(coverage?.productName??coverage?.category??args.contract.name)+(confirmedAmount?" with an insured amount of "+confirmedAmount:"")+". I could not verify the claim formula in matching wording, so the insured amount is not being presented as a payout.":
       !args.contract.confirmed?"A personalised schedule/certificate still needs to confirm ownership for this contract.":
       notMet?"A reported fact does not meet the quoted condition for this particular benefit.":
       calculation&&!review?calculation.basis+". This is a potential amount from the uploaded evidence, not an approved claim.":

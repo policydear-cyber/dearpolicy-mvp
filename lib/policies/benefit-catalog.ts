@@ -632,8 +632,9 @@ const SCHEDULE_RESPONDS:{pattern:RegExp;exclude?:RegExp;traits:ScenarioTrait[];r
    traits:["illness","diagnosis"],pays:"critical illness benefit",rule:"a critical illness plan pays its sum assured on a qualifying diagnosis, or a percentage of it for an early-stage condition",basis:"indicative"},
 ];
 const TRAIT_ASK:Partial<Record<ScenarioTrait,string>>={accident:"confirmation that this was caused by an accident"};
-export function scheduleFallbackItems(args:{contract:PolicyContract;traits:ScenarioTrait[]}):{items:ClaimItem[];citations:ChatCitation[]}{
+export function scheduleFallbackItems(args:{contract:PolicyContract;traits:ScenarioTrait[];events?:ClaimEventType[]}):{items:ClaimItem[];citations:ChatCitation[]}{
   const reported=new Set(args.traits);
+  const events=args.events??reportedClaimEvents({},args.traits);
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];
   for(const coverage of args.contract.coverages){
     if(coverage.amount==null||!(coverage.amount>0))continue;
@@ -641,6 +642,10 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
     for(const rule of SCHEDULE_RESPONDS){
       if(!rule.pattern.test(name)||(rule.exclude&&rule.exclude.test(name)))continue;
       if(!rule.traits.some(trait=>reported.has(trait)))continue;
+      // The same gate the stored rules get. A schedule line saying the
+      // household holds critical-illness cover is not a reason to pay it on a
+      // death, and an assumed standard rule is the last place to be generous.
+      if(ruledOutByEvent(benefitTriggerEvents(rule.pays,rule.rule),events))continue;
       const missing:string[]=[];let contradicted=false;
       for(const required of rule.requires??[]){
         if(reported.has(required))continue;
@@ -655,6 +660,11 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
         status:missing.length?"potentially_applicable":"likely_applicable",
         amountText:formatMoney(coverage.amount,currency),amountLabel:"Potential payout",
         estimateBasis:rule.basis,calculatedAmount:coverage.amount,currency,calculationKind:"sum_insured",aggregation:"additive",calculationId:"coverage:"+coverage.id,
+        coverKey:coverKey({policyNumber:coverage.policyNumber,groupPolicyNumber:coverage.groupPolicyNumber,
+          insurer:coverage.insurer??args.contract.insurer??null,
+          productName:canonicalProduct(coverage.productName??coverage.policyName??coverage.category),
+          contractId:args.contract.id,contractName:args.contract.name}),
+        ...(payingEvent(benefitTriggerEvents(rule.pays,rule.rule),events)?{payingEvent:payingEvent(benefitTriggerEvents(rule.pays,rule.rule),events)!}:{}),
         reason:"Your "+(coverage.evidenceText?"document":"schedule")+" shows "+formatMoney(coverage.amount,currency)+" of "+label+" cover for "+args.contract.ownerName+(coverage.sourcePage?" (page "+coverage.sourcePage+")":"")+". "
           +"No benefit table for this plan has been read, so this assumes the standard rule: "+rule.rule+". "
           +(rule.basis==="indicative"?"Shown for reference and not added to the total until the plan's own wording is read.":"Upload the policy wording or benefit summary and DearPolicy will calculate from the actual clause instead."),
@@ -667,18 +677,20 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
   }
   return {items,citations};
 }
-export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];traits:ScenarioTrait[]}){
+export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];traits:ScenarioTrait[];events?:ClaimEventType[]}){
+  const events=args.events??reportedClaimEvents({},args.traits);
   const documentIds=new Set([...args.contract.documents,...args.contract.references].map(d=>d.id));
   const mine=preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId)));
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];const needs:ScenarioNeed[]=[];
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";
-  for(const {benefit} of matchBenefits(mine,args.traits)){
+  for(const {benefit} of matchBenefits(mine,args.traits,events)){
     const coverage=coverageForBenefit(args.contract,benefit);
     if(!coverage&&!declaredOnly)continue;
     const key=benefit.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"");
     if(seen.has(key))continue;seen.add(key);
-    const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:{},declaredOnly});
+    const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:{},declaredOnly,
+      contractId:args.contract.id,contractName:args.contract.name,insurer:args.contract.insurer,events});
     if(item.amountText==null&&benefit.formulaKind!=="none"){
       // No figure yet, but the rule is known. Showing the rule is the answer.
       item.amountText=describeBenefitFormula(benefit);

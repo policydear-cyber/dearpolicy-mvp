@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { assessContractFromCatalog,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessContractFromCatalog,scheduleFallbackItems,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { eventTraits } from "@/lib/policies/benefit-catalog";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
 import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
@@ -91,6 +91,9 @@ type Case={
   /** Set when the situation is described in the question rather than recorded
    * as facts -- "what could I claim if...". */
   traits?:ScenarioTrait[];
+  /** Answer from the schedule lines alone, as happens for a household whose
+   * documents are a certificate with no benefit table in them. */
+  withoutBenefitRules?:boolean;
   /** Benefit names that must be offered with a figure. */
   pays:Record<string,string>;
   /** Benefit names that must NOT be offered, whatever else happens. */
@@ -168,6 +171,19 @@ const cases:Case[]=[
     never:["Death Benefit","Death due to Accident","Group Living Care","Early Critical Illness Benefit"],
     total:"S$1,000,000",
   },
+  {
+    question:"charmaine died in an accident in japan (certificate only, no benefit table read yet)",
+    facts:{death:fact(true),accidentalDeath:fact(true),eventType:fact("accident")},
+    withoutBenefitRules:true,
+    // The same answer has to come out of the schedule lines alone. This is the
+    // path a household is on the day they upload a certificate, and it was
+    // assuming a standard rule for every plan on the schedule.
+    pays:{"Group Term Life (Death) \u2014 death benefit":"S$1,000,000",
+      "Group Personal Accident (Personal Accident) \u2014 accidental death benefit":"S$600,000"},
+    never:["Living Care (Critical Illness) \u2014 critical illness benefit",
+      "Living Care Plus (Early Critical Illness) \u2014 critical illness benefit"],
+    total:"S$1,600,000",
+  },
 ];
 
 export function runClaimAnswerEval(){
@@ -176,8 +192,10 @@ export function runClaimAnswerEval(){
     const traits=eventTraits(testCase.facts,testCase.traits??[]);
     const diagnosis=testCase.facts.diagnosis?.value;
     const events=reportedClaimEvents(testCase.facts,traits,typeof diagnosis==="string"?[diagnosis]:[]);
-    const assessed=assessContractFromCatalog({contract,catalog,facts:testCase.facts,traits,events});
-    const {items}=resolveCoverOverlaps(assessed.items);
+    const produced=testCase.withoutBenefitRules
+      ?scheduleFallbackItems({contract,traits,events}).items
+      :assessContractFromCatalog({contract,catalog,facts:testCase.facts,traits,events}).items;
+    const {items}=resolveCoverOverlaps(produced);
     const totals=aggregatePotentialPayouts(items);
     const named=(item:{title:string})=>item.title.split(" · ").slice(1).join(" · ");
     const shown=new Map(items.map(item=>[named(item),item]));

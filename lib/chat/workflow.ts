@@ -456,14 +456,15 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const anySchedule=contracts.some(contract=>contract.coverages.some(coverage=>coverage.amount!=null));
         if((catalog.length||anySchedule)&&!reportsAnEvent&&describesAScenario(asked)){
           const traits=questionTraits(asked);
+          const events=reportedClaimEvents({},traits);
           await report({stage:"Checking your policy benefit rules",completed:0,total:contracts.length});
           const needs=new Map<string,string>();
           for(const contract of contracts){
-            const scenario=scenarioFromCatalog({contract,catalog,traits});
+            const scenario=scenarioFromCatalog({contract,catalog,traits,events});
             if(!scenario.items.length){
               // No rule on file for this contract; the schedule line itself
               // says what the plan pays for a death or a diagnosis.
-              const fallback=scheduleFallbackItems({contract,traits});
+              const fallback=scheduleFallbackItems({contract,traits,events});
               scenario.items.push(...fallback.items);scenario.citations.push(...fallback.citations);
             }
             for(const item of scenario.items)answer.claimItems.push(item);
@@ -598,7 +599,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           const outsideDefined=new Set(outsideDefinedConditions
             ?candidates.filter(c=>paysOnDefinedCondition(c.name+" "+c.pays)).map(c=>c.name):[]);
           const keep=(name:string)=>!outsideDefined.has(name)&&(!responds||responds.has(name));
-          for(const {contract,facts,traits,assessed} of perContract){
+          for(const {contract,facts,traits,events,assessed} of perContract){
             const status=currentness.get(contract.id);
             const matches=assessed.matches.filter(match=>keep(match.benefit.benefitName));
             for(const item of assessed.items){
@@ -622,7 +623,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             if(!matches.length){
               // No stored rule for this contract responds. Its schedule lines
               // can still answer a death or a diagnosis on their own.
-              const fallback=scheduleFallbackItems({contract,traits});
+              const fallback=scheduleFallbackItems({contract,traits,events});
               for(const item of fallback.items){
                 if(status&&status.state!=="verified_recent")item.conditions=[...new Set([...item.conditions,status.label+": "+status.detail])];
                 answer.claimItems.push(item);
@@ -853,7 +854,13 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           }
           for(const step of merged.nextSteps)answer.nextSteps.push(step.text);
           if(state.intent==="claim")for(const benefit of merged.benefits){
-            const assessed=assessmentFromBenefit({benefit,contract,sources:analysisPassages,facts:state.subjects[contract.ownerId]??{},now,scenarios:state.scenarios?.[contract.ownerId]??[]});
+            const ownerFacts=state.subjects[contract.ownerId]??{};
+            const ownerDiagnosis=knownValue(ownerFacts,"diagnosis");
+            const readingEvents=reportedClaimEvents(ownerFacts,
+              eventTraits(ownerFacts,(state.scenarios?.[contract.ownerId]??[]).flatMap(s=>s.traits)),
+              typeof ownerDiagnosis==="string"&&ownerDiagnosis.trim()?[ownerDiagnosis.trim()]:[]);
+            const assessed=assessmentFromBenefit({benefit,contract,sources:analysisPassages,facts:ownerFacts,now,
+              scenarios:state.scenarios?.[contract.ownerId]??[],events:readingEvents});
             const status=currentness.get(contract.id);
             if(status&&status.state!=="verified_recent")assessed.item.conditions=[...new Set([...assessed.item.conditions,status.label+": "+status.detail])];
             answer.claimItems.push(assessed.item);addCitations(answer.citations,assessed.citations);
