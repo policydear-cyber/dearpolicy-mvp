@@ -27,14 +27,16 @@ export default function DashboardPage(){
  // answered the document is used for nothing at all, which is why it is on the
  // portfolio rather than buried in the document list.
  const [claiming,setClaiming]=useState("");
+ const [claimError,setClaimError]=useState("");
  async function claim(policyId:string,familyMemberId:string){
-  setClaiming(policyId);
+  setClaiming(policyId);setClaimError("");
   try{
    const response=await fetch("/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
      body:JSON.stringify({policyId,familyMemberId,declared:true})});
-   if(!response.ok)throw new Error("Could not link that document.");
+   const payload=await response.json().catch(()=>({}));
+   if(!response.ok)throw new Error(payload.error||"Could not link that document.");
    await load(activeId||undefined);
-  }catch{/* The banner already reports a failed load; nothing is lost. */}
+  }catch(error){setClaimError(error instanceof Error?error.message:"Could not link that document. Please try again in a moment.");}
   finally{setClaiming("");}
  }
  async function choose(id:string){setActiveId(id);await load(id);} const confirmed=useMemo(()=>data?.coverages?.filter(c=>c.status==="covered")??[],[data]);const active=data?.activeMember;
@@ -46,6 +48,7 @@ export default function DashboardPage(){
   <section className="evidence-health"><span><b>{data?.quality?.personalDocs??0}</b> personal proof</span><span><b>{data?.quality?.referenceDocs??0}</b> reference documents</span><span><b>{active?.policy_count??0}</b> total linked documents</span><small>Personal documents establish which plans you own. Supporting policy wording is then used to determine the benefits included in those owned plans.</small></section>
   {!!data?.unclaimed?.length&&<section className="section unclaimed-panel"><div className="section-heading"><div><div className="eyebrow">ONE QUESTION</div><h2>Whose {data.unclaimed.length===1?"document is this":"documents are these"}?</h2></div></div>
    <p className="unclaimed-lead">You uploaded {data.unclaimed.length===1?"this":"these"}, so someone in the family holds {data.unclaimed.length===1?"it":"them"}. Until you say who, nothing in {data.unclaimed.length===1?"it is":"them is"} used to answer questions. Amounts printed inside stay marked as the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
+   {claimError&&<div className="alert error" role="alert">{claimError}</div>}
    <div className="unclaimed-list">{data.unclaimed.map(doc=><div className="unclaimed-row" key={doc.id}>
     <div><strong>{doc.product_name??doc.original_filename}</strong><span>{[doc.insurer,(doc.document_role??"").replaceAll("_"," ")].filter(Boolean).join(" · ")||doc.original_filename}</span></div>
     <div className="declare-owner">{data.family.map(m=><button key={m.id} type="button" className="button secondary" disabled={claiming===doc.id} onClick={()=>void claim(doc.id,m.id)}>{m.display_name}</button>)}</div>
