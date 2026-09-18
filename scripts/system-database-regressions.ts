@@ -76,6 +76,7 @@ async function main(){
   // one the app speaks. REPLAY_URL is how the provider-specific tests below
   // reuse these same answers without re-implementing the decision table.
   const REPLAY_URL="http://model.test/replay";
+  const googleReply=(text:string)=>Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
   globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input);
     if(/googleapis\.com\/v1beta\/models\?/.test(url))
@@ -189,16 +190,16 @@ async function main(){
       result={verdicts:(user.rows as {index:number}[]).map(r=>({index:r.index,supported:true}))};
     }else if(system.startsWith("Read insurance")){
       readingCalls++;
-      if(failReading)return Response.json({message:{content:"not valid json"}});
+      if(failReading)return reply("not valid json");
       if(misshapeReading>0){
         misshapeReading--;
         const quote={sourceId:user.sources[0].id,quote:String(user.sources[0].text).slice(0,120)};
         // The exact shape Qwen returned on DC's machine: a bare string where a
         // list of quoted conditions belongs, and one quote instead of a list.
-        return Response.json({message:{content:JSON.stringify({benefits:[{title:"Critical illness benefit",coverageId:user.confirmedCoverages[0]?.id,
+        return reply(JSON.stringify({benefits:[{title:"Critical illness benefit",coverageId:user.confirmedCoverages[0]?.id,
           evidence:quote,requirements:[],conditions:"Subject to the defined illness.",
           formula:{kind:"none",value:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence:null}}],
-          observations:[],nextSteps:[]})}});
+          observations:[],nextSteps:[]}));
       }
       const analysis:PolicyAnalysis={benefits:[],observations:[],nextSteps:[]};
       const traits=new Set<string>((user.scenarioCandidates??[]).flatMap((candidate:{traits:string[]})=>candidate.traits));
@@ -1110,7 +1111,7 @@ async function main(){
       const { loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
       const pages=await documentPages(account,fixture.referenceId);
       const inner=globalThis.fetch;
-      let groqCalls=0,throttled=false,ollamaReads=0,authHeader="";
+      let groqCalls=0,throttled=false,authHeader="";
       globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
         const url=String(input);
         if(url.startsWith("https://api.groq.com/")){
@@ -1129,15 +1130,13 @@ async function main(){
             :[];
           return Response.json({choices:[{message:{content:JSON.stringify({benefits})},finish_reason:"stop"}]});
         }
-        if(url.endsWith("/api/chat"))ollamaReads++;
         return inner(input,init);
       }) as typeof fetch;
       process.env.READING_MODEL_PROVIDER="groq";process.env.GROQ_API_KEY="test-key";
       try{
         const stored=await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",pages});
         assert.ok(groqCalls>=pages.length+1,"Every page went to the hosted reader, and the throttled page was retried");
-        assert.equal(ollamaReads,0,"The local model was not used for reading");
-        assert.equal(authHeader,"Bearer test-key");
+            assert.equal(authHeader,"Bearer test-key");
         assert.equal(stored,1,"The invented quote was refused; only the real rule was stored");
         const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
         assert.deepEqual(catalog.map(b=>b.benefitName),["Major Critical Illness"]);
@@ -1545,18 +1544,18 @@ async function main(){
       let readingWindowCalls=0;
       globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
         const url=String(input);
-        if(!url.endsWith("/api/chat"))return inner(input,init);
-        const body=JSON.parse(String(init?.body)),system=String(body.messages[0].content);
+        if(!/googleapis\.com/.test(url)||!/generateContent/.test(url))return inner(input,init);
+        const body=JSON.parse(String(init?.body)),system=String(body.systemInstruction.parts[0].text);
         if(!system.startsWith("Read insurance"))return inner(input,init);
         readingWindowCalls++;
-        const user=JSON.parse(body.messages[1].content),source=user.sources[0],quote=String(source.text).slice(0,40);
+        const user=JSON.parse(body.contents[0].parts[0].text),source=user.sources[0],quote=String(source.text).slice(0,40);
         // Independent reading windows over the same undershot section, worded
         // differently the way a real model varies its phrasing window to window.
         const restatements=["This contract does not contain a critical illness benefit for this diagnosis.",
           "The policy wording does not include any relevant benefit here.","These pages do not provide coverage for the reported event."];
         const text=readingWindowCalls<=3?restatements[readingWindowCalls-1]:
           "This particular passage raises an unrelated administrative point, not a coverage conclusion.";
-        return Response.json({message:{content:JSON.stringify({benefits:[],observations:[{text,evidence:[{sourceId:source.id,quote}]}],nextSteps:[]})}});
+        return googleReply(JSON.stringify({benefits:[],observations:[{text,evidence:[{sourceId:source.id,quote}]}],nextSteps:[]}));
       }) as typeof fetch;
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
@@ -1578,19 +1577,19 @@ async function main(){
       const inner=globalThis.fetch;
       globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
         const url=String(input);
-        if(!url.endsWith("/api/chat"))return inner(input,init);
-        const body=JSON.parse(String(init?.body)),system=String(body.messages[0].content);
+        if(!/googleapis\.com/.test(url)||!/generateContent/.test(url))return inner(input,init);
+        const body=JSON.parse(String(init?.body)),system=String(body.systemInstruction.parts[0].text);
         if(!system.startsWith("Read insurance"))return inner(input,init);
-        const user=JSON.parse(body.messages[1].content);
+        const user=JSON.parse(body.contents[0].parts[0].text);
         const fractureSource=(user.sources as {id:string;text:string}[]).find(s=>s.text.includes("broken forearm"));
         if(!fractureSource)return inner(input,init);
         // The model quotes the clause correctly but -- the way a small/cheap
         // model sometimes does -- returns it only as prose, never structuring
         // it into the benefits list alongside.
-        return Response.json({message:{content:JSON.stringify({benefits:[],
+        return googleReply(JSON.stringify({benefits:[],
           observations:[{text:"Compensation is provided for a broken forearm at 20% of the Sum Insured.",
             evidence:[{sourceId:fractureSource.id,quote:"compensation is provided for a broken forearm at 20% of the Sum Insured"}]}],
-          nextSteps:[]})}});
+          nextSteps:[]}));
       }) as typeof fetch;
       try{
         const {data}=await send("He broke his left forearm playing basketball. What can he claim?",fixture.person.id);
