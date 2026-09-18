@@ -78,6 +78,11 @@ const catalog:CatalogBenefit[]=[
     "Simple fracture of the wrist: S$1,250.",["bodily_injury","accident"],{formulaKind:"fixed",formulaValue:1_250},["accident"]),
   benefit("Ambulance Fee","Group Personal Accident","We reimburse the ambulance cost up to S$500 per incident.",
     ["medical_expense"],{formulaKind:"expense_cap",formulaValue:500,factKey:"ambulanceBill"}),
+  // The same death benefit read out of a second document, whose product
+  // heading is the booklet's ("Hospitalisation"), not the cover's. It resolves
+  // to the same group term life cover and must not be added to it.
+  benefit("Death","Hospitalisation","On the death of the insured member we pay 100% of the Sum Insured.",
+    ["death"],{formulaKind:"sum_insured",formulaValue:1},["death"]),
   benefit("Group Living Care","Living Care",
     "We pay 100% of the Sum Insured on the diagnosis of a Critical Illness as defined in the Schedule. Cover ends on the death of the member.",
     ["illness","diagnosis"],{formulaKind:"sum_insured",formulaValue:1}),
@@ -103,6 +108,8 @@ type Case={
    * amount, and the rest stay visible as alternatives. Which one is kept is
    * arbitrary and deliberately not asserted. */
   oneOf?:{names:string[];amount:string};
+  /** A second such set in the same answer. */
+  alsoOneOf?:{names:string[];amount:string};
   total:string|null;
 };
 
@@ -110,8 +117,9 @@ const cases:Case[]=[
   {
     question:"charmaine died in an accident in japan",
     facts:{death:fact(true),accidentalDeath:fact(true),eventType:fact("accident")},
-    pays:{"Death Benefit":"S$1,000,000"},
+    pays:{},
     oneOf:{names:["Death due to Accident","Accidental Death Benefit"],amount:"S$600,000"},
+    alsoOneOf:{names:["Death Benefit","Death"],amount:"S$1,000,000"},
     // The answer that started this was S$3,600,000: a critical-illness product
     // paying on a death, and the personal accident cover counted twice. The
     // fracture benefit is here too, because an accidental death is not an
@@ -126,14 +134,14 @@ const cases:Case[]=[
     pays:{"Daily Hospital Cash":"S$60.00"},
     // Dengue is severe. Severity is not the test; the schedule of defined
     // conditions is, and dengue is not in it.
-    never:["Group Living Care","Early Critical Illness Benefit","Death Benefit","Death due to Accident"],
+    never:["Group Living Care","Early Critical Illness Benefit","Death Benefit","Death","Death due to Accident"],
     total:"S$60.00",
   },
   {
     question:"i was diagnosed with stage 3 colon cancer",
     facts:{diagnosis:fact("stage 3 colon cancer"),eventType:fact("diagnosis")},
     pays:{"Group Living Care":"S$350,000","Early Critical Illness Benefit":"S$150,000"},
-    never:["Death Benefit","Death due to Accident","Total and Permanent Disability"],
+    never:["Death Benefit","Death","Death due to Accident","Total and Permanent Disability"],
     total:"S$500,000",
   },
   {
@@ -141,7 +149,7 @@ const cases:Case[]=[
     facts:{eventType:fact("accident"),injured:fact(true),fractureBodyPart:fact("wrist"),
       hospitalised:fact(true),hospitalNights:fact(5),ambulanceUsed:fact(true),ambulanceBill:fact(220)},
     pays:{"Simple Fracture":"S$1,250","Daily Hospital Cash":"S$90.00","Ambulance Fee":"S$220.00"},
-    never:["Death Benefit","Death due to Accident","Group Living Care","Early Critical Illness Benefit"],
+    never:["Death Benefit","Death","Death due to Accident","Group Living Care","Early Critical Illness Benefit"],
     // The ambulance is a reimbursement of an actual bill, so it is shown on its
     // own card and never folded into the lump-sum total.
     total:"S$1,340",
@@ -149,7 +157,8 @@ const cases:Case[]=[
   {
     question:"my husband died of a heart attack at home",
     facts:{death:fact(true),eventType:fact("illness"),causeOfDeath:fact("heart attack")},
-    pays:{"Death Benefit":"S$1,000,000"},
+    pays:{},
+    oneOf:{names:["Death Benefit","Death"],amount:"S$1,000,000"},
     // A personal accident policy does not pay for a death from illness, and a
     // critical-illness policy does not pay because the person has died.
     never:["Death due to Accident","Accidental Death Benefit","Group Living Care","Early Critical Illness Benefit","Simple Fracture"],
@@ -162,14 +171,14 @@ const cases:Case[]=[
     facts:{},
     traits:["illness","diagnosis"],
     pays:{"Group Living Care":"S$350,000","Early Critical Illness Benefit":"S$150,000"},
-    never:["Death Benefit","Death due to Accident","Total and Permanent Disability"],
+    never:["Death Benefit","Death","Death due to Accident","Total and Permanent Disability"],
     total:"S$500,000",
   },
   {
     question:"i lost the use of both legs in a motorbike accident and it is permanent",
     facts:{eventType:fact("accident"),injured:fact(true),permanentImpairment:fact("total and permanent loss of use of both legs")},
     pays:{"Total and Permanent Disability":"S$1,000,000"},
-    never:["Death Benefit","Death due to Accident","Group Living Care","Early Critical Illness Benefit"],
+    never:["Death Benefit","Death","Death due to Accident","Group Living Care","Early Critical Illness Benefit"],
     total:"S$1,000,000",
   },
   {
@@ -180,7 +189,7 @@ const cases:Case[]=[
     // the rule is known, and showing the rule IS the answer. It is labelled as
     // the rule rather than as a payout, and never added to a total.
     pays:{"Daily Hospital Cash":"S$30.00 per day after the first 2 days, up to 30 days"},
-    never:["Group Living Care","Early Critical Illness Benefit","Death Benefit"],
+    never:["Group Living Care","Early Critical Illness Benefit","Death Benefit","Death"],
     total:null,
   },
   {
@@ -232,12 +241,13 @@ export function runClaimAnswerEval(){
       if(shown.has(name))fail("“"+name+"” must not be offered for this event");
       checked++;
     }
-    if(testCase.oneOf){
-      const found=testCase.oneOf.names.map(name=>shown.get(name));
-      if(found.some(item=>!item))fail("every row describing the same cover should still be shown: "+testCase.oneOf.names.join(", "));
+    for(const set of [testCase.oneOf,testCase.alsoOneOf]){
+      if(!set)continue;
+      const found=set.names.map(name=>shown.get(name));
+      if(found.some(item=>!item))fail("every row describing the same cover should still be shown: "+set.names.join(", "));
       const counted=found.filter(item=>typeof item!.calculatedAmount==="number");
-      if(counted.length!==1)fail(counted.length+" of "+found.length+" rows describing the same cover are being counted; exactly one should be");
-      if(counted[0]!.amountText!==testCase.oneOf.amount)fail("the counted row should pay "+testCase.oneOf.amount+", not "+counted[0]!.amountText);
+      if(counted.length!==1)fail(counted.length+" of "+found.length+" rows describing the same cover ("+set.names.join(", ")+") are being counted; exactly one should be");
+      if(counted[0]!.amountText!==set.amount)fail("the counted row should pay "+set.amount+", not "+counted[0]!.amountText);
       for(const item of found)if(item!==counted[0]&&!item!.supersededBy)fail("“"+named(item!)+"” should say which benefit is paid instead of it");
       checked+=3;
     }

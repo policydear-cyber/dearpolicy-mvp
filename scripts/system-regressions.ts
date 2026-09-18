@@ -1398,7 +1398,8 @@ export function runSystemRegressions(){
     const assessed=assessCatalogBenefit({benefit:death,coverage:coverage({amount:600_000,documentRole:"certificate"}),
       ownerName:"Person A",facts:{death:fact(true)},contractId:"contract",insurer:"Example Insurer",events:["death"]});
     assert.equal(assessed.item.payingEvent,"death");
-    assert.equal(assessed.item.coverKey,"policy:P100|group term life","identity is the policy number and the product, not the row");
+    assert.equal(assessed.item.coverKey,"policy:P100|flexible plan",
+      "identity is the cover the money comes from, not the document the rule was read from");
     assert.equal(assessed.item.amountText,"S$600,000");
     // Two rows describing the same cover share the key; a different policy does not.
     assert.equal(coverKey({policyNumber:"P-100",productName:"group personal accident",contractId:"a"}),

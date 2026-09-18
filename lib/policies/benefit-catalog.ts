@@ -314,7 +314,11 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     +"DearPolicy checks against the standard Singapore list, and a policy may define fewer conditions than that list contains.");
   const cover=coverKey({policyNumber:coverage?.policyNumber,groupPolicyNumber:coverage?.groupPolicyNumber,
     insurer:args.insurer??coverage?.insurer??null,
-    productName:canonicalProduct(benefit.productName??coverage?.productName??coverage?.policyName??null),
+    // The cover identifies itself, not the document the rule was read from. A
+    // booklet's product heading is not a cover: two rules read from two
+    // different booklets that both pay from the same certificate line are one
+    // cover, and keying on the heading would have let them be added together.
+    productName:canonicalProduct(coverage?.productName??coverage?.policyName??benefit.productName??null),
     contractId:args.contractId??benefit.policyId,contractName:args.contractName??null});
   const item:ClaimItem={
     title:args.ownerName+" · "+benefit.benefitName,
