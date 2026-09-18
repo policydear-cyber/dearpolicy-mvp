@@ -41,6 +41,21 @@ function explicitPeople(message:string,family:ClaimPerson[]){
  * Resolving that before the total is struck is the difference between "your
  * cover pays S$2,000,000" and the S$3,600,000 that adding every responding row
  * together produced. */
+/** How far the figure can be relied on, read from the evidence behind it
+ * rather than from whether a number exists at all.
+ *
+ * "There is a total, therefore strong match" said strong on an answer built
+ * entirely from figures printed in a booklet for everybody, with three facts
+ * still outstanding. Confidence is a claim about the evidence, so it is now
+ * made from the evidence: every counted figure computed from the person's own
+ * schedule, and nothing still needed, or it is a partial match and says so. */
+export function claimConfidence(items:ClaimItem[]):"strong_match"|"partial_match"|"insufficient_evidence"{
+  const counted=items.filter(item=>typeof item.calculatedAmount==="number"&&!item.supersededBy&&item.aggregation!=="reimbursement");
+  if(!counted.length)return items.length?"partial_match":"insufficient_evidence";
+  const verified=counted.every(item=>item.estimateBasis==="confirmed");
+  const complete=counted.every(item=>!item.conditions.some(condition=>condition.startsWith("Still needed:")));
+  return verified&&complete?"strong_match":"partial_match";
+}
 function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[]}){
   const {notes}=resolveCoverOverlaps(answer.claimItems);
   for(const note of notes)if(!answer.details.includes(note))answer.details.push(note);
@@ -433,7 +448,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
               }
               answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
               answer.scenarioClassifications=context.people.flatMap(person=>(state.scenarios?.[person.id]??[]).slice(-12).map(s=>({subjectName:person.display_name,label:s.label,family:s.family,traits:s.traits})));
-              answer.confidence=answer.potentialPayoutTotals.length?"strong_match":"partial_match";
+              answer.confidence=claimConfidence(answer.claimItems);
               answer.details.push("Answered from your Coverage Ledger — "+ledger.length+" row"+(ledger.length===1?"":"s")+" read from the documents you uploaded. The Coverage page shows every row, the page it came from, and whether it was verified.");
               if(stillReading)answer.details.push(stillReading+" document"+(stillReading===1?" is":"s are")+" still being read into the ledger. Ask again in a minute and anything found there is included.");
               await report({stage:"Putting the answer together",completed:contracts.length,total:contracts.length});
@@ -479,7 +494,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           answer.summary=answer.claimItems.length
             ?"If that happened, these benefits in your policies would respond"+(totals?", and the ones that can already be calculated come to "+totals:"")+". Every figure is an estimate from the wording quoted on the page shown, and the insurer decides the final amount."
             :"None of the benefit rules DearPolicy has read respond to what you described. That is only as complete as the documents you have uploaded.";
-          answer.confidence=answer.claimItems.length?"strong_match":"partial_match";
+          answer.confidence=claimConfidence(answer.claimItems);
           // The facts that would turn a rule into a figure, asked one at a time.
           const ask=[...needs.entries()].slice(0,1);
           answer.questions=ask.map(([factKey,text])=>({id:"scenario-"+factKey,type:"text" as const,
@@ -719,7 +734,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             ?"Estimated claim amount so far: "+totals+" across "+answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0)+" evidence-supported benefit"+(answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0)===1?"":"s")+". Each amount is calculated by DearPolicy from your schedule and the quoted clause, and remains subject to the insurer's assessment."
             :matched?"I found "+matched+" benefit"+(matched===1?"":"s")+" that can respond to what happened, but each still needs a fact or a document before an amount can be calculated."
             :"None of the benefit rules on file respond to what you described. That is based on the rules captured from your uploaded documents, so it is only as complete as those documents.");
-          answer.confidence=answer.claimItems.length?"strong_match":"partial_match";
+          answer.confidence=claimConfidence(answer.claimItems);
           if(staleContracts.length)answer.nextSteps.push("Upload the latest premium receipt or renewal notice for "+[...new Set(staleContracts.map(c=>c.ownerName+" · "+c.name))].slice(0,4).join("; ")+" so the active status can be verified. Ownership is already confirmed and is unaffected.");
           answer.details.push("Answered from "+catalog.length+" benefit rule"+(catalog.length===1?"":"s")+" read from your documents. Anything uploaded since is read automatically; the Benefits page shows what has been read.");
           // Ask for the single fact that would unlock the most, so the chat

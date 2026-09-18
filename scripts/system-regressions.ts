@@ -20,7 +20,7 @@ import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
 import { z } from "zod";
-import { readingBudget } from "@/lib/chat/workflow";
+import { claimConfidence,readingBudget } from "@/lib/chat/workflow";
 import { allocateReadingWindows,candidateFromWindows,rankCandidates } from "@/lib/policies/relevance";
 
 export function runSystemRegressions(){
@@ -1037,6 +1037,20 @@ export function runSystemRegressions(){
     const capped={...uncapped,maximumDays:3};
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
+  });
+  test("Confidence is a claim about the evidence, not about whether a number exists",()=>{
+    const card=(override:Partial<ClaimItem>={}):ClaimItem=>({title:"A · Death Benefit",status:"likely_applicable",
+      amountText:"S$1,000,000",estimateBasis:"confirmed",calculatedAmount:1_000_000,currency:"SGD",
+      calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[],...override});
+    assert.equal(claimConfidence([card()]),"strong_match");
+    // A figure printed in a booklet for everybody is not the person's schedule.
+    assert.equal(claimConfidence([card(),card({title:"A · PA",estimateBasis:"estimated"})]),"partial_match");
+    // Nor is a figure with a fact still outstanding behind it.
+    assert.equal(claimConfidence([card({conditions:["Still needed: the number of nights in hospital"]})]),"partial_match");
+    // A benefit paid instead of another does not weaken the answer.
+    assert.equal(claimConfidence([card(),card({title:"A · Dup",estimateBasis:"estimated",supersededBy:"A · Death Benefit",calculatedAmount:undefined})]),"strong_match");
+    assert.equal(claimConfidence([]),"insufficient_evidence");
+    assert.equal(claimConfidence([card({calculatedAmount:undefined,amountText:null,status:"needs_document"})]),"partial_match");
   });
   test("A benefit read live out of a booklet gets the same gate as one read at upload",()=>{
     const text="Group Living Care pays 100% of the Sum Insured on diagnosis of a Critical Illness. Cover ends on death.";
