@@ -38,6 +38,14 @@ export default function FamilyPage() {
     if (response.ok) await refresh();
   }
 
+  async function remove(member: Member) {
+    if (!confirm(`Remove ${member.display_name} from your household?`)) return;
+    const response = await fetch(`/api/family/${member.id}`, { method: "DELETE" });
+    const payload = await response.json().catch(() => ({}));
+    setStatus(response.ok ? `Removed ${member.display_name}.` : (payload.error || "Could not remove this profile. Please try again in a moment."));
+    if (response.ok) await refresh();
+  }
+
   function update(id: string, patch: Partial<Member>) { setFamily((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item)); }
 
   return (
@@ -67,7 +75,7 @@ export default function FamilyPage() {
                 <div className="field"><label>Date of birth</label><input type="date" value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
                 <div className="field"><label>Preferred name</label><input value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
-              <div className="profile-actions"><span>{member.policy_count} linked documents</span><button className="button secondary" onClick={() => save(member)}>Save</button></div>
+              <div className="profile-actions"><span>{member.policy_count} linked documents</span><button className="button secondary" onClick={() => save(member)}>Save</button><button className="button secondary" onClick={() => remove(member)}>Delete</button></div>
             </div>
           ))}
         </div>

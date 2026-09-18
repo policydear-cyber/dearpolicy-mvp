@@ -21,3 +21,39 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 }
+
+// There is no UI or API path to undo an accidental "+ Add person" (a typo, a
+// duplicate, a one-off test profile) once it's on the household list -- this
+// closes that gap. Deletion is refused, rather than cascaded, whenever the
+// profile has any real activity attached (an uploaded policy, chat history,
+// a claim, a coverage rule, a premium record): silently cascading a delete
+// through a family member's policy documents and claim history in a family
+// insurance app is exactly the kind of data loss that must never be a single
+// click, so those profiles are left for the person to explicitly clear out
+// (remove the documents/history) before the profile itself can go.
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params;
+    const accountId = devAccountId();
+    const owned = await query<{ id: string }>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2`, [id, accountId]);
+    if (!owned.rows.length) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    const usage = await query<{ n: number }>(
+      `SELECT (
+          (SELECT count(*) FROM policies WHERE family_member_id=$1)
+        + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
+        + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
+        + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
+        + (SELECT count(*) FROM coverage_rules WHERE family_member_id=$1)
+        + (SELECT count(*) FROM premium_records WHERE family_member_id=$1)
+       )::int AS n`,
+      [id],
+    );
+    if ((usage.rows[0]?.n ?? 0) > 0) {
+      return NextResponse.json({ error: "This profile has linked documents or activity, so it can't be deleted. Remove those first." }, { status: 409 });
+    }
+    await query(`DELETE FROM family_members WHERE id=$1 AND account_id=$2`, [id, accountId]);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json({ error: "Database error" }, { status: 500 });
+  }
+}
