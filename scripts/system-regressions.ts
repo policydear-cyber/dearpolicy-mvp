@@ -17,7 +17,7 @@ import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCove
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
-import { applyImpliedScaleLimit,impliedScaleLimit } from "@/lib/insurance/scale-limit";
+import { applyImpliedScaleLimit,corroborateInferredRules,impliedScaleLimit } from "@/lib/insurance/scale-limit";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1124,6 +1124,41 @@ export function runSystemRegressions(){
     // A benefit that pays on none of those is left unresolved rather than
     // attached to whichever cover happens to be first.
     assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
+  });
+  test("A rule two documents state identically no longer waits for a person to confirm it",()=>{
+    // 116 of the 181 rules on file were waiting to be confirmed, and the
+    // dismemberment scale is most of them: read from a column heading in one
+    // document, and read again, identically, from a different layout in
+    // another. Two independent readings agreeing IS the agreement the
+    // confirmation was asking a person to supply.
+    const row=(id:string,policyId:string,name:string,value:number,over:Partial<CatalogBenefit>={}):CatalogBenefit=>({
+      id,policyId,productName:"Group Personal Accident",benefitName:name,traits:["bodily_injury"],
+      formulaKind:"sum_insured",formulaValue:value,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:6,quote:"",conditions:[],requirements:[],needsReview:false,basisInferred:true,needsConfirmation:true,...over});
+    const agreeing=corroborateInferredRules([
+      row("a","summary","22. Loss of speech",0.5),
+      row("b","booklet","22. Loss of speech",0.5),
+    ]);
+    assert.equal(agreeing[0].needsConfirmation,false);
+    assert.equal(agreeing[1].needsConfirmation,false);
+    assert.match(agreeing[0].conditions.join(" "),/two of your documents state this rule identically/);
+    // One document alone is one reading, and still waits.
+    assert.equal(corroborateInferredRules([row("a","summary","22. Loss of speech",0.5)])[0].needsConfirmation,true);
+    // The same document twice is not two documents.
+    assert.equal(corroborateInferredRules([
+      row("a","summary","22. Loss of speech",0.5),row("b","summary","22. Loss of speech",0.5)])[0].needsConfirmation,true);
+    // Two documents disagreeing is exactly what confirmation exists for.
+    const disagreeing=corroborateInferredRules([
+      row("a","summary","Arm, Elbow, Wrist or Ribs",0.2),
+      row("b","booklet","Arm , Elbow, Wrist or Ribs",0.25),
+    ]);
+    assert.equal(disagreeing[0].needsConfirmation,true);
+    assert.equal(disagreeing[1].needsConfirmation,true);
+    // A row a person already reviewed is never reopened or relabelled.
+    const reviewed=corroborateInferredRules([
+      row("a","summary","22. Loss of speech",0.5,{needsConfirmation:false,reviewedAt:"2026-01-01"}),
+      row("b","booklet","22. Loss of speech",0.5,{needsConfirmation:false,reviewedAt:"2026-01-01"})]);
+    assert.deepEqual(reviewed[0].conditions,[]);
   });
   test("A fracture scale's percentages are worked out against the limit the household's own documents imply",()=>{
     // The live benefit table states this scale twice: as percentages in one

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { devAccountId,isUuid,query } from "@/lib/db/client";
 import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,looksLikeCoverageLine,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
-import { applyImpliedScaleLimit } from "@/lib/insurance/scale-limit";
+import { resolveStoredRules } from "@/lib/insurance/scale-limit";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { formatMoney } from "@/lib/format/currency";
 
@@ -94,7 +94,7 @@ export async function GET(request:Request){
         needsConfirmation:row.basis_inferred&&!row.reviewed_at,reviewedAt:row.reviewed_at};
     };
     const usableRows=rows.rows.filter(row=>!looksLikeCoverageLine(row.benefit_name));
-    const resolved=new Map(applyImpliedScaleLimit(usableRows.map(asCatalog)).map(entry=>[entry.id,entry]));
+    const resolved=new Map(resolveStoredRules(usableRows.map(asCatalog)).map(entry=>[entry.id,entry]));
     const benefits=usableRows.map(row=>{
       const stub=resolved.get(row.id)!;
       const formula={

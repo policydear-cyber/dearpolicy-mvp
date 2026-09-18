@@ -4,7 +4,7 @@ import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
-import { applyImpliedScaleLimit } from "@/lib/insurance/scale-limit";
+import { resolveStoredRules } from "@/lib/insurance/scale-limit";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 
@@ -572,7 +572,7 @@ export async function loadBenefitCatalog(accountId:string,policyIds:string[]){
   const r=await query<BenefitRow>(
     "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation FROM policy_benefits WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) ORDER BY benefit_name",
     [accountId,policyIds]);
-  return applyImpliedScaleLimit(r.rows.map(toBenefit).filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)));
+  return resolveStoredRules(r.rows.map(toBenefit).filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)));
 }
 /** Rebuilds a document's rules, keeping every rule a person corrected.
  *
