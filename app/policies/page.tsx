@@ -51,6 +51,7 @@ export default function PoliciesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
 
   async function refresh() {
@@ -158,7 +159,11 @@ export default function PoliciesPage() {
   async function deleteDocument(policy: Policy) {
     if (isProcessing(policy)) return;
     const label = policy.product_name ?? policy.original_filename;
-    if (!window.confirm(`Delete ${label}?\n\nThis permanently removes the PDF and data derived from it. Other documents are not affected.`)) return;
+    // A native confirm() blocks the tab's whole event loop until dismissed --
+    // an inline arm-then-confirm click (see the Delete button below) avoids
+    // that while still requiring a deliberate second click first.
+    if (confirmDeleteId !== policy.id) { setConfirmDeleteId(policy.id); return; }
+    setConfirmDeleteId(null);
     setDeletingId(policy.id);
     try {
       const response = await fetch(`/api/policies/${policy.id}`, { method: "DELETE" });
@@ -218,7 +223,7 @@ export default function PoliciesPage() {
             <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? `${pct}%` : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
           </div>
 
-          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" disabled={processing || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : "Delete"}</button></div>
+          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" disabled={processing || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {processing && <div className="document-progress" aria-live="polite">
             <div className="document-progress-copy"><strong>{policy.processing_message ?? "Analysis in progress…"}</strong><span>{pct}%</span></div>

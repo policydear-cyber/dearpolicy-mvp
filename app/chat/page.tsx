@@ -33,6 +33,8 @@ function ChatContent(){
   const [elapsed,setElapsed]=useState(0);
   const [error,setError]=useState("");
   const [historyError,setHistoryError]=useState("");
+  const [confirmDeleteChatId,setConfirmDeleteChatId]=useState<string|null>(null);
+  const [confirmClearHistory,setConfirmClearHistory]=useState(false);
   const requestVersion=useRef(0);
   const controller=useRef<AbortController|null>(null);
   const jobId=useRef<string|null>(null);
@@ -139,7 +141,11 @@ function ChatContent(){
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
   }
   async function removeChat(id:string){
-    if(!window.confirm("Delete this chat and its saved conversation facts? Your policy documents will remain."))return;
+    // Inline arm-then-confirm avoids window.confirm()'s tab-freezing blocking
+    // dialog (see the Delete button below) while keeping a deliberate second
+    // click before anything irreversible happens.
+    if(confirmDeleteChatId!==id){setConfirmDeleteChatId(id);return;}
+    setConfirmDeleteChatId(null);
     if(id===conversationId)reset();
     try{
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:id})});
@@ -148,7 +154,8 @@ function ChatContent(){
     }catch(e){setHistoryError(e instanceof Error?e.message:"Could not delete chat");}
   }
   async function clearHistory(){
-    if(!window.confirm("Clear all chat history and saved conversation facts? Your family profiles and policy documents will remain."))return;
+    if(!confirmClearHistory){setConfirmClearHistory(true);return;}
+    setConfirmClearHistory(false);
     reset();setHistoryError("");
     try{
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},
@@ -183,10 +190,11 @@ function ChatContent(){
       <div className="chat-head-actions"><div className="auto-context"><strong>Automatic family context</strong><span>{active?"Following "+active.display_name+" until you mention someone else":"Mention a name, relationship, “I”, or ask about the whole family"}</span></div><button className="button secondary compact" onClick={reset}>New chat</button></div>
     </header>
     <details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
-      <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>Clear all chat history</button></div>
+      <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
         <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {new Date(chat.updated_at).toLocaleDateString()}</small></button>
-        <button className="mini-button danger" onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>Delete</button>
+        <button className="mini-button danger" onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>{confirmDeleteChatId===chat.id?"Confirm delete":"Delete"}</button>
+        {confirmDeleteChatId===chat.id&&<button className="mini-button" onClick={()=>setConfirmDeleteChatId(null)}>Cancel</button>}
       </li>)}</ul>}
       {historyCursor?<button className="mini-button" onClick={()=>void refreshHistory(historyCursor).catch(()=>setHistoryError("Could not load more chats."))}>Load more chats</button>:null}
       {historyError?<p role="alert">{historyError}</p>:null}
