@@ -86,3 +86,37 @@ export function paysOnDefinedCondition(text: string) {
   if (/\b(critical illness|crisis cover|dread disease|defined condition)\b/.test(value)) return true;
   return LIA_2019_CRITICAL_ILLNESSES.some((condition) => condition.matches.test(value));
 }
+
+/** The policy's OWN schedule, when DearPolicy already holds it.
+ *
+ * The LIA list is a floor, and a floor has a cost: a plan that defines more
+ * conditions than the standard 37 -- severe rheumatoid arthritis, diabetic
+ * complications, an early-stage plan's own list -- would have its own named
+ * condition refused because a national baseline does not mention it.
+ *
+ * Nothing new has to be read to fix most of that. When a critical-illness
+ * plan's benefit table was catalogued at upload, its rows ARE its schedule of
+ * defined conditions, stored already. So the diagnosis is checked against the
+ * policy's own row names as well as against the standard list, and the policy
+ * always wins: it is the contract.
+ *
+ * Matching is by containment of significant words in either direction, so
+ * "Severe Rheumatoid Arthritis" answers "rheumatoid arthritis" and "Major
+ * Cancer" answers "cancer", while nothing in the table answers "dengue". */
+const SCHEDULE_STOPWORDS = new Set(["the","a","an","of","and","or","for","to","in","on","with","due","benefit","benefits",
+  "cover","coverage","plan","policy","insured","sum","payment","payout","stage","stages","level","severity","specified",
+  "group","critical","illness","illnesses","condition","conditions","early","advanced","intermediate","severe","major"]);
+function significantWords(value: string) {
+  return (value ?? "").toLowerCase().match(/[a-z][a-z-]{2,}/g)?.filter((word) => !SCHEDULE_STOPWORDS.has(word)) ?? [];
+}
+export function matchesPolicySchedule(diagnosis: string, conditionNames: string[]): string[] {
+  const reported = significantWords(diagnosis);
+  if (!reported.length) return [];
+  const reportedSet = new Set(reported);
+  return conditionNames.filter((name) => {
+    const words = significantWords(name);
+    if (!words.length) return false;
+    const wordSet = new Set(words);
+    return words.every((word) => reportedSet.has(word)) || reported.every((word) => wordSet.has(word));
+  });
+}

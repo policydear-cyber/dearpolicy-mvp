@@ -5,7 +5,7 @@ import { analysisSources,buildContracts,passageBudget,productIdentity,referenceM
 import { contractReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,pagesSpanned,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
 import { assessCurrentness,contractCurrentness,matchPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { describeChoice,modelFor } from "@/lib/ai/providers";
-import { definedConditionsFor,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
+import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { deterministicDocumentRole } from "@/lib/documents/intelligence";
 import { detectHighConfidenceReferenceRole } from "@/lib/ai/extract-policy";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -1050,6 +1050,28 @@ export function runSystemRegressions(){
     const capped={...uncapped,maximumDays:3};
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
+  });
+  test("The policy's own schedule of defined conditions beats the national baseline",()=>{
+    // The honest limit of the dengue fix: the standard list is a floor, and a
+    // plan that defines more than the standard 37 would have its own named
+    // condition refused. When that plan's benefit table was catalogued at
+    // upload, its rows ARE its schedule, and they are already on file.
+    const rows=["Severe Rheumatoid Arthritis","Major Cancer","Diabetic Complications","Early Thyroid Cancer","Group Living Care"];
+    assert.deepEqual(matchesPolicySchedule("rheumatoid arthritis",rows),["Severe Rheumatoid Arthritis"]);
+    assert.deepEqual(matchesPolicySchedule("diabetic complications",rows),["Diabetic Complications"]);
+    assert.ok(matchesPolicySchedule("thyroid cancer",rows).includes("Early Thyroid Cancer"));
+    // The standard list says nothing about these two, which is the point.
+    assert.deepEqual(definedConditionsFor("severe rheumatoid arthritis"),[]);
+    assert.deepEqual(definedConditionsFor("diabetic complications"),[]);
+    // And nothing in a schedule answers dengue.
+    assert.deepEqual(matchesPolicySchedule("dengue fever",rows),[]);
+    assert.deepEqual(matchesPolicySchedule("food poisoning",rows),[]);
+    assert.deepEqual(matchesPolicySchedule("",rows),[]);
+    // A diagnosis named only in the policy's own schedule still opens the
+    // critical-illness door.
+    assert.ok(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],rows).includes("critical_illness"));
+    assert.equal(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],[]).includes("critical_illness"),false);
+    assert.equal(reportedClaimEvents({},["illness","diagnosis"],["dengue fever"],rows).includes("critical_illness"),false);
   });
   test("An event before the cover on file is flagged, never silently denied",()=>{
     // A group certificate prints the current period's effective date, not the

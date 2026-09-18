@@ -12,7 +12,7 @@ import { pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract"
 import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTraits,loadBenefitCatalog,planClaimQuestions,questionTraits,scenarioFromCatalog,scheduleFallbackItems } from "@/lib/policies/benefit-catalog";
 import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
-import { definedConditionsFor,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
+import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
 import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
@@ -557,6 +557,10 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           const candidateNames=new Set<string>();
           const ruledOut=new Map<string,string>();
           let questionSubject:string|null=null;
+          // The household's own critical-illness benefit tables, which are the
+          // policies' own schedules of defined conditions.
+          const scheduleRows=catalog.filter(entry=>paysOnDefinedCondition((entry.productName??"")+" "+entry.benefitName+" "+entry.quote))
+            .map(entry=>entry.benefitName);
           // Pass 1, deterministic: what the rules and the facts allow.
           const perContract=contracts.map(contract=>{
             const facts=state.subjects[contract.ownerId]??{};
@@ -566,7 +570,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             // before any model is asked anything, because that is a matter of
             // what the policy says and not a matter of opinion.
             const diagnosis=knownValue(facts,"diagnosis");
-            const events=reportedClaimEvents(facts,traits,typeof diagnosis==="string"&&diagnosis.trim()?[diagnosis.trim()]:[]);
+            const events=reportedClaimEvents(facts,traits,typeof diagnosis==="string"&&diagnosis.trim()?[diagnosis.trim()]:[],scheduleRows);
             return {contract,facts,traits,events,assessed:assessContractFromCatalog({contract,catalog,facts,traits,events})};
           });
           for(const {assessed} of perContract)
@@ -593,15 +597,21 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             return typeof value==="string"&&value.trim()?[value.trim()]:[];
           });
           const definedMatches=diagnoses.flatMap(definedConditionsFor);
+          // The policy's own schedule beats the national baseline, and for a
+          // plan whose benefit table was catalogued at upload DearPolicy
+          // already holds it: those rows ARE its list of defined conditions.
+          const ownScheduleMatches=diagnoses.flatMap(diagnosis=>matchesPolicySchedule(diagnosis,scheduleRows));
           // Only when a diagnosis was actually reported. An accident, a death
           // or a question with no diagnosis in it says nothing either way.
-          const outsideDefinedConditions=diagnoses.length>0&&definedMatches.length===0;
+          const outsideDefinedConditions=diagnoses.length>0&&definedMatches.length===0&&ownScheduleMatches.length===0;
           if(outsideDefinedConditions)
             for(const candidate of candidates.filter(c=>paysOnDefinedCondition(c.name+" "+c.pays)))
               ruledOut.set(candidate.name,"“"+diagnoses[0]+"” is not one of the conditions a critical-illness benefit is defined to cover, however serious it is — check the policy's own list of defined conditions if you believe it is named there");
           const definedConditionNote=diagnoses.length===0?[]
             :outsideDefinedConditions
             ?["Reported diagnosis is NOT on the standard list of defined critical illnesses; a critical-illness benefit does not respond to it"]
+            :ownScheduleMatches.length
+            ?["Reported diagnosis is named in the policy's own schedule of defined conditions ("+[...new Set(ownScheduleMatches)].slice(0,3).join("; ")+")"]
             :["Reported diagnosis may be a defined critical illness ("+[...new Set(definedMatches)].slice(0,3).join("; ")+"), subject to the policy's own wording"];
           await report({stage:"Deciding which benefits respond to this",completed:0,total:contracts.length});
           const verdict=await judgeRelevance({event:(claimEventLead(context.people,state)||request.question).slice(0,600),

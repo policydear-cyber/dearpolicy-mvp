@@ -1,5 +1,5 @@
 import { knownValue } from "@/lib/chat/facts";
-import { definedConditionsFor } from "./defined-conditions";
+import { definedConditionsFor,matchesPolicySchedule } from "./defined-conditions";
 import type { ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 
 /** What kind of claim this is, and what kind of claim a benefit is written for.
@@ -92,7 +92,12 @@ export function benefitTriggerEvents(benefitName:string,quote:string):ClaimEvent
  * those benefits are defined to pay for, that the critical-illness door closes.
  * That asymmetry is the point: the system should be certain before it rules
  * something out, and generous while it is still asking. */
-export function reportedClaimEvents(facts:SubjectFacts,traits:ScenarioTrait[]=[],diagnoses:string[]=[]):ClaimEventType[]{
+export function reportedClaimEvents(facts:SubjectFacts,traits:ScenarioTrait[]=[],diagnoses:string[]=[],
+  /** Condition names read from the household's own critical-illness benefit
+   * tables. The policy's schedule is the contract and beats the national
+   * baseline, so a diagnosis named there keeps the critical-illness door
+   * open even when the standard list does not mention it. */
+  policyConditionNames:string[]=[]):ClaimEventType[]{
   const events=new Set<ClaimEventType>();
   const trait=new Set(traits);
   const known=(key:string)=>knownValue(facts,key);
@@ -107,7 +112,7 @@ export function reportedClaimEvents(facts:SubjectFacts,traits:ScenarioTrait[]=[]
   // claim, and the ruled-out note says so and asks for the diagnosis date.
   if(!events.has("death")){
     if(named.length){
-      if(named.some(text=>definedConditionsFor(text).length>0))events.add("critical_illness");
+      if(named.some(text=>definedConditionsFor(text).length>0||matchesPolicySchedule(text,policyConditionNames).length>0))events.add("critical_illness");
     } else if(trait.has("illness")||trait.has("diagnosis"))events.add("critical_illness");
   }
   if(known("permanentImpairment")!=null||trait.has("disability"))events.add("total_permanent_disability");
