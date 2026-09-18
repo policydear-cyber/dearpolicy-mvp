@@ -14,12 +14,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (body.preferredName && body.preferredName.trim().length > 100) return NextResponse.json({ error: "That preferred name is too long." }, { status: 400 });
     if (body.notes && body.notes.trim().length > 2000) return NextResponse.json({ error: "That note is too long." }, { status: 400 });
     if (body.dateOfBirth && !isValidDateString(body.dateOfBirth)) return NextResponse.json({ error: "That date of birth isn't valid." }, { status: 400 });
+    const accountId = devAccountId();
+    if (body.relationship.trim().toLowerCase() === "self") {
+      const existingSelf = await query<{ id: string }>(`SELECT id FROM family_members WHERE account_id=$1 AND relationship='self' AND id<>$2`, [accountId, id]);
+      if (existingSelf.rows.length) return NextResponse.json({ error: "This household already has a profile marked \"self\". Use a different relationship for this person." }, { status: 409 });
+    }
     const result = await query(
       `UPDATE family_members
           SET display_name=$1,relationship=$2,date_of_birth=$3,preferred_name=$4,notes=$5,updated_at=now()
         WHERE id=$6 AND account_id=$7
         RETURNING id,display_name,relationship,date_of_birth::text,preferred_name,notes`,
-      [body.displayName.trim(),body.relationship.trim(),body.dateOfBirth || null,body.preferredName?.trim() || null,body.notes?.trim() || null,id,devAccountId()],
+      [body.displayName.trim(),body.relationship.trim(),body.dateOfBirth || null,body.preferredName?.trim() || null,body.notes?.trim() || null,id,accountId],
     );
     if (!result.rows[0]) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     return NextResponse.json({ member: result.rows[0] });

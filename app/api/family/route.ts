@@ -33,11 +33,20 @@ export async function POST(request: Request) {
     if (body.relationship.trim().length > 100) return NextResponse.json({ error: "That relationship is too long." }, { status: 400 });
     if (body.preferredName && body.preferredName.trim().length > 100) return NextResponse.json({ error: "That preferred name is too long." }, { status: 400 });
     if (body.dateOfBirth && !isValidDateString(body.dateOfBirth)) return NextResponse.json({ error: "That date of birth isn't valid." }, { status: 400 });
+    const accountId = devAccountId();
+    if (body.relationship.trim().toLowerCase() === "self") {
+      // "self" means the household member DearPolicy is speaking for; a
+      // second one has no meaning here and would just confuse whichever
+      // fallback in the app picks "the self profile" (the upload default,
+      // portfolio ordering) into silently choosing one over the other.
+      const existingSelf = await query<{ id: string }>(`SELECT id FROM family_members WHERE account_id=$1 AND relationship='self'`, [accountId]);
+      if (existingSelf.rows.length) return NextResponse.json({ error: "This household already has a profile marked \"self\". Use a different relationship for this person." }, { status: 409 });
+    }
     const result = await query(
       `INSERT INTO family_members(account_id,display_name,relationship,date_of_birth,preferred_name)
        VALUES($1,$2,$3,$4,$5)
        RETURNING id,display_name,relationship,date_of_birth::text,preferred_name`,
-      [devAccountId(), body.displayName.trim(), body.relationship.trim(), body.dateOfBirth || null, body.preferredName?.trim() || null],
+      [accountId, body.displayName.trim(), body.relationship.trim(), body.dateOfBirth || null, body.preferredName?.trim() || null],
     );
     return NextResponse.json({ member: result.rows[0] }, { status: 201 });
   } catch (error) {
