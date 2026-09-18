@@ -422,6 +422,8 @@ table { font-variant-numeric: tabular-nums; }
 .message.user .message-body { background: var(--brand); color: #fff; border-color: var(--brand); }
 .message-body p { margin-bottom: 10px; }
 .message-body p:last-child { margin-bottom: 0; }
+.message-inline-error { margin: 0; font-size: var(--fs-xs); }
+.message.user .message-inline-error { justify-self: end; }
 .typing { color: var(--muted); }
 .chat-composer { position: sticky; bottom: 16px; margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 10px; box-shadow: var(--shadow-float); }
 .chat-composer textarea { resize: vertical; border: 0; box-shadow: none !important; padding: 10px; min-height: 64px; background: transparent; }

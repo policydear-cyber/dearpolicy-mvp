@@ -5,6 +5,21 @@ import { embedTexts,toPgVector } from "@/lib/ai/embeddings";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { PolicySource } from "@/lib/chat/types";
 
+/** Falls back to a readable label when a document has no extracted product
+ * name yet -- a raw filename like "dps.pdf" or
+ * "careshield_life_welcome_booklet_for_1980_2026.pdf" reads as broken when it
+ * shows up inline in a sentence ("Upload the latest receipt for ... dps.pdf"),
+ * so this turns separators and case boundaries into spaces and title-cases a
+ * name that was all lowercase (snake_case/kebab-case filenames), while
+ * leaving deliberate casing (acronyms, PascalCase) alone. */
+export function prettifyFilename(filename:string):string {
+  const base=filename.replace(/\.[a-zA-Z0-9]{1,5}$/,"");
+  const spaced=base.replace(/[_\-]+/g," ").replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g,"$1 $2").replace(/\s+/g," ").trim();
+  if(!spaced)return filename;
+  if(spaced===spaced.toLowerCase())return spaced.replace(/\b\w/g,c=>c.toUpperCase());
+  return spaced;
+}
+
 export type InventoryDocument = {
   id:string;insurer:string|null;product_name:string|null;policy_number:string|null;group_policy_number:string|null;
   policy_type:string|null;document_role:string|null;personal_coverage_confirmed:boolean;document_authority:number;
@@ -96,7 +111,7 @@ export function buildContracts(documents:InventoryDocument[],people:ClaimPerson[
       const identity=normalizedIdentifier(owner.policy_number)||("document:"+owner.id);
       const key=person.id+":"+canonicalDeathInsurer(owner.insurer)+":"+identity;
       const contract=contracts.get(key)??{id:key,ownerId:person.id,ownerName:person.display_name,
-        name:owner.product_name??owner.original_filename,insurer:owner.insurer,documents:[],references:[],coverages:[],
+        name:owner.product_name??prettifyFilename(owner.original_filename),insurer:owner.insurer,documents:[],references:[],coverages:[],
         confirmed:false,effectiveDate:owner.effective_date,
         ownershipBasis:evidenced?"evidence" as const:"declared" as const};
       contract.documents.push(owner);contract.coverages.push(...owned);
@@ -235,7 +250,7 @@ export async function retrieveContractSources(args:{accountId:string;contracts:P
       return {id:row.id,policyId:row.policy_id,text:row.text,pageStart:row.page_start,pageEnd:row.page_end,
         lexicalMatch:row.lexical_match,semanticDistance:row.semantic_distance,
         productScopes:scopes.get(doc.id)?.get(row.page_start)??[],
-        citation:{chunkId:row.id,policyId:doc.id,policyName:doc.product_name??doc.original_filename,insurer:doc.insurer??undefined,
+        citation:{chunkId:row.id,policyId:doc.id,policyName:doc.product_name??prettifyFilename(doc.original_filename),insurer:doc.insurer??undefined,
           pageStart:row.page_start,pageEnd:row.page_end,documentRole:doc.document_role,
           personalEvidence:contract.documents.some(d=>d.id===doc.id),evidenceLabel:contract.documents.some(d=>d.id===doc.id)?"Personal document":"Policy wording"}};
     }));

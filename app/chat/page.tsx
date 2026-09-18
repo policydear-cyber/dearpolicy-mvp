@@ -6,7 +6,7 @@ import type { ChatAnswer,ClaimItem } from "@/types";
 import { formatMoney } from "@/lib/format/currency";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
-type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer};
+type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const statusCopy:Record<ClaimItem["status"],string>={likely_applicable:"Likely applicable",potentially_applicable:"Potentially applicable",not_applicable:"Not applicable",needs_document:"Needs checking"};
 const reviewCopy:Record<string,string>={searched:"Retrieved sections checked",missing_wording:"Matching wording needed",not_ready:"Document processing",no_matching_section:"No match in retrieved sections",needs_review:"Further review needed"};
@@ -105,8 +105,20 @@ function ChatContent(){
       setMessageCursor(data.nextCursor??null);
       setMessages(data.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined})));
       if(data.pendingJob){
-        setMessages(previous=>[...previous,{role:"user",content:data.pendingJob.message}]);
-        accept(await waitForJob(data.pendingJob.id,abort.signal,version),version);
+        // A job that was still running when the tab closed (or the app
+        // restarted mid-analysis) needs to be shown as answered, failed, or
+        // still in flight -- not silently re-added as a plain, unanswered
+        // "You" bubble that looks identical to one nobody ever picked up.
+        const pendingMessage:Message={role:"user",content:data.pendingJob.message};
+        setMessages(previous=>[...previous,pendingMessage]);
+        try{
+          accept(await waitForJob(data.pendingJob.id,abort.signal,version),version);
+        }catch(e){
+          if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
+            const message=e instanceof Error?e.message:"Analysis stopped";
+            setMessages(previous=>previous.map(m=>m===pendingMessage?{...m,error:message}:m));
+          }
+        }
       }
     }catch(e){if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Could not open chat");}
     finally{if(version===requestVersion.current){setBusy(false);controller.current=null;}}
@@ -125,7 +137,8 @@ function ChatContent(){
   async function sendText(text:string,personChoiceId?:string){
     text=text.trim();if(!text||busy)return;
     const version=++requestVersion.current,abort=new AbortController();controller.current=abort;
-    setMessages(previous=>[...previous,{role:"user",content:text}]);setQuestion("");setBusy(true);setError("");setProgress("Understanding your message…");setProgressDetail(null);
+    const userMessage:Message={role:"user",content:text};
+    setMessages(previous=>[...previous,userMessage]);setQuestion("");setBusy(true);setError("");setProgress("Understanding your message…");setProgressDetail(null);
     try{
       const response=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},signal:abort.signal,
         body:JSON.stringify({familyMemberId:memberId||null,scope:memberId?"member":"family",
@@ -137,7 +150,16 @@ function ChatContent(){
       const resolved=data.familyMemberId??"";setMemberId(resolved);
       const answer=await waitForJob(data.jobId,abort.signal,version);accept(answer,version);
       if(version===requestVersion.current)await refreshHistory();
-    }catch(e){if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Chat failed");}
+    }catch(e){
+      // Marking the message itself -- instead of only a page-level banner --
+      // is what stops a failed send from looking like a message that simply
+      // never got a reply: the person can see exactly which of their
+      // messages didn't go through, and why, right where they sent it.
+      if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
+        const message=e instanceof Error?e.message:"Chat failed";
+        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message}:m));
+      }
+    }
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
   }
   async function removeChat(id:string){
@@ -208,7 +230,7 @@ function ChatContent(){
       {messages.map((message,index)=><div className={"message "+message.role} key={message.id??index}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body"><p>{message.content}</p>
           {message.answer?.knownFacts.length?<div className="known-facts"><strong>Facts and uncertainties</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{f}</span>)}</div></div>:null}
-          {message.answer?.scenarioClassifications?.length?<div className="scenario-check"><strong>Scenario candidates being checked</strong><small>These guide policy matching; the policy wording and claim evidence decide eligibility.</small><div>{message.answer.scenarioClassifications.map((s,i)=><span key={i}><b>{s.label}</b> · {s.traits.map(t=>t.replaceAll("_"," ")).join(" · ")}</span>)}</div></div>:null}
+          {message.answer?.scenarioClassifications?.length?<div className="scenario-check"><strong>What DearPolicy is checking against</strong><small>These guide which policy wording is matched; the wording and your evidence decide what you can actually claim.</small><div>{message.answer.scenarioClassifications.map((s,i)=>{const extra=s.traits.map(t=>t.replaceAll("_"," ")).filter(t=>t.toLowerCase()!==s.label.toLowerCase());return<span key={i}><b>{s.label}</b>{extra.length?" · "+extra.join(" · "):""}</span>;})}</div></div>:null}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{q.text}</strong><small>{q.why}</small>
             <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
           </div>)}
@@ -226,6 +248,7 @@ function ChatContent(){
           {message.answer?.citations.length?<details className="citations"><summary>Why DearPolicy says this · {message.answer.citations.length} sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Uploaded policy evidence"}</small></span><b>Page {c.pageStart}{c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</b></div>)}</details>:null}
           {message.answer?.disclaimer?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
         </div>
+        {message.error?<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error} Send it again when you&rsquo;re ready.</span></div>:null}
       </div>)}
       {busy?<div className="message assistant"><div className="message-label">DearPolicy</div>
         <div className="message-body thinking" role="status" aria-live="polite">
@@ -235,7 +258,7 @@ function ChatContent(){
           </div>
           <small>{progressDetail?progressDetail.completed+" of "+progressDetail.total+" policy contracts read":"Reading your uploaded policy evidence"} · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
         </div></div>:null}
-      {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> Please try again in a moment — if this keeps happening, contact support.</span></div>:null}<div ref={end}/>
+      {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
     </div>
     <form className="chat-composer" onSubmit={ask}><textarea aria-label="Message to DearPolicy" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ask a question, answer a missing fact, or tell me what you don’t know yet…" rows={3}/>
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
