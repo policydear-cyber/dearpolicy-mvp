@@ -76,6 +76,27 @@ export function describeChoice(choice:ModelChoice){
   const names:Record<Provider,string>={ollama:"Local",groq:"Groq",anthropic:"Anthropic",openai:"OpenAI",gemini:"Google"};
   return names[choice.provider]+" · "+choice.model;
 }
+/** A one-tier-down model to try when a role's primary is rate-limited, so a
+ * household sees a slightly plainer answer instead of "try again in a
+ * minute" for a quota that is specific to the pricier tier. Google prices
+ * (and rate-limits) flash separately from flash-lite, so judgement falling
+ * back to the reading tier's model is a real relief, not just a retry of the
+ * same limit; other providers/roles have no such observed split, so this
+ * stays narrow rather than guessing at one. An explicit env var always wins,
+ * the same as modelFor. Returns null when there is nothing sensible to fall
+ * back to, or when it would just be the same model again. */
+export function fallbackModelFor(role:ModelRole):ModelChoice|null{
+  const setting=role==="judgement"?process.env.JUDGEMENT_FALLBACK_MODEL:undefined;
+  const chosen=parseChoice(setting);
+  if(chosen)return chosen;
+  const preset=modelPreset();
+  if(preset==="gemini"&&role==="judgement"){
+    const fallback=parseChoice(PRESETS.gemini.reading);
+    const primary=modelFor(role);
+    if(fallback&&(fallback.provider!==primary.provider||fallback.model!==primary.model))return fallback;
+  }
+  return null;
+}
 
 /** List prices per million tokens, for the ledger. Kept as a table you can
  * read; the number that matters is per household per month, and it is only

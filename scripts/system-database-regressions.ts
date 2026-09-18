@@ -1477,6 +1477,47 @@ async function main(){
         await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
       }
     });
+    await test("A judgement call rate-limited on Google's pricier tier falls back to the cheaper tier instead of failing the chat",async()=>{
+      const fixture=await seedReviewFixture(1);
+      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
+        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
+      const inner=globalThis.fetch;
+      let flashCalls=0,flashLiteCalls=0,ollamaCalls=0;
+      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+        const url=String(input);
+        if(/googleapis\.com\/v1beta\/models\?/.test(url))
+          return Response.json({models:[{name:"models/gemini-3.6-flash",supportedGenerationMethods:["generateContent"]},{name:"models/gemini-3.5-flash-lite",supportedGenerationMethods:["generateContent"]}]});
+        // The pricier judgement tier is out of quota for this whole test --
+        // every call to it fails, the way a real Google rate limit would.
+        if(/gemini-3\.6-flash:generateContent/.test(url)){flashCalls++;return new Response("rate limited",{status:429,headers:{"retry-after":"0"}});}
+        if(/gemini-3\.5-flash-lite:generateContent/.test(url)){
+          flashLiteCalls++;
+          const body=JSON.parse(String(init?.body));
+          const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
+          const replay=await inner("http://127.0.0.1:11434/api/chat",{method:"POST",body:JSON.stringify({options:{num_ctx:4096},keep_alive:0,
+            messages:[{role:"system",content:system},{role:"user",content:JSON.stringify(user)}]})});
+          const content=(await replay.json()).message.content;
+          return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
+        }
+        if(/127\.0\.0\.1:11434/.test(url))ollamaCalls++;
+        return inner(input,init);
+      }) as typeof fetch;
+      process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
+      const savedModel=process.env.LLM_MODEL;delete process.env.LLM_MODEL;
+      try{
+        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000","The chat still produced the right answer despite the pricier tier being down");
+        assert.ok(flashCalls>=1,"The primary judgement tier was tried first");
+        assert.ok(flashLiteCalls>=1,"...and every judgement call fell back to the tier that is not rate-limited");
+        assert.equal(ollamaCalls,0,"Fully hosted -- the local model is never touched as a fallback");
+        const usage=(await db.query("SELECT model,ok FROM model_usage WHERE account_id=$1 AND role='judgement' ORDER BY at",[account])).rows as {model:string;ok:boolean}[];
+        assert.ok(usage.some(r=>r.model==="flash"&&r.ok===false),"The failed attempt on the primary model is on the ledger, not silently dropped: "+JSON.stringify(usage));
+        assert.ok(usage.some(r=>r.model==="flash-lite"&&r.ok===true),"...and the successful fallback attempt is billed under the model that actually ran: "+JSON.stringify(usage));
+      }finally{
+        delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;if(savedModel)process.env.LLM_MODEL=savedModel;globalThis.fetch=inner;
+        await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
+      }
+    });
     await test("A printed figure outranks a heading-inferred percentage for the same benefit across two documents",async()=>{
       const fixture=await seedReviewFixture(1);
       const product="Review Fixture Critical Illness";

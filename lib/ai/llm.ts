@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { describeChoice, fullyHosted, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
+import { describeChoice, fallbackModelFor, fullyHosted, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
 import { modelIsResident, ollamaFetch, residentKeepAlive, unloadOllamaModelDirect, withOllamaLock, withResidentModel } from "./ollama-runtime";
 
@@ -137,28 +137,44 @@ export async function structuredCompletion<T>(args: {
   const choice = modelFor(role);
   if (choice.provider !== "ollama") {
     await assertUnderSpendCap(ledgerAccountId());
-    const started = Date.now();
+    const call = async (target: typeof choice) => {
+      const started = Date.now();
+      try {
+        const reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
+          temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
+        await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs: Date.now() - started, ok: true });
+        return reply;
+      } catch (error) {
+        await recordUsage({ role, choice: target, input: 0, output: 0, durationMs: Date.now() - started, ok: false });
+        throw error;
+      }
+    };
+    let usedChoice = choice;
     let reply;
     try {
-      reply = await hostedStructuredCompletion(choice, { system: args.system, user: args.user, jsonSchema,
-        temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
+      reply = await call(choice);
     } catch (error) {
-      await recordUsage({ role, choice, input: 0, output: 0, durationMs: Date.now() - started, ok: false });
-      throw error;
+      // A rate limit is specific to the model, not to the household's
+      // question -- when a cheaper tier of the same provider exists for this
+      // role, one attempt there beats surfacing "try again in a minute" for
+      // a quota the fallback tier does not share.
+      const fallback = /\(429\)|busy|rate limit|quota/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
+      if (!fallback) throw error;
+      usedChoice = fallback;
+      reply = await call(fallback);
     }
-    await recordUsage({ role, choice, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs: Date.now() - started, ok: true });
     let json: unknown;
     try { json = JSON.parse(reply.content); }
     catch {
       const repaired = repairTruncatedJson(reply.content);
       if (repaired === null) throw new Error(`Model returned invalid structured JSON: ${reply.content.slice(0, 200)}`);
       try { json = JSON.parse(repaired); }
-      catch { throw new TruncatedModelOutput("The " + describeChoice(choice) + " model stopped part-way through its structured output.", reply.content, true); }
+      catch { throw new TruncatedModelOutput("The " + describeChoice(usedChoice) + " model stopped part-way through its structured output.", reply.content, true); }
     }
     try { return args.schema.parse(args.coerce ? args.coerce(json) : json); }
     catch (error) {
-      throw new TruncatedModelOutput(reply.truncated ? "The " + describeChoice(choice) + " model stopped part-way through its structured output."
-        : "The " + describeChoice(choice) + " model's reply did not match the expected structure.", reply.content, reply.truncated, error instanceof Error ? error : undefined);
+      throw new TruncatedModelOutput(reply.truncated ? "The " + describeChoice(usedChoice) + " model stopped part-way through its structured output."
+        : "The " + describeChoice(usedChoice) + " model's reply did not match the expected structure.", reply.content, reply.truncated, error instanceof Error ? error : undefined);
     }
   }
 
