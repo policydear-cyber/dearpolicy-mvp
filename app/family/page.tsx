@@ -16,6 +16,7 @@ export default function FamilyPage() {
   const [dob, setDob] = useState("");
   const [preferred, setPreferred] = useState("");
   const [status, setStatus] = useState("");
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
@@ -39,7 +40,12 @@ export default function FamilyPage() {
   }
 
   async function remove(member: Member) {
-    if (!confirm(`Remove ${member.display_name} from your household?`)) return;
+    // A native confirm() blocks the whole tab's event loop until dismissed --
+    // an inline arm-then-confirm click avoids that (and the jarring OS-styled
+    // popup) while still requiring a deliberate second click before anything
+    // irreversible happens.
+    if (confirmId !== member.id) { setConfirmId(member.id); return; }
+    setConfirmId(null);
     const response = await fetch(`/api/family/${member.id}`, { method: "DELETE" });
     const payload = await response.json().catch(() => ({}));
     setStatus(response.ok ? `Removed ${member.display_name}.` : (payload.error || "Could not remove this profile. Please try again in a moment."));
@@ -75,7 +81,12 @@ export default function FamilyPage() {
                 <div className="field"><label>Date of birth</label><input type="date" value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
                 <div className="field"><label>Preferred name</label><input value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
-              <div className="profile-actions"><span>{member.policy_count} linked documents</span><button className="button secondary" onClick={() => save(member)}>Save</button><button className="button secondary" onClick={() => remove(member)}>Delete</button></div>
+              <div className="profile-actions">
+                <span>{member.policy_count} linked documents</span>
+                <button className="button secondary" onClick={() => save(member)}>Save</button>
+                <button className="button secondary" onClick={() => remove(member)}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>
+                {confirmId === member.id && <button className="button secondary" onClick={() => setConfirmId(null)}>Cancel</button>}
+              </div>
             </div>
           ))}
         </div>
