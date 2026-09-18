@@ -64,28 +64,37 @@ async function main(){
     const release=await acquire();
     return {query:execute,release};
   }) as typeof pool.connect;
-  process.env.LLM_MODEL="qwen3:8b";
-  // Remove only the VRAM cleanup delay for a simulated model. Production model
-  // locking/unloading code is exercised and left unchanged.
+  // The suite runs the routing production runs. Restored after any test that
+  // reroutes to another provider, so one test cannot silently change the next.
+  const HARNESS_PRESET="gemini",HARNESS_KEY="AQ.test-key";
+  const useHarnessModel=()=>{process.env.MODEL_PRESET=HARNESS_PRESET;process.env.GEMINI_API_KEY=HARNESS_KEY;};
+  useHarnessModel();
   globalThis.setTimeout=((fn:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>originalTimeout(fn,ms===700?0:ms,...args)) as typeof setTimeout;
-  let interpretationCalls=0,readingCalls=0,explanationCalls=0,maxModelUserCharacters=0,unloadCalls=0,catalogCalls=0,categoriseCalls=0,relevanceCalls=0,ledgerReads=0,ledgerChecks=0;
-  let lastKeepAlive:unknown=null;
-  // Unload count observed at each policy-reading call, to prove the model is not
-  // dropped and reloaded between the sections of a single turn.
-  const unloadsAtRead:number[]=[];
+  let interpretationCalls=0,readingCalls=0,explanationCalls=0,maxModelUserCharacters=0,catalogCalls=0,categoriseCalls=0,relevanceCalls=0,ledgerReads=0,ledgerChecks=0;
   let malformed=false,failReading=false,truncateInterpretations=0,misshapeReading=0;
+  // The simulated model answers on Google's wire format, because that is the
+  // one the app speaks. REPLAY_URL is how the provider-specific tests below
+  // reuse these same answers without re-implementing the decision table.
+  const REPLAY_URL="http://model.test/replay";
   globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input);
-    if(url.endsWith("/api/generate")){unloadCalls++;return Response.json({});}
-    if(url.endsWith("/api/embed"))return Response.json({embeddings:[Array.from({length:1024},(_,i)=>i===0?1:0)]});
-    if(!url.endsWith("/api/chat"))throw new Error("Unexpected model request: "+url);
-    const body=JSON.parse(String(init?.body)),system=body.messages[0].content,user=JSON.parse(body.messages[1].content);
-    maxModelUserCharacters=Math.max(maxModelUserCharacters,body.messages[1].content.length);
-    assert.equal(body.options.num_ctx,4096);lastKeepAlive=body.keep_alive;
+    if(/googleapis\.com\/v1beta\/models\?/.test(url))
+      return Response.json({models:[{name:"models/gemini-3.6-flash",supportedGenerationMethods:["generateContent"]},
+        {name:"models/gemini-3.5-flash-lite",supportedGenerationMethods:["generateContent"]}]});
+    const google=/googleapis\.com/.test(url);
+    if(!google&&url!==REPLAY_URL)throw new Error("Unexpected model request: "+url);
+    const body=JSON.parse(String(init?.body));
+    const userText=google?String(body.contents[0].parts[0].text):String(body.user);
+    const system:string=google?String(body.systemInstruction.parts[0].text):String(body.system);
+    const user=JSON.parse(userText);
+    maxModelUserCharacters=Math.max(maxModelUserCharacters,userText.length);
+    const reply=(text:string)=>google
+      ?Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}})
+      :Response.json({content:text});
     let result:unknown;
     if(system.startsWith("Interpret this")){
       interpretationCalls++;
-      if(malformed)return Response.json({message:{content:"invalid JSON"}});
+      if(malformed)return reply("invalid JSON");
       const message:string=user.currentMessage,subject=user.subjects[0]?.id;
       const facts:Interpretation["facts"]=[];
       const scenarioCandidates:NonNullable<Interpretation["scenarioCandidates"]>=[];
@@ -179,7 +188,7 @@ async function main(){
       ledgerChecks++;
       result={verdicts:(user.rows as {index:number}[]).map(r=>({index:r.index,supported:true}))};
     }else if(system.startsWith("Read insurance")){
-      readingCalls++;unloadsAtRead.push(unloadCalls);
+      readingCalls++;
       if(failReading)return Response.json({message:{content:"not valid json"}});
       if(misshapeReading>0){
         misshapeReading--;
@@ -264,7 +273,7 @@ async function main(){
     }
     let content=JSON.stringify(result);
     if(truncateInterpretations>0&&system.startsWith("Interpret this")){truncateInterpretations--;content=content.slice(0,Math.floor(content.length*0.75));}
-    return Response.json({message:{content}});
+    return reply(content);
   }) as typeof fetch;
 
   let cases=0;const test=async(name:string,fn:()=>Promise<void>)=>{try{await fn();cases++;console.log("PASS "+name);}catch(error){throw new Error(name,{cause:error});}};
@@ -648,15 +657,6 @@ async function main(){
       const saved=await getConversation(account,answer.conversationId!);
       assert.ok(saved?.state.subjects[people[0].id],"State is keyed by the real family member id");
       assert.equal(Object.keys(saved!.state.subjects).some(k=>/^s\d+$/.test(k)),false,"No short handle may leak into saved state");
-    });
-    await test("The model is not reloaded for every evidence section",async()=>{
-      await seedReviewFixture(40);
-      unloadsAtRead.length=0;
-      await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      assert.ok(unloadsAtRead.length>1,"This fixture must need several evidence sections, got "+unloadsAtRead.length);
-      assert.equal(new Set(unloadsAtRead).size,1,
-        "A 9B model reloaded between sections is what made a turn take many minutes; unload counts seen at each section: "+unloadsAtRead.join(","));
-      assert.equal(lastKeepAlive,0,"The session must leave the GPU released when it ends");
     });
     await test("A turn stops at its reading budget instead of running for minutes",async()=>{
       await seedReviewFixture(40);
@@ -1396,7 +1396,7 @@ async function main(){
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       const inner=globalThis.fetch;
-      let anthropicCalls=0,ollamaCalls=0;const modelsUsed=new Set<string>();let cached=false;
+      let anthropicCalls=0;const modelsUsed=new Set<string>();let cached=false;
       globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
         const url=String(input);
         if(url.startsWith("https://api.anthropic.com/v1/messages")){
@@ -1406,23 +1406,19 @@ async function main(){
           assert.equal((init?.headers as Record<string,string>)["x-api-key"],"sk-ant-test");
           cached=cached||body.system?.[0]?.cache_control?.type==="ephemeral";
           const system=String(body.system[0].text),user=JSON.parse(body.messages[0].content);
-          // Reuse the simulated local model's answers by replaying the request through it.
-          const replay=await inner("http://127.0.0.1:11434/api/chat",{method:"POST",body:JSON.stringify({options:{num_ctx:4096},keep_alive:0,
-            messages:[{role:"system",content:system},{role:"user",content:JSON.stringify(user)}]})});
-          const content=(await replay.json()).message.content;
+          // Reuse the simulated model's answers by replaying the request through it.
+          const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
+          const content=(await replay.json()).content;
           return Response.json({content:[{type:"text",text:content}],stop_reason:"end_turn",usage:{input_tokens:1200,output_tokens:90,cache_read_input_tokens:800}});
         }
-        if(/127\.0\.0\.1:11434/.test(url))ollamaCalls++;
         return inner(input,init);
       }) as typeof fetch;
-      process.env.MODEL_PRESET="anthropic";process.env.ANTHROPIC_API_KEY="sk-ant-test";
-      const savedModel=process.env.LLM_MODEL;delete process.env.LLM_MODEL;
+      process.env.MODEL_PRESET="anthropic";process.env.ANTHROPIC_API_KEY="sk-ant-test";delete process.env.GEMINI_API_KEY;
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         const answer=data.answer as ChatAnswer;
         assert.equal(answer.claimItems[0]?.amountText,"S$350,000","The claim is answered");
         assert.ok(anthropicCalls>=2,"Interpretation, relevance and narration went to Claude");
-        assert.equal(ollamaCalls,0,"Nothing touched Ollama — not a model call, not an unload");
         assert.ok(modelsUsed.has("claude-sonnet-5"),"Judgement on the mid tier: "+[...modelsUsed].join(","));
         assert.ok(cached,"The system prompt is marked for prompt caching");
         const { usageThisMonth }=await import("@/lib/ai/ledger");
@@ -1430,7 +1426,7 @@ async function main(){
         assert.ok(usage.costUsd>0,"Hosted calls are priced on the ledger");
         assert.ok(usage.byRole.some(r=>r.role==="judgement"&&r.costUsd>0));
       }finally{
-        delete process.env.MODEL_PRESET;delete process.env.ANTHROPIC_API_KEY;if(savedModel)process.env.LLM_MODEL=savedModel;globalThis.fetch=inner;
+        delete process.env.ANTHROPIC_API_KEY;useHarnessModel();globalThis.fetch=inner;
         await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='anthropic'",[account]);
       }
     });
@@ -1445,7 +1441,7 @@ async function main(){
       assert.match(geminiEndpoint("gemini-2.5-flash","AQ.Ab8Example"),/^https:\/\/aiplatform\.googleapis\.com\/v1\/publishers\/google\/models\/gemini-2\.5-flash:generateContent$/,"Vertex only when asked for");
       delete process.env.GEMINI_ENDPOINT;
       const inner=globalThis.fetch;
-      let googleCalls=0,ollamaCalls=0;const hosts=new Set<string>();
+      let googleCalls=0;const hosts=new Set<string>();
       globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
         const url=String(input);
         if(/googleapis\.com\/v1beta\/models\?/.test(url))
@@ -1457,55 +1453,48 @@ async function main(){
           const body=JSON.parse(String(init?.body));
           assert.equal(body.generationConfig.responseMimeType,"application/json");
           const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
-          const replay=await inner("http://127.0.0.1:11434/api/chat",{method:"POST",body:JSON.stringify({options:{num_ctx:4096},keep_alive:0,
-            messages:[{role:"system",content:system},{role:"user",content:JSON.stringify(user)}]})});
-          const content=(await replay.json()).message.content;
+          const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
+          const content=(await replay.json()).content;
           return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
         }
-        if(/127\.0\.0\.1:11434/.test(url))ollamaCalls++;
         return inner(input,init);
       }) as typeof fetch;
       process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
-      const savedModel=process.env.LLM_MODEL;delete process.env.LLM_MODEL;
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
-        assert.ok(googleCalls>=2);assert.equal(ollamaCalls,0);
+        assert.ok(googleCalls>=2);
         assert.deepEqual([...hosts],["generativelanguage.googleapis.com"],"The Gemini API by default");
       }finally{
-        delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;if(savedModel)process.env.LLM_MODEL=savedModel;globalThis.fetch=inner;
+        useHarnessModel();globalThis.fetch=inner;
         await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
       }
     });
-    await test("Reading gets a larger context/output budget once nothing is routed to the local model",async()=>{
+    await test("Reading is given the output budget a hosted model can actually use",async()=>{
       const { readingOutputTokens }=await import("@/lib/chat/policy-analysis");
-      const savedPreset=process.env.MODEL_PRESET,savedKey=process.env.GEMINI_API_KEY,savedTokens=process.env.RAG_READING_OUTPUT_TOKENS;
-      delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;delete process.env.RAG_READING_OUTPUT_TOKENS;
+      const savedTokens=process.env.RAG_READING_OUTPUT_TOKENS;
+      delete process.env.RAG_READING_OUTPUT_TOKENS;
       try{
-        assert.equal(readingOutputTokens(),900,"Still routed to the local model -- keep the small local-GPU budget");
-        process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
-        assert.equal(readingOutputTokens(),2600,"Fully hosted -- a hosted model is not forced to choose between quoting a clause and also structuring it");
+        // 900 was the local GPU's ceiling, and it forced the reader to choose
+        // between quoting a clause and structuring it. Nothing imposes it now.
+        assert.equal(readingOutputTokens(),2600,"A hosted model is not forced to choose between quoting a clause and also structuring it");
         process.env.RAG_READING_OUTPUT_TOKENS="1500";
-        assert.equal(readingOutputTokens(),1500,"An explicit setting always wins over either default");
+        assert.equal(readingOutputTokens(),1500,"An explicit setting always wins over the default");
       }finally{
-        if(savedPreset)process.env.MODEL_PRESET=savedPreset;else delete process.env.MODEL_PRESET;
-        if(savedKey)process.env.GEMINI_API_KEY=savedKey;else delete process.env.GEMINI_API_KEY;
         if(savedTokens)process.env.RAG_READING_OUTPUT_TOKENS=savedTokens;else delete process.env.RAG_READING_OUTPUT_TOKENS;
       }
     });
-    await test("Retrieval depth per document also widens once nothing is routed to the local model",async()=>{
+    await test("Retrieval depth per document is set for a reader that can take it",async()=>{
       const { passageBudget }=await import("@/lib/policies/inventory");
-      const savedPreset=process.env.MODEL_PRESET,savedKey=process.env.GEMINI_API_KEY,savedMax=process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
-      delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+      const savedMax=process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+      delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
       try{
-        assert.equal(passageBudget(500),16,"Still routed to the local model -- keep its reading work bounded");
-        process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
-        assert.equal(passageBudget(500),40,"Fully hosted -- a low ceiling is how a real benefit table ranks just outside the retrieved set and never reaches the model");
+        // A ceiling of 16 is how a real benefit table ranked just outside the
+        // retrieved set and never reached the model at all.
+        assert.equal(passageBudget(500),40,"A hosted reader can take the depth that keeps a real benefit table in the retrieved set");
         process.env.RAG_MAX_PASSAGES_PER_DOCUMENT="10";
-        assert.equal(passageBudget(500),10,"An explicit setting always wins over either default");
+        assert.equal(passageBudget(500),10,"An explicit setting always wins over the default");
       }finally{
-        if(savedPreset)process.env.MODEL_PRESET=savedPreset;else delete process.env.MODEL_PRESET;
-        if(savedKey)process.env.GEMINI_API_KEY=savedKey;else delete process.env.GEMINI_API_KEY;
         if(savedMax)process.env.RAG_MAX_PASSAGES_PER_DOCUMENT=savedMax;else delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
       }
     });
@@ -1514,7 +1503,7 @@ async function main(){
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       const inner=globalThis.fetch;
-      let flashCalls=0,flashLiteCalls=0,ollamaCalls=0;
+      let flashCalls=0,flashLiteCalls=0;
       globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
         const url=String(input);
         if(/googleapis\.com\/v1beta\/models\?/.test(url))
@@ -1526,27 +1515,23 @@ async function main(){
           flashLiteCalls++;
           const body=JSON.parse(String(init?.body));
           const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
-          const replay=await inner("http://127.0.0.1:11434/api/chat",{method:"POST",body:JSON.stringify({options:{num_ctx:4096},keep_alive:0,
-            messages:[{role:"system",content:system},{role:"user",content:JSON.stringify(user)}]})});
-          const content=(await replay.json()).message.content;
+          const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
+          const content=(await replay.json()).content;
           return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
         }
-        if(/127\.0\.0\.1:11434/.test(url))ollamaCalls++;
         return inner(input,init);
       }) as typeof fetch;
       process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
-      const savedModel=process.env.LLM_MODEL;delete process.env.LLM_MODEL;
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000","The chat still produced the right answer despite the pricier tier being down");
         assert.ok(flashCalls>=1,"The primary judgement tier was tried first");
         assert.ok(flashLiteCalls>=1,"...and every judgement call fell back to the tier that is not rate-limited");
-        assert.equal(ollamaCalls,0,"Fully hosted -- the local model is never touched as a fallback");
         const usage=(await db.query("SELECT model,ok FROM model_usage WHERE account_id=$1 AND role='judgement' ORDER BY at",[account])).rows as {model:string;ok:boolean}[];
         assert.ok(usage.some(r=>r.model==="flash"&&r.ok===false),"The failed attempt on the primary model is on the ledger, not silently dropped: "+JSON.stringify(usage));
         assert.ok(usage.some(r=>r.model==="flash-lite"&&r.ok===true),"...and the successful fallback attempt is billed under the model that actually ran: "+JSON.stringify(usage));
       }finally{
-        delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;if(savedModel)process.env.LLM_MODEL=savedModel;globalThis.fetch=inner;
+        useHarnessModel();globalThis.fetch=inner;
         await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
       }
     });
