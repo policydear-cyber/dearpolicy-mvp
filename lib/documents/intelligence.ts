@@ -67,16 +67,25 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
 
 
 function deriveReferenceCoverages(pages: PdfPage[]) {
-  const text = pages.map((p) => p.text).join("\n").toLowerCase();
   const found: { category: string; productName: string | null; notes: string | null; sourcePage: number | null }[] = [];
-  const add = (category: string, productName: string) => { if (!found.some((x) => x.category === category && x.productName === productName)) found.push({ category, productName, notes: "Detected in reference document", sourcePage: null }); };
-  if (/group term life|term life/.test(text)) { add("Death", "Group Term Life"); add("Total Permanent Disability", "Group Term Life"); if (/daily hospital cash|hospital cash benefit/.test(text)) add("Hospital Cash", "Group Term Life"); }
-  if (/group personal accident|personal accident/.test(text)) add("Personal Accident", "Group Personal Accident");
-  if (/living care plus/.test(text)) add("Early Critical Illness", "Living Care Plus");
-  if (/living care(?! plus)/.test(text)) add("Critical Illness", "Living Care");
-  if (/disability income/.test(text)) add("Disability Income", "Disability Income");
-  if (/outpatient medicare|outpatient/.test(text)) add("Outpatient", "Outpatient Medicare");
-  if (/hospitalisation|hospitalization|integrated shield|medishield/.test(text)) add("Hospitalisation", "Hospitalisation");
+  // Detect per page, not on the whole document joined into one string --
+  // joining pages loses which page each product's own section is actually
+  // on, which is exactly the page number the chat later needs to bind a
+  // quoted clause to the right product in a multi-product document. The
+  // first page a term appears on is the best available signal without a
+  // second AI pass; it is a page number to try, not an assertion, so
+  // nothing downstream trusts it without also matching that same page.
+  const add = (category: string, productName: string, sourcePage: number) => { if (!found.some((x) => x.category === category && x.productName === productName)) found.push({ category, productName, notes: "Detected in reference document", sourcePage }); };
+  for (const page of pages) {
+    const text = page.text.toLowerCase();
+    if (/group term life|term life/.test(text)) { add("Death", "Group Term Life", page.pageNumber); add("Total Permanent Disability", "Group Term Life", page.pageNumber); if (/daily hospital cash|hospital cash benefit/.test(text)) add("Hospital Cash", "Group Term Life", page.pageNumber); }
+    if (/group personal accident|personal accident/.test(text)) add("Personal Accident", "Group Personal Accident", page.pageNumber);
+    if (/living care plus/.test(text)) add("Early Critical Illness", "Living Care Plus", page.pageNumber);
+    if (/living care(?! plus)/.test(text)) add("Critical Illness", "Living Care", page.pageNumber);
+    if (/disability income/.test(text)) add("Disability Income", "Disability Income", page.pageNumber);
+    if (/outpatient medicare|outpatient/.test(text)) add("Outpatient", "Outpatient Medicare", page.pageNumber);
+    if (/hospitalisation|hospitalization|integrated shield|medishield/.test(text)) add("Hospitalisation", "Hospitalisation", page.pageNumber);
+  }
   return found;
 }
 

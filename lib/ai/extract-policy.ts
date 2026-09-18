@@ -188,7 +188,7 @@ Only return real human names printed in a personalised context. Never return lab
 
 OWNERSHIP
 personalCoverageConfirmed=true only when a personalised schedule, certificate or endorsement clearly associates a named person with specific cover. Generic product information, eligibility text, maximums and sample premium tables are never personal ownership.
-For every personal coverage/payment, sourcePage is required and evidenceText must be a short exact phrase copied from that page.
+For every personal coverage/payment, sourcePage is required and evidenceText must be a short exact phrase copied from that page. For every referenceCoverages item too, sourcePage is required: the exact page where that specific product's own benefit section appears, never the document's first page, a cover page or a table of contents -- a multi-product reference document has a different page per product, and this page number is how the chat later binds a quoted clause to the right product instead of leaving it unmatched.
 For every currency field, return a 3-letter ISO 4217 code such as SGD, USD, MYR or PHP. Never return symbols such as S$, $, RM, ₱, € or £.
 
 ROLES
