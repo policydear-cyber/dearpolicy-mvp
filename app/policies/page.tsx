@@ -142,8 +142,8 @@ export default function PoliciesPage() {
       if (!response.ok) throw new Error(payload.error || "Could not save that");
       setStatus(`Saved — this policy is ${who}'s. Its benefits will now be used in answers. Upload a schedule or statement when you have one to confirm the amounts.`);
       await refresh();
-    } catch {
-      setStatus("Could not save that. Please try again in a moment.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save that. Please try again in a moment.");
     }
   }
 
@@ -158,8 +158,8 @@ export default function PoliciesPage() {
       if (!response.ok) throw new Error(payload.error || "Could not link person");
       setStatus(`Linked ${detectedName} to the selected family profile.`);
       await refresh();
-    } catch {
-      setStatus("Could not link person. Please try again in a moment.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not link person. Please try again in a moment.");
     }
   }
 
