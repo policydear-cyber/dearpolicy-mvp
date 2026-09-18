@@ -40,7 +40,25 @@ export const pool =
 // one on every file change.
 if (process.env.NODE_ENV !== "production") globalForDb.dearPolicyPool = pool;
 
+let devAccountEnsured = false;
+
+// Every write in this single-household app hangs off one account_id via a
+// foreign key, so a missing accounts row (a fresh database, or a
+// DEV_ACCOUNT_ID that does not match any seeded row) turns every insert into
+// an opaque 500 -- this happened in production once already. Ensuring the
+// row exists before the app's first real query, once per warm instance,
+// makes that failure mode self-healing instead of a silent outage.
+async function ensureDevAccountRow() {
+  // Tests and scripts point `pool.query` at an in-memory database or a
+  // strict fixture mock instead of a real DATABASE_URL; either already
+  // seeds what it needs, so this only has to run against a real connection.
+  if (devAccountEnsured || !connectionString) return;
+  await pool.query(`INSERT INTO accounts(id, name) VALUES ($1, 'Household') ON CONFLICT (id) DO NOTHING`, [devAccountId()]);
+  devAccountEnsured = true;
+}
+
 export async function query<T extends QueryResultRow>(text: string, params: unknown[] = []) {
+  await ensureDevAccountRow();
   return pool.query<T>(text, params);
 }
 
