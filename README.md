@@ -31,6 +31,8 @@ The gate is deliberately one-sided. It is generous while the facts are thin — 
 
 **When the amount cannot be calculated, the rule is shown.** "S$30.00 per day after the first 2 days, up to 30 days" is the answer when the number of nights is not yet known. It is labelled as the rule rather than as a payout, and it never reaches a total.
 
+**The numbers themselves are cross-checked before anything is calculated from them.** A line from a certificate's cover table is not a benefit: a row named after a person and an identity number never becomes a rule about what a plan pays. And when two people on one group scheme hold the same set of amounts but the certificate attaches them to different plans for each of them, one of those readings is wrong and only the certificate can say which — so DearPolicy says so rather than quietly calculating from whichever it read.
+
 **Confidence is a claim about the evidence.** An answer is a strong match only when every counted figure was computed from your own schedule and nothing is still needed. Everything else is a partial match and says so.
 
 `scripts/claim-answer-eval.ts` runs nine real household scenarios end to end through this path with no model at all, and asserts which benefits respond, which do not, and what the total is. It runs in CI on every push.

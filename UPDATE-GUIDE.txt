@@ -31,6 +31,16 @@ WHAT CHANGED, IN ONE BREATH
    - The claim pack states the estimated claim amount itself, struck once.
    - Your own plan's schedule of defined conditions beats the national list
      wherever its benefit table has been read.
+   - A line from a certificate's cover table is no longer treated as a benefit.
+     Rows named after a person and an identity number - "S****195A Ong Pei Lin
+     Charmaine GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)" - were being
+     matched to claims by the words inside them, and paid.
+   - A "Total Permanent Disability" row under a plan called "Group Term Life"
+     is no longer read as a second death benefit.
+   - An advance payment benefit is the sum arriving early, not a second one.
+   - When two people on one group scheme hold the same amounts but the
+     certificate attaches them to different plans, DearPolicy says so instead
+     of calculating from whichever it happened to read.
 
    The death claim that returned S$3,600,000 across four benefits returns
    S$1,600,000: S$1,000,000 of group term life plus S$600,000 of group
