@@ -1262,6 +1262,20 @@ export function runSystemRegressions(){
     assert.match(items[0].conditions.join(" "),/Paid instead of/);
     assert.equal(items[0].amountText,"S$1,000,000","the figure stays visible so it can be checked");
     assert.equal(notes.length,1);
+    // An advance payment is the death sum arriving early, not a second one.
+    const advance=[
+      item("Person A · Death Benefit",1_000_000,"confirmed","policy:GTL2"),
+      item("Person A · Advance Payment Benefit",1_000_000,"confirmed","policy:GTL2"),
+    ];
+    resolveCoverOverlaps(advance);
+    assert.equal(advance[1].supersededBy,"Person A · Death Benefit","the advance gives way to the benefit it advances");
+    assert.equal(advance[0].calculatedAmount,1_000_000);
+    assert.deepEqual(aggregatePotentialPayouts(advance),[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
+    // Alone, it still pays: an advance is real money.
+    const alone=[item("Person A · Advance Payment Benefit",1_000_000,"confirmed","policy:GTL3")];
+    resolveCoverOverlaps(alone);
+    assert.equal(alone[0].supersededBy,undefined);
+    assert.deepEqual(aggregatePotentialPayouts(alone),[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
     // Separate covers still stack, which is the whole point of holding both.
     assert.deepEqual(aggregatePotentialPayouts(items),[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
     // But a smaller fixed grant alongside a sum assured is a second benefit

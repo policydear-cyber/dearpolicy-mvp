@@ -18,7 +18,18 @@ import type { ClaimItem } from "@/types";
 export type OverlapResolution={items:ClaimItem[];notes:string[]};
 
 const BASIS_RANK:Record<string,number>={confirmed:3,estimated:2,indicative:1};
+/** A benefit that says it is an advance, or an acceleration, of another one.
+ *
+ * "Advance Payment Benefit -- 100% of the sum insured" sits in the same plan as
+ * the death benefit and pays the same sum: it is that money arriving early, not
+ * a second lot of it. Where anything else in the cover pays the same event,
+ * this is the row that gives way, whatever the arithmetic ranks it. Alone, it
+ * still pays, because an advance is real money. */
+function saysItIsAnAdvance(item:ClaimItem){
+  return /\b(?:advance(?:d)? payment|advance benefit|accelerat\w*)\b/i.test(item.title+" "+item.reason);
+}
 function rank(item:ClaimItem){
+  if(saysItIsAnAdvance(item))return -1;
   // A figure computed from the person's own verified sum insured beats one
   // printed in a booklet for everybody, whichever is larger.
   const fromOwnSchedule=item.calculationKind==="sum_insured"?1:0;
