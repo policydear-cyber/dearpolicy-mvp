@@ -221,8 +221,7 @@ export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyEx
       temperature: 0,
       timeoutMs: 240_000,
       attempts: 1,
-      numCtx: 4096,
-    });
+      });
   } catch (error) {
     if (!isTransientModelError(error)) throw error;
 
@@ -237,7 +236,6 @@ export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyEx
       temperature: 0,
       timeoutMs: 180_000,
       attempts: 1,
-      numCtx: 3584,
-    });
+      });
   }
 }

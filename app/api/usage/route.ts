@@ -9,7 +9,7 @@ export async function GET(){
     const usage=await usageThisMonth(devAccountId());
     const routing=(["reading","judgement","narration"] as const).map(role=>{
       const choice=modelFor(role);const price=priceFor(choice);
-      return {role,model:describeChoice(choice),hosted:choice.provider!=="ollama",
+      return {role,model:describeChoice(choice),hosted:true,
         price:price?"$"+price.input+" in / $"+price.output+" out per 1M tokens":"no price on file"};
     });
     return NextResponse.json({usage,routing});

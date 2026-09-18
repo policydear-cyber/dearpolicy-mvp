@@ -257,8 +257,7 @@ export async function extractClaimFacts(args: { text: string; current?: ClaimFac
         temperature: 0,
         timeoutMs: 60_000,
         attempts: 1,
-        numCtx: 1792,
-      });
+        });
       ai = parsed;
     } catch {
       ai = {};

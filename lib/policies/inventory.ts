@@ -4,7 +4,6 @@ import { canonicalProduct, confirmedOwnedCoverages, type OwnedCoverage } from "@
 import { pineconeEnabled,searchPolicyPassages } from "@/lib/rag/pinecone";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { PolicySource } from "@/lib/chat/types";
-import { fullyHosted } from "@/lib/ai/providers";
 
 /** Falls back to a readable label when a document has no extracted product
  * name yet -- a raw filename like "dps.pdf" or
@@ -206,7 +205,7 @@ function configuredPassageBound(name:string,fallback:number){
 }
 export function passageBudget(chunkTotal:number,share=0.35){
   const minimum=configuredPassageBound("RAG_MIN_PASSAGES_PER_DOCUMENT",DEFAULT_MIN_PASSAGES_PER_DOCUMENT);
-  const maximum=Math.max(minimum,configuredPassageBound("RAG_MAX_PASSAGES_PER_DOCUMENT",fullyHosted()?HOSTED_MAX_PASSAGES_PER_DOCUMENT:DEFAULT_MAX_PASSAGES_PER_DOCUMENT));
+  const maximum=Math.max(minimum,configuredPassageBound("RAG_MAX_PASSAGES_PER_DOCUMENT",HOSTED_MAX_PASSAGES_PER_DOCUMENT));
   const stored=Number.isFinite(chunkTotal)&&chunkTotal>0?Math.floor(chunkTotal):0;
   if(!stored)return minimum;
   return Math.min(maximum,stored,Math.max(minimum,Math.ceil(stored*share)));

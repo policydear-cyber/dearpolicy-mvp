@@ -13,7 +13,6 @@
  */
 import { z } from "zod";
 import { structuredCompletion } from "@/lib/ai/llm";
-import { readingProvider } from "@/lib/ai/reading-model";
 import { query } from "@/lib/db/client";
 import { normalText } from "@/lib/chat/facts";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
@@ -80,7 +79,9 @@ function numbersOnPage(row:ExtractedRow,text:string){
 }
 /** How much text one reading call may carry. A hosted reader takes a whole
  * document; a local model takes a page or two. */
-function batchBudget(){return readingProvider()==="ollama"?3200:60_000;}
+// 3,200 characters was the local model's context talking; a hosted reader
+// takes the whole batch.
+function batchBudget(){return 60_000;}
 function batches(pages:Page[]):Page[][]{
   const budget=batchBudget();const out:Page[][]=[];let current:Page[]=[];let size=0;
   for(const page of pages){
@@ -103,7 +104,7 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
   for(const [index,batch] of batches(pages).entries()){
     args.report?.("Reading pages "+batch[0].page_number+"–"+batch[batch.length-1].page_number);
     const extraction=await structuredCompletion({
-      role:"reading",schema:ExtractionSchema,temperature:0,numCtx:4096,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
+      role:"reading",schema:ExtractionSchema,temperature:0,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         const rows=Array.isArray(source.rows)?source.rows:[];
         return {rows:rows.map(r=>{const row=(r&&typeof r==="object"?r:{}) as Record<string,unknown>;
@@ -130,7 +131,7 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
     try{
       args.report?.("Checking what was read");
       const verdict=await structuredCompletion({
-        role:"reading",schema:VerifySchema,temperature:0,numCtx:4096,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
+        role:"reading",schema:VerifySchema,temperature:0,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
         coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;return {verdicts:Array.isArray(source.verdicts)?source.verdicts:[]};},
         system:VERIFY_SYSTEM,
         user:JSON.stringify({rows:kept.map((row,i)=>({index:i,insuredName:row.insuredName??null,planName:row.planName,eventType:row.eventType,detail:row.detail??null,cause:row.cause??null,

@@ -57,8 +57,7 @@ export async function answerFromEvidence(args: {
     temperature: 0,
     timeoutMs:120_000,
     attempts:1,
-    numCtx:3072,
-  });
+    });
 
   const chunkMap = new Map(args.chunks.map((c) => [c.id, c]));
   const coverageMap = new Map(args.coverages.map((c) => [c.id, c]));

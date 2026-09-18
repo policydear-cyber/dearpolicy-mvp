@@ -1,4 +1,6 @@
 import type { PdfPage } from "@/lib/documents/pdf";
+
+type BridgePage = { pageNumber: number; text: string };
 import { modelFor, supportsHostedDocumentReading } from "@/lib/ai/providers";
 import { completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 
@@ -11,6 +13,22 @@ export function pagesNeedingOcr(pages: PdfPage[]) {
   return pages
     .filter((page) => usableCharacters(page.text) < 24 && (page.imageCount ?? 0) > 0)
     .map((page) => page.pageNumber);
+}
+
+/** Fold OCR'd page text back into the page list, keeping any page the reader
+ * could not improve on. */
+export function mergeOcrPages(pages: PdfPage[], ocrPages: BridgePage[]) {
+  const replacements = new Map(
+    ocrPages
+      .filter((page) => Number.isInteger(page.pageNumber) && page.pageNumber > 0 && usableCharacters(page.text) >= 1)
+      .map((page) => [page.pageNumber, page.text.trim()]),
+  );
+  return pages.map((page) => {
+    const replacement = replacements.get(page.pageNumber);
+    return replacement
+      ? { ...page, text: replacement, extractionMethod: "ocr" as const }
+      : page;
+  });
 }
 
 /** Fills in the text of scanned, image-only pages by having the reading model

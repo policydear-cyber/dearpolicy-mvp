@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
-import { structuredCompletion,withModelSession } from "@/lib/ai/llm";
-import { readingProvider } from "@/lib/ai/reading-model";
+import { structuredCompletion } from "@/lib/ai/llm";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
 import { benefitRowsFromText } from "@/lib/documents/layout";
@@ -73,7 +72,7 @@ async function categoriseRows(rows:{index:number;label:string;value:string}[]){
   // safety net either way.
   try{
     const result=await structuredCompletion({
-      role:"reading",schema:RowCategoriesSchema,temperature:0,numCtx:4096,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
+      role:"reading",schema:RowCategoriesSchema,temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         return {rows:(Array.isArray(source.rows)?source.rows:[]).filter(row=>RowCategoriesSchema.shape.rows.element.safeParse(row).success)};},
       system:CATEGORISE_SYSTEM,
@@ -92,76 +91,71 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // each page belongs to stops a rule from one product being attached to a
   // different product's insured amount.
   const scopes=pageProductScopes(args.pages,[...new Set([args.productName,...(args.products??[])].filter((name):name is string=>!!name))]);
-  // A hosted reading model needs no local model loaded at all; holding one
-  // resident for the whole pass would only tie up the GPU for nothing.
-  const session=readingProvider()!=="ollama"?(work:()=>Promise<void>)=>work():withModelSession;
-  await session(async()=>{
-    for(const [index,page] of pages.entries()){
-      args.report?.(index+1,pages.length);
-      const section=scopes.get(page.page_number)?.[0]??args.productName;
-      // Table rows first. A schedule row states its own rule, so it is parsed in
-      // plain code — faster, identical every time, and it leaves the model only
-      // the pages that are genuinely prose.
-      let parsedHere=0;
-      // Read once per page: which heading says what a bare percentage is of,
-      // and where on the page that heading starts applying.
-      const bases=percentageBases(page.text);
-      const pageRows=benefitRowsFromText(page.text);
-      const categories=await categoriseRows(pageRows.map(row=>({index:row.index,label:row.label,value:row.value})));
-      for(const row of pageRows){
-        const parsed=parseBenefitValue(row.value,{percentageBasis:basisForRow(bases,row.index)});
-        if(!parsed)continue;
-        const category=categories.get(row.index);
-        // The model may rule a row OUT as a benefit; it never rules one in
-        // that the value cell could not be parsed from.
-        if(category&&!category.isBenefit)continue;
-        const key=row.label.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+row.value.toLowerCase();
-        if(seen.has(key))continue;seen.add(key);
-        const daily=parsed.kind==="daily"?dailyLimitsFrom(row.line):null;
-        benefits.push({productName:section,benefitName:row.label.replace(/^[•\-–\s]+/,"").trim().slice(0,90),
-          traits:[...new Set([...benefitTraits(row.label,row.line).filter(t=>t!=="other"||!category?.respondsTo.length),...(category?.respondsTo??[])])],
-          requires:[...new Set([...requiredTraits(row.label,row.line),...(category?.requires??[])])],
-          formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency,
-          factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
-          offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
-          sourcePage:page.page_number,quote:row.line.replace(/\t/g," ").trim().slice(0,260),
-          conditions:parsed.inferred&&parsed.basis?["DearPolicy read this as "+parsed.basis+". Confirm it on the Benefits page."]:[],
-          requirements:[],
-          // A daily rate with no cap stated in its own row is not yet payable,
-          // and a rule taken from a heading is confirmed by a person first.
-          needsReview:(parsed.kind==="daily"&&daily?.maximumDays==null)||parsed.inferred===true,
-          basisInferred:parsed.inferred===true});
-        parsedHere++;
-      }
-      // A page whose schedule was read needs no model pass at all.
-      if(parsedHere>=2)continue;
-      let extraction;
-      try{
-        extraction=await structuredCompletion({
-          role:"reading",
-          schema:CatalogExtractionSchema,coerce:coerceExtraction,
-          temperature:0,numCtx:4096,maxOutputTokens:700,timeoutMs:120_000,attempts:2,
-          system:SYSTEM,
-          user:JSON.stringify({page:page.page_number,
-            tableRows:benefitRowsFromText(page.text).slice(0,12).map(row=>({label:row.label,amount:row.value})),
-            text:page.text.slice(0,3200)}),
-        });
-      }catch{continue;/* A page that cannot be read is skipped, never guessed. */}
-      for(const found of extraction.benefits){
-        // The quote must be present on this page, verbatim.
-        if(!hasQuote(page.text,found.quote))continue;
-        const key=found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+found.quote.slice(0,60).toLowerCase();
-        if(seen.has(key))continue;seen.add(key);
-        const formula=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
-          quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays});
-        benefits.push({productName:section,benefitName:found.name.trim(),
-          traits:benefitTraits(found.name,found.quote),requires:requiredTraits(found.name,found.quote),...formula,
-          sourcePage:page.page_number,quote:found.quote,
-          conditions:found.conditions.filter(condition=>condition.trim().length>3),
-          requirements:[],needsReview:formula.formulaKind==="none"});
-      }
+  for(const [index,page] of pages.entries()){
+    args.report?.(index+1,pages.length);
+    const section=scopes.get(page.page_number)?.[0]??args.productName;
+    // Table rows first. A schedule row states its own rule, so it is parsed in
+    // plain code — faster, identical every time, and it leaves the model only
+    // the pages that are genuinely prose.
+    let parsedHere=0;
+    // Read once per page: which heading says what a bare percentage is of,
+    // and where on the page that heading starts applying.
+    const bases=percentageBases(page.text);
+    const pageRows=benefitRowsFromText(page.text);
+    const categories=await categoriseRows(pageRows.map(row=>({index:row.index,label:row.label,value:row.value})));
+    for(const row of pageRows){
+      const parsed=parseBenefitValue(row.value,{percentageBasis:basisForRow(bases,row.index)});
+      if(!parsed)continue;
+      const category=categories.get(row.index);
+      // The model may rule a row OUT as a benefit; it never rules one in
+      // that the value cell could not be parsed from.
+      if(category&&!category.isBenefit)continue;
+      const key=row.label.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+row.value.toLowerCase();
+      if(seen.has(key))continue;seen.add(key);
+      const daily=parsed.kind==="daily"?dailyLimitsFrom(row.line):null;
+      benefits.push({productName:section,benefitName:row.label.replace(/^[•\-–\s]+/,"").trim().slice(0,90),
+        traits:[...new Set([...benefitTraits(row.label,row.line).filter(t=>t!=="other"||!category?.respondsTo.length),...(category?.respondsTo??[])])],
+        requires:[...new Set([...requiredTraits(row.label,row.line),...(category?.requires??[])])],
+        formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency,
+        factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
+        offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
+        sourcePage:page.page_number,quote:row.line.replace(/\t/g," ").trim().slice(0,260),
+        conditions:parsed.inferred&&parsed.basis?["DearPolicy read this as "+parsed.basis+". Confirm it on the Benefits page."]:[],
+        requirements:[],
+        // A daily rate with no cap stated in its own row is not yet payable,
+        // and a rule taken from a heading is confirmed by a person first.
+        needsReview:(parsed.kind==="daily"&&daily?.maximumDays==null)||parsed.inferred===true,
+        basisInferred:parsed.inferred===true});
+      parsedHere++;
     }
-  });
+    // A page whose schedule was read needs no model pass at all.
+    if(parsedHere>=2)continue;
+    let extraction;
+    try{
+      extraction=await structuredCompletion({
+        role:"reading",
+        schema:CatalogExtractionSchema,coerce:coerceExtraction,
+        temperature:0,maxOutputTokens:700,timeoutMs:120_000,attempts:2,
+        system:SYSTEM,
+        user:JSON.stringify({page:page.page_number,
+          tableRows:benefitRowsFromText(page.text).slice(0,12).map(row=>({label:row.label,amount:row.value})),
+          text:page.text.slice(0,3200)}),
+      });
+    }catch{continue;/* A page that cannot be read is skipped, never guessed. */}
+    for(const found of extraction.benefits){
+      // The quote must be present on this page, verbatim.
+      if(!hasQuote(page.text,found.quote))continue;
+      const key=found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+found.quote.slice(0,60).toLowerCase();
+      if(seen.has(key))continue;seen.add(key);
+      const formula=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
+        quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays});
+      benefits.push({productName:section,benefitName:found.name.trim(),
+        traits:benefitTraits(found.name,found.quote),requires:requiredTraits(found.name,found.quote),...formula,
+        sourcePage:page.page_number,quote:found.quote,
+        conditions:found.conditions.filter(condition=>condition.trim().length>3),
+        requirements:[],needsReview:formula.formulaKind==="none"});
+    }
+  }
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);
   return benefits.length;
 }
