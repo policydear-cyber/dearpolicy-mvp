@@ -129,9 +129,53 @@ export function applyImpliedScaleLimit(benefits:CatalogBenefit[]):CatalogBenefit
   });
 }
 
+/** A scale that pays LESS for a worse injury was misread.
+ *
+ * A burns table runs one way: the more of the body burnt, the more it pays.
+ * This household's reads "10% or more of the body -- 50%" and then "15% or more
+ * -- 30%", which no insurer wrote. Two tables on one page have been interleaved,
+ * or a column has drifted, and the rows carry the largest percentages in the
+ * plan, so getting them wrong is expensive in the direction that matters.
+ *
+ * Nothing here guesses at the right order. The rows are simply held back for a
+ * person to confirm, whatever else corroborated them, with the reason said out
+ * loud -- because "this scale pays less for a worse injury" is a fact about the
+ * reading, not about the policy. */
+const BAND_BOUND=/greater than\s*(\d+(?:\.\d+)?)\s*%/i;
+function bandGroup(benefit:CatalogBenefit){
+  const name=benefit.benefitName??"";
+  if(!BAND_BOUND.test(name))return null;
+  const prefix=/^\s*(body|head)\s*[-\u2013]/i.exec(name)?.[1]?.toLowerCase()??"";
+  return benefit.policyId+"#"+(benefit.sourcePage??0)+"#"+prefix;
+}
+export function holdNonMonotonicBands(benefits:CatalogBenefit[]):CatalogBenefit[]{
+  const groups=new Map<string,CatalogBenefit[]>();
+  for(const benefit of benefits){
+    if(benefit.formulaValue==null||benefit.formulaKind==="none")continue;
+    const group=bandGroup(benefit);
+    if(!group)continue;
+    groups.set(group,[...(groups.get(group)??[]),benefit]);
+  }
+  const held=new Set<string>();
+  for(const rows of groups.values()){
+    if(rows.length<2)continue;
+    const ordered=[...rows].sort((a,b)=>
+      Number(BAND_BOUND.exec(a.benefitName)![1])-Number(BAND_BOUND.exec(b.benefitName)![1]));
+    const falls=ordered.some((row,index)=>index>0&&(row.formulaValue as number)<(ordered[index-1].formulaValue as number));
+    if(falls)for(const row of ordered)held.add(row.id);
+  }
+  if(!held.size)return benefits;
+  const note="This scale pays less for a worse injury than for a lesser one, which no insurer writes, "
+    +"so DearPolicy has read it wrong \u2014 two tables on one page, or a column out of line. "
+    +"It will not calculate from these rows until someone checks them against the page.";
+  return benefits.map(benefit=>held.has(benefit.id)&&!benefit.reviewedAt
+    ?{...benefit,needsConfirmation:true,conditions:[...new Set([...benefit.conditions,note])]}
+    :benefit);
+}
+
 /** Everything the stored rules can resolve about themselves, in order: work out
  * what a percentage scale is a percentage of, then stop asking a person to
  * confirm what two of their own documents already agree on. */
 export function resolveStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return corroborateInferredRules(applyImpliedScaleLimit(benefits));
+  return holdNonMonotonicBands(corroborateInferredRules(applyImpliedScaleLimit(benefits)));
 }

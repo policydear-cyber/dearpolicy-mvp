@@ -17,7 +17,7 @@ import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCove
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
-import { applyImpliedScaleLimit,corroborateInferredRules,impliedScaleLimit } from "@/lib/insurance/scale-limit";
+import { applyImpliedScaleLimit,corroborateInferredRules,holdNonMonotonicBands,impliedScaleLimit } from "@/lib/insurance/scale-limit";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1124,6 +1124,42 @@ export function runSystemRegressions(){
     // A benefit that pays on none of those is left unresolved rather than
     // attached to whichever cover happens to be first.
     assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
+  });
+  test("A scale that pays less for a worse injury was read wrong, and says so",()=>{
+    // Straight off the live benefit table: "10% or more of the body -- 50%",
+    // then "15% or more -- 30%". No insurer wrote that. Two tables on one page
+    // have been interleaved, or a column has drifted.
+    const band=(name:string,value:number,over:Partial<CatalogBenefit>={}):CatalogBenefit=>({
+      id:name,policyId:"summary",productName:"Group Personal Accident",benefitName:name,traits:["bodily_injury"],
+      formulaKind:"sum_insured",formulaValue:value,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:7,quote:"",conditions:[],requirements:[],needsReview:false,needsConfirmation:false,...over});
+    const broken=holdNonMonotonicBands([
+      band("Body - Equals to or greater than 10% but less than 15%",0.5),
+      band("Body - Equals to or greater than 15% but less than 25%",0.3),
+    ]);
+    assert.equal(broken[0].needsConfirmation,true);
+    assert.equal(broken[1].needsConfirmation,true);
+    assert.match(broken[0].conditions.join(" "),/pays less for a worse injury/);
+    // A scale that runs the right way is left alone.
+    const sound=holdNonMonotonicBands([
+      band("Head - Equals to or greater than 2% but less than 5%",0.5),
+      band("Head - Equals to or greater than 10%",1),
+    ]);
+    assert.equal(sound[0].needsConfirmation,false);
+    assert.deepEqual(sound[0].conditions,[]);
+    // Head and Body are different scales and are not compared with each other.
+    const mixed=holdNonMonotonicBands([
+      band("Head - Equals to or greater than 2% but less than 5%",0.5),
+      band("Body - Equals to or greater than 10% but less than 15%",0.4),
+    ]);
+    assert.equal(mixed[0].needsConfirmation,false);
+    assert.equal(mixed[1].needsConfirmation,false);
+    // A row a person has already reviewed is never reopened.
+    const reviewed=holdNonMonotonicBands([
+      band("Body - Equals to or greater than 10% but less than 15%",0.5,{reviewedAt:"2026-01-01"}),
+      band("Body - Equals to or greater than 15% but less than 25%",0.3,{reviewedAt:"2026-01-01"}),
+    ]);
+    assert.equal(reviewed[0].needsConfirmation,false);
   });
   test("A burns band answers to a burn, and carries the largest percentages in the plan",()=>{
     // These rows name no injury at all, so nothing recognised them, and they
