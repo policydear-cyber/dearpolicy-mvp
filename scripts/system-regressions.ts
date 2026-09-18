@@ -17,6 +17,7 @@ import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,looks
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
+import { applyImpliedScaleLimit,impliedScaleLimit } from "@/lib/insurance/scale-limit";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1093,6 +1094,46 @@ export function runSystemRegressions(){
     assert.ok(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],rows).includes("critical_illness"));
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],[]).includes("critical_illness"),false);
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["dengue fever"],rows).includes("critical_illness"),false);
+  });
+  test("A fracture scale's percentages are worked out against the limit the household's own documents imply",()=>{
+    // The live benefit table states this scale twice: as percentages in one
+    // document and as amounts in another. Applied to the S$600,000 sum insured,
+    // "20% for a fractured wrist" is S$120,000 -- a hundred times the S$1,250
+    // the other document prints on the same row.
+    const row=(over:Partial<CatalogBenefit>):CatalogBenefit=>({id:String(over.benefitName),policyId:"doc",productName:"Group Personal Accident",
+      benefitName:"x",traits:["bodily_injury","accident"],formulaKind:"none",formulaValue:null,currency:"SGD",factKey:null,
+      offsetDays:null,maximumDays:null,sourcePage:1,quote:"",conditions:[],requirements:[],needsReview:false,...over});
+    const share=(name:string,value:number)=>row({benefitName:name,policyId:"summary",sourcePage:8,
+      formulaKind:"sum_insured",formulaValue:value,basisInferred:true,needsConfirmation:true});
+    const amount=(name:string,value:number)=>row({benefitName:name,policyId:"booklet",sourcePage:13,
+      formulaKind:"fixed",formulaValue:value});
+    const catalog=[
+      share("Hip",0.75),amount("Hip",3_750),
+      share("Jaw, Pelvis, Leg, Ankle or Knee",0.5),amount("Jaw, Pelvis, Leg^, Ankle or Knee",2_500),
+      share("Neck, Skull or Spine (Full Break)",1),amount("Neck, Skull or Spine (Full Break)",5_000),
+      // A percentage row with no amount anywhere: this is the one the person
+      // could not be given a figure for.
+      share("Cheekbone, Shoulder or Hairline Fracture of Skull or Spine",0.3),
+      // A dismemberment row, on a different page, which really IS a percentage
+      // of the plan's sum insured and must not be touched.
+      share("22. Loss of speech",0.5),
+    ];
+    catalog[catalog.length-1].sourcePage=6;
+    const scale=impliedScaleLimit(catalog)!;
+    assert.equal(scale.limit,5_000);
+    assert.ok(scale.support>=2,"one coincidence is not a scale");
+    const applied=applyImpliedScaleLimit(catalog);
+    const cheekbone=applied.find(entry=>entry.benefitName.startsWith("Cheekbone"))!;
+    assert.equal(cheekbone.formulaKind,"fixed");
+    assert.equal(cheekbone.formulaValue,1_500,"30% of the S$5,000 limit, not 30% of the sum insured");
+    assert.equal(cheekbone.needsConfirmation,false,"and the person is no longer asked to confirm it");
+    assert.match(cheekbone.conditions.join(" "),/not of the plan's sum insured/);
+    const speech=applied.find(entry=>entry.benefitName.startsWith("22."))!;
+    assert.equal(speech.formulaKind,"sum_insured","a dismemberment scale is left exactly as it was");
+    assert.equal(speech.formulaValue,0.5);
+    // Nothing to corroborate means nothing is changed.
+    assert.equal(impliedScaleLimit([share("Hip",0.75)]),null);
+    assert.equal(impliedScaleLimit([share("Hip",0.75),amount("Hip",3_750)]),null,"a single pair is not agreement");
   });
   test("Two people on one scheme catch a certificate whose columns drifted",()=>{
     // Straight out of the live data. Both members hold the same four sums under
