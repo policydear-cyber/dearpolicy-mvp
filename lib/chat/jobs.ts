@@ -8,8 +8,14 @@ type QueueGlobal=typeof globalThis&{__dearpolicyChatTail?:Promise<void>;__dearpo
 async function initializeQueue(){
   await ensureChatSchema();
   const state=globalThis as QueueGlobal;
+  // Serverless means the POST that dispatches a job, and the GET that polls
+  // it, can land on different instances -- a per-instance "ran once" flag
+  // does not stop a fresh instance from treating a job another instance is
+  // actively running as orphaned. Scoping the sweep to jobs stale well past
+  // the route's own 300s maxDuration keeps it able to clean up a real crash
+  // without ever touching a job that is still legitimately in flight.
   state.__dearpolicyChatRecovery??=query(
-    "UPDATE chat_analysis_jobs SET status='failed',error='The app restarted before this analysis finished. Please resend the message.',updated_at=now() WHERE status IN ('queued','running')",
+    "UPDATE chat_analysis_jobs SET status='failed',error='The app restarted before this analysis finished. Please resend the message.',updated_at=now() WHERE status IN ('queued','running') AND updated_at<now()-interval '10 minutes'",
   ).then(()=>undefined);
   await state.__dearpolicyChatRecovery;
 }
