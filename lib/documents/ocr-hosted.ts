@@ -5,10 +5,6 @@ import type { PdfPage } from "@/lib/documents/pdf";
 
 type BridgePage = { pageNumber: number; text: string };
 
-function usableCharacters(text: string) {
-  return (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
-}
-
 /** Builds a small standalone PDF containing only the requested pages, so a
  * scanned 90-page policy only ever sends the handful of image-only pages to
  * the model, not the whole document. */
@@ -62,13 +58,22 @@ export async function completePdfPagesWithHostedOcr(args: {
   } catch {
     throw new Error("The hosted document reader did not return usable text for the scanned page(s).");
   }
-  const completed = (parsed.pages ?? []).filter((p) => Number.isInteger(p.pageNumber) && usableCharacters(p.text) >= 1);
-  const missing = args.pageNumbers.filter((n) => !completed.some((p) => p.pageNumber === n));
+  // The model is explicitly told to return an empty string for a page that is
+  // genuinely blank or unreadable (a divider, an inside cover, "this page
+  // intentionally left blank"), which is a legitimate, honest answer, not a
+  // failure -- a real insurance booklet has these often. Treating that empty
+  // string the same as the model silently DROPPING the page entirely used to
+  // fail the whole document over a single decorative page. Only a page with
+  // no entry at all in the reply is a real transcription failure; the
+  // document-level "not enough readable text" check further down still
+  // catches a document that is genuinely unreadable throughout.
+  const returned = (parsed.pages ?? []).filter((p) => Number.isInteger(p.pageNumber));
+  const missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
   if (missing.length) throw new Error(`The hosted document reader returned no usable text for page${missing.length === 1 ? "" : "s"} ${missing.join(", ")}.`);
 
-  const replacements = new Map(completed.map((p) => [p.pageNumber, p.text.trim()]));
+  const replacements = new Map(returned.map((p) => [p.pageNumber, p.text.trim()]));
   return args.pages.map((page) => {
     const replacement = replacements.get(page.pageNumber);
-    return replacement ? { ...page, text: replacement, extractionMethod: "ocr" as const } : page;
+    return replacement !== undefined ? { ...page, text: replacement, extractionMethod: "ocr" as const } : page;
   });
 }
