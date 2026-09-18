@@ -68,6 +68,8 @@ export type ClaimAssessmentItem = {
   aggregation?: "additive" | "reimbursement";
   /** Another benefit under the same cover pays instead of this one. */
   supersededBy?: string;
+  /** The cover this figure is paid out of, as the certificate names it. */
+  coverLabel?: string;
   ruleEvidence?: ClaimEvidence;
 };
 

@@ -65,6 +65,17 @@ export async function runClaimPackRegressions(){
   assert.ok(estimate,"The pack states an estimated claim amount");
   assert.match(estimate.lines.join(" | "),/Lump-sum benefits: S\$1,250 across 1 benefit/);
   assert.match(estimate.lines.join(" | "),/Reimbursement of actual eligible expenses: up to S\$220\.00/);
+  // With one cover there is nothing to break down; with two there is.
+  const twoCovers=claimPackContent({packet:{...packet,assessments:[
+    {...packet.assessments[0],coverLabel:"Group Personal Accident"},
+    {id:"gtl-tpd",title:"Desmond · Total and Permanent Disability",status:"likely_applicable",
+     amountText:"S$1,000,000",calculatedAmount:1_000_000,currency:"SGD",coverLabel:"Group Term Life",
+     reason:"100% of the sum insured.",conditions:[],evidenceTerms:[],productName:"Group Term Life"},
+  ]},claimantName:"Tan Yi Chuen Desmond"});
+  const split=twoCovers.sections.find(section=>section.heading==="Estimated claim amount")!.lines.join(" | ");
+  assert.match(split,/S\$1,001,250 across 2 benefits/);
+  assert.match(split,/S\$1,000,000 from the Group Term Life cover/);
+  assert.match(split,/S\$1,250 from the Group Personal Accident cover/);
   const twice=claimPackContent({packet:{...packet,assessments:[
     ...packet.assessments,
     {id:"gpa-fracture-dup",title:"Desmond · Fracture of the wrist",status:"potentially_applicable",

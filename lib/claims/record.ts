@@ -42,6 +42,7 @@ function assessmentFromItem(item:ClaimItem,index:number,citations:ChatCitation[]
     ...(item.calculatedAmount!=null?{calculatedAmount:item.calculatedAmount,currency:item.currency}:{}),
     ...(item.aggregation?{aggregation:item.aggregation}:{}),
     ...(item.supersededBy?{supersededBy:item.supersededBy}:{}),
+    ...(item.coverLabel?{coverLabel:item.coverLabel}:{}),
     ...(evidence?{ruleEvidence:evidence}:{}),
   };
 }

@@ -99,8 +99,15 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
     const currency=lumpSums[0]?.currency??reimbursements[0]?.currency??"SGD";
     const lumpTotal=lumpSums.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
     const billTotal=reimbursements.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
+    // Cover by cover, so the figure can be held against the certificate.
+    const byCover=new Map<string,number>();
+    for(const item of lumpSums){
+      const label=item.coverLabel??item.productName??"this plan";
+      byCover.set(label,(byCover.get(label)??0)+(item.calculatedAmount??0));
+    }
     sections.push({heading:"Estimated claim amount",lines:[
       ...(lumpSums.length?["Lump-sum benefits: "+formatMoney(lumpTotal,currency)+" across "+lumpSums.length+" benefit"+(lumpSums.length===1?"":"s")]:[]),
+      ...(byCover.size>1?[...byCover].sort((a,b)=>b[1]-a[1]).map(([label,amount])=>"    "+formatMoney(amount,currency)+" from the "+label+" cover"):[]),
       ...(reimbursements.length?["Reimbursement of actual eligible expenses: up to "+formatMoney(billTotal,currency)
         +" across "+reimbursements.length+" benefit"+(reimbursements.length===1?"":"s")+", against receipts"]:[]),
     ],note:"Benefits paid by the same policy for the same event are counted once, not added together. This is DearPolicy's estimate from the documents on file and remains subject to the insurer's assessment."});
