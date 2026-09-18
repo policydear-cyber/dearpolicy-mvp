@@ -604,18 +604,18 @@ export function runSystemRegressions(){
     assert.ok(characters/4<readingOutputTokens()*3,
       "The schema's worst case ("+Math.round(characters/4)+" tokens of text) is far beyond the "+readingOutputTokens()+"-token budget");
     delete process.env.RAG_READING_OUTPUT_TOKENS;
-    assert.equal(readingOutputTokens(),900);
+    assert.equal(readingOutputTokens(),2600);
     process.env.RAG_READING_OUTPUT_TOKENS="500";
     assert.equal(readingOutputTokens(),500);
     process.env.RAG_READING_OUTPUT_TOKENS="oops";
-    assert.equal(readingOutputTokens(),900,"A bad setting falls back to the default");
+    assert.equal(readingOutputTokens(),2600,"A bad setting falls back to the default");
     delete process.env.RAG_READING_OUTPUT_TOKENS;
   });
   test("One misshapen field no longer discards a whole evidence section",()=>{
     const quote={sourceId:"source-a",quote:"We pay 25% of the S$5,000 benefit limit."};
     const raw={
       benefits:[
-        // conditions arrived as a bare string - the shape Qwen actually returned.
+        // conditions arrived as a bare string - a shape a model really returned.
         {title:"Simple Fracture",coverageId:"cover-a",evidence:quote,requirements:[],conditions:"Subject to the policy definition.",
          formula:{kind:"sum_insured",value:0.25,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:quote}},
         {title:"Unusable",coverageId:null,evidence:[],requirements:[],conditions:[],
