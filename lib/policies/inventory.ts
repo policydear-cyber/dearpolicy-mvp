@@ -4,6 +4,7 @@ import { canonicalProduct, confirmedOwnedCoverages, type OwnedCoverage } from "@
 import { embedTexts,toPgVector } from "@/lib/ai/embeddings";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { PolicySource } from "@/lib/chat/types";
+import { fullyHosted } from "@/lib/ai/providers";
 
 /** Falls back to a readable label when a document has no extracted product
  * name yet -- a raw filename like "dps.pdf" or
@@ -190,18 +191,22 @@ export function pageProductScopes(pages:{page_number:number;text:string}[],produ
  * A fixed six passages is fine for a two-page schedule and far too few for a
  * forty-page multi-product booklet, where the responsive benefit table can sit
  * well outside the top six. The cap therefore scales with how much text the
- * document actually stores, with a floor for small documents and a ceiling that
- * keeps the local model's reading work bounded on an 8 GB GPU.
- * Tune with RAG_MIN_PASSAGES_PER_DOCUMENT / RAG_MAX_PASSAGES_PER_DOCUMENT. */
+ * document actually stores, with a floor for small documents and a ceiling
+ * that -- for a local model -- keeps its reading work bounded on an 8 GB GPU.
+ * A hosted model has no such ceiling to respect, and a low one is exactly how
+ * a real benefit table can rank just outside the retrieved set and never
+ * reach the model at all, which is indistinguishable from the model failing
+ * to find it. Tune with RAG_MIN_PASSAGES_PER_DOCUMENT / RAG_MAX_PASSAGES_PER_DOCUMENT. */
 export const DEFAULT_MIN_PASSAGES_PER_DOCUMENT=6;
 export const DEFAULT_MAX_PASSAGES_PER_DOCUMENT=16;
+export const HOSTED_MAX_PASSAGES_PER_DOCUMENT=40;
 function configuredPassageBound(name:string,fallback:number){
   const value=Number(process.env[name]);
   return Number.isFinite(value)&&value>=1&&value<=200?Math.floor(value):fallback;
 }
 export function passageBudget(chunkTotal:number,share=0.35){
   const minimum=configuredPassageBound("RAG_MIN_PASSAGES_PER_DOCUMENT",DEFAULT_MIN_PASSAGES_PER_DOCUMENT);
-  const maximum=Math.max(minimum,configuredPassageBound("RAG_MAX_PASSAGES_PER_DOCUMENT",DEFAULT_MAX_PASSAGES_PER_DOCUMENT));
+  const maximum=Math.max(minimum,configuredPassageBound("RAG_MAX_PASSAGES_PER_DOCUMENT",fullyHosted()?HOSTED_MAX_PASSAGES_PER_DOCUMENT:DEFAULT_MAX_PASSAGES_PER_DOCUMENT));
   const stored=Number.isFinite(chunkTotal)&&chunkTotal>0?Math.floor(chunkTotal):0;
   if(!stored)return minimum;
   return Math.min(maximum,stored,Math.max(minimum,Math.ceil(stored*share)));

@@ -1493,6 +1493,22 @@ async function main(){
         if(savedTokens)process.env.RAG_READING_OUTPUT_TOKENS=savedTokens;else delete process.env.RAG_READING_OUTPUT_TOKENS;
       }
     });
+    await test("Retrieval depth per document also widens once nothing is routed to the local model",async()=>{
+      const { passageBudget }=await import("@/lib/policies/inventory");
+      const savedPreset=process.env.MODEL_PRESET,savedKey=process.env.GEMINI_API_KEY,savedMax=process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+      delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+      try{
+        assert.equal(passageBudget(500),16,"Still routed to the local model -- keep its reading work bounded");
+        process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
+        assert.equal(passageBudget(500),40,"Fully hosted -- a low ceiling is how a real benefit table ranks just outside the retrieved set and never reaches the model");
+        process.env.RAG_MAX_PASSAGES_PER_DOCUMENT="10";
+        assert.equal(passageBudget(500),10,"An explicit setting always wins over either default");
+      }finally{
+        if(savedPreset)process.env.MODEL_PRESET=savedPreset;else delete process.env.MODEL_PRESET;
+        if(savedKey)process.env.GEMINI_API_KEY=savedKey;else delete process.env.GEMINI_API_KEY;
+        if(savedMax)process.env.RAG_MAX_PASSAGES_PER_DOCUMENT=savedMax;else delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
+      }
+    });
     await test("A judgement call rate-limited on Google's pricier tier falls back to the cheaper tier instead of failing the chat",async()=>{
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
