@@ -76,6 +76,14 @@ const catalog:CatalogBenefit[]=[
     {formulaKind:"sum_insured",formulaValue:1},["death","accident"]),
   benefit("Simple Fracture","Group Personal Accident",
     "Simple fracture of the wrist: S$1,250.",["bodily_injury","accident"],{formulaKind:"fixed",formulaValue:1_250},["accident"]),
+  // One page of a dismemberment schedule: three lines that all describe a
+  // thumb, with three different percentages.
+  {...benefit("11. Loss of or Permanent Total Loss of use of (a) Right Thumb","Group Personal Accident",
+    "30% of the Sum Insured.",["bodily_injury","accident"],{formulaKind:"sum_insured",formulaValue:0.3},["accident"]),sourcePage:11},
+  {...benefit("11. Loss of or Permanent Total Loss of use of (c) One Phalanx of Right Thumb","Group Personal Accident",
+    "20% of the Sum Insured.",["bodily_injury","accident"],{formulaKind:"sum_insured",formulaValue:0.2},["accident"]),sourcePage:11},
+  {...benefit("14. Loss of or Permanent Total Loss of use of any other finger (a) Right hand","Group Personal Accident",
+    "6% of the Sum Insured.",["bodily_injury","accident"],{formulaKind:"sum_insured",formulaValue:0.06},["accident"]),sourcePage:11},
   benefit("Ambulance Fee","Group Personal Accident","We reimburse the ambulance cost up to S$500 per incident.",
     ["medical_expense"],{formulaKind:"expense_cap",formulaValue:500,factKey:"ambulanceBill"}),
   // The same death benefit read out of a second document, whose product
@@ -104,6 +112,9 @@ type Case={
   pays:Record<string,string>;
   /** Benefit names that must NOT be offered, whatever else happens. */
   never:string[];
+  /** Benefit names that may be shown -- because the person is entitled to see
+   * what their policy pays -- but must carry no amount that reaches a total. */
+  notCounted?:string[];
   /** Rows that describe the same money: exactly one is counted, at this
    * amount, and the rest stay visible as alternatives. Which one is kept is
    * arbitrary and deliberately not asserted. */
@@ -182,6 +193,22 @@ const cases:Case[]=[
     total:"S$1,000,000",
   },
   {
+    question:"i lost my right thumb in a workshop accident",
+    facts:{eventType:fact("accident"),injured:fact(true),injuries:fact("amputation of right thumb")},
+    // Three lines of one schedule describe a thumb. They are subdivisions of
+    // one injury, not three payouts: S$180,000 + S$120,000 + S$36,000 of a
+    // S$600,000 cover, for one thumb.
+    oneOf:{names:["11. Loss of or Permanent Total Loss of use of (a) Right Thumb",
+      "11. Loss of or Permanent Total Loss of use of (c) One Phalanx of Right Thumb"],amount:"S$180,000"},
+    pays:{},
+    never:["Death Benefit","Death","Death due to Accident","Group Living Care"],
+    // A fracture benefit is shown, because it is in the policy and the person
+    // should see what it pays -- but no fracture was described, so it carries
+    // no figure into the total.
+    notCounted:["Simple Fracture","14. Loss of or Permanent Total Loss of use of any other finger (a) Right hand"],
+    total:"S$180,000",
+  },
+  {
     question:"i was warded for dengue (nights not known yet)",
     facts:{diagnosis:fact("dengue fever"),eventType:fact("diagnosis"),hospitalised:fact(true)},
     // The complaint this answers: "still doesn't tell me what i can claim".
@@ -235,6 +262,12 @@ export function runClaimAnswerEval(){
       if(!item)fail("“"+name+"” should respond and was not offered at all");
       if(item!.supersededBy)fail("“"+name+"” should be paid, not replaced by “"+item!.supersededBy+"”");
       if(item!.amountText!==amount)fail("“"+name+"” should pay "+amount+", not "+(item!.amountText??"nothing"));
+      checked++;
+    }
+    for(const name of testCase.notCounted??[]){
+      const item=shown.get(name);
+      if(!item)fail("\u201c"+name+"\u201d should still be shown so the person can see what it pays");
+      if(typeof item!.calculatedAmount==="number")fail("\u201c"+name+"\u201d has no supporting facts and must not reach the total");
       checked++;
     }
     for(const name of testCase.never){
