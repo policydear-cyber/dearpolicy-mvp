@@ -13,7 +13,7 @@ import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassificatio
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
-import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,looksLikeCoverageLine,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,looksLikeCoverageLine,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
@@ -1094,6 +1094,36 @@ export function runSystemRegressions(){
     assert.ok(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],rows).includes("critical_illness"));
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],[]).includes("critical_illness"),false);
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["dengue fever"],rows).includes("critical_illness"),false);
+  });
+  test("A booklet's death and disability rows find the cover they pay on",()=>{
+    // A group booklet covers several plans under one product name, so its rows
+    // resolved to no cover at all and the person was told to "set the product
+    // name to match the certificate" -- admin, for a question their own
+    // documents already answer.
+    const scheme:PolicyContract={...contract,coverages:[
+      coverage({id:"gtl",category:"Death",amount:1_000_000,productName:"Group Term Life"}),
+      coverage({id:"tpd",category:"Total Permanent Disability",amount:1_000_000,productName:"Group Term Life"}),
+      coverage({id:"gpa",category:"Personal Accident",amount:600_000,productName:"Group Personal Accident"}),
+      coverage({id:"lc",category:"Critical Illness",amount:350_000,productName:"Living Care"}),
+    ]};
+    const booklet=(benefitName:string,quote:string,requires?:CatalogBenefit["requires"]):CatalogBenefit=>({
+      id:benefitName,policyId:"booklet",productName:"Hospitalisation",benefitName,traits:benefitTraits(benefitName,quote),
+      requires,formulaKind:"sum_insured",formulaValue:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:5,quote,conditions:[],requirements:[],needsReview:false});
+    assert.equal(coverageForBenefit(scheme,booklet("Death","On death we pay 100% of the Sum Insured."))?.id,"gtl");
+    assert.equal(coverageForBenefit(scheme,booklet("Total and Permanent Disability Benefit (TPD)",
+      "We pay 100% of the Sum Insured on total and permanent disability."))?.id,"tpd");
+    // Conditional on an accident: the accident plan, not the life sum. This is
+    // what keeps a 150% accidental disablement benefit off S$1,000,000.
+    assert.equal(coverageForBenefit(scheme,booklet("Total and Permanent Disablement due to Accident",
+      "150% of the Sum Insured where disablement results from an accident.",["accident"]))?.id,"gpa");
+    assert.equal(coverageForBenefit(scheme,booklet("Death due to Accident",
+      "100% of the Sum Insured where death results from an accident.",["death","accident"]))?.id,"gpa");
+    assert.equal(coverageForBenefit(scheme,booklet("Group Living Care",
+      "100% of the Sum Insured on diagnosis of a Critical Illness."))?.id,"lc");
+    // A benefit that pays on none of those is left unresolved rather than
+    // attached to whichever cover happens to be first.
+    assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
   });
   test("A fracture scale's percentages are worked out against the limit the household's own documents imply",()=>{
     // The live benefit table states this scale twice: as percentages in one

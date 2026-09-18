@@ -627,6 +627,31 @@ export function coverageForBenefit(contract:PolicyContract,benefit:CatalogBenefi
     });
     if(byCategory.length===1)return byCategory[0];
   }
+  // Last resort: join by what the benefit is written to pay ON.
+  //
+  // A group booklet covers several plans under one product name, so its "Death"
+  // and "Total and Permanent Disability Benefit" rows resolve to no cover at
+  // all, and the person is told to "set the product name to match the
+  // certificate" -- admin, for a question their own documents already answer.
+  // A benefit that pays on a death belongs to the death cover; one that is
+  // conditional on an accident belongs to the accident plan, which is what
+  // keeps "Total and Permanent Disablement due to Accident" off the life sum.
+  const triggers=benefitTriggerEvents(benefit.benefitName,benefit.quote);
+  const accidentOnly=(benefit.requires??[]).includes("accident")
+    ||/\baccidental\b|\bdue to (?:an )?accident\b/i.test(benefit.benefitName);
+  const category=(coverage:OwnedCoverage)=>(coverage.category??"").toLowerCase();
+  const wantedCategory=accidentOnly?/accident/
+    :triggers.includes("critical_illness")?/critical/
+    :triggers.includes("total_permanent_disability")?/permanent|disab/
+    :triggers.includes("death")?/death|life/
+    :null;
+  if(wantedCategory){
+    const byEvent=contract.coverages.filter(coverage=>wantedCategory.test(category(coverage)));
+    if(byEvent.length===1)return byEvent[0];
+    // Several match: the one with a figure, if only one has one.
+    const withAmount=byEvent.filter(coverage=>coverage.amount!=null);
+    if(withAmount.length===1)return withAmount[0];
+  }
   return contract.coverages.length===1?contract.coverages[0]:null;
 }
 /** Two documents of the same plan often state the same benefit two ways. A
