@@ -238,6 +238,20 @@ export function runSystemRegressions(){
     const b=benefit("We pay the Sum Insured less previous benefits.");
     assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(b.evidence[0].quote)],facts:{}}),null);
   });
+  test("A percentage-of-a-flat-limit table pays that limit, not the policy's own Sum Insured",()=>{
+    const text="Arm, Elbow, Wrist or Ribs: 25% of the Simple Fracture Benefit Limit of S$5,000.",b=benefit(text);
+    b.formula={...b.formula,kind:"limit_percentage",value:0.25,limitAmount:5000};
+    assert.equal(calculatePolicyFormula({benefit:b,contract,sources:[source(text)],facts:{}})?.amount,1250,
+      "25% of the quoted S$5,000 limit is S$1,250, not 25% of the contract's S$350,000 Sum Insured");
+  });
+  test("A limit-percentage payout cannot invent either figure it wasn't quoted",()=>{
+    const text="Arm, Elbow, Wrist or Ribs: 25% of the Simple Fracture Benefit Limit of S$5,000.",b=benefit(text);
+    b.formula={...b.formula,kind:"limit_percentage",value:0.25,limitAmount:5000};
+    assert.equal(calculatePolicyFormula({benefit:{...b,formula:{...b.formula,limitAmount:6000}},contract,sources:[source(text)],facts:{}}),null,
+      "A limit the quote does not state cannot be computed from");
+    assert.equal(calculatePolicyFormula({benefit:{...b,formula:{...b.formula,value:0.5}},contract,sources:[source(text)],facts:{}}),null,
+      "A percentage the quote does not state cannot be computed from");
+  });
   test("Reimbursement uses the actual bill and verified cap",()=>{
     const text="We reimburse ambulance expenses up to S$500 per incident.",b=benefit(text);
     b.formula={...b.formula,kind:"expense_cap",value:500,factKey:"ambulanceBill"};

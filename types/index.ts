@@ -31,7 +31,7 @@ export type ClaimItem = {
   estimateBasis?:"confirmed"|"estimated"|"indicative";
   calculatedAmount?:number;
   currency?:string;
-  calculationKind?:"sum_insured"|"fixed"|"expense_cap"|"daily";
+  calculationKind?:"sum_insured"|"limit_percentage"|"fixed"|"expense_cap"|"daily";
   aggregation?:"additive"|"reimbursement";
   calculationId?:string;
   reason:string;

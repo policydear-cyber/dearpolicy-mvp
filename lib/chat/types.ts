@@ -61,9 +61,15 @@ export type PolicySource = {
   lexicalMatch?: boolean; semanticDistance?: number | null;
 };
 export type PolicyFormula = {
-  kind: "none" | "sum_insured" | "fixed" | "expense_cap" | "daily";
+  kind: "none" | "sum_insured" | "limit_percentage" | "fixed" | "expense_cap" | "daily";
   value: number | null; currency: string | null; factKey: string | null;
   offsetDays: number | null; maximumDays: number | null; evidence: SourceQuote | null;
+  // Only meaningful for limit_percentage: the flat benefit limit `value` is a
+  // percentage of, e.g. a "Simple Fracture Benefit Limit: S$5,000" table where
+  // each row pays a percentage of that S$5,000, not of the policy's own Sum
+  // Insured. Optional so every other kind, and every existing call site, is
+  // unaffected.
+  limitAmount?: number | null;
 };
 export type PolicyRequirement = {
   factKey: string;
