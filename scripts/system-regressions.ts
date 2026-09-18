@@ -4,6 +4,7 @@ import { aggregatePotentialPayouts,assessmentFromBenefit,calculatePolicyFormula,
 import { analysisSources,buildContracts,passageBudget,productIdentity,referenceMatchReason,referenceMatches,type InventoryDocument,type PolicyContract } from "@/lib/policies/inventory";
 import { contractReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,pagesSpanned,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
 import { assessCurrentness,contractCurrentness,matchPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
+import { describeChoice,modelFor } from "@/lib/ai/providers";
 import { deterministicDocumentRole } from "@/lib/documents/intelligence";
 import { detectHighConfidenceReferenceRole } from "@/lib/ai/extract-policy";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -488,9 +489,9 @@ export function runSystemRegressions(){
     assert.equal(passageBudget(2),2,"Never ask for more passages than the document stores");
     assert.equal(passageBudget(10),6,"Small documents keep the floor");
     assert.equal(passageBudget(40),14,"A forty-passage booklet is no longer read six passages at a time");
-    assert.equal(passageBudget(500),16,"The ceiling keeps local-model work bounded");
+    assert.equal(passageBudget(500),40,"The ceiling bounds the work without pushing a real benefit table out of the retrieved set");
     process.env.RAG_MAX_PASSAGES_PER_DOCUMENT="10";
-    assert.equal(passageBudget(500),10,"The ceiling is tunable for a slower machine");
+    assert.equal(passageBudget(500),10,"The ceiling is tunable");
     delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
   });
   test("One shared group summary supports every family member who owns that group cover",()=>{
@@ -639,16 +640,19 @@ export function runSystemRegressions(){
   });
   test("A failed section is explained in plain language, never as validation output",()=>{
     const zodish=new Error('[{"expected":"array","code":"invalid_type","path":["benefits",0,"conditions"]}]');
+    const who=describeChoice(modelFor("judgement"));
     const cases:[unknown,string][]=[
       [new TruncatedModelOutput("x","raw",false,zodish),"the model’s answer for that section was not in the expected form"],
       [new TruncatedModelOutput("x","raw",true),"the model ran out of room part-way through that section"],
-      [new Error("qwen3:8b chat timed out after 150 seconds"),"the local model timed out on that section"],
-      [new Error('Model returned invalid structured JSON: {"a":'),"the local model did not return usable structured output for that section"],
-      [new Error("something else entirely"),"the local model could not complete that section"],
+      // Named from the model actually routed to, so this keeps holding when the
+      // routing changes rather than pinning one provider's name into the suite.
+      [new Error("chat timed out after 150 seconds"),who+" timed out on that section"],
+      [new Error('Model returned invalid structured JSON: {"a":'),who+" did not return usable structured output for that section"],
+      [new Error("something else entirely"),who+" could not complete that section"],
       // A hosted provider's own explanation is the diagnosis, in its words.
       [new Error('Model request failed (403): This API method requires billing to be enabled. Please enable billing on project #123'),
-        "the local model refused the request: This API method requires billing to be enabled. Please enable billing on project #123. Check the key in .env.local and the key's API restrictions in Google Cloud"],
-      [new Error("Model request failed (404): models/gemini-9 is not found"),"the local model does not recognise the model name set in .env.local"],
+        who+" refused the request: This API method requires billing to be enabled. Please enable billing on project #123. Check the API key in the hosting dashboard's environment variables and its API restrictions in Google Cloud"],
+      [new Error("Model request failed (404): models/gemini-9 is not found"),who+" does not recognise the model name set in the hosting environment variables"],
     ];
     for(const [error,expected] of cases){
       const reason=readableModelFailure(error);
