@@ -145,7 +145,12 @@ const BAND_BOUND=/greater than\s*(\d+(?:\.\d+)?)\s*%/i;
 function bandGroup(benefit:CatalogBenefit){
   const name=benefit.benefitName??"";
   if(!BAND_BOUND.test(name))return null;
-  const prefix=/^\s*(body|head)\s*[-\u2013]/i.exec(name)?.[1]?.toLowerCase()??"";
+  // Everything the row says BEFORE the band itself: which burns table, and
+  // which part of the body. Two bands only belong to one scale when both of
+  // those agree, and a row that says neither is its own unlabelled group --
+  // which is the shape that used to make three tables look like one.
+  const prefix=name.slice(0,name.search(/equals? to or greater than/i))
+    .toLowerCase().replace(/[^a-z]+/g," ").trim();
   return benefit.policyId+"#"+(benefit.sourcePage??0)+"#"+prefix;
 }
 export function holdNonMonotonicBands(benefits:CatalogBenefit[]):CatalogBenefit[]{

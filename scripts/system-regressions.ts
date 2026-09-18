@@ -1140,6 +1140,18 @@ export function runSystemRegressions(){
     assert.equal(broken[0].needsConfirmation,true);
     assert.equal(broken[1].needsConfirmation,true);
     assert.match(broken[0].conditions.join(" "),/pays less for a worse injury/);
+    // Once the parser carries the table's own heading down, the same rows are
+    // two sound scales rather than one broken one.
+    const labelled=holdNonMonotonicBands([
+      band("Third Degree Burns \u00b7 Body - Equals to or greater than 10% but less than 15%",0.5),
+      band("Third Degree Burns \u00b7 Body - Equals to or greater than 15% but less than 20%",0.75),
+      band("Third Degree Burns \u00b7 Body - Equals to or greater than 20%",1),
+      band("Second Degree Burns \u00b7 Body - Equals to or greater than 15% but less than 25%",0.3),
+      band("Second Degree Burns \u00b7 Body - Equals to or greater than 25% but less than 40%",0.4),
+      band("Second Degree Burns \u00b7 Body - Equals to or greater than 40%",0.5),
+    ]);
+    assert.equal(labelled.some(entry=>entry.needsConfirmation),false,
+      "two tables, each running the right way, are not one broken scale");
     // A scale that runs the right way is left alone.
     const sound=holdNonMonotonicBands([
       band("Head - Equals to or greater than 2% but less than 5%",0.5),

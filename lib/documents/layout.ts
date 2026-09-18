@@ -153,9 +153,24 @@ function withContinuation(label:string,lines:PageLine[],index:number){
  * is not cover and must never appear as cover. */
 const NOT_A_BENEFIT_TABLE=/pro-?ration factor|premium rate|schedule of premiums|premium table/i;
 const NEW_TABLE=/^table\s+[a-z][:.]/i;
+/** A band in a burns table -- "Equals to or greater than 10% but less than 15%".
+ * The percentage in the row is a percentage of the BODY; the percentage beside
+ * it is the payout. Read on its own the row means nothing, which is why the
+ * label above it has to be carried down. */
+const BURN_BAND=/\bequals? to or greater than\b/i;
+/** "Third Degree Burns", "Second Degree Burns": a heading with no amount that
+ * changes what every band under it pays. Deliberately narrow -- a page is full
+ * of lines with no amount ("Area", "Compensation", "(% of Sum Insured)"), and
+ * only this one decides a payout. */
+const BURN_SECTION=/^(?:first|second|third|1st|2nd|3rd)[\s-]+degree\s+burns?$/i;
 export function benefitRows(lines:PageLine[]):BenefitRow[]{
   const rows:BenefitRow[]=[];
   let stem:string|null=null,suppressed=false;
+  // A two-column table states "Head" once and leaves the rows beneath it to
+  // continue with a bare dash. Those rows were stored as "- Equals to or
+  // greater than 5% but less than 8%", which belongs to no part of the body and
+  // to neither burns table, so nothing downstream could tell them apart.
+  let area:string|null=null,section:string|null=null;
   for(const [index,line] of lines.entries()){
     const whole=line.text.replace(/\s+/g," ").trim();
     if(NOT_A_BENEFIT_TABLE.test(whole))suppressed=true;
@@ -166,6 +181,7 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
       // "2. Permanent Total Loss of" carries no amount of its own but names the
       // rows under it, which would otherwise read as "(b) Whole eye".
       const heading=line.cells.join(" ").replace(/\s+/g," ").trim();
+      if(BURN_SECTION.test(heading)){section=heading;area=null;}
       if(/^\d+[.)]\s+\S/.test(heading)&&heading.length<=90&&!AMOUNT.test(heading))stem=heading;
       continue;
     }
@@ -177,6 +193,15 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     const continued=withContinuation(stated,lines,index);
     let label=continued.label;
     if(label.length<2||label.length>140)continue;
+    if(BURN_BAND.test(label)){
+      // The row states its own area ("Head - ...") -- remember it for the rows
+      // beneath, which state only a dash.
+      const own=/^([A-Za-z][A-Za-z ]{1,14}?)\s*[-\u2013]\s*(?=equals? to)/i.exec(label);
+      if(own)area=own[1].trim();
+      else if(area)label=area+" - "+label.replace(/^[-\u2013]\s*/,"");
+      if(section&&!label.toLowerCase().startsWith(section.toLowerCase()))label=section+" \u00b7 "+label;
+      if(label.length>140)continue;
+    }
     // A numbered row that itself carries "(a)" opens a group; the "(b)", "(c)"
     // rows beneath it inherit its wording so each one stands on its own.
     const opened=parentStem(label);

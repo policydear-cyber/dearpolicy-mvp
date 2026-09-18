@@ -1,0 +1,81 @@
+{
+ "name": "Group personal accident - two burns tables on one page (redacted)",
+ "pages": [
+  {
+   "page": 7,
+   "text": "C. Total and Permanent Dismemberment due to Accident (continued)\n\"Total and Permanent Dismemberment\" or \"Loss\" for the purpose of this Benefit means permanent, total and irrecoverable loss of use or entire\nphysical loss caused by physical separation.\nNo compensation is payable for a specific disability where such specific disability forms part of another disability for which a greater amount is\npayable or which qualifies for Total and Permanent Disability Benefit under this Policy.\nThe total compensation payable in respect of an Insured Person for all Accidental Permanent Dismemberment due to the same Accident shall\nnot exceed in the aggregate the Sum Insured under the Policy.\nD. Injury due to Accident\nIf while this Policy is in force, an Insured Person sustains an Accidental bodily injury and suffers from any of the results described in the\nSchedule below, the Company shall indemnify the Insured Person according to the Schedule below:\nCompensation\nSchedule\n(% of Sum Insured)\nFractured leg or patella with established non-union\t20%\nShortening of leg by at least 5cm\t10%\nThird Degree Burns\nArea\tDamage as a Percentage of Total Body Surface Area\nHead\t- Equals to or greater than 2% but less than 5%\t50%\n- Equals to or greater than 5% but less than 8%\t75%\n- Equals to or greater than 8%\t100%\nBody\t- Equals to or greater than 10% but less than 15%\t50%\n- Equals to or greater than 15% but less than 20%\t75%\n- Equals to or greater than 20%\t100%\nSecond Degree Burns\nArea\tDamage as a Percentage of Total Body Surface Area\nHead\t- Equals to or greater than 10%\t100%\nBody\t- Equals to or greater than 15% but less than 25%\t30%\n- Equals to or greater than 25% but less than 40%\t40%\n- Equals to or greater than 40%\t50%\n"
+  }
+ ],
+ "expected": [
+  {
+   "page": 7,
+   "label": "Fractured leg or patella with established non-union",
+   "value": "20%"
+  },
+  {
+   "page": 7,
+   "label": "Shortening of leg by at least 5cm",
+   "value": "10%"
+  },
+  {
+   "page": 7,
+   "label": "Third Degree Burns · Head - Equals to or greater than 2% but less than 5%",
+   "value": "50%"
+  },
+  {
+   "page": 7,
+   "label": "Third Degree Burns · Head - Equals to or greater than 5% but less than 8%",
+   "value": "75%"
+  },
+  {
+   "page": 7,
+   "label": "Third Degree Burns · Head - Equals to or greater than 8%",
+   "value": "100%"
+  },
+  {
+   "page": 7,
+   "label": "Third Degree Burns · Body - Equals to or greater than 10% but less than 15%",
+   "value": "50%"
+  },
+  {
+   "page": 7,
+   "label": "Third Degree Burns · Body - Equals to or greater than 15% but less than 20%",
+   "value": "75%"
+  },
+  {
+   "page": 7,
+   "label": "Third Degree Burns · Body - Equals to or greater than 20%",
+   "value": "100%"
+  },
+  {
+   "page": 7,
+   "label": "Second Degree Burns · Head - Equals to or greater than 10%",
+   "value": "100%"
+  },
+  {
+   "page": 7,
+   "label": "Second Degree Burns · Body - Equals to or greater than 15% but less than 25%",
+   "value": "30%"
+  },
+  {
+   "page": 7,
+   "label": "Second Degree Burns · Body - Equals to or greater than 25% but less than 40%",
+   "value": "40%"
+  },
+  {
+   "page": 7,
+   "label": "Second Degree Burns · Body - Equals to or greater than 40%",
+   "value": "50%"
+  }
+ ],
+ "mustNotProduce": [
+  {
+   "page": 7,
+   "label": "Equals to or greater than 20%"
+  },
+  {
+   "page": 7,
+   "label": "Equals to or greater than 40%"
+  }
+ ]
+}
