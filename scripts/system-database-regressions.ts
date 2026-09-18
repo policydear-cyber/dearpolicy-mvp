@@ -1548,6 +1548,40 @@ async function main(){
         globalThis.fetch=inner;
       }
     });
+    await test("A percentage-of-Sum-Insured clause the model only quoted as prose is still promoted into a computable claim",async()=>{
+      const fixture=await seedReviewFixture(1);
+      const fractureText="For accidental fracture of a limb, compensation is provided for a broken forearm at 20% of the Sum Insured.";
+      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)",[account,fixture.referenceId,fractureText]);
+      await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,2,2,$5,$6::vector)",
+        [uuid(700600),account,fixture.person.id,fixture.referenceId,fractureText,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
+      const inner=globalThis.fetch;
+      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+        const url=String(input);
+        if(!url.endsWith("/api/chat"))return inner(input,init);
+        const body=JSON.parse(String(init?.body)),system=String(body.messages[0].content);
+        if(!system.startsWith("Read insurance"))return inner(input,init);
+        const user=JSON.parse(body.messages[1].content);
+        const fractureSource=(user.sources as {id:string;text:string}[]).find(s=>s.text.includes("broken forearm"));
+        if(!fractureSource)return inner(input,init);
+        // The model quotes the clause correctly but -- the way a small/cheap
+        // model sometimes does -- returns it only as prose, never structuring
+        // it into the benefits list alongside.
+        return Response.json({message:{content:JSON.stringify({benefits:[],
+          observations:[{text:"Compensation is provided for a broken forearm at 20% of the Sum Insured.",
+            evidence:[{sourceId:fractureSource.id,quote:"compensation is provided for a broken forearm at 20% of the Sum Insured"}]}],
+          nextSteps:[]})}});
+      }) as typeof fetch;
+      try{
+        const {data}=await send("He broke his left forearm playing basketball. What can he claim?",fixture.person.id);
+        const answer=data.answer as ChatAnswer;
+        const item=answer.claimItems.find(c=>/broken forearm/i.test(c.title));
+        assert.ok(item,"The quoted percentage clause must be promoted into a claim item, not left as prose the household has to work out itself: "+JSON.stringify(answer.claimItems));
+        assert.equal(item!.calculatedAmount,70000,"20% of the verified S$350,000 Sum Insured");
+        assert.equal(item!.amountText,"S$70,000");
+      }finally{
+        globalThis.fetch=inner;
+      }
+    });
     await test("A printed figure outranks a heading-inferred percentage for the same benefit across two documents",async()=>{
       const fixture=await seedReviewFixture(1);
       const product="Review Fixture Critical Illness";

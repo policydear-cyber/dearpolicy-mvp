@@ -15,7 +15,7 @@ import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
-import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded } from "./policy-analysis";
+import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn,ChatConflict } from "./store";
 import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress } from "./types";
 
@@ -752,6 +752,14 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             windowsAnalyzed:windows.length,windowsFailed:contractFailedWindows,
             hasWording:hasWording.get(contract.id)===true});
           const merged=mergeAnalyses(analyses);
+          // A clause the model already quoted correctly in an observation but
+          // never also structured into a benefit is still a computable rule,
+          // not a gap -- promote it rather than leaving it as prose the
+          // household would have to work out for themselves.
+          for(const benefit of promoteComputableObservations(merged.observations,contract,analysisPassages)){
+            const key=benefitKey(benefit);
+            if(!merged.benefits.some(b=>benefitKey(b)===key))merged.benefits.push(benefit);
+          }
           if(merged.conflicts)reviews.find(r=>r.id===contract.id)!.status="needs_review";
           if(!merged.benefits.length&&!merged.observations.length&&reviews.find(r=>r.id===contract.id)!.status==="searched")reviews.find(r=>r.id===contract.id)!.status="no_matching_section";
           for(const observation of dedupeNegativeRestatements(merged.observations)){

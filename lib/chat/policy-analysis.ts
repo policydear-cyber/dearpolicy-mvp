@@ -7,7 +7,7 @@ import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ChatCitation,ClaimItem,PotentialPayoutTotal } from "@/types";
 import { hasQuote,knownValue,normalText } from "./facts";
-import type { PolicyAnalysis,PolicyBenefit,PolicyFormula,PolicyRequirement,PolicySource,ScenarioClassification,ScenarioTrait,SourceQuote,SubjectFacts } from "./types";
+import type { PolicyAnalysis,PolicyBenefit,PolicyFormula,PolicyObservation,PolicyRequirement,PolicySource,ScenarioClassification,ScenarioTrait,SourceQuote,SubjectFacts } from "./types";
 
 /** Output volume is the whole cost of a reading call.
  *
@@ -253,6 +253,36 @@ export function calculatePolicyFormula(args:{benefit:PolicyBenefit;contract:Poli
     return {amount:Math.max(0,Math.min(formula.maximumDays,days-formula.offsetDays))*value,currency,basis:"Reported completed duration, less the quoted unpaid days, within the day limit"};
   }
   return null;
+}
+const SUM_INSURED_PERCENTAGE=/(\d+(?:\.\d+)?)\s*%\s*(?:of\s*)?(?:the\s+)?sum (?:insured|assured)/i;
+const FORMULA_EXCLUSION_TERMS=/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/i;
+/** One reading call is asked to return both prose observations and structured
+ * benefits, and a clause it quotes correctly in an observation can still fail
+ * to also come back as a structured benefit -- the two are separate fields in
+ * the same reply, and a small/cheap model does not always fill in both for
+ * the same clause. Rather than let a "N% of the Sum Insured" rule the model
+ * already found and quoted verbatim go uncounted, mechanically promote it
+ * into a benefit -- but only when exactly one owned coverage can be bound to
+ * the passage without guessing, the same rule boundProduct already enforces
+ * for every model-supplied benefit. Ambiguous binding is never promoted. */
+export function promoteComputableObservations(observations:PolicyObservation[],contract:PolicyContract,sources:PolicySource[]):PolicyBenefit[]{
+  const promoted:PolicyBenefit[]=[];
+  for(const observation of observations)for(const evidence of observation.evidence){
+    const quote=normalText(evidence.quote);
+    if(FORMULA_EXCLUSION_TERMS.test(quote))continue;
+    const percentage=quote.match(SUM_INSURED_PERCENTAGE)?.[1];
+    if(!percentage)continue;
+    const value=Number(percentage)/100;
+    const formula:PolicyFormula={kind:"sum_insured",value,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence};
+    const candidates=contract.coverages.filter(coverage=>
+      boundProduct({title:"",coverageId:coverage.id,evidence:[evidence],formula:{...formula,currency:coverage.currency},requirements:[],conditions:[]},contract,sources));
+    if(candidates.length!==1)continue;
+    const coverage=candidates[0];
+    promoted.push({title:observation.text.length<=110?observation.text:observation.text.slice(0,107)+"...",coverageId:coverage.id,
+      evidence:[evidence],formula:{...formula,currency:coverage.currency},requirements:[],conditions:[]});
+    break;
+  }
+  return promoted;
 }
 export type RequirementResult="met"|"inferred"|"missing"|"deferred"|"document"|"not_met"|"review";
 function requiredTrait(factKey:string):ScenarioTrait|null{
