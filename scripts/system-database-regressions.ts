@@ -1377,7 +1377,10 @@ async function main(){
       assert.ok(after.calls>before.calls,"The turn's model calls were counted");
       assert.ok(after.byRole.some(r=>r.role==="judgement"),"Interpretation and relevance are judgement work");
       assert.ok(after.byRole.some(r=>r.role==="narration"),"Wording the answer is narration work");
-      assert.equal(after.costUsd,before.costUsd,"Local calls cost nothing but are still counted");
+      // Every call is billable now, so a turn that costs nothing would mean the
+      // ledger missed it -- which is the failure this test exists to catch.
+      assert.ok(after.costUsd>before.costUsd,"A turn's hosted calls are priced, not just counted: "+before.costUsd+" -> "+after.costUsd);
+      assert.ok(after.byRole.every(r=>r.costUsd>=0),"No role reports a negative cost");
       assert.equal(after.plan.priceUsd,4.99);
       assert.ok(after.chatTurns>=1,"Questions are counted against the plan's allowance");
     });
