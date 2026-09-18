@@ -1,85 +1,18 @@
 import { z } from "zod";
-import { describeChoice, fallbackModelFor, fullyHosted, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
+import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
-import { modelIsResident, ollamaFetch, residentKeepAlive, unloadOllamaModelDirect, withOllamaLock, withResidentModel } from "./ollama-runtime";
-
-const OllamaChatResponseSchema = z.object({
-  message: z.object({ content: z.string() }),
-  prompt_eval_count: z.number().optional(),
-  eval_count: z.number().optional(),
-});
 function ledgerAccountId() { return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001"; }
 
 type CompletionRuntimeOptions = {
   timeoutMs?: number;
   attempts?: number;
-  numCtx?: number;
   maxOutputTokens?: number;
 };
 
-function baseUrl() {
-  return (process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434").replace(/\/$/, "");
-}
-
-function llmModel() {
-  const model = process.env.LLM_MODEL;
-  if (!model) throw new Error("LLM_MODEL is not configured in .env.local");
-  return model;
-}
-
-/**
- * DearPolicy uses Ollama's native endpoint so model lifetime and context size
- * can be controlled explicitly on local GPUs.
- */
-export async function chatCompletion(args: {
-  system: string;
-  user: string;
-  temperature?: number;
-} & CompletionRuntimeOptions): Promise<string> {
-  const base = baseUrl();
-  const model = llmModel();
-
-  return withOllamaLock(async () => {
-    try {
-      const response = await ollamaFetch(
-        `${base}/api/chat`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            model,
-            stream: false,
-            think: false,
-            keep_alive: residentKeepAlive(),
-            options: {
-              temperature: args.temperature ?? 0.1,
-              num_ctx: args.numCtx ?? Number(process.env.LLM_CONTEXT_SIZE ?? 4096),
-              num_batch: Number(process.env.LLM_NUM_BATCH ?? 256),
-              ...(args.maxOutputTokens?{num_predict:args.maxOutputTokens}:{}),
-            },
-            messages: [
-              { role: "system", content: args.system },
-              { role: "user", content: args.user },
-            ],
-          }),
-        },
-        { label: `${model} chat`, timeoutMs: args.timeoutMs ?? 300_000, attempts: args.attempts ?? 2 },
-      );
-
-      if (!response.ok) throw new Error(`LLM request failed (${response.status}): ${await response.text()}`);
-      const parsed = OllamaChatResponseSchema.parse(await response.json());
-      return parsed.message.content ?? "";
-    } finally {
-      // Inside a model session the phase owner unloads once at the end.
-      if (!modelIsResident()) await unloadOllamaModelDirect(base, model);
-    }
-  });
-}
-
 /** Close a JSON document that the model stopped emitting mid-way.
  *
- * A local model that runs out of output budget returns syntactically valid
- * JSON up to the cut, then nothing. Rather than discarding the whole turn, cut
+ * A model that runs out of output budget returns syntactically valid JSON up
+ * to the cut, then nothing. Rather than discarding the whole turn, cut
  * back to the last complete element and close the open containers. Returns null
  * when the text is not recoverable. */
 export function repairTruncatedJson(text: string): string | null {
@@ -135,8 +68,7 @@ export async function structuredCompletion<T>(args: {
 
   const role: ModelRole = args.role ?? "chat";
   const choice = modelFor(role);
-  if (choice.provider !== "ollama") {
-    await assertUnderSpendCap(ledgerAccountId());
+  await assertUnderSpendCap(ledgerAccountId());
     const call = async (target: typeof choice) => {
       const started = Date.now();
       try {
@@ -178,81 +110,6 @@ export async function structuredCompletion<T>(args: {
     }
   }
 
-  const base = baseUrl();
-  const model = llmModel();
-  const run = async (outputTokens?: number) =>
-    withOllamaLock(async () => {
-    const startedLocal = Date.now();
-    try {
-      const response = await ollamaFetch(
-        `${base}/api/chat`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            model,
-            stream: false,
-            think: false,
-            keep_alive: residentKeepAlive(),
-            format: jsonSchema,
-            options: {
-              temperature: args.temperature ?? 0,
-              num_ctx: args.numCtx ?? Number(process.env.LLM_CONTEXT_SIZE ?? 4096),
-              num_batch: Number(process.env.LLM_NUM_BATCH ?? 256),
-              ...(outputTokens?{num_predict:outputTokens}:{}),
-            },
-            messages: [
-              { role: "system", content: args.system },
-              { role: "user", content: args.user },
-            ],
-          }),
-        },
-        { label: `${model} structured extraction`, timeoutMs: args.timeoutMs ?? 240_000, attempts: args.attempts ?? 1 },
-      );
-
-      if (!response.ok) throw new Error(`Structured LLM request failed (${response.status}): ${await response.text()}`);
-      const payload = OllamaChatResponseSchema.parse(await response.json());
-      void recordUsage({ role, choice: { provider: "ollama", model }, input: payload.prompt_eval_count ?? 0, output: payload.eval_count ?? 0,
-        durationMs: Date.now() - startedLocal, ok: true });
-      const content = payload.message.content;
-      let json: unknown;
-      let wasTruncated = false;
-      try {
-        json = JSON.parse(content);
-      } catch {
-        // Distinguish "stopped mid-JSON" (worth retrying with more room) from
-        // plain malformed output (retrying the same call will not help).
-        const repaired = repairTruncatedJson(content);
-        if (repaired === null) throw new Error(`Model returned invalid structured JSON: ${content.slice(0, 200)}`);
-        wasTruncated = true;
-        try { json = JSON.parse(repaired); }
-        catch { throw new TruncatedModelOutput("The local model stopped part-way through its structured output.", content, true); }
-      }
-      try { return args.schema.parse(args.coerce ? args.coerce(json) : json); }
-      catch (error) {
-        // Distinguish a reply cut short (worth more room) from one that was
-        // complete but the wrong shape (more room will not help).
-        throw new TruncatedModelOutput(
-          wasTruncated ? "The local model stopped part-way through its structured output."
-            : "The local model's reply did not match the expected structure.",
-          content, wasTruncated, error instanceof Error ? error : undefined);
-      }
-    } finally {
-      // Inside a model session the phase owner unloads once at the end.
-      if (!modelIsResident()) await unloadOllamaModelDirect(base, model);
-    }
-  });
-
-  try {
-    return await run(budget);
-  } catch (error) {
-    // Only a reply that actually ran out of room benefits from more room.
-    // Retrying a complete but misshapen reply just spends the time twice.
-    if (!(error instanceof TruncatedModelOutput) || !error.truncated || !budget) throw error;
-    return await run(Math.min(4096, Math.ceil(budget * 2)));
-  }
-}
-
 /** Raised when the model's structured output was cut short or malformed. */
 export class TruncatedModelOutput extends Error {
   readonly raw: string;
@@ -274,8 +131,7 @@ export function readableModelFailure(error: unknown) {
   if (error instanceof TruncatedModelOutput)
     return error.truncated ? "the model ran out of room part-way through that section" : "the model’s answer for that section was not in the expected form";
   const message = error instanceof Error ? error.message : String(error);
-  const hosted = fullyHosted() || modelFor("judgement").provider !== "ollama";
-  const who = hosted ? describeChoice(modelFor("judgement")) : "the local model";
+  const who = describeChoice(modelFor("judgement"));
   // A hosted provider's own explanation is usually the fix, said in its words.
   const enable = message.match(/has not been used in project (\d+)|is disabled\. Enable it/i);
   if (enable) {
@@ -285,22 +141,14 @@ export function readableModelFailure(error: unknown) {
   if (/\(401\)|\(403\)|invalid.*api key|api key not valid|authentication/i.test(message)) {
     // The provider's sentence is the diagnosis; keep it, minus the noise.
     const said = message.replace(/^Model request failed \(\d+\):\s*/, "").trim();
-    return who + " refused the request: " + (said || "the API key was not accepted") + (hosted ? ". Check the API key in the hosting dashboard's environment variables and its API restrictions in Google Cloud" : ". Check the key in .env.local and the key's API restrictions in Google Cloud");
+    return who + " refused the request: " + (said || "the API key was not accepted") + ". Check the API key in the hosting dashboard's environment variables and its API restrictions in Google Cloud";
   }
-  if (/\(404\)|not found|does not exist|unknown model|is not supported/i.test(message)) return who + (hosted ? " does not recognise the model name set in the hosting environment variables" : " does not recognise the model name set in .env.local");
+  if (/\(404\)|not found|does not exist|unknown model|is not supported/i.test(message)) return who + " does not recognise the model name set in the hosting environment variables";
   if (/\(429\)|busy|rate limit|quota/i.test(message)) return who + " is rate-limited right now; it usually clears in under a minute";
   if (/timed out/i.test(message)) return who + " timed out on that section";
   if (/invalid structured JSON/i.test(message)) return who + " did not return usable structured output for that section";
-  if (/connection error|stopped responding|ECONNREFUSED|fetch failed/i.test(message)) return hosted ? "the connection to " + who + " could not be made — check the internet connection" : "the connection to the local model dropped during that section";
+  if (/connection error|stopped responding|ECONNREFUSED|fetch failed/i.test(message)) return "the connection to " + who + " could not be made — check the internet connection";
   return who + " could not complete that section";
-}
-
-/** Runs a whole phase with the chat model held resident, then unloads once. */
-export async function withModelSession<T>(task: () => Promise<T>): Promise<T> {
-  // No local model in play: nothing to keep resident, nothing to unload, and
-  // no 30-second knock on a door nobody is behind.
-  if (fullyHosted()) return task();
-  return withResidentModel(baseUrl(), llmModel(), task);
 }
 
 export function extractJsonObject(text: string) {

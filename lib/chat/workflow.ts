@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
-import { readableModelFailure,structuredCompletion,withModelSession,TruncatedModelOutput } from "@/lib/ai/llm";
-import { fullyHosted } from "@/lib/ai/providers";
+import { readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
 import { analysisSources,loadPolicyInventory,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
 import { contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
@@ -96,7 +95,7 @@ async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknow
   try{
     const explanation=await structuredCompletion({
       role:"narration",
-      schema:ExplanationSchema,temperature:0.3,numCtx:4096,maxOutputTokens:450,timeoutMs:60_000,attempts:1,
+      schema:ExplanationSchema,temperature:0.3,maxOutputTokens:450,timeoutMs:60_000,attempts:1,
       system:NARRATION_SYSTEM,user:JSON.stringify(packet),
     });
     const proof=JSON.stringify(packet);
@@ -708,7 +707,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         // slice that stops mid-clause and a separate slice that starts
         // mid-clause -- is what lets it recognise which product section it is
         // reading without a second, separate pass to work that out.
-        const windowCharacterBudget=fullyHosted()?14000:3300;
+        const windowCharacterBudget=14000;
         const prepared=contracts.map(contract=>{
           const retrievedPassages=sources.get(contract.id)??[];
           const windows=evidenceWindows(analysisSources(retrievedPassages),windowCharacterBudget);
@@ -722,7 +721,6 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           .concat(prepared.filter(item=>!item.windows.length));
         const plan=[...new Map(readingOrder.map(item=>[item.contract.id,item])).values()];
         let unexaminedContracts=0;
-        await withModelSession(async()=>{
         for(const {contract,retrievedPassages,windows,analysisPassages} of plan){
           await check();
           await report({stage:"Reading "+contract.ownerName+"’s "+contract.name,completed,total:contracts.length});
@@ -751,20 +749,12 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             }catch(error){return {ok:false as const,window,error};}
           };
           // Sections of one contract are independent readings of the same
-          // question, so a hosted model reads them at the same time. In
-          // sequence they were the two-to-four minutes a person spent watching
-          // a spinner -- and worse, each one spent the clock the next needed,
-          // so the last sections fell past the deadline and were reported as
-          // unread when nothing had gone wrong with them. A local model still
-          // reads one at a time: there is one GPU, and withModelSession holds
-          // it for the duration.
-          type WindowResult=Awaited<ReturnType<typeof readWindow>>;
-          let results:WindowResult[];
-          if(fullyHosted())results=await Promise.all(chosen.map(readWindow));
-          else{
-            results=[];
-            for(const window of chosen){await check();results.push(await readWindow(window));}
-          }
+          // question, so they are read at the same time. In sequence they were
+          // the two-to-four minutes a person spent watching a spinner -- and
+          // worse, each one spent the clock the next needed, so the last
+          // sections fell past the deadline and were reported as unread when
+          // nothing had gone wrong with them.
+          const results=await Promise.all(chosen.map(readWindow));
           for(const result of results){
             if(result.ok){analyses.push(result.analysis);readPassages.push(...result.window);continue;}
             failedWindows++;contractFailedWindows++;
@@ -822,7 +812,6 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           }
           completed++;await report({stage:"Checking policy conditions",completed,total:contracts.length});
         }
-        });
         answer.reviewCoverage=summarizeReviewCoverage(reviews.map(r=>r.coverage??emptyReviewCoverage(r.status==="not_ready"?"not_processed":r.status==="missing_wording"?"no_wording":"partial_retrieval")));
         answer.details=[...new Set([...catalogueNotes,...observations])];
         if(staleContracts.length&&state.intent==="claim")

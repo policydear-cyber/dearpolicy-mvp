@@ -11,12 +11,10 @@ jobs:
     env:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       DEV_ACCOUNT_ID: 00000000-0000-0000-0000-000000000001
-      MODEL_PRESET: ollama
-      LLM_BASE_URL: http://localhost:11434/v1
-      LLM_API_KEY: ci
-      LLM_MODEL: ci
-      EMBED_MODEL: ci
-      EMBED_DIMENSIONS: "768"
+      # The suites answer from fixtures and never reach a provider; the key is
+      # here only so model routing resolves the same way it does in production.
+      MODEL_PRESET: gemini
+      GEMINI_API_KEY: ci
     steps:
       - name: Check out code
         uses: actions/checkout@v4

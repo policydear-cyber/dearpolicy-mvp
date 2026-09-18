@@ -3,7 +3,6 @@ import { readPolicyFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
-import { embeddingsEnabled, toPgVector, withEmbeddingSession } from "@/lib/ai/embeddings";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
 import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
@@ -267,38 +266,16 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           [args.policyId, args.accountId],
         ).catch(() => { /* Never let the note itself fail the upload. */ });
       }
-    } else if (!embeddingsEnabled()) {
-      // Full-text search only. The stored benefit rules answer questions; the
-      // page text is still searchable for the fallback reading path.
+    } else {
+      // No vector database configured: the passages are still stored and still
+      // findable by keyword, which is a worse answer, never a missing one.
       await progress(args, "indexing", 80, `Saving ${chunks.length} searchable section${chunks.length === 1 ? "" : "s"}…`, "indexing");
       for (const c of chunks)
         await query(
           `INSERT INTO policy_chunks(account_id,family_member_id,policy_id,page_start,page_end,heading,text) VALUES($1,$2,$3,$4,$5,$6,$7)`,
           [args.accountId, args.familyMemberId, args.policyId, c.pageStart, c.pageEnd, c.heading, c.text],
         );
-    } else await withEmbeddingSession(async (embed) => {
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const batch = chunks.slice(i, i + batchSize);
-        const end = Math.min(i + batch.length, chunks.length);
-        const pct = 70 + (i / Math.max(chunks.length, 1)) * 24;
-        await progress(args, "indexing", pct, `Building semantic search index ${i + 1}–${end} of ${chunks.length}…`, "indexing");
-        let vectors: number[][];
-        try {
-          vectors = await embed(batch.map((c) => c.text));
-        } catch (error) {
-          const detail = error instanceof Error ? error.message : "Unknown embedding error";
-          throw new Error(`Policy extraction succeeded, but BGE-M3 indexing failed at section ${i + 1}-${end} of ${chunks.length}: ${detail}`);
-        }
-        for (let j = 0; j < batch.length; j++) {
-          const c = batch[j];
-          await query(
-            `INSERT INTO policy_chunks(account_id,family_member_id,policy_id,page_start,page_end,heading,text,embedding)
-             VALUES($1,$2,$3,$4,$5,$6,$7,$8::vector)`,
-            [args.accountId, args.familyMemberId, args.policyId, c.pageStart, c.pageEnd, c.heading, c.text, toPgVector(vectors[j])],
-          );
-        }
-      }
-    });
+    }
 
     // Read the benefit rules now, once, while the user already expects to wait.
     // Every later question is then answered from the stored table without

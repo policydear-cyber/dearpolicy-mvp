@@ -8,25 +8,29 @@ import { z } from "zod";
  *   judgement  — interpreting a message and deciding which benefits respond.
  *                Small context, needs to be right: the mid tier.
  *   narration  — two sentences around figures code has already computed.
- *                Cheapest tier, or local.
+ *                The cheapest tier.
  *
- * Each is "provider:model", e.g. groq:llama-3.3-70b-versatile,
- * anthropic:claude-haiku-4-5, gemini:gemini-2.5-flash-lite, ollama:qwen3:8b.
+ * Every job is done by a hosted model. There is no local model and no GPU to
+ * schedule around: DearPolicy runs wherever it is deployed, and a household's
+ * laptop is not part of the system.
+ *
+ * Each is "provider:model", e.g. gemini:flash, anthropic:claude-haiku-4-5,
+ * groq:llama-3.3-70b-versatile.
  * Switching providers is a config change; nothing in the app knows which
  * company answered. Every call reports its tokens to the ledger, so a plan can
  * be priced from what a household actually costs. */
 export type ModelRole="reading"|"judgement"|"narration"|"chat";
-export type Provider="ollama"|"groq"|"anthropic"|"openai"|"gemini";
+export type Provider="gemini"|"anthropic"|"openai"|"groq";
 export type ModelChoice={provider:Provider;model:string};
 
-const PROVIDERS:Provider[]=["ollama","groq","anthropic","openai","gemini"];
+const PROVIDERS:Provider[]=["gemini","anthropic","openai","groq"];
 function parseChoice(value:string|undefined):ModelChoice|null{
   const text=(value??"").trim();
   const colon=text.indexOf(":");
   if(colon<1)return null;
   const provider=text.slice(0,colon).toLowerCase() as Provider,model=text.slice(colon+1).trim();
   if(!PROVIDERS.includes(provider)||!model)return null;
-  if(provider!=="ollama"&&!apiKeyFor(provider))return null; // configured but no key: fall back
+  if(!apiKeyFor(provider))return null; // configured but no key: fall back
   return {provider,model};
 }
 export function apiKeyFor(provider:Provider){
@@ -35,11 +39,11 @@ export function apiKeyFor(provider:Provider){
     case "anthropic":return process.env.ANTHROPIC_API_KEY;
     case "openai":return process.env.OPENAI_API_KEY;
     case "gemini":return process.env.GEMINI_API_KEY;
-    default:return "local";
   }
 }
 /** The model for a job. Order of precedence: the job's own setting, then the
- * legacy READING_MODEL_PROVIDER/GROQ_MODEL pair for reading, then local. */
+ * preset, then the legacy READING_MODEL_PROVIDER/GROQ_MODEL pair for reading,
+ * and finally Google, which is what DearPolicy runs on. */
 /** One key, whole system. MODEL_PRESET=anthropic routes every job to Claude
  * with the cheap tier where cheap is enough and the mid tier where it has to
  * be right, and needs nothing installed on the computer. Explicit per-job
@@ -53,12 +57,12 @@ export function modelPreset(){
   const name=(process.env.MODEL_PRESET??"").trim().toLowerCase();
   return name&&PRESETS[name]?name:null;
 }
-/** True when no job is routed to the local model, so Ollama is not needed. */
-export function fullyHosted(){
-  return (["reading","judgement","narration"] as const).every(role=>modelFor(role).provider!=="ollama");
-}
+/** Where a job lands when nothing is configured. Naming a Google model rather
+ * than silently doing nothing means a missing GEMINI_API_KEY fails as "the key
+ * was not accepted", which is the actual problem, instead of as an empty
+ * answer nobody can explain. */
+const DEFAULT_MODEL:Record<ModelRole,string>={reading:"flash-lite",judgement:"flash",narration:"flash-lite",chat:"flash"};
 export function modelFor(role:ModelRole):ModelChoice{
-  const local:ModelChoice={provider:"ollama",model:process.env.LLM_MODEL??"qwen3:8b"};
   const setting=role==="reading"?process.env.READING_MODEL:role==="judgement"?process.env.JUDGEMENT_MODEL:role==="narration"?process.env.NARRATION_MODEL:undefined;
   const chosen=parseChoice(setting);
   if(chosen)return chosen;
@@ -70,10 +74,10 @@ export function modelFor(role:ModelRole):ModelChoice{
   if(preset&&role==="chat"){const fromPreset=parseChoice(PRESETS[preset].judgement);if(fromPreset)return fromPreset;}
   if(role==="reading"&&(process.env.READING_MODEL_PROVIDER??"").toLowerCase()==="groq"&&process.env.GROQ_API_KEY)
     return {provider:"groq",model:process.env.GROQ_MODEL??"llama-3.3-70b-versatile"};
-  return local;
+  return {provider:"gemini",model:DEFAULT_MODEL[role]};
 }
 export function describeChoice(choice:ModelChoice){
-  const names:Record<Provider,string>={ollama:"Local",groq:"Groq",anthropic:"Anthropic",openai:"OpenAI",gemini:"Google"};
+  const names:Record<Provider,string>={gemini:"Google",anthropic:"Anthropic",openai:"OpenAI",groq:"Groq"};
   return names[choice.provider]+" · "+choice.model;
 }
 /** A one-tier-down model to try when a role's primary is rate-limited, so a
@@ -119,7 +123,6 @@ const PRICES:Record<string,Price>={
   "openai:gpt-5-mini":{input:0.25,output:2},
 };
 export function priceFor(choice:ModelChoice):Price|null{
-  if(choice.provider==="ollama")return {input:0,output:0};
   return PRICES[choice.provider+":"+choice.model]??PRICES[choice.provider+":"+choice.model.replace(/-\d{8}$/,"")]??null;
 }
 export function costUsd(choice:ModelChoice,usage:{input:number;output:number;cached?:number}){
