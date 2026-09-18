@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { devAccountId, query } from "@/lib/db/client";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
+import { runAfterResponse } from "@/lib/http/background";
 
 export const runtime = "nodejs";
+// Re-reading a document can take as long as the original upload; give the
+// background job room to finish inside after() rather than being cut off.
+export const maxDuration = 300;
 
 const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().optional() });
 
@@ -28,14 +32,16 @@ export async function POST(request: Request) {
       [body.policyId, accountId],
     );
 
-    void enqueuePolicyProcessing({
+    // after() keeps this alive past the response instead of racing the
+    // serverless instance being frozen the instant "queued" is returned.
+    runAfterResponse(() => enqueuePolicyProcessing({
       accountId,
       familyMemberId: policy.family_member_id,
       policyId: body.policyId,
       storageKey: policy.storage_key,
       pdfPassword: body.pdfPassword || undefined,
       linkUploadMember: true,
-    });
+    }));
 
     return NextResponse.json({ ok: true, status: "queued" }, { status: 202 });
   } catch (error) {

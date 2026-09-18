@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { runAfterResponse } from "@/lib/http/background";
 import { ensureChatSchema,getConversation,ChatConflict } from "./store";
 import { prepareChat,runChatWorkflow,type ChatContext,type ChatRequest } from "./workflow";
 import type { Progress } from "./types";
@@ -40,7 +41,15 @@ export async function enqueueChat(request:ChatRequest){
     [request.accountId,context.conversation.family_member_id,context.conversation.id,JSON.stringify(request)]);
   const id=job.rows[0].id;
   const state=globalThis as QueueGlobal;
-  state.__dearpolicyChatTail=(state.__dearpolicyChatTail??Promise.resolve()).catch(()=>undefined).then(()=>runJob(id,context)).catch(()=>undefined);
+  // after() keeps the function alive past the response (Vercel's waitUntil
+  // under the hood) instead of racing the serverless instance being frozen
+  // the instant the 202 is returned, which is what a bare fire-and-forget
+  // promise would do -- the chat UI would then spin on "Reading..." forever
+  // for a job that never actually ran.
+  runAfterResponse(()=>{
+    state.__dearpolicyChatTail=(state.__dearpolicyChatTail??Promise.resolve()).catch(()=>undefined).then(()=>runJob(id,context)).catch(()=>undefined);
+    return state.__dearpolicyChatTail;
+  });
   return {jobId:id,conversationId:context.conversation.id,conversationRevision:context.conversation.revision,
     familyMemberId:context.conversation.family_member_id};
 }
