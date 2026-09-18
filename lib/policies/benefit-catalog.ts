@@ -3,6 +3,7 @@ import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutB
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
+import { canonicalProduct } from "@/lib/coverage/facts";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 
@@ -201,7 +202,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   /** The contract this benefit sits in, and what happened -- so the figure can
    * be tied to one cover and one triggering event, which is what stops the same
    * sum being counted twice. */
-  contractId?:string;insurer?:string|null;events?:ClaimEventType[];
+  contractId?:string;contractName?:string|null;insurer?:string|null;events?:ClaimEventType[];
   /** Set when the person told us the policy is theirs but no schedule has been
    * uploaded. A figure the document itself prints still applies; a percentage
    * of "the sum insured" cannot be computed without their schedule. */
@@ -261,8 +262,9 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   const triggers=benefitTriggerEvents(benefit.benefitName,benefit.quote);
   const paysOn=payingEvent(triggers,args.events??[]);
   const cover=coverKey({policyNumber:coverage?.policyNumber,groupPolicyNumber:coverage?.groupPolicyNumber,
-    insurer:args.insurer??coverage?.insurer??null,productName:benefit.productName??coverage?.productName??null,
-    contractId:args.contractId??benefit.policyId});
+    insurer:args.insurer??coverage?.insurer??null,
+    productName:canonicalProduct(benefit.productName??coverage?.productName??coverage?.policyName??null),
+    contractId:args.contractId??benefit.policyId,contractName:args.contractName??null});
   const item:ClaimItem={
     title:args.ownerName+" · "+benefit.benefitName,
     coverKey:cover,
@@ -723,7 +725,7 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
     const key=benefit.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"");
     if(seen.has(key))continue;seen.add(key);
     const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:args.facts,declaredOnly,
-      contractId:args.contract.id,insurer:args.contract.insurer,events});
+      contractId:args.contract.id,contractName:args.contract.name,insurer:args.contract.insurer,events});
     items.push(item);
     citations.push({chunkId:"benefit:"+benefit.id,policyId:benefit.policyId,
       policyName:benefit.productName??args.contract.name,insurer:args.contract.insurer??undefined,

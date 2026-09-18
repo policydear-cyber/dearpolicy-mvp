@@ -1127,9 +1127,10 @@ export function runSystemRegressions(){
   test("One cover pays its sum once, and the figure from the person's own schedule is the one kept",()=>{
     // The other half of S$3,600,000: the same group personal accident cover
     // counted twice, once from the booklet and once from the certificate.
-    const item=(title:string,amount:number,basis:"confirmed"|"estimated",cover:string):ClaimItem=>({
+    const item=(title:string,amount:number,basis:"confirmed"|"estimated",cover:string,
+      kind:"sum_insured"|"fixed"="sum_insured"):ClaimItem=>({
       title,status:"likely_applicable",amountText:"S$"+amount.toLocaleString("en-SG"),amountLabel:"Potential payout",
-      estimateBasis:basis,calculatedAmount:amount,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",
+      estimateBasis:basis,calculatedAmount:amount,currency:"SGD",calculationKind:kind,aggregation:"additive",
       calculationId:title,coverKey:cover,payingEvent:"death",reason:"",conditions:[]});
     const items=[
       item("Person A · Death due to Accident",1_000_000,"estimated","policy:GPA1"),
@@ -1145,6 +1146,16 @@ export function runSystemRegressions(){
     assert.equal(notes.length,1);
     // Separate covers still stack, which is the whole point of holding both.
     assert.deepEqual(aggregatePotentialPayouts(items),[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
+    // But a smaller fixed grant alongside a sum assured is a second benefit
+    // that really is paid as well. Collapsing it would fix the double count by
+    // inventing an undercount.
+    const withGrant=[
+      item("Person A · Death Benefit",1_000_000,"confirmed","policy:GTL1"),
+      item("Person A · Funeral Expenses",5_000,"confirmed","policy:GTL1","fixed"),
+    ];
+    resolveCoverOverlaps(withGrant);
+    assert.equal(withGrant[1].supersededBy,undefined,"a funeral grant is not an alternative to the death sum");
+    assert.deepEqual(aggregatePotentialPayouts(withGrant),[{currency:"SGD",amount:1_005_000,amountText:"S$1,005,000",itemCount:2}]);
   });
   test("A benefit figure is tied to one cover and one triggering event",()=>{
     const death:CatalogBenefit={id:"d1",policyId:"wording",productName:"Group Term Life",benefitName:"Death Benefit",
@@ -1153,11 +1164,16 @@ export function runSystemRegressions(){
     const assessed=assessCatalogBenefit({benefit:death,coverage:coverage({amount:600_000,documentRole:"certificate"}),
       ownerName:"Person A",facts:{death:fact(true)},contractId:"contract",insurer:"Example Insurer",events:["death"]});
     assert.equal(assessed.item.payingEvent,"death");
-    assert.equal(assessed.item.coverKey,"policy:P100","identity is the policy number the insurer settles against");
+    assert.equal(assessed.item.coverKey,"policy:P100|group term life","identity is the policy number and the product, not the row");
     assert.equal(assessed.item.amountText,"S$600,000");
     // Two rows describing the same cover share the key; a different policy does not.
-    assert.equal(coverKey({policyNumber:"P-100",contractId:"a"}),coverKey({policyNumber:"p100",contractId:"b"}));
-    assert.notEqual(coverKey({policyNumber:"P-100",contractId:"a"}),coverKey({policyNumber:"P-200",contractId:"a"}));
+    assert.equal(coverKey({policyNumber:"P-100",productName:"group personal accident",contractId:"a"}),
+      coverKey({policyNumber:"p100",productName:"Group Personal Accident",contractId:"b"}));
+    assert.notEqual(coverKey({policyNumber:"P-100",productName:"group personal accident",contractId:"a"}),
+      coverKey({policyNumber:"P-200",productName:"group personal accident",contractId:"a"}));
+    // One master group policy number, several covers that genuinely stack.
+    assert.notEqual(coverKey({policyNumber:"3037850",productName:"group term life",contractId:"a"}),
+      coverKey({policyNumber:"3037850",productName:"group personal accident",contractId:"a"}));
   });
 console.log("DearPolicy contextual system regressions passed ("+cases+" checks, including 90- and 900-policy inventories).");
 }

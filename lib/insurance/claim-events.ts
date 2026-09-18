@@ -40,6 +40,13 @@ export type ClaimEventType=
  * consequences that can accompany almost any event. */
 export const LUMP_SUM_EVENTS:ClaimEventType[]=["death","terminal_illness","critical_illness","total_permanent_disability"];
 
+/** Being in hospital and having a bill are consequences, not events: they can
+ * follow almost anything, and someone who has not yet said whether they were
+ * admitted should be asked, never silently ruled out. Every other event is a
+ * cause -- it either happened or it did not -- so a benefit written only for
+ * causes that did not happen can be ruled out in plain code. */
+const CONSEQUENCE_EVENTS:ClaimEventType[]=["hospitalisation","medical_expense"];
+
 const TRIGGER_RULES:{event:ClaimEventType;pattern:RegExp}[]=[
   {event:"death",pattern:/\b(?:death|dies|died|deceased|loss of life|funeral|bereavement|mortal remains|repatriation of remains)\b/},
   {event:"terminal_illness",pattern:/\bterminal(?:ly)? ill\w*\b/},
@@ -96,7 +103,11 @@ export function reportedClaimEvents(facts:SubjectFacts,traits:ScenarioTrait[]=[]
     if(named.some(text=>definedConditionsFor(text).length>0))events.add("critical_illness");
   } else if(trait.has("illness")||trait.has("diagnosis"))events.add("critical_illness");
   if(known("permanentImpairment")!=null||trait.has("disability"))events.add("total_permanent_disability");
-  if(trait.has("bodily_injury")||trait.has("accident")||known("injured")===true)events.add("accidental_injury");
+  // An accidental death is not an accidental injury claim. Reading the cause
+  // as an injury is what offered S$1,250 for a fractured wrist to a family
+  // whose relative had just died in that accident.
+  if(trait.has("bodily_injury")||known("injured")===true||known("fractureBodyPart")!=null
+    ||(trait.has("accident")&&!events.has("death")))events.add("accidental_injury");
   if(known("hospitalised")===true||known("hospitalNights")!=null||known("hospitalNightsSoFar")!=null||trait.has("hospitalisation"))events.add("hospitalisation");
   if(known("surgery")===true)events.add("surgery");
   if(trait.has("medical_expense")||known("hospitalBill")!=null||known("ambulanceBill")!=null||known("outOfPocket")!=null)events.add("medical_expense");
@@ -109,6 +120,12 @@ export function reportedClaimEvents(facts:SubjectFacts,traits:ScenarioTrait[]=[]
   return [...events];
 }
 
+const PLAIN_EVENT:Record<ClaimEventType,string>={
+  death:"a death",terminal_illness:"a terminal diagnosis",critical_illness:"a defined critical illness",
+  total_permanent_disability:"total and permanent disability",accidental_injury:"an injury caused by an accident",
+  hospitalisation:"a hospital stay",surgery:"an operation",medical_expense:"a medical bill",
+  income_loss:"lost income",care_need:"a need for nursing care",property_or_motor:"damage to property or a vehicle",
+  travel:"a travel disruption",liability:"a liability to someone else",policy_event:"a policy maturing or being surrendered"};
 const RULED_OUT_REASON:Partial<Record<ClaimEventType,string>>={
   critical_illness:"pays on the diagnosis of a condition named in the policy's own schedule of critical illnesses, which is not what happened here",
   death:"pays only on a death, and nobody has died",
@@ -124,37 +141,45 @@ const RULED_OUT_REASON:Partial<Record<ClaimEventType,string>>={
  * not to delete. */
 export function ruledOutByEvent(triggers:ClaimEventType[],reported:ClaimEventType[]):string|null{
   if(!triggers.length)return null;
-  // Only benefits that carry one of the once-only triggers can be ruled out
-  // here. A hospital or expense benefit responds to a consequence that can
-  // follow almost any event, so the right move there is to ask, never to
-  // delete.
-  const lumpSum=triggers.filter(event=>LUMP_SUM_EVENTS.includes(event));
-  if(!lumpSum.length)return null;
+  // A benefit that also responds to a hospital stay or a bill is never ruled
+  // out here: those follow almost any event, and the right move is to ask.
+  if(triggers.some(event=>CONSEQUENCE_EVENTS.includes(event)))return null;
   // Nothing at all is known about the event yet: say nothing rather than rule
   // the household's biggest benefits out of their own answer.
   if(!reported.length)return null;
   const happened=new Set(reported);
   if(triggers.some(event=>happened.has(event)))return null;
-  return RULED_OUT_REASON[lumpSum[0]]??"responds to a different kind of event from the one reported";
+  const named=triggers.find(event=>RULED_OUT_REASON[event]);
+  return (named&&RULED_OUT_REASON[named])??"is written for "+PLAIN_EVENT[triggers[0]]+", which is not what happened here";
 }
 
 /** One cover, however many rows describe it.
  *
  * A group personal accident policy that appears once in a certificate and again
  * in the benefit table is one cover, and its accidental death benefit is
- * payable once. Identity is the policy number when there is one, because that
- * is what the insurer settles against -- never the row, and never the benefit's
- * name, which is exactly how the same S$1,000,000 came to be counted twice. */
+ * payable once. Identity is the policy number the insurer settles against,
+ * together with the product -- never the row, and never the benefit's name,
+ * which is how the same S$1,000,000 came to be counted twice.
+ *
+ * The product matters as much as the number: a household can hold group term
+ * life, personal accident and critical illness under ONE master group policy
+ * number, and those are separate covers that genuinely pay on top of each
+ * other. Keying on the number alone would have fixed the double count by
+ * introducing an undercount, which is the same failure facing the other way.
+ *
+ * `productName` is expected already canonicalised by the caller, so that
+ * "GPA", "Group Personal Accident" and "Group Personal Accident Plan" are one
+ * cover rather than three. */
 export function coverKey(input:{policyNumber?:string|null;groupPolicyNumber?:string|null;
-  insurer?:string|null;productName?:string|null;contractId:string}):string{
+  insurer?:string|null;productName?:string|null;contractId:string;contractName?:string|null}):string{
+  const plain=(value:string|null|undefined)=>(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+  const product=plain(input.productName)||plain(input.contractName);
   const identifier=(input.policyNumber??input.groupPolicyNumber??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
-  if(identifier.length>=4)return "policy:"+identifier;
-  const insurer=(input.insurer??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-  const product=(input.productName??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+  if(identifier.length>=4)return "policy:"+identifier+"|"+product;
+  const insurer=plain(input.insurer);
   if(insurer&&product)return "product:"+insurer+"|"+product;
-  return "contract:"+input.contractId+(product?"|"+product:"");
+  return "contract:"+input.contractId+"|"+product;
 }
-
 /** The single lump-sum event a figure is being paid for, or null when the
  * benefit is an expense or per-day benefit that stacks normally. */
 export function payingEvent(triggers:ClaimEventType[],reported:ClaimEventType[]):ClaimEventType|null{

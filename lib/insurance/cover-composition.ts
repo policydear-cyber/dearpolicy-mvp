@@ -19,7 +19,10 @@ export type OverlapResolution={items:ClaimItem[];notes:string[]};
 
 const BASIS_RANK:Record<string,number>={confirmed:3,estimated:2,indicative:1};
 function rank(item:ClaimItem){
-  return (BASIS_RANK[item.estimateBasis??""]??0)*1_000_000_000+(item.calculatedAmount??0);
+  // A figure computed from the person's own verified sum insured beats one
+  // printed in a booklet for everybody, whichever is larger.
+  const fromOwnSchedule=item.calculationKind==="sum_insured"?1:0;
+  return ((BASIS_RANK[item.estimateBasis??""]??0)*2+fromOwnSchedule)*1_000_000_000+(item.calculatedAmount??0);
 }
 
 export function resolveCoverOverlaps(items:ClaimItem[]):OverlapResolution{
@@ -28,7 +31,17 @@ export function resolveCoverOverlaps(items:ClaimItem[]):OverlapResolution{
     if(item.aggregation!=="additive")continue;
     if(typeof item.calculatedAmount!=="number"||!Number.isFinite(item.calculatedAmount)||item.calculatedAmount<=0)continue;
     if(!item.coverKey||!item.payingEvent)continue;
-    const key=item.coverKey+"|"+item.payingEvent;
+    // Which rows are genuinely alternatives, and which only look like it.
+    //
+    // Two rows computed from the same sum insured are the same money described
+    // twice -- a certificate line and a benefit table saying what the policy
+    // pays on a death. So are two rows that arrive at an identical figure. But
+    // a fixed funeral grant alongside a death sum assured is a second, smaller
+    // benefit that really is paid as well, and collapsing those would fix the
+    // double count by inventing an undercount. So only the first two shapes
+    // are treated as alternatives.
+    const shape=item.calculationKind==="sum_insured"?"sum-insured":"amount:"+item.calculatedAmount;
+    const key=item.coverKey+"|"+item.payingEvent+"|"+shape;
     groups.set(key,[...(groups.get(key)??[]),item]);
   }
   const notes:string[]=[];
@@ -38,19 +51,23 @@ export function resolveCoverOverlaps(items:ClaimItem[]):OverlapResolution{
     // a booklet for everybody, and only then does size decide. Taking the
     // largest first would have preferred a generic S$1,000,000 over the
     // S$600,000 the certificate actually says is theirs.
-    const ordered=[...group].sort((a,b)=>rank(b)-rank(a));
+    // The last tie-break is the title, and it is arbitrary on purpose: when
+    // two rows describe the same money on the same evidence there is no better
+    // row, only a need to pick the same one every time. The note below says
+    // both names out loud so nothing disappears.
+    const ordered=[...group].sort((a,b)=>rank(b)-rank(a)||a.title.localeCompare(b.title));
     const kept=ordered[0];
     for(const item of ordered.slice(1)){
       item.supersededBy=kept.title;
       item.status="potentially_applicable";
       item.amountLabel="What this benefit pays";
       item.conditions=[...new Set([...item.conditions,
-        "Paid instead of “"+kept.title+"”, not in addition to it: both are paid by the same policy for the same event, so only one of them settles. "
-        +"The larger figure on file, "+(kept.amountText??"the other benefit")+", is the one counted."])];
+        "Paid instead of \u201c"+kept.title+"\u201d, not in addition to it: both are paid by the same policy for the same event, so only one of them settles. "
+        +"The figure counted is "+(kept.amountText??"the other benefit")+"."])];
       delete (item as {calculatedAmount?:number}).calculatedAmount;
     }
-    const others=ordered.slice(1).map(item=>"“"+item.title.split(" · ").slice(1).join(" · ")+"”").join(", ");
-    notes.push("“"+kept.title.split(" · ").slice(1).join(" · ")+"” and "+others+" are the same cover paying on the same event, so "
+    const others=ordered.slice(1).map(item=>"\u201c"+item.title.split(" \u00b7 ").slice(1).join(" \u00b7 ")+"\u201d").join(", ");
+    notes.push("\u201c"+kept.title.split(" \u00b7 ").slice(1).join(" \u00b7 ")+"\u201d and "+others+" are the same cover paying on the same event, so "
       +(kept.amountText?kept.amountText+" is counted once":"only one of them is counted")+" rather than added together.");
   }
   return {items,notes};
