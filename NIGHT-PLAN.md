@@ -1,114 +1,59 @@
-# DearPolicy — overnight work queue
-
-## When you wake up — three commands, in this order
-
-```
-npm install          # pdf-lib was added for the claim pack
-npm run db:setup     # optional: the new columns also apply themselves on first use
-npm run dev
-```
-
-Then, once, rebuild what DearPolicy has read out of your documents:
-
-```
-npm run policies:index
-```
-
-The parser changed a lot overnight, so the benefit rules stored in your
-database are the old ones until this is run. It is safe and repeatable: it only
-replaces derived benefit rows, never your documents, your uploaded evidence,
-your confirmed cover, or any row you have corrected yourself.
-
-If a document comes back with very few benefits, its stored page text predates
-the table parser — press **Re-analyse** on it in Documents, then run
-`policies:index` again.
-
-New in the sidebar: **Benefits** (`/schedule`) — every payout rule DearPolicy
-has read, in plain English, next to the page it came from. Rows marked "read
-from the table heading" are deliberately NOT used to calculate anything until
-you confirm them; that is one click each, and it is worth doing first because
-your own two documents state the fracture scale against different bases.
-
-
-A fresh Claude session picks this up each time it runs. Update it as you go: it
-is the only memory between runs.
+# DearPolicy — work queue
 
 ## How to set up a run
 
-DearPolicy lives on the user's Windows machine at
-`C:\Users\i7107\Downloads\dearpolicy-mvp\dearpolicy-mvp`, reachable through the
-remote-devices tools. `device_bash` sees it at `$HOME/mnt/dearpolicy-mvp/…`.
+The project is `policydear-cyber/dearpolicy-mvp` on GitHub, deployed on Vercel
+from `main`, with Postgres on Supabase and semantic search on Pinecone.
 
-1. Copy the project (WITHOUT `node_modules`, `.next`, `data`, `.env.local`) into
-   the cloud sandbox and `npm install` there. Never run npm inside the user's
-   folder — their `node_modules` is a Windows install and would be corrupted.
-2. Do the work in the sandbox.
-3. Commit only the files you changed, with `device_commit_files`.
+1. Check the repository out into a sandbox and `npm ci` there.
+2. Do the work there. Never edit files in a running deployment.
+3. Commit to a branch, let CI run, and fast-forward `main` only once it is green.
 
-## The verification gate — nothing is committed until all of this passes
+## The verification gate — nothing reaches `main` until all of this passes
 
 ```
 npm run typecheck
-npm run ocr:test
-npm run eval:extraction     # extraction accuracy must not drop
-npm run claims:test
-npm run system:test
+npm run system:test         # system + database regressions
+npm run claims:test         # claim rules, claim-answer evaluation, pack
+npm run eval:extraction     # extraction recall must not drop
 npm run build
 ```
 
-If a suite fails and you cannot fix it, commit nothing and write what happened
-in the log below.
+All five run in CI on every push. If a suite fails and you cannot fix it,
+merge nothing and write what happened in the log below.
 
 ## Rules
 
 - Every change needs a regression test that fails without it.
 - Never weaken an existing test to make something pass.
-- Never touch `.env.local`, `data/`, uploaded documents or the user's database.
+- Never touch `.env.local`, uploaded documents or the user's database.
 - Deterministic code over a model call, every time.
 - A rule that cannot be proved from the document is left for review, never guessed.
-- Amounts are only shown when the evidence supports them.
+- Amounts are only shown when the evidence supports them — and where an amount
+  cannot be calculated, the rule is shown instead of nothing.
+- A benefit is ruled out out loud, with its reason, never silently.
 
 ## What cannot be tested from here
 
-The sandbox and the device shell cannot reach the user's PostgreSQL, Ollama, or
-the running app — the device shell's network is behind an egress allowlist.
-So: no end-to-end run against real documents, and no UI testing. Everything is
-verified by the suites above, which use an in-process PostgreSQL and simulated
-model replies. Say so plainly rather than claiming a feature is proven live.
+The suites use an in-process PostgreSQL and simulated model replies, so a live
+Gemini call and the deployed UI are not exercised. Say so plainly rather than
+claiming a feature is proven live.
 
 ## Queue — take the top unfinished item
 
-1. ~~**Benefit schedule screen.**~~ DONE 0.9.0 — `/schedule` plus
-   `GET/PATCH/DELETE /api/benefits`. The new `policy_benefits.reviewed_at`
-   column is applied automatically on first use; no setup step needed.
-
-2. ~~**Claim pack (pdf-lib).**~~ DONE 0.10.0 — the summary sheet half.
-   `GET /api/claims/<id>/pack` returns a printable PDF, linked from the Claims
-   page. Filling an *insurer's own* AcroForm is NOT done: there is no insurer
-   form on this machine to read field names from, so it could not be written
-   against anything real. See queue item 6.
-
-3. ~~**More extraction fixtures.**~~ DONE 0.11.0 — three added from the
-   household's own documents (no names on those pages). Recall 21/21 across four
-   documents. The eval now also supports `mustNotProduce`, for rows a document
-   must never yield.
-
-4. **Layout hardening.** Mostly done across 0.11.0 and 0.13.0. Still open:
-   right-aligned amount columns, rotated pages, and footnote markers glued to
-   text ("Total and Permanent Disablement2due to Accident" — left alone
-   deliberately: stripping a digit from inside a word is a guess, and the
-   Benefits page lets a person fix the name in one edit). Add a fixture for any
-   of these before changing the parser.
-
-6. **Fill an insurer's own claim form.** Needs a real insurer PDF with form
-   fields in the project folder. `pdf-lib` can read `getForm().getFields()`;
-   map field names to the claim pack's values and fill what matches, leaving
-   anything unmatched blank rather than guessing. Blocked until there is a form
-   to test against.
-
-5. ~~**Ownership review queue.**~~ DONE 0.12.0 — the portfolio now opens with
-   "Whose documents are these?" and a button per family member, plus a to-do
-   entry. Answering removes it.
+1. Evaluate waiting periods, survival periods, territorial limits and age
+   limits as rules rather than printing them as conditions. Needs each one
+   extracted as a structured field with its citation, which is the larger
+   piece of work behind it.
+2. Model accelerated riders: a critical illness rider that reduces the death
+   benefit it is attached to. Today both are shown and both are counted when
+   their events differ.
+3. Extract each plan's own schedule of defined critical illnesses at upload,
+   rather than inferring it from whichever benefit rows were catalogued.
+4. Two independent extraction passes per document with a disagreement queue,
+   so the 5% that is wrong is corrected once and stays corrected.
+5. Fill an insurer's own claim form (needs a real form with fields to test
+   against).
 
 ## Log
 
@@ -182,52 +127,19 @@ model replies. Say so plainly rather than claiming a feature is proven live.
 
 ## What is left
 
-Items 4 and 6 only. Both need material that is not on this machine: a PDF with
-right-aligned amount columns or rotated pages, and an insurer's own claim form
-with fillable fields. Put either in the project folder and the next run can take
-it.
-- 2026-09-16 00:52 SGT — 0.13.0. Spent the rest of the night reading every
-  benefit table in all seven of the household's PDFs and fixing what the parser
-  got wrong. Four things, each with a regression and a fixture:
-  * A table heading that wraps ("Schedule of Indemnities  (% of Sum" /
-    "Insured)") is now read as one heading, which is why the product summary's
-    own indemnity schedule went from 2 usable rules to 18.
-  * A benefit heading that carries no amount of its own ("2. Permanent Total
-    Loss of") now names the rows beneath it, so a row reads "Permanent Total
-    Loss of (b) Whole eye" instead of "(b) Whole eye".
-  * A benefit name that wraps onto the next line is read whole; but when that
-    next line carries money instead ("or up to S$50,000, whichever is lesser")
-    it finishes the AMOUNT, and a "whichever is lesser" rule is refused rather
-    than settled at the larger figure.
-  * Money the household PAYS is no longer read as money it receives. A premium
-    line, a pro-ration factor table and a worked claim example ("Total
-    $24,500") produced 59 false benefit rows in the health booklet alone; they
-    now produce none, while a premium WAIVER benefit still counts.
-  Measured on their own documents: product summary 13 -> 67 usable rules,
-  benefit summary 0 -> 51, health booklet 123 rows -> 64 with every false one
-  gone. Fixtures now cover five documents; recall 24/24.
-  Gate: typecheck, ocr:test, eval:extraction (24/24), claims:test (109 checks),
-  system:test (54 checks), build — all pass. Still not verified live: no
-  database, model or browser is reachable from here.
-- 2026-09-16 00:58 SGT — Queue done. Items 1, 2, 3 and 5 finished and committed
-  (0.9.0 through 0.13.0); items 4 and 6 are blocked on documents that are not on
-  this machine. The hourly overnight pass has been switched off rather than left
-  running against an empty queue: another autonomous pass with nothing concrete
-  to do would mean inventing work on a system that cannot be run or looked at
-  from here, and this project's own rule is not to guess.
+The honest limits of the current decision layer, in the order they are most
+likely to produce a wrong answer:
 
-
-- 2026-09-16 (day) — 0.14.0 -> 1.0.0-rc.1, working with DC live. In order:
-  Benefits page reads unread documents itself ("Read them now"); silent index
-  failures now visible; env-var names removed from chat copy; "needs review"
-  split into needs-you / unreadable / usable; estimate tiers (confirmed /
-  estimated / indicative, indicative never summed); what-if questions answered
-  from the catalogue with one question back; Groq as a swappable reading model
-  with 429 back-off; judgment layer with a TypeSafe slot; rows categorised by
-  meaning at upload (isBenefit, respondsTo, requires); contradiction-aware
-  matching (illness never gets accident-only benefits, and says so); facts-first
-  question plan (gates, then quantities, one per turn); cross-document dedupe;
-  claim record + pack from the fast path; condensed cards; service status in
-  the sidebar with fixes. system:test 65 checks. Live Groq call could not be
-  made from the sandbox (host blocked); shape verified against a simulated
-  Groq. DC's key is in his .env.local.
+- A plan whose benefit table has not been read has no schedule of its own, so
+  its defined critical illnesses fall back to the LIA 2019 standard list. That
+  list is a floor: a plan may define more conditions, and one of its own named
+  conditions would then be refused. The card says so.
+- Waiting and survival periods are shown, not evaluated.
+- An accelerated rider is not recognised as reducing the benefit it accelerates.
+- Two covers under one policy number are separated by product name. A plan
+  whose product name is missing from both the benefit row and the coverage row
+  falls back to the contract name, and two such rows in one contract would be
+  treated as one cover.
+- Extraction quality is the floor under everything above: a wrong stored rule
+  propagates confidently. `npm run eval:extraction` scores it on five real
+  documents and runs in CI, but five documents is not a corpus.

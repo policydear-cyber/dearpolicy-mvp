@@ -1,8 +1,8 @@
-# DearPolicy 0.8.1 Architecture
+# DearPolicy Architecture
 
 ## Product boundary
 
-DearPolicy is a local evidence and workflow system, not an insurer adjudicator and not a generic chatbot. It keeps four things distinct:
+DearPolicy is an insurance evidence and workflow system, not an insurer adjudicator and not a generic chatbot. It runs on Vercel with Postgres on Supabase, semantic search on Pinecone, and Google Gemini for every model call. It keeps four things distinct:
 
 1. personalised evidence that establishes ownership and insured amounts;
 2. wording that establishes policy rules for the matching contract/product;
@@ -10,6 +10,52 @@ DearPolicy is a local evidence and workflow system, not an insurer adjudicator a
 4. application-side calculations that are authorised by validated wording.
 
 No one layer is allowed to silently substitute for another.
+
+## Deciding what a benefit pays
+
+The layer that decides whether an answer is right, in the order it runs.
+
+**Claim events (`lib/insurance/claim-events.ts`).** A closed vocabulary of the
+kinds of claim a contract is written for: a death, a terminal diagnosis, a
+defined critical illness, total and permanent disability, an accidental injury,
+a hospital stay, an operation, a medical bill, lost income, a need for care,
+property or motor, travel, liability, a policy maturing. Both sides speak it.
+`benefitTriggerEvents` reads a benefit's trigger from its own name first and
+falls back to the quoted clause only when the name names no once-only trigger,
+because a critical illness clause routinely mentions death in passing and that
+is not a death benefit. `reportedClaimEvents` reads what happened from the
+stored facts in the same vocabulary.
+
+`ruledOutByEvent` then rules out a benefit whose triggers are all causes, none
+of which happened. Hospital stays and bills are excluded from that gate by
+design: they are consequences that can follow almost any event, so they stay
+questions rather than filters. The gate is silent while nothing is known, and
+generous where the facts are thin — an unnamed illness still reaches the
+critical illness benefits — so it only ever closes a door it is certain about.
+
+**Defined conditions (`lib/insurance/defined-conditions.ts`).** A critical
+illness benefit pays for a condition its schedule names, not for severity.
+`matchesPolicySchedule` checks the diagnosis against the household's own
+critical-illness benefit rows, which ARE that plan's schedule where its table
+was read; `definedConditionsFor` falls back to the LIA Critical Illness
+Framework 2019. The policy wins, because the policy is the contract, and the
+card says that the standard list is a floor.
+
+**Cover identity and composition (`lib/insurance/cover-composition.ts`).**
+`coverKey` is the policy number the insurer settles against together with the
+product, because a Singapore group scheme puts several covers under one master
+number. `resolveCoverOverlaps` treats two benefits in one cover paying on one
+event as alternatives when they compute from the same sum insured or arrive at
+an identical figure — never when one is a smaller fixed grant, which really is
+paid as well. The kept figure is the one from the person's own certificate; the
+other stays visible and stops being counted. Only then is a total struck.
+
+All three answer paths run this: rules stored at upload, schedule lines with a
+standard rule assumed, and benefits read live out of the document.
+
+`scripts/claim-answer-eval.ts` asserts the end result — which benefits respond,
+which do not, and what the total is — for nine real household scenarios, with
+no model in the loop, in CI on every push.
 
 ## Document ingestion and OCR
 
@@ -37,7 +83,7 @@ PDF.js extracts the original embedded text first and records whether each page i
 
 Password-protected PDFs are authenticated before temporary rendering. The password travels to the private bridge over stdin, never in command-line arguments, and is not stored. Temporary PDFs and page images are removed after every run.
 
-PaddleOCR work holds the same global GPU lock used by Qwen and BGE-M3. Both Ollama models are explicitly unloaded before PaddleOCR starts; the OCR process exits after the selected pages are complete so later models can load normally. Missing OCR installation, unreadable output and timeouts become visible policy-processing errors rather than silently indexing empty text.
+Missing OCR support, unreadable output and timeouts become visible policy-processing errors rather than silently indexing empty text.
 
 OCR is transcription, not authority. Its output still passes the same exact-quote, person, contract, currency and coverage validation as native text before it can support a payout calculation.
 
@@ -110,16 +156,16 @@ that has not been indexed yet.
 
 1. Resolve the account and relevant family member(s) from the message. Explicit full/preferred names and relationships override conversational context; first-person language maps to the unique account holder; follow-up pronouns reuse the resolved subject. An ambiguous or unknown person produces a choice before any personal policy is loaded.
 2. Load the saved conversation revision, structured facts and a bounded recent-message window.
-3. Ask Qwen to interpret the whole current message into an intent, search terms, quoted fact candidates and broad scenario candidates.
+3. Ask the reading model to interpret the whole current message into an intent, search terms, quoted fact candidates and broad scenario candidates.
 4. Validate candidates in application code: subject binding, exact quote, numeric/date provenance, known/unknown/pending state, terminal-event hierarchy and causal-death safeguards. Store scenario candidates separately from facts so semantic matching cannot silently become policy eligibility.
 5. Load the complete selected inventory using 200-row keyset work batches. The batch size is not a policy limit.
-6. For a portfolio request, return the deterministic contract ledger without sending the whole portfolio to Qwen.
-7. For an evidence question, retrieve bounded candidates independently for every contract/document using PostgreSQL full-text search and BGE-M3 similarity. Keep only lexically matched or sufficiently close semantic passages for model reading; an omitted/unmatched section remains an incomplete review, never proof of no cover.
-8. Split any oversized legacy passage at text boundaries, then ask Qwen to extract candidate benefits, observations, conditions and material requirements from small source windows with exact quotes and owned coverage IDs.
+6. For a portfolio request, return the deterministic contract ledger without sending the whole portfolio to a model.
+7. For an evidence question, retrieve bounded candidates independently for every contract/document using PostgreSQL full-text search and semantic similarity (Pinecone). Keep only lexically matched or sufficiently close semantic passages for model reading; an omitted/unmatched section remains an incomplete review, never proof of no cover.
+8. Split any oversized legacy passage at text boundaries, then ask the reading model to extract candidate benefits, observations, conditions and material requirements from small source windows with exact quotes and owned coverage IDs.
 9. Validate every extracted quote, number, currency, coverage ID and product-section binding. Evaluate each benefit independently. A scenario candidate may keep a benefit in consideration, but supporting claim evidence must still confirm the policy definition.
-10. Calculate only source-proved formula shapes in application code. Qwen never performs the payout arithmetic. Missing or documentary conditions make the result potential rather than suppressing a valid calculation; a known failed condition removes that benefit's amount.
+10. Calculate only source-proved formula shapes in application code. No model ever performs the payout arithmetic. Missing or documentary conditions make the result potential rather than suppressing a valid calculation; a known failed condition removes that benefit's amount.
 11. Aggregate only distinct additive amounts in the same currency. Reimbursement estimates remain separate to avoid implying duplicate recovery. Each calculated amount carries the specific unresolved checks that could change the settled figure, so the answer states reasons rather than a generic caveat.
-12. Optionally ask Qwen to explain the bounded validated packet. Reject new numbers, omitted payout totals, questions or claim-approval language.
+12. Optionally ask the narration model to explain the bounded validated packet. Reject new numbers, omitted payout totals, questions or claim-approval language.
 13. Atomically save the user turn, answer, structured state and new conversation revision.
 
 ## Ownership basis
@@ -167,7 +213,7 @@ is, and `negativeConclusionPermitted` gates any categorical statement that a
 benefit or cover is absent — including a guard that rejects generated prose
 containing such a claim while the review is partial.
 
-## Local-model output recovery
+## Structured-output recovery
 
 Subjects reach the interpretation model as short handles (`s1`, `s2`) and are
 mapped back to family member ids in the application, so no UUID is ever spent on
@@ -257,13 +303,7 @@ benefit, and every array and free-text field is sized to match.
 `readingOutputTokens` caps `num_predict` per section, and truncated output is
 salvaged and retried, so the cap is a target rather than a hard failure.
 
-## Model sessions and reading bounds
-
-`withModelSession` holds the chat model resident for one phase: inside a session
-calls use `LLM_KEEP_ALIVE` instead of `keep_alive: 0` and skip the per-call
-unload, and the session unloads once when it ends. Nesting is reference-counted.
-The global lock still admits one heavy task at a time and OCR still unloads
-explicitly before it runs, so the 8 GB safeguards are intact.
+## Reading bounds
 
 `lib/policies/relevance.ts` decides where those calls go. Retrieval scores every
 passage of every contract, so contracts are ranked by lexical matches first and
@@ -280,9 +320,9 @@ household still reaches every contract) and a wall-clock budget. Whichever binds
 first stops the read; the unread sections are reported through the existing
 completeness figures rather than silently dropped.
 
-## Async work and local GPU safety
+## Async work
 
-`chat_analysis_jobs` stores queued/running progress, final results and failures. The UI polls real stages and contract counts. A process-local queue plus the global Ollama lock prevents Qwen and BGE-M3 from competing for an 8 GB GPU. Ollama requests use bounded context/output, zero keepalive and explicit unload between phases.
+`chat_analysis_jobs` stores queued/running progress, final results and failures. The UI polls real stages and contract counts. Model calls are bounded in context and output, run concurrently within one turn's reading budget, and are charged against the spend ledger before they are made.
 
 ## History deletion safety
 

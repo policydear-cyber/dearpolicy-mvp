@@ -1,43 +1,58 @@
-DearPolicy 1.0.0-rc.1 — the release candidate
+DearPolicy 1.0.0-rc.14 - how a claim amount is decided
 
 WHAT TO DO AFTER THIS UPDATE
 
-   1. npm install                      (pdf-lib was added)
-   2. Restart the dev server           (the .env.local changes need it)
-   3. Open Benefits -> "Re-read all documents"
-      Rules are now stored with what they REQUIRE (an accident-only benefit
-      needs an accident), so every document needs one fresh read.
+   Nothing. It is already live. No re-read, no re-upload, no command.
 
-The sidebar now shows three lights: Database, Local model, Reading model.
-If one is red it says what to run.
+   The change is in how DearPolicy decides which benefits respond and how
+   they add up, and it applies to the benefit rules already in your database.
 
-WHAT CHANGED SINCE 0.8.2, IN ONE BREATH
+WHAT CHANGED, IN ONE BREATH
 
-   - Benefits page: every rule in plain English with its page; correct any
-     row and your version sticks.
-   - Documents are read on upload and categorised by meaning (Groq reads,
-     if you set the key; your chat never leaves the machine).
-   - Chat asks the facts first - accident or illness? admitted? how many
-     nights? - one at a time, then gives figures. Never figures first.
-   - Figures are labelled confirmed / estimated / indicative. Indicative ones
-     show but do not add up. Everything says "subject to the insurer's
-     assessment".
-   - Accident-only benefits are never offered for an illness, and it tells
-     you which ones it ruled out and why.
-   - One card per benefit per person, even when two documents state it.
-   - "What if I break my wrist?" is answered from your policies too.
-   - Claim pack PDF from the Claims page, or straight from the chat answer.
-   - "Whose document is this?" on the portfolio for anything unclaimed.
-   - Premium tables, pro-ration factors and worked examples are no longer
-     read as benefits (59 false rows gone from one booklet alone).
+   - A benefit is matched on the EVENT it is written for, not on words it
+     shares with your story. A critical illness product is no longer offered
+     for a death, and dengue no longer reaches a critical illness benefit.
+   - A critical illness benefit is a living benefit. Once a death is reported
+     the death benefits are the claim; an illness diagnosed before the death
+     is offered as a separate claim rather than added to it.
+   - Benefits are no longer simply added up. Two benefits paid by the SAME
+     cover for the SAME event are alternatives: the figure from your own
+     certificate is kept and counted, the other stays on its card and says
+     which benefit is paid instead of it. Separate covers still stack.
+   - An injury scale is not a menu. The benefit that pays is the one whose
+     injury actually happened, not every fixed amount in the table.
+   - When the amount cannot be calculated yet, the RULE is shown - "S$30.00
+     per day after the first 2 days, up to 30 days" - labelled as the rule
+     rather than as a payout, and never added to a total.
+   - Every card says which cover the figure is paid under and the policy
+     number the insurer settles against.
+   - Confidence is now read from the evidence: strong only when every counted
+     figure came from your own schedule and nothing is still needed.
+   - The claim pack states the estimated claim amount itself, struck once.
+   - Your own plan's schedule of defined conditions beats the national list
+     wherever its benefit table has been read.
+
+   The death claim that returned S$3,600,000 across four benefits returns
+   S$1,600,000: S$1,000,000 of group term life plus S$600,000 of group
+   personal accident.
+
+HOW THIS IS CHECKED
+
+   scripts/claim-answer-eval.ts runs nine real household scenarios end to end
+   with no model involved and asserts which benefits respond, which do not,
+   and what the total is. It runs in CI on every push, alongside the type
+   check, both regression suites, extraction recall and the production build.
 
 KNOWN LIMITS
 
-   - Insurer claim forms are not filled in yet (no form to test against).
-   - Some rule shapes (per-year caps, deductibles, co-insurance) are stored
-     for you to confirm rather than calculated.
-   - The Groq reading path was verified against a simulated Groq; if the
-     first re-read errors, send the message.
+   - Waiting periods, survival periods, territorial and age limits are shown
+     as conditions on the card rather than evaluated as rules.
+   - An accelerated rider that reduces another benefit is not yet modelled;
+     both are shown.
+   - Where a plan's benefit table has not been read, its list of defined
+     critical illnesses is the national standard list, which is a floor. The
+     card says so.
+   - Insurer claim forms are still not filled in (no form to test against).
 
 
 DearPolicy 0.8.2 — A Failure You Can Read

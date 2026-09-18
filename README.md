@@ -1,10 +1,12 @@
-# DearPolicy 1.0.0-rc.1
+# DearPolicy 1.0.0-rc.14
 
-DearPolicy tells a family what their insurance would pay when something happens — an estimated claim amount, subject to the insurer's assessment, with the exact page it came from. Everything runs on your own computer; the only thing that leaves it is the one-time reading of each document by the reading model.
+DearPolicy tells a family what their insurance would pay when something happens — an estimated claim amount, subject to the insurer's assessment, with the exact page it came from.
 
 **The AI reads and explains. DearPolicy decides. You confirm.**
 
-## The Coverage Ledger (rc.11)
+The app runs on Vercel, the database is Postgres on Supabase, semantic search is Pinecone, and every model call goes to Google Gemini. There is no local model anywhere in the system.
+
+## The Coverage Ledger
 
 Every payout answer is a lookup in one table: one row per **person · plan · event · what it pays**. Open **Coverage** in the sidebar to see it.
 
@@ -13,49 +15,63 @@ Every payout answer is a lookup in one table: one row per **person · plan · ev
 - Documents uploaded before this version are read into the ledger the next time you ask a payout question (or press **Read now** on the Coverage page). Nothing needs re-uploading.
 - Nothing needs your confirmation. You can correct a row, remove one that is not in your plan, or add cover no document states (DPS, for example); those edits are kept as written.
 
-Chat answers from the ledger whenever every row in play carries a figure. Where a row still says "as stated in the plan", the older document-reading path takes over for that question.
+Chat answers from the ledger whenever every row in play carries a figure. Where a row still says "as stated in the plan", the document-reading path takes over for that question.
+
+## How a claim amount is decided
+
+This is the part that decides whether an answer is right, so it is worth reading once.
+
+**A benefit is matched on the event it is written for, not on words it shares with your story.** Each benefit's trigger — a death, a defined critical illness, total and permanent disability, an accidental injury, a hospital stay, a bill — is read from its own name first, because a critical illness clause routinely mentions death in passing and that is not a death benefit. What happened to you is read in the same vocabulary from the facts you gave. A benefit written for an event that did not happen is ruled out in plain code, with the reason shown to you, before any model is asked anything.
+
+The gate is deliberately one-sided. It is generous while the facts are thin — "what could I claim if I were diagnosed with cancer" still reaches every critical illness plan you hold — and certain before it rules anything out. Being in hospital and having a bill are treated as consequences rather than events, so they are always a question and never a filter.
+
+**A critical illness benefit pays for a condition its schedule names, not for how serious the illness is.** Dengue is severe; severity is not the test. DearPolicy checks the diagnosis against your own plan's schedule of defined conditions where its benefit table has been read, and against the LIA Critical Illness Framework 2019 otherwise — and says on the card that the standard list is a floor, because your policy may define fewer conditions than it contains. A critical illness benefit is a living benefit: once a death is reported the death benefits are the claim, and an illness diagnosed before the death is offered as a separate claim rather than added to it.
+
+**Benefits do not simply add up.** Every figure is tied to a cover — the policy number the insurer settles against, together with the product, because a Singapore group scheme puts several covers under one master number. Two benefits paid by the same cover for the same event are alternatives, not additions: the figure from your own certificate is kept, the other stays visible on its card and stops being counted. Separate covers still stack, which is the point of holding both. An injury scale is not a menu — the benefit that pays is the one whose injury actually happened.
+
+**When the amount cannot be calculated, the rule is shown.** "S$30.00 per day after the first 2 days, up to 30 days" is the answer when the number of nights is not yet known. It is labelled as the rule rather than as a payout, and it never reaches a total.
+
+**Confidence is a claim about the evidence.** An answer is a strong match only when every counted figure was computed from your own schedule and nothing is still needed. Everything else is a partial match and says so.
+
+`scripts/claim-answer-eval.ts` runs nine real household scenarios end to end through this path with no model at all, and asserts which benefits respond, which do not, and what the total is. It runs in CI on every push.
 
 ## How it works
 
-1. **Upload** a policy document (schedule, certificate, benefit summary, booklet). DearPolicy reads it once, page by page, and stores every payout rule with its verbatim quote and page number. The reading model (Groq's Llama 3.3 70B, or the local model) does the reading; a quote that is not on the page is refused. This takes minutes and happens once.
+1. **Upload** a policy document (schedule, certificate, benefit summary, booklet). DearPolicy reads it once, page by page, and stores every payout rule with its verbatim quote and page number. A quote that is not on the page is refused. This takes minutes and happens once.
 2. **Benefits page** shows every rule in plain English. Most need nothing from you. A rule DearPolicy read from a table heading rather than the row is marked *confirm this* and is not calculated from until you say it is right — one click, and your version survives every later re-read.
 3. **Ask** in the chat: *"Charmaine caught dengue, what can she claim?"* or *"How much if I break my wrist?"* DearPolicy asks the facts that decide eligibility first (accident or illness? admitted?), then the ones that set amounts (how many nights?), one at a time, and only then gives figures — each one calculated by code from the stored rule and your sum insured, never by the model, and labelled **confirmed / estimated / indicative**.
-4. **Claim pack** — one printable PDF: who is claiming, what happened, each benefit with its amount and page, what is still missing, and what to attach.
+4. **Claim pack** — one printable PDF: who is claiming, what happened, each benefit with its amount and page, the estimated claim amount struck once, what is still missing, and what to attach.
 
 ## Setup
 
 ```
 npm install
-copy .env.example .env.local      # then fill it in (see below)
-npm run db:start                  # PostgreSQL in Docker
+cp .env.example .env.local        # then fill it in (see below)
+npm run db:start                  # PostgreSQL in Docker, for local runs
 npm run db:setup
 npm run dev
 ```
 
-Optional, for scanned PDFs: double-click `INSTALL-OCR.cmd` once.
-
 ### `.env.local`
 
-**One key, whole system** — no Ollama, no local models:
+**One key, whole system:**
 
 ```
-MODEL_PRESET=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+MODEL_PRESET=gemini
+GEMINI_API_KEY=...
 ```
 
-Claude Haiku reads documents and words answers; Claude Sonnet decides what applies. Presets also exist for `gemini` and `openai`. Or route each job yourself:
+Gemini Flash-Lite reads documents and words answers; Gemini Flash decides what applies. Presets also exist for `anthropic` and `openai`. Or route each job yourself:
 
 | Key | What it is |
 |---|---|
-| `READING_MODEL` / `JUDGEMENT_MODEL` / `NARRATION_MODEL` | `provider:model` per job, e.g. `anthropic:claude-haiku-4-5`; overrides the preset |
-| `PLAN_PRICE_USD`, `PLAN_CHAT_TURNS`, `PLAN_DOCUMENTS`, `PLAN_HARD_STOP_USD` | Allowances shown on the Usage page; the hard stop halts hosted calls for the month |
-| `DATABASE_URL` | `postgres://…@127.0.0.1:5432/dearpolicy` |
-| `LLM_MODEL` | Local chat model in Ollama, e.g. `qwen3:8b` |
-| `READING_MODEL_PROVIDER` | `groq` to read documents with Groq; leave unset to read locally |
-| `GROQ_API_KEY` | From console.groq.com (free tier; Groq's terms forbid training on your data) |
-| `GROQ_MODEL` | Default `llama-3.3-70b-versatile` |
+| `READING_MODEL` / `JUDGEMENT_MODEL` / `NARRATION_MODEL` | `provider:model` per job, e.g. `google:flash-lite`; overrides the preset |
+| `DATABASE_URL` | Postgres connection string (Supabase in production) |
+| `PINECONE_API_KEY` | Semantic search. Without it, retrieval falls back to Postgres full-text alone |
+| `PLAN_PRICE_USD`, `PLAN_CHAT_TURNS`, `PLAN_DOCUMENTS`, `PLAN_HARD_STOP_USD` | Allowances shown on the Usage page; the hard stop halts model calls for the month |
+| `RAG_EVIDENCE_WINDOW_CHARACTERS`, `RAG_MAX_EVIDENCE_WINDOWS`, `RAG_ANALYSIS_BUDGET_MS` | How deep one question is allowed to read |
 
-The sidebar shows whether the database, the local model and the reading model are up, and what to run if one is not.
+The sidebar shows whether the database, the models and semantic search are up, and what to do if one is not.
 
 ## Commands
 
@@ -64,23 +80,32 @@ The sidebar shows whether the database, the local model and the reading model ar
 | `npm run db:check` | Verifies the database, every table and column, and how much is indexed |
 | `npm run policies:index` | Re-reads every document's stored pages into benefit rules (also a button on the Benefits page) |
 | `npm run policies:report` | What was captured, per document |
-| `npm run claims:test` · `system:test` · `ocr:test` · `eval:extraction` | The verification suites — 110 + 65 checks, 24/24 extraction recall on five real documents |
+| `npm run typecheck` | TypeScript across the whole app |
+| `npm run system:test` | System and database regressions against an in-process PostgreSQL |
+| `npm run claims:test` | Claim rules, the nine-scenario claim-answer evaluation, death evidence, orchestration and the printed claim pack |
+| `npm run eval:extraction` | Extraction recall against five real documents (24/24 today) |
+
+Every one of these runs in CI on every push, plus the production build.
 
 ## What DearPolicy will and will not do
 
-- Every figure carries the quote and page it came from, and a label saying how far to trust it. Indicative figures are shown but never added into the total.
+- Every figure carries the quote and page it came from, the cover it is paid under, and a label saying how far to trust it. Indicative figures are shown but never added into the total.
+- A benefit written for an event that did not happen is ruled out, and the reason is said out loud rather than the row quietly vanishing.
+- Two rows describing the same cover are counted once, never twice.
 - A rule the wording does not clearly state is left for you to confirm — never guessed. "Whichever is lesser" rules are refused rather than settled at the larger figure.
-- An accident-only benefit is never offered for an illness, and the reason is said out loud.
 - Money you pay (premiums, pro-ration factors, worked examples) is never read as money you receive.
 - An incomplete read is reported as incomplete, never as "not covered".
 - Nothing here is an offer, an admission of liability, or a decision by any insurer.
 
-## Not done yet (the 10%)
+## Not done yet
 
+- A policy's own schedule of defined critical illnesses is only known where its benefit table was read. Where it was not, the LIA 2019 list is the floor and the card says so.
+- Waiting periods, survival periods, territorial limits and age limits are stored as conditions on the card rather than evaluated as rules.
+- An accelerated rider that reduces another benefit is not yet modelled; both are shown.
 - Filling an insurer's own claim form (needs a real form with fields to test against).
 - Rules the five formula kinds cannot express (per-year aggregates, deductibles, co-insurance) are stored for review rather than calculated.
 - Rotated pages and right-aligned amount columns have no fixture yet.
-- Live testing: the suites use an in-process PostgreSQL and a simulated model; the reading path against Groq is verified against a simulated Groq.
+- The suites use an in-process PostgreSQL and a simulated model; the live Gemini path is verified by hand.
 
 ---
 
