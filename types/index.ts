@@ -38,6 +38,9 @@ export type ClaimItem = {
    * one. Two rows describing the same cover share it, which is what stops the
    * same sum assured being counted twice. */
   coverKey?:string;
+  /** The cover's own name, as the person's certificate prints it, for saying
+   * where a figure comes from without showing them a key. */
+  coverLabel?:string;
   /** The single lump-sum event this figure is paid for, when there is one.
    * Two benefits in the same cover paying on the same event are alternatives,
    * not additions. */

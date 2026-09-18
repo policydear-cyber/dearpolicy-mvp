@@ -15,7 +15,7 @@ import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
-import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
@@ -72,6 +72,11 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
   if(warnings.length){
     answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),...warnings])];
     for(const warning of warnings)if(!answer.details.includes(warning))answer.details.push(warning);
+  }
+  const split=describeCoverSplit(answer.claimItems);
+  if(split){
+    const line="That is "+split+".";
+    if(!answer.details.includes(line))answer.details.unshift(line);
   }
   return aggregatePotentialPayouts(answer.claimItems);
 }

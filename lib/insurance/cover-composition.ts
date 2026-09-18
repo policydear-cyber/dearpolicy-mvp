@@ -120,15 +120,23 @@ export function acceleratedBenefitWarnings(items:ClaimItem[]):string[]{
   return notes;
 }
 
-/** What a figure is worth saying out loud when several covers respond. Kept
- * separate from the arithmetic so the wording can change without touching it. */
+/** Where the total came from, cover by cover.
+ *
+ * A single figure is only checkable if the person can see it broken into the
+ * plans it came out of. "S$1,600,000" is an assertion; "S$1,000,000 from your
+ * Group Term Life cover and S$600,000 from your Group Personal Accident cover"
+ * is something they can hold against their own certificate. */
 export function describeCoverSplit(items:ClaimItem[]){
-  const byCover=new Map<string,number>();
+  const byCover=new Map<string,{amount:number;label:string;currency:string}>();
   for(const item of items){
-    if(typeof item.calculatedAmount!=="number"||!item.coverKey||item.aggregation!=="additive")continue;
-    byCover.set(item.coverKey,(byCover.get(item.coverKey)??0)+item.calculatedAmount);
+    if(typeof item.calculatedAmount!=="number"||!item.coverKey||item.aggregation!=="additive"||item.supersededBy)continue;
+    const existing=byCover.get(item.coverKey);
+    byCover.set(item.coverKey,{amount:(existing?.amount??0)+item.calculatedAmount,
+      label:existing?.label??item.coverLabel??item.title.split(" \u00b7 ").slice(1).join(" \u00b7 "),
+      currency:item.currency??existing?.currency??"SGD"});
   }
   if(byCover.size<2)return null;
-  const currency=items.find(item=>item.currency)?.currency??"SGD";
-  return [...byCover.values()].map(amount=>formatMoney(amount,currency)).join(" + ");
+  const parts=[...byCover.values()].sort((a,b)=>b.amount-a.amount)
+    .map(entry=>formatMoney(entry.amount,entry.currency)+" from your "+entry.label+" cover");
+  return parts.slice(0,-1).join(", ")+" and "+parts[parts.length-1];
 }

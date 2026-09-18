@@ -15,7 +15,7 @@ import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,t
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
 import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,looksLikeCoverageLine,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
-import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
 import { applyImpliedScaleLimit,impliedScaleLimit } from "@/lib/insurance/scale-limit";
 import type { ClaimItem } from "@/types";
@@ -1380,6 +1380,12 @@ export function runSystemRegressions(){
     assert.deepEqual(aggregatePotentialPayouts(alone),[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
     // Separate covers still stack, which is the whole point of holding both.
     assert.deepEqual(aggregatePotentialPayouts(items),[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
+    // And the total is broken into the plans it came out of, so the person can
+    // hold it against their own certificate.
+    items[1].coverLabel="Group Personal Accident";items[2].coverLabel="Group Term Life";
+    assert.equal(describeCoverSplit(items),
+      "S$1,000,000 from your Group Term Life cover and S$600,000 from your Group Personal Accident cover");
+    assert.equal(describeCoverSplit([items[2]]),null,"one cover needs no breakdown");
     // But a smaller fixed grant alongside a sum assured is a second benefit
     // that really is paid as well. Collapsing it would fix the double count by
     // inventing an undercount.

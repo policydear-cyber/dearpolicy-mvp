@@ -303,7 +303,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   // A figure a person cannot trace back to one of their own covers is a figure
   // they cannot check. Every card says which cover it is paid under, and the
   // policy number the insurer settles against.
-  const coverLabel=benefit.productName??coverage?.productName??coverage?.policyName??args.contractName??null;
+  const coverLabel=coverage?.productName??coverage?.policyName??benefit.productName??args.contractName??null;
   const coverNumber=coverage?.policyNumber??coverage?.groupPolicyNumber??null;
   const paidUnder=coverLabel?" Paid under your "+coverLabel+" cover"+(coverNumber?" (policy "+coverNumber+")":"")+".":"";
   // The standard Singapore list is a floor, not the contract. Saying so on the
@@ -323,6 +323,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   const item:ClaimItem={
     title:args.ownerName+" · "+benefit.benefitName,
     coverKey:cover,
+    ...(coverLabel?{coverLabel}:{}),
     ...(paysOn?{payingEvent:paysOn}:{}),
     status:amount!=null?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
     amountText:amount!=null?formatMoney(amount,currency):null,
