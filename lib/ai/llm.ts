@@ -141,7 +141,7 @@ export async function structuredCompletion<T>(args: {
     let reply;
     try {
       reply = await hostedStructuredCompletion(choice, { system: args.system, user: args.user, jsonSchema,
-        temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs });
+        temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
     } catch (error) {
       await recordUsage({ role, choice, input: 0, output: 0, durationMs: Date.now() - started, ok: false });
       throw error;

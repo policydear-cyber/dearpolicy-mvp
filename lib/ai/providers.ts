@@ -115,9 +115,20 @@ export function costUsd(choice:ModelChoice,usage:{input:number;output:number;cac
 // ---------------------------------------------------------------------------
 export type HostedReply={content:string;truncated:boolean;usage:{input:number;output:number;cached?:number}};
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
-async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeoutMs:number):Promise<Response>{
+// maxAttempts defaults to 8 (existing behaviour for every caller that does
+// not name it). A caller that DOES pass one -- like judgeRelevance's
+// attempts:1 -- was silently ignored here before: this hardcoded loop always
+// ran up to 8 times regardless, so a 90s-timeout call meant to fail fast
+// could actually retry for up to ~12 minutes, well past Vercel's 300s
+// function limit. That let the platform kill the function mid-retry instead
+// of judgeRelevance's own try/catch ever getting to run its documented
+// graceful fallback (the deterministic shortlist stands), leaving the job
+// stuck "running" until the separate 10-minute cross-instance recovery sweep
+// finally marked it failed -- exactly the stuck-chat symptom this was meant
+// to avoid.
+async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeoutMs:number,maxAttempts=8):Promise<Response>{
   let lastError:Error|null=null;
-  for(let n=0;n<8;n++){
+  for(let n=0;n<maxAttempts;n++){
     const controller=new AbortController();
     // Cleared on every path: a live timer keeps a process alive long after
     // the answer came back.
@@ -147,7 +158,7 @@ function openAiBase(provider:Provider){
   if(provider==="groq")return (process.env.GROQ_BASE_URL??"https://api.groq.com/openai/v1").replace(/\/$/,"");
   return (process.env.OPENAI_BASE_URL??"https://api.openai.com/v1").replace(/\/$/,"");
 }
-export async function openAiCompatible(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number}):Promise<HostedReply>{
+export async function openAiCompatible(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}):Promise<HostedReply>{
   const key=apiKeyFor(choice.provider);
   if(!key)throw new Error("No API key configured for "+choice.provider);
   const timeoutMs=args.timeoutMs??120_000;
@@ -161,7 +172,7 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
     ],
   });
   const response=await withRetries((signal)=>fetch(openAiBase(choice.provider)+"/chat/completions",{method:"POST",signal,
-      headers:{"content-type":"application/json",authorization:"Bearer "+key},body}),timeoutMs);
+      headers:{"content-type":"application/json",authorization:"Bearer "+key},body}),timeoutMs,args.attempts);
   if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
   const payload=OpenAIShape.parse(await response.json());
   return {content:payload.choices[0].message.content??"",truncated:payload.choices[0].finish_reason==="length",
@@ -172,7 +183,7 @@ const AnthropicShape=z.object({
   stop_reason:z.string().nullable().optional(),
   usage:z.object({input_tokens:z.number(),output_tokens:z.number(),cache_read_input_tokens:z.number().optional()}).optional(),
 });
-export async function anthropicMessages(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number}):Promise<HostedReply>{
+export async function anthropicMessages(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}):Promise<HostedReply>{
   const key=apiKeyFor("anthropic");
   if(!key)throw new Error("No API key configured for anthropic");
   const timeoutMs=args.timeoutMs??120_000;
@@ -185,7 +196,7 @@ export async function anthropicMessages(choice:ModelChoice,args:{system:string;u
     messages:[{role:"user",content:args.user}],
   });
   const response=await withRetries((signal)=>fetch((process.env.ANTHROPIC_BASE_URL??"https://api.anthropic.com").replace(/\/$/,"")+"/v1/messages",{method:"POST",signal,
-      headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},body}),timeoutMs);
+      headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},body}),timeoutMs,args.attempts);
   if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
   const payload=AnthropicShape.parse(await response.json());
   const text=payload.content.filter(block=>block.type==="text").map(block=>block.text??"").join("");
@@ -244,7 +255,7 @@ export function pickGeminiModel(requested:string,available:string[]){
   candidates.sort((a,b)=>versionOf(b)-versionOf(a)||a.length-b.length);
   return candidates[0]??requested;
 }
-export async function geminiGenerate(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number}):Promise<HostedReply>{
+export async function geminiGenerate(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}):Promise<HostedReply>{
   const key=apiKeyFor("gemini");
   if(!key)throw new Error("No API key configured for gemini");
   const timeoutMs=args.timeoutMs??120_000;
@@ -259,7 +270,7 @@ export async function geminiGenerate(choice:ModelChoice,args:{system:string;user
   // keys accept either. Sending both costs nothing and rules out the difference.
   const endpoint=geminiEndpoint(model,key)+"?key="+encodeURIComponent(key);
   const response=await withRetries((signal)=>fetch(endpoint,{method:"POST",signal,
-      headers:{"content-type":"application/json","x-goog-api-key":key},body}),timeoutMs);
+      headers:{"content-type":"application/json","x-goog-api-key":key},body}),timeoutMs,args.attempts);
   if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
   const payload=GeminiShape.parse(await response.json());
   if(payload.promptFeedback?.blockReason)throw new Error("The model declined this page: "+payload.promptFeedback.blockReason);
@@ -279,7 +290,7 @@ export function providerMessage(bodyText:string){
     return (message+(reason?" ["+reason+"]":"")).replace(/[{}]/g,"").slice(0,400);
   }catch{return bodyText.replace(/[{}]/g,"").slice(0,400);}
 }
-export async function hostedStructuredCompletion(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number}){
+export async function hostedStructuredCompletion(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}){
   if(choice.provider==="anthropic")return anthropicMessages(choice,args);
   if(choice.provider==="gemini")return geminiGenerate(choice,args);
   return openAiCompatible(choice,args);
