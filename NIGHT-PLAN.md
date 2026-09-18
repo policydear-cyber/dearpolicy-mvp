@@ -130,16 +130,22 @@ claiming a feature is proven live.
 The honest limits of the current decision layer, in the order they are most
 likely to produce a wrong answer:
 
+- Sixteen rows of the household's burns and impairment tables read as a scale
+  that pays less for a worse injury, which means two tables on one page have
+  been interleaved or a column has drifted. They are held back and labelled;
+  nobody has yet read the page to say what they should be.
 - A plan whose benefit table has not been read has no schedule of its own, so
   its defined critical illnesses fall back to the LIA 2019 standard list. That
   list is a floor: a plan may define more conditions, and one of its own named
   conditions would then be refused. The card says so.
 - Waiting and survival periods are shown, not evaluated.
-- An accelerated rider is not recognised as reducing the benefit it accelerates.
-- Two covers under one policy number are separated by product name. A plan
-  whose product name is missing from both the benefit row and the coverage row
-  falls back to the contract name, and two such rows in one contract would be
-  treated as one cover.
-- Extraction quality is the floor under everything above: a wrong stored rule
-  propagates confidently. `npm run eval:extraction` scores it on five real
-  documents and runs in CI, but five documents is not a corpus.
+- Someone with genuinely separate injuries is under-counted: one schedule pays
+  once, and the answer invites them to name the injuries so each can be worked
+  out. Nobody has tested that conversation.
+- Two covers under one policy number are separated by the certificate's product
+  name. A cover whose product name is missing from both the benefit row and the
+  coverage row falls back to the contract name.
+- Extraction quality is the floor under everything: a wrong stored rule
+  propagates confidently, and the four cross-checks now in place (a certificate
+  line is not a benefit, an implied scale limit, two documents agreeing, a scale
+  that runs the wrong way) catch only the shapes they were written for.

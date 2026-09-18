@@ -41,6 +41,22 @@ WHAT CHANGED, IN ONE BREATH
    - When two people on one group scheme hold the same amounts but the
      certificate attaches them to different plans, DearPolicy says so instead
      of calculating from whichever it happened to read.
+   - Your fracture scale calculates itself. One document gives it as
+     percentages, the other as amounts; divide one by the other and the base
+     falls out (S$5,000, agreed by four rows independently). "20% for a
+     fractured wrist" was being applied to your S$600,000 sum insured and
+     coming out at S$120,000, which is why every row waited to be confirmed.
+   - A rule two of your documents state identically is used without being
+     confirmed. Two independent readings agreeing IS the confirmation.
+     Rules on file ready to calculate with: 62 -> 135, out of 173.
+   - A schedule of injuries pays for the injury that happened, not for every
+     line that could describe it. "I lost my thumb" was three payouts.
+   - The burns table ("Body - equals to or greater than 10%...") answers only
+     to a reported burn or assessed impairment. It names no injury, so every
+     band used to match every accident, and those rows carry the largest
+     percentages in the plan.
+   - A band scale that pays LESS for a worse injury is held back and says so:
+     no insurer writes that, so DearPolicy has read the page wrong.
 
    The death claim that returned S$3,600,000 across four benefits returns
    S$1,600,000: S$1,000,000 of group term life plus S$600,000 of group
