@@ -554,6 +554,17 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             const matches=assessed.matches.filter(match=>keep(match.benefit.benefitName));
             for(const item of assessed.items){
               if(!keep(item.title.split(" · ").slice(1).join(" · ")))continue;
+              // The reader could not be asked at all. Keeping the benefits is
+              // right -- they are the person's, and the shortlist found them --
+              // but a figure nobody checked against this event is not an
+              // estimate, it is a guess with a currency symbol in front of it.
+              if(!verdict){
+                item.amountText=null;
+                item.status="needs_document";
+                delete (item as {calculatedAmount?:number}).calculatedAmount;
+                item.conditions=[...new Set([...item.conditions,
+                  "DearPolicy could not check whether this benefit responds to what happened, so no amount is shown for it."])];
+              }
               if(status&&status.state!=="verified_recent")item.conditions=[...new Set([...item.conditions,status.label+": "+status.detail])];
               answer.claimItems.push(item);
             }
