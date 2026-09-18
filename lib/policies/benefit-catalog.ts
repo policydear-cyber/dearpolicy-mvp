@@ -1,4 +1,5 @@
 import { knownValue,normalText } from "@/lib/chat/facts";
+import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
@@ -143,12 +144,14 @@ export type RuledOut={benefit:CatalogBenefit;because:string};
 const TRAIT_WORDS:Partial<Record<ScenarioTrait,string>>={accident:"an accident",death:"a death",illness:"an illness"};
 /** Why a candidate benefit was ruled out — said out loud, because silence about
  * a benefit the person can see in their policy reads as a miss. */
-export function ruledOutBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[]):RuledOut[]{
+export function ruledOutBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[],events:ClaimEventType[]=[]):RuledOut[]{
   const reported=new Set(traits);
   const out:RuledOut[]=[];
   for(const benefit of catalog){
     const overlap=benefit.traits.some(trait=>reported.has(trait))||benefit.traits.some(trait=>CONSEQUENCES.includes(trait));
     if(!overlap)continue;
+    const wrongEvent=ruledOutByEvent(benefitTriggerEvents(benefit.benefitName,benefit.quote),events);
+    if(wrongEvent){out.push({benefit,because:wrongEvent});continue;}
     for(const required of benefit.requires??[]){
       if(reported.has(required))continue;
       const conflict=(CONTRADICTS[required]??[]).find(trait=>reported.has(trait));
@@ -157,11 +160,15 @@ export function ruledOutBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[]
   }
   return out;
 }
-export function matchBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[]):BenefitMatch[]{
+export function matchBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[],events:ClaimEventType[]=[]):BenefitMatch[]{
   const reported=new Set(traits);
   const hasCause=CAUSES.some(trait=>reported.has(trait));
   const matches:BenefitMatch[]=[];
   for(const benefit of catalog){
+    // Before anything else: is this benefit even written for the kind of event
+    // that happened? A critical-illness benefit and a death are different
+    // triggers, and no overlap of words between them makes one the other.
+    if(ruledOutByEvent(benefitTriggerEvents(benefit.benefitName,benefit.quote),events))continue;
     let overlap=benefit.traits.filter(trait=>reported.has(trait)).length;
     const unknown:ScenarioTrait[]=[];
     if(overlap===0){
@@ -191,6 +198,10 @@ export type CatalogAssessment={item:ClaimItem;missing:string[]};
 /** Arithmetic in application code, from a stored rule and a verified insured
  * amount. No model is involved and the result is identical every time. */
 export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:OwnedCoverage|null;ownerName:string;facts:SubjectFacts;
+  /** The contract this benefit sits in, and what happened -- so the figure can
+   * be tied to one cover and one triggering event, which is what stops the same
+   * sum being counted twice. */
+  contractId?:string;insurer?:string|null;events?:ClaimEventType[];
   /** Set when the person told us the policy is theirs but no schedule has been
    * uploaded. A figure the document itself prints still applies; a percentage
    * of "the sum insured" cannot be computed without their schedule. */
@@ -247,8 +258,15 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   for(const requirement of benefit.requirements)
     if(knownValue(facts,requirement.factKey)==null)missing.push(requirement.why);
   for(const entry of missing)conditions.push("Still needed: "+entry);
+  const triggers=benefitTriggerEvents(benefit.benefitName,benefit.quote);
+  const paysOn=payingEvent(triggers,args.events??[]);
+  const cover=coverKey({policyNumber:coverage?.policyNumber,groupPolicyNumber:coverage?.groupPolicyNumber,
+    insurer:args.insurer??coverage?.insurer??null,productName:benefit.productName??coverage?.productName??null,
+    contractId:args.contractId??benefit.policyId});
   const item:ClaimItem={
     title:args.ownerName+" · "+benefit.benefitName,
+    coverKey:cover,
+    ...(paysOn?{payingEvent:paysOn}:{}),
     status:amount!=null?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
     amountText:amount!=null?formatMoney(amount,currency):null,
     amountLabel:amount==null?undefined
@@ -684,13 +702,17 @@ export function planClaimQuestions(args:{matches:BenefitMatch[];facts:SubjectFac
   }
   return plan;
 }
-export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];facts:SubjectFacts;traits:ScenarioTrait[]}){
+export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];facts:SubjectFacts;traits:ScenarioTrait[];
+  /** Supplied by the caller when a diagnosis was reported, so the critical
+   * illness door can be closed on a condition the schedules do not name. */
+  events?:ClaimEventType[]}){
+  const events=args.events??reportedClaimEvents(args.facts,args.traits);
   const documentIds=new Set([...args.contract.documents,...args.contract.references].map(d=>d.id));
   const mine=preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId)));
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";
-  const matches=matchBenefits(mine,args.traits);
+  const matches=matchBenefits(mine,args.traits,events);
   const excludedByFact=factExclusions(args.facts);
   const inPlay=matches.filter(match=>!excludedByFact(match.benefit));
   for(const {benefit} of inPlay){
@@ -700,7 +722,8 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
     if(!coverage&&!declaredOnly)continue;
     const key=benefit.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"");
     if(seen.has(key))continue;seen.add(key);
-    const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:args.facts,declaredOnly});
+    const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:args.facts,declaredOnly,
+      contractId:args.contract.id,insurer:args.contract.insurer,events});
     items.push(item);
     citations.push({chunkId:"benefit:"+benefit.id,policyId:benefit.policyId,
       policyName:benefit.productName??args.contract.name,insurer:args.contract.insurer??undefined,
@@ -711,7 +734,7 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
       pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,
       documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"});
   }
-  const excluded=ruledOutBenefits(mine,args.traits);
+  const excluded=ruledOutBenefits(mine,args.traits,events);
   const byFact=matches.filter(match=>!inPlay.includes(match)).map(match=>({benefit:match.benefit,because:excludedByFact(match.benefit)||"ruled out by what you told me"}));
   return {items,citations,considered:mine.length,matches:inPlay,ruledOut:[...excluded,...byFact]};
 }

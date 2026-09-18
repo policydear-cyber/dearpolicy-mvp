@@ -13,8 +13,10 @@ import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTrai
 import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
+import { reportedClaimEvents } from "@/lib/insurance/claim-events";
+import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
-import type { ChatAnswer,ChatCitation,ChatQuestion } from "@/types";
+import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
 import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn,ChatConflict } from "./store";
@@ -35,6 +37,16 @@ function explicitPeople(message:string,family:ClaimPerson[]){
   const text=" "+normalText(message).replace(/[^\p{L}\p{N}]+/gu," ")+" ";
   return family.filter(p=>[p.display_name,p.preferred_name].filter(Boolean).some(name=>text.includes(" "+normalText(name!).replace(/[^\p{L}\p{N}]+/gu," ")+" ")));
 }
+/** Benefits that pay on the same event under the same policy are alternatives.
+ * Resolving that before the total is struck is the difference between "your
+ * cover pays S$2,000,000" and the S$3,600,000 that adding every responding row
+ * together produced. */
+function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[]}){
+  const {notes}=resolveCoverOverlaps(answer.claimItems);
+  for(const note of notes)if(!answer.details.includes(note))answer.details.push(note);
+  return aggregatePotentialPayouts(answer.claimItems);
+}
+
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   const family=(await query<ClaimPerson>("SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at",[request.accountId])).rows;
   if(!family.length)throw new Error("Add a family profile before starting a chat.");
@@ -394,7 +406,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
               // A what-if names the one fact that would turn a rule into a
               // figure, without recording anything against anyone's profile.
               if(whatIf&&looked.question)answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:"It is what turns the rule above into an actual amount."}];
-              answer.potentialPayoutTotals=aggregatePotentialPayouts(answer.claimItems);
+              answer.potentialPayoutTotals=settleOverlaps(answer);
               const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
               const count=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
               const unconfirmed=answer.claimItems.filter(item=>item.conditions.some(c=>c.startsWith("Not yet verified")||c.startsWith("Assumes the standard"))).length;
@@ -461,7 +473,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             if(review)review.status=scenario.considered?"searched":"missing_wording";
           }
           answer.mode="claim_assessment";
-          answer.potentialPayoutTotals=aggregatePotentialPayouts(answer.claimItems);
+          answer.potentialPayoutTotals=settleOverlaps(answer);
           const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
           answer.summary=answer.claimItems.length
             ?"If that happened, these benefits in your policies would respond"+(totals?", and the ones that can already be calculated come to "+totals:"")+". Every figure is an estimate from the wording quoted on the page shown, and the insurer decides the final amount."
@@ -533,7 +545,13 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           const perContract=contracts.map(contract=>{
             const facts=state.subjects[contract.ownerId]??{};
             const traits=eventTraits(facts,(state.scenarios?.[contract.ownerId]??[]).flatMap(s=>s.traits));
-            return {contract,facts,traits,assessed:assessContractFromCatalog({contract,catalog,facts,traits})};
+            // What kind of claim this is, in the contract's own vocabulary. A
+            // benefit written for a different kind of event is dropped here,
+            // before any model is asked anything, because that is a matter of
+            // what the policy says and not a matter of opinion.
+            const diagnosis=knownValue(facts,"diagnosis");
+            const events=reportedClaimEvents(facts,traits,typeof diagnosis==="string"&&diagnosis.trim()?[diagnosis.trim()]:[]);
+            return {contract,facts,traits,events,assessed:assessContractFromCatalog({contract,catalog,facts,traits,events})};
           });
           for(const {assessed} of perContract)
             for(const entry of assessed.ruledOut)ruledOut.set(entry.benefit.benefitName,entry.because);
@@ -674,7 +692,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           }
           delete state.pending;
           answer.mode="claim_assessment";
-          answer.potentialPayoutTotals=aggregatePotentialPayouts(answer.claimItems);
+          answer.potentialPayoutTotals=settleOverlaps(answer);
           // Put the claim on record so the pack can be printed and the Claims
           // page shows it, and say what to do next — the last thing a person
           // reads should be an action, not a caveat.
@@ -891,7 +909,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const unresolved=reviews.filter(r=>r.status!=="searched").length;
         answer.confidence=answer.citations.length?"partial_match":"insufficient_evidence";
         const eventLead=claimEventLead(context.people,state);
-        answer.potentialPayoutTotals=aggregatePotentialPayouts(answer.claimItems);
+        answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
         if(answer.potentialPayoutTotals.length&&answer.reviewCoverage&&!answer.reviewCoverage.complete)

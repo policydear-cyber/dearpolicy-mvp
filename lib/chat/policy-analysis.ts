@@ -420,6 +420,10 @@ export function aggregatePotentialPayouts(items:ClaimItem[]):PotentialPayoutTota
     // read from a table heading must not inflate what the household is told it
     // can claim.
     if(item.estimateBasis==="indicative")continue;
+    // Another benefit in the same cover pays instead of this one. The figure
+    // stays on its card so the person can see it; adding it would be telling
+    // them the policy pays the same sum twice.
+    if(item.supersededBy)continue;
     const id=item.calculationId??JSON.stringify([item.title,item.currency,item.calculatedAmount,item.calculationKind]);
     if(seen.has(id))continue;seen.add(id);
     const old=totals.get(item.currency)??{amount:0,itemCount:0};old.amount+=item.calculatedAmount;old.itemCount++;totals.set(item.currency,old);

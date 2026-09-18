@@ -13,7 +13,10 @@ import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassificatio
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
-import { assessCatalogBenefit,benefitTraits,eventTraits,matchBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessCatalogBenefit,benefitTraits,eventTraits,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
+import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
 import { z } from "zod";
@@ -1056,6 +1059,105 @@ export function runSystemRegressions(){
     assert.equal(paysOnDefinedCondition("Major Cancer Benefit"),true);
     assert.equal(paysOnDefinedCondition("Daily Hospital Cash Benefit S$100 per day"),false);
     assert.equal(paysOnDefinedCondition("Accidental Hospital Recuperation Benefit"),false);
+  });
+  test("A benefit's trigger is read from its own name, not from a passing mention in the clause",()=>{
+    // The S$3,600,000 death answer: a critical-illness product was offered for
+    // a death because its clause mentions death in passing. It does not pay on
+    // one.
+    const livingCare=benefitTriggerEvents("Group Living Care",
+      "We pay 100% of the Sum Insured on diagnosis of a Critical Illness. This benefit terminates on the death of the insured member.");
+    assert.ok(livingCare.includes("critical_illness"));
+    assert.equal(livingCare.includes("death"),false,"a clause that mentions death is not a death benefit");
+    const accidentalDeath=benefitTriggerEvents("Death due to Accident","We pay 100% of the Sum Insured.");
+    assert.ok(accidentalDeath.includes("death"));
+    const cash=benefitTriggerEvents("Daily Hospital Cash Benefit","S$100 for each day of confinement.");
+    assert.deepEqual(cash,["hospitalisation"]);
+    // A clause-only death benefit is still a death benefit when its name says
+    // nothing at all.
+    assert.ok(benefitTriggerEvents("Sum Assured","The Sum Assured is payable on death.").includes("death"));
+  });
+  test("What happened is read in the contract's vocabulary, and only a named diagnosis closes a door",()=>{
+    assert.ok(reportedClaimEvents({death:fact(true)},["death"]).includes("death"));
+    // No diagnosis named: the critical-illness benefits stay in play, because
+    // "what if I am diagnosed with cancer" must still reach them.
+    assert.ok(reportedClaimEvents({},["illness","diagnosis"],[]).includes("critical_illness"));
+    assert.ok(reportedClaimEvents({},["illness","diagnosis"],["stage 2 breast cancer"]).includes("critical_illness"));
+    // Named, and not a condition those benefits are defined to pay for.
+    assert.equal(reportedClaimEvents({},["illness","diagnosis"],["dengue fever"]).includes("critical_illness"),false);
+    // A death is not a diagnosis, which is why the earlier diagnosis-only
+    // check never fired on the death that returned S$3,600,000.
+    assert.equal(reportedClaimEvents({death:fact(true)},["death"]).includes("critical_illness"),false);
+  });
+  test("A critical-illness product is not offered for a death, and a death benefit is not offered for dengue",()=>{
+    const entry=(name:string,quote:string):CatalogBenefit=>({id:name,policyId:"wording",productName:"Group Plan",benefitName:name,
+      traits:benefitTraits(name,quote),formulaKind:"none",formulaValue:null,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:1,quote,conditions:[],requirements:[],needsReview:false});
+    const catalog=[
+      entry("Group Living Care","100% of the Sum Insured on diagnosis of a Critical Illness. Cover ends on death."),
+      entry("Group Term Life Death Benefit","On death we pay the full Sum Insured."),
+      entry("Death due to Accident","We pay 100% of the Sum Insured where death results from an accident."),
+      entry("Daily Hospital Cash","S$100 for each day of hospital confinement."),
+    ];
+    const deathFacts:SubjectFacts={death:fact(true),accidentalDeath:fact(true)};
+    const deathTraits=eventTraits(deathFacts);
+    const deathEvents=reportedClaimEvents(deathFacts,deathTraits);
+    const onDeath=matchBenefits(catalog,deathTraits,deathEvents).map(m=>m.benefit.benefitName);
+    assert.equal(onDeath.includes("Group Living Care"),false,"a critical-illness product does not pay on a death");
+    assert.ok(onDeath.includes("Group Term Life Death Benefit"));
+    assert.ok(onDeath.includes("Death due to Accident"));
+    // And the reason is said out loud rather than the row silently vanishing.
+    const reasons=ruledOutBenefits(catalog,deathTraits,deathEvents).map(r=>r.benefit.benefitName+": "+r.because);
+    assert.match(reasons.join(" | "),/Group Living Care: pays on the diagnosis of a condition named/);
+    // The other direction: the dengue answer.
+    const illFacts:SubjectFacts={diagnosis:fact("dengue fever"),hospitalised:fact(true),hospitalNights:fact(3)};
+    const illTraits=eventTraits(illFacts);
+    const illEvents=reportedClaimEvents(illFacts,illTraits,["dengue fever"]);
+    const onDengue=matchBenefits(catalog,illTraits,illEvents).map(m=>m.benefit.benefitName);
+    assert.equal(onDengue.includes("Group Living Care"),false,"dengue is not a defined critical illness");
+    assert.equal(onDengue.includes("Group Term Life Death Benefit"),false,"nobody has died");
+    assert.ok(onDengue.includes("Daily Hospital Cash"),"but the admission still pays");
+  });
+  test("Nothing is ruled out while the event is still unknown",()=>{
+    assert.equal(ruledOutByEvent(["critical_illness"],[]),null);
+    assert.equal(ruledOutByEvent([],["death"]),null);
+    // A hospital or expense benefit is never ruled out by this gate.
+    assert.equal(ruledOutByEvent(["hospitalisation"],["death"]),null);
+    assert.equal(ruledOutByEvent(["medical_expense"],["death"]),null);
+  });
+  test("One cover pays its sum once, and the figure from the person's own schedule is the one kept",()=>{
+    // The other half of S$3,600,000: the same group personal accident cover
+    // counted twice, once from the booklet and once from the certificate.
+    const item=(title:string,amount:number,basis:"confirmed"|"estimated",cover:string):ClaimItem=>({
+      title,status:"likely_applicable",amountText:"S$"+amount.toLocaleString("en-SG"),amountLabel:"Potential payout",
+      estimateBasis:basis,calculatedAmount:amount,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",
+      calculationId:title,coverKey:cover,payingEvent:"death",reason:"",conditions:[]});
+    const items=[
+      item("Person A · Death due to Accident",1_000_000,"estimated","policy:GPA1"),
+      item("Person A · Group Personal Accident",600_000,"confirmed","policy:GPA1"),
+      item("Person A · Group Term Life Death Benefit",1_000_000,"confirmed","policy:GTL1"),
+    ];
+    const {notes}=resolveCoverOverlaps(items);
+    assert.equal(items[1].calculatedAmount,600_000,"the certificate figure is the one that counts");
+    assert.equal(items[0].calculatedAmount,undefined,"the booklet figure is no longer added");
+    assert.equal(items[0].supersededBy,"Person A · Group Personal Accident");
+    assert.match(items[0].conditions.join(" "),/Paid instead of/);
+    assert.equal(items[0].amountText,"S$1,000,000","the figure stays visible so it can be checked");
+    assert.equal(notes.length,1);
+    // Separate covers still stack, which is the whole point of holding both.
+    assert.deepEqual(aggregatePotentialPayouts(items),[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
+  });
+  test("A benefit figure is tied to one cover and one triggering event",()=>{
+    const death:CatalogBenefit={id:"d1",policyId:"wording",productName:"Group Term Life",benefitName:"Death Benefit",
+      traits:["death"],formulaKind:"sum_insured",formulaValue:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,
+      sourcePage:2,quote:"On death we pay 100% of the Sum Insured.",conditions:[],requirements:[],needsReview:false};
+    const assessed=assessCatalogBenefit({benefit:death,coverage:coverage({amount:600_000,documentRole:"certificate"}),
+      ownerName:"Person A",facts:{death:fact(true)},contractId:"contract",insurer:"Example Insurer",events:["death"]});
+    assert.equal(assessed.item.payingEvent,"death");
+    assert.equal(assessed.item.coverKey,"policy:P100","identity is the policy number the insurer settles against");
+    assert.equal(assessed.item.amountText,"S$600,000");
+    // Two rows describing the same cover share the key; a different policy does not.
+    assert.equal(coverKey({policyNumber:"P-100",contractId:"a"}),coverKey({policyNumber:"p100",contractId:"b"}));
+    assert.notEqual(coverKey({policyNumber:"P-100",contractId:"a"}),coverKey({policyNumber:"P-200",contractId:"a"}));
   });
 console.log("DearPolicy contextual system regressions passed ("+cases+" checks, including 90- and 900-policy inventories).");
 }

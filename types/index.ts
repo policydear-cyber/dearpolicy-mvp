@@ -34,6 +34,17 @@ export type ClaimItem = {
   calculationKind?:"sum_insured"|"limit_percentage"|"fixed"|"expense_cap"|"daily";
   aggregation?:"additive"|"reimbursement";
   calculationId?:string;
+  /** Which cover this figure belongs to -- the policy number where there is
+   * one. Two rows describing the same cover share it, which is what stops the
+   * same sum assured being counted twice. */
+  coverKey?:string;
+  /** The single lump-sum event this figure is paid for, when there is one.
+   * Two benefits in the same cover paying on the same event are alternatives,
+   * not additions. */
+  payingEvent?:string;
+  /** Set when another benefit in the same cover pays instead of this one. The
+   * amount stays visible; it stops being added. */
+  supersededBy?:string;
   reason:string;
   conditions:string[];
 };
