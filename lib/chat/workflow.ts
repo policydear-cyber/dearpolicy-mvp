@@ -12,6 +12,7 @@ import { pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract"
 import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTraits,loadBenefitCatalog,planClaimQuestions,questionTraits,scenarioFromCatalog,scheduleFallbackItems } from "@/lib/policies/benefit-catalog";
 import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
+import { definedConditionsFor,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
@@ -543,12 +544,42 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           for(const {assessed} of perContract)for(const match of assessed.matches)
             if(!candidates.some(c=>c.name===match.benefit.benefitName))
               candidates.push({name:match.benefit.benefitName,pays:describeBenefitFormula(match.benefit),product:match.benefit.productName,weak:match.weak});
+          // Before the reader: whether the reported diagnosis is a condition
+          // these contracts are defined to pay for at all.
+          //
+          // A critical-illness benefit does not pay for how serious an illness
+          // is. It pays for a condition named in its schedule of definitions.
+          // Trait matching cannot see that difference -- "illness" overlaps a
+          // critical-illness row directly -- and asking a model to supply it
+          // from general knowledge is asking the wrong question, because on
+          // medical grounds dengue IS severe. So the check is made here, in
+          // plain code, against the standard schedule those policies adopt.
+          const diagnoses=context.people.flatMap(person=>{
+            const value=knownValue(state.subjects[person.id]??{},"diagnosis");
+            return typeof value==="string"&&value.trim()?[value.trim()]:[];
+          });
+          const definedMatches=diagnoses.flatMap(definedConditionsFor);
+          // Only when a diagnosis was actually reported. An accident, a death
+          // or a question with no diagnosis in it says nothing either way.
+          const outsideDefinedConditions=diagnoses.length>0&&definedMatches.length===0;
+          if(outsideDefinedConditions)
+            for(const candidate of candidates.filter(c=>paysOnDefinedCondition(c.name+" "+c.pays)))
+              ruledOut.set(candidate.name,"“"+diagnoses[0]+"” is not one of the conditions a critical-illness benefit is defined to cover, however serious it is — check the policy's own list of defined conditions if you believe it is named there");
+          const definedConditionNote=diagnoses.length===0?[]
+            :outsideDefinedConditions
+            ?["Reported diagnosis is NOT on the standard list of defined critical illnesses; a critical-illness benefit does not respond to it"]
+            :["Reported diagnosis may be a defined critical illness ("+[...new Set(definedMatches)].slice(0,3).join("; ")+"), subject to the policy's own wording"];
           await report({stage:"Deciding which benefits respond to this",completed:0,total:contracts.length});
           const verdict=await judgeRelevance({event:(claimEventLead(context.people,state)||request.question).slice(0,600),
-            facts:context.people.flatMap(person=>factLabels(state.subjects[person.id]??{})),candidates});
+            facts:[...context.people.flatMap(person=>factLabels(state.subjects[person.id]??{})),...definedConditionNote],candidates});
           const responds=verdict?new Set(verdict.applies.map(entry=>entry.name)):null;
           if(verdict)for(const entry of verdict.ruledOut)if(!responds!.has(entry.name))ruledOut.set(entry.name,entry.why);
-          const keep=(name:string)=>!responds||responds.has(name);
+          // The schedule is not a matter of opinion: a model that says a
+          // critical-illness benefit responds to dengue is wrong, and does not
+          // get to overrule the list.
+          const outsideDefined=new Set(outsideDefinedConditions
+            ?candidates.filter(c=>paysOnDefinedCondition(c.name+" "+c.pays)).map(c=>c.name):[]);
+          const keep=(name:string)=>!outsideDefined.has(name)&&(!responds||responds.has(name));
           for(const {contract,facts,traits,assessed} of perContract){
             const status=currentness.get(contract.id);
             const matches=assessed.matches.filter(match=>keep(match.benefit.benefitName));

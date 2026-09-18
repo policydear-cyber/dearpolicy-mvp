@@ -5,6 +5,7 @@ import { analysisSources,buildContracts,passageBudget,productIdentity,referenceM
 import { contractReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,pagesSpanned,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
 import { assessCurrentness,contractCurrentness,matchPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { describeChoice,modelFor } from "@/lib/ai/providers";
+import { definedConditionsFor,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { deterministicDocumentRole } from "@/lib/documents/intelligence";
 import { detectHighConfidenceReferenceRole } from "@/lib/ai/extract-policy";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -1033,6 +1034,28 @@ export function runSystemRegressions(){
     const capped={...uncapped,maximumDays:3};
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
+  });
+  test("A critical-illness benefit is defined by its schedule, not by how serious the illness is",()=>{
+    // The answer that started this: dengue offered S$650,000 of critical
+    // illness cover. Dengue is severe, and severity is not the test.
+    assert.deepEqual(definedConditionsFor("dengue fever"),[]);
+    assert.deepEqual(definedConditionsFor("severe dengue with warning signs"),[]);
+    assert.deepEqual(definedConditionsFor("food poisoning"),[]);
+    assert.deepEqual(definedConditionsFor("broken wrist"),[]);
+    // The listed ones are recognised from the words a person actually uses.
+    assert.ok(definedConditionsFor("stage 2 breast cancer").includes("Major Cancer"));
+    assert.ok(definedConditionsFor("he had a heart attack").includes("Heart Attack of Specified Severity"));
+    assert.ok(definedConditionsFor("suffered a stroke").includes("Stroke with Permanent Neurological Deficit"));
+    assert.ok(definedConditionsFor("diagnosed with Parkinson's").includes("Idiopathic Parkinson's Disease"));
+    // No diagnosis stated says nothing either way.
+    assert.deepEqual(definedConditionsFor("   "),[]);
+    // Which benefits the check applies to: the ones that pay on a named
+    // condition, including plans whose name gives nothing away.
+    assert.equal(paysOnDefinedCondition("GROUP LIVING CARE 100% of Sum Insured on diagnosis of a Critical Illness"),true);
+    assert.equal(paysOnDefinedCondition("Early Critical Illness Benefit"),true);
+    assert.equal(paysOnDefinedCondition("Major Cancer Benefit"),true);
+    assert.equal(paysOnDefinedCondition("Daily Hospital Cash Benefit S$100 per day"),false);
+    assert.equal(paysOnDefinedCondition("Accidental Hospital Recuperation Benefit"),false);
   });
 console.log("DearPolicy contextual system regressions passed ("+cases+" checks, including 90- and 900-policy inventories).");
 }
