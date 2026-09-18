@@ -618,17 +618,34 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             const status=currentness.get(contract.id);
             const matches=assessed.matches.filter(match=>keep(match.benefit.benefitName));
             for(const item of assessed.items){
-              if(!keep(item.title.split(" · ").slice(1).join(" · ")))continue;
-              // The reader could not be asked at all. Keeping the benefits is
-              // right -- they are the person's, and the shortlist found them --
-              // but a figure nobody checked against this event is not an
-              // estimate, it is a guess with a currency symbol in front of it.
+              const benefitName=item.title.split(" · ").slice(1).join(" · ");
+              if(!keep(benefitName))continue;
+              // The reader could not be asked at all.
+              //
+              // This used to blank every figure. That was the right call when
+              // the only thing standing between "illness" and a critical
+              // illness payout was the reader. It is no longer: the benefit's
+              // trigger is now read from its own wording and checked against
+              // what actually happened, in code, before the reader is asked
+              // anything -- and that check is what stops the dengue and the
+              // death answers, not the reader.
+              //
+              // So a benefit the rules matched on its own cause keeps its
+              // figure and says it was not double-checked. A benefit that was
+              // only a candidate because a hospital stay or a bill is involved
+              // still loses its figure: nothing established that one responds.
               if(!verdict){
-                item.amountText=null;
-                item.status="needs_document";
-                delete (item as {calculatedAmount?:number}).calculatedAmount;
-                item.conditions=[...new Set([...item.conditions,
-                  "DearPolicy could not check whether this benefit responds to what happened, so no amount is shown for it."])];
+                const weak=assessed.matches.find(match=>match.benefit.benefitName===benefitName)?.weak??true;
+                if(weak){
+                  item.amountText=null;
+                  item.status="needs_document";
+                  delete (item as {calculatedAmount?:number}).calculatedAmount;
+                  item.conditions=[...new Set([...item.conditions,
+                    "DearPolicy could not check whether this benefit responds to what happened, so no amount is shown for it."])];
+                } else {
+                  item.conditions=[...new Set([...item.conditions,
+                    "DearPolicy's reader could not be reached for this answer. This figure comes from your policy's own rule for this benefit and the facts you gave; it has not been double-checked against what happened."])];
+                }
               }
               if(status&&status.state!=="verified_recent")item.conditions=[...new Set([...item.conditions,status.label+": "+status.detail])];
               answer.claimItems.push(item);
@@ -734,7 +751,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             ?"Estimated claim amount so far: "+totals+" across "+answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0)+" evidence-supported benefit"+(answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0)===1?"":"s")+". Each amount is calculated by DearPolicy from your schedule and the quoted clause, and remains subject to the insurer's assessment."
             :matched?"I found "+matched+" benefit"+(matched===1?"":"s")+" that can respond to what happened, but each still needs a fact or a document before an amount can be calculated."
             :"None of the benefit rules on file respond to what you described. That is based on the rules captured from your uploaded documents, so it is only as complete as those documents.");
-          answer.confidence=claimConfidence(answer.claimItems);
+          answer.confidence=verdict?claimConfidence(answer.claimItems):"partial_match";
           if(staleContracts.length)answer.nextSteps.push("Upload the latest premium receipt or renewal notice for "+[...new Set(staleContracts.map(c=>c.ownerName+" · "+c.name))].slice(0,4).join("; ")+" so the active status can be verified. Ownership is already confirmed and is unaffected.");
           answer.details.push("Answered from "+catalog.length+" benefit rule"+(catalog.length===1?"":"s")+" read from your documents. Anything uploaded since is read automatically; the Benefits page shows what has been read.");
           // Ask for the single fact that would unlock the most, so the chat
