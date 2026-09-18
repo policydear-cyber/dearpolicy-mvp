@@ -707,7 +707,13 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         // slice that stops mid-clause and a separate slice that starts
         // mid-clause -- is what lets it recognise which product section it is
         // reading without a second, separate pass to work that out.
-        const windowCharacterBudget=14000;
+        // A hosted model can see far more evidence in one call, and giving it
+        // the whole responsive section at once -- rather than a slice that
+        // stops mid-clause and a separate slice that starts mid-clause -- is
+        // what lets it recognise which product section it is reading. Kept as
+        // a setting because it decides how many sections a document needs, and
+        // so how often a turn runs out of budget before finishing one.
+        const windowCharacterBudget=Math.max(500,Number(process.env.RAG_EVIDENCE_WINDOW_CHARACTERS??14000)||14000);
         const prepared=contracts.map(contract=>{
           const retrievedPassages=sources.get(contract.id)??[];
           const windows=evidenceWindows(analysisSources(retrievedPassages),windowCharacterBudget);
@@ -859,14 +865,14 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         // completeness and currentness wording. Repeating them here duplicated
         // the same sentence in the answer body, so details stay observations
         // plus anything the user cannot see elsewhere.
-        if(budgetStopped)answer.details.push("Reading stopped at this turn's local-model budget with "+skippedWindows+" evidence section"+(skippedWindows===1?"":"s")+" still unread"+
+        if(budgetStopped)answer.details.push("Reading stopped at this turn's reading budget with "+skippedWindows+" evidence section"+(skippedWindows===1?"":"s")+" still unread"+
           (unexaminedContracts?", including "+unexaminedContracts+" contract"+(unexaminedContracts===1?"":"s")+" that retrieval ranked lower and that were not opened at all":"")+
           // Never name an environment variable here. The person reading this is
           // holding a policy document, not a terminal, and the real fix is to
           // index the documents once so this path is not used at all.
           ". This review is incomplete rather than negative. DearPolicy answers instantly, and completely, from documents it has already read — open the Benefits page to see what it has read so far. If a document is missing from there, re-index it and ask again. Asking about one person or one policy at a time also lets it finish.");
         if(unresolved)answer.details.push(unresolved+" policy contract"+(unresolved===1?"":"s")+" still need wording, processing or further review. See the policy review list.");
-        if(failedWindows)answer.details.push("The local model could not finish "+failedWindows+" evidence batch"+(failedWindows===1?"":"es")+", so those sections were not read."+
+        if(failedWindows)answer.details.push("The reading model could not finish "+failedWindows+" evidence batch"+(failedWindows===1?"":"es")+", so those sections were not read."+
           (failureReasons.length?" Reported cause: "+[...new Set(failureReasons)].slice(0,2).join(" / ")+".":""));
         await check();
         await report({stage:"Explaining the evidence and remaining questions",completed:contracts.length,total:contracts.length});

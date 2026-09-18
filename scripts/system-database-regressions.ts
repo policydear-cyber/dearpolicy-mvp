@@ -661,9 +661,13 @@ async function main(){
     await test("A turn stops at its reading budget instead of running for minutes",async()=>{
       await seedReviewFixture(40);
       process.env.RAG_MAX_EVIDENCE_WINDOWS="2";
+      // Small sections so this document needs more of them than the budget
+      // allows, which is the situation the test is about. At the default size
+      // the whole document fits in one section and nothing is ever cut short.
+      process.env.RAG_EVIDENCE_WINDOW_CHARACTERS="3300";
       const readsBefore=readingCalls;
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      delete process.env.RAG_MAX_EVIDENCE_WINDOWS;
+      delete process.env.RAG_MAX_EVIDENCE_WINDOWS;delete process.env.RAG_EVIDENCE_WINDOW_CHARACTERS;
       const answer=data.answer as ChatAnswer;
       assert.ok(readingCalls-readsBefore<=2,"The call ceiling must be enforced, made "+(readingCalls-readsBefore));
       assert.equal(answer.reviewCoverage?.complete,false);
