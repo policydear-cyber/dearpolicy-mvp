@@ -733,25 +733,46 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           // A window the model could not finish was sent but never actually
           // read, so it must not be counted towards review completeness.
           const readPassages:PolicySource[]=[];
-          let windowsHere=0;
-          for(const window of windows){
-            await check();
-            if(windowsHere>=allowance||windowsUsed>=budget.maximumWindows||Date.now()>readingDeadline){
-              skippedWindows+=windows.length-windowsHere;if(windowsHere<windows.length)budgetStopped=true;break;
-            }
-            windowsHere++;windowsUsed++;
-            await report({stage:"Reading "+contract.ownerName+"’s "+contract.name+" · section "+windowsHere+" of "+Math.min(windows.length,allowance),completed,total:contracts.length});
+          // How many of this contract's sections the remaining budget can pay
+          // for. Deciding this up front, rather than re-checking after every
+          // section, is what lets the affordable ones be read together.
+          const affordable=Date.now()>readingDeadline?0
+            :Math.max(0,Math.min(windows.length,allowance,budget.maximumWindows-windowsUsed));
+          const chosen=windows.slice(0,affordable);
+          if(chosen.length<windows.length){skippedWindows+=windows.length-chosen.length;budgetStopped=true;}
+          windowsUsed+=chosen.length;
+          await check();
+          if(chosen.length)await report({stage:"Reading "+contract.ownerName+"\u2019s "+contract.name+" \u00b7 "+chosen.length+" section"+(chosen.length===1?"":"s"),completed,total:contracts.length});
+          const readWindow=async(window:PolicySource[])=>{
             try{
-              analyses.push(await analyzePolicyWindow({accountId:request.accountId,contract,sources:window,question,intent:state.intent??"policy_question",scenarioCandidates:state.scenarios?.[contract.ownerId]??[]}));
-              readPassages.push(...window);
-            }
-            catch(error){
-              failedWindows++;contractFailedWindows++;
-              // Never surface validation output or raw model text to the user.
-              failureReasons.push(readableModelFailure(error));
-              reviews.find(r=>r.id===contract.id)!.status="needs_review";
-            }
+              return {ok:true as const,window,
+                analysis:await analyzePolicyWindow({accountId:request.accountId,contract,sources:window,question,
+                  intent:state.intent??"policy_question",scenarioCandidates:state.scenarios?.[contract.ownerId]??[]})};
+            }catch(error){return {ok:false as const,window,error};}
+          };
+          // Sections of one contract are independent readings of the same
+          // question, so a hosted model reads them at the same time. In
+          // sequence they were the two-to-four minutes a person spent watching
+          // a spinner -- and worse, each one spent the clock the next needed,
+          // so the last sections fell past the deadline and were reported as
+          // unread when nothing had gone wrong with them. A local model still
+          // reads one at a time: there is one GPU, and withModelSession holds
+          // it for the duration.
+          type WindowResult=Awaited<ReturnType<typeof readWindow>>;
+          let results:WindowResult[];
+          if(fullyHosted())results=await Promise.all(chosen.map(readWindow));
+          else{
+            results=[];
+            for(const window of chosen){await check();results.push(await readWindow(window));}
           }
+          for(const result of results){
+            if(result.ok){analyses.push(result.analysis);readPassages.push(...result.window);continue;}
+            failedWindows++;contractFailedWindows++;
+            // Never surface validation output or raw model text to the user.
+            failureReasons.push(readableModelFailure(result.error));
+            reviews.find(r=>r.id===contract.id)!.status="needs_review";
+          }
+
           // Record exactly how much of this contract's stored text was retrieved
           // and read, so an unread section can never be reported as no cover.
           reviews.find(r=>r.id===contract.id)!.coverage=contractReviewCoverage({
