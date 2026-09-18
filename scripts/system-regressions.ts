@@ -13,7 +13,7 @@ import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassificatio
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
-import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,looksLikeCoverageLine,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import type { ClaimItem } from "@/types";
@@ -1092,6 +1092,25 @@ export function runSystemRegressions(){
     assert.ok(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],rows).includes("critical_illness"));
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],[]).includes("critical_illness"),false);
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["dengue fever"],rows).includes("critical_illness"),false);
+  });
+  test("A line from a certificate's cover table is not a benefit",()=>{
+    // Straight out of the live benefit table: a certificate prints one row per
+    // person per plan, the table parser read those rows like any other table,
+    // and a row NAMED after a person and an identity number was then matched
+    // to a death claim by the word "accident" in it, and paid.
+    assert.equal(looksLikeCoverageLine("S****195A Ong Pei Lin Charmaine GROUP PERSONAL ACCIDENT(POLICY NO. 3037850)"),true);
+    assert.equal(looksLikeCoverageLine("S****048I Tan Yi Chuen, Desmond"),true);
+    assert.equal(looksLikeCoverageLine("GROUP LIVING CARE (POLICY NO. 3037850)"),true);
+    assert.equal(looksLikeCoverageLine("S1234567A"),true);
+    assert.equal(looksLikeCoverageLine("   "),true);
+    // A rule about what a plan pays names no person and carries no identity
+    // number, and must survive untouched.
+    assert.equal(looksLikeCoverageLine("Death due to Accident"),false);
+    assert.equal(looksLikeCoverageLine("Daily Hospital Cash Benefit"),false);
+    assert.equal(looksLikeCoverageLine("Accidental Hospital Recuperation Benefit"),false);
+    assert.equal(looksLikeCoverageLine("22. Loss of speech"),false);
+    assert.equal(looksLikeCoverageLine("Total and Permanent Disablement due to Accident"),false);
+    assert.equal(looksLikeCoverageLine("Surgical procedure (Table 6B)"),false);
   });
   test("An event before the cover on file is flagged, never silently denied",()=>{
     // A group certificate prints the current period's effective date, not the

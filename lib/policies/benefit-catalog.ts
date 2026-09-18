@@ -537,13 +537,36 @@ function toBenefit(row:BenefitRow):CatalogBenefit{
     requirements:Array.isArray(row.requirements)?row.requirements as CatalogBenefit["requirements"]:[],
     needsReview:row.needs_review,basisInferred:row.basis_inferred===true,needsConfirmation:row.needs_confirmation===true,reviewedAt:row.reviewed_at??null};
 }
+/** A line from a certificate's cover table is not a benefit.
+ *
+ * A certificate prints one row per person per plan: an identity number, a name,
+ * a plan, an amount. The table parser reads those rows like any other table, so
+ * they were stored as benefits whose NAME is a masked NRIC and a person -- and
+ * a row called "S****195A Ong Pei Lin Charmaine GROUP PERSONAL ACCIDENT (POLICY
+ * NO. 3037850)" carrying S$1,000,000 was then matched to a claim by the word
+ * "accident" in it, and paid.
+ *
+ * Those amounts belong in the coverage ledger, where they already are. A rule
+ * about what a plan PAYS never names a person and never carries an identity
+ * number, so this is deterministic and safe to apply to rows already stored:
+ * they stop being used without anything needing to be read again.
+ */
+export function looksLikeCoverageLine(benefitName:string){
+  const name=(benefitName??"").trim();
+  if(!name)return true;
+  if(/\bpolic(?:y|ies)\s*(?:no|number)\b/i.test(name))return true;
+  // A masked identity number ("S****048I") or a full one.
+  if(/[A-Z]\s*\*{2,}\s*\d{2,}\s*[A-Z]/i.test(name))return true;
+  if(/\b[STFGM]\d{7}[A-Z]\b/i.test(name))return true;
+  return false;
+}
 export async function loadBenefitCatalog(accountId:string,policyIds:string[]){
   if(!policyIds.length)return [] as CatalogBenefit[];
   await ensureBenefitSchema();
   const r=await query<BenefitRow>(
     "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation FROM policy_benefits WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) ORDER BY benefit_name",
     [accountId,policyIds]);
-  return r.rows.map(toBenefit);
+  return r.rows.map(toBenefit).filter(benefit=>!looksLikeCoverageLine(benefit.benefitName));
 }
 /** Rebuilds a document's rules, keeping every rule a person corrected.
  *
@@ -559,6 +582,7 @@ export async function replaceBenefitCatalog(accountId:string,policyId:string,ben
   await query("DELETE FROM policy_benefits WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NULL",[accountId,policyId]);
   for(const benefit of benefits){
     if(kept.has(benefitKey(benefit.benefitName)))continue;
+    if(looksLikeCoverageLine(benefit.benefitName))continue;
     await query(
       "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,requires) VALUES($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18::text[])",
       [accountId,policyId,benefit.productName,benefit.benefitName,benefit.traits,benefit.formulaKind,
