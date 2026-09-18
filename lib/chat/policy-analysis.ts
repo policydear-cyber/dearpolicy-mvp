@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { structuredCompletion } from "@/lib/ai/llm";
+import { fullyHosted } from "@/lib/ai/providers";
 import { query } from "@/lib/db/client";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
@@ -19,10 +20,17 @@ import type { PolicyAnalysis,PolicyBenefit,PolicyFormula,PolicyObservation,Polic
  * fraction of the time. Every bound below is an output-budget decision. */
 const QuoteSchema=z.object({sourceId:z.string(),quote:z.string().min(1).max(260)});
 /** Output token ceiling for one evidence section. Truncation is salvaged and
- * retried with a larger budget, so this is a target rather than a hard limit. */
+ * retried with a larger budget, so this is a target rather than a hard limit.
+ * 900 was sized for qwen3:8b's throughput on an 8 GB local GPU, where every
+ * extra output token was seconds of wall-clock time. A hosted model pays in
+ * cents per token, not GPU-minutes, and a tight budget is exactly what forces
+ * it to choose between quoting a clause in full and also structuring it into
+ * a benefit -- the two halves of the same reply. Fully hosted, give it
+ * enough room to do both. */
 export function readingOutputTokens(){
   const value=Number(process.env.RAG_READING_OUTPUT_TOKENS);
-  return Number.isFinite(value)&&value>=200&&value<=4000?Math.floor(value):900;
+  if(Number.isFinite(value)&&value>=200&&value<=8000)return Math.floor(value);
+  return fullyHosted()?2600:900;
 }
 const ValueSchema=z.union([z.string(),z.number(),z.boolean(),z.array(z.string()),z.null()]);
 const BenefitSchema=z.object({

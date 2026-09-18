@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { readableModelFailure,structuredCompletion,withModelSession,TruncatedModelOutput } from "@/lib/ai/llm";
+import { fullyHosted } from "@/lib/ai/providers";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
 import { analysisSources,loadPolicyInventory,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
 import { contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
@@ -701,9 +702,16 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         // calls are scarce, so they are spent in relevance order rather than
         // split evenly across contracts that retrieval already showed were not
         // responsive. Whatever is not examined is reported, never assumed empty.
+        // 3300 characters per window was sized for a local model's small
+        // context. A hosted model can see far more evidence in one call, and
+        // giving it the whole responsive section at once -- rather than a
+        // slice that stops mid-clause and a separate slice that starts
+        // mid-clause -- is what lets it recognise which product section it is
+        // reading without a second, separate pass to work that out.
+        const windowCharacterBudget=fullyHosted()?14000:3300;
         const prepared=contracts.map(contract=>{
           const retrievedPassages=sources.get(contract.id)??[];
-          const windows=evidenceWindows(analysisSources(retrievedPassages));
+          const windows=evidenceWindows(analysisSources(retrievedPassages),windowCharacterBudget);
           return {contract,retrievedPassages,windows,analysisPassages:windows.flat()};
         });
         const allocation=allocateReadingWindows(

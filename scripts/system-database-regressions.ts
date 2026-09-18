@@ -1477,6 +1477,22 @@ async function main(){
         await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
       }
     });
+    await test("Reading gets a larger context/output budget once nothing is routed to the local model",async()=>{
+      const { readingOutputTokens }=await import("@/lib/chat/policy-analysis");
+      const savedPreset=process.env.MODEL_PRESET,savedKey=process.env.GEMINI_API_KEY,savedTokens=process.env.RAG_READING_OUTPUT_TOKENS;
+      delete process.env.MODEL_PRESET;delete process.env.GEMINI_API_KEY;delete process.env.RAG_READING_OUTPUT_TOKENS;
+      try{
+        assert.equal(readingOutputTokens(),900,"Still routed to the local model -- keep the small local-GPU budget");
+        process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
+        assert.equal(readingOutputTokens(),2600,"Fully hosted -- a hosted model is not forced to choose between quoting a clause and also structuring it");
+        process.env.RAG_READING_OUTPUT_TOKENS="1500";
+        assert.equal(readingOutputTokens(),1500,"An explicit setting always wins over either default");
+      }finally{
+        if(savedPreset)process.env.MODEL_PRESET=savedPreset;else delete process.env.MODEL_PRESET;
+        if(savedKey)process.env.GEMINI_API_KEY=savedKey;else delete process.env.GEMINI_API_KEY;
+        if(savedTokens)process.env.RAG_READING_OUTPUT_TOKENS=savedTokens;else delete process.env.RAG_READING_OUTPUT_TOKENS;
+      }
+    });
     await test("A judgement call rate-limited on Google's pricier tier falls back to the cheaper tier instead of failing the chat",async()=>{
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
