@@ -299,6 +299,18 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   for(const entry of missing)conditions.push("Still needed: "+entry);
   const triggers=benefitTriggerEvents(benefit.benefitName,benefit.quote);
   const paysOn=payingEvent(triggers,args.events??[]);
+  // A figure a person cannot trace back to one of their own covers is a figure
+  // they cannot check. Every card says which cover it is paid under, and the
+  // policy number the insurer settles against.
+  const coverLabel=benefit.productName??coverage?.productName??coverage?.policyName??args.contractName??null;
+  const coverNumber=coverage?.policyNumber??coverage?.groupPolicyNumber??null;
+  const paidUnder=coverLabel?" Paid under your "+coverLabel+" cover"+(coverNumber?" (policy "+coverNumber+")":"")+".":"";
+  // The standard Singapore list is a floor, not the contract. Saying so on the
+  // card is the difference between an estimate a person can rely on and one
+  // they can be surprised by.
+  if(paysOn==="critical_illness")conditions.push(
+    "Payable only if the diagnosis meets the definition in your policy's own schedule of critical illnesses. "
+    +"DearPolicy checks against the standard Singapore list, and a policy may define fewer conditions than that list contains.");
   const cover=coverKey({policyNumber:coverage?.policyNumber,groupPolicyNumber:coverage?.groupPolicyNumber,
     insurer:args.insurer??coverage?.insurer??null,
     productName:canonicalProduct(benefit.productName??coverage?.productName??coverage?.policyName??null),
@@ -325,7 +337,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
         ?(uncappedDaily
           ?"Estimated from the rate quoted on page "+(benefit.sourcePage??1)+" and the number of days you reported. The row does not state a day limit, so check the full wording for one."
           :"Estimated from the quoted clause on page "+(benefit.sourcePage??1)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate.")
-        :"Calculated from your policy schedule and the quoted clause on page "+(benefit.sourcePage??1)+".")
+        :"Calculated from your policy schedule and the quoted clause on page "+(benefit.sourcePage??1)+".")+paidUnder
       :"This benefit can respond to what happened, but "+(missing[0]??"its payout rule")+" is still needed before an amount can be calculated.",
     conditions:[...new Set(conditions)],
   };
