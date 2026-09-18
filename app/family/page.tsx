@@ -11,6 +11,7 @@ const RELATIONSHIPS = ["self","spouse","parent","child","sibling","grandparent",
 
 export default function FamilyPage() {
   const [family, setFamily] = useState<Member[]>([]);
+  const [baseline, setBaseline] = useState<Record<string, Member>>({});
   const [name, setName] = useState("");
   const [relationship, setRelationship] = useState("parent");
   const [dob, setDob] = useState("");
@@ -20,7 +21,9 @@ export default function FamilyPage() {
 
   async function refresh() {
     const data = await fetch("/api/family").then((r) => r.json());
-    setFamily(data.family ?? []);
+    const members: Member[] = data.family ?? [];
+    setFamily(members);
+    setBaseline(Object.fromEntries(members.map((m) => [m.id, m])));
   }
   useEffect(() => { void refresh(); }, []);
 
@@ -37,6 +40,17 @@ export default function FamilyPage() {
     const payload = await response.json();
     setStatus(response.ok ? `Saved ${member.display_name}.` : "Could not save this profile. Please try again in a moment.");
     if (response.ok) await refresh();
+  }
+
+  // A freshly-added or untouched profile has nothing to save -- showing an
+  // always-on Save button next to it reads as "did this actually save?"
+  // Comparing against the last-fetched/last-saved snapshot lets the button
+  // disable itself (and say so) until there is a real edit to persist.
+  function isDirty(member: Member) {
+    const original = baseline[member.id];
+    if (!original) return false;
+    return original.display_name !== member.display_name || original.relationship !== member.relationship ||
+      (original.date_of_birth ?? null) !== (member.date_of_birth ?? null) || (original.preferred_name ?? null) !== (member.preferred_name ?? null);
   }
 
   async function remove(member: Member) {
@@ -83,7 +97,7 @@ export default function FamilyPage() {
               </div>
               <div className="profile-actions">
                 <span>{member.policy_count} linked documents</span>
-                <button className="button secondary" onClick={() => save(member)}>Save</button>
+                <button className="button secondary" disabled={!isDirty(member)} onClick={() => save(member)}>{isDirty(member) ? "Save" : "Saved"}</button>
                 <button className="button secondary" onClick={() => remove(member)}>{confirmId === member.id ? "Confirm delete" : "Delete"}</button>
                 {confirmId === member.id && <button className="button secondary" onClick={() => setConfirmId(null)}>Cancel</button>}
               </div>
