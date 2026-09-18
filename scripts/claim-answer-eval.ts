@@ -6,7 +6,7 @@ import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { aggregatePotentialPayouts } from "@/lib/chat/policy-analysis";
 import type { InventoryDocument,PolicyContract } from "@/lib/policies/inventory";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
-import type { SubjectFacts } from "@/lib/chat/types";
+import type { ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 
 /** What the whole answer comes to, for a household and an event.
  *
@@ -88,6 +88,9 @@ const catalog:CatalogBenefit[]=[
 type Case={
   question:string;
   facts:SubjectFacts;
+  /** Set when the situation is described in the question rather than recorded
+   * as facts -- "what could I claim if...". */
+  traits?:ScenarioTrait[];
   /** Benefit names that must be offered with a figure. */
   pays:Record<string,string>;
   /** Benefit names that must NOT be offered, whatever else happens. */
@@ -139,12 +142,38 @@ const cases:Case[]=[
     // own card and never folded into the lump-sum total.
     total:"S$1,340",
   },
+  {
+    question:"my husband died of a heart attack at home",
+    facts:{death:fact(true),eventType:fact("illness"),causeOfDeath:fact("heart attack")},
+    pays:{"Death Benefit":"S$1,000,000"},
+    // A personal accident policy does not pay for a death from illness, and a
+    // critical-illness policy does not pay because the person has died.
+    never:["Death due to Accident","Accidental Death Benefit","Group Living Care","Early Critical Illness Benefit","Simple Fracture"],
+    total:"S$1,000,000",
+  },
+  {
+    question:"what could i claim if i were diagnosed with cancer",
+    // Nothing has happened, so there are no facts at all. The critical-illness
+    // benefits must still answer: this is the question the product exists for.
+    facts:{},
+    traits:["illness","diagnosis"],
+    pays:{"Group Living Care":"S$350,000","Early Critical Illness Benefit":"S$150,000"},
+    never:["Death Benefit","Death due to Accident","Total and Permanent Disability"],
+    total:"S$500,000",
+  },
+  {
+    question:"i lost the use of both legs in a motorbike accident and it is permanent",
+    facts:{eventType:fact("accident"),injured:fact(true),permanentImpairment:fact("total and permanent loss of use of both legs")},
+    pays:{"Total and Permanent Disability":"S$1,000,000"},
+    never:["Death Benefit","Death due to Accident","Group Living Care","Early Critical Illness Benefit"],
+    total:"S$1,000,000",
+  },
 ];
 
 export function runClaimAnswerEval(){
   let checked=0;
   for(const testCase of cases){
-    const traits=eventTraits(testCase.facts);
+    const traits=eventTraits(testCase.facts,testCase.traits??[]);
     const diagnosis=testCase.facts.diagnosis?.value;
     const events=reportedClaimEvents(testCase.facts,traits,typeof diagnosis==="string"?[diagnosis]:[]);
     const assessed=assessContractFromCatalog({contract,catalog,facts:testCase.facts,traits,events});

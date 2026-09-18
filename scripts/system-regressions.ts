@@ -1107,7 +1107,7 @@ export function runSystemRegressions(){
     assert.ok(onDeath.includes("Death due to Accident"));
     // And the reason is said out loud rather than the row silently vanishing.
     const reasons=ruledOutBenefits(catalog,deathTraits,deathEvents).map(r=>r.benefit.benefitName+": "+r.because);
-    assert.match(reasons.join(" | "),/Group Living Care: pays on the diagnosis of a condition named/);
+    assert.match(reasons.join(" | "),/Group Living Care: pays the person who was diagnosed, while they are alive/);
     // The other direction: the dengue answer.
     const illFacts:SubjectFacts={diagnosis:fact("dengue fever"),hospitalised:fact(true),hospitalNights:fact(3)};
     const illTraits=eventTraits(illFacts);

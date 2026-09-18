@@ -2,7 +2,7 @@ import { knownValue,normalText } from "@/lib/chat/facts";
 import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
-import type { ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
+import type { FactValue,ScenarioTrait,SubjectFacts } from "@/lib/chat/types";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
@@ -195,6 +195,42 @@ export function matchBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[],ev
   }
   return matches.sort((a,b)=>b.overlap-a.overlap||a.benefit.benefitName.localeCompare(b.benefit.benefitName));
 }
+/** An injury scale pays for the injury it names, not for any injury.
+ *
+ * A personal accident plan lists dozens of fixed amounts -- simple fracture of
+ * the wrist, loss of sight in one eye, loss of a thumb. They all respond to
+ * "an accident", so a single accident used to compute every one of them and add
+ * them up. The scale is not a menu: the benefit that pays is the one whose
+ * injury actually happened.
+ *
+ * So when a benefit names a specific injury and the person has described their
+ * injuries, the two have to agree. When nothing has been described yet -- a
+ * hypothetical, or a claim that has only just started -- the figure is still
+ * shown, because the person is entitled to see what their policy pays. */
+const NAMED_INJURIES=["fracture","dislocation","burn","amputation","amputat","loss of sight","sight","eye","hearing","ear","speech",
+  "limb","arm","leg","hand","foot","finger","thumb","toe","wrist","ankle","knee","hip","shoulder","elbow","spine","skull","jaw",
+  "rib","pelvis","femur","tibia","clavicle","coma","paralysis","quadripleg","parapleg","dismember"];
+export function reportedInjuryText(facts:SubjectFacts){
+  const parts:string[]=[];
+  const push=(value:FactValue|undefined)=>{
+    if(typeof value==="string")parts.push(value);
+    else if(Array.isArray(value))parts.push(value.join(" "));
+  };
+  push(knownValue(facts,"injuries"));
+  push(knownValue(facts,"permanentImpairment"));
+  const fracture=knownValue(facts,"fractureBodyPart");
+  if(typeof fracture==="string"&&fracture.trim())parts.push("fracture "+fracture);
+  return parts.join(" ").toLowerCase();
+}
+export function injuryNotReported(benefit:CatalogBenefit,facts:SubjectFacts){
+  const reported=reportedInjuryText(facts);
+  if(!reported)return null;
+  const name=benefit.benefitName.toLowerCase();
+  const named=NAMED_INJURIES.filter(word=>name.includes(word));
+  if(!named.length)return null;
+  if(named.some(word=>reported.includes(word)))return null;
+  return benefit.benefitName;
+}
 export type CatalogAssessment={item:ClaimItem;missing:string[]};
 /** Arithmetic in application code, from a stored rule and a verified insured
  * amount. No model is involved and the result is identical every time. */
@@ -214,7 +250,9 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   let amount:number|null=null,basis="",aggregation:"additive"|"reimbursement"="additive";
   // A per-day figure worked out without knowing the policy's own day limit.
   let uncappedDaily=false;
-  if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&currency===coverage.currency){
+  const wrongInjury=injuryNotReported(benefit,facts);
+  if(wrongInjury)missing.push("confirmation that \u201c"+wrongInjury+"\u201d is what happened \u2014 this benefit pays for that specific injury, and it is not among the ones you described");
+  else if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&currency===coverage.currency){
     amount=Math.round(coverage.amount*benefit.formulaValue*100)/100;
     basis=Math.round(benefit.formulaValue*1000)/10+"% of verified "+formatMoney(coverage.amount,currency);
   } else if(benefit.formulaKind==="fixed"&&benefit.formulaValue!=null){

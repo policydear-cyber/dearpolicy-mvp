@@ -99,9 +99,17 @@ export function reportedClaimEvents(facts:SubjectFacts,traits:ScenarioTrait[]=[]
   if(known("death")===true||trait.has("death"))events.add("death");
   if(known("terminalIllness")===true)events.add("terminal_illness");
   const named=diagnoses.filter(text=>typeof text==="string"&&text.trim().length>0);
-  if(named.length){
-    if(named.some(text=>definedConditionsFor(text).length>0))events.add("critical_illness");
-  } else if(trait.has("illness")||trait.has("diagnosis"))events.add("critical_illness");
+  // A critical-illness benefit is a living benefit: it pays the person who was
+  // diagnosed. Once a death is reported, the death benefits are the claim.
+  // Without this, "died of a heart attack" paid the death sum AND both
+  // critical-illness plans, because a heart attack is on the defined list.
+  // A critical illness diagnosed before the death is a real and separate
+  // claim, and the ruled-out note says so and asks for the diagnosis date.
+  if(!events.has("death")){
+    if(named.length){
+      if(named.some(text=>definedConditionsFor(text).length>0))events.add("critical_illness");
+    } else if(trait.has("illness")||trait.has("diagnosis"))events.add("critical_illness");
+  }
   if(known("permanentImpairment")!=null||trait.has("disability"))events.add("total_permanent_disability");
   // An accidental death is not an accidental injury claim. Reading the cause
   // as an injury is what offered S$1,250 for a fractured wrist to a family
@@ -149,6 +157,9 @@ export function ruledOutByEvent(triggers:ClaimEventType[],reported:ClaimEventTyp
   if(!reported.length)return null;
   const happened=new Set(reported);
   if(triggers.some(event=>happened.has(event)))return null;
+  if(happened.has("death")&&(triggers.includes("critical_illness")||triggers.includes("terminal_illness")))
+    return "pays the person who was diagnosed, while they are alive, so a death is claimed under the death benefits instead"
+      +" \u2014 if the illness was diagnosed before the death, tell me the date of diagnosis and this becomes a separate claim";
   const named=triggers.find(event=>RULED_OUT_REASON[event]);
   return (named&&RULED_OUT_REASON[named])??"is written for "+PLAIN_EVENT[triggers[0]]+", which is not what happened here";
 }
