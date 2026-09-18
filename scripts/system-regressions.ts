@@ -16,6 +16,7 @@ import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentage
 import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,looksLikeCoverageLine,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1092,6 +1093,36 @@ export function runSystemRegressions(){
     assert.ok(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],rows).includes("critical_illness"));
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["rheumatoid arthritis"],[]).includes("critical_illness"),false);
     assert.equal(reportedClaimEvents({},["illness","diagnosis"],["dengue fever"],rows).includes("critical_illness"),false);
+  });
+  test("Two people on one scheme catch a certificate whose columns drifted",()=>{
+    // Straight out of the live data. Both members hold the same four sums under
+    // one group policy number, but the certificate reading attaches them to
+    // different plans for each of them. No amount of correct arithmetic can
+    // catch that, because every figure is a real figure from a real page.
+    const scheme=(owner:string,ownerId:string,rows:[string,number][]):PolicyContract=>({
+      id:"c-"+ownerId,ownerId,ownerName:owner,name:"MINDEF & MHA Group Insurance",insurer:"Singlife",
+      documents:[document({id:"cert-"+ownerId})],references:[],confirmed:true,effectiveDate:"2022-10-06",ownershipBasis:"evidence",
+      coverages:rows.map(([product,amount],index)=>coverage({id:ownerId+"-"+index,productName:product,amount,
+        policyNumber:"3037850",documentRole:"certificate"}))});
+    const desmond=scheme("Desmond","p1",[["Group Term Life",1_000_000],["Living Care",350_000],
+      ["Living Care Plus",300_000],["Group Personal Accident",600_000]]);
+    const charmaine=scheme("Charmaine","p2",[["Group Term Life",300_000],["Living Care",600_000],
+      ["Living Care Plus",350_000],["Group Personal Accident",1_000_000]]);
+    const warnings=transposedScheduleWarnings([desmond,charmaine]);
+    assert.equal(warnings.length,1);
+    assert.equal(warnings[0].policyNumber,"3037850");
+    assert.match(warnings[0].detail,/lists the same amounts for Desmond and Charmaine/);
+    assert.match(warnings[0].detail,/only the certificate can say which/);
+    // Agreeing schedules say nothing.
+    const agreeing=scheme("Charmaine","p2",[["Group Term Life",1_000_000],["Living Care",350_000],
+      ["Living Care Plus",300_000],["Group Personal Accident",600_000]]);
+    assert.deepEqual(transposedScheduleWarnings([desmond,agreeing]),[]);
+    // Genuinely different cover is not a drifted column, so it is left alone.
+    const different=scheme("Charmaine","p2",[["Group Term Life",250_000],["Living Care",100_000],
+      ["Living Care Plus",50_000],["Group Personal Accident",75_000]]);
+    assert.deepEqual(transposedScheduleWarnings([desmond,different]),[]);
+    // One person alone cannot disagree with anyone.
+    assert.deepEqual(transposedScheduleWarnings([desmond]),[]);
   });
   test("A line from a certificate's cover table is not a benefit",()=>{
     // Straight out of the live benefit table: a certificate prints one row per

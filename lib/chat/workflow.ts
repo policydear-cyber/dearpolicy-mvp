@@ -14,6 +14,7 @@ import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
+import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
 import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem } from "@/types";
@@ -55,6 +56,14 @@ export function claimConfidence(items:ClaimItem[]):"strong_match"|"partial_match
   const verified=counted.every(item=>item.estimateBasis==="confirmed");
   const complete=counted.every(item=>!item.conditions.some(condition=>condition.startsWith("Still needed:")));
   return verified&&complete?"strong_match":"partial_match";
+}
+/** Said before any figure from the scheme is relied on, because a wrong sum
+ * insured cannot be caught by any amount of correct arithmetic downstream. */
+function warnAboutInconsistentSchedules(answer:{details:string[];payoutQualifiers?:string[]},contracts:PolicyContract[]){
+  for(const warning of transposedScheduleWarnings(contracts)){
+    if(!answer.details.includes(warning.detail))answer.details.push(warning.detail);
+    answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),warning.detail])];
+  }
 }
 function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQualifiers?:string[]}){
   const {notes}=resolveCoverOverlaps(answer.claimItems);
@@ -426,7 +435,8 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
               // A what-if names the one fact that would turn a rule into a
               // figure, without recording anything against anyone's profile.
               if(whatIf&&looked.question)answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:"It is what turns the rule above into an actual amount."}];
-              answer.potentialPayoutTotals=settleOverlaps(answer);
+              warnAboutInconsistentSchedules(answer,contracts);
+          answer.potentialPayoutTotals=settleOverlaps(answer);
               const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
               const count=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
               const unconfirmed=answer.claimItems.filter(item=>item.conditions.some(c=>c.startsWith("Not yet verified")||c.startsWith("Assumes the standard"))).length;
@@ -494,6 +504,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             if(review)review.status=scenario.considered?"searched":"missing_wording";
           }
           answer.mode="claim_assessment";
+          warnAboutInconsistentSchedules(answer,contracts);
           answer.potentialPayoutTotals=settleOverlaps(answer);
           const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
           answer.summary=answer.claimItems.length
@@ -740,6 +751,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           }
           delete state.pending;
           answer.mode="claim_assessment";
+          warnAboutInconsistentSchedules(answer,contracts);
           answer.potentialPayoutTotals=settleOverlaps(answer);
           // Put the claim on record so the pack can be printed and the Claims
           // page shows it, and say what to do next — the last thing a person
@@ -963,7 +975,8 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const unresolved=reviews.filter(r=>r.status!=="searched").length;
         answer.confidence=answer.citations.length?"partial_match":"insufficient_evidence";
         const eventLead=claimEventLead(context.people,state);
-        answer.potentialPayoutTotals=settleOverlaps(answer);
+        warnAboutInconsistentSchedules(answer,contracts);
+          answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
         if(answer.potentialPayoutTotals.length&&answer.reviewCoverage&&!answer.reviewCoverage.complete)
