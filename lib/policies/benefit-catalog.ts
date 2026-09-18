@@ -652,6 +652,8 @@ const SCHEDULE_RESPONDS:{pattern:RegExp;exclude?:RegExp;traits:ScenarioTrait[];r
    traits:["death"],requires:["accident"],pays:"accidental death benefit",rule:"a personal accident plan pays 100% of its sum insured on accidental death",basis:"estimated"},
   {pattern:/\b(?:critical illness|living care|dread disease|major illness|ci)\b/i,
    traits:["illness","diagnosis"],pays:"critical illness benefit",rule:"a critical illness plan pays its sum assured on a qualifying diagnosis, or a percentage of it for an early-stage condition",basis:"indicative"},
+  {pattern:/\b(?:total permanent disability|total and permanent disab\w*|permanent disablement|tpd)\b/i,
+   traits:["disability"],pays:"total and permanent disability benefit",rule:"a life or accident plan pays its sum assured on total and permanent disability",basis:"estimated"},
 ];
 const TRAIT_ASK:Partial<Record<ScenarioTrait,string>>={accident:"confirmation that this was caused by an accident"};
 export function scheduleFallbackItems(args:{contract:PolicyContract;traits:ScenarioTrait[];events?:ClaimEventType[]}):{items:ClaimItem[];citations:ChatCitation[]}{
@@ -660,9 +662,19 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];
   for(const coverage of args.contract.coverages){
     if(coverage.amount==null||!(coverage.amount>0))continue;
-    const name=(coverage.category+" "+(coverage.productName??"")).trim();
+    // Match on the CATEGORY, not on the category plus the product name.
+    //
+    // A "Total Permanent Disability" row under a plan called "Group Term Life"
+    // used to be read as a death benefit, because the combined string contains
+    // "term life". On a death that produced a second S$1,000,000 beside the
+    // real death benefit, from the same plan, for an event it does not pay on.
+    // The category is the structured field and the precise one; the product
+    // name is only consulted when there is no category to go on.
+    const category=(coverage.category??"").trim();
+    const name=(category+" "+(coverage.productName??"")).trim();
+    const target=category&&category.toLowerCase()!=="other"?category:name;
     for(const rule of SCHEDULE_RESPONDS){
-      if(!rule.pattern.test(name)||(rule.exclude&&rule.exclude.test(name)))continue;
+      if(!rule.pattern.test(target)||(rule.exclude&&rule.exclude.test(target)))continue;
       if(!rule.traits.some(trait=>reported.has(trait)))continue;
       // The same gate the stored rules get. A schedule line saying the
       // household holds critical-illness cover is not a reason to pay it on a

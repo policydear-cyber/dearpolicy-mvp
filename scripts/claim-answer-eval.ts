@@ -44,6 +44,7 @@ const contract:PolicyContract={
   documents:[document()],references:[document({id:"wording",document_role:"policy_wording",personal_coverage_confirmed:false})],
   coverages:[
     cover("c-gtl","Death",1_000_000,"Group Term Life"),
+    cover("c-tpd","Total Permanent Disability",1_000_000,"Group Term Life"),
     cover("c-gpa","Personal Accident",600_000,"Group Personal Accident"),
     cover("c-lc","Critical Illness",350_000,"Living Care"),
     cover("c-lcp","Early Critical Illness",300_000,"Living Care Plus"),
@@ -191,8 +192,13 @@ const cases:Case[]=[
     // assuming a standard rule for every plan on the schedule.
     pays:{"Group Term Life (Death) \u2014 death benefit":"S$1,000,000",
       "Group Personal Accident (Personal Accident) \u2014 accidental death benefit":"S$600,000"},
+    // The live defect: a "Total Permanent Disability" row under a plan called
+    // "Group Term Life" was read as a death benefit, because the two strings
+    // joined contain "term life". It paid a second S$1,000,000 beside the real
+    // death benefit, from the same plan, for an event it does not pay on.
     never:["Living Care (Critical Illness) \u2014 critical illness benefit",
-      "Living Care Plus (Early Critical Illness) \u2014 critical illness benefit"],
+      "Living Care Plus (Early Critical Illness) \u2014 critical illness benefit",
+      "Group Term Life (Total Permanent Disability) \u2014 death benefit"],
     total:"S$1,600,000",
   },
 ];
