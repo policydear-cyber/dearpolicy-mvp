@@ -44,8 +44,7 @@ const SYSTEM="You decide which of a person's insurance benefits respond to what 
  * it. A benefit wrongly held back costs a question the person can ask again;
  * a benefit wrongly paid is a number they may act on. */
 function unjudged(candidate:RelevanceCandidate){
-  return {list:"ruledOut" as const,
-    entry:{name:candidate.name,why:"DearPolicy could not establish that this benefit responds to what happened"}};
+  return {name:candidate.name,why:"DearPolicy could not establish that this benefit responds to what happened"};
 }
 
 async function judgeBatch(args:{event:string;facts:string[]},candidates:RelevanceCandidate[]):Promise<RelevanceVerdict|null>{
@@ -70,11 +69,8 @@ async function judgeBatch(args:{event:string;facts:string[]},candidates:Relevanc
     // sight in one eye" in front of someone with a broken wrist: those rows
     // were never sent to the model at all, went unmentioned for that reason
     // alone, and the unmentioned-but-direct fallback kept every one of them.
-    for(const candidate of candidates){
-      if(mentioned.has(candidate.name))continue;
-      const {list,entry}=unjudged(candidate);
-      (list==="applies"?applies:ruledOut).push(entry);
-    }
+    for(const candidate of candidates)
+      if(!mentioned.has(candidate.name))ruledOut.push(unjudged(candidate));
     if(!applies.length&&!ruledOut.length)return null;
     return {applies,ruledOut};
   }catch{return null;}
@@ -98,10 +94,7 @@ export async function judgeRelevance(args:{event:string;facts:string[];candidate
       ruledOut.push(...verdict.ruledOut);
       return;
     }
-    for(const candidate of batch){
-      const {list,entry}=unjudged(candidate);
-      (list==="applies"?applies:ruledOut).push(entry);
-    }
+    for(const candidate of batch)ruledOut.push(unjudged(candidate));
   });
   // Nothing was actually read: leave the deterministic shortlist standing
   // rather than dressing it up as a verdict.
