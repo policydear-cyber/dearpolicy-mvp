@@ -1105,7 +1105,7 @@ async function main(){
       const answer=data.answer as ChatAnswer;
       assert.notEqual(answer.mode,"claim_assessment");
     });
-    await test("With a hosted reading model configured, documents are read there and chat stays local",async()=>{
+    await test("Routing reading to another provider sends documents there and leaves chat where it was",async()=>{
       const fixture=await seedReviewFixture(3);
       const { catalogueDocument,documentPages }=await import("@/lib/policies/catalog-builder");
       const { loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
@@ -1125,13 +1125,16 @@ async function main(){
           const text=String(JSON.parse(body.messages[1].content).text);
           const benefits=/100% of Sum Insured/.test(text)
             ?[{name:"Major Critical Illness",quote:"We pay 100% of Sum Insured for qualifying critical illness.",formulaKind:"sum_insured",formulaValue:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,conditions:[]},
-              // A quote that is not on the page must be refused exactly as it is for the local model.
+              // A quote that is not on the page must be refused wherever it came from.
               {name:"Invented Benefit",quote:"We pay S$999,999 on request.",formulaKind:"fixed",formulaValue:999999,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,conditions:[]}]
             :[];
           return Response.json({choices:[{message:{content:JSON.stringify({benefits})},finish_reason:"stop"}]});
         }
         return inner(input,init);
       }) as typeof fetch;
+      // The preset would otherwise claim reading too; this test is about the
+      // per-job override, so it is what has to be out of the way.
+      const savedPreset=process.env.MODEL_PRESET;delete process.env.MODEL_PRESET;
       process.env.READING_MODEL_PROVIDER="groq";process.env.GROQ_API_KEY="test-key";
       try{
         const stored=await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",pages});
@@ -1140,13 +1143,14 @@ async function main(){
         assert.equal(stored,1,"The invented quote was refused; only the real rule was stored");
         const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
         assert.deepEqual(catalog.map(b=>b.benefitName),["Major Critical Illness"]);
-        // Asking a question still runs on the local model.
+        // Rerouting reading does not move the other jobs with it.
         const readsBefore=explanationCalls;
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
-        assert.equal(explanationCalls-readsBefore,1,"Chat narration stays on the local model");
+        assert.equal(explanationCalls-readsBefore,1,"Chat narration stays on the model its own setting names");
       }finally{
-        delete process.env.READING_MODEL_PROVIDER;delete process.env.GROQ_API_KEY;globalThis.fetch=inner;
+        delete process.env.READING_MODEL_PROVIDER;delete process.env.GROQ_API_KEY;
+        if(savedPreset)process.env.MODEL_PRESET=savedPreset;useHarnessModel();globalThis.fetch=inner;
       }
     });
     await test("Rows are categorised by meaning after upload, not by keywords alone",async()=>{
