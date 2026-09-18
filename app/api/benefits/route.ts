@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { devAccountId,query } from "@/lib/db/client";
+import { devAccountId,isUuid,query } from "@/lib/db/client";
 import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { formatMoney } from "@/lib/format/currency";
@@ -27,6 +27,7 @@ export async function GET(request:Request){
   try{
     const url=new URL(request.url);
     const member=url.searchParams.get("familyMemberId");
+    if(member&&!isUuid(member))return NextResponse.json({benefits:[],summary:{total:0,needsYou:0,unreadable:0,usable:0,documents:0,unclaimed:0}});
     const accountId=devAccountId();
     await ensureBenefitSchema();
     const rows=await query<Row>(

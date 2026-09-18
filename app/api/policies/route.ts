@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { devAccountId, query } from "@/lib/db/client";
+import { devAccountId, isUuid, query } from "@/lib/db/client";
 export const runtime = "nodejs";
 
 type PolicyRow = {
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const familyMemberId = url.searchParams.get("familyMemberId");
+    if (familyMemberId && !isUuid(familyMemberId)) return NextResponse.json({ policies: [] });
     const accountId = devAccountId();
     const params: unknown[] = [accountId];
     let memberClause = "";
