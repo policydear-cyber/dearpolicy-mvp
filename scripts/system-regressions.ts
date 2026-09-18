@@ -13,7 +13,7 @@ import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassificatio
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
-import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,looksLikeCoverageLine,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,injuryNotReported,looksLikeCoverageLine,matchBenefits,namesASpecificInjury,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
@@ -1124,6 +1124,29 @@ export function runSystemRegressions(){
     // A benefit that pays on none of those is left unresolved rather than
     // attached to whichever cover happens to be first.
     assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
+  });
+  test("A burns band answers to a burn, and carries the largest percentages in the plan",()=>{
+    // These rows name no injury at all, so nothing recognised them, and they
+    // hold the biggest percentages on the schedule. Any reported injury matched
+    // every band at once: 50%, 75% and 100% of a S$600,000 cover, from one
+    // accident. The percentage in the name is a percentage of the BODY.
+    const band=(name:string):CatalogBenefit=>({id:name,policyId:"summary",productName:"Group Personal Accident",
+      benefitName:name,traits:["bodily_injury"],formulaKind:"sum_insured",formulaValue:0.5,currency:"SGD",
+      factKey:null,offsetDays:null,maximumDays:null,sourcePage:7,quote:"",conditions:[],requirements:[],needsReview:false});
+    assert.equal(namesASpecificInjury("Body - Equals to or greater than 10% but less than 15%"),true);
+    assert.equal(namesASpecificInjury("Equals to or greater than 20%"),true);
+    assert.equal(namesASpecificInjury("Head - Equals to or greater than 10%"),true);
+    // A broken wrist is not a burn, so the bands answer nothing.
+    const wrist={fractureBodyPart:fact("wrist"),injured:fact(true)};
+    assert.equal(injuryNotReported(band("Body - Equals to or greater than 10% but less than 15%"),wrist),
+      "Body - Equals to or greater than 10% but less than 15%");
+    // A reported burn does.
+    assert.equal(injuryNotReported(band("Body - Equals to or greater than 10% but less than 15%"),
+      {injuries:fact("burns to 12% of the body")}),null);
+    assert.equal(injuryNotReported(band("Equals to or greater than 20%"),
+      {permanentImpairment:fact("assessed impairment of 22%")}),null);
+    // Nothing described yet still shows what the policy pays.
+    assert.equal(injuryNotReported(band("Equals to or greater than 20%"),{}),null);
   });
   test("A schedule of injuries pays for the injury that happened, not for every line describing it",()=>{
     // "I lost my thumb" matches the thumb row, the phalanx-of-thumb row and the

@@ -223,16 +223,30 @@ export function reportedInjuryText(facts:SubjectFacts){
   if(typeof fracture==="string"&&fracture.trim())parts.push("fracture "+fracture);
   return parts.join(" ").toLowerCase();
 }
-/** Whether this row is one line of a schedule of injuries rather than a
- * benefit in its own right. */
+/** A band in a burns or impairment table: "Body -- equals to or greater than
+ * 10% but less than 15%". These rows name no injury at all, so nothing above
+ * recognises them -- and they carry the largest percentages in the plan. Left
+ * alone, any reported injury matched every band at once, and one accident
+ * could produce several separate payouts of 50%, 75% and 100% of a S$600,000
+ * cover. The percentage in the row's name is a percentage of the BODY, not of
+ * the sum insured, which is why the row reads as nonsense without its table. */
+function isScaleBand(name:string){
+  return /\bequals? to or greater than\b|\bbut less than\b/i.test(name)||/^\s*(?:body|head)\s*[-–]/i.test(name);
+}
+const BURN_WORDS=["burn","scald","impair","disfigur","scar"];
+/** Whether this row is one line of a schedule rather than a benefit in its own
+ * right. */
 export function namesASpecificInjury(benefitName:string){
   const name=(benefitName??"").toLowerCase();
-  return NAMED_INJURIES.some(word=>name.includes(word));
+  return NAMED_INJURIES.some(word=>name.includes(word))||isScaleBand(name);
 }
 export function injuryNotReported(benefit:CatalogBenefit,facts:SubjectFacts){
   const reported=reportedInjuryText(facts);
   if(!reported)return null;
   const name=benefit.benefitName.toLowerCase();
+  // A burns band answers only to a burn or an assessed impairment.
+  if(isScaleBand(name))
+    return BURN_WORDS.some(word=>reported.includes(word))?null:benefit.benefitName;
   const named=NAMED_INJURIES.filter(word=>name.includes(word));
   if(!named.length)return null;
   if(named.some(word=>reported.includes(word)))return null;
