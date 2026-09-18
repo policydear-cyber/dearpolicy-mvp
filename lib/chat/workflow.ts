@@ -17,7 +17,7 @@ import type { ChatAnswer,ChatCitation,ChatQuestion } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
 import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn,ChatConflict } from "./store";
-import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyReview,PolicySource,Progress } from "./types";
+import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress } from "./types";
 
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
@@ -211,6 +211,18 @@ function mergeAnalyses(analyses:PolicyAnalysis[]){
     b.formula={kind:"none",value:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence:null};
   }
   return {benefits:[...map.values()],observations:analyses.flatMap(a=>a.observations),nextSteps:analyses.flatMap(a=>a.nextSteps),conflicts:conflicts.size};
+}
+/** Independent reading windows often restate the same "this contract does not
+ * contain X" conclusion in slightly different words. That is not new evidence,
+ * just the same negative conclusion said several times, so collapse repeated
+ * restatements down to the single most specific one and leave every other
+ * (genuinely distinct) observation untouched. */
+function dedupeNegativeRestatements(observations:PolicyObservation[]){
+  const isRestatement=(text:string)=>/\b(?:do|does) not (?:contain|include|cover|provide)\b/i.test(text);
+  const restatements=observations.filter(o=>isRestatement(o.text));
+  if(restatements.length<=1)return observations;
+  const best=restatements.reduce((a,b)=>b.text.length>a.text.length?b:a);
+  return observations.filter(o=>!isRestatement(o.text)||o===best);
 }
 export async function runChatWorkflow(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
   const {request,conversation}=context;
@@ -742,7 +754,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           const merged=mergeAnalyses(analyses);
           if(merged.conflicts)reviews.find(r=>r.id===contract.id)!.status="needs_review";
           if(!merged.benefits.length&&!merged.observations.length&&reviews.find(r=>r.id===contract.id)!.status==="searched")reviews.find(r=>r.id===contract.id)!.status="no_matching_section";
-          for(const observation of merged.observations){
+          for(const observation of dedupeNegativeRestatements(merged.observations)){
             observations.push(contract.ownerName+" · "+contract.name+": "+observation.text);
             addCitations(answer.citations,observation.evidence.flatMap(q=>analysisPassages.filter(p=>p.id===q.sourceId).map(p=>p.citation)));
           }

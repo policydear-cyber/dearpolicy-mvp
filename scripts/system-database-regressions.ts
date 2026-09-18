@@ -1518,6 +1518,36 @@ async function main(){
         await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
       }
     });
+    await test("Several reading windows restating the same \'no coverage\' conclusion collapse into one detail, not several near-duplicates",async()=>{
+      await seedReviewFixture(40);
+      const inner=globalThis.fetch;
+      let readingWindowCalls=0;
+      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
+        const url=String(input);
+        if(!url.endsWith("/api/chat"))return inner(input,init);
+        const body=JSON.parse(String(init?.body)),system=String(body.messages[0].content);
+        if(!system.startsWith("Read insurance"))return inner(input,init);
+        readingWindowCalls++;
+        const user=JSON.parse(body.messages[1].content),source=user.sources[0],quote=String(source.text).slice(0,40);
+        // Independent reading windows over the same undershot section, worded
+        // differently the way a real model varies its phrasing window to window.
+        const restatements=["This contract does not contain a critical illness benefit for this diagnosis.",
+          "The policy wording does not include any relevant benefit here.","These pages do not provide coverage for the reported event."];
+        const text=readingWindowCalls<=3?restatements[readingWindowCalls-1]:
+          "This particular passage raises an unrelated administrative point, not a coverage conclusion.";
+        return Response.json({message:{content:JSON.stringify({benefits:[],observations:[{text,evidence:[{sourceId:source.id,quote}]}],nextSteps:[]})}});
+      }) as typeof fetch;
+      try{
+        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
+        const answer=data.answer as ChatAnswer;
+        assert.ok(readingWindowCalls>=4,"The fixture\'s 40 wording pages must span more than one reading window: "+readingWindowCalls);
+        const restatementLines=answer.details.filter(d=>/\b(?:do|does) not (?:contain|include|cover|provide)\b/i.test(d));
+        assert.equal(restatementLines.length,1,"Every window\'s restatement of the same \'no coverage\' conclusion collapses into a single detail line, not one per window: "+JSON.stringify(answer.details));
+        assert.ok(answer.details.some(d=>/unrelated administrative point/.test(d)),"A genuinely distinct observation for the same contract is still preserved: "+JSON.stringify(answer.details));
+      }finally{
+        globalThis.fetch=inner;
+      }
+    });
     await test("A printed figure outranks a heading-inferred percentage for the same benefit across two documents",async()=>{
       const fixture=await seedReviewFixture(1);
       const product="Review Fixture Critical Illness";
