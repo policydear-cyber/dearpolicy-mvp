@@ -45,6 +45,10 @@ export type ClaimItem = {
    * Two benefits in the same cover paying on the same event are alternatives,
    * not additions. */
   payingEvent?:string;
+  /** The schedule of injuries this row came from -- one table, on one page of
+   * one document. A schedule pays for the injury that happened, so two rows
+   * from the same table are not two payouts. */
+  scaleGroup?:string;
   /** Set when another benefit in the same cover pays instead of this one. The
    * amount stays visible; it stops being added. */
   supersededBy?:string;

@@ -223,6 +223,12 @@ export function reportedInjuryText(facts:SubjectFacts){
   if(typeof fracture==="string"&&fracture.trim())parts.push("fracture "+fracture);
   return parts.join(" ").toLowerCase();
 }
+/** Whether this row is one line of a schedule of injuries rather than a
+ * benefit in its own right. */
+export function namesASpecificInjury(benefitName:string){
+  const name=(benefitName??"").toLowerCase();
+  return NAMED_INJURIES.some(word=>name.includes(word));
+}
 export function injuryNotReported(benefit:CatalogBenefit,facts:SubjectFacts){
   const reported=reportedInjuryText(facts);
   if(!reported)return null;
@@ -324,6 +330,8 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     title:args.ownerName+" · "+benefit.benefitName,
     coverKey:cover,
     ...(coverLabel?{coverLabel}:{}),
+    ...(namesASpecificInjury(benefit.benefitName)
+      ?{scaleGroup:benefit.policyId+"#"+(benefit.sourcePage??0)}:{}),
     ...(paysOn?{payingEvent:paysOn}:{}),
     status:amount!=null?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
     amountText:amount!=null?formatMoney(amount,currency):null,

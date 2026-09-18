@@ -1125,6 +1125,34 @@ export function runSystemRegressions(){
     // attached to whichever cover happens to be first.
     assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
   });
+  test("A schedule of injuries pays for the injury that happened, not for every line describing it",()=>{
+    // "I lost my thumb" matches the thumb row, the phalanx-of-thumb row and the
+    // fingers row. Those are subdivisions of one injury, not three payouts.
+    const line=(title:string,amount:number,group:string):ClaimItem=>({title,status:"likely_applicable",
+      amountText:"S$"+amount.toLocaleString("en-SG"),estimateBasis:"confirmed",calculatedAmount:amount,currency:"SGD",
+      calculationKind:"sum_insured",aggregation:"additive",coverKey:"policy:GPA|group personal accident",
+      scaleGroup:group,reason:"",conditions:[]});
+    const thumb=[
+      line("A · 11. Loss of use of (a) Right Thumb",180_000,"doc#11"),
+      line("A · 11. Loss of use of (c) One Phalanx of Right Thumb",120_000,"doc#11"),
+      line("A · 14. Loss of any other finger (a) Right hand",36_000,"doc#11"),
+      // A different table on a different page: a fracture benefit really is a
+      // separate benefit and still pays.
+      line("A · Arm, Elbow, Wrist or Ribs",1_000,"doc#8"),
+    ];
+    const {notes}=resolveCoverOverlaps(thumb);
+    assert.equal(thumb[0].calculatedAmount,180_000,"the largest line on the schedule is the one counted");
+    assert.equal(thumb[1].supersededBy,"A · 11. Loss of use of (a) Right Thumb");
+    assert.equal(thumb[2].supersededBy,"A · 11. Loss of use of (a) Right Thumb");
+    assert.equal(thumb[3].supersededBy,undefined,"a separate schedule is a separate benefit");
+    assert.match(notes.join(" "),/counted once rather than added up/);
+    assert.match(notes.join(" "),/If there were separate injuries/);
+    assert.deepEqual(aggregatePotentialPayouts(thumb),[{currency:"SGD",amount:181_000,amountText:"S$181,000",itemCount:2}]);
+    // One line alone is just a benefit.
+    const single=[line("A · 22. Loss of speech",300_000,"doc#11")];
+    resolveCoverOverlaps(single);
+    assert.equal(single[0].supersededBy,undefined);
+  });
   test("A rule two documents state identically no longer waits for a person to confirm it",()=>{
     // 116 of the 181 rules on file were waiting to be confirmed, and the
     // dismemberment scale is most of them: read from a column heading in one

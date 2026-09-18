@@ -55,8 +55,41 @@ export function resolveCoverOverlaps(items:ClaimItem[]):OverlapResolution{
     const key=item.coverKey+"|"+item.payingEvent+"|"+shape;
     groups.set(key,[...(groups.get(key)??[]),item]);
   }
+  // A schedule of injuries pays for the injury that happened, not for every
+  // line that could describe it. "I lost my thumb" matches the thumb row, the
+  // phalanx-of-thumb row and the fingers row -- subdivisions of one injury, not
+  // three payouts. Rows from the same table, one page of one document, resolve
+  // to the largest, and the rest say so.
+  const scales=new Map<string,ClaimItem[]>();
+  for(const item of items){
+    if(item.aggregation!=="additive"||item.supersededBy)continue;
+    if(typeof item.calculatedAmount!=="number"||!(item.calculatedAmount>0))continue;
+    if(!item.scaleGroup)continue;
+    scales.set(item.scaleGroup,[...(scales.get(item.scaleGroup)??[]),item]);
+  }
   const notes:string[]=[];
-  for(const group of groups.values()){
+  for(const group of scales.values()){
+    if(group.length<2)continue;
+    const ordered=[...group].sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0)||a.title.localeCompare(b.title));
+    const kept=ordered[0];
+    for(const item of ordered.slice(1)){
+      item.supersededBy=kept.title;
+      item.status="potentially_applicable";
+      item.amountLabel="What this benefit pays";
+      item.conditions=[...new Set([...item.conditions,
+        "One line of a schedule of injuries, which pays for the injury that happened rather than for every line that could describe it. "
+        +"\u201c"+kept.title+"\u201d is the largest line on that schedule matching what you described, and is the one counted."])];
+      delete (item as {calculatedAmount?:number}).calculatedAmount;
+    }
+    notes.push("More than one line of the same schedule of injuries matches what you described, so "
+      +(kept.amountText??"the largest")+" is counted once rather than added up. "
+      +"If there were separate injuries, each can pay on its own \u2014 say which, and DearPolicy will work them out separately.");
+  }
+  for(const raw of groups.values()){
+    // A row the schedule pass already resolved is out of the running here: it
+    // no longer carries an amount, so it can neither be counted nor stand in
+    // for the row that is.
+    const group=raw.filter(item=>!item.supersededBy);
     if(group.length<2)continue;
     // The figure taken from the person's own schedule wins over one printed in
     // a booklet for everybody, and only then does size decide. Taking the
