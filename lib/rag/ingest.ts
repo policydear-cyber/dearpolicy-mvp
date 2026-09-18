@@ -304,7 +304,16 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // The Coverage Ledger gains this document's rows the moment it is ready,
     // so the next payout question is a lookup rather than a read.
     try {
-      await progress(args, "finalising", 98, "Reading the document into your coverage ledger…", "indexing");
+      // No status argument here: the document was already marked 'ready' just
+      // above, and this progress() call previously passed "indexing" as the
+      // status override, which flipped processing_status back from 'ready' to
+      // 'indexing' -- and nothing after this step ever set it back. The Coverage
+      // Ledger read (a background enhancement) would then leave every
+      // successfully-processed document stuck showing as "processing" in the
+      // UI forever, even though the analysis and the ledger rows were both
+      // already done. Omitting the status here leaves it at 'ready' via the
+      // COALESCE in progress().
+      await progress(args, "finalising", 98, "Reading the document into your coverage ledger…");
       const { readDocumentIntoLedger } = await import("@/lib/ledger/extract");
       await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
         console.warn("Ledger reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
