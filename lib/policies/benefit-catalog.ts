@@ -198,7 +198,10 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   const {benefit,coverage,facts}=args;
   const currency=normalizeCurrencyCode(benefit.currency??coverage?.currency??null,coverage?.currency??"SGD");
   const missing:string[]=[];
+  const conditions=[...benefit.conditions];
   let amount:number|null=null,basis="",aggregation:"additive"|"reimbursement"="additive";
+  // A per-day figure worked out without knowing the policy's own day limit.
+  let uncappedDaily=false;
   if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&currency===coverage.currency){
     amount=Math.round(coverage.amount*benefit.formulaValue*100)/100;
     basis=Math.round(benefit.formulaValue*1000)/10+"% of verified "+formatMoney(coverage.amount,currency);
@@ -209,14 +212,23 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     aggregation="reimbursement";
     if(typeof spent==="number"&&spent>=0){amount=Math.min(spent,benefit.formulaValue);basis="Lower of the reported eligible expense and the quoted cap of "+formatMoney(benefit.formulaValue,currency);}
     else missing.push("the actual eligible amount for "+benefit.benefitName);
-  } else if(benefit.formulaKind==="daily"&&benefit.formulaValue!=null&&benefit.factKey&&benefit.offsetDays!=null&&benefit.maximumDays==null){
-    missing.push("the maximum number of days this benefit pays for, which is not stated in the row it came from");
-  } else if(benefit.formulaKind==="daily"&&benefit.formulaValue!=null&&benefit.factKey&&benefit.offsetDays!=null&&benefit.maximumDays!=null){
+  } else if(benefit.formulaKind==="daily"&&benefit.formulaValue!=null&&benefit.factKey&&benefit.offsetDays!=null){
     const days=knownValue(facts,benefit.factKey);
     if(knownValue(facts,"hospitalStayOngoing")===true)missing.push("the completed length of the hospital stay");
     else if(typeof days==="number"&&Number.isInteger(days)&&days>=0){
-      amount=Math.max(0,Math.min(benefit.maximumDays,days-benefit.offsetDays))*benefit.formulaValue;
-      basis=formatMoney(benefit.formulaValue,currency)+" per day after the first "+benefit.offsetDays+", up to "+benefit.maximumDays+" days";
+      const payableDays=Math.max(0,days-benefit.offsetDays);
+      // A row that does not state its own maximum used to withhold the figure
+      // entirely. But the person has told us how many days they were in, the
+      // rate is quoted, and the arithmetic is theirs to check: a cap they
+      // cannot see cannot be the reason they are shown nothing. The unknown
+      // cap becomes what it is -- a condition on the figure.
+      const payFor=benefit.maximumDays!=null?Math.min(benefit.maximumDays,payableDays):payableDays;
+      uncappedDaily=benefit.maximumDays==null;
+      amount=payFor*benefit.formulaValue;
+      basis=formatMoney(benefit.formulaValue,currency)+" per day after the first "+benefit.offsetDays
+        +(benefit.maximumDays!=null?", up to "+benefit.maximumDays+" days"
+          :", for the "+payableDays+" day"+(payableDays===1?"":"s")+" you reported");
+      if(uncappedDaily)conditions.push("The row this came from does not state a maximum number of payable days, so a limit elsewhere in the wording could reduce this figure.");
     } else missing.push("the number of nights in hospital");
   }
   if(benefit.formulaKind==="sum_insured"&&amount==null&&!coverage?.amount)
@@ -228,12 +240,12 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   const estimateBasis:"confirmed"|"estimated"|"indicative"=
     benefit.needsConfirmation||args.declaredOnly?"indicative"
     :benefit.formulaKind==="sum_insured"?(personalEvidence?"confirmed":"estimated")
+    :uncappedDaily?"estimated"
     :"confirmed";
   if(benefit.needsConfirmation&&amount!=null)
     missing.push("your confirmation of what this benefit pays — DearPolicy read the rate from the heading above the row, not the row itself (Benefits page)");
   for(const requirement of benefit.requirements)
     if(knownValue(facts,requirement.factKey)==null)missing.push(requirement.why);
-  const conditions=[...benefit.conditions];
   for(const entry of missing)conditions.push("Still needed: "+entry);
   const item:ClaimItem={
     title:args.ownerName+" · "+benefit.benefitName,
@@ -252,7 +264,9 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
         :estimateBasis==="indicative"
         ?"Estimated from the quoted clause on page "+(benefit.sourcePage??1)+". DearPolicy read the rate from the heading above this row rather than from the row itself, so confirm it on the Benefits page before relying on it."
         :estimateBasis==="estimated"
-        ?"Estimated from the quoted clause on page "+(benefit.sourcePage??1)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate."
+        ?(uncappedDaily
+          ?"Estimated from the rate quoted on page "+(benefit.sourcePage??1)+" and the number of days you reported. The row does not state a day limit, so check the full wording for one."
+          :"Estimated from the quoted clause on page "+(benefit.sourcePage??1)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate.")
         :"Calculated from your policy schedule and the quoted clause on page "+(benefit.sourcePage??1)+".")
       :"This benefit can respond to what happened, but "+(missing[0]??"its payout rule")+" is still needed before an amount can be calculated.",
     conditions:[...new Set(conditions)],

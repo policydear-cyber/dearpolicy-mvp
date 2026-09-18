@@ -1017,17 +1017,22 @@ export function runSystemRegressions(){
     // Both are real enough to add up; only an indicative reading is not.
     assert.equal(aggregatePotentialPayouts([secondhand.item])[0].amountText,"S$1,000,000");
   });
-  test("A daily row with no stated cap asks for the cap instead of paying out",()=>{
+  test("A daily row with no stated cap still pays for the days reported, with the unknown cap as a condition",()=>{
     const uncapped:CatalogBenefit={id:"d1",policyId:"w",productName:"Plan",benefitName:"Daily hospital cash",
       traits:["hospitalisation"],formulaKind:"daily",formulaValue:30,currency:"SGD",factKey:"hospitalNights",
       offsetDays:0,maximumDays:null,sourcePage:9,quote:"Daily hospital cash S$30 per day",conditions:[],requirements:[],needsReview:true};
     const assessed=assessCatalogBenefit({benefit:uncapped,coverage:coverage(),ownerName:"Person A",facts:{hospitalNights:fact(10)}});
-    assert.equal(assessed.item.amountText,null);
-    assert.ok(assessed.missing.some(entry=>/maximum number of days/.test(entry)));
-    // With the cap present it pays, deterministically.
-    const capped={...uncapped,maximumDays:30};
+    // Ten reported days at the quoted rate. A cap the person cannot see is not
+    // a reason to show them nothing -- it is a condition on the figure.
+    assert.equal(assessed.item.amountText,"S$300.00");
+    assert.equal(assessed.missing.some(entry=>/maximum number of days/.test(entry)),false,"An unstated cap no longer blocks the amount");
+    assert.ok(assessed.item.conditions.some(c=>/does not state a maximum number of payable days/i.test(c)),
+      "The unknown cap must travel with the figure: "+JSON.stringify(assessed.item.conditions));
+    assert.equal(assessed.item.estimateBasis,"estimated","An uncapped daily figure is an estimate, not a confirmed calculation");
+    // A cap that IS stated still binds.
+    const capped={...uncapped,maximumDays:3};
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
-      facts:{hospitalNights:fact(10)}}).item.amountText,"S$300.00");
+      facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
   });
 console.log("DearPolicy contextual system regressions passed ("+cases+" checks, including 90- and 900-policy inventories).");
 }
