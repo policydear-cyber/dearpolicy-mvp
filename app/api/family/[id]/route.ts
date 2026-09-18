@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { devAccountId, isUuid, query } from "@/lib/db/client";
+import { devAccountId, isUuid, isValidDateString, query } from "@/lib/db/client";
 
 export const runtime = "nodejs";
 
@@ -9,6 +9,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null };
     if (!body.displayName?.trim() || !body.relationship?.trim()) return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });
+    if (body.displayName.trim().length > 200) return NextResponse.json({ error: "That name is too long." }, { status: 400 });
+    if (body.relationship.trim().length > 100) return NextResponse.json({ error: "That relationship is too long." }, { status: 400 });
+    if (body.preferredName && body.preferredName.trim().length > 100) return NextResponse.json({ error: "That preferred name is too long." }, { status: 400 });
+    if (body.notes && body.notes.trim().length > 2000) return NextResponse.json({ error: "That note is too long." }, { status: 400 });
+    if (body.dateOfBirth && !isValidDateString(body.dateOfBirth)) return NextResponse.json({ error: "That date of birth isn't valid." }, { status: 400 });
     const result = await query(
       `UPDATE family_members
           SET display_name=$1,relationship=$2,date_of_birth=$3,preferred_name=$4,notes=$5,updated_at=now()

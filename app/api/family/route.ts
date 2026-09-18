@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { devAccountId, query } from "@/lib/db/client";
+import { devAccountId, isValidDateString, query } from "@/lib/db/client";
 
 export const runtime = "nodejs";
 
@@ -29,6 +29,10 @@ export async function POST(request: Request) {
     if (!body.displayName?.trim() || !body.relationship?.trim()) {
       return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });
     }
+    if (body.displayName.trim().length > 200) return NextResponse.json({ error: "That name is too long." }, { status: 400 });
+    if (body.relationship.trim().length > 100) return NextResponse.json({ error: "That relationship is too long." }, { status: 400 });
+    if (body.preferredName && body.preferredName.trim().length > 100) return NextResponse.json({ error: "That preferred name is too long." }, { status: 400 });
+    if (body.dateOfBirth && !isValidDateString(body.dateOfBirth)) return NextResponse.json({ error: "That date of birth isn't valid." }, { status: 400 });
     const result = await query(
       `INSERT INTO family_members(account_id,display_name,relationship,date_of_birth,preferred_name)
        VALUES($1,$2,$3,$4,$5)

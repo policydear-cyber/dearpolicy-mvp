@@ -71,6 +71,16 @@ export function isUuid(value: string): boolean {
   return UUID_RE.test(value);
 }
 
+// A hand-typed or malformed date (e.g. "not-a-date", "2024-13-45") reaches a
+// `date` column as raw text; Postgres's own rejection of it is an opaque
+// driver error, not a message a person could act on, so this is checked
+// before the query instead of after it fails.
+export function isValidDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(value + "T00:00:00Z");
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
 export function devAccountId() {
   // An env var that exists but is blank (e.g. a placeholder saved empty in a
   // hosting dashboard) must not become "" here — Postgres rejects "" as a uuid
