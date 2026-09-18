@@ -71,6 +71,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ policyId, status: "queued" }, { status: 202 });
   } catch (error) {
+    // A double-click or two tabs can both pass the pre-check and race each
+    // other to the insert; the unique index on (account_id,file_hash) is the
+    // real guard, so its violation gets the same friendly message as the
+    // pre-check instead of a generic 500.
+    if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505") {
+      return NextResponse.json({ error: "This exact document is already in DearPolicy." }, { status: 409 });
+    }
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }
