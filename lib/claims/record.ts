@@ -40,6 +40,8 @@ function assessmentFromItem(item:ClaimItem,index:number,citations:ChatCitation[]
     id:item.calculationId??"item-"+index,title:item.title,status:item.status,amountText:item.amountText,
     reason:item.reason,conditions:item.conditions,evidenceTerms:[],productName:null,
     ...(item.calculatedAmount!=null?{calculatedAmount:item.calculatedAmount,currency:item.currency}:{}),
+    ...(item.aggregation?{aggregation:item.aggregation}:{}),
+    ...(item.supersededBy?{supersededBy:item.supersededBy}:{}),
     ...(evidence?{ruleEvidence:evidence}:{}),
   };
 }

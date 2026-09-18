@@ -63,6 +63,11 @@ export type ClaimAssessmentItem = {
   coverageId?: string;
   calculatedAmount?: number;
   currency?: string;
+  /** A reimbursement is the actual eligible bill, so it is listed on its own
+   * rather than folded into the lump-sum total. */
+  aggregation?: "additive" | "reimbursement";
+  /** Another benefit under the same cover pays instead of this one. */
+  supersededBy?: string;
   ruleEvidence?: ClaimEvidence;
 };
 

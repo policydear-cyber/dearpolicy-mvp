@@ -80,7 +80,8 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
     lines:claimable.flatMap(item=>{
       const evidence=item.ruleEvidence;
       return [
-        item.title+(item.amountText?" — "+item.amountText:""),
+        item.title+(item.amountText?" \u2014 "+item.amountText:"")
+          +(item.supersededBy?" (paid instead of \u201c"+item.supersededBy+"\u201d, not added to the total)":""),
         "    How this figure was reached: "+item.reason,
         ...(evidence?["    Policy wording: "+evidence.policyName+", page "+evidence.pageStart+(evidence.pageEnd!==evidence.pageStart?"–"+evidence.pageEnd:"")]:[]),
         ...item.conditions.map(condition=>"    Condition: "+condition),
@@ -88,6 +89,22 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
     }),
     note:"Each benefit is assessed on its own. Every figure here is an ESTIMATED claim amount, calculated by DearPolicy from the policy wording quoted above and the claimant's own schedule. It is not a quotation and not an offer: the insurer decides the final amount on assessment.",
   });
+  // The number the household came for, struck once and struck correctly:
+  // benefits that pay instead of one another are already excluded, and a
+  // reimbursement of an actual bill is listed beside the total rather than
+  // inside it.
+  const lumpSums=claimable.filter(item=>item.aggregation!=="reimbursement"&&!item.supersededBy&&typeof item.calculatedAmount==="number");
+  const reimbursements=claimable.filter(item=>item.aggregation==="reimbursement"&&typeof item.calculatedAmount==="number");
+  if(lumpSums.length||reimbursements.length){
+    const currency=lumpSums[0]?.currency??reimbursements[0]?.currency??"SGD";
+    const lumpTotal=lumpSums.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
+    const billTotal=reimbursements.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
+    sections.push({heading:"Estimated claim amount",lines:[
+      ...(lumpSums.length?["Lump-sum benefits: "+formatMoney(lumpTotal,currency)+" across "+lumpSums.length+" benefit"+(lumpSums.length===1?"":"s")]:[]),
+      ...(reimbursements.length?["Reimbursement of actual eligible expenses: up to "+formatMoney(billTotal,currency)
+        +" across "+reimbursements.length+" benefit"+(reimbursements.length===1?"":"s")+", against receipts"]:[]),
+    ],note:"Benefits paid by the same policy for the same event are counted once, not added together. This is DearPolicy's estimate from the documents on file and remains subject to the insurer's assessment."});
+  }
   else sections.push({heading:"Benefits being claimed",lines:[
     "No benefit could be calculated yet from the documents on file.",
   ],note:"This usually means a policy schedule or the benefit wording is still missing. Upload it and the claim pack can be produced again."});

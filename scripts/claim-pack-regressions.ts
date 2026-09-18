@@ -27,7 +27,7 @@ const packet:ClaimDecisionPacket={
     {id:"gpa-ambulance",title:"Desmond · Ambulance reimbursement",status:"potentially_applicable",
      amountText:"S$220.00",calculatedAmount:220,currency:"SGD",
      reason:"Lower of the reported ambulance bill and the S$500 cap.",
-     conditions:[],evidenceTerms:["ambulance"],productName:"Group Personal Accident"},
+     aggregation:"reimbursement",conditions:[],evidenceTerms:["ambulance"],productName:"Group Personal Accident"},
     {id:"gtl-death",title:"Desmond · Death Benefit",status:"not_applicable",amountText:null,
      reason:"Nobody died.",conditions:[],evidenceTerms:["death"],productName:"Group Term Life"},
   ],
@@ -57,6 +57,25 @@ export async function runClaimPackRegressions(){
   assert.ok(bereaved.some(item=>/Death certificate/.test(item)));
   assert.equal(bereaved.some(item=>/Operation report/.test(item)),false,"Only what this event actually needs is asked for");
   assert.equal(new Set(attachments).size,attachments.length,"The same document is never asked for twice");
+
+  // The number the household came for. A reimbursement of an actual bill is
+  // listed beside the total, not inside it, and a benefit paid instead of
+  // another is excluded entirely.
+  const estimate=content.sections.find(section=>section.heading==="Estimated claim amount")!;
+  assert.ok(estimate,"The pack states an estimated claim amount");
+  assert.match(estimate.lines.join(" | "),/Lump-sum benefits: S\$1,250 across 1 benefit/);
+  assert.match(estimate.lines.join(" | "),/Reimbursement of actual eligible expenses: up to S\$220\.00/);
+  const twice=claimPackContent({packet:{...packet,assessments:[
+    ...packet.assessments,
+    {id:"gpa-fracture-dup",title:"Desmond · Fracture of the wrist",status:"potentially_applicable",
+     amountText:"S$1,250",currency:"SGD",supersededBy:"Desmond · Simple Fracture (wrist)",
+     reason:"Same benefit read from the benefit table.",conditions:[],evidenceTerms:[],productName:"Group Personal Accident"},
+  ]},claimantName:"Tan Yi Chuen Desmond"});
+  const twiceEstimate=twice.sections.find(section=>section.heading==="Estimated claim amount")!;
+  assert.match(twiceEstimate.lines.join(" | "),/Lump-sum benefits: S\$1,250 across 1 benefit/,
+    "The same cover described twice is counted once");
+  assert.match(twice.sections.find(section=>section.heading==="Benefits being claimed")!.lines.join(" | "),
+    /paid instead of/,"and the row that is not counted says which benefit is paid instead of it");
 
   // An unassessed claim states that plainly instead of printing an empty sheet.
   const empty=claimPackContent({packet:{...packet,assessments:[]},claimantName:"Tan Yi Chuen Desmond"});
