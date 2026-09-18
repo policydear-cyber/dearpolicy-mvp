@@ -14,7 +14,7 @@ import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
-import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
@@ -56,9 +56,14 @@ export function claimConfidence(items:ClaimItem[]):"strong_match"|"partial_match
   const complete=counted.every(item=>!item.conditions.some(condition=>condition.startsWith("Still needed:")));
   return verified&&complete?"strong_match":"partial_match";
 }
-function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[]}){
+function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQualifiers?:string[]}){
   const {notes}=resolveCoverOverlaps(answer.claimItems);
   for(const note of notes)if(!answer.details.includes(note))answer.details.push(note);
+  const warnings=acceleratedBenefitWarnings(answer.claimItems);
+  if(warnings.length){
+    answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),...warnings])];
+    for(const warning of warnings)if(!answer.details.includes(warning))answer.details.push(warning);
+  }
   return aggregatePotentialPayouts(answer.claimItems);
 }
 

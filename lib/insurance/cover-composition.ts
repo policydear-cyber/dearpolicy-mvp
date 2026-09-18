@@ -73,6 +73,42 @@ export function resolveCoverOverlaps(items:ClaimItem[]):OverlapResolution{
   return {items,notes};
 }
 
+/** Two critical-illness plans under one scheme, both responding.
+ *
+ * An early-stage plan and a main plan are separate covers, so the arithmetic
+ * adds them -- and for two plans genuinely bought as extra cover, that is
+ * right. But insurers commonly write the early-stage benefit as an ADVANCE
+ * against the main sum rather than as money on top of it, and the word that
+ * decides it ("accelerated", or "in addition to") is in the wording rather
+ * than in any figure DearPolicy holds.
+ *
+ * So the total keeps both -- withholding money because a clause MIGHT reduce
+ * it is its own kind of wrong answer -- and says exactly what to look for. A
+ * death benefit and an accidental death benefit are not treated this way:
+ * those genuinely cumulate, and a caveat there would be noise.
+ */
+export function acceleratedBenefitWarnings(items:ClaimItem[]):string[]{
+  const scheme=(coverKey:string)=>coverKey.startsWith("policy:")?coverKey.split("|")[0]:null;
+  const groups=new Map<string,ClaimItem[]>();
+  for(const item of items){
+    if(typeof item.calculatedAmount!=="number"||item.supersededBy)continue;
+    if(item.payingEvent!=="critical_illness"&&item.payingEvent!=="terminal_illness")continue;
+    const master=item.coverKey?scheme(item.coverKey):null;
+    if(!master)continue;
+    const key=master+"|"+item.payingEvent;
+    groups.set(key,[...(groups.get(key)??[]),item]);
+  }
+  const notes:string[]=[];
+  for(const group of groups.values()){
+    if(new Set(group.map(item=>item.coverKey)).size<2)continue;
+    const names=group.map(item=>"\u201c"+item.title.split(" \u00b7 ").slice(1).join(" \u00b7 ")+"\u201d").join(" and ");
+    notes.push(names+" are separate covers under the same policy, so both are counted. "
+      +"Check the wording for the word \u201caccelerated\u201d: where an early-stage or terminal benefit is paid as an advance against the main sum rather than in addition to it, "
+      +"the amount settled is the larger of the two rather than the total of both.");
+  }
+  return notes;
+}
+
 /** What a figure is worth saying out loud when several covers respond. Kept
  * separate from the arithmetic so the wording can change without touching it. */
 export function describeCoverSplit(items:ClaimItem[]){

@@ -15,7 +15,7 @@ import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,t
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
 import { assessCatalogBenefit,benefitTraits,eventPredatesCover,eventTraits,matchBenefits,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
-import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { acceleratedBenefitWarnings,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import type { ClaimItem } from "@/types";
 import { readableModelFailure,repairTruncatedJson,TruncatedModelOutput } from "@/lib/ai/llm";
 import { coercePolicyAnalysis,PolicyAnalysisSchema,readingOutputTokens } from "@/lib/chat/policy-analysis";
@@ -1050,6 +1050,26 @@ export function runSystemRegressions(){
     const capped={...uncapped,maximumDays:3};
     assert.equal(assessCatalogBenefit({benefit:capped,coverage:coverage(),ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$90.00");
+  });
+  test("Two critical-illness plans under one scheme are counted, and the acceleration is flagged",()=>{
+    const ci=(title:string,amount:number,cover:string):ClaimItem=>({title,status:"likely_applicable",
+      amountText:"S$"+amount.toLocaleString("en-SG"),estimateBasis:"confirmed",calculatedAmount:amount,currency:"SGD",
+      calculationKind:"sum_insured",aggregation:"additive",coverKey:cover,payingEvent:"critical_illness",reason:"",conditions:[]});
+    const both=[ci("A · Group Living Care",350_000,"policy:3037850|living care"),
+      ci("A · Early Critical Illness Benefit",150_000,"policy:3037850|living care plus")];
+    const warnings=acceleratedBenefitWarnings(both);
+    assert.equal(warnings.length,1);
+    assert.match(warnings[0],/accelerated/);
+    // The money is still counted: withholding it because a clause MIGHT reduce
+    // it is its own kind of wrong answer.
+    assert.deepEqual(aggregatePotentialPayouts(both),[{currency:"SGD",amount:500_000,amountText:"S$500,000",itemCount:2}]);
+    // A death benefit and an accidental death benefit genuinely cumulate, so
+    // no caveat is raised there.
+    const deaths=[{...ci("A · Death Benefit",1_000_000,"policy:3037850|group term life"),payingEvent:"death"},
+      {...ci("A · Death due to Accident",600_000,"policy:3037850|group personal accident"),payingEvent:"death"}];
+    assert.deepEqual(acceleratedBenefitWarnings(deaths),[]);
+    // One plan alone raises nothing either.
+    assert.deepEqual(acceleratedBenefitWarnings([both[0]]),[]);
   });
   test("The policy's own schedule of defined conditions beats the national baseline",()=>{
     // The honest limit of the dengue fix: the standard list is a floor, and a
