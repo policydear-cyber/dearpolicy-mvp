@@ -53,6 +53,8 @@ export default function PoliciesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
+  const [searchIndex, setSearchIndex] = useState<{ enabled: boolean; total: number; indexed: number; pending: number } | null>(null);
+  const [indexing, setIndexing] = useState(false);
 
   async function refresh() {
     const [f, p] = await Promise.all([
@@ -61,6 +63,11 @@ export default function PoliciesPage() {
     ]);
     setFamily(f.family ?? []);
     setPolicies(p.policies ?? []);
+    // Semantic search is a separate store from the database, so a document can
+    // be fully analysed and still be invisible to it -- every document read
+    // before Pinecone was connected is. Ask, rather than assume.
+    const search = await fetch("/api/policies/reindex", { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+    setSearchIndex(search && typeof search.pending === "number" ? search : null);
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -185,6 +192,31 @@ export default function PoliciesPage() {
     }
   }
 
+  // No model is called and nothing already extracted is touched: this only
+  // sends passages the database already holds. Re-analysing would cost a
+  // hosted model call per page and could disturb benefit rows that are right.
+  async function indexForSearch() {
+    setIndexing(true);
+    setStatus("Adding your documents to semantic search\u2026");
+    try {
+      const response = await fetch("/api/policies/reindex", { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Could not build the search index");
+      const done = payload.indexed?.length ?? 0;
+      const failed = payload.failed?.length ?? 0;
+      setStatus(failed
+        ? `${done} document${done === 1 ? "" : "s"} added to semantic search. ${failed} could not be added: ${payload.failed.map((f: { label: string }) => f.label).join(", ")}.`
+        : done
+          ? `${done} document${done === 1 ? "" : "s"} added to semantic search. Questions can now match wording rather than exact keywords.`
+          : "Every document was already in semantic search.");
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not build the search index");
+    } finally {
+      setIndexing(false);
+    }
+  }
+
   const shown = useMemo(
     () => policies.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || filter === "review" && p.needs_review),
     [policies, filter],
@@ -201,6 +233,9 @@ export default function PoliciesPage() {
     <section className="trust-strip"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
 
     {activeCount > 0 && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is working on {activeCount} document{activeCount === 1 ? "" : "s"}</strong><small>Progress updates automatically. You can continue using the app while local processing runs.</small></div></div>}
+
+    {!!searchIndex?.enabled && searchIndex.pending > 0 && activeCount === 0 && <div className="processing-banner"><div><strong>{searchIndex.pending} of your {searchIndex.total} document{searchIndex.total === 1 ? " is" : "s are"} not in semantic search yet</strong><small>They were read before semantic search was connected, so questions about them match keywords only &mdash; &ldquo;hospital&rdquo; but not &ldquo;admitted for three nights&rdquo;. Adding them uses text DearPolicy already has: no re-reading, no cost, and nothing already extracted changes.</small></div><button className="button secondary" disabled={indexing || busy} onClick={indexForSearch}>{indexing ? "Adding\u2026" : "Add to semantic search"}</button></div>}
+
 
     <section className="upload-panel">
       <form onSubmit={upload} className="upload-form">

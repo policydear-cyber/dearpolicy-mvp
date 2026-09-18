@@ -235,6 +235,16 @@ export async function deletePolicyPassages(args: { accountId: string; policyId: 
   return ids.length;
 }
 
+/** How many passages of one document the index is holding. Used to decide
+ * whether a document uploaded before Pinecone existed still needs indexing,
+ * which is asked of Pinecone rather than tracked in a column so the answer
+ * survives the index being rebuilt or swapped. */
+export async function countPolicyPassages(args: { accountId: string; policyId: string }) {
+  const namespace = encodeURIComponent(namespaceFor(args.accountId));
+  const ids = await listRecordIds(namespace, `${args.policyId}:`);
+  return ids.length;
+}
+
 /** For the health page: is semantic search actually working right now. */
 export async function describePineconeState(): Promise<{ ok: boolean; detail: string; fix?: string }> {
   if (!pineconeEnabled()) {
