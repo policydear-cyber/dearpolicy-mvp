@@ -1569,6 +1569,9 @@ async function main(){
           "This particular passage raises an unrelated administrative point, not a coverage conclusion.";
         return googleReply(JSON.stringify({benefits:[],observations:[{text,evidence:[{sourceId:source.id,quote}]}],nextSteps:[]}));
       }) as typeof fetch;
+      // Small sections so these 40 pages span several reading windows, which is
+      // the condition the test is about; at the default size they fit in two.
+      process.env.RAG_EVIDENCE_WINDOW_CHARACTERS="3300";
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         const answer=data.answer as ChatAnswer;
@@ -1577,7 +1580,7 @@ async function main(){
         assert.equal(restatementLines.length,1,"Every window\'s restatement of the same \'no coverage\' conclusion collapses into a single detail line, not one per window: "+JSON.stringify(answer.details));
         assert.ok(answer.details.some(d=>/unrelated administrative point/.test(d)),"A genuinely distinct observation for the same contract is still preserved: "+JSON.stringify(answer.details));
       }finally{
-        globalThis.fetch=inner;
+        delete process.env.RAG_EVIDENCE_WINDOW_CHARACTERS;globalThis.fetch=inner;
       }
     });
     await test("A percentage-of-Sum-Insured clause the model only quoted as prose is still promoted into a computable claim",async()=>{
