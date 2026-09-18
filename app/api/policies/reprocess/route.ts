@@ -13,7 +13,7 @@ const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().o
 
 export async function POST(request: Request) {
   try {
-    const body = Schema.parse(await request.json());
+    const body = Schema.parse(await request.json().catch(() => ({})));
     const accountId = devAccountId();
     const result = await query<{ family_member_id: string; storage_key: string; processing_status: string }>(
       `SELECT family_member_id,storage_key,processing_status FROM policies WHERE id=$1 AND account_id=$2`,

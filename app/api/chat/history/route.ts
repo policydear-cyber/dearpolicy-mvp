@@ -20,7 +20,7 @@ const DeleteSchema=z.object({
 }).refine(body=>!!body.conversationId||body.scope==="all"||body.scope==="family"||(body.scope==="member"&&!!body.familyMemberId));
 export async function DELETE(request:Request){
   try{
-    const body=DeleteSchema.parse(await request.json()),accountId=devAccountId();
+    const body=DeleteSchema.parse(await request.json().catch(()=>({}))),accountId=devAccountId();
     if(body.familyMemberId){
       const member=await query("SELECT id FROM family_members WHERE id=$1 AND account_id=$2",[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family profile not found."},{status:404});

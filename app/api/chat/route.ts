@@ -22,7 +22,7 @@ const BodySchema=z.object({
 });
 export async function POST(request:Request){
   try{
-    const body=BodySchema.parse(await request.json()),accountId=devAccountId();
+    const body=BodySchema.parse(await request.json().catch(()=>({}))),accountId=devAccountId();
     if(body.familyMemberId){
       const member=await query<{id:string}>("SELECT id FROM family_members WHERE id=$1 AND account_id=$2",[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family member not found."},{status:404});

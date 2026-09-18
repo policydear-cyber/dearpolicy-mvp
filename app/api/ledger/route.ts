@@ -57,7 +57,7 @@ const Patch=z.object({
 export async function PATCH(request:Request){
   try{
     const accountId=devAccountId();
-    const body=Patch.parse(await request.json());
+    const body=Patch.parse(await request.json().catch(()=>({})));
     if(body.eventType&&!(body.eventType in EVENTS))return NextResponse.json({error:"Unknown event"},{status:400});
     const existing=await loadLedgerRow(accountId,body.id);
     if(!existing)return NextResponse.json({error:"Row not found"},{status:404});
@@ -86,7 +86,7 @@ const Add=z.object({
 export async function POST(request:Request){
   try{
     const accountId=devAccountId();
-    const body=await request.json();
+    const body=await request.json().catch(()=>({}));
     if(body?.action==="rebuild"){
       const added=await seedLedger(accountId);
       return NextResponse.json({added:added.added});

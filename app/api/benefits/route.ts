@@ -144,7 +144,7 @@ const Patch=z.object({
 
 export async function PATCH(request:Request){
   try{
-    const body=Patch.parse(await request.json());
+    const body=Patch.parse(await request.json().catch(()=>({})));
     const accountId=devAccountId();
     await ensureBenefitSchema();
     const existing=await query<{id:string}>("SELECT id FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
@@ -183,7 +183,7 @@ const Remove=z.object({id:z.string().uuid()});
  * cover are untouched, and re-indexing the document rebuilds the row. */
 export async function DELETE(request:Request){
   try{
-    const body=Remove.parse(await request.json());
+    const body=Remove.parse(await request.json().catch(()=>({})));
     await ensureBenefitSchema();
     const result=await query("DELETE FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,devAccountId()]);
     if(!result.rowCount)return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});

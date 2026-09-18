@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { devAccountId,query } from "@/lib/db/client";
+import { devAccountId,isUuid,query } from "@/lib/db/client";
 import { buildClaimPack } from "@/lib/claims/claim-pack";
 import { EMPTY_CLAIM_FACTS,type ClaimDecisionPacket,type ClaimFacts } from "@/lib/claims/types";
 
@@ -11,6 +11,7 @@ export const runtime="nodejs";
 export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const {id}=await params;
+    if(!isUuid(id))return NextResponse.json({error:"That claim could not be found."},{status:404});
     const accountId=devAccountId();
     const result=await query<{decision_packet:ClaimDecisionPacket|null;facts:Partial<ClaimFacts>;event_summary:string|null;display_name:string;relationship:string}>(
       `SELECT cs.decision_packet,cs.facts,cs.event_summary,f.display_name,f.relationship

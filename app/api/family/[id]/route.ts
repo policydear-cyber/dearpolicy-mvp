@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { devAccountId, query } from "@/lib/db/client";
+import { devAccountId, isUuid, query } from "@/lib/db/client";
 
 export const runtime = "nodejs";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const body = (await request.json()) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null };
+    if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null };
     if (!body.displayName?.trim() || !body.relationship?.trim()) return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });
     const result = await query(
       `UPDATE family_members
@@ -34,6 +35,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
+    if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     const accountId = devAccountId();
     const owned = await query<{ id: string }>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2`, [id, accountId]);
     if (!owned.rows.length) return NextResponse.json({ error: "Family member not found" }, { status: 404 });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { devAccountId, pool } from "@/lib/db/client";
+import { devAccountId, isUuid, pool } from "@/lib/db/client";
 import { deletePolicyFile } from "@/lib/storage";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: policyId } = await params;
+  if (!isUuid(policyId)) return NextResponse.json({ error: "Document not found" }, { status: 404 });
   const accountId = devAccountId();
   const client = await pool.connect();
   let policy: PolicyFileRow | undefined;

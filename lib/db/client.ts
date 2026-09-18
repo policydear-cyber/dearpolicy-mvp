@@ -62,6 +62,15 @@ export async function query<T extends QueryResultRow>(text: string, params: unkn
   return pool.query<T>(text, params);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// A malformed id in a URL path (a stale link, a typo, a bot probing routes)
+// should read as "not found" or "bad request", never as a database failure --
+// Postgres rejects non-uuid text for a uuid column with an opaque driver
+// error that would otherwise surface as a scary generic 500.
+export function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
 export function devAccountId() {
   // An env var that exists but is blank (e.g. a placeholder saved empty in a
   // hosting dashboard) must not become "" here — Postgres rejects "" as a uuid

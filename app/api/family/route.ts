@@ -25,7 +25,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null };
+    const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null };
     if (!body.displayName?.trim() || !body.relationship?.trim()) {
       return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });
     }

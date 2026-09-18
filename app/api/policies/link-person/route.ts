@@ -16,7 +16,7 @@ const Schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const body = Schema.parse(await request.json());
+    const body = Schema.parse(await request.json().catch(() => ({})));
     const accountId = devAccountId();
     // Somebody who uploads their own welcome booklet is telling you they hold
     // that cover. The document still cannot prove their personal sum insured,
