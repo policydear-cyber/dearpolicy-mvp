@@ -92,7 +92,12 @@ export default function PoliciesPage() {
       if (pdfPassword) form.set("pdfPassword", pdfPassword);
       const response = await fetch("/api/policies/upload", { method: "POST", body: form });
       const payload = await response.json();
-      if (!response.ok) throw new Error("Upload failed");
+      // The backend already returns a specific, actionable reason (e.g. "Create
+      // at least one family profile before uploading documents.", "This exact
+      // document is already in DearPolicy...", the 50MB limit). Discarding it
+      // for a generic "Upload failed" hid exactly the information a person
+      // needs to fix the problem themselves.
+      if (!response.ok) throw new Error(payload.error || "Upload failed");
       setStatus("Upload received. DearPolicy is analysing it in the background; live progress appears below.");
       setFile(null);
       setPdfPassword("");
@@ -115,7 +120,7 @@ export default function PoliciesPage() {
         body: JSON.stringify({ policyId: policy.id }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("Re-analysis failed");
+      if (!response.ok) throw new Error(payload.error || "Re-analysis failed");
       await refresh();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Re-analysis failed. Password-protected PDFs should be uploaded again with the password.");
@@ -133,7 +138,8 @@ export default function PoliciesPage() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ policyId, familyMemberId, declared: true }),
       });
-      if (!response.ok) throw new Error("Could not save that");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not save that");
       setStatus(`Saved — this policy is ${who}'s. Its benefits will now be used in answers. Upload a schedule or statement when you have one to confirm the amounts.`);
       await refresh();
     } catch {
@@ -148,7 +154,8 @@ export default function PoliciesPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ policyId, detectedName, familyMemberId }),
       });
-      if (!response.ok) throw new Error("Could not link person");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not link person");
       setStatus(`Linked ${detectedName} to the selected family profile.`);
       await refresh();
     } catch {
@@ -168,7 +175,7 @@ export default function PoliciesPage() {
     try {
       const response = await fetch(`/api/policies/${policy.id}`, { method: "DELETE" });
       const payload = await response.json();
-      if (!response.ok) throw new Error("Could not delete document");
+      if (!response.ok) throw new Error(payload.error || "Could not delete document");
       setStatus(`${label} was deleted. The portfolio has been recalculated.`);
       await refresh();
     } catch (error) {

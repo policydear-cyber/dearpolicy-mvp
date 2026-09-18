@@ -51,7 +51,7 @@ function ChatContent(){
   async function refreshHistory(cursor?:string|null){
     const response=await fetch("/api/chat/history?scope=all"+(cursor?"&cursor="+cursor:""));
     const data=await response.json();
-    if(!response.ok)throw new Error("Could not load chat history");
+    if(!response.ok)throw new Error(data.error??"Could not load chat history");
     setHistory(previous=>cursor?[...previous,...data.conversations]:data.conversations);
     setHistoryCursor(data.nextCursor??null);
   }
@@ -149,7 +149,7 @@ function ChatContent(){
     if(id===conversationId)reset();
     try{
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:id})});
-      const data=await response.json();if(!response.ok)throw new Error("Could not delete chat");
+      const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not delete chat");
       await refreshHistory();
     }catch(e){setHistoryError(e instanceof Error?e.message:"Could not delete chat");}
   }
@@ -160,7 +160,7 @@ function ChatContent(){
     try{
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({scope:"all"})});
-      const data=await response.json();if(!response.ok)throw new Error("Could not clear history");
+      const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not clear history");
       await refreshHistory();
     }catch(e){setHistoryError(e instanceof Error?e.message:"Could not clear history");}
   }
@@ -175,9 +175,9 @@ function ChatContent(){
   useEffect(()=>{
     const abort=new AbortController();
     fetch("/api/chat/history?scope=all",{signal:abort.signal,cache:"no-store"}).then(async response=>{
-      const data=await response.json();if(!response.ok)throw new Error("Could not load history");
+      const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not load history");
       if(!abort.signal.aborted){setHistory(data.conversations);setHistoryCursor(data.nextCursor??null);setHistoryError("");}
-    }).catch(()=>{if(!abort.signal.aborted)setHistoryError("Could not load your chat history.");});
+    }).catch((e)=>{if(!abort.signal.aborted)setHistoryError(e instanceof Error?e.message:"Could not load your chat history.");});
     return()=>abort.abort();
   },[]);
   useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages,busy]);

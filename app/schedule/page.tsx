@@ -101,7 +101,7 @@ export default function SchedulePage(){
       try{
         const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({policyId:doc.id})});
         const payload=await response.json();
-        if(!response.ok||payload.error)throw new Error("That document could not be read.");
+        if(!response.ok||payload.error)throw new Error(payload.error||"That document could not be read.");
         found+=Number(payload.stored??0);
         setStatus(`Read ${payload.name} — ${payload.stored} benefit${payload.stored===1?"":"s"} found. ${found} so far.`);
         await load();
@@ -125,7 +125,7 @@ export default function SchedulePage(){
       try{
         const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({})});
         const payload=await response.json();
-        if(!response.ok||payload.error)throw new Error("That document could not be read.");
+        if(!response.ok||payload.error)throw new Error(payload.error||"That document could not be read.");
         if(payload.done&&payload.stored==null){setUnread([]);break;}
         setStatus(`Read ${payload.name} — ${payload.stored} benefit${payload.stored===1?"":"s"} found.`);
         await checkUnread();
@@ -157,7 +157,7 @@ export default function SchedulePage(){
             offsetDays:draft.offsetDays===""?null:Number(draft.offsetDays),
             maximumDays:draft.maximumDays===""?null:Number(draft.maximumDays)}})});
       const payload=await response.json().catch(()=>({error:"That correction could not be saved."}));
-      if(!response.ok||payload.error)throw new Error("That correction could not be saved.");
+      if(!response.ok||payload.error)throw new Error(payload.error||"That correction could not be saved.");
       setOpenId("");setDraft(null);setStatus(`Saved. DearPolicy will use your version of “${benefit.benefitName}” from now on.`);
       await load();
     }catch(e){setStatus(e instanceof Error?e.message:"That correction could not be saved.");}
@@ -168,7 +168,8 @@ export default function SchedulePage(){
     try{
       const response=await fetch("/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:benefit.id,needsReview:false})});
-      if(!response.ok)throw new Error("Could not mark that benefit as checked.");
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||"Could not mark that benefit as checked.");
       setStatus(`“${benefit.benefitName}” is marked as checked.`);await load();
     }catch(e){setStatus(e instanceof Error?e.message:"Could not mark that benefit as checked.");}
     finally{setSaving(false);}
@@ -178,7 +179,8 @@ export default function SchedulePage(){
     try{
       const response=await fetch("/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:benefit.id})});
-      if(!response.ok)throw new Error("Could not remove that row.");
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload.error||"Could not remove that row.");
       setOpenId("");setDraft(null);
       setStatus(`Removed “${benefit.benefitName}”. Your document is untouched — re-indexing it brings the row back.`);
       await load();
