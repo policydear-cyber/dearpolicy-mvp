@@ -1289,6 +1289,18 @@ export function runSystemRegressions(){
     assert.equal(agreeing[0].needsConfirmation,false);
     assert.equal(agreeing[1].needsConfirmation,false);
     assert.match(agreeing[0].conditions.join(" "),/two of your documents state this rule identically/);
+    // Bands that differ only in their numbers are different rows. Dropping the
+    // digits made every band of a burns table the same row, so two documents
+    // stating an identical scale looked like two documents contradicting each
+    // other, and every band stayed waiting.
+    const bands=corroborateInferredRules([
+      row("a1","summary","Second Degree Burns \u00b7 Body - Equals to or greater than 15% but less than 25%",0.3),
+      row("b1","booklet","Second Degree Burns \u00b7 Body - Equals to or greater than 15% but less than 25%",0.3),
+      row("a2","summary","Second Degree Burns \u00b7 Body - Equals to or greater than 25% but less than 40%",0.4),
+      row("b2","booklet","Second Degree Burns \u00b7 Body - Equals to or greater than 25% but less than 40%",0.4),
+    ]);
+    assert.equal(bands.filter(entry=>entry.needsConfirmation).length,0,
+      "two documents stating the same scale agree, band by band");
     // One document alone is one reading, and still waits.
     assert.equal(corroborateInferredRules([row("a","summary","22. Loss of speech",0.5)])[0].needsConfirmation,true);
     // The same document twice is not two documents.

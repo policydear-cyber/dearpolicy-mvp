@@ -23,7 +23,16 @@ import type { CatalogBenefit } from "@/lib/policies/benefit-catalog";
  * confirm a hundred rows their own documents already answer. */
 export type ImpliedScale={limit:number;currency:string;support:number;pages:Set<string>};
 
-function scaleKey(name:string){return (name??"").toLowerCase().replace(/\(.*?\)/g,"").replace(/[^a-z]/g,"");}
+/** Two rows naming the same benefit, however the two documents punctuate it.
+ *
+ * Digits are kept. Dropping them made every band of a burns table the same
+ * row -- "15% but less than 25%" and "25% but less than 40%" both reduce to
+ * "equalstoorgreaterthanbutlessthan" -- so two documents stating an identical
+ * scale looked like two documents contradicting each other, and every band
+ * stayed waiting for a person to confirm what both of their documents already
+ * said. Bracketed text is still dropped, because "(Other Fracture)" is how one
+ * document annotates what the other states plainly. */
+function scaleKey(name:string){return (name??"").toLowerCase().replace(/\(.*?\)/g,"").replace(/[^a-z0-9]/g,"");}
 function pageKey(benefit:CatalogBenefit){return benefit.policyId+"#"+(benefit.sourcePage??0);}
 
 export function impliedScaleLimit(benefits:CatalogBenefit[]):ImpliedScale|null{
