@@ -53,9 +53,36 @@ other stays visible and stops being counted. Only then is a total struck.
 All three answer paths run this: rules stored at upload, schedule lines with a
 standard rule assumed, and benefits read live out of the document.
 
+**5. What the cover does not pay.** `lib/insurance/cover-conditions.ts`, applied
+by `applyCoverConditionsToAnswer` in `lib/chat/workflow.ts` immediately before
+the overlaps are settled, so a benefit the cover cannot pay is never the one
+chosen to represent the others.
+
+The conditions themselves are read in their own pass —
+`lib/policies/condition-catalog.ts`, run over every page alongside the benefit
+pass and stored in `policy_cover_conditions` against a cover rather than a
+benefit row. The benefit pass gives up on a page as soon as its table parses
+(`parsedHere>=2`) and correctly returns nothing on a page of pure prose, so
+before this the exclusions were read and thrown away: seventeen pages of one
+benefit summary yielded fifty-three rules and not one condition.
+
+`conditionIsDecidable` is the distinction the layer turns on. A waiting period,
+a survival period, a notice period, an aggregate cap, a sub-limit and a
+payment precondition are arithmetic on facts already held, so they change the
+figure. An exclusion is a question about the cause of a loss, which no claim
+conversation establishes, so it is stated beside the figure and can never
+reduce it. `time_bar_from_inception` is the hybrid the documents actually
+write — suicide within twelve months of commencement — where the window is
+arithmetic and the cause is not.
+
+A condition the facts satisfy returns `clear` and is dropped entirely rather
+than shown. That is deliberate: an answer carrying every condition a policy
+states is an answer nobody finishes reading.
+
 `scripts/claim-answer-eval.ts` asserts the end result — which benefits respond,
-which do not, and what the total is — for nine real household scenarios, with
-no model in the loop, in CI on every push.
+which do not, which are blocked by a condition and what is said about the rest,
+and what the total is — for sixteen real household scenarios, with no model in
+the loop, in CI on every push.
 
 ## Document ingestion and OCR
 

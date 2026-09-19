@@ -1,0 +1,418 @@
+import { knownValue } from "@/lib/chat/facts";
+import type { SubjectFacts } from "@/lib/chat/types";
+import type { ClaimItem } from "@/types";
+import type { ClaimEventType } from "./claim-events";
+
+/** The reasons a policy does NOT pay, which is the half of a contract this
+ * system could not see.
+ *
+ * Every benefit rule in the catalogue answers "how much". None of them answer
+ * "unless". The unlesses live in prose -- exclusion lists, waiting periods,
+ * survival periods, aggregate caps, the sentence that ends the cover once the
+ * sum insured has been paid -- and the row parser walks straight past them,
+ * because they are sentences and not table rows. A benefit summary of
+ * seventeen pages yielded fifty-three rules and not one condition.
+ *
+ * That is the whole legal exposure of this product in one line: it can tell a
+ * person their policy pays, on a death the policy explicitly excludes.
+ *
+ * These records are attached to a COVER, not to a benefit row, because that is
+ * how the document writes them: one exclusion paragraph governs every benefit
+ * under Group Term Life, and the Group Personal Accident paragraph next to it
+ * says the opposite about pre-existing conditions. They are applied after the
+ * amount has been calculated, never instead of calculating it. */
+export type CoverConditionKind=
+  |"exclusion"
+  |"waiting_period"
+  |"survival_period"
+  |"time_bar_from_inception"
+  |"aggregate_cap"
+  |"sub_limit"
+  |"terminates_on_full_payment"
+  |"notice_period"
+  |"age_limit"
+  |"payment_precondition";
+
+/** A closed list, for the same reason claim events are a closed list: an open
+ * one becomes a synonym problem, and a synonym problem becomes a wrong answer.
+ * Anything outside it is stored as "other" and shown as written. */
+export type ExcludedCause=
+  |"suicide"|"self_inflicted"|"pre_existing"|"war"|"terrorism"|"aviation"
+  |"racing"|"hazardous_sport"|"hiv"|"pregnancy"|"alcohol_or_drugs"
+  |"criminal_act"|"nuclear"|"mental_health"|"other";
+
+export type CoverCondition={
+  id?:string;
+  policyId?:string;
+  /** Which cover this governs. Null means the document states it once for
+   * everything it covers. */
+  productName:string|null;
+  kind:CoverConditionKind;
+  cause:ExcludedCause|null;
+  /** The claim events this bears on. Empty means all of them: an aggregate cap
+   * does not care what happened. */
+  appliesToEvents:ClaimEventType[];
+  /** The illnesses a waiting period names, where it names them. */
+  conditionNames:string[];
+  days:number|null;
+  amount:number|null;
+  amountBasis:"fixed"|"sum_insured_fraction"|null;
+  scope:"per_claim"|"per_accident"|"per_policy_year"|"aggregate"|"lifetime"|null;
+  /** The sentence that takes the condition back off again -- "unless caused
+   * solely and directly by an Accident". Kept verbatim: paraphrasing a carve-out
+   * is how a correct exclusion becomes a wrong refusal. */
+  carveOut:string|null;
+  sourcePage:number|null;
+  quote:string;
+  needsReview?:boolean;
+};
+
+/** Whether the facts a person has given can settle this, or whether it can only
+ * ever be stated.
+ *
+ * This is the distinction the whole layer turns on. A waiting period is
+ * arithmetic on two dates we hold, so it changes the number. An exclusion for
+ * war is a question about the cause of a loss, which nothing in a claim
+ * conversation establishes and which only the insurer decides -- so it is said
+ * out loud next to the figure and never subtracted from it. Removing money on
+ * a guess would be the same error as promising money on a guess, pointing the
+ * other way. */
+export function conditionIsDecidable(kind:CoverConditionKind){
+  return kind!=="exclusion"&&kind!=="age_limit";
+}
+
+const CAUSE_WORDS:Record<ExcludedCause,string>={
+  suicide:"suicide",
+  self_inflicted:"a self-inflicted injury",
+  pre_existing:"a condition that already existed before the cover started",
+  war:"war",
+  terrorism:"terrorism",
+  aviation:"flying other than as a passenger on a licensed airline",
+  racing:"racing on wheels",
+  hazardous_sport:"a hazardous sport",
+  hiv:"HIV or AIDS",
+  pregnancy:"pregnancy or childbirth",
+  alcohol_or_drugs:"alcohol or drug misuse",
+  criminal_act:"taking part in a criminal act",
+  nuclear:"nuclear or radioactive causes",
+  mental_health:"a mental health condition",
+  other:"a cause the policy names",
+};
+
+function isoDate(value:unknown){
+  return typeof value==="string"&&/^\d{4}-\d{2}-\d{2}/.test(value)?value.slice(0,10):null;
+}
+function daysBetween(from:string,to:string){
+  const a=Date.parse(from+"T00:00:00Z"),b=Date.parse(to+"T00:00:00Z");
+  if(!Number.isFinite(a)||!Number.isFinite(b))return null;
+  return Math.round((b-a)/86_400_000);
+}
+function addDays(from:string,days:number){
+  const a=Date.parse(from+"T00:00:00Z");
+  if(!Number.isFinite(a))return null;
+  return new Date(a+days*86_400_000).toISOString().slice(0,10);
+}
+/** The date the benefit responds to, in the order the contract would read them:
+ * the diagnosis for a living benefit, the accident for an injury, the death
+ * last. */
+function claimDate(facts:SubjectFacts,prefer:"diagnosis"|"event"="event"){
+  const diagnosis=isoDate(knownValue(facts,"diagnosisDate"));
+  const accident=isoDate(knownValue(facts,"accidentDate"));
+  const event=isoDate(knownValue(facts,"eventDate"));
+  const death=isoDate(knownValue(facts,"deathDate"));
+  if(prefer==="diagnosis"&&diagnosis)return diagnosis;
+  return diagnosis??accident??event??death??null;
+}
+
+/** What one condition does to one figure.
+ *
+ * "clear" is the outcome that matters most and the one a caveat-generator
+ * would never produce: the facts satisfy the condition, so it is deleted
+ * rather than displayed. A policy carries dozens of conditions and almost all
+ * of them are met. An answer that lists every one of them teaches the person
+ * to stop reading the list, which leaves them worse informed than an answer
+ * that listed none -- and it buries the one condition that actually bites. */
+export type ConditionOutcome=
+  |{kind:"clear"}
+  |{kind:"caveat";text:string;weight:number}
+  |{kind:"reduce";to:number;text:string}
+  |{kind:"blocked";text:string};
+
+/** Does a reported fact name the excluded cause outright?
+ *
+ * Only a handful of causes can ever be read off a claim conversation, and this
+ * reads only those. Everything it cannot see returns null, which keeps the
+ * exclusion a caveat. */
+function factNamesCause(cause:ExcludedCause|null,facts:SubjectFacts):boolean|null{
+  if(!cause)return null;
+  const cod=String(knownValue(facts,"causeOfDeath")??"").toLowerCase();
+  const diagnosis=String(knownValue(facts,"diagnosis")??"").toLowerCase();
+  const text=cod+" "+diagnosis;
+  if(cause==="racing"){
+    const racing=knownValue(facts,"competitiveRacing");
+    if(racing===true)return knownValue(facts,"racingAuthoritySanctioned")===true?false:true;
+    if(racing===false)return false;
+    return null;
+  }
+  if(cause==="suicide"||cause==="self_inflicted")
+    return /suicide|took (his|her|their) own life|self[- ]inflicted/.test(text)?true:null;
+  if(cause==="pregnancy")return /pregnan|childbirth|miscarriage/.test(text)?true:null;
+  if(cause==="hiv")return /\bhiv\b|aids/.test(text)?true:null;
+  return null;
+}
+
+type ApplyArgs={
+  items:ClaimItem[];
+  conditions:CoverCondition[];
+  facts:SubjectFacts;
+  /** The date the cover on file starts, used for waiting periods and for the
+   * time bars written as "within 12 months of the commencement date". */
+  coverStart?:string|null;
+  /** Today, injected so the tests are not a clock. */
+  today?:string;
+};
+
+/** Which conditions bear on this figure at all.
+ *
+ * A cover condition governs a cover. It is matched on the cover's own name
+ * where the document scoped it to one, and on the paying event where the
+ * condition names events. A document-wide condition governs everything in that
+ * document. */
+function conditionsForItem(item:ClaimItem,conditions:CoverCondition[]){
+  const cover=(item.coverLabel??"").toLowerCase();
+  return conditions.filter(condition=>{
+    if(condition.productName){
+      const named=condition.productName.toLowerCase();
+      if(cover&&!cover.includes(named)&&!named.includes(cover))return false;
+    }
+    if(condition.appliesToEvents.length&&item.payingEvent
+      &&!condition.appliesToEvents.includes(item.payingEvent as ClaimEventType))return false;
+    return true;
+  });
+}
+
+function money(amount:number,currency?:string){
+  return (currency??"SGD").replace("SGD","S$")+amount.toLocaleString("en-SG",{maximumFractionDigits:2});
+}
+
+/** Test one condition against the facts and one figure. */
+export function evaluateCondition(condition:CoverCondition,args:{item:ClaimItem;facts:SubjectFacts;
+  coverStart?:string|null;today:string}):ConditionOutcome{
+  const {item,facts,coverStart,today}=args;
+  const quoteTail=condition.quote?" The policy says: “"+condition.quote.trim().slice(0,160)+"”":"";
+  switch(condition.kind){
+    case "waiting_period":{
+      // Named illnesses only, where the policy named them: a 90-day wait on
+      // five cancers must not silence a fracture benefit.
+      if(condition.conditionNames.length){
+        const diagnosis=String(knownValue(facts,"diagnosis")??"").toLowerCase();
+        if(diagnosis&&!condition.conditionNames.some(name=>diagnosis.includes(name.toLowerCase().slice(0,12))))return {kind:"clear"};
+      }
+      // The carve-out that gives the period back. An accident does not wait.
+      if(condition.carveOut&&/accident/i.test(condition.carveOut)
+        &&(knownValue(facts,"accidentalDeath")===true||isoDate(knownValue(facts,"accidentDate"))))return {kind:"clear"};
+      const start=coverStart?isoDate(coverStart):null;
+      const when=claimDate(facts,"diagnosis");
+      if(!start||!when||condition.days==null)
+        return {kind:"caveat",weight:3,text:"this cover has a "+condition.days+"-day waiting period from the date it started, and DearPolicy does not hold both dates to check it."+quoteTail};
+      const elapsed=daysBetween(start,when);
+      if(elapsed==null)return {kind:"clear"};
+      if(elapsed>=condition.days)return {kind:"clear"};
+      const opens=addDays(start,condition.days);
+      return {kind:"blocked",text:"this cover's "+condition.days+"-day waiting period had not finished. It started on "
+        +start+" and ran to "+opens+"; what you described is dated "+when+"."+quoteTail};
+    }
+    case "survival_period":{
+      const diagnosed=isoDate(knownValue(facts,"diagnosisDate"));
+      const died=isoDate(knownValue(facts,"deathDate"));
+      if(condition.days==null)return {kind:"clear"};
+      if(diagnosed&&died){
+        const survived=daysBetween(diagnosed,died);
+        if(survived!=null&&survived<condition.days)
+          return {kind:"blocked",text:"this benefit is paid to the person diagnosed and requires them to survive "
+            +condition.days+" days from diagnosis. Diagnosis was "+diagnosed+" and the death "+died+"."+quoteTail};
+        return {kind:"clear"};
+      }
+      if(diagnosed){
+        const due=addDays(diagnosed,condition.days);
+        if(due&&due>today)
+          return {kind:"caveat",weight:4,text:"this benefit requires "+condition.days+" days' survival from the diagnosis on "
+            +diagnosed+", so it becomes payable on "+due};
+        return {kind:"clear"};
+      }
+      return {kind:"caveat",weight:2,text:"this benefit requires the person to survive "+condition.days+" days from diagnosis"};
+    }
+    case "time_bar_from_inception":{
+      // A cause excluded only for a while. The cause is the insurer's to
+      // determine; the window is arithmetic, and once it has closed the
+      // condition is gone and should not be mentioned at all.
+      const start=coverStart?isoDate(coverStart):null;
+      const when=claimDate(facts);
+      const named=factNamesCause(condition.cause,facts);
+      if(start&&when&&condition.days!=null){
+        const elapsed=daysBetween(start,when);
+        if(elapsed!=null&&elapsed>=condition.days)return {kind:"clear"};
+        if(named===true)
+          return {kind:"blocked",text:"the policy does not cover "+CAUSE_WORDS[condition.cause??"other"]
+            +" within "+condition.days+" days of the cover starting on "+start+", and what you described falls inside that."+quoteTail};
+        if(named===false)return {kind:"clear"};
+        return {kind:"caveat",weight:5,text:"the cover started on "+start+" and the policy does not pay for "
+          +CAUSE_WORDS[condition.cause??"other"]+" in its first "+condition.days+" days"};
+      }
+      if(named===true)
+        return {kind:"caveat",weight:5,text:"the policy does not pay for "+CAUSE_WORDS[condition.cause??"other"]
+          +" within "+(condition.days??0)+" days of the cover starting, and DearPolicy does not hold the date it started"};
+      return {kind:"clear"};
+    }
+    case "exclusion":{
+      const named=factNamesCause(condition.cause,facts);
+      // Never subtracted. An exclusion is a statement about the cause of a
+      // loss, and the cause of a loss is decided on evidence this system has
+      // not seen. Even when a fact names it, the figure stays and the sentence
+      // gets louder.
+      if(named===false)return {kind:"clear"};
+      if(named===true)
+        return {kind:"caveat",weight:9,text:"you described "+CAUSE_WORDS[condition.cause??"other"]
+          +", and this cover excludes it, so the insurer may decline this benefit entirely."+quoteTail};
+      return {kind:"caveat",weight:1,text:"this cover does not pay when the cause is "+CAUSE_WORDS[condition.cause??"other"]};
+    }
+    case "sub_limit":{
+      const current=item.calculatedAmount;
+      if(current==null||condition.amount==null)return {kind:"clear"};
+      const ceiling=condition.amountBasis==="sum_insured_fraction"&&item.coverAmount!=null
+        ?Math.min(condition.amount*item.coverAmount,item.coverAmount):condition.amount;
+      if(current<=ceiling)return {kind:"clear"};
+      return {kind:"reduce",to:ceiling,text:item.title+" was reduced from "+money(current,item.currency)
+        +" to "+money(ceiling,item.currency)+", which is the most this benefit pays"};
+    }
+    case "notice_period":{
+      const when=claimDate(facts);
+      if(!when||condition.days==null)return {kind:"clear"};
+      const deadline=addDays(when,condition.days);
+      if(!deadline)return {kind:"clear"};
+      if(deadline<today)
+        return {kind:"caveat",weight:8,text:"the policy asks to be told about a claim within "+condition.days
+          +" days, and that ran out on "+deadline+" — tell the insurer now and say why it is late"};
+      return {kind:"caveat",weight:6,text:"the insurer must be told by "+deadline+", which is "+condition.days
+        +" days from "+when};
+    }
+    case "payment_precondition":
+      return {kind:"caveat",weight:4,text:item.title+" is only paid if nothing else has been paid under this cover"+quoteTail};
+    case "terminates_on_full_payment":
+      if(item.calculationKind==="sum_insured"&&item.coverAmount!=null&&item.calculatedAmount===item.coverAmount)
+        return {kind:"caveat",weight:5,text:"paying this in full ends the cover, so nothing further is payable under it afterwards"};
+      return {kind:"clear"};
+    case "age_limit":
+      return {kind:"caveat",weight:2,text:"this cover ends at the age the policy states, so it only responds if the member was still within it"};
+    case "aggregate_cap":
+      return {kind:"clear"};// handled across items, below
+    default:
+      return {kind:"clear"};
+  }
+}
+
+export type ConditionsResult={qualifiers:string[];blocked:{title:string;reason:string}[]};
+
+/** Apply a document's conditions to an answer's figures.
+ *
+ * The items are changed in place, the way the overlap and aggregate-cap passes
+ * already work, so a caller holding a reference to one of them sees the same
+ * figure the answer will show.
+ *
+ * Order matters. Blocks first, so a benefit that cannot respond is not then
+ * capped or summed; reductions next; the aggregate cap last, over what
+ * survives. Caveats are collected throughout and ranked, because the answer
+ * has room for a few and the ones that bite must be the ones shown. */
+export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
+  const today=args.today??new Date().toISOString().slice(0,10);
+  const caveats:{text:string;weight:number}[]=[];
+  const blocked:{title:string;reason:string}[]=[];
+  const items=args.items;
+  for(const item of items){
+    for(const condition of conditionsForItem(item,args.conditions)){
+      const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,today});
+      if(outcome.kind==="clear")continue;
+      if(outcome.kind==="caveat"){caveats.push({text:outcome.text,weight:outcome.weight});continue;}
+      if(outcome.kind==="reduce"){
+        item.calculatedAmount=outcome.to;
+        item.amountText=money(outcome.to,item.currency);
+        item.conditions=[...new Set([...(item.conditions??[]),outcome.text])];
+        caveats.push({text:outcome.text,weight:7});
+        continue;
+      }
+      // Blocked. The figure stays on the card, because a person is owed the
+      // number their policy prints and the reason it is not being paid; what
+      // it stops doing is counting towards a total they might rely on.
+      blocked.push({title:item.title,reason:outcome.text});
+      item.status="not_applicable";
+      item.reason=outcome.text;
+      item.conditions=[...new Set([...(item.conditions??[]),outcome.text])];
+      delete item.calculatedAmount;
+    }
+  }
+  // An aggregate cap governs a cover, not a row, so it is applied to the
+  // survivors together.
+  for(const condition of args.conditions){
+    if(condition.kind!=="aggregate_cap"||condition.amount==null)continue;
+    const inCover=items.filter(item=>item.calculatedAmount!=null
+      &&(!condition.productName||(item.coverLabel??"").toLowerCase().includes(condition.productName.toLowerCase())));
+    const total=inCover.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
+    if(total<=condition.amount)continue;
+    // Reduce the largest figure, which is the one the cap is really about, and
+    // say what it was reduced from.
+    const largest=inCover.slice().sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0))[0];
+    if(!largest)continue;
+    const was=largest.calculatedAmount??0;
+    const now=Math.max(0,was-(total-condition.amount));
+    largest.calculatedAmount=now;
+    largest.amountText=money(now,largest.currency);
+    caveats.push({weight:8,text:(condition.productName??"this cover")+" pays no more than "+money(condition.amount)
+      +" in total, so "+largest.title+" is shown at "+money(now)+" rather than "+money(was)});
+  }
+  const qualifiers=caveats.sort((a,b)=>b.weight-a.weight)
+    .map(caveat=>caveat.text.replace(/\s+/g," ").trim())
+    .filter((text,index,all)=>all.indexOf(text)===index);
+  return {qualifiers,blocked};
+}
+
+/** One stored condition, in the words a person would use.
+ *
+ * The Benefits page is what makes imperfect extraction acceptable: a rule read
+ * wrongly is visible before a claim happens. That argument applies twice over
+ * to a condition, because a wrong one takes money OFF an answer, so a person
+ * has to be able to see every one of them and say which is wrong. */
+export function describeCondition(condition:CoverCondition){
+  const cover=condition.productName?condition.productName+": ":"";
+  const carve=condition.carveOut?" \u2014 except: "+condition.carveOut.trim():"";
+  switch(condition.kind){
+    case "exclusion":
+      return cover+"does not pay when the cause is "+CAUSE_WORDS[condition.cause??"other"]+carve;
+    case "waiting_period":
+      return cover+"pays nothing in the first "+(condition.days??0)+" days of the cover"
+        +(condition.conditionNames.length?", for "+condition.conditionNames.slice(0,4).join(", "):"")+carve;
+    case "survival_period":
+      return cover+"the insured must survive "+(condition.days??0)+" days from diagnosis"+carve;
+    case "time_bar_from_inception":
+      return cover+"does not pay for "+CAUSE_WORDS[condition.cause??"other"]+" in the first "+(condition.days??0)+" days of the cover"+carve;
+    case "aggregate_cap":
+      return cover+"pays no more than "+(condition.amount!=null?money(condition.amount):"a stated maximum")+" in total";
+    case "sub_limit":
+      return cover+"this benefit is capped at "+(condition.amountBasis==="sum_insured_fraction"&&condition.amount!=null
+        ?Math.round(condition.amount*100)+"% of the sum insured":condition.amount!=null?money(condition.amount):"a stated maximum");
+    case "terminates_on_full_payment":
+      return cover+"paying the full sum insured ends the cover";
+    case "notice_period":
+      return cover+"the insurer must be told within "+(condition.days??0)+" days";
+    case "age_limit":
+      return cover+"cover ends at the age the policy states";
+    case "payment_precondition":
+      return cover+"paid only if nothing else has been paid under this cover";
+    default:
+      return cover+condition.quote.slice(0,120);
+  }
+}
+/** Whether this condition can change a figure, or only ever be stated beside
+ * one. Shown on the screen so a person can see which is which. */
+export function conditionEffect(condition:CoverCondition){
+  return conditionIsDecidable(condition.kind)?"changes the amount":"stated beside the amount";
+}

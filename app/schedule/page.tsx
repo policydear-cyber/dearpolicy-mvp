@@ -22,7 +22,13 @@ type Benefit={
   calculatedAgainst:{owner:string;plan:string|null;amount:string|null}[];
   documentName:string;insurer:string|null;owners:string[];
 };
-type Summary={total:number;needsYou:number;unreadable:number;usable:number;documents:number;unclaimed:number};
+type Summary={total:number;needsYou:number;unreadable:number;usable:number;documents:number;unclaimed:number;
+  conditions?:number;conditionsThatChangeAmounts?:number};
+/** What a cover does NOT pay: the exclusions, waiting periods and caps read
+ * from the same documents. Shown here because a condition read wrongly takes
+ * money OFF an answer, which is the error a person most needs to catch. */
+type Condition={id:string;policyId:string;documentName:string;cover:string|null;kind:string;
+  description:string;effect:string;sourcePage:number|null;quote:string;needsReview:boolean};
 type Member={id:string;display_name:string;relationship:string};
 type Unread={id:string;name:string;pages:number};
 
@@ -56,6 +62,8 @@ function draftFrom(benefit:Benefit):Draft{
 
 export default function SchedulePage(){
   const [benefits,setBenefits]=useState<Benefit[]>([]);
+  const [conditions,setConditions]=useState<Condition[]>([]);
+  const [showConditions,setShowConditions]=useState(false);
   const [summary,setSummary]=useState<Summary|null>(null);
   const [family,setFamily]=useState<Member[]>([]);
   const [memberId,setMemberId]=useState("");
@@ -79,7 +87,7 @@ export default function SchedulePage(){
       const response=await fetch(`/api/benefits${query}`);
       const payload=await response.json().catch(()=>({error:`The benefit schedule returned an unreadable response (${response.status}).`}));
       if(!response.ok||payload.error)throw new Error(payload.error??`The benefit schedule could not be loaded (${response.status}).`);
-      setBenefits(payload.benefits??[]);setSummary(payload.summary??null);setError("");
+      setBenefits(payload.benefits??[]);setConditions(payload.conditions??[]);setSummary(payload.summary??null);setError("");
     }catch(e){setError(e instanceof Error?e.message:"Could not reach DearPolicy.");}
     finally{setLoading(false);}
   }
@@ -233,7 +241,29 @@ export default function SchedulePage(){
       <div className={summary?.needsYou?"warn":""}><strong>{summary?.needsYou??0}</strong><span>need one answer from you</span></div>
       <div><strong>{summary?.unreadable??0}</strong><span>DearPolicy could not read an amount</span></div>
       <div><strong>{summary?.documents??0}</strong><span>document{summary?.documents===1?"":"s"} read</span></div>
+      <div><strong>{summary?.conditions??0}</strong><span>condition{summary?.conditions===1?"":"s"} on what they pay</span></div>
     </section>
+
+    {!!conditions.length&&<section className="section schedule-group">
+      <div className="section-heading">
+        <div><div className="eyebrow">WHAT YOUR COVERS DO NOT PAY</div>
+          <h2>{conditions.length} condition{conditions.length===1?"":"s"} read from your documents</h2></div>
+        <button type="button" className="link-button" onClick={()=>setShowConditions(!showConditions)}>
+          {showConditions?"Hide":"Show all"}</button>
+      </div>
+      <p className="muted">Exclusions, waiting periods, survival periods and caps. {summary?.conditionsThatChangeAmounts??0} of
+        these can change an estimated amount; the rest are stated next to it, because whether they apply is the insurer&rsquo;s
+        decision and not something DearPolicy can settle from what you tell it.</p>
+      {showConditions&&<div className="schedule-table-scroll"><table className="schedule-table">
+        <thead><tr><th>Cover</th><th>Condition</th><th>Effect</th><th>Page</th></tr></thead>
+        <tbody>{conditions.map(condition=><tr key={condition.id}>
+          <td>{condition.cover??condition.documentName}</td>
+          <td>{condition.description}<br /><small className="muted">&ldquo;{condition.quote.slice(0,160)}&rdquo;</small></td>
+          <td><small>{condition.effect}</small></td>
+          <td>{condition.sourcePage??"—"}</td>
+        </tr>)}</tbody>
+      </table></div>}
+    </section>}
 
     <section className="schedule-controls">
       <div className="field"><label htmlFor="schedule-person">Person</label>

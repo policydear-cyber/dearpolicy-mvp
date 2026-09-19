@@ -3,6 +3,7 @@ import { assessContractFromCatalog,scheduleFallbackItems,type CatalogBenefit } f
 import { eventTraits } from "@/lib/policies/benefit-catalog";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
 import { resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { applyCoverConditions,type CoverCondition } from "@/lib/insurance/cover-conditions";
 import { aggregatePotentialPayouts } from "@/lib/chat/policy-analysis";
 import type { InventoryDocument,PolicyContract } from "@/lib/policies/inventory";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
@@ -123,8 +124,39 @@ type Case={
   oneOf?:{names:string[];amount:string};
   /** A second such set in the same answer. */
   alsoOneOf?:{names:string[];amount:string};
+  /** The cover's own conditions, as the policy prose states them. */
+  conditions?:CoverCondition[];
+  /** When this cover started, for the cases that turn on a waiting period or a
+   * time bar. Defaults to the contract's own date. */
+  coverStart?:string;
+  /** Benefits that must be shown with the reason they cannot be paid, and must
+   * not reach the total. */
+  blocked?:string[];
+  /** Words that must appear in the reasons given next to the figure. */
+  qualifierMentions?:string[];
+  /** Words that must NOT appear: a condition the facts satisfy is deleted, not
+   * displayed. */
+  qualifierSilentAbout?:string[];
   total:string|null;
 };
+
+/** The conditions this scheme actually states, read from the benefit summary's
+ * prose rather than its tables. */
+const condition=(override:Partial<CoverCondition>&Pick<CoverCondition,"kind">):CoverCondition=>({
+  productName:null,cause:null,appliesToEvents:[],conditionNames:[],days:null,amount:null,
+  amountBasis:null,scope:null,carveOut:null,sourcePage:11,quote:"",...override});
+const LIVING_CARE_WAIT=condition({kind:"waiting_period",productName:"Living Care",days:90,
+  carveOut:"unless such Critical Illness is caused solely and directly by an Accident",
+  quote:"a waiting period of 90 days from the commencement date applies to Major Cancer, Heart Attack of Specified Severity, Coronary Artery By-pass Surgery"});
+const LIVING_CARE_SURVIVAL=condition({kind:"survival_period",productName:"Living Care",days:30,
+  quote:"the Insured Member must survive 30 days from the date of diagnosis"});
+const LIVING_CARE_PLUS_WAIT=condition({kind:"waiting_period",productName:"Living Care Plus",days:60,
+  quote:"a waiting period of 60 days from the commencement date applies"});
+const GTL_SUICIDE_BAR=condition({kind:"time_bar_from_inception",productName:"Group Term Life",cause:"suicide",days:365,
+  quote:"no benefit is payable where death results from suicide within 12 months of the commencement date"});
+const NOTICE=condition({kind:"notice_period",days:120,
+  quote:"written notice of claim must be given within 120 days of the event"});
+const SCHEME_CONDITIONS=[LIVING_CARE_WAIT,LIVING_CARE_SURVIVAL,LIVING_CARE_PLUS_WAIT,GTL_SUICIDE_BAR,NOTICE];
 
 const cases:Case[]=[
   {
@@ -250,6 +282,68 @@ const cases:Case[]=[
       "Group Term Life (Total Permanent Disability) \u2014 death benefit"],
     total:"S$1,600,000",
   },
+  {
+    // The case the conditions layer exists for. A death the policy explicitly
+    // does not cover, five months into the cover: the answer used to be
+    // S$1,000,000.
+    question:"my brother took his own life in november, the cover started in june",
+    facts:{death:fact(true),eventType:fact("death"),causeOfDeath:fact("suicide"),
+      deathDate:fact("2025-11-01"),eventDate:fact("2025-11-01")},
+    conditions:SCHEME_CONDITIONS,coverStart:"2025-06-01",
+    pays:{},
+    blocked:["Death Benefit"],
+    never:["Death due to Accident","Accidental Death Benefit","Group Living Care","Early Critical Illness Benefit"],
+    qualifierMentions:["suicide"],
+    total:null,
+  },
+  {
+    // The same cause, three years in. The bar has closed, so it is not
+    // mentioned at all and the benefit pays in full.
+    question:"my brother took his own life last november",
+    facts:{death:fact(true),eventType:fact("death"),causeOfDeath:fact("suicide"),
+      deathDate:fact("2025-11-01"),eventDate:fact("2025-11-01")},
+    conditions:SCHEME_CONDITIONS,coverStart:"2022-10-06",
+    pays:{},
+    oneOf:{names:["Death Benefit","Death"],amount:"S$1,000,000"},
+    never:["Death due to Accident","Accidental Death Benefit","Group Living Care","Early Critical Illness Benefit"],
+    qualifierSilentAbout:["suicide"],
+    total:"S$1,000,000",
+  },
+  {
+    // Diagnosed inside both waiting periods. Neither critical illness plan
+    // responds yet, and the answer says so with the date the cover opens.
+    question:"i was diagnosed with stage 3 colon cancer, i only joined the scheme six weeks ago",
+    facts:{diagnosis:fact("stage 3 colon cancer"),eventType:fact("diagnosis"),diagnosisDate:fact("2026-07-15")},
+    conditions:SCHEME_CONDITIONS,coverStart:"2026-06-01",
+    pays:{},
+    blocked:["Group Living Care","Early Critical Illness Benefit"],
+    never:["Death Benefit","Death","Death due to Accident","Total and Permanent Disability"],
+    qualifierMentions:["waiting period"],
+    total:null,
+  },
+  {
+    // The same diagnosis, well past both periods. Nothing is deducted and
+    // nothing is said about waiting.
+    question:"i was diagnosed with stage 3 colon cancer in march",
+    facts:{diagnosis:fact("stage 3 colon cancer"),eventType:fact("diagnosis"),diagnosisDate:fact("2026-03-01")},
+    conditions:SCHEME_CONDITIONS,coverStart:"2022-10-06",
+    pays:{"Group Living Care":"S$350,000","Early Critical Illness Benefit":"S$150,000"},
+    never:["Death Benefit","Death","Death due to Accident","Total and Permanent Disability"],
+    qualifierSilentAbout:["waiting period"],
+    total:"S$500,000",
+  },
+  {
+    // A living benefit is paid to the person diagnosed. Nine days is not the
+    // thirty the contract asks for.
+    question:"my mother was diagnosed with cancer on 1 january and died on the 10th",
+    facts:{diagnosis:fact("stage 4 pancreatic cancer"),diagnosisDate:fact("2026-01-01"),
+      death:fact(true),deathDate:fact("2026-01-10"),eventType:fact("death")},
+    conditions:SCHEME_CONDITIONS,coverStart:"2022-10-06",
+    pays:{},
+    oneOf:{names:["Death Benefit","Death"],amount:"S$1,000,000"},
+    never:["Death due to Accident","Accidental Death Benefit"],
+    total:"S$1,000,000",
+  },
 ];
 
 export function runClaimAnswerEval(){
@@ -261,6 +355,13 @@ export function runClaimAnswerEval(){
     const produced=testCase.withoutBenefitRules
       ?scheduleFallbackItems({contract,traits,events}).items
       :assessContractFromCatalog({contract,catalog,facts:testCase.facts,traits,events}).items;
+    // The conditions layer runs where the app runs it: on the calculated
+    // figures, BEFORE the alternatives are settled, so a benefit the cover
+    // cannot pay is never the one chosen to represent the others.
+    const applied=testCase.conditions?.length
+      ?applyCoverConditions({items:produced,conditions:testCase.conditions,facts:testCase.facts,
+        coverStart:testCase.coverStart??contract.effectiveDate,today:"2026-09-18"})
+      :{qualifiers:[] as string[],blocked:[] as {title:string;reason:string}[]};
     const {items}=resolveCoverOverlaps(produced);
     const totals=aggregatePotentialPayouts(items);
     const named=(item:{title:string})=>item.title.split(" · ").slice(1).join(" · ");
@@ -296,6 +397,24 @@ export function runClaimAnswerEval(){
       if(counted[0]!.amountText!==set.amount)fail("the counted row should pay "+set.amount+", not "+counted[0]!.amountText);
       for(const item of found)if(item!==counted[0]&&!item!.supersededBy)fail("“"+named(item!)+"” should say which benefit is paid instead of it");
       checked+=3;
+    }
+    for(const name of testCase.blocked??[]){
+      const item=shown.get(name);
+      if(!item)fail("\u201c"+name+"\u201d should still be shown with the reason it cannot be paid");
+      if(typeof item!.calculatedAmount==="number")fail("\u201c"+name+"\u201d is ruled out by a condition of the cover and must not reach the total");
+      if(!applied.blocked.some(entry=>entry.title.endsWith(name)))fail("\u201c"+name+"\u201d was silently dropped; the person is owed the reason");
+      checked+=3;
+    }
+    // Everything the answer would say about the conditions: the reasons a
+    // benefit cannot be paid, and the reasons the settled figure could differ.
+    const said=[...applied.qualifiers,...applied.blocked.map(entry=>entry.reason)].join(" ").toLowerCase();
+    for(const phrase of testCase.qualifierMentions??[]){
+      if(!said.includes(phrase.toLowerCase()))fail("the answer should say something about \u201c"+phrase+"\u201d and said: "+(applied.qualifiers.join("; ")||"nothing"));
+      checked++;
+    }
+    for(const phrase of testCase.qualifierSilentAbout??[]){
+      if(said.includes(phrase.toLowerCase()))fail("the facts satisfy the condition about \u201c"+phrase+"\u201d, so it should not be raised at all");
+      checked++;
     }
     const total=totals.map(entry=>entry.amountText).join(" and ")||null;
     if(total!==testCase.total)fail("the total should be "+(testCase.total??"nothing")+", not "+(total??"nothing"));

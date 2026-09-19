@@ -33,14 +33,20 @@ The gate is deliberately one-sided. It is generous while the facts are thin — 
 
 **The numbers themselves are cross-checked before anything is calculated from them.** A line from a certificate's cover table is not a benefit: a row named after a person and an identity number never becomes a rule about what a plan pays. And when two people on one group scheme hold the same set of amounts but the certificate attaches them to different plans for each of them, one of those readings is wrong and only the certificate can say which — so DearPolicy says so rather than quietly calculating from whichever it read.
 
+**Every cover's own conditions are applied to the figure, after it is calculated and never instead of it.** A benefit table answers *how much*; the exclusions, waiting periods, survival periods, notice periods and aggregate caps answer *unless*, and they live in the prose of the same documents. They are read in their own pass, stored against the cover rather than the row — one exclusion paragraph governs every benefit under it — and applied at the end.
+
+They divide by whether your facts can settle them. A waiting period is arithmetic on two dates DearPolicy holds, so it changes the number: a diagnosis six weeks into a cover with a ninety-day wait is shown with the date the cover opens, not with a figure you cannot claim. An exclusion for war or suicide is a question about the cause of a loss, which only the insurer decides — so it is said out loud beside the figure and is never subtracted from it. Taking money off a guess is the same error as promising money on one, pointing the other way.
+
+A condition your facts **satisfy** is deleted rather than displayed. A policy carries dozens and nearly all of them are met; an answer that recites them all teaches you to stop reading the list, which buries the one that bites.
+
 **Confidence is a claim about the evidence.** An answer is a strong match only when every counted figure was computed from your own schedule and nothing is still needed. Everything else is a partial match and says so.
 
-`scripts/claim-answer-eval.ts` runs nine real household scenarios end to end through this path with no model at all, and asserts which benefits respond, which do not, and what the total is. It runs in CI on every push.
+`scripts/claim-answer-eval.ts` runs sixteen real household scenarios end to end through this path with no model at all, and asserts which benefits respond, which do not, and what the total is. It runs in CI on every push.
 
 ## How it works
 
 1. **Upload** a policy document (schedule, certificate, benefit summary, booklet). DearPolicy reads it once, page by page, and stores every payout rule with its verbatim quote and page number. A quote that is not on the page is refused. This takes minutes and happens once.
-2. **Benefits page** shows every rule in plain English. Most need nothing from you. A rule DearPolicy read from a table heading rather than the row is marked *confirm this* and is not calculated from until you say it is right — one click, and your version survives every later re-read.
+2. **Benefits page** shows every rule in plain English, and beneath them every condition DearPolicy read on what those covers pay — each with the sentence it came from and the page, because a condition read wrongly takes money *off* an answer and that is the error worth catching early. Most need nothing from you. A rule DearPolicy read from a table heading rather than the row is marked *confirm this* and is not calculated from until you say it is right — one click, and your version survives every later re-read.
 3. **Ask** in the chat: *"Charmaine caught dengue, what can she claim?"* or *"How much if I break my wrist?"* DearPolicy asks the facts that decide eligibility first (accident or illness? admitted?), then the ones that set amounts (how many nights?), one at a time, and only then gives figures — each one calculated by code from the stored rule and your sum insured, never by the model, and labelled **confirmed / estimated / indicative**.
 4. **Claim pack** — one printable PDF: who is claiming, what happened, each benefit with its amount and page, the estimated claim amount struck once, what is still missing, and what to attach.
 

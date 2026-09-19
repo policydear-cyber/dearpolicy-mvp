@@ -22,7 +22,7 @@ async function main(){
   if(!documents.length){console.log("No processed documents to index.");await pool.end();return;}
   console.log("Indexing "+documents.length+" document(s). This reads each page once and is meant to be slow.\n");
   const started=Date.now();
-  let total=0;
+  let total=0;let totalConditions=0;
   for(const [index,document] of documents.entries()){
     const label=(document.product_name??document.original_filename)+" ("+document.page_count+" pages)";
     process.stdout.write("["+(index+1)+"/"+documents.length+"] "+label+" ");
@@ -30,9 +30,18 @@ async function main(){
     const found=await catalogueDocument({accountId,policyId:document.id,productName:document.product_name,pages,
       report:(page,pageTotal)=>process.stdout.write("\r["+(index+1)+"/"+documents.length+"] "+label+" — page "+page+" of "+pageTotal+"      ")});
     total+=found;
-    console.log("\r["+(index+1)+"/"+documents.length+"] "+label+" — "+found+" benefit(s) stored.                    ");
+    // The conditions pass reads the same pages for the other half of the
+    // contract: what the cover does NOT pay, and when.
+    let conditions=0;
+    try{
+      const { catalogueConditions }=await import("../lib/policies/condition-catalog");
+      conditions=await catalogueConditions({accountId,policyId:document.id,productName:document.product_name,pages,
+        report:(page,pageTotal)=>process.stdout.write("\r["+(index+1)+"/"+documents.length+"] "+label+" — conditions, page "+page+" of "+pageTotal+"      ")});
+    }catch{/* conditions are additive */}
+    totalConditions+=conditions;
+    console.log("\r["+(index+1)+"/"+documents.length+"] "+label+" — "+found+" benefit(s), "+conditions+" condition(s) stored.          ");
   }
-  console.log("\nStored "+total+" benefit rule(s) in "+Math.round((Date.now()-started)/1000)+"s.");
+  console.log("\nStored "+total+" benefit rule(s) and "+totalConditions+" policy condition(s) in "+Math.round((Date.now()-started)/1000)+"s.");
   console.log("Questions are now answered from this table without reading the documents again.");
   console.log("Run 'npm run policies:report' to see what was captured, and re-run this after uploading new documents.");
   await pool.end();

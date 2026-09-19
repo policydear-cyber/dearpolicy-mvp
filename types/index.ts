@@ -56,6 +56,11 @@ export type ClaimItem = {
   /** Set when another benefit in the same cover pays instead of this one. The
    * amount stays visible; it stops being added. */
   supersededBy?:string;
+  /** The contract this figure was assessed against. A cover's exclusions and
+   * waiting periods govern that contract's figures and no others, and without
+   * this the only way to tell them apart was the cover's printed name -- which
+   * two contracts in one household routinely share. */
+  contractId?:string;
   reason:string;
   conditions:string[];
 };

@@ -4,6 +4,8 @@ import { devAccountId,isUuid,query } from "@/lib/db/client";
 import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,looksLikeCoverageLine,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
 import { loadPolicyInventory } from "@/lib/policies/inventory";
+import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
+import { conditionEffect,describeCondition,type CoverCondition,type CoverConditionKind,type ExcludedCause } from "@/lib/insurance/cover-conditions";
 import { formatMoney } from "@/lib/format/currency";
 
 export const runtime="nodejs";
@@ -131,9 +133,46 @@ export async function GET(request:Request){
         owners:row.owner_names??[],
       };
     });
+    // The other half of every document: what these covers do NOT pay. Shown on
+    // the same screen and for the same reason -- a condition read wrongly takes
+    // money off an answer, so it has to be visible before a claim happens.
+    let conditions:{id:string;policyId:string;documentName:string;cover:string|null;kind:string;
+      description:string;effect:string;sourcePage:number|null;quote:string;needsReview:boolean}[]=[];
+    try{
+      await ensureConditionSchema();
+      const conditionRows=await query<{id:string;policy_id:string;product_name:string|null;condition_kind:string;
+        cause:string|null;condition_names:string[];days:number|null;amount:string|null;amount_basis:string|null;
+        scope:string|null;carve_out:string|null;source_page:number|null;quote:string;needs_review:boolean;
+        original_filename:string}>(
+        `SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.cause,c.condition_names,c.days,c.amount::text,
+                c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename
+           FROM policy_cover_conditions c
+           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id
+          WHERE c.account_id=$1
+            AND ($2::uuid IS NULL OR EXISTS (
+                  SELECT 1 FROM policy_members pm
+                   WHERE pm.policy_id=c.policy_id AND pm.account_id=c.account_id AND pm.family_member_id=$2::uuid))
+          ORDER BY c.product_name NULLS FIRST,c.condition_kind,c.source_page`,
+        [accountId,member||null]);
+      conditions=conditionRows.rows.map(row=>{
+        const condition:CoverCondition={
+          id:row.id,policyId:row.policy_id,productName:row.product_name,
+          kind:row.condition_kind as CoverConditionKind,cause:row.cause as ExcludedCause|null,
+          appliesToEvents:[],conditionNames:Array.isArray(row.condition_names)?row.condition_names:[],
+          days:row.days,amount:row.amount==null?null:Number(row.amount),
+          amountBasis:row.amount_basis as CoverCondition["amountBasis"],scope:row.scope as CoverCondition["scope"],
+          carveOut:row.carve_out,sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review};
+        return {id:row.id,policyId:row.policy_id,documentName:row.original_filename,cover:row.product_name,
+          kind:row.condition_kind,description:describeCondition(condition),effect:conditionEffect(condition),
+          sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review};
+      });
+    }catch{/* A document whose conditions have not been read yet simply has none to show. */}
     return NextResponse.json({
       benefits,
+      conditions,
       summary:{
+        conditions:conditions.length,
+        conditionsThatChangeAmounts:conditions.filter(c=>c.effect==="changes the amount").length,
         total:benefits.length,
         // The only number that is a to-do for the person reading the screen.
         needsYou:benefits.filter(b=>b.attention==="confirm").length,

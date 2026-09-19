@@ -394,6 +394,7 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
   const canShowCalculation=!!calculation&&!review&&!notMet&&!wrongEvent&&args.contract.confirmed;
   const item:ClaimItem={
     title:args.contract.ownerName+" · "+args.benefit.title,
+    contractId:args.contract.id,
     coverKey:coverKey({policyNumber:coverage?.policyNumber,groupPolicyNumber:coverage?.groupPolicyNumber,
       insurer:coverage?.insurer??args.contract.insurer??null,
       productName:canonicalProduct(coverage?.productName??coverage?.policyName??args.contract.name),

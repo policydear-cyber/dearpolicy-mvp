@@ -10,6 +10,8 @@ import { answerFromLedger } from "@/lib/ledger/answer";
 import { ledgerFor,seedLedger } from "@/lib/ledger/store";
 import { pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
 import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTraits,loadBenefitCatalog,planClaimQuestions,questionTraits,scenarioFromCatalog,scheduleFallbackItems } from "@/lib/policies/benefit-catalog";
+import { loadCoverConditions } from "@/lib/policies/condition-catalog";
+import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
@@ -64,6 +66,52 @@ function warnAboutInconsistentSchedules(answer:{details:string[];payoutQualifier
     if(!answer.details.includes(warning.detail))answer.details.push(warning.detail);
     answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),warning.detail])];
   }
+}
+/** What the covers do NOT pay, applied to what they do.
+ *
+ * Everything upstream of this line answers "how much". The exclusions, waiting
+ * periods, survival periods, notice periods and aggregate caps live in the
+ * prose of the same documents and were read straight past, so an answer could
+ * promise a payout on a death the policy excludes. They are applied here,
+ * after the arithmetic and never instead of it, and scoped to the contract
+ * whose document stated them.
+ *
+ * A condition the facts SATISFY is deleted rather than displayed. A policy
+ * carries dozens and nearly all of them are met; an answer that recites them
+ * all teaches a person to stop reading the list, which buries the one that
+ * bites. Only an exclusion is never allowed to change a figure: the cause of a
+ * loss is the insurer's to determine, and taking money off a guess is the same
+ * error as promising money on one. */
+async function applyCoverConditionsToAnswer(accountId:string,
+  answer:{claimItems:ClaimItem[];details:string[];payoutQualifiers?:string[]},
+  contracts:PolicyContract[],state:ConversationState){
+  if(!answer.claimItems.length||!contracts.length)return;
+  const documents=new Map(contracts.map(contract=>
+    [contract.id,new Set([...contract.documents,...contract.references].map(document=>document.id))]));
+  const every=[...new Set([...documents.values()].flatMap(ids=>[...ids]))];
+  if(!every.length)return;
+  let conditions;
+  try{conditions=await loadCoverConditions(accountId,every);}
+  catch{return;/* A document whose conditions were never read is not a document without conditions, and the answer says so elsewhere. */}
+  if(!conditions.length)return;
+  const qualifiers:string[]=[];
+  for(const contract of contracts){
+    const ids=documents.get(contract.id)??new Set<string>();
+    const mine=conditions.filter(condition=>!condition.policyId||ids.has(condition.policyId));
+    if(!mine.length)continue;
+    // An item with no contract on it predates this field; with one contract in
+    // play there is no ambiguity about whose conditions govern it.
+    const items=answer.claimItems.filter(item=>item.contractId===contract.id||(contracts.length===1&&!item.contractId));
+    if(!items.length)continue;
+    const result=applyCoverConditions({items,conditions:mine,
+      facts:state.subjects[contract.ownerId]??{},coverStart:contract.effectiveDate});
+    qualifiers.push(...result.qualifiers);
+    for(const stopped of result.blocked){
+      const line=stopped.title+" is not payable on these facts: "+stopped.reason;
+      if(!answer.details.includes(line))answer.details.push(line);
+    }
+  }
+  if(qualifiers.length)answer.payoutQualifiers=[...new Set([...qualifiers,...(answer.payoutQualifiers??[])])];
 }
 function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQualifiers?:string[]}){
   const {notes}=resolveCoverOverlaps(answer.claimItems);
@@ -442,6 +490,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
               // A what-if names the one fact that would turn a rule into a
               // figure, without recording anything against anyone's profile.
               if(whatIf&&looked.question)answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:"It is what turns the rule above into an actual amount."}];
+              await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
               warnAboutInconsistentSchedules(answer,contracts);
           answer.potentialPayoutTotals=settleOverlaps(answer);
               const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
@@ -511,6 +560,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             if(review)review.status=scenario.considered?"searched":"missing_wording";
           }
           answer.mode="claim_assessment";
+          await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
           answer.potentialPayoutTotals=settleOverlaps(answer);
           const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
@@ -758,6 +808,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           }
           delete state.pending;
           answer.mode="claim_assessment";
+          await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
           answer.potentialPayoutTotals=settleOverlaps(answer);
           // Put the claim on record so the pack can be printed and the Claims
@@ -982,13 +1033,18 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const unresolved=reviews.filter(r=>r.status!=="searched").length;
         answer.confidence=answer.citations.length?"partial_match":"insufficient_evidence";
         const eventLead=claimEventLead(context.people,state);
+        await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
         warnAboutInconsistentSchedules(answer,contracts);
           answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
         if(answer.potentialPayoutTotals.length&&answer.reviewCoverage&&!answer.reviewCoverage.complete)
           payoutQualifiers.push("sections of the policy that were not read may contain a further benefit or an exclusion");
-        answer.payoutQualifiers=[...new Set(payoutQualifiers.map(q=>q.length>180?q.slice(0,177).trimEnd()+"…":q))].slice(0,4);
+        // Conditions read from the policy come first: they are the specific
+        // reasons this contract may pay less or nothing, and the generic ones
+        // below are what a person can already guess.
+        answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),...payoutQualifiers]
+          .map(q=>q.length>180?q.slice(0,177).trimEnd()+"…":q))].slice(0,4);
         answer.summary=(eventLead?eventLead+" ":"")+(answer.potentialPayoutTotals.length?"Potential payout identified so far: "+totalText+" across "+totalItems+" evidence-supported benefit"+(totalItems===1?"":"s")+". "+(answer.payoutQualifiers.length?"The final settled amount can differ because "+answer.payoutQualifiers.join("; ")+".":"Each figure remains conditional on the listed policy terms and claim evidence."):
           answer.claimItems.length?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+", but the retrieved evidence did not support a payout calculation for them yet. Confirmed cover amounts are labelled separately from payouts.":
           observations.length?"The uploaded passages support the policy details below.":

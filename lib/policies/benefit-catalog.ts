@@ -343,6 +343,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   const item:ClaimItem={
     title:args.ownerName+" · "+benefit.benefitName,
     coverKey:cover,
+    ...(args.contractId?{contractId:args.contractId}:{}),
     ...(coverLabel?{coverLabel}:{}),
     ...(namesASpecificInjury(benefit.benefitName)
       ?{scaleGroup:benefit.policyId+"#"+(benefit.sourcePage??0)}:{}),
@@ -843,6 +844,7 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
       const label=coverage.productName&&normalText(coverage.productName)!==normalText(coverage.category)?coverage.productName+" ("+coverage.category+")":coverage.category;
       items.push({
         title:args.contract.ownerName+" · "+label+" — "+rule.pays,
+        contractId:args.contract.id,
         status:missing.length?"potentially_applicable":"likely_applicable",
         amountText:formatMoney(coverage.amount,currency),amountLabel:"Potential payout",
         estimateBasis:rule.basis,calculatedAmount:coverage.amount,currency,calculationKind:"sum_insured",aggregation:"additive",calculationId:"coverage:"+coverage.id,
@@ -1016,6 +1018,17 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
  * ambulance" ends every ambulance benefit and its question; "not admitted"
  * ends the hospital ones. Asking about a charge for a thing that did not
  * happen is the fastest way to lose someone's trust. */
+/** A cause of death or injury the person has stated that is plainly not an
+ * accident. Their words only: nothing here is inferred from a diagnosis or
+ * guessed from a silence, because "we do not know" must never become "not an
+ * accident". */
+export function causeIsNotAnAccident(facts:SubjectFacts){
+  if(knownValue(facts,"accidentalDeath")===true)return false;
+  if(knownValue(facts,"accidentalDeath")===false)return true;
+  const cause=String(knownValue(facts,"causeOfDeath")??"").toLowerCase();
+  if(!cause.trim())return false;
+  return /suicide|took (?:his|her|their) own life|self[- ]inflicted|natural causes|old age|illness|disease|cancer|stroke|heart attack|cardiac|organ failure|infection|sepsis|pneumonia|covid/.test(cause);
+}
 export function factExclusions(facts:SubjectFacts){
   const rules:{when:boolean;matches:(benefit:CatalogBenefit)=>boolean;because:string}[]=[
     {when:knownValue(facts,"hospitalised")===false,because:"needs a hospital admission, and there was none",
@@ -1026,6 +1039,14 @@ export function factExclusions(facts:SubjectFacts){
      matches:benefit=>/\b(?:surg\w+|operation|implant)\b/i.test(benefit.benefitName)},
     {when:knownValue(facts,"death")!==true,because:"nobody has died",
      matches:benefit=>(benefit.requires??[]).includes("death")},
+    // A personal accident cover pays for an accident. When the person has told
+    // us in their own words what the cause was, and that cause is not one,
+    // the accident cover is out -- and so is the injury schedule under it.
+    // Without this a death by suicide was being offered S$600,000 of accident
+    // cover, on nothing more than the words "death" and "accident" both being
+    // present.
+    {when:causeIsNotAnAccident(facts),because:"pays where an accident caused the loss, and you have said what the cause was",
+     matches:benefit=>(benefit.requires??[]).includes("accident")||benefit.traits.includes("accident")},
   ];
   return (benefit:CatalogBenefit)=>rules.find(rule=>rule.when&&rule.matches(benefit))?.because??null;
 }

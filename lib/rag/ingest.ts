@@ -296,6 +296,22 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         [args.accountId, args.policyId]).then(r => Number(r.rows[0]?.count ?? 0)).catch(() => 0);
       await progress(args, "benefits", 96, stored + " benefit rule" + (stored === 1 ? "" : "s") + " read from this document"
         + (attention ? "; " + attention + " to confirm on the Benefits page" : "") + ".", "indexing");
+      // The other half of the contract. The benefit pass answers "how much";
+      // this answers "unless" -- the exclusions, waiting periods, survival
+      // periods and caps that live in prose and that a table parser walks
+      // straight past. Read here, once, for the same reason.
+      try {
+        await progress(args, "conditions", 96, "Reading the exclusions and waiting periods…", "indexing");
+        const { catalogueConditions } = await import("@/lib/policies/condition-catalog");
+        const conditions = await catalogueConditions({
+          accountId: args.accountId, policyId: args.policyId, productName: extraction.productName ?? null,
+          pages: pages.map(page => ({ page_number: page.pageNumber, text: page.text })),
+          report: (page, total) => { void progress(args, "conditions", 96,
+            "Reading the exclusions and waiting periods — page " + page + " of " + total + "…", "indexing"); },
+        });
+        await progress(args, "conditions", 98, conditions + " policy condition" + (conditions === 1 ? "" : "s")
+          + " read from this document.", "indexing");
+      } catch { /* A document whose conditions cannot be read keeps its benefits. */ }
     } catch (error) {
       // Swallowing this silently told the person "Analysis complete" while the
       // document had in fact been read for nothing: every later question then
