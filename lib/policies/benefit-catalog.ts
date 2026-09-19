@@ -208,9 +208,17 @@ export function matchBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[],ev
  * injuries, the two have to agree. When nothing has been described yet -- a
  * hypothetical, or a claim that has only just started -- the figure is still
  * shown, because the person is entitled to see what their policy pays. */
-const NAMED_INJURIES=["fracture","dislocation","burn","amputation","amputat","loss of sight","sight","eye","hearing","ear","speech",
-  "limb","arm","leg","hand","foot","finger","thumb","toe","wrist","ankle","knee","hip","shoulder","elbow","spine","skull","jaw",
-  "rib","pelvis","femur","tibia","clavicle","coma","paralysis","quadripleg","parapleg","dismember"];
+/** The words that name a PART OF THE BODY. Kept separate from the words that
+ * name a kind of injury, because mixing them is how "Jaw, Pelvis, Leg, Ankle
+ * or Knee (Other Fracture)" came to be paid for a broken wrist: both the row
+ * and the report contained the word "fracture", and that was treated as the
+ * two describing the same injury. A schedule pays for the part that was hurt,
+ * so the part has to agree. */
+const BODY_PARTS=["sight","eye","hearing","ear","speech","limb","arm","leg","hand","foot","finger","thumb","toe","wrist",
+  "ankle","knee","hip","shoulder","elbow","spine","skull","jaw","rib","pelvis","femur","tibia","clavicle","patella",
+  "phalan","neck","cheekbone","insanity"];
+const INJURY_KINDS=["fracture","dislocation","burn","amputation","amputat","coma","paralysis","quadripleg","parapleg","dismember"];
+const NAMED_INJURIES=[...INJURY_KINDS,...BODY_PARTS];
 export function reportedInjuryText(facts:SubjectFacts){
   const parts:string[]=[];
   const push=(value:FactValue|undefined)=>{
@@ -234,6 +242,38 @@ function isScaleBand(name:string){
   return /\bequals? to or greater than\b|\bbut less than\b/i.test(name)||/^\s*(?:body|head)\s*[-–]/i.test(name);
 }
 const BURN_WORDS=["burn","scald","impair","disfigur","scar"];
+/** What KIND of injury a schedule line is written for, and what kind was
+ * reported.
+ *
+ * Matching on the body part alone is how a fractured wrist came to be offered
+ * S$600,000: the row "Loss of arm (at shoulder, between shoulder and elbow, at
+ * elbow, between elbow and wrist)" contains the word "wrist", and the reported
+ * injury contained the word "wrist", so they agreed. They are not the same
+ * injury. One is an amputation of the whole arm at 100% of the sum insured;
+ * the other is a broken bone worth about a thousand dollars.
+ *
+ * A schedule pays for the injury that happened, so the kind has to agree
+ * before the body part is even looked at. */
+type InjuryKind="permanent_loss"|"fracture"|"burn";
+function scheduleLineKind(name:string):InjuryKind|null{
+  const text=(name??"").toLowerCase();
+  if(/\bburn\b|\bburns\b|\bscald/.test(text))return "burn";
+  if(/\bfractur|\bfull break\b|non-union|\bdislocat/.test(text))return "fracture";
+  if(/\bloss of\b|\bpermanent total loss\b|\bamputat|\bdismember|\bshortening of\b|paralys|parapleg|quadripleg/.test(text))
+    return "permanent_loss";
+  if(isScaleBand(text))return "burn";
+  return null;
+}
+function reportedInjuryKinds(facts:SubjectFacts):Set<InjuryKind>{
+  const kinds=new Set<InjuryKind>();
+  const reported=reportedInjuryText(facts);
+  if(!reported)return kinds;
+  if(/\bburn|\bscald|disfigur|\bscar\b/.test(reported))kinds.add("burn");
+  if(/\bfractur|\bbroke|\bbroken\b|\bfull break\b|non-union|\bdislocat|\bcrack/.test(reported))kinds.add("fracture");
+  if(/\blost\b|\bloss of\b|\bamputat|\bsevered\b|\bpermanent|paralys|parapleg|quadripleg|\bblind|\bdeaf/.test(reported))
+    kinds.add("permanent_loss");
+  return kinds;
+}
 /** Whether this row is one line of a schedule rather than a benefit in its own
  * right. */
 export function namesASpecificInjury(benefitName:string){
@@ -249,7 +289,30 @@ export function injuryNotReported(benefit:CatalogBenefit,facts:SubjectFacts){
     return BURN_WORDS.some(word=>reported.includes(word))?null:benefit.benefitName;
   const named=NAMED_INJURIES.filter(word=>name.includes(word));
   if(!named.length)return null;
-  if(named.some(word=>reported.includes(word)))return null;
+  // The kind of injury first. A broken wrist is not a lost arm, whatever words
+  // the two share.
+  const lineKind=scheduleLineKind(name),reportedKinds=reportedInjuryKinds(facts);
+  if(lineKind&&reportedKinds.size&&!reportedKinds.has(lineKind))return benefit.benefitName;
+  // Then the scope. A row written for both hands, all the fingers, or both
+  // eyes is not answered by the loss of one thumb.
+  const bothSided=/\bboth\b|\ball (?:fingers|toes)\b|\bfour fingers\b/.test(name);
+  const singleDigit=/\b(?:a|one|left|right|my)\b[^.]{0,20}\b(?:thumb|finger|toe|phalanx)\b/.test(reported)
+    &&!/\bboth\b|\ball\b/.test(reported);
+  if(bothSided&&singleDigit)return benefit.benefitName;
+  // Which side. A schedule pays a different percentage for the right thumb
+  // than for the left, and offering the right-hand row for a left-hand injury
+  // is simply a different benefit.
+  const side=(text:string)=>({left:/\bleft\b/.test(text),right:/\bright\b/.test(text)});
+  const rowSide=side(name),hurtSide=side(reported);
+  if((rowSide.left!==rowSide.right)&&(hurtSide.left!==hurtSide.right)
+    &&(rowSide.left!==hurtSide.left))return benefit.benefitName;
+  // Then the part of the body. Agreement on the KIND of injury is not
+  // agreement that it happened to the same place.
+  const parts=BODY_PARTS.filter(word=>name.includes(word));
+  if(parts.length)return parts.some(word=>reported.includes(word))?null:benefit.benefitName;
+  // A row that names only a kind of injury and no body part ("Third Degree
+  // Burns") is answered by that kind alone.
+  if(INJURY_KINDS.some(word=>name.includes(word)&&reported.includes(word)))return null;
   return benefit.benefitName;
 }
 export type CatalogAssessment={item:ClaimItem;missing:string[]};
@@ -294,8 +357,13 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
       // cannot see cannot be the reason they are shown nothing. The unknown
       // cap becomes what it is -- a condition on the figure.
       const payFor=benefit.maximumDays!=null?Math.min(benefit.maximumDays,payableDays):payableDays;
+      // Nobody is helped by a card reading S$0.00. A stay shorter than the
+      // days this benefit waits out is the rule saying it does not respond,
+      // and that is what the card should say.
+      if(payFor<=0)missing.push("a hospital stay longer than the "+benefit.offsetDays
+        +" day"+(benefit.offsetDays===1?"":"s")+" this benefit waits out — the stay you described is shorter than that");
       uncappedDaily=benefit.maximumDays==null;
-      amount=payFor*benefit.formulaValue;
+      amount=payFor>0?payFor*benefit.formulaValue:null;
       basis=formatMoney(benefit.formulaValue,currency)+" per day after the first "+benefit.offsetDays
         +(benefit.maximumDays!=null?", up to "+benefit.maximumDays+" days"
           :", for the "+payableDays+" day"+(payableDays===1?"":"s")+" you reported");
@@ -760,10 +828,18 @@ export function coverageForBenefit(contract:PolicyContract,benefit:CatalogBenefi
   const accidentOnly=(benefit.requires??[]).includes("accident")
     ||/\baccidental\b|\bdue to (?:an )?accident\b/i.test(benefit.benefitName);
   const category=(coverage:OwnedCoverage)=>(coverage.category??"").toLowerCase();
+  // A schedule of injuries IS the personal accident plan's schedule. Sixty of
+  // this household's rules -- every dismemberment row, every burns band, every
+  // fracture -- name an injury and nothing else, so none of the triggers above
+  // fitted them and every one of them resolved to no cover at all and was
+  // dropped without a word. A row that names a specific injury belongs to the
+  // accident cover for the same reason "due to an accident" does.
+  const namesAnInjury=namesASpecificInjury(benefit.benefitName)||triggers.includes("accidental_injury");
   const wantedCategory=accidentOnly?/accident/
     :triggers.includes("critical_illness")?/critical/
     :triggers.includes("total_permanent_disability")?/permanent|disab/
     :triggers.includes("death")?/death|life/
+    :namesAnInjury?/accident|injur|dismember/
     :null;
   if(wantedCategory){
     const byEvent=contract.coverages.filter(coverage=>wantedCategory.test(category(coverage)));
@@ -1011,7 +1087,15 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
     const coverage=coverageForBenefit(args.contract,benefit);
     // Without a schedule there is no coverage row, but the person has told us
     // they hold this policy, so its own stated figures still apply to them.
-    if(!coverage&&!declaredOnly)continue;
+    //
+    // And a benefit that needs no sum insured never needed a coverage row in
+    // the first place: a S$1,000 fracture, a S$30-a-day hospital cash, a
+    // reimbursement capped at S$500 are all computed from the rule and the
+    // facts alone. Requiring the join anyway silently threw away every one of
+    // them whenever the rule carried the booklet's title instead of the
+    // cover's -- which, for a group scheme, is every rule.
+    const needsASumInsured=benefit.formulaKind==="sum_insured";
+    if(!coverage&&!declaredOnly&&needsASumInsured)continue;
     const key=benefit.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"");
     if(seen.has(key))continue;seen.add(key);
     const {item}=assessCatalogBenefit({benefit,coverage,ownerName:args.contract.ownerName,facts:args.facts,declaredOnly,

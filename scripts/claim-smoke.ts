@@ -10,6 +10,7 @@ import { runCoverConditionsStress } from "./cover-conditions-stress";
 import { runClaimArithmeticStress } from "./claim-arithmetic-stress";
 import { runBenefitFormulaStress } from "./benefit-formula-stress";
 import { runScaleLimitStress } from "./scale-limit-stress";
+import { runRealHouseholdReplay } from "./real-household-replay";
 import { runClaimPackRegressions } from "./claim-pack-regressions";
 
 const baseCoverage=(overrides:Partial<OwnedCoverage>):OwnedCoverage=>({id:"x",policyId:"p",familyMemberId:"m",category:"Death",amount:null,currency:"SGD",productName:null,sourcePage:1,evidenceText:"test",insurer:"Singlife",policyName:"MINDEF & MHA Group Insurance",policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null,...overrides});
@@ -31,4 +32,6 @@ runCoverConditionsStress();
 runClaimArithmeticStress();
 runBenefitFormulaStress();
 runScaleLimitStress();
+runRealHouseholdReplay({quiet:true});
+console.log("DearPolicy real-household replay passed (one real scheme, 125 stored rules, nine questions).");
 runClaimRegressions().then(runDeathEvidenceRegressions).then(runClaimWorkflowRegressions).then(runClaimPackRegressions).catch(error => { console.error(error); process.exitCode=1; });

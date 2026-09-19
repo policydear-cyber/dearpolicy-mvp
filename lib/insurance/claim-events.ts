@@ -69,7 +69,18 @@ const TRIGGER_RULES:{event:ClaimEventType;pattern:RegExp}[]=[
  * illness clause routinely mentions death (to say the benefit ends on it, or
  * that it is accelerated against it), and reading that mention as "this pays on
  * death" is how a living-care product came to be offered for a death. */
+/** A line of an injury schedule -- a dismemberment row, a burns band, a
+ * fracture -- pays on an accidental injury and on nothing else.
+ *
+ * Left without a trigger of its own, every one of this household's sixty
+ * schedule rows was eligible for a DEATH claim: they carry no death wording,
+ * so nothing ruled them out, and the largest of them computed to the whole
+ * personal accident sum insured. A bereaved family was being offered the
+ * dismemberment scale. */
+const SCHEDULE_LINE=/\bloss of\b|\bpermanent total loss\b|\bamputat|\bdismember|\bfractur|\bfull break\b|\bburns?\b|\bnon-union\b|\bshortening of\b|\bequals? to or greater than\b|\bdislocat/i;
 export function benefitTriggerEvents(benefitName:string,quote:string):ClaimEventType[]{
+  if(SCHEDULE_LINE.test(benefitName??"")&&!/\bdeath\b|\bdies\b|\bdisappear/i.test(benefitName??""))
+    return ["accidental_injury"];
   const name=(benefitName??"").toLowerCase();
   const full=(name+" "+(quote??"")).toLowerCase();
   const events=new Set<ClaimEventType>();

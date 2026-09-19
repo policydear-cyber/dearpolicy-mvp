@@ -195,6 +195,53 @@ export function holdNonMonotonicBands(benefits:CatalogBenefit[]):CatalogBenefit[
 /** Everything the stored rules can resolve about themselves, in order: work out
  * what a percentage scale is a percentage of, then stop asking a person to
  * confirm what two of their own documents already agree on. */
+/** Two documents agreeing on a PERCENTAGE is not two documents agreeing on
+ * what the percentage is OF.
+ *
+ * Corroboration exists so a household is not asked to confirm a hundred rows
+ * their own documents already answer twice over. But where this household also
+ * states the same schedule in dollars -- so an implied limit was derived at
+ * all -- the open question about every other heading-read percentage in that
+ * document is exactly the one corroboration cannot answer. Both documents say
+ * "Fractured leg or patella 20%"; neither says 20% of what, and read against
+ * the accident sum insured that row pays S$120,000 for a bone the same
+ * schedule prices at S$2,500 two pages later.
+ *
+ * So where a limit was derived, the rows it did not rewrite stay for a person
+ * to settle. They are still shown; they are not calculated from. */
+/** Which schedule a row belongs to. A policy states several: a dismemberment
+ * scale that really is a percentage of the sum insured, a burns table, and a
+ * fracture table that is a percentage of its own small limit. Only rows of the
+ * schedule the limit was derived FROM are in dispute; holding the others back
+ * as well stopped a lost thumb being worth anything at all. */
+function scheduleFamily(name:string){
+  const text=(name??"").toLowerCase();
+  if(/\bburns?\b|\bscald/.test(text))return "burns";
+  if(/\bfractur|\bfull break\b|non-union|\bshortening of\b|\bdislocat/.test(text))return "fracture";
+  if(/\bloss of\b|\bpermanent total loss\b|\bamputat|\bdismember|insanity/.test(text))return "dismemberment";
+  return null;
+}
+function holdUnresolvedPercentagesAlongsideAScale(benefits:CatalogBenefit[]):CatalogBenefit[]{
+  const scale=impliedScaleLimit(benefits);
+  if(!scale)return benefits;
+  const documents=new Set([...scale.pages].map(page=>page.split("#")[0]));
+  // The schedules the limit was actually derived from.
+  const families=new Set(benefits.filter(benefit=>scale.pages.has(benefit.policyId+"#"+(benefit.sourcePage??0)))
+    .map(benefit=>scheduleFamily(benefit.benefitName)).filter((family):family is NonNullable<ReturnType<typeof scheduleFamily>>=>!!family));
+  if(!families.size)return benefits;
+  const note="Your documents state this scale as a percentage in one place and in dollars in another. "
+    +"DearPolicy worked out the dollar figures it could prove and is holding this row back: "
+    +"the page it came from does not say what the percentage is of, and reading it against the plan's sum insured "
+    +"would price it far above what the same schedule pays elsewhere.";
+  return benefits.map(benefit=>{
+    if(benefit.formulaKind!=="sum_insured"||!benefit.basisInferred||benefit.reviewedAt)return benefit;
+    if(!documents.has(benefit.policyId))return benefit;
+    const family=scheduleFamily(benefit.benefitName);
+    if(!family||!families.has(family))return benefit;
+    return {...benefit,needsConfirmation:true,conditions:[...new Set([...benefit.conditions,note])]};
+  });
+}
 export function resolveStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
-  return holdNonMonotonicBands(corroborateInferredRules(applyImpliedScaleLimit(benefits)));
+  return holdNonMonotonicBands(holdUnresolvedPercentagesAlongsideAScale(
+    corroborateInferredRules(applyImpliedScaleLimit(benefits))));
 }

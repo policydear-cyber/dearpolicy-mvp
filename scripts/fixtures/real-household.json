@@ -1,0 +1,17 @@
+{
+  "note":"One real Singapore group scheme, as DearPolicy actually stored it. Names and the policy number are replaced; every rule, figure, page number and quote is exactly what the system holds.",
+  "insurer":"Singapore Life Ltd",
+  "scheme":"MINDEF & MHA GROUP INSURANCE SCHEME",
+  "policyNumber":"POLICY-1",
+  "groupPolicyNumber":"GROUP-1",
+  "effectiveDate":"2022-10-06",
+  "members":[{"id":"member-1","name":"Member A"},{"id":"member-2","name":"Member B"}],
+  "coverages":[
+    {"category":"Death","amount":1000000,"productName":"GROUP TERM LIFE"},
+    {"category":"Personal Accident","amount":600000,"productName":"GROUP PERSONAL ACCIDENT"},
+    {"category":"Critical Illness","amount":350000,"productName":"GROUP LIVING CARE"},
+    {"category":"Early Critical Illness","amount":300000,"productName":"GROUP LIVING CARE PLUS"}
+  ],
+  "documents":{"certificate":"cert","benefitSummary":"summary","productSummary":"product"},
+  "benefitColumns":["id","policyId","productName","benefitName","traits","requires","formulaKind","formulaValue","currency","factKey","offsetDays","maximumDays","sourcePage","quote","needsReview","basisInferred","reviewed"]
+}

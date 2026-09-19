@@ -779,8 +779,16 @@ export function runSystemRegressions(){
       formulaKind:"daily",formulaValue:30,factKey:"hospitalNights",offsetDays:3,maximumDays:30,quote:"S$30 per day after the 3rd day."};
     assert.equal(assessCatalogBenefit({benefit:cash,coverage:cover,ownerName:"Person A",
       facts:{hospitalNights:fact(10)}}).item.amountText,"S$210.00","(10 - 3) x S$30");
-    assert.equal(assessCatalogBenefit({benefit:cash,coverage:cover,ownerName:"Person A",
-      facts:{hospitalNights:fact(2)}}).item.amountText,"S$0.00","Below the waiting period pays nothing");
+    // A stay shorter than the days the benefit waits out is the rule saying it
+    // does not respond. "S$0.00" on a card tells a person nothing and reads
+    // like a policy that pays nothing; the rule and the reason tell them why.
+    const tooShort=assessCatalogBenefit({benefit:cash,coverage:cover,ownerName:"Person A",
+      facts:{hospitalNights:fact(2)}});
+    assert.equal(tooShort.item.calculatedAmount,undefined,"Below the waiting period there is nothing to count");
+    assert.deepEqual(aggregatePotentialPayouts([tooShort.item]),[]);
+    assert.match(tooShort.item.amountText??"",/per day after the first 3/,"the rule is shown instead of a zero");
+    assert.ok(tooShort.missing.some(entry=>/longer than the 3 days/.test(entry)),
+      "and the card says what would make it pay: "+tooShort.missing.join(" | "));
   });
   test("Uploading a policy is a statement that you hold it",()=>{
     const booklet=document({id:"booklet",personal_coverage_confirmed:false,document_authority:40,
