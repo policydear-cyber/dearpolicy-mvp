@@ -308,8 +308,25 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
   // never used to hide it: a person who cannot see a number cannot check it
   // against their own policy, and DearPolicy exists to give them the number.
   const personalEvidence=coverage?.documentRole==="personal_schedule"||coverage?.documentRole==="certificate";
+  // A multiple of the sum insured that no policy pays.
+  //
+  // The clause has to state the percentage before it is accepted at all, so
+  // this is not a guess -- but "1000% of the Sum Insured" reads as a valid
+  // clause and turns a S$1,000,000 cover into S$10,000,000. One stray digit in
+  // a scanned table does it. Accidental death riders reach two or three times
+  // the sum insured; nothing reaches ten. Above that the figure is still shown,
+  // because a number nobody can see is a number nobody can correct, but it is
+  // labelled as unverified and kept out of the household total until a person
+  // says it is right.
+  const IMPLAUSIBLE_SHARE=3;
+  const implausibleShare=benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null
+    &&benefit.formulaValue>IMPLAUSIBLE_SHARE&&!benefit.reviewedAt;
+  if(implausibleShare&&amount!=null)conditions.push("DearPolicy read this as "
+    +Math.round((benefit.formulaValue??0)*100)+"% of the sum insured, which is far more than any policy pays for one benefit. "
+    +"The figure is shown but not counted until you confirm it on the Benefits page.");
   const estimateBasis:"confirmed"|"estimated"|"indicative"=
-    benefit.needsConfirmation||args.declaredOnly?"indicative"
+    implausibleShare?"indicative"
+    :benefit.needsConfirmation||args.declaredOnly?"indicative"
     :benefit.formulaKind==="sum_insured"?(personalEvidence?"confirmed":"estimated")
     :uncappedDaily?"estimated"
     :"confirmed";
