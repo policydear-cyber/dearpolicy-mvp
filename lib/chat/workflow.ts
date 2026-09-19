@@ -15,7 +15,7 @@ import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
-import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
@@ -68,6 +68,8 @@ function warnAboutInconsistentSchedules(answer:{details:string[];payoutQualifier
 function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQualifiers?:string[]}){
   const {notes}=resolveCoverOverlaps(answer.claimItems);
   for(const note of notes)if(!answer.details.includes(note))answer.details.push(note);
+  for(const note of applyPolicyAggregateCaps(answer.claimItems))
+    if(!answer.details.includes(note))answer.details.push(note);
   const warnings=acceleratedBenefitWarnings(answer.claimItems);
   if(warnings.length){
     answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),...warnings])];

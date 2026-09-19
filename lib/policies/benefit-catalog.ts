@@ -346,6 +346,8 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     ...(coverLabel?{coverLabel}:{}),
     ...(namesASpecificInjury(benefit.benefitName)
       ?{scaleGroup:benefit.policyId+"#"+(benefit.sourcePage??0)}:{}),
+    ...(coverage?.amount!=null&&coverage.amount>0&&normalizeCurrencyCode(coverage.currency,"SGD")===currency
+      ?{coverAmount:coverage.amount}:{}),
     ...(paysOn?{payingEvent:paysOn}:{}),
     status:amount!=null?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
     amountText:amount!=null?formatMoney(amount,currency):null,

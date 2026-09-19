@@ -45,6 +45,10 @@ export type ClaimItem = {
    * Two benefits in the same cover paying on the same event are alternatives,
    * not additions. */
   payingEvent?:string;
+  /** The sum insured of the cover this figure is paid out of, where it is
+   * known. A policy caps what all the injuries from one accident can come to
+   * at this figure, and that cap cannot be applied without it. */
+  coverAmount?:number;
   /** The schedule of injuries this row came from -- one table, on one page of
    * one document. A schedule pays for the injury that happened, so two rows
    * from the same table are not two payouts. */

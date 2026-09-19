@@ -15,7 +15,7 @@ import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,t
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
 import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,injuryNotReported,looksLikeCoverageLine,matchBenefits,namesASpecificInjury,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
-import { acceleratedBenefitWarnings,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
+import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
 import { applyImpliedScaleLimit,corroborateInferredRules,holdNonMonotonicBands,impliedScaleLimit } from "@/lib/insurance/scale-limit";
 import type { ClaimItem } from "@/types";
@@ -1124,6 +1124,54 @@ export function runSystemRegressions(){
     // A benefit that pays on none of those is left unresolved rather than
     // attached to whichever cover happens to be first.
     assert.equal(coverageForBenefit(scheme,booklet("Daily Hospital Cash Benefit","S$30 for each day of confinement.")),null);
+  });
+  test("The policy's own limits on adding injuries up are followed",()=>{
+    // Two sentences from the household's own wording: a schedule amount is not
+    // paid for a disability that also qualifies for Total and Permanent
+    // Disability, and everything paid for injuries from one accident is capped
+    // in aggregate at the sum insured.
+    const line=(title:string,amount:number,over:Partial<ClaimItem>={}):ClaimItem=>({title,status:"likely_applicable",
+      amountText:"S$"+amount.toLocaleString("en-SG"),estimateBasis:"confirmed",calculatedAmount:amount,currency:"SGD",
+      calculationKind:"sum_insured",aggregation:"additive",coverKey:"policy:GPA|group personal accident",
+      coverAmount:600_000,scaleGroup:"doc#10",reason:"",conditions:[],...over});
+    // Total and permanent disability pays instead of the schedule.
+    const withTpd=[
+      line("A · Total and Permanent Disablement due to Accident",900_000,{scaleGroup:undefined,payingEvent:"total_permanent_disability"}),
+      line("A · 1. Loss of use of at least one limb",600_000),
+    ];
+    const tpdNotes=applyPolicyAggregateCaps(withTpd);
+    assert.equal(withTpd[1].supersededBy,"A · Total and Permanent Disablement due to Accident");
+    assert.match(tpdNotes.join(" "),/cannot be claimed under both/);
+    assert.deepEqual(aggregatePotentialPayouts(withTpd),[{currency:"SGD",amount:900_000,amountText:"S$900,000",itemCount:1}]);
+    // Otherwise the schedule is capped at the sum insured, by reducing the
+    // figure that breaches it rather than by dropping a benefit.
+    const overCap=[
+      line("A · 4. Loss of arm",600_000,{scaleGroup:"doc#10"}),
+      line("A · 22. Loss of speech",300_000,{scaleGroup:"doc#10"}),
+    ];
+    // Two different schedules so the pays-once rule does not apply first.
+    overCap[1].scaleGroup="doc#11";
+    const capNotes=applyPolicyAggregateCaps(overCap);
+    assert.equal(overCap[0].calculatedAmount,600_000);
+    assert.equal(overCap[1].calculatedAmount,undefined,"the cap is already used up");
+    assert.ok(overCap[1].supersededBy,"and the row says so rather than vanishing");
+    assert.match(capNotes.join(" "),/capped at the sum insured/);
+    assert.deepEqual(aggregatePotentialPayouts(overCap),[{currency:"SGD",amount:600_000,amountText:"S$600,000",itemCount:1}]);
+    // A figure that only partly breaches the cap is reduced to what is left,
+    // and says what it was reduced from.
+    const partial=[
+      line("A · 4. Loss of arm",400_000,{scaleGroup:"doc#10"}),
+      line("A · 22. Loss of speech",300_000,{scaleGroup:"doc#11"}),
+    ];
+    applyPolicyAggregateCaps(partial);
+    assert.equal(partial[0].calculatedAmount,400_000);
+    assert.equal(partial[1].calculatedAmount,200_000);
+    assert.match(partial[1].conditions.join(" "),/Reduced from S\$300,000/);
+    assert.deepEqual(aggregatePotentialPayouts(partial),[{currency:"SGD",amount:600_000,amountText:"S$600,000",itemCount:2}]);
+    // Under the cap, nothing is touched.
+    const underCap=[line("A · 22. Loss of speech",300_000,{scaleGroup:"doc#11"})];
+    assert.deepEqual(applyPolicyAggregateCaps(underCap),[]);
+    assert.equal(underCap[0].calculatedAmount,300_000);
   });
   test("A scale that pays less for a worse injury was read wrong, and says so",()=>{
     // Straight off the live benefit table: "10% or more of the body -- 50%",

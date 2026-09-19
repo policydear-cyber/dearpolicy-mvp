@@ -117,6 +117,86 @@ export function resolveCoverOverlaps(items:ClaimItem[]):OverlapResolution{
   return {items,notes};
 }
 
+/** What the policy itself says about adding injuries up.
+ *
+ * Two sentences from the household's own wording, which nothing in the system
+ * was following:
+ *
+ *   "No compensation is payable for a specific disability where such specific
+ *    disability ... qualifies for Total and Permanent Disability Benefit under
+ *    this Policy."
+ *
+ *   "The total compensation payable ... for all Accidental Permanent
+ *    Dismemberment due to the same Accident shall not exceed in the aggregate
+ *    the Sum Insured under the Policy."
+ *
+ * So: where total and permanent disability pays, the schedule of injuries does
+ * not pay as well; and whatever the schedule does come to, it cannot exceed the
+ * cover it is a percentage of. The second is applied by reducing the smallest
+ * figure that breaches the cap rather than by dropping benefits, because the
+ * contract caps the total, not the list.
+ */
+export function applyPolicyAggregateCaps(items:ClaimItem[]):string[]{
+  const notes:string[]=[];
+  const counted=(item:ClaimItem)=>item.aggregation==="additive"&&!item.supersededBy
+    &&typeof item.calculatedAmount==="number"&&item.calculatedAmount>0;
+  const byCover=new Map<string,ClaimItem[]>();
+  for(const item of items){
+    if(!counted(item)||!item.coverKey)continue;
+    byCover.set(item.coverKey,[...(byCover.get(item.coverKey)??[]),item]);
+  }
+  for(const group of byCover.values()){
+    const disability=group.find(item=>item.payingEvent==="total_permanent_disability");
+    const schedule=group.filter(item=>item.scaleGroup);
+    if(disability&&schedule.length){
+      for(const item of schedule){
+        item.supersededBy=disability.title;
+        item.status="potentially_applicable";
+        item.amountLabel="What this benefit pays";
+        item.conditions=[...new Set([...item.conditions,
+          "Your policy does not pay a schedule-of-injuries amount for a disability that also qualifies for the Total and Permanent Disability benefit, "
+          +"and \u201c"+disability.title+"\u201d is paying instead."])];
+        delete (item as {calculatedAmount?:number}).calculatedAmount;
+      }
+      notes.push("The schedule of injuries is not paid alongside "+(disability.amountText??"the total and permanent disability benefit")
+        +" of total and permanent disability cover: the policy says the same disability cannot be claimed under both.");
+      continue;
+    }
+    const cap=schedule.find(item=>typeof item.coverAmount==="number")?.coverAmount;
+    if(cap==null||!schedule.length)continue;
+    const total=schedule.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
+    if(total<=cap)continue;
+    const ordered=[...schedule].sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0));
+    let running=0;
+    for(const item of ordered){
+      const headroom=Math.max(0,cap-running);
+      const amount=item.calculatedAmount??0;
+      if(headroom<=0){
+        item.supersededBy=ordered[0].title;
+        item.status="potentially_applicable";
+        item.amountLabel="What this benefit pays";
+        item.conditions=[...new Set([...item.conditions,
+          "Everything the policy pays for injuries from one accident is already accounted for: it caps that total at the sum insured."])];
+        delete (item as {calculatedAmount?:number}).calculatedAmount;
+        continue;
+      }
+      if(amount>headroom){
+        item.calculatedAmount=headroom;
+        item.amountText=formatMoney(headroom,item.currency??"SGD");
+        item.conditions=[...new Set([...item.conditions,
+          "Reduced from "+formatMoney(amount,item.currency??"SGD")+": your policy caps everything it pays for injuries from one accident at the sum insured of "
+          +formatMoney(cap,item.currency??"SGD")+"."])];
+        running=cap;
+        continue;
+      }
+      running+=amount;
+    }
+    notes.push("Everything your policy pays for injuries from one accident is capped at the sum insured, "
+      +formatMoney(cap,ordered[0].currency??"SGD")+", so the total is held there rather than added beyond it.");
+  }
+  return notes;
+}
+
 /** Two critical-illness plans under one scheme, both responding.
  *
  * An early-stage plan and a main plan are separate covers, so the arithmetic
