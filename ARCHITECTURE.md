@@ -79,6 +79,21 @@ A condition the facts satisfy returns `clear` and is dropped entirely rather
 than shown. That is deliberate: an answer carrying every condition a policy
 states is an answer nobody finishes reading.
 
+`scripts/cover-conditions-stress.ts` is the adversarial half. The benefit side
+of this system can only ever be too generous; the conditions side can be too
+mean, and a figure wrongly withheld from someone about to claim is the worse
+failure, because they do not claim and nothing ever tells them they should
+have. So it checks properties rather than scenarios, over fuzzed hostile
+input: an exclusion never changes a figure, nothing ever increases one or goes
+negative, the same conditions applied twice give the same answer, the order
+they were stored in does not change a payout, one cover's waiting period never
+silences another's benefit, an untestable condition never rules a benefit out,
+and a quote that is not on the page never becomes a condition at all. It found
+three defects on its first run: a model returning NaN turned a death benefit
+into "S$NaN", the aggregate cap under-applied on one pass and then compounded
+on the next, and a household with hundreds of benefits spent seven seconds
+composing caveats that four lines of would survive.
+
 `scripts/claim-answer-eval.ts` asserts the end result — which benefits respond,
 which do not, which are blocked by a condition and what is said about the rest,
 and what the total is — for sixteen real household scenarios, with no model in

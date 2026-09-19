@@ -99,6 +99,33 @@ const CAUSE_WORDS:Record<ExcludedCause,string>={
   other:"a cause the policy names",
 };
 
+/** A number a policy could actually have printed, or nothing.
+ *
+ * Extraction is a model reading a page, and a model can return a period of
+ * NaN days or a cap of minus five hundred dollars as easily as it can return
+ * ninety. Neither is a condition; both would otherwise reach the arithmetic,
+ * and a cap of NaN turns a million-dollar death benefit into "S$NaN" on the
+ * card of someone who has just been bereaved. Anything that is not a finite,
+ * non-negative number is treated as a condition with no figure attached --
+ * which is stated, never applied. */
+function usable(value:number|null|undefined){
+  return typeof value==="number"&&Number.isFinite(value)&&value>=0?value:null;
+}
+/** A CEILING a policy could have printed. Zero is not one.
+ *
+ * A cap of nothing is not a cap, it is an extraction that went wrong, and
+ * acting on it would silently reduce a real benefit to nothing. Withholding
+ * money someone is owed is the worse of the two possible errors here, so a
+ * ceiling has to be a positive figure before it is allowed to bite. */
+function usableCeiling(value:number|null|undefined){
+  const amount=usable(value);
+  return amount!=null&&amount>0?amount:null;
+}
+/** The same, for a period: a policy states whole days. */
+function usableDays(value:number|null|undefined){
+  const days=usable(value);
+  return days==null?null:Math.round(days);
+}
 function isoDate(value:unknown){
   return typeof value==="string"&&/^\d{4}-\d{2}-\d{2}/.test(value)?value.slice(0,10):null;
 }
@@ -196,9 +223,11 @@ function money(amount:number,currency?:string){
 }
 
 /** Test one condition against the facts and one figure. */
-export function evaluateCondition(condition:CoverCondition,args:{item:ClaimItem;facts:SubjectFacts;
+export function evaluateCondition(raw:CoverCondition,args:{item:ClaimItem;facts:SubjectFacts;
   coverStart?:string|null;today:string}):ConditionOutcome{
   const {item,facts,coverStart,today}=args;
+  // Nothing downstream sees a figure the policy could not have printed.
+  const condition:CoverCondition={...raw,days:usableDays(raw.days),amount:usable(raw.amount)};
   const quoteTail=condition.quote?" The policy says: “"+condition.quote.trim().slice(0,160)+"”":"";
   switch(condition.kind){
     case "waiting_period":{
@@ -214,7 +243,9 @@ export function evaluateCondition(condition:CoverCondition,args:{item:ClaimItem;
       const start=coverStart?isoDate(coverStart):null;
       const when=claimDate(facts,"diagnosis");
       if(!start||!when||condition.days==null)
-        return {kind:"caveat",weight:3,text:"this cover has a "+condition.days+"-day waiting period from the date it started, and DearPolicy does not hold both dates to check it."+quoteTail};
+        return {kind:"caveat",weight:3,text:condition.days==null
+          ?"this cover has a waiting period after it starts, and the policy wording DearPolicy read does not state how long."+quoteTail
+          :"this cover has a "+condition.days+"-day waiting period from the date it started, and DearPolicy does not hold both dates to check it."+quoteTail};
       const elapsed=daysBetween(start,when);
       if(elapsed==null)return {kind:"clear"};
       if(elapsed>=condition.days)return {kind:"clear"};
@@ -261,7 +292,8 @@ export function evaluateCondition(condition:CoverCondition,args:{item:ClaimItem;
       }
       if(named===true)
         return {kind:"caveat",weight:5,text:"the policy does not pay for "+CAUSE_WORDS[condition.cause??"other"]
-          +" within "+(condition.days??0)+" days of the cover starting, and DearPolicy does not hold the date it started"};
+          +(condition.days==null?" for a period after the cover starts":" within "+condition.days+" days of the cover starting")
+          +", and DearPolicy does not hold the date it started"};
       return {kind:"clear"};
     }
     case "exclusion":{
@@ -278,9 +310,10 @@ export function evaluateCondition(condition:CoverCondition,args:{item:ClaimItem;
     }
     case "sub_limit":{
       const current=item.calculatedAmount;
-      if(current==null||condition.amount==null)return {kind:"clear"};
+      const stated=usableCeiling(condition.amount);
+      if(current==null||stated==null)return {kind:"clear"};
       const ceiling=condition.amountBasis==="sum_insured_fraction"&&item.coverAmount!=null
-        ?Math.min(condition.amount*item.coverAmount,item.coverAmount):condition.amount;
+        ?Math.min(stated*item.coverAmount,item.coverAmount):stated;
       if(current<=ceiling)return {kind:"clear"};
       return {kind:"reduce",to:ceiling,text:item.title+" was reduced from "+money(current,item.currency)
         +" to "+money(ceiling,item.currency)+", which is the most this benefit pays"};
@@ -325,19 +358,29 @@ export type ConditionsResult={qualifiers:string[];blocked:{title:string;reason:s
  * has room for a few and the ones that bite must be the ones shown. */
 export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   const today=args.today??new Date().toISOString().slice(0,10);
-  const caveats:{text:string;weight:number}[]=[];
+  // Collected as a map rather than a list. Two of a household's benefits under
+  // the same cover produce the same sentence, and a household with hundreds of
+  // benefits produced hundreds of thousands of them -- which then had to be
+  // de-duplicated against each other one by one. Seven seconds of a person's
+  // turn went into composing a paragraph that four lines of it would survive.
+  const caveats=new Map<string,number>();
+  const say=(text:string,weight:number)=>{
+    const line=text.replace(/\s+/g," ").trim();
+    if(!line)return;
+    caveats.set(line,Math.max(caveats.get(line)??0,weight));
+  };
   const blocked:{title:string;reason:string}[]=[];
   const items=args.items;
   for(const item of items){
     for(const condition of conditionsForItem(item,args.conditions)){
       const outcome=evaluateCondition(condition,{item,facts:args.facts,coverStart:args.coverStart,today});
       if(outcome.kind==="clear")continue;
-      if(outcome.kind==="caveat"){caveats.push({text:outcome.text,weight:outcome.weight});continue;}
+      if(outcome.kind==="caveat"){say(outcome.text,outcome.weight);continue;}
       if(outcome.kind==="reduce"){
         item.calculatedAmount=outcome.to;
         item.amountText=money(outcome.to,item.currency);
         item.conditions=[...new Set([...(item.conditions??[]),outcome.text])];
-        caveats.push({text:outcome.text,weight:7});
+        say(outcome.text,7);
         continue;
       }
       // Blocked. The figure stays on the card, because a person is owed the
@@ -353,25 +396,34 @@ export function applyCoverConditions(args:ApplyArgs):ConditionsResult{
   // An aggregate cap governs a cover, not a row, so it is applied to the
   // survivors together.
   for(const condition of args.conditions){
-    if(condition.kind!=="aggregate_cap"||condition.amount==null)continue;
+    if(condition.kind!=="aggregate_cap")continue;
+    const ceiling=usableCeiling(condition.amount);
+    if(ceiling==null)continue;
     const inCover=items.filter(item=>item.calculatedAmount!=null
       &&(!condition.productName||(item.coverLabel??"").toLowerCase().includes(condition.productName.toLowerCase())));
     const total=inCover.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
-    if(total<=condition.amount)continue;
-    // Reduce the largest figure, which is the one the cap is really about, and
-    // say what it was reduced from.
-    const largest=inCover.slice().sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0))[0];
-    if(!largest)continue;
-    const was=largest.calculatedAmount??0;
-    const now=Math.max(0,was-(total-condition.amount));
-    largest.calculatedAmount=now;
-    largest.amountText=money(now,largest.currency);
-    caveats.push({weight:8,text:(condition.productName??"this cover")+" pays no more than "+money(condition.amount)
-      +" in total, so "+largest.title+" is shown at "+money(now)+" rather than "+money(was)});
+    if(total<=ceiling)continue;
+    // Reduce from the largest figure down, and keep going until the total
+    // fits. Reducing only the largest left the answer still over the cap
+    // whenever one benefit could not absorb the whole excess -- and asking the
+    // same question a second time then reduced the next one, so the same
+    // policy and the same facts produced a smaller figure on the second ask.
+    let excess=total-ceiling;
+    for(const entry of inCover.slice().sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0))){
+      if(excess<=0)break;
+      const was=entry.calculatedAmount??0;
+      const now=Math.max(0,was-excess);
+      if(now===was)continue;
+      excess-=was-now;
+      entry.calculatedAmount=now;
+      entry.amountText=money(now,entry.currency);
+      say((condition.productName??"this cover")+" pays no more than "+money(ceiling)
+        +" in total, so "+entry.title+" is shown at "+money(now)+" rather than "+money(was),8);
+    }
   }
-  const qualifiers=caveats.sort((a,b)=>b.weight-a.weight)
-    .map(caveat=>caveat.text.replace(/\s+/g," ").trim())
-    .filter((text,index,all)=>all.indexOf(text)===index);
+  // Heaviest first, and bounded: an answer has room for a handful, and a list
+  // nobody reaches the end of is the same as no list at all.
+  const qualifiers=[...caveats.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([text])=>text);
   return {qualifiers,blocked};
 }
 
@@ -388,21 +440,22 @@ export function describeCondition(condition:CoverCondition){
     case "exclusion":
       return cover+"does not pay when the cause is "+CAUSE_WORDS[condition.cause??"other"]+carve;
     case "waiting_period":
-      return cover+"pays nothing in the first "+(condition.days??0)+" days of the cover"
+      return cover+"pays nothing in the first "+(usableDays(condition.days)??"(unstated number of)")+" days of the cover"
         +(condition.conditionNames.length?", for "+condition.conditionNames.slice(0,4).join(", "):"")+carve;
     case "survival_period":
-      return cover+"the insured must survive "+(condition.days??0)+" days from diagnosis"+carve;
+      return cover+"the insured must survive "+(usableDays(condition.days)??"(unstated number of)")+" days from diagnosis"+carve;
     case "time_bar_from_inception":
-      return cover+"does not pay for "+CAUSE_WORDS[condition.cause??"other"]+" in the first "+(condition.days??0)+" days of the cover"+carve;
+      return cover+"does not pay for "+CAUSE_WORDS[condition.cause??"other"]+" in the first "+(usableDays(condition.days)??"(unstated number of)")+" days of the cover"+carve;
     case "aggregate_cap":
-      return cover+"pays no more than "+(condition.amount!=null?money(condition.amount):"a stated maximum")+" in total";
+      return cover+"pays no more than "+(usable(condition.amount)!=null?money(usable(condition.amount)!):"a stated maximum")+" in total";
     case "sub_limit":
-      return cover+"this benefit is capped at "+(condition.amountBasis==="sum_insured_fraction"&&condition.amount!=null
-        ?Math.round(condition.amount*100)+"% of the sum insured":condition.amount!=null?money(condition.amount):"a stated maximum");
+      return cover+"this benefit is capped at "+(condition.amountBasis==="sum_insured_fraction"&&usable(condition.amount)!=null
+        ?Math.round(usable(condition.amount)!*100)+"% of the sum insured"
+        :usable(condition.amount)!=null?money(usable(condition.amount)!):"a stated maximum");
     case "terminates_on_full_payment":
       return cover+"paying the full sum insured ends the cover";
     case "notice_period":
-      return cover+"the insurer must be told within "+(condition.days??0)+" days";
+      return cover+"the insurer must be told within "+(usableDays(condition.days)??"(unstated number of)")+" days";
     case "age_limit":
       return cover+"cover ends at the age the policy states";
     case "payment_precondition":

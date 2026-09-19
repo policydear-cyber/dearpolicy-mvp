@@ -59,7 +59,7 @@ const ConditionExtractionSchema=z.object({
     quote:z.string().min(1).max(260),
   })).max(10),
 });
-function coerceConditions(raw:unknown){
+export function coerceConditions(raw:unknown){
   const source=(raw&&typeof raw==="object"&&!Array.isArray(raw)?raw:{}) as Record<string,unknown>;
   const list=Array.isArray(source.conditions)?source.conditions:source.conditions?[source.conditions]:[];
   return {conditions:list.map(entry=>{
@@ -99,22 +99,40 @@ export async function readPageConditions(page:{page_number:number;text:string},p
       user:JSON.stringify({page:page.page_number,text:page.text.slice(0,3600)}),
     });
   }catch{return [] as Omit<CoverCondition,"id"|"policyId">[];}
+  return conditionsFromExtraction({page,productName,raw:extraction});
+}
+
+/** Turns what a model returned into conditions this system will act on, or
+ * into nothing.
+ *
+ * Separate from the call that produced it so it can be tested against output
+ * no model should ever produce but eventually will. Everything here is a
+ * refusal: an unparseable entry, a quote that is not on the page, a period or
+ * a figure the policy did not print. A condition this system invented would
+ * be worse than one it missed, because it takes money off the answer of
+ * someone who is entitled to it. */
+export function conditionsFromExtraction(args:{page:{page_number:number;text:string};
+  productName:string|null;raw:unknown}){
+  const parsed=ConditionExtractionSchema.safeParse(coerceConditions(args.raw));
+  if(!parsed.success)return [] as Omit<CoverCondition,"id"|"policyId">[];
   const out:Omit<CoverCondition,"id"|"policyId">[]=[];
-  for(const found of extraction.conditions){
+  for(const found of parsed.data.conditions){
     // The quote must be present on this page, verbatim. Same rule as the
     // benefit pass, and for a stronger reason: this one can take money away.
-    if(!hasQuote(page.text,found.quote))continue;
+    if(!hasQuote(args.page.text,found.quote))continue;
+    const days=typeof found.days==="number"&&Number.isFinite(found.days)&&found.days>0?Math.round(found.days):null;
+    const amount=typeof found.amount==="number"&&Number.isFinite(found.amount)&&found.amount>=0?found.amount:null;
     out.push({
-      productName:found.productName?.trim()||productName,
+      productName:found.productName?.trim()||args.productName,
       kind:found.kind as CoverConditionKind,
       cause:(found.cause??null) as ExcludedCause|null,
       appliesToEvents:found.appliesToEvents as ClaimEventType[],
       conditionNames:found.conditionNames.filter(name=>name.trim().length>2),
-      days:found.days,amount:found.amount,amountBasis:found.amountBasis,scope:found.scope,
-      carveOut:found.carveOut,sourcePage:page.page_number,quote:found.quote,
+      days,amount,amountBasis:found.amountBasis,scope:found.scope,
+      carveOut:found.carveOut,sourcePage:args.page.page_number,quote:found.quote,
       // A condition that would silence a benefit without a period or a cause to
       // test is shown to a person before it is ever acted on.
-      needsReview:found.kind==="waiting_period"&&found.days==null,
+      needsReview:(found.kind==="waiting_period"||found.kind==="survival_period")&&days==null,
     });
   }
   return out;
