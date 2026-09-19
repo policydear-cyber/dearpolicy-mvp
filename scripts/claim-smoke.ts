@@ -7,6 +7,7 @@ import { runDeathEvidenceRegressions } from "./death-evidence-regressions";
 import { runSystemRegressions } from "./system-regressions";
 import { runClaimAnswerEval } from "./claim-answer-eval";
 import { runCoverConditionsStress } from "./cover-conditions-stress";
+import { runClaimArithmeticStress } from "./claim-arithmetic-stress";
 import { runClaimPackRegressions } from "./claim-pack-regressions";
 
 const baseCoverage=(overrides:Partial<OwnedCoverage>):OwnedCoverage=>({id:"x",policyId:"p",familyMemberId:"m",category:"Death",amount:null,currency:"SGD",productName:null,sourcePage:1,evidenceText:"test",insurer:"Singlife",policyName:"MINDEF & MHA Group Insurance",policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null,...overrides});
@@ -25,4 +26,5 @@ console.log("DearPolicy claim-rule smoke tests passed.");
 runSystemRegressions();
 runClaimAnswerEval();
 runCoverConditionsStress();
+runClaimArithmeticStress();
 runClaimRegressions().then(runDeathEvidenceRegressions).then(runClaimWorkflowRegressions).then(runClaimPackRegressions).catch(error => { console.error(error); process.exitCode=1; });

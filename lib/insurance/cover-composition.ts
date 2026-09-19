@@ -162,11 +162,21 @@ export function applyPolicyAggregateCaps(items:ClaimItem[]):string[]{
         +" of total and permanent disability cover: the policy says the same disability cannot be claimed under both.");
       continue;
     }
-    const cap=schedule.find(item=>typeof item.coverAmount==="number")?.coverAmount;
-    if(cap==null||!schedule.length)continue;
+    // The sum insured is a property of the COVER, so every row under it should
+    // state the same one. Where they disagree -- a row whose own sub-limit was
+    // read as the cover amount, say -- taking whichever happened to be first
+    // in the list made the household's total depend on the order its rows came
+    // out of the database. The largest is the cover's own figure, and it is
+    // the reading that cannot wrongly withhold money.
+    const stated=schedule.map(item=>item.coverAmount).filter((amount):amount is number=>
+      typeof amount==="number"&&Number.isFinite(amount)&&amount>0);
+    if(!stated.length||!schedule.length)continue;
+    const cap=Math.max(...stated);
     const total=schedule.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
     if(total<=cap)continue;
-    const ordered=[...schedule].sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0));
+    // Same figure, same order, every time: which row is truncated and which is
+    // superseded must not depend on how the rows arrived.
+    const ordered=[...schedule].sort((a,b)=>(b.calculatedAmount??0)-(a.calculatedAmount??0)||a.title.localeCompare(b.title));
     let running=0;
     for(const item of ordered){
       const headroom=Math.max(0,cap-running);
