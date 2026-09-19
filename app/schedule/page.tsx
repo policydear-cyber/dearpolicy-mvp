@@ -145,6 +145,31 @@ export default function SchedulePage(){
     await checkUnread();
   }
 
+  /** Reads only the conditions -- the exclusions, waiting periods and caps --
+   * leaving every benefit rule exactly as it is. A household whose rules were
+   * read before DearPolicy could read conditions needs this once, and it costs
+   * a fraction of a full re-read. */
+  async function readConditions(){
+    setStatus("");
+    let found=0;
+    for(let guard=0;guard<80;guard++){
+      setReading("the exclusions and waiting periods");
+      try{
+        const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
+          body:JSON.stringify({conditionsOnly:true})});
+        const payload=await response.json();
+        if(!response.ok||payload.error)throw new Error(payload.error||"That document could not be read.");
+        if(payload.stored==null&&payload.conditions==null)break;
+        found+=Number(payload.conditions??0);
+        setStatus(`Read ${payload.name} — ${payload.conditions} condition${payload.conditions===1?"":"s"} found. ${found} so far.`);
+        await load();
+      }catch(e){setStatus(e instanceof Error?e.message:"That document could not be read.");break;}
+    }
+    setReading("");
+    setStatus(found?`${found} condition${found===1?"":"s"} read. They are applied to every estimate from now on.`
+      :"No further conditions were found to read.");
+  }
+
   async function chooseMember(id:string){setMemberId(id);setOpenId("");await load(id);}
 
   function open(benefit:Benefit){
@@ -243,6 +268,13 @@ export default function SchedulePage(){
       <div><strong>{summary?.documents??0}</strong><span>document{summary?.documents===1?"":"s"} read</span></div>
       <div><strong>{summary?.conditions??0}</strong><span>condition{summary?.conditions===1?"":"s"} on what they pay</span></div>
     </section>
+
+    {!conditions.length&&!!benefits.length&&<div className="schedule-reread">
+      <span>DearPolicy has read what these covers <strong>pay</strong>. It has not yet read what they do <strong>not</strong> pay —
+        the exclusions, waiting periods and caps. Until it has, an estimate cannot account for them.</span>
+      <button type="button" className="link-button" disabled={!!reading} onClick={()=>void readConditions()}>
+        {reading?`Reading ${reading}…`:"Read the conditions"}</button>
+    </div>}
 
     {!!conditions.length&&<section className="section schedule-group">
       <div className="section-heading">
