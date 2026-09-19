@@ -521,6 +521,7 @@ async function main(){
       // needs. That is a different state from never having been read, and it is
       // the one these fallback tests are about.
       await db.query("UPDATE policies SET benefits_indexed_at=now() WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account]);
+      await db.query("UPDATE policies SET conditions_indexed_at=now() WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account]).catch(()=>{});
       await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)",[account,id,schedule]);
       await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,1,1,$5,$6::vector)",
         [uuid(700300),account,person.id,id,schedule,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
@@ -723,6 +724,25 @@ async function main(){
       assert.match(answer.claimItems[0].title,/Major Critical Illness/);
       assert.match(answer.claimItems[0].reason,/page 7/);
       assert.match(answer.summary,/S\$350,000/);
+    });
+    await test("A document whose conditions were never read has them read without being asked",async()=>{
+      const fixture=await seedReviewFixture(2);
+      // The state every household was in the day this shipped: rules on file,
+      // and nothing yet read about what those covers do NOT pay.
+      await db.query("UPDATE policies SET conditions_indexed_at=NULL WHERE account_id=$1",[account]);
+      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
+        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
+      const unreadBefore=Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account])).rows[0].n);
+      assert.ok(unreadBefore>0,"the fixture should start with conditions unread");
+      await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
+      const unreadAfter=Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account])).rows[0].n);
+      assert.ok(unreadAfter<unreadBefore,"asking a question should have read the conditions, with nothing pressed");
+      // And never again: a document is read once and marked.
+      const callsBefore=readingCalls+explanationCalls;
+      await send("And what about a heart attack?",people[0].id);
+      const readAgain=Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account])).rows[0].n);
+      assert.ok(readAgain<=unreadAfter,"a document already read must not be read again");
+      assert.ok(readingCalls+explanationCalls-callsBefore<20,"the second question must not pay the reading cost again");
     });
     await test("The same question gives the same answer every time",async()=>{
       const first=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;

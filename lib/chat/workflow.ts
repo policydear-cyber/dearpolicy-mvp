@@ -384,7 +384,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         try{
           const outstanding=await readWhateverIsStillUnread({accountId:request.accountId,
             policyIds:[...new Set(contracts.flatMap(contract=>[...contract.documents,...contract.references].map(d=>d.id)))],
-            deadline:Date.now()+120_000,
+            deadline:Date.now()+60_000,documentsPerTurn:2,
             report:stage=>void report({stage,completed:0,total:contracts.length})});
           documentsStillUnread=outstanding.unread;
         }catch{/* An answer is still better than no answer; what was not read is said below. */}

@@ -196,13 +196,15 @@ export async function loadCoverConditions(accountId:string,policyIds:string[]){
  * about to matter, rather than waiting behind a button on a settings screen
  * that nobody should ever have to find.
  *
- * It is bounded by a deadline rather than a count, because the person is
- * waiting: whatever is read within it is used, and whatever is not is
- * reported as unread rather than silently treated as empty. Each document is
- * read once and marked, so the cost falls to nothing by the second question.
+ * It is bounded, because the person is waiting and an answer that already has
+ * its rules is supposed to be effectively instant. Whatever is read within the
+ * bound is used; whatever is not is reported as still being read, never
+ * silently treated as empty, and is picked up by the next question. Each
+ * document is read once and marked, so a household converges in a turn or two
+ * and costs nothing after that.
  */
 export async function readWhateverIsStillUnread(args:{accountId:string;policyIds:string[];
-  deadline:number;report?:(stage:string)=>void}){
+  deadline:number;documentsPerTurn?:number;report?:(stage:string)=>void}){
   if(!args.policyIds.length)return {benefits:0,conditions:0,unread:0};
   await ensureConditionSchema().catch(()=>{});
   type Pending={id:string;name:string;product_name:string|null;needs_benefits:boolean;needs_conditions:boolean};
@@ -215,9 +217,11 @@ export async function readWhateverIsStillUnread(args:{accountId:string;policyIds
         AND (p.benefits_indexed_at IS NULL OR p.conditions_indexed_at IS NULL)
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
       ORDER BY p.created_at`,[args.accountId,args.policyIds]);
-  let benefits=0,conditions=0,unread=0;
+  let benefits=0,conditions=0,unread=0,read=0;
+  const limit=args.documentsPerTurn??2;
   for(const document of pending.rows){
-    if(Date.now()>=args.deadline){unread++;continue;}
+    if(read>=limit||Date.now()>=args.deadline){unread++;continue;}
+    read++;
     const { catalogueDocument,documentPages }=await import("./catalog-builder");
     const pages=await documentPages(args.accountId,document.id);
     if(!pages.length){unread++;continue;}
