@@ -10,7 +10,7 @@ import { answerFromLedger } from "@/lib/ledger/answer";
 import { ledgerFor,seedLedger } from "@/lib/ledger/store";
 import { pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
 import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTraits,loadBenefitCatalog,planClaimQuestions,questionTraits,scenarioFromCatalog,scheduleFallbackItems } from "@/lib/policies/benefit-catalog";
-import { loadCoverConditions } from "@/lib/policies/condition-catalog";
+import { loadCoverConditions,readWhateverIsStillUnread } from "@/lib/policies/condition-catalog";
 import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
@@ -372,6 +372,23 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
       catch{/* Missing premium history never blocks an evidence-backed answer. */}
       const currentness=new Map(contracts.map(contract=>[contract.id,contractCurrentness(contract,premiumEvidence,now)]));
       const hasWording=new Map(contracts.map(contract=>[contract.id,contract.references.length>0||contract.documents.some(d=>d.has_reference_sections===true)]));
+      // Anything these documents still owe -- benefit rules, or the conditions
+      // on what those rules pay -- is read here, before they are used to
+      // answer. The person uploads documents and asks questions; everything
+      // between those two things is this system's job, not a button on a
+      // screen they should never have to find. Bounded by a deadline, because
+      // they are waiting, and each document is read once and marked, so the
+      // second question costs nothing.
+      let documentsStillUnread=0;
+      if(contracts.length){
+        try{
+          const outstanding=await readWhateverIsStillUnread({accountId:request.accountId,
+            policyIds:[...new Set(contracts.flatMap(contract=>[...contract.documents,...contract.references].map(d=>d.id)))],
+            deadline:Date.now()+120_000,
+            report:stage=>void report({stage,completed:0,total:contracts.length})});
+          documentsStillUnread=outstanding.unread;
+        }catch{/* An answer is still better than no answer; what was not read is said below. */}
+      }
       const reviews:PolicyReview[]=contracts.map(contract=>({
         id:contract.id,ownerId:contract.ownerId,ownerName:contract.ownerName,policyName:contract.name,
         documentCount:new Set([...contract.documents,...contract.references].map(d=>d.id)).size,
@@ -1040,6 +1057,9 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
         if(answer.potentialPayoutTotals.length&&answer.reviewCoverage&&!answer.reviewCoverage.complete)
           payoutQualifiers.push("sections of the policy that were not read may contain a further benefit or an exclusion");
+        if(documentsStillUnread)
+          payoutQualifiers.push(documentsStillUnread+" of your documents "+(documentsStillUnread===1?"is":"are")
+            +" still being read, so an exclusion or a benefit in "+(documentsStillUnread===1?"it":"them")+" is not reflected here yet");
         // Conditions read from the policy come first: they are the specific
         // reasons this contract may pay less or nothing, and the generic ones
         // below are what a person can already guess.

@@ -187,3 +187,52 @@ export async function loadCoverConditions(accountId:string,policyIds:string[]){
     carveOut:row.carve_out,sourcePage:row.source_page,quote:row.quote,needsReview:row.needs_review,
   })) as CoverCondition[];
 }
+
+/** Reads whatever these documents still owe, before they are used to answer.
+ *
+ * A person uploads documents and asks questions. Anything between those two
+ * things is the product's problem, not theirs -- so a document that has not
+ * had its rules or its conditions read is read here, at the moment it is
+ * about to matter, rather than waiting behind a button on a settings screen
+ * that nobody should ever have to find.
+ *
+ * It is bounded by a deadline rather than a count, because the person is
+ * waiting: whatever is read within it is used, and whatever is not is
+ * reported as unread rather than silently treated as empty. Each document is
+ * read once and marked, so the cost falls to nothing by the second question.
+ */
+export async function readWhateverIsStillUnread(args:{accountId:string;policyIds:string[];
+  deadline:number;report?:(stage:string)=>void}){
+  if(!args.policyIds.length)return {benefits:0,conditions:0,unread:0};
+  await ensureConditionSchema().catch(()=>{});
+  type Pending={id:string;name:string;product_name:string|null;needs_benefits:boolean;needs_conditions:boolean};
+  const pending=await query<Pending>(
+    `SELECT p.id,coalesce(p.product_name,p.original_filename) AS name,p.product_name,
+            (p.benefits_indexed_at IS NULL) AS needs_benefits,
+            (p.conditions_indexed_at IS NULL) AS needs_conditions
+       FROM policies p
+      WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND p.processing_status='ready'
+        AND (p.benefits_indexed_at IS NULL OR p.conditions_indexed_at IS NULL)
+        AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
+      ORDER BY p.created_at`,[args.accountId,args.policyIds]);
+  let benefits=0,conditions=0,unread=0;
+  for(const document of pending.rows){
+    if(Date.now()>=args.deadline){unread++;continue;}
+    const { catalogueDocument,documentPages }=await import("./catalog-builder");
+    const pages=await documentPages(args.accountId,document.id);
+    if(!pages.length){unread++;continue;}
+    try{
+      if(document.needs_benefits){
+        args.report?.("Reading the benefit rules in "+document.name);
+        benefits+=await catalogueDocument({accountId:args.accountId,policyId:document.id,
+          productName:document.product_name,pages});
+      }
+      if(document.needs_conditions){
+        args.report?.("Reading the exclusions and waiting periods in "+document.name);
+        conditions+=await catalogueConditions({accountId:args.accountId,policyId:document.id,
+          productName:document.product_name,pages});
+      }
+    }catch{unread++;/* A document that cannot be read is reported, never assumed empty. */}
+  }
+  return {benefits,conditions,unread};
+}

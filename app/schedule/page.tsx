@@ -145,31 +145,6 @@ export default function SchedulePage(){
     await checkUnread();
   }
 
-  /** Reads only the conditions -- the exclusions, waiting periods and caps --
-   * leaving every benefit rule exactly as it is. A household whose rules were
-   * read before DearPolicy could read conditions needs this once, and it costs
-   * a fraction of a full re-read. */
-  async function readConditions(){
-    setStatus("");
-    let found=0;
-    for(let guard=0;guard<80;guard++){
-      setReading("the exclusions and waiting periods");
-      try{
-        const response=await fetch("/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
-          body:JSON.stringify({conditionsOnly:true})});
-        const payload=await response.json();
-        if(!response.ok||payload.error)throw new Error(payload.error||"That document could not be read.");
-        if(payload.stored==null&&payload.conditions==null)break;
-        found+=Number(payload.conditions??0);
-        setStatus(`Read ${payload.name} — ${payload.conditions} condition${payload.conditions===1?"":"s"} found. ${found} so far.`);
-        await load();
-      }catch(e){setStatus(e instanceof Error?e.message:"That document could not be read.");break;}
-    }
-    setReading("");
-    setStatus(found?`${found} condition${found===1?"":"s"} read. They are applied to every estimate from now on.`
-      :"No further conditions were found to read.");
-  }
-
   async function chooseMember(id:string){setMemberId(id);setOpenId("");await load(id);}
 
   function open(benefit:Benefit){
@@ -249,10 +224,10 @@ export default function SchedulePage(){
     {error&&<div className="alert error" role="alert"><strong>The benefit schedule could not be loaded.</strong><span>Something went wrong reaching your data.</span><small>Your documents are untouched. Please try refreshing in a moment — if this keeps happening, contact support.</small></div>}
 
     {!!unread.length&&<section className="unread-documents">
-      <div><strong>{unread.length} document{unread.length===1?"":"s"} {unread.length===1?"has":"have"} not been read yet</strong>
-        <span>{unread.slice(0,3).map(d=>d.name).join(" · ")}{unread.length>3?` and ${unread.length-3} more`:""}. Until {unread.length===1?"it is":"they are"} read, nothing in {unread.length===1?"it":"them"} is used to answer questions — which is why an answer can come back slow and incomplete.</span></div>
-      <button type="button" className="button primary" disabled={!!reading} onClick={()=>void readAll()}>
-        {reading?`Reading ${reading}…`:"Read them now"}</button>
+      <div><strong>{unread.length} document{unread.length===1?"":"s"} still to read</strong>
+        <span>{unread.slice(0,3).map(d=>d.name).join(" · ")}{unread.length>3?` and ${unread.length-3} more`:""}. DearPolicy reads {unread.length===1?"it":"them"} on the way in, and finishes whatever is left the next time you ask a question — the first answer after an upload can take a little longer because of it. Nothing here needs doing.</span></div>
+      <button type="button" className="link-button" disabled={!!reading} onClick={()=>void readAll()}>
+        {reading?`Reading ${reading}…`:"Read them now instead of waiting"}</button>
     </section>}
 
     {!unread.length&&!!everything.length&&<div className="schedule-reread">
@@ -268,13 +243,6 @@ export default function SchedulePage(){
       <div><strong>{summary?.documents??0}</strong><span>document{summary?.documents===1?"":"s"} read</span></div>
       <div><strong>{summary?.conditions??0}</strong><span>condition{summary?.conditions===1?"":"s"} on what they pay</span></div>
     </section>
-
-    {!conditions.length&&!!benefits.length&&<div className="schedule-reread">
-      <span>DearPolicy has read what these covers <strong>pay</strong>. It has not yet read what they do <strong>not</strong> pay —
-        the exclusions, waiting periods and caps. Until it has, an estimate cannot account for them.</span>
-      <button type="button" className="link-button" disabled={!!reading} onClick={()=>void readConditions()}>
-        {reading?`Reading ${reading}…`:"Read the conditions"}</button>
-    </div>}
 
     {!!conditions.length&&<section className="section schedule-group">
       <div className="section-heading">
@@ -315,7 +283,7 @@ export default function SchedulePage(){
     {status&&<div className="schedule-status" role="status">{status}</div>}
 
     {loading?<div className="empty-card">Loading the benefit schedule…</div>
-      :!benefits.length?<div className="empty-card">{unread.length?"Your documents have not been read yet. Press “Read them now” above — it takes a few minutes and only happens once.":<>No benefits have been read yet. Upload a policy document or benefit summary and DearPolicy will read it once, on the way in. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
+      :!benefits.length?<div className="empty-card">{unread.length?"Your documents are still being read. Ask your question in the chat — DearPolicy reads whatever it still needs before it answers.":<>No benefits have been read yet. Upload a policy document or benefit summary and DearPolicy will read it once, on the way in. <Link className="text-link" href="/policies">Upload documents →</Link></>}</div>
       :!visible.length?<div className="empty-card">Nothing matches that filter.</div>
       :groups.map(([product,rows])=>
         <section className="section schedule-group" key={product}>
