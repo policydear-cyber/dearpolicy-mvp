@@ -13,7 +13,7 @@ import type { ConversationState,PolicyBenefit,PolicySource,ScenarioClassificatio
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { benefitRows,benefitRowsFromText,columnBands,lineFrom,renderPageLayout,type TextItem } from "@/lib/documents/layout";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases } from "@/lib/policies/benefit-rows";
-import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,injuryNotReported,looksLikeCoverageLine,matchBenefits,namesASpecificInjury,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { assessCatalogBenefit,benefitTraits,coverageForBenefit,eventPredatesCover,eventTraits,injuryNotReported,looksLikeCoverageLine,matchBenefits,namesASpecificInjury,ruleFromQuote,ruledOutBenefits,validateCatalogFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { benefitTriggerEvents,coverKey,reportedClaimEvents,ruledOutByEvent } from "@/lib/insurance/claim-events";
 import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
@@ -695,6 +695,35 @@ export function runSystemRegressions(){
     assert.ok(matched.includes("Simple Fracture")&&matched.includes("Ambulance Fee"));
     assert.equal(matched.includes("Death Benefit"),false,"A broken ankle is not a death claim");
     assert.equal(matched.includes("Total and Permanent Disablement"),false,"and it is not a disability claim either");
+  });
+  test("A rule stated in a sentence is read from that sentence, and still has to prove itself",()=>{
+    // Three rows from the live benefit table had no amount at all, and all
+    // three state a complete rule in their own quoted sentence. The reader
+    // looks for a figure in a column; these are prose.
+    const row=(benefitName:string,quote:string):CatalogBenefit=>({id:benefitName,policyId:"booklet",productName:"Group Term Life",
+      benefitName,traits:["other"],formulaKind:"none",formulaValue:null,currency:"SGD",factKey:null,offsetDays:null,
+      maximumDays:null,sourcePage:8,quote,conditions:[],requirements:[],needsReview:false});
+    const tpd=ruleFromQuote(row("Total and Permanent Disability",
+      "Receive 150% of your coverage amount if Total and Permanent Disability is due to an accident."))!;
+    assert.equal(tpd.formulaKind,"sum_insured");
+    assert.equal(tpd.formulaValue,1.5,"a policy that says \u201ccoverage amount\u201d means its sum insured");
+    const cash=ruleFromQuote(row("Hospital Cash Benefit",
+      "S$30 per day Hospital Cash Benefit is payable from 11th to 40th day of the hospital stay."))!;
+    assert.equal(cash.formulaKind,"daily");
+    assert.equal(cash.formulaValue,30);
+    assert.equal(cash.offsetDays,10,"payable from the 11th day is payable after the first ten");
+    assert.equal(cash.maximumDays,30,"the 11th to the 40th day is thirty days");
+    const twelfth=ruleFromQuote(row("Disability Benefit","Disability Benefit One twelfth of Sum Insured"))!;
+    assert.equal(twelfth.formulaKind,"sum_insured");
+    assert.ok(Math.abs((twelfth.formulaValue as number)-1/12)<0.0005);
+    // And the sentence still has to prove it. Prose that names no figure, or
+    // names one the rule does not follow from, yields nothing.
+    assert.equal(ruleFromQuote(row("Escalation benefits",
+      "The Disability Benefit payable shall increase each year that the policy continues.")),null);
+    assert.equal(ruleFromQuote(row("Premium",
+      "The premium for this plan is S$30 per day of cover.")),null,"money paid is not money received");
+    assert.equal(ruleFromQuote({...row("Death Benefit","On death we pay 100% of the Sum Insured."),
+      formulaKind:"sum_insured",formulaValue:1}),null,"a rule already read is never overwritten");
   });
   test("A payout rule is only accepted when the quoted clause proves it",()=>{
     const ok=validateCatalogFormula({kind:"sum_insured",value:0.25,currency:"SGD",

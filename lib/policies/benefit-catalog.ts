@@ -390,6 +390,63 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
  * formula can enter the system. It is plain code with no model involved, so the
  * same clause always yields the same rule, and a clause that does not clearly
  * state a supported rule yields none rather than a guess. */
+/** What a policy calls the figure its percentages are percentages of. One
+ * document says "Sum Insured", another "your coverage amount", and a rule
+ * stated in the second wording was being refused for saying the same thing in
+ * different words. */
+const INSURED_AMOUNT="(?:sum\\s+(?:insured|assured)|coverage\\s+amount|sum\\s+covered|insured\\s+amount)";
+const WORD_FRACTIONS=[
+  {words:"one half",value:0.5},{words:"one third",value:1/3},{words:"two thirds",value:2/3},
+  {words:"one quarter",value:0.25},{words:"three quarters",value:0.75},{words:"one fifth",value:0.2},
+  {words:"one sixth",value:1/6},{words:"one eighth",value:0.125},{words:"one tenth",value:0.1},
+  {words:"one twelfth",value:1/12},{words:"one twenty[- ]fourth",value:1/24},
+];
+/** A rule the document states in a sentence rather than in a table cell.
+ *
+ * "Receive 150% of your coverage amount if Total and Permanent Disability is
+ * due to an accident." "S$30 per day Hospital Cash Benefit is payable from the
+ * 11th to the 40th day." Both state a complete rule, and both were stored with
+ * no rule at all, because the reader looks for a figure in a column and these
+ * are prose. So the quote is read for a rule directly -- and the proposal is
+ * then put through exactly the same validator as the model's own, which is
+ * what keeps this from becoming a second, looser way in.
+ */
+export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
+  if(benefit.formulaKind!=="none")return null;
+  const quote=benefit.quote??"";
+  const text=normalText(quote);
+  const propose=(input:Parameters<typeof validateCatalogFormula>[0])=>{
+    const read=validateCatalogFormula(input);
+    return read.formulaKind==="none"?null:read;
+  };
+  const percentage=text.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?"+INSURED_AMOUNT))?.[1];
+  if(percentage)return propose({kind:"sum_insured",value:Number(percentage)/100,currency:benefit.currency,
+    quote,factKey:null,offsetDays:null,maximumDays:null});
+  const worded=WORD_FRACTIONS.find(entry=>
+    new RegExp("\\b"+entry.words+"\\b\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?"+INSURED_AMOUNT).test(text));
+  if(worded)return propose({kind:"sum_insured",value:worded.value,currency:benefit.currency,
+    quote,factKey:null,offsetDays:null,maximumDays:null});
+  const perDay=quote.match(/(?:s\$|sgd|usd|us\$|\$)\s*([\d,]+(?:\.\d+)?)\s*(?:per day|daily|a day)/i)?.[1];
+  if(perDay&&/hospital|confine|ward|inpatient|in-patient|stay/i.test(quote))
+    return propose({kind:"daily",value:Number(perDay.replace(/,/g,"")),currency:benefit.currency,
+      quote,factKey:"hospitalNights",offsetDays:null,maximumDays:null});
+  return null;
+}
+/** Everything the stored rules can settle about themselves, without reading a
+ * document again: a certificate's cover line is not a benefit, a percentage
+ * scale is resolved against the limit the documents imply, a rule two
+ * documents state identically needs no confirming, a scale that runs the wrong
+ * way is held back, and a rule stated in a sentence is read from that
+ * sentence. */
+export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
+  return resolveStoredRules(benefits.filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)))
+    .map(benefit=>{
+      const read=ruleFromQuote(benefit);
+      return read?{...benefit,...read,conditions:[...new Set([...benefit.conditions,
+        "DearPolicy read this rule from the sentence quoted on page "+(benefit.sourcePage??1)
+        +" rather than from a table, and checked it against that sentence before using it."])]}:benefit;
+    });
+}
 export function validateCatalogFormula(input:{
   kind:string;value:number|null;currency:string|null;quote:string;
   factKey:string|null;offsetDays:number|null;maximumDays:number|null;coverageCurrency?:string|null;
@@ -403,8 +460,15 @@ export function validateCatalogFormula(input:{
   if(quoted&&quoted!==currency)return none;
   if(input.kind==="sum_insured"){
     if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(quote))return none;
-    const percentage=quote.match(/(\d+(?:\.\d+)?)\s*%\s*(?:of\s*)?(?:the\s+)?(?:relevant\s+|applicable\s+)?sum (?:insured|assured)/)?.[1];
-    const full=/\b(?:pay|pays|payable)\b[^.;]{0,100}\b(?:the |relevant |full |applicable )*sum (?:insured|assured)\b/.test(quote);
+    const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?"+INSURED_AMOUNT))?.[1];
+    const full=new RegExp("\\b(?:pay|pays|payable)\\b[^.;]{0,100}\\b(?:the |relevant |full |applicable |your )*"+INSURED_AMOUNT).test(quote);
+    // "One twelfth of Sum Insured" is a rule stated in words. It is as provable
+    // from the quote as "8.33%" would be, and refusing it left a disability
+    // benefit with no amount at all.
+    const worded=WORD_FRACTIONS.find(entry=>
+      new RegExp("\\b"+entry.words+"\\b\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?"+INSURED_AMOUNT).test(quote));
+    if(worded)return Math.abs(worded.value-value)<0.0005
+      ?{formulaKind:"sum_insured",formulaValue:worded.value,currency,factKey:null,offsetDays:null,maximumDays:null}:none;
     if(percentage?Number(percentage)/100!==value:!full||value!==1)return none;
     return {formulaKind:"sum_insured",formulaValue:value,currency,factKey:null,offsetDays:null,maximumDays:null};
   }
@@ -429,7 +493,16 @@ export function validateCatalogFormula(input:{
     const after=quote.match(/after (?:the )?(\d+)(?:th|st|nd|rd)? (?:day|days)/)?.[1];
     const from=quote.match(/(?:from|starting (?:on )?) (?:the )?(?:day )?(\d+)(?:th|st|nd|rd)?/)?.[1];
     const cap=quote.match(/(?:max(?:imum)?(?: of)?|up to|not exceed)\s*(\d+)\s*(?:continuous |consecutive |payable )?days/)?.[1];
+    // "payable from the 11th to the 40th day" states both ends of the scale at
+    // once: it starts after ten days and runs for thirty. Read as an open
+    // "from the 11th day", it had no limit and no figure could be given.
+    const range=quote.match(/\bfrom (?:the )?(\d+)(?:st|nd|rd|th)?(?: day)? (?:to|until|through|up to) (?:the )?(\d+)(?:st|nd|rd|th)?(?: day)?/);
     const offset=after?Number(after):from?Number(from)-1:null;
+    if(range){
+      const first=Number(range[1]),last=Number(range[2]);
+      if(last>=first&&first>=1)
+        return {formulaKind:"daily",formulaValue:value,currency,factKey:input.factKey,offsetDays:first-1,maximumDays:last-first+1};
+    }
     if(offset==null||cap==null)return none;
     return {formulaKind:"daily",formulaValue:value,currency,factKey:input.factKey,offsetDays:offset,maximumDays:Number(cap)};
   }
@@ -596,7 +669,7 @@ export async function loadBenefitCatalog(accountId:string,policyIds:string[]){
   const r=await query<BenefitRow>(
     "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation FROM policy_benefits WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) ORDER BY benefit_name",
     [accountId,policyIds]);
-  return resolveStoredRules(r.rows.map(toBenefit).filter(benefit=>!looksLikeCoverageLine(benefit.benefitName)));
+  return repairStoredRules(r.rows.map(toBenefit));
 }
 /** Rebuilds a document's rules, keeping every rule a person corrected.
  *
