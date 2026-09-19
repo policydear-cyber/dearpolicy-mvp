@@ -1004,7 +1004,7 @@ async function main(){
       assert.equal(data.unclaimed.some((doc:{id:string})=>doc.id===foreignOrphan),false);
       await db.query("DELETE FROM policies WHERE id=$1",[foreignOrphan]);
     });
-    await test("A document uploaded before DearPolicy could read schedules is offered as a button, not a command",async()=>{
+    await test("Reading a document by hand still works, for a deliberate re-read after the model changes",async()=>{
       const fixture=await seedReviewFixture(1);
       // What an install upgraded from an older version actually looks like.
       await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1",[account]);
@@ -1067,28 +1067,34 @@ async function main(){
       assert.equal(data.summary.needsYou+data.summary.unreadable+data.summary.usable,data.summary.total,
         "Every row is in exactly one of the three states the screen shows");
     });
-    await test("With nothing read yet, the chat says so at once instead of grinding through the PDFs",async()=>{
+    await test("With nothing read yet, the chat reads what it needs and answers — nothing to press",async()=>{
       await seedReviewFixture(12);
+      // What an install upgraded from an older version actually looks like,
+      // and what every household looked like the day conditions arrived.
       await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1",[account]);
-      const readsBefore=readingCalls;
-      const started=Date.now();
+      await db.query("UPDATE policies SET conditions_indexed_at=NULL WHERE account_id=$1",[account]).catch(()=>{});
+      const unreadBefore=(await db.query("SELECT id FROM policies WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account])).rows.length;
+      assert.ok(unreadBefore>0);
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
       const answer=data.answer as ChatAnswer;
-      assert.equal(readingCalls-readsBefore,0,"Reading twelve sections to produce a partial answer helps nobody");
-      assert.ok(Date.now()-started<4000,"It must come back immediately, not after minutes");
-      assert.match(answer.summary,/have not read your policy documents yet/);
-      assert.ok(answer.nextSteps.some(step=>/Benefits page/.test(step)&&/Read them now/.test(step)),
-        "It names the one button that fixes this: "+answer.nextSteps.join(" / "));
+      // The person uploaded documents and asked a question. Everything between
+      // those two things is this system's job: it reads what it needs, then
+      // answers. It does not hand the work back.
+      const unreadAfter=(await db.query("SELECT id FROM policies WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account])).rows.length;
+      assert.ok(unreadAfter<unreadBefore,"Asking the question should have read the documents it needed");
+      assert.doesNotMatch(answer.summary,/have not read your policy documents yet/,
+        "Telling someone their documents are unread is a confession, not an answer");
       const everything=[answer.summary,...answer.details,...answer.nextSteps].join(" ");
-      for(const leak of ["RAG_","policies:index","npm run","benefits_indexed_at"])
+      for(const leak of ["RAG_","policies:index","npm run","benefits_indexed_at","Read them now"])
         assert.equal(everything.includes(leak),false,"A person holding a policy document should never be shown: "+leak);
-      assert.equal(answer.claimItems.length,0,"It claims nothing it has not read");
-      // Once the documents are read, the same question is answered from them.
+      // Once its rules are on file, the same question is answered from them.
       const fixture=await db.query<{id:string}>("SELECT id FROM policies WHERE account_id=$1 AND document_role='policy_wording'",[account]);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.rows[0].id,"Review Fixture Critical Illness"]);
+      const started=Date.now();
       const after=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
       assert.match(after.summary,/S\$350,000/);
+      assert.ok(Date.now()-started<4000,"Nothing is re-read, so a second question is immediate");
     });
     await test("A what-if question is answered from the stored benefits, with figures and a question back",async()=>{
       const fixture=await seedReviewFixture(1);

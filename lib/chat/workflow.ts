@@ -607,36 +607,6 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
-        // Nothing read yet. Falling through to reading the PDFs now would take
-        // minutes and still come back partial, and the person would have no way
-        // to know why. Say it plainly instead, and point at the one button that
-        // fixes it for good.
-        if(!catalog.length&&(state.intent==="claim"||describesAScenario(asked))){
-          // Only for a household nothing has ever been read for. Once ANY
-          // document has been read, the reading fallback is the right answer
-          // for a question its rules do not cover.
-          const pending=await query<{waiting:number;anyRules:number}>(
-            `SELECT (SELECT count(*)::int FROM policies p
-                      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.benefits_indexed_at IS NULL
-                        AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)) AS waiting,
-                    (SELECT count(*)::int FROM policies p WHERE p.account_id=$1 AND p.benefits_indexed_at IS NOT NULL) AS "anyRules"`,
-            [request.accountId]).catch(()=>({rows:[{waiting:0,anyRules:1}]}));
-          const waiting=Number(pending.rows[0]?.waiting??0),alreadyRead=Number(pending.rows[0]?.anyRules??1);
-          if(waiting>0&&alreadyRead===0){
-            answer.mode="answer";
-            answer.summary="I have not read your policy documents yet, so I cannot answer this properly.";
-            answer.details.push(waiting+" document"+(waiting===1?"":"s")+" "+(waiting===1?"is":"are")+" uploaded and processed but "+(waiting===1?"its":"their")+" benefit rules have not been read. Until that is done I would have to read the PDFs while you wait, which takes minutes and still misses sections.");
-            answer.nextSteps.push("Open the Benefits page and press “Read them now”. It takes a few minutes and only happens once.");
-            answer.nextSteps.push("Then ask this question again — the answer will be immediate.");
-            answer.confidence=null;
-            answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
-            answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
-            if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
-            await check();
-            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
-            return {answer,retrieved:[]};
-          }
-        }
         // Carried into the reading path when the rules on file have nothing to
         // say: what was ruled out, and which documents never yielded a table.
         const catalogueNotes:string[]=[];
