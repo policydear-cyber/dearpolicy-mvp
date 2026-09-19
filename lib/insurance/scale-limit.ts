@@ -57,17 +57,22 @@ export function impliedScaleLimit(benefits:CatalogBenefit[]):ImpliedScale|null{
   if(!candidates.length)return null;
   const buckets=new Map<number,Candidate[]>();
   for(const candidate of candidates)buckets.set(candidate.limit,[...(buckets.get(candidate.limit)??[]),candidate]);
-  let best:{limit:number;rows:Candidate[]}|null=null;
-  for(const [limit,rows] of buckets){
-    const distinct=new Set(rows.map(row=>row.key)).size;
-    const bestDistinct=best?new Set(best.rows.map(row=>row.key)).size:0;
-    if(!best||distinct>bestDistinct||(distinct===bestDistinct&&limit>best.limit))best={limit,rows};
-  }
+  const ranked=[...buckets.entries()]
+    .map(([limit,rows])=>({limit,rows,support:new Set(rows.map(row=>row.key)).size}))
+    .sort((a,b)=>b.support-a.support||b.limit-a.limit);
+  const best=ranked[0];
   if(!best)return null;
-  const support=new Set(best.rows.map(row=>row.key)).size;
   // One coincidence is not a scale. Two independent rows agreeing is.
-  if(support<2)return null;
-  return {limit:best.limit,currency:best.rows[0].currency,support,pages:new Set(best.rows.map(row=>row.page))};
+  if(best.support<2)return null;
+  // Two limits supported equally well is not weak evidence for the better one;
+  // it is the documents contradicting each other, and there is no reading of
+  // them that settles it. Taking the higher one made a fractured wrist worth
+  // eight times what the household's own schedule prints. So nothing is
+  // inferred, the rows stay waiting for a person, and the one question they
+  // are asked is the one their documents genuinely do not answer.
+  if(ranked.length>1&&ranked[1].support===best.support)return null;
+  return {limit:best.limit,currency:best.rows[0].currency,support:best.support,
+    pages:new Set(best.rows.map(row=>row.page))};
 }
 
 /** Two documents, read independently, saying the same thing.
