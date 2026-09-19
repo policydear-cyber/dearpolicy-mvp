@@ -790,10 +790,27 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
   }
   return {items,citations};
 }
+/** A personal accident plan pays for accidents.
+ *
+ * That is the plan's whole name, and in the wording it is stated once, in a
+ * section heading the row parser never kept: "D. Injury due to Accident". So a
+ * row reading "4. Loss of arm -- 100% of the Sum Insured" carried no such
+ * condition, and an amputation caused by illness rather than by an accident
+ * was answered with the full accident sum insured. The cover a row is paid out
+ * of says what the row's own line does not. */
+export function conditionsFromTheCover(contract:PolicyContract,benefits:CatalogBenefit[]):CatalogBenefit[]{
+  return benefits.map(benefit=>{
+    if((benefit.requires??[]).includes("accident"))return benefit;
+    const coverage=coverageForBenefit(contract,benefit);
+    const paysOnAccidentsOnly=/accident/i.test(coverage?.category??"")
+      ||/accident/i.test(canonicalProduct(coverage?.productName??coverage?.policyName??""));
+    return paysOnAccidentsOnly?{...benefit,requires:[...(benefit.requires??[]),"accident" as ScenarioTrait]}:benefit;
+  });
+}
 export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];traits:ScenarioTrait[];events?:ClaimEventType[]}){
   const events=args.events??reportedClaimEvents({},args.traits);
   const documentIds=new Set([...args.contract.documents,...args.contract.references].map(d=>d.id));
-  const mine=preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId)));
+  const mine=conditionsFromTheCover(args.contract,preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId))));
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];const needs:ScenarioNeed[]=[];
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";
@@ -891,7 +908,7 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
   const events=args.events??reportedClaimEvents(args.facts,args.traits);
   const predatesCover=eventPredatesCover(args.contract,args.facts);
   const documentIds=new Set([...args.contract.documents,...args.contract.references].map(d=>d.id));
-  const mine=preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId)));
+  const mine=conditionsFromTheCover(args.contract,preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId))));
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";

@@ -74,6 +74,8 @@ const catalog:CatalogBenefit[]=[
   benefit("Accidental Death Benefit","Group Personal Accident",
     "Accidental Death: 100% of the Sum Insured.",["death","accident"],
     {formulaKind:"sum_insured",formulaValue:1},["death","accident"]),
+  benefit("18. Loss of any toe other than great toe","Group Personal Accident",
+    "3% of the Sum Insured.",["bodily_injury"],{formulaKind:"sum_insured",formulaValue:0.03}),
   benefit("Simple Fracture","Group Personal Accident",
     "Simple fracture of the wrist: S$1,250.",["bodily_injury","accident"],{formulaKind:"fixed",formulaValue:1_250},["accident"]),
   // One page of a dismemberment schedule: three lines that all describe a
@@ -207,6 +209,17 @@ const cases:Case[]=[
     // no figure into the total.
     notCounted:["Simple Fracture","14. Loss of or Permanent Total Loss of use of any other finger (a) Right hand"],
     total:"S$180,000",
+  },
+  {
+    question:"my toe was amputated because of diabetes",
+    facts:{eventType:fact("illness"),diagnosis:fact("diabetic complications"),injuries:fact("amputation of the left toe")},
+    // A personal accident plan pays for accidents. That is stated once, in a
+    // section heading the row parser never kept, so every line of the schedule
+    // looked like it would pay for an amputation however it was caused.
+    pays:{},
+    never:["18. Loss of any toe other than great toe","Simple Fracture","Death Benefit","Death","Death due to Accident",
+      "11. Loss of or Permanent Total Loss of use of (a) Right Thumb"],
+    total:null,
   },
   {
     question:"i was warded for dengue (nights not known yet)",
