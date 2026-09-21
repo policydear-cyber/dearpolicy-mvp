@@ -71,6 +71,10 @@ export type ClaimAssessmentItem = {
   /** The cover this figure is paid out of, as the certificate names it. */
   coverLabel?: string;
   ruleEvidence?: ClaimEvidence;
+  /** Result of the server-side fail-closed monetary eligibility gate. */
+  monetaryDecision?:
+    | { status: "allowed" }
+    | { status: "blocked"; reasonCode: string; message: string };
 };
 
 export type ClaimDecisionPacket = {
