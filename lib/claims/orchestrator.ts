@@ -4,6 +4,7 @@ import { extractClaimFacts, factsToLabels } from "./facts";
 import { assessClaim, claimNextSteps, nextClaimQuestion, relevantOwnedProducts } from "./rules";
 import { createClaimSession, getClaimSession, saveClaimSession } from "./session";
 import { evidenceForAssessment, ownedCoverageForItem } from "./evidence";
+import { enforceMonetarySafety } from "./monetary-gate";
 import { loadDeathEvidence } from "./death-evidence";
 import { formatMoney } from "@/lib/format/currency";
 import type { ChatAnswer, ChatCitation } from "@/types";
@@ -119,7 +120,8 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   const deathEvidence=facts.eventType === "death" ? await loadDeathEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[]};
   const deathRules=deathEvidence.rules;
   const question=nextClaimQuestion(facts,coverages,deathRules);
-  const deathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps) : null;
+  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps) : null;
+  const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages) : null;
   const newDeath=facts.eventType === "death" && session.event_type !== "death";
   if(question){
     const names=relevantCoverageNames(coverages,relevantProducts);
@@ -149,7 +151,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
     return answer;
   }
 
-  const assessments=deathAssessments??assessClaim(facts,coverages);
+  const assessments=deathAssessments??enforceMonetarySafety(assessClaim(facts,coverages),facts,coverages);
   const citations=await assessmentCitations(args.accountId,args.familyMemberId,assessments,coverages);
   const nextSteps=claimNextSteps(facts,assessments);
   if(!currentness.verified)nextSteps.push("Upload the latest renewal notice or premium receipt if available so DearPolicy can verify current policy status separately from coverage ownership.");
