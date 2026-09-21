@@ -366,14 +366,14 @@ async function main(){
       const messages=await db.query<{family_member_id:string}>("SELECT family_member_id FROM chat_messages WHERE account_id=$1 AND conversation_id=$2",[account,prompt.conversationId]);
       assert.ok(messages.rows.length>=4);assert.equal(messages.rows.every(m=>m.family_member_id===people[5].id),true);
     });
-    await test("A homicide is classified broadly and both evidence-supported death amounts remain visible",async()=>{
+    await test("A homicide keeps verified death cover visible and withholds inferred accidental death cover",async()=>{
       const result=await send("Desmond was murdered in Thailand");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;
-      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\$1,600,000/);
-      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
+      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\\$1,000,000/);
+      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
       assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText==="S$1,000,000"),answer.claimItems.map(i=>i.title).join(" | "));
-      assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText==="S$600,000"),answer.claimItems.map(i=>i.title).join(" | "));
+      assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText===null&&item.status==="needs_document"),answer.claimItems.map(i=>i.title).join(" | "));
       assert.ok(answer.scenarioClassifications?.some(item=>item.traits.includes("violent")&&item.traits.includes("external")));
       assert.equal(new Set(answer.details).size,answer.details.length);
       const saved=(await getConversation(account,answer.conversationId!))!.state,state=saved.subjects[people[0].id];
