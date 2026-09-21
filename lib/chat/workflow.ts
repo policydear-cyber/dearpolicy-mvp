@@ -2,6 +2,7 @@ import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
+import { enforceChatMonetarySafety } from "@/lib/claims/monetary-gate";
 import { analysisSources,loadPolicyInventory,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
 import { contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { contractReviewCoverage,emptyReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
@@ -509,6 +510,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
               if(whatIf&&looked.question)answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:"It is what turns the rule above into an actual amount."}];
               await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
               warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems);
           answer.potentialPayoutTotals=settleOverlaps(answer);
               const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
               const count=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
@@ -579,6 +581,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           answer.mode="claim_assessment";
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems);
           answer.potentialPayoutTotals=settleOverlaps(answer);
           const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
           answer.summary=answer.claimItems.length
@@ -797,6 +800,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           answer.mode="claim_assessment";
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems);
           answer.potentialPayoutTotals=settleOverlaps(answer);
           // Put the claim on record so the pack can be printed and the Claims
           // page shows it, and say what to do next — the last thing a person
@@ -1022,6 +1026,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const eventLead=claimEventLead(context.people,state);
         await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
         warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems);
           answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
