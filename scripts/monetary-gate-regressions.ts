@@ -3,6 +3,7 @@ import { enforceChatMonetarySafety, enforceMonetarySafety, evaluateChatMonetaryE
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimFacts } from "@/lib/claims/types";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
+import type { ClaimItem } from "@/types";
 
 const coverage: OwnedCoverage = {
   id: "coverage-1",
