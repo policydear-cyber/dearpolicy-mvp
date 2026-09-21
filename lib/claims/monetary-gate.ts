@@ -1,5 +1,6 @@
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
+import type { ClaimItem } from "@/types";
 import type { ClaimAssessmentItem, ClaimFacts } from "./types";
 
 export type MonetaryBlockReason =
