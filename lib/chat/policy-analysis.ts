@@ -392,6 +392,15 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
   if(wrongEvent)conditions.push("This benefit "+wrongEvent+".");
   const confirmedAmount=coverage?.amount!=null?formatMoney(coverage.amount,coverage.currency):null;
   const canShowCalculation=!!calculation&&!review&&!notMet&&!wrongEvent&&args.contract.confirmed;
+  const personalEvidence=coverage?.documentRole==="personal_schedule"||coverage?.documentRole==="certificate";
+  const formulaEvidence=args.benefit.formula.evidence
+    ?args.sources.find(source=>source.id===args.benefit.formula.evidence?.sourceId)
+    :null;
+  const requirementsResolved=checks.every(check=>check.result==="met");
+  const boundedDaily=args.benefit.formula.kind!=="daily"||args.benefit.formula.maximumDays!=null;
+  const usesVerifiedPersonalAmount=args.benefit.formula.kind!=="sum_insured"||personalEvidence;
+  const confirmedCalculation=canShowCalculation&&requirementsResolved&&boundedDaily&&usesVerifiedPersonalAmount
+    &&!!formulaEvidence&&hasRuleLanguage;
   const item:ClaimItem={
     title:args.contract.ownerName+" · "+args.benefit.title,
     contractId:args.contract.id,
@@ -405,7 +414,8 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
     amountText:canShowCalculation?formatMoney(calculation.amount,calculation.currency):wrongEvent?null:ownershipOnly?confirmedAmount:null,
     amountLabel:canShowCalculation?(args.benefit.formula.kind==="expense_cap"?"Potential reimbursement":"Potential payout"):
       ownershipOnly&&confirmedAmount?"Confirmed cover amount — payout rule not yet verified":undefined,
-    ...(canShowCalculation?{calculatedAmount:calculation.amount,currency:calculation.currency,
+    ...(canShowCalculation?{estimateBasis:confirmedCalculation?"confirmed" as const:"indicative" as const,
+      calculatedAmount:calculation.amount,currency:calculation.currency,
       calculationKind:args.benefit.formula.kind as Exclude<PolicyFormula["kind"],"none">,
       aggregation:args.benefit.formula.kind==="expense_cap"?"reimbursement" as const:"additive" as const,
       calculationId:createHash("sha256").update(JSON.stringify([args.contract.id,args.benefit.coverageId,args.benefit.formula.kind,args.benefit.formula.value,
