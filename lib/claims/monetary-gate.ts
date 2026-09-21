@@ -64,7 +64,7 @@ export function evaluateMonetaryEligibility(args: {
   const coverage = item.coverageId
     ? coverages.find((candidate) => candidate.id === item.coverageId)
     : null;
-  if (!coverage || coverage.familyMemberId !== coverages[0]?.familyMemberId) {
+  if (!coverage) {
     return {
       status: "blocked",
       reasonCode: "UNRESOLVED_COVERAGE_MAPPING",
