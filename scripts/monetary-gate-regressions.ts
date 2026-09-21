@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { enforceMonetarySafety, evaluateMonetaryEligibility } from "@/lib/claims/monetary-gate";
+import { enforceChatMonetarySafety, enforceMonetarySafety, evaluateChatMonetaryEligibility, evaluateMonetaryEligibility } from "@/lib/claims/monetary-gate";
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimFacts } from "@/lib/claims/types";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import type { ClaimItem } from "@/types";
 
 const coverage: OwnedCoverage = {
   id: "coverage-1",
@@ -127,6 +128,48 @@ export function runMonetaryGateRegressions() {
     ).length,
     1,
   );
+
+  const liveSupported: ClaimItem = {
+    title: "Avery · Hospital cash",
+    status: "likely_applicable",
+    amountText: "S$300",
+    amountLabel: "Potential payout",
+    estimateBasis: "confirmed",
+    calculatedAmount: 300,
+    currency: "SGD",
+    calculationKind: "daily",
+    aggregation: "additive",
+    calculationId: "verified-daily-rule",
+    contractId: "contract-1",
+    coverKey: "contract-1:hospital-cash",
+    reason: "S$100 per day for three payable days.",
+    conditions: [],
+  };
+  assert.deepEqual(evaluateChatMonetaryEligibility(liveSupported), { status: "allowed" });
+  assert.equal(enforceChatMonetarySafety([liveSupported])[0].amountText, "S$300");
+
+  const [blockedLiveFact] = enforceChatMonetarySafety([{
+    ...liveSupported,
+    conditions: ["Still needed: the completed length of the hospital stay"],
+  }]);
+  assert.equal(blockedLiveFact.amountText, null);
+  assert.equal(blockedLiveFact.calculatedAmount, undefined);
+  assert.equal(blockedLiveFact.status, "needs_document");
+
+  const [blockedLiveEstimate] = enforceChatMonetarySafety([{
+    ...liveSupported,
+    estimateBasis: "estimated",
+    conditions: ["The day limit was not found in the quoted row."],
+  }]);
+  assert.equal(blockedLiveEstimate.amountText, null);
+  assert.equal(blockedLiveEstimate.calculatedAmount, undefined);
+
+  const [blockedLiveMapping] = enforceChatMonetarySafety([{
+    ...liveSupported,
+    contractId: undefined,
+  }]);
+  assert.equal(blockedLiveMapping.amountText, null);
+  assert.equal(blockedLiveMapping.status, "needs_document");
 
   console.log("DearPolicy monetary eligibility gate regressions passed.");
 }
