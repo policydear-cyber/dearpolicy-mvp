@@ -402,7 +402,7 @@ async function main(){
       const result=await send("Charmaine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;assert.equal(answer.resolvedFamilyMemberId,people[1].id);
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText?.includes("350,000")));
+      assert.ok(answer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
       assert.equal(answer.policyReview?.length,10);
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.family_member_id,people[1].id);
       assert.equal(row?.state.subjects[people[1].id].hospitalBill.state,"pending");
@@ -414,7 +414,7 @@ async function main(){
       const prior=history.rows[0].last_answer;
       const reply=await send("still not sure how many nights she needs to be warded for",people[1].id,history.rows[0].id,prior.conversationRevision);
       assert.equal(reply.response.status,200,JSON.stringify(reply.data));ongoingAnswer=reply.data.answer;
-      assert.equal(ongoingAnswer.questions.length,0);assert.ok(ongoingAnswer.claimItems.some(item=>item.amountText?.includes("350,000")));
+      assert.equal(ongoingAnswer.questions.length,0);assert.ok(ongoingAnswer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
       const next=await send("i still don't know how many nights",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
       assert.equal(next.response.status,200,JSON.stringify(next.data));ongoingAnswer=next.data.answer;assert.equal(ongoingAnswer.questions.length,0);
       const state=(await getConversation(account,ongoingAnswer.conversationId!))!.state;
@@ -424,7 +424,7 @@ async function main(){
     await test("A completed stay updates memory and permits the independent daily calculation",async()=>{
       const result=await send("She was discharged after twelve nights.",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText==="S$60.00"));
+      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText===null&&item.status==="needs_document"));
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.state.subjects[people[1].id].hospitalNights.value,12);
     });
     await test("Automatic context retains a named reported condition when model facts are empty",async()=>{
