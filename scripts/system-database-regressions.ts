@@ -380,11 +380,11 @@ async function main(){
       assert.equal(state.death.value,true);assert.equal(state.causeOfDeath.value,"murdered");assert.equal(state.eventLocation.value,"Thailand");
       assert.equal(state.accidentalDeath,undefined);assert.ok(saved.scenarios?.[people[0].id]?.length);
     });
-    await test("A travel delay is assessed from its own clause and reported duration",async()=>{
+    await test("An unreviewed extracted travel rule is withheld until confirmed",async()=>{
       const result=await send("Desmond's flight was delayed for eight hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Flight delay")&&item.amountText==="S$300.00"&&/applicable/.test(item.status)),JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(answer.potentialPayoutTotals?.[0]?.amount,300);
+      assert.ok(answer.claimItems.some(item=>item.title.includes("Flight delay")&&item.amountText===null&&item.status==="needs_document"),JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.equal(answer.potentialPayoutTotals?.length,0);
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
       const result=await send("Desmond's flight was delayed for three hours.");
@@ -392,11 +392,11 @@ async function main(){
       const item=answer.claimItems.find(value=>value.title.includes("Flight delay"));assert.equal(item?.status,"not_applicable");assert.equal(item?.amountText,null);
       assert.equal(answer.potentialPayoutTotals?.length,0);
     });
-    await test("A motor repair estimate is calculated but excluded from freely additive lump-sum totals",async()=>{
+    await test("An unreviewed motor reimbursement is withheld until confirmed",async()=>{
       const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));assert.equal(item?.amountText,"S$4,000");
-      assert.equal(item?.amountLabel,"Potential reimbursement");assert.equal(answer.potentialPayoutTotals?.length,0);
+      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));assert.equal(item?.amountText,null);assert.equal(item?.status,"needs_document");
+      assert.equal(item?.amountLabel,undefined);assert.equal(answer.potentialPayoutTotals?.length,0);
     });
     await test("The active API resolves Charmaine before loading personal policies",async()=>{
       const result=await send("Charmaine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
