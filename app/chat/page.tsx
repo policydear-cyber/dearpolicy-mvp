@@ -239,6 +239,28 @@ function ChatContent(){
             <div className="claim-result-head"><strong>{item.title}</strong><span>{statusCopy[item.status]}</span></div>{item.amountText?<div className="claim-amount"><small>{item.amountLabel??"Potential amount"}</small><strong>{item.amountText}</strong><em className={`estimate-basis ${item.estimateBasis??"estimated"}`}>{item.estimateBasis==="confirmed"?"From your own schedule and the policy wording · estimated, subject to the insurer's assessment":item.estimateBasis==="indicative"?"Indicative — DearPolicy read this rate from a table heading. Confirm it on the Benefits page.":"Estimated, subject to the insurer's assessment"}</em></div>:null}<p>{item.reason}</p>
             {item.conditions.length?<details className="claim-conditions"><summary>{item.conditions.length===1?"1 condition":item.conditions.length+" conditions"}</summary><ul>{item.conditions.map((c,j)=><li key={j}>{c}</li>)}</ul></details>:null}
           </div>)}</div>:null}
+          {message.answer?.composition?<div className="claim-composition">
+            <div className="composition-totals"><small>Potential policy-based estimate · subject to the insurer's assessment · not a guarantee of payment</small>
+              <div>{message.answer.composition.totalsByCurrency.length?message.answer.composition.totalsByCurrency.map(t=><strong key={t.currency}>{t.amountText}</strong>):<strong>No amount calculated yet</strong>}</div>
+              <p>{message.answer.composition.disclaimer}</p>
+            </div>
+            {message.answer.composition.policies.map(policy=><div className="composition-policy" key={policy.policyId}>
+              <div className="composition-policy-head"><strong>{policy.policyLabel}</strong>{policy.subtotalsByCurrency.length?<span>{policy.subtotalsByCurrency.map(s=>s.amountText).join(" + ")}</span>:null}</div>
+              {policy.benefits.map(b=><div className={"composition-benefit "+b.status} key={b.calculationId}>
+                <div className="composition-benefit-head"><span>{b.benefitCategory}</span><strong>{b.status==="included"?b.payableAmountText:"—"}</strong><em>{b.status==="included"?"Included in total":b.status==="needs_document"?"Needs a document":b.status==="needs_review"?"Needs review":b.status==="excluded"?"Excluded":"Blocked"}</em></div>
+                {b.status!=="included"&&b.blockedReasons.length?<p className="composition-blocked-reason">{b.blockedReasons.join(" ")}</p>:null}
+                {b.deductionReferences.length||b.capReferences.some(c=>c.applied)?<details className="composition-why"><summary>Why this amount?</summary>
+                  {b.rawAmount!==b.payableAmount?<p>Raw calculated amount before deductions: {b.rawAmount.toLocaleString()} {b.currency}</p>:null}
+                  {b.deductionReferences.map((d,i)=><p key={i}>−{d.amountText} · {d.reason.replaceAll("_"," ")}</p>)}
+                  {b.capReferences.filter(c=>c.applied).map((c,i)=><p key={i}>Capped by {c.label} ({c.scope}): {c.amountDeductedText} deducted, cap {c.amountText}</p>)}
+                </details>:null}
+                {b.evidenceReferences.length?<div className="composition-evidence">{b.evidenceReferences.map((e,i)=><span key={i}>{e.label??"Policy wording"} · page {e.pageStart}{e.pageEnd!==e.pageStart?"–"+e.pageEnd:""}</span>)}</div>:null}
+              </div>)}
+            </div>)}
+            {message.answer.composition.alternativeGroups.length?<div className="composition-alternatives"><strong>Alternative benefits · policy pays only one</strong>{message.answer.composition.alternativeGroups.map(g=><ul key={g.compositionGroupId}>{g.benefits.map(b=><li key={b.calculationId}>{b.benefitCategory} — {b.payableAmountText||b.rawAmount.toLocaleString()+" "+b.currency}{b.calculationId===g.selectedBenefitCalculationId?" · selected (higher amount)":" · not selected"}</li>)}</ul>)}</div>:null}
+            {message.answer.composition.excludedBenefits.length?<details className="composition-excluded"><summary>Excluded or pending benefits · {message.answer.composition.excludedBenefits.length}</summary>{message.answer.composition.excludedBenefits.map(b=><div className="composition-excluded-item" key={b.calculationId}><strong>{b.benefitCategory}</strong><span>{b.status}</span>{b.blockedReasons.map((r,i)=><p key={i}>{r}</p>)}</div>)}</details>:null}
+            {message.answer.composition.outstandingQuestions.length?<div className="composition-outstanding"><strong>Still needed to finish this calculation</strong><ul>{message.answer.composition.outstandingQuestions.map((q,i)=><li key={i}>{q}</li>)}</ul></div>:null}
+          </div>:null}
           {message.answer?.claimSessionId&&message.answer.mode==="claim_assessment"&&message.answer.claimItems.length?<a className="claim-pack-link" href={`/api/claims/${message.answer.claimSessionId}/pack`}>Download the claim pack (PDF)</a>:null}
           {message.answer?.portfolioItems?.length?<div className="policy-table-scroll"><table className="chat-policy-table"><caption>Personal policy inventory</caption><thead><tr><th>Family member</th><th>Policy</th><th>Confirmed cover</th><th>Active status</th></tr></thead><tbody>{message.answer.portfolioItems.map(item=><tr key={item.id}><td>{item.ownerName}</td><td>{item.policyName}</td><td>{item.confirmed?item.coverages.map((c,i)=><div key={i}>{c.productName??c.category}{c.amount!=null?" · "+formatMoney(c.amount,c.currency):""}</div>):"Personal evidence needs review"}</td><td title={item.currentness?.detail}>{item.currentness?.label??"Not checked"}</td></tr>)}</tbody></table></div>:null}
           {message.answer?.details.map((detail,i)=><p key={i}>{detail}</p>)}

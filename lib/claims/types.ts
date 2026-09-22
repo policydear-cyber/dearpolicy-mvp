@@ -52,6 +52,13 @@ export type ClaimFacts = {
    * free text, since no document-review pipeline exists in this slice yet
    * to populate it. Empty by default. */
   causeDefinitionMatches: CauseDefinitionMatch[];
+  /** Explicit, user-reported amount already paid under a policy's own
+   * lifetime aggregate benefit maximum -- keyed by policyId. NEVER
+   * inferred or defaulted: the composition engine (lib/claims/
+   * composition/engine.ts) blocks a benefit closed rather than guess
+   * remaining lifetime capacity when wording establishes a lifetime cap
+   * and no entry exists here for that policy. */
+  priorPaidAmounts?: Record<string, { amount: number; currency: string; recordedAt: string }>;
   uncertainFacts: string[];
   factSources?: Record<string, { source: "user" | "system-derived"; text: string; recordedAt: string; timeZone?: string; anchorDate?: string }>;
 };
@@ -96,6 +103,13 @@ export type ClaimAssessmentItem = {
   /** The cover this figure is paid out of, as the certificate names it. */
   coverLabel?: string;
   ruleEvidence?: ClaimEvidence;
+  /** The calculator's own stable SHA-256 calculation identity (see
+   * lib/claims/calculators/death-benefit.ts's stableId()), copied through
+   * unchanged so the claim-composition engine (lib/claims/composition/
+   * engine.ts) can build on the calculator's own identity rather than
+   * recomputing a weaker one from this already-flattened item. Absent for
+   * any assessment item that isn't backed by one of those calculators. */
+  calculationId?: string;
   /** Result of the server-side fail-closed monetary eligibility gate. */
   monetaryDecision?:
     | { status: "allowed" }
@@ -112,6 +126,33 @@ export type ClaimDecisionPacket = {
   assessments: ClaimAssessmentItem[];
   nextSteps: string[];
   ready: boolean;
+  /** The deterministic claim-composition engine's result for this turn
+   * (lib/claims/composition/engine.ts's composeClaim()) -- present only
+   * when the event type has a wired composition path (death, currently).
+   * This, never a model, is what selected/capped/totalled `assessments`
+   * into a safe cross-policy total; see engine.ts's own doc comment. */
+  compositionResult?: ClaimCompositionResultLike | null;
+};
+
+/** Structural alias for lib/claims/composition/types.ts's
+ * `ClaimCompositionResult`, declared locally to avoid this file importing
+ * from ./composition (which itself imports from this file) -- see that
+ * module for the authoritative type and validateComposedBenefit(), the
+ * fail-closed runtime validator every persisted/round-tripped value here
+ * must be re-checked against before being trusted for anything but
+ * display. */
+export type ClaimCompositionResultLike = {
+  claimEventId: string;
+  familyMemberId: string;
+  engineVersion: string;
+  calculationId: string;
+  calculatedAt: string;
+  policies: unknown[];
+  alternativeGroups: unknown[];
+  totalsByCurrency: { currency: string; includedAmount: number }[];
+  excludedBenefits: unknown[];
+  outstandingQuestions: string[];
+  disclaimer: string;
 };
 
 export const EMPTY_CLAIM_FACTS: ClaimFacts = {
@@ -144,6 +185,7 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   causeOfDeathDocumentAvailable: null,
   causeOfDeathEvidenceReviewed: null,
   causeDefinitionMatches: [],
+  priorPaidAmounts: {},
   uncertainFacts: [],
   factSources: {},
 };

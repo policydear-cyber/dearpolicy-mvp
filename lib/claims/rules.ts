@@ -253,7 +253,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         continue;
       }
       items.push({ ...base, ruleEvidence: rule.citation, status: "potentially_applicable", amountText: amountText(calc.potentialAmount, calc.currency),
-        calculatedAmount: calc.potentialAmount, currency: calc.currency,
+        calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId,
         reason: `The personal certificate confirms ${amountText(coverage.amount, coverage.currency)} of cover. The matching death-benefit clause pays ${calc.formulaBasis}.`, conditions });
     }
   }

@@ -13,7 +13,13 @@ export type DeathFormula =
 /** An explicitly evidenced ceiling quoted in the same clause. */
 export type DeathCap = { amount: number; currency: string } | null;
 export type DeathRuleEvidence = { coverageId: string; benefit: "gtl-death" | "gpa-accidental-death"; quote: string; citation: ClaimEvidence; racingExclusion?: RacingExclusion; formula: DeathFormula; cap?: DeathCap };
-export type DeathEvidenceGap = { coverageId: string; reason: string; nextStep: string };
+/** `reasonCode` is a stable, structured identifier for why a coverage has no
+ * resolved rule -- used by downstream composition/UI logic that needs to
+ * distinguish "genuinely ambiguous evidence" from "no document uploaded yet"
+ * without parsing the human-readable `reason` string. Optional so any older
+ * caller that only reads `reason`/`nextStep` keeps working unchanged. */
+export type DeathEvidenceGapReasonCode = "GROUP_MISMATCH" | "AMBIGUOUS_EVIDENCE" | "DOCUMENT_FOUND_NO_CLAUSE" | "NO_MATCHING_DOCUMENT";
+export type DeathEvidenceGap = { coverageId: string; reason: string; nextStep: string; reasonCode?: DeathEvidenceGapReasonCode };
 export type DeathWordingPage = {
   policy_id: string; page_number: number; text: string; group_policy_number: string | null;
   insurer: string | null; product_name: string | null; original_filename: string;
@@ -139,41 +145,114 @@ export function findDeathRule(pages: Page[], product: string): { page: number; p
 }
 
 /** Rows are scoped to one account. Shared reference wording can explain each
- * member's independently confirmed cover of the same insurer and group. */
+ * member's independently confirmed cover of the same insurer and group.
+ *
+ * Evidence-document selection uses a deterministic, fail-closed precedence
+ * instead of taking whichever document happens to satisfy a loose OR
+ * condition first (the previous behaviour, and the source of a real
+ * production ambiguity: two policies that are both genuinely linked to the
+ * same family member, with byte-identical wording, could resolve to either
+ * one depending on row/Map iteration order). The precedence, from strongest
+ * to weakest:
+ *
+ *  1/2/3. The coverage's OWN policy document (exact policy ID). This schema
+ *     stores one physical document per `policies` row with no separate
+ *     "document version" or "contract id" distinct from the policy id
+ *     itself, so the requested tiers "exact policy ID + applicable
+ *     policy-document version" and "exact contract/group identifier within
+ *     the same policy" collapse into this single tier here: a coverage's
+ *     own policy row IS both its exact policy id and its only version.
+ *  4. Explicitly linked shared/master wording -- another policy document
+ *     that a `policy_members` row explicitly ties to this exact family
+ *     member (`linked_to_member`), with matching insurer and group.
+ *  5. Otherwise, unlinked shared reference material (a product summary,
+ *     benefit guide or similar with `personal_coverage_confirmed=false`)
+ *     that matches insurer and group but is not tied to this member by any
+ *     explicit record. Weaker than tier 4 because nothing ties it to this
+ *     specific person.
+ *
+ * At every tier, if MORE THAN ONE candidate document independently
+ * qualifies, that is treated as ambiguous and this coverage fails closed
+ * with an explicit reason code and no rule -- even when the documents carry
+ * identical wording. Selecting between two equally-qualified documents
+ * would only ever be justified by "the insurer/group/wording happens to
+ * match", which is exactly the reasoning this function must not use to pick
+ * evidence. A higher tier is tried first; only when a tier has zero
+ * qualifying documents does resolution fall through to the next tier, and a
+ * document that qualifies for a tier but whose text does not contain the
+ * benefit clause (`findDeathRule` returns null) does not count as
+ * "resolved" -- resolution properly falls through to the next tier. */
 export function resolveDeathEvidence(coverages: OwnedCoverage[], rows: DeathWordingPage[]) {
   const documents = new Map<string, DeathWordingPage[]>();
   for (const row of rows) documents.set(row.policy_id, [...(documents.get(row.policy_id) ?? []), row]);
+  const allDocuments = [...documents.values()];
   const rules: DeathRuleEvidence[] = [];
   const gaps: DeathEvidenceGap[] = [];
   for (const coverage of coverages) {
     const product = canonicalProduct(coverage.productName) || productFromCategory(coverage.category);
     if (!["group term life", "group personal accident"].includes(product)) continue;
     if (groupNumber(coverage.groupPolicyNumber) !== "G007500") {
-      gaps.push({ coverageId: coverage.id, reason: "I could not verify matching death-benefit wording for the group stated on this person's personal certificate.", nextStep: "Add the policy wording or benefit summary issued for this cover." });
+      gaps.push({ coverageId: coverage.id, reasonCode: "GROUP_MISMATCH", reason: "I could not verify matching death-benefit wording for the group stated on this person's personal certificate.", nextStep: "Add the policy wording or benefit summary issued for this cover." });
       continue;
     }
-    let matchedReference = false;
-    for (const pages of documents.values()) {
-      const first = pages[0];
-      const ownDocument = first.policy_id === coverage.policyId;
-      const sharedReference = first.personal_coverage_confirmed === false && REFERENCE_ROLES.has(first.document_role ?? "");
-      const insurer = canonicalDeathInsurer(coverage.insurer);
+    const insurer = canonicalDeathInsurer(coverage.insurer);
+    const wantedGroup = groupNumber(coverage.groupPolicyNumber);
+    const sameGroupAndInsurer = (pages: DeathWordingPage[]) => {
       const sameInsurer = insurer != null && insurer === documentInsurer(pages);
-      const sameGroup = documentGroup(pages) === groupNumber(coverage.groupPolicyNumber);
-      if (!(ownDocument || (sameGroup && sameInsurer && (sharedReference || first.linked_to_member)))) continue;
-      if (!ownDocument) matchedReference = true;
+      const sameGroup = documentGroup(pages) === wantedGroup;
+      return sameGroup && sameInsurer;
+    };
+
+    const ownDocument = allDocuments.filter((pages) => pages[0].policy_id === coverage.policyId);
+    const linkedDocuments = allDocuments.filter((pages) => pages[0].policy_id !== coverage.policyId && pages[0].linked_to_member === true && sameGroupAndInsurer(pages));
+    const referenceDocuments = allDocuments.filter((pages) => {
+      const first = pages[0];
+      return first.policy_id !== coverage.policyId && first.linked_to_member !== true
+        && first.personal_coverage_confirmed === false && REFERENCE_ROLES.has(first.document_role ?? "")
+        && sameGroupAndInsurer(pages);
+    });
+
+    // Tiers in strength order. A tier with 2+ qualifying documents is
+    // ambiguous and fails this coverage closed immediately -- it never
+    // falls through to a weaker tier, since that would silently prefer a
+    // weaker-evidenced document purely because the stronger tier happened
+    // to be unresolvable, which is its own form of picking by convenience.
+    const tiers: { name: string; documents: DeathWordingPage[][] }[] = [
+      { name: "own", documents: ownDocument },
+      { name: "linked", documents: linkedDocuments },
+      { name: "reference", documents: referenceDocuments },
+    ];
+
+    let resolved = false;
+    let anyDocumentSeen = false;
+    for (const tier of tiers) {
+      if (tier.documents.length === 0) continue;
+      anyDocumentSeen = true;
+      if (tier.documents.length > 1) {
+        gaps.push({
+          coverageId: coverage.id,
+          reasonCode: "AMBIGUOUS_EVIDENCE",
+          reason: `${tier.documents.length} equally valid policy documents match this cover's insurer and group at the same evidence tier ("${tier.name}"), so DearPolicy cannot deterministically pick one for the death-benefit wording. It never guesses based on insurer, group number or wording similarity alone.`,
+          nextStep: "Remove the duplicate/extra document, or explicitly confirm which document is this person's own policy wording.",
+        });
+        resolved = true; // consumed -- stop, do not fall through to a weaker tier
+        break;
+      }
+      const pages = tier.documents[0];
+      const first = pages[0];
       const found = findDeathRule(pages, product);
-      if (!found) continue;
+      if (!found) continue; // this tier's one candidate has no clause -- fall through
       rules.push({ coverageId: coverage.id, benefit: product === "group term life" ? "gtl-death" : "gpa-accidental-death", quote: found.quote, racingExclusion: found.racingExclusion,
         formula: found.formula, ...(found.cap ? { cap: found.cap } : {}),
         citation: { chunkId: `page:${first.policy_id}:${found.page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
           insurer: first.insurer ?? undefined, pageStart: found.page, pageEnd: found.pageEnd, documentRole: first.document_role,
           personalEvidence: false, evidenceLabel: "Death benefit wording" } });
+      resolved = true;
       break;
     }
-    if (!rules.some(r => r.coverageId === coverage.id)) gaps.push(matchedReference
-      ? { coverageId: coverage.id, reason: "A matching policy document is uploaded, but I could not verify its death-benefit clause.", nextStep: "Check that the uploaded benefit summary or wording is readable and includes the Death section." }
-      : { coverageId: coverage.id, reason: "I could not find uploaded death-benefit wording that matches this cover's insurer and group.", nextStep: "Add the matching policy wording or benefit summary if it is missing; keep documents that are already uploaded." });
+    if (!resolved) gaps.push(anyDocumentSeen
+      ? { coverageId: coverage.id, reasonCode: "DOCUMENT_FOUND_NO_CLAUSE", reason: "A matching policy document is uploaded, but I could not verify its death-benefit clause.", nextStep: "Check that the uploaded benefit summary or wording is readable and includes the Death section." }
+      : { coverageId: coverage.id, reasonCode: "NO_MATCHING_DOCUMENT", reason: "I could not find uploaded death-benefit wording that matches this cover's insurer and group.", nextStep: "Add the matching policy wording or benefit summary if it is missing; keep documents that are already uploaded." });
   }
   return { rules, gaps };
 }
@@ -188,7 +267,12 @@ export async function loadDeathEvidence(accountId: string, familyMemberId: strin
               OR (p.personal_coverage_confirmed=false AND p.document_role IN ('policy_wording','product_summary','benefit_guide','benefit_summary','rider')))
        ORDER BY p.document_authority DESC, p.created_at DESC, p.id, pp.page_number
        LIMIT 1000`, [accountId, familyMemberId]);
-  return resolveDeathEvidence(coverages, result.rows);
+  // `pages` is exposed alongside the resolved rules/gaps so the claim-
+  // composition engine (lib/claims/composition/engine.ts) can read
+  // composition-relationship and aggregate-cap wording from the EXACT same
+  // evidenced pages death-benefit resolution just used, rather than
+  // issuing a second, potentially inconsistent, unverified fetch.
+  return { ...resolveDeathEvidence(coverages, result.rows), pages: result.rows };
 }
 
 export async function loadDeathRuleEvidence(accountId: string, familyMemberId: string, coverages: OwnedCoverage[]) {

@@ -7,6 +7,10 @@ import { evidenceForAssessment, ownedCoverageForItem } from "./evidence";
 import { enforceMonetarySafety } from "./monetary-gate";
 import { loadDeathEvidence } from "./death-evidence";
 import { loadCauseDefinitionMatchesForFacts } from "./evidence/session-matches";
+import { composeClaim } from "./composition/engine";
+import { recordCompositionSnapshot } from "./composition/store";
+import { toClaimCompositionView } from "./composition/view";
+import type { ClaimCompositionResult } from "./composition/types";
 import { formatMoney } from "@/lib/format/currency";
 import type { ChatAnswer, ChatCitation } from "@/types";
 import type { ClaimAssessmentItem, ClaimDecisionPacket, ClaimFacts, ClaimQuestion } from "./types";
@@ -80,12 +84,19 @@ async function assessmentCitations(accountId:string,familyMemberId:string,assess
   return citations;
 }
 
-function deathSummary(assessments:ClaimAssessmentItem[],personName?:string,question?:ClaimQuestion|null,acknowledgeLoss=false) {
+function deathSummary(assessments:ClaimAssessmentItem[],personName?:string,question?:ClaimQuestion|null,acknowledgeLoss=false,composition?:ClaimCompositionResult|null) {
   const calculated=assessments.filter(a=>a.calculatedAmount!=null&&a.currency&&a.ruleEvidence&&["potentially_applicable","likely_applicable"].includes(a.status));
-  const currencies=[...new Set(calculated.map(a=>a.currency!))];
-  const totals=currencies.map(currency=>formatMoney(calculated.filter(a=>a.currency===currency).reduce((total,a)=>total+a.calculatedAmount!,0),currency));
-  let summary=calculated.length
-    ? `${personName??"This person"}'s ${calculated.length>1?"combined potential death benefits total":"potential death benefit is"} ${totals.join(" and ")}, based on confirmed personal cover and the matching uploaded wording. Policy conditions and the insurer's assessment still apply.`
+  // The deterministic claim-composition engine's (lib/claims/composition/engine.ts) own per-currency totals are the ONLY total ever shown once a
+  // composition result exists -- never a plain sum of each assessment's calculatedAmount, since that would double-count alternative benefits,
+  // ignore accelerated-benefit deductions, and ignore aggregate caps. The naive per-currency sum below is only a fallback for the rare case
+  // composition could not be computed at all (no wording pages loaded yet).
+  const includedBenefits=composition?composition.policies.flatMap(p=>p.benefits).filter(b=>b.status==="included"):[];
+  const totals=composition
+    ? composition.totalsByCurrency.map(t=>formatMoney(t.includedAmount,t.currency))
+    : (()=>{const currencies=[...new Set(calculated.map(a=>a.currency!))];return currencies.map(currency=>formatMoney(calculated.filter(a=>a.currency===currency).reduce((total,a)=>total+a.calculatedAmount!,0),currency));})();
+  const includedCount=composition?includedBenefits.length:calculated.length;
+  let summary=totals.length&&includedCount>0
+    ? `${personName??"This person"}'s ${includedCount>1?"combined potential death benefits total":"potential death benefit is"} ${totals.join(" and ")}, based on confirmed personal cover and the matching uploaded wording. Policy conditions and the insurer's assessment still apply.`
     : `I found ${personName?`${personName}'s`:"this person's"} confirmed personal cover. The wording or unresolved event fact shown below still needs checking before I can calculate a death benefit.`;
   if(assessments.length&&assessments.every(a=>a.status==="not_applicable"))summary="The reported death does not satisfy the checked death-benefit rules for the confirmed cover on file. See the reason for each policy below.";
   if(question)summary+=" I still need the answer below to check the remaining policy condition.";
@@ -124,17 +135,32 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
     return answer;
   }
 
-  const deathEvidence=facts.eventType === "death" ? await loadDeathEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[]};
+  const deathEvidence=facts.eventType === "death" ? await loadDeathEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[],pages:[]};
   const deathRules=deathEvidence.rules;
   const question=nextClaimQuestion(facts,coverages,deathRules);
   const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id) : null;
   const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages) : null;
+  // The ONLY place a death claim's benefits are selected, composed, capped
+  // and totalled -- see lib/claims/composition/engine.ts's own doc comment.
+  // Computed whenever there is something to compose, even while a fact-
+  // finding question is still pending, so the preview shown alongside that
+  // question already reflects alternative selection, accelerated
+  // deductions and caps rather than a naive per-item list. The snapshot is
+  // persisted (idempotently, keyed by the engine's own stable
+  // calculationId) on every turn it is computed, giving a full audit trail
+  // of how the calculated total evolved as facts and evidence were added.
+  const deathComposition:ClaimCompositionResult|null = facts.eventType==="death" && deathAssessments
+    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:deathAssessments,wordingPages:deathEvidence.pages,now:args.now})
+    : null;
+  if(deathComposition){
+    await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:deathComposition});
+  }
   const newDeath=facts.eventType === "death" && session.event_type !== "death";
   if(question){
     const names=relevantCoverageNames(coverages,relevantProducts);
     const policySummary=coverageListSummary(coverages,relevantProducts);
     const firstTurn=!session.event_type && !session.event_summary;
-    const summary=deathAssessments ? deathSummary(deathAssessments,args.personName,question,newDeath) : firstTurn
+    const summary=deathAssessments ? deathSummary(deathAssessments,args.personName,question,newDeath,deathComposition) : firstTurn
       ? `I found ${names.length?names.join(", "):"confirmed personal cover"} that may be relevant. Before I tell you what you can claim, I need to understand the event properly.`
       : "I have enough to narrow this down, but I still need one material fact before I calculate or rule on the next benefit.";
     const preview=deathAssessments??[];
@@ -148,11 +174,11 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
       }
     }
     const nextSteps=deathAssessments ? claimNextSteps(facts,preview) : [];
-    const missingFacts=[...new Set([missingLabel(question.id),...facts.uncertainFacts.map(missingLabel),...preview.filter(a=>a.status==="needs_document").map(a=>`Evidence for ${a.title}`)])];
+    const missingFacts=[...new Set([missingLabel(question.id),...facts.uncertainFacts.map(missingLabel),...preview.filter(a=>a.status==="needs_document").map(a=>`Evidence for ${a.title}`),...(deathComposition?.outstandingQuestions??[])])];
     const details=policySummary.length?[`Confirmed cover in scope: ${policySummary.join(" · ")}`]:[];
     if(deathAssessments)details.push(currentness.detail);
-    const answer:ChatAnswer={mode:"fact_finding",summary,details,claimItems:preview.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:deathAssessments?"These are potential benefits based on confirmed personal cover and uploaded wording. Remaining conditions and final approval stay with the insurer.":"DearPolicy asks only for facts that can change eligibility, payout or claim steps.",claimSessionId:session.id,questions:[question],knownFacts,missingFacts};
-    const decisionPacket:ClaimDecisionPacket|null=deathAssessments?{sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments:preview,nextSteps,ready:false}:null;
+    const answer:ChatAnswer={mode:"fact_finding",summary,details,claimItems:preview.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:deathAssessments?"These are potential benefits based on confirmed personal cover and uploaded wording. Remaining conditions and final approval stay with the insurer.":"DearPolicy asks only for facts that can change eligibility, payout or claim steps.",claimSessionId:session.id,questions:[question],knownFacts,missingFacts,composition:deathComposition?toClaimCompositionView(deathComposition):undefined};
+    const decisionPacket:ClaimDecisionPacket|null=deathAssessments?{sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments:preview,nextSteps,ready:false,compositionResult:deathComposition??null}:null;
     await saveClaimSession({accountId:args.accountId,familyMemberId:args.familyMemberId,id:session.id,status:"fact_finding",facts,pendingQuestion:question,eventSummary:eventSummary(facts),decisionPacket});
     await storeChat({accountId:args.accountId,familyMemberId:args.familyMemberId,sessionId:session.id,user:args.message,answer});
     return answer;
@@ -170,11 +196,11 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
       ? `I found ${likely} benefit${likely===1?"":"s"} that look applicable from the facts you gave me${possible?`, plus ${possible} that need a condition or document checked`:""}.`
       : `I found ${possible} benefit${possible===1?"":"s"} that may apply, but each still needs a policy condition or document checked.`;
   if (facts.eventType === "death") {
-    summary=deathSummary(assessments,args.personName,null,newDeath);
+    summary=deathSummary(assessments,args.personName,null,newDeath,deathComposition);
   }
-  const missingFacts = [...new Set([...facts.uncertainFacts.map(missingLabel),...assessments.filter(a => a.status === "needs_document").map(a => `Evidence for ${a.title}`)])];
-  const decisionPacket:ClaimDecisionPacket={sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments,nextSteps,ready:true};
-  const answer:ChatAnswer={mode:"claim_assessment",summary,details:[`Event checked: ${eventSummary(facts)}.`,currentness.detail],claimItems:assessments.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:"DearPolicy's claim calculations come from confirmed personal cover plus the uploaded policy rules. Final claim approval and admissibility remain with the insurer.",claimSessionId:session.id,questions:[],knownFacts,missingFacts};
+  const missingFacts = [...new Set([...facts.uncertainFacts.map(missingLabel),...assessments.filter(a => a.status === "needs_document").map(a => `Evidence for ${a.title}`),...(deathComposition?.outstandingQuestions??[])])];
+  const decisionPacket:ClaimDecisionPacket={sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments,nextSteps,ready:true,compositionResult:deathComposition??null};
+  const answer:ChatAnswer={mode:"claim_assessment",summary,details:[`Event checked: ${eventSummary(facts)}.`,currentness.detail],claimItems:assessments.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:"DearPolicy's claim calculations come from confirmed personal cover plus the uploaded policy rules. Final claim approval and admissibility remain with the insurer.",claimSessionId:session.id,questions:[],knownFacts,missingFacts,composition:deathComposition?toClaimCompositionView(deathComposition):undefined};
   await saveClaimSession({accountId:args.accountId,familyMemberId:args.familyMemberId,id:session.id,status:"complete",facts,pendingQuestion:null,eventSummary:eventSummary(facts),decisionPacket});
   await storeChat({accountId:args.accountId,familyMemberId:args.familyMemberId,sessionId:session.id,user:args.message,answer});
   return answer;

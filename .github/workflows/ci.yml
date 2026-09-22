@@ -43,5 +43,8 @@ jobs:
       - name: Claim-evidence pipeline regression suite (PGlite, no live DB needed)
         run: npm run claims:evidence-test
 
+      - name: Claim-composition engine regression suite (PGlite, no live DB needed)
+        run: npm run claims:composition-test
+
       - name: Build
         run: npm run build

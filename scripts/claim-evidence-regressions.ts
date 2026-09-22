@@ -38,6 +38,7 @@ import { ClaimEvidenceExtractionSchema } from "@/lib/claims/evidence/extraction-
 import type { ClaimEvidenceDocumentRow, ClaimEvidenceExtractedFields } from "@/lib/claims/evidence/types";
 import { calculateAccidentalDeath } from "@/lib/claims/calculators/accidental-death";
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
+import { resolveDeathEvidence, type DeathWordingPage } from "@/lib/claims/death-evidence";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -238,6 +239,113 @@ function runPureTests() {
       assert.notEqual(r1.calculationId, differentDoc.calculationId);
     }
   });
+
+  // --- Evidence-document resolution precedence (production fix for the
+  // ambiguity PR #9 exposed: resolveDeathEvidence() must never pick between
+  // two equally-qualified policy documents by insurer/group/wording alone).
+  {
+    const wordingPages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
+    const coverage = (overrides: Partial<{ id: string; policyId: string }> = {}) => ({
+      id: overrides.id ?? "coverage-1", policyId: overrides.policyId ?? "policy-own", familyMemberId: "member-1",
+      category: "Personal Accident", amount: 600_000, currency: "SGD", productName: "Group Personal Accident",
+      sourcePage: null, evidenceText: null, insurer: "Singlife", policyName: "Group Personal Accident",
+      policyNumber: null, groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: null, renewalOrExpiryDate: null,
+    });
+    const documentPages = (policyId: string, opts: { role?: string; personalConfirmed?: boolean; linked?: boolean; text?: typeof wordingPages } = {}): DeathWordingPage[] =>
+      (opts.text ?? wordingPages).map((p) => ({
+        policy_id: policyId, page_number: p.page_number, text: p.text, group_policy_number: "G007500",
+        insurer: "Singlife", product_name: "Group Personal Accident", original_filename: `${policyId}.pdf`,
+        document_role: opts.role ?? "certificate", personal_coverage_confirmed: opts.personalConfirmed ?? true, linked_to_member: opts.linked ?? false,
+      }));
+    const noClausePages = (policyId: string): DeathWordingPage[] => [{
+      policy_id: policyId, page_number: 1, text: "Table of contents. See the enclosed schedule for your Sum Insured.",
+      group_policy_number: "G007500", insurer: "Singlife", product_name: "Group Personal Accident", original_filename: `${policyId}.pdf`,
+      document_role: "certificate", personal_coverage_confirmed: true, linked_to_member: false,
+    }];
+
+    test("resolveDeathEvidence: a coverage's own policy document resolves directly (tier 1)", () => {
+      const rows = documentPages("policy-own");
+      const { rules, gaps } = resolveDeathEvidence([coverage()], rows);
+      assert.equal(gaps.length, 0);
+      assert.equal(rules.length, 1);
+      assert.equal(rules[0].citation.policyId, "policy-own");
+    });
+
+    test("resolveDeathEvidence: the own document is used even when it appears AFTER a matching linked document in row order (order-independence -- the exact production bug)", () => {
+      // The linked document is inserted first in the rows array, and it also
+      // carries byte-identical wording, but it must never be picked over the
+      // coverage's own policy document: iteration/row order must not matter.
+      const rows = [...documentPages("policy-linked", { role: "policy_wording", personalConfirmed: false, linked: true }), ...documentPages("policy-own")];
+      const { rules, gaps } = resolveDeathEvidence([coverage()], rows);
+      assert.equal(gaps.length, 0);
+      assert.equal(rules.length, 1);
+      assert.equal(rules[0].citation.policyId, "policy-own", "must resolve from the coverage's own document, not the linked one, regardless of row order");
+    });
+
+    test("resolveDeathEvidence: two genuinely linked policies with byte-identical wording fail closed as ambiguous (no own document present)", () => {
+      const rows = [
+        ...documentPages("policy-linked-1", { role: "policy_wording", personalConfirmed: false, linked: true }),
+        ...documentPages("policy-linked-2", { role: "policy_wording", personalConfirmed: false, linked: true }),
+      ];
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-none" })], rows);
+      assert.equal(rules.length, 0, "an ambiguous tier must never contribute a rule");
+      assert.equal(gaps.length, 1);
+      assert.equal(gaps[0].reasonCode, "AMBIGUOUS_EVIDENCE");
+    });
+
+    test("resolveDeathEvidence: a single explicitly-linked document (tier 4) resolves when there is no own document", () => {
+      const rows = documentPages("policy-linked-only", { role: "policy_wording", personalConfirmed: false, linked: true });
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-none" })], rows);
+      assert.equal(gaps.length, 0);
+      assert.equal(rules.length, 1);
+      assert.equal(rules[0].citation.policyId, "policy-linked-only");
+    });
+
+    test("resolveDeathEvidence: an unlinked shared-reference document (tier 5) resolves only when nothing stronger is available", () => {
+      const rows = documentPages("policy-reference-only", { role: "product_summary", personalConfirmed: false, linked: false });
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-none" })], rows);
+      assert.equal(gaps.length, 0);
+      assert.equal(rules.length, 1);
+      assert.equal(rules[0].citation.policyId, "policy-reference-only");
+    });
+
+    test("resolveDeathEvidence: two unlinked shared-reference documents also fail closed as ambiguous, even with identical wording", () => {
+      const rows = [
+        ...documentPages("policy-ref-1", { role: "product_summary", personalConfirmed: false, linked: false }),
+        ...documentPages("policy-ref-2", { role: "benefit_guide", personalConfirmed: false, linked: false }),
+      ];
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-none" })], rows);
+      assert.equal(rules.length, 0);
+      assert.equal(gaps.length, 1);
+      assert.equal(gaps[0].reasonCode, "AMBIGUOUS_EVIDENCE");
+    });
+
+    test("resolveDeathEvidence: a linked candidate (tier 4) is preferred over an unlinked reference candidate (tier 5), never mixed into one ambiguity", () => {
+      const rows = [
+        ...documentPages("policy-linked-pref", { role: "policy_wording", personalConfirmed: false, linked: true }),
+        ...documentPages("policy-ref-weaker", { role: "product_summary", personalConfirmed: false, linked: false }),
+      ];
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-none" })], rows);
+      assert.equal(gaps.length, 0);
+      assert.equal(rules.length, 1);
+      assert.equal(rules[0].citation.policyId, "policy-linked-pref");
+    });
+
+    test("resolveDeathEvidence: an own document with no matching clause falls through to a single linked candidate rather than blocking", () => {
+      const rows = [...noClausePages("policy-own-empty"), ...documentPages("policy-linked-fallback", { role: "policy_wording", personalConfirmed: false, linked: true })];
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-own-empty" })], rows);
+      assert.equal(gaps.length, 0);
+      assert.equal(rules.length, 1);
+      assert.equal(rules[0].citation.policyId, "policy-linked-fallback");
+    });
+
+    test("resolveDeathEvidence: no matching document at all produces a NO_MATCHING_DOCUMENT gap, not an amount", () => {
+      const { rules, gaps } = resolveDeathEvidence([coverage({ policyId: "policy-none" })], []);
+      assert.equal(rules.length, 0);
+      assert.equal(gaps.length, 1);
+      assert.equal(gaps[0].reasonCode, "NO_MATCHING_DOCUMENT");
+    });
+  }
 }
 
 // ---------------------------------------------------------------------

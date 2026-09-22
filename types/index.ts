@@ -98,6 +98,54 @@ export type PolicyCurrentness = {
   renewalOrExpiryDate:string|null;
 };
 export type ChatQuestion = { id:string;text:string;type:"yes_no"|"text"|"money"|"date"|"choice";options?:string[];why:string };
+
+/** UI-facing view of one calculated, composed benefit -- a serialisable
+ * projection of lib/claims/composition/types.ts's `ComposedBenefit`. Every
+ * amount here already reflects whatever caps/deductions/alternative
+ * selection the deterministic composition engine applied; nothing in this
+ * app re-derives or re-sums these figures on the client. */
+export type CompositionBenefitView = {
+  benefitCode:string;
+  benefitCategory:string;
+  calculationId:string;
+  currency:string;
+  rawAmount:number;
+  payableAmount:number;
+  payableAmountText:string;
+  compositionType:"independent_additive"|"alternative_highest"|"alternative_selected"|"accelerated_from_base"|"additional_to_base"|"shared_policy_cap"|"shared_event_cap"|"informational_only"|"unknown";
+  compositionGroupId:string|null;
+  status:"included"|"excluded"|"blocked"|"needs_document"|"needs_review";
+  blockedReasonCodes:string[];
+  /** Human-readable version of blockedReasonCodes, in the same order, for
+   * direct display without a client-side lookup table. */
+  blockedReasons:string[];
+  capReferences:{scope:string;amount:number;amountText:string;currency:string;applied:boolean;amountDeducted:number;amountDeductedText:string;label:string}[];
+  deductionReferences:{reason:string;amount:number;amountText:string}[];
+  evidenceReferences:{policyId:string;chunkId:string;pageStart:number;pageEnd:number;label?:string}[];
+};
+export type CompositionPolicyView = {
+  policyId:string;
+  policyLabel:string;
+  benefits:CompositionBenefitView[];
+  subtotalsByCurrency:{currency:string;amountText:string}[];
+};
+/** UI-facing view of one composeClaim() result
+ * (lib/claims/composition/engine.ts) -- the ONLY deterministic, code-
+ * computed cross-policy total DearPolicy shows. Never recomputed or
+ * re-summed in the client; every total here is copied verbatim from the
+ * engine's own output. */
+export type ClaimCompositionView = {
+  engineVersion:string;
+  calculationId:string;
+  calculatedAt:string;
+  policies:CompositionPolicyView[];
+  alternativeGroups:{compositionGroupId:string;benefits:CompositionBenefitView[];selectedBenefitCalculationId:string|null}[];
+  totalsByCurrency:{currency:string;amountText:string}[];
+  excludedBenefits:CompositionBenefitView[];
+  outstandingQuestions:string[];
+  disclaimer:string;
+};
+
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -125,4 +173,9 @@ export type ChatAnswer = {
   reviewCoverage?:AnswerReviewCoverage;
   policyReview?:{id:string;ownerId:string;ownerName:string;policyName:string;status:string;documentCount:number;coverage?:ReviewCoverage;currentness?:PolicyCurrentness}[];
   portfolioItems?:{id:string;ownerName:string;policyName:string;confirmed:boolean;currentness?:PolicyCurrentness;coverages:{category:string;amount:number|null;currency:string;productName:string|null}[]}[];
+
+  /** Deterministic, code-computed claim-composition result for this turn
+   * (never present unless lib/claims/composition/engine.ts actually ran).
+   * See ClaimCompositionView's own doc comment. */
+  composition?:ClaimCompositionView|null;
 };

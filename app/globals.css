@@ -486,6 +486,44 @@ table { font-variant-numeric: tabular-nums; }
 .claim-conditions { margin-top: 6px; }
 .claim-conditions summary { cursor: pointer; font-size: var(--fs-xs); color: var(--brand-ink); font-weight: 600; min-height: 24px; }
 .claim-conditions ul { margin: 6px 0 0; padding-left: 18px; }
+
+.claim-composition { display: grid; gap: 10px; margin: 12px 0; }
+.composition-totals { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--accent-tint); }
+.composition-totals > small { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--money); font-weight: 650; }
+.composition-totals > div { display: flex; gap: 12px; flex-wrap: wrap; }
+.composition-totals > div strong { font-size: var(--fs-2xl); font-weight: 650; letter-spacing: -.02em; color: var(--money); font-variant-numeric: tabular-nums; }
+.composition-totals p { font-size: var(--fs-xs) !important; color: var(--ink-2); margin: 4px 0 0 !important; line-height: 1.45; }
+.composition-policy { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; background: var(--surface); display: grid; gap: 8px; }
+.composition-policy-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.composition-policy-head strong { font-size: var(--fs-sm); }
+.composition-policy-head span { font-size: var(--fs-xs); color: var(--money); font-weight: 650; font-variant-numeric: tabular-nums; }
+.composition-benefit { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.composition-benefit:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+.composition-benefit-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.composition-benefit-head span { font-size: var(--fs-sm); }
+.composition-benefit-head strong { font-size: var(--fs-md); font-variant-numeric: tabular-nums; color: var(--money); }
+.composition-benefit-head em { font-style: normal; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; font-weight: 650; color: var(--muted); }
+.composition-benefit.included .composition-benefit-head em { color: var(--good-text); }
+.composition-benefit.blocked .composition-benefit-head em, .composition-benefit.needs_document .composition-benefit-head em, .composition-benefit.needs_review .composition-benefit-head em { color: var(--warn-text); }
+.composition-benefit.excluded .composition-benefit-head strong { color: var(--muted); }
+.composition-blocked-reason { font-size: var(--fs-sm); line-height: 1.5; margin: 4px 0; color: var(--ink-2); }
+.composition-why { margin-top: 6px; }
+.composition-why summary { cursor: pointer; font-size: var(--fs-xs); color: var(--brand-ink); font-weight: 600; min-height: 24px; }
+.composition-why p { font-size: var(--fs-sm); line-height: 1.5; margin: 4px 0; color: var(--ink-2); }
+.composition-evidence { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.composition-evidence span { font-size: var(--fs-xs); color: var(--muted); }
+.composition-alternatives, .composition-excluded, .composition-outstanding { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; background: var(--surface-2); }
+.composition-alternatives strong, .composition-outstanding strong { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; }
+.composition-alternatives ul { margin: 6px 0 0; padding-left: 18px; }
+.composition-alternatives li { font-size: var(--fs-sm); line-height: 1.5; margin: 3px 0; }
+.composition-excluded summary { cursor: pointer; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; font-weight: 650; color: var(--muted); min-height: 24px; }
+.composition-excluded-item { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--line); }
+.composition-excluded-item:first-of-type { border-top: none; padding-top: 0; margin-top: 4px; }
+.composition-excluded-item strong { font-size: var(--fs-sm); }
+.composition-excluded-item span { margin-left: 8px; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.composition-excluded-item p { font-size: var(--fs-sm); line-height: 1.5; margin: 4px 0; color: var(--ink-2); }
+.composition-outstanding ul { margin: 6px 0 0; padding-left: 18px; }
+.composition-outstanding li { font-size: var(--fs-sm); line-height: 1.5; margin: 3px 0; }
 .next-steps { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
 .next-steps strong { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .06em; }
 .next-steps ol { margin: 8px 0 0; padding-left: 18px; }
