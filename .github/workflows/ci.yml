@@ -58,5 +58,8 @@ jobs:
       - name: Travel-claims engine regression suite
         run: npm run claims:travel-test
 
+      - name: Cross-product claim-quality golden dataset
+        run: npm run eval:claim-quality
+
       - name: Build
         run: npm run build
