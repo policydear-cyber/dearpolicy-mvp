@@ -8,6 +8,7 @@ import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ChatCitation,ClaimItem,PotentialPayoutTotal } from "@/types";
 import { hasQuote,knownValue,normalText } from "./facts";
+import { calculateHospitalCash } from "@/lib/claims/calculators/hospital-cash";
 import type { PolicyAnalysis,PolicyBenefit,PolicyFormula,PolicyObservation,PolicyRequirement,PolicySource,ScenarioClassification,ScenarioTrait,SourceQuote,SubjectFacts } from "./types";
 
 /** Output volume is the whole cost of a reading call.
@@ -279,7 +280,18 @@ export function calculatePolicyFormula(args:{benefit:PolicyBenefit;contract:Poli
     if(knownValue(args.facts,"hospitalStayOngoing")===true)return null;
     const days=knownValue(args.facts,formula.factKey);
     if(typeof days!=="number"||days<0||!Number.isInteger(days))return null;
-    return {amount:Math.max(0,Math.min(formula.maximumDays,days-formula.offsetDays))*value,currency,basis:"Reported completed duration, less the quoted unpaid days, within the day limit"};
+    // Ownership and rule evidence for this benefit are verified by the
+    // caller (contract confirmation, formula evidence, requirement checks in
+    // assessmentFromBenefit); this call exists to share the same bounded,
+    // integer-minor-unit arithmetic as every other hospital-cash-shaped
+    // calculation, not to re-run those checks here.
+    const calc=calculateHospitalCash({
+      dailyRate:value,currency,hospitalStayOngoing:false,hospitalNights:days,
+      offsetDays:formula.offsetDays,maximumDays:formula.maximumDays,
+      ownership:{contractId:"verified-by-caller"},ruleEvidence:{label:"verified-by-caller"},ownershipEvidence:{label:"verified-by-caller"},
+    });
+    if(calc.status==="blocked")return null;
+    return {amount:calc.potentialAmount??0,currency,basis:"Reported completed duration, less the quoted unpaid days, within the day limit"};
   }
   return null;
 }

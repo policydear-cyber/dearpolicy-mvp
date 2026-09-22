@@ -13,6 +13,8 @@ import { runScaleLimitStress } from "./scale-limit-stress";
 import { runRealHouseholdReplay } from "./real-household-replay";
 import { runClaimPackRegressions } from "./claim-pack-regressions";
 import { runMonetaryGateRegressions } from "./monetary-gate-regressions";
+import { runHospitalCashCalculatorRegressions } from "./hospital-cash-calculator-regressions";
+import { runLedgerHospitalCashRegressions } from "./ledger-hospital-cash-regressions";
 
 const baseCoverage=(overrides:Partial<OwnedCoverage>):OwnedCoverage=>({id:"x",policyId:"p",familyMemberId:"m",category:"Death",amount:null,currency:"SGD",productName:null,sourcePage:1,evidenceText:"test",insurer:"Singlife",policyName:"MINDEF & MHA Group Insurance",policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null,...overrides});
 const coverages:OwnedCoverage[]=[
@@ -28,6 +30,8 @@ const cancer:ClaimFacts={...accident,eventType:"diagnosis",eventDate:null,accide
 const c=assessClaim(cancer,coverages);if(c.find(x=>x.id==="living-care")?.amountText!=="S$350,000")throw new Error("Living Care amount failed");
 console.log("DearPolicy claim-rule smoke tests passed.");
 runMonetaryGateRegressions();
+runHospitalCashCalculatorRegressions();
+runLedgerHospitalCashRegressions();
 runSystemRegressions();
 runClaimAnswerEval();
 runCoverConditionsStress();
