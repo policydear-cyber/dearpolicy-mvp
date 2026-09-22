@@ -1,7 +1,24 @@
 import { formatMoney } from "@/lib/format/currency";
 import { canonicalProduct, coverageByProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
-import type { ClaimAssessmentItem, ClaimFacts, ClaimQuestion } from "./types";
+import type { ClaimAssessmentItem, ClaimEvidence, ClaimFacts, ClaimQuestion } from "./types";
 import type { DeathEvidenceGap, DeathRuleEvidence } from "./death-evidence";
+import { calculateDeathBenefit, type DeathBenefitEvidenceRef, type DeathBenefitFormula } from "./calculators/death-benefit";
+import { calculateAccidentalDeath, type AccidentalDeathCauseConfirmation } from "./calculators/accidental-death";
+
+function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
+  return { chunkId: c.chunkId, policyId: c.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, label: c.evidenceLabel };
+}
+/** How sure DearPolicy can be that a reported death matches this policy's
+ * own accidental-death definition, from the facts gathered so far. A
+ * reported cause consistent with an accident is only ever "relevant, not
+ * yet confirmed" until an official cause-of-death document has actually
+ * been checked -- `causeOfDeathDocumented` is that check, and nothing else
+ * (not a self-report, not a scenario guess) can substitute for it. */
+function accidentalDeathCauseConfirmation(facts: ClaimFacts): AccidentalDeathCauseConfirmation {
+  if (facts.accidentalDeath === false) return "ruled_out";
+  if (facts.accidentalDeath == null) return "unknown";
+  return facts.causeOfDeathDocumented === true ? "confirmed_matches_definition" : "reported_unconfirmed";
+}
 
 function hasProduct(coverages: OwnedCoverage[], product: string) {
   return coverageByProduct(coverages, product).length > 0;
@@ -102,6 +119,7 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
     const racingRule = deathRules.find(r => r.benefit === "gpa-accidental-death" && r.coverageId === bestCoverage(coverages,"group personal accident","Personal Accident")?.id);
     if (facts.accidentalDeath === true && /motorcycle|motorbike/i.test(facts.accidentType ?? "") && racingRule?.racingExclusion && facts.competitiveRacing == null && !facts.uncertainFacts.includes("competitive_racing")) return { id:"competitive_racing", text:"Was the accident during competitive racing on wheels?", type:"yes_no", options:["Yes", "No", "Not sure"], why:racingRule.racingExclusion.authorityException ? "The Personal Accident wording excludes competitive racing on wheels, with an exception for racing sanctioned by MINDEF/MHA. This can change its death benefit." : "The matching Personal Accident wording excludes competitive racing on wheels, so this can change its death benefit." };
     if (facts.accidentalDeath === true && facts.competitiveRacing === true && racingRule?.racingExclusion?.authorityException && facts.racingAuthoritySanctioned == null && !facts.uncertainFacts.includes("racing_authority_sanctioned")) return { id:"racing_authority_sanctioned", text:"Was the racing sanctioned by MINDEF/MHA?", type:"yes_no", options:["Yes", "No", "Not sure"], why:"Your uploaded wording has an exception for racing sanctioned by the Authority. The insurer will need evidence of that sanction." };
+    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumented == null && !facts.uncertainFacts.includes("cause_of_death_document")) return { id:"cause_of_death_document", text:"Do you have an official cause-of-death document -- a death certificate, police report, or coroner's report -- confirming the accident? You can say \u201cnot sure\u201d if you have not checked yet.", type:"yes_no", options:["Yes", "No", "Not sure"], why:"The accidental death benefit needs the reported cause checked against the policy's own accident definition before DearPolicy can show an amount. A reported circumstance alone is not enough." };
   }
 
   if (facts.eventType === "disability") {
@@ -158,17 +176,55 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The wording confirms 100% of Sum Insured, but this person's sum insured is missing from verified personal evidence.", conditions: ["Upload the certificate or schedule showing the person's insured amount."] });
         continue;
       }
-      if (product === "group personal accident" && facts.accidentalDeath !== true) {
-        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The cause of death is still unknown; I cannot calculate an accidental death claim from an earlier accident alone.", conditions: ["Check the death certificate and accident or medical report to establish the cause."] });
-        continue;
-      }
       const conditions = ["The cover must have been in force on the date of death, and the policy's conditions and exclusions must be met."];
       if (!deathDate || !coverage.effectiveDate) conditions.push("The date of death and this cover's effective date still need documentary confirmation.");
       if (product === "group personal accident") conditions.push("The death certificate and accident/medical report must establish death directly caused by the accident; accident exclusions and any time limits still need checking.");
       if (product === "group personal accident" && facts.competitiveRacing === true && rule.racingExclusion?.authorityException) conditions.push("Provide proof that the racing was sanctioned by MINDEF/MHA; the insurer must accept the exception.");
-      items.push({ ...base, ruleEvidence: rule.citation, status: "potentially_applicable", amountText: amountText(coverage.amount, coverage.currency),
-        calculatedAmount: coverage.amount, currency: coverage.currency,
-        reason: `The personal certificate confirms ${amountText(coverage.amount, coverage.currency)} of cover. The matching death-benefit clause pays the full Sum Insured: 100% × ${amountText(coverage.amount, coverage.currency)}.`, conditions });
+
+      const formulaCurrencyOk = rule.formula.kind !== "fixed" || rule.formula.currency === coverage.currency;
+      const capCurrencyOk = !rule.cap || rule.cap.currency === coverage.currency;
+      if (!formulaCurrencyOk || !capCurrencyOk) {
+        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The matching wording quotes an amount in a different currency than this person's verified sum insured, so DearPolicy cannot compute a figure from it.", conditions: ["Confirm the currency of the quoted benefit against the personal certificate."] });
+        continue;
+      }
+      const evidenceRef = toEvidenceRef(rule.citation);
+      const formula: DeathBenefitFormula = rule.formula.kind === "sum_insured_fraction"
+        ? { kind: "sum_insured_fraction", fraction: rule.formula.fraction, evidence: evidenceRef }
+        : { kind: "fixed", amount: rule.formula.amount, evidence: evidenceRef };
+      const ownershipEvidence: DeathBenefitEvidenceRef = { chunkId: `coverage:${coverage.id}`, policyId: coverage.policyId, label: coverage.productName ?? undefined };
+      const sharedInput = {
+        ownership: { contractId: coverage.policyId, coverageId: coverage.id, label: coverage.productName ?? undefined },
+        familyMember: { id: coverage.familyMemberId, confirmed: true },
+        deathConfirmed: facts.death === true,
+        dateOfDeath: deathDate,
+        policyEffectiveDate: coverage.effectiveDate,
+        sumInsured: coverage.amount,
+        currency: coverage.currency,
+        formula,
+        ...(rule.cap ? { cap: { amount: rule.cap.amount, evidence: evidenceRef } } : {}),
+        ruleEvidence: evidenceRef,
+        ownershipEvidence,
+      };
+      const calc = product === "group personal accident"
+        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeConfirmation: accidentalDeathCauseConfirmation(facts) })
+        : calculateDeathBenefit(sharedInput);
+
+      if (calc.status === "blocked") {
+        const isCauseGap = product === "group personal accident" && (calc.reasonCode === "CAUSE_NOT_CONFIRMED" || calc.reasonCode === "CAUSE_UNKNOWN");
+        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null,
+          reason: isCauseGap
+            ? "An accidental death benefit may apply, but DearPolicy has not included an amount because the policy's accident definition still needs to be checked against an official cause-of-death document, police report or coroner's report."
+            : `The personal certificate confirms ownership of this cover. DearPolicy has not included an amount: ${calc.message}`,
+          conditions: isCauseGap ? ["Check the death certificate, police report or coroner's report against the policy's accidental-death definition."] : [calc.message] });
+        continue;
+      }
+      if (calc.status === "not_applicable") {
+        items.push({ ...base, ruleEvidence: rule.citation, status: "not_applicable", amountText: null, reason: calc.reason, conditions: [] });
+        continue;
+      }
+      items.push({ ...base, ruleEvidence: rule.citation, status: "potentially_applicable", amountText: amountText(calc.potentialAmount, calc.currency),
+        calculatedAmount: calc.potentialAmount, currency: calc.currency,
+        reason: `The personal certificate confirms ${amountText(coverage.amount, coverage.currency)} of cover. The matching death-benefit clause pays ${calc.formulaBasis}.`, conditions });
     }
   }
 

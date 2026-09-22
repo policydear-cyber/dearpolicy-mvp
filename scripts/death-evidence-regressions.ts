@@ -52,7 +52,7 @@ export async function runDeathEvidenceRegressions() {
   test("Payout uses personalised sums rather than available-product maximums",()=>{
     const owned=covers.map(c=>({...c,amount:c.id==="gtl"?250_000:100_000}));
     const evidence=resolveDeathEvidence(owned,rows);
-    assert.equal(assessClaim({...facts,competitiveRacing:false},owned,evidence.rules).reduce((sum,i)=>sum+(i.calculatedAmount??0),0),350_000);
+    assert.equal(assessClaim({...facts,competitiveRacing:false,causeOfDeathDocumented:true},owned,evidence.rules).reduce((sum,i)=>sum+(i.calculatedAmount??0),0),350_000);
   });
   test("Actual racing exclusion keeps its Authority-sanctioned exception",()=>{
     const exclusion=result.rules.find(r=>r.benefit==="gpa-accidental-death")?.racingExclusion;
@@ -62,7 +62,7 @@ export async function runDeathEvidenceRegressions() {
     const unknown=assessClaim({...facts,competitiveRacing:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
     assert.equal(unknown?.status,"needs_document");assert.equal(unknown?.amountText,null);
     assert.equal(assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:false},covers,result.rules).find(i=>i.id==="gpa-accidental-death")?.status,"not_applicable");
-    const sanctioned=assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
+    const sanctioned=assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:true,causeOfDeathDocumented:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
     assert.equal(sanctioned?.calculatedAmount,600_000);assert.ok(sanctioned?.conditions.some(c=>/proof.*sanctioned/i.test(c)));
   });
   test("Partial or discretionary promises cannot be treated as the full death sum",()=>{
@@ -84,13 +84,13 @@ export async function runDeathEvidenceRegressions() {
   const sanctioned=await extractClaimFacts({text:"Yes, racing sanctioned by MINDEF",current:facts,...context});
   const notSanctioned=await extractClaimFacts({text:"The racing was not sanctioned by the Authority",current:facts,...context});
   test("Explicit racing and sanction facts are retained without repeated questions",()=>{
-    assert.equal(noRacing.competitiveRacing,false);assert.equal(nextClaimQuestion(noRacing,covers,result.rules),null);
-    assert.equal(sanctioned.competitiveRacing,true);assert.equal(sanctioned.racingAuthoritySanctioned,true);assert.equal(nextClaimQuestion(sanctioned,covers,result.rules),null);
+    assert.equal(noRacing.competitiveRacing,false);assert.equal(nextClaimQuestion(noRacing,covers,result.rules)?.id,"cause_of_death_document");
+    assert.equal(sanctioned.competitiveRacing,true);assert.equal(sanctioned.racingAuthoritySanctioned,true);assert.equal(nextClaimQuestion(sanctioned,covers,result.rules)?.id,"cause_of_death_document");
     assert.equal(notSanctioned.racingAuthoritySanctioned,false);
   });
   const unknown=await extractClaimFacts({text:"Not sure whether there was racing",current:facts,pendingQuestion:{id:"competitive_racing",text:"Racing?",type:"yes_no",why:"test"},...context});
   test("Unknown racing is deferred without being turned into a reported race",()=>{
-    assert.equal(unknown.competitiveRacing,null);assert.equal(nextClaimQuestion(unknown,covers,result.rules),null);
+    assert.equal(unknown.competitiveRacing,null);assert.equal(nextClaimQuestion(unknown,covers,result.rules)?.id,"cause_of_death_document");
   });
   console.log(`DearPolicy real-PDF death-wording regressions passed (${cases} scenarios).`);
 }

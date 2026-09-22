@@ -27,6 +27,12 @@ export type ClaimFacts = {
   competitiveRacing: boolean | null;
   racingAuthoritySanctioned: boolean | null;
   medicalReportAvailable: boolean | null;
+  /** Whether an official cause-of-death document -- a death certificate's
+   * cause-of-death entry, a police report, or a coroner's/medical
+   * examiner's report -- has been reviewed. This is distinct from
+   * `accidentalDeath`: a family's own description of the circumstances is
+   * never enough by itself to confirm an accidental-death benefit. */
+  causeOfDeathDocumented: boolean | null;
   uncertainFacts: string[];
   factSources?: Record<string, { source: "user" | "system-derived"; text: string; recordedAt: string; timeZone?: string; anchorDate?: string }>;
 };
@@ -116,6 +122,7 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   competitiveRacing: null,
   racingAuthoritySanctioned: null,
   medicalReportAvailable: null,
+  causeOfDeathDocumented: null,
   uncertainFacts: [],
   factSources: {},
 };

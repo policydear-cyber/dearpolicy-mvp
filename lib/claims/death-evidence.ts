@@ -3,7 +3,16 @@ import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib
 import type { ClaimEvidence } from "./types";
 
 export type RacingExclusion = { quote: string; page: number; authorityException?: boolean };
-export type DeathRuleEvidence = { coverageId: string; benefit: "gtl-death" | "gpa-accidental-death"; quote: string; citation: ClaimEvidence; racingExclusion?: RacingExclusion };
+/** A death-benefit payout formula read directly from the quoted wording.
+ * `sum_insured_fraction` covers both a percentage (fraction 0-1) and a
+ * multiple (fraction > 1) of the Sum Insured -- the same arithmetic either
+ * way. `fixed` is a flat additional benefit independent of the Sum Insured. */
+export type DeathFormula =
+  | { kind: "sum_insured_fraction"; fraction: number }
+  | { kind: "fixed"; amount: number; currency: string };
+/** An explicitly evidenced ceiling quoted in the same clause. */
+export type DeathCap = { amount: number; currency: string } | null;
+export type DeathRuleEvidence = { coverageId: string; benefit: "gtl-death" | "gpa-accidental-death"; quote: string; citation: ClaimEvidence; racingExclusion?: RacingExclusion; formula: DeathFormula; cap?: DeathCap };
 export type DeathEvidenceGap = { coverageId: string; reason: string; nextStep: string };
 export type DeathWordingPage = {
   policy_id: string; page_number: number; text: string; group_policy_number: string | null;
@@ -36,7 +45,30 @@ function documentInsurer(pages: DeathWordingPage[]) {
 
 /** Accept a 100% row or an explicit promise to pay the relevant Sum Insured.
  * A formula in another product's section never establishes this benefit. */
-export function findDeathRule(pages: Page[], product: string): { page: number; pageEnd: number; quote: string; racingExclusion?: RacingExclusion } | null {
+const DISCRETIONARY_LANGUAGE = /\b(?:may\s+pay|up\s+to|at\s+(?:our|the\s+company'?s|the\s+insurer'?s)\s+discretion|discretionary|subject\s+to\s+underwriting)\b/i;
+const MONEY_PATTERN = /(?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*([\d,]+(?:\.\d+)?)/i;
+function explicitDeathCurrency(text: string) {
+  if (/\bUS\$|USD\b/i.test(text)) return "USD";
+  if (/\bS\$|SGD\b/i.test(text)) return "SGD";
+  if (/\bMYR\b/i.test(text)) return "MYR";
+  if (/\bEUR|€/i.test(text)) return "EUR";
+  if (/\bGBP|£/i.test(text)) return "GBP";
+  return "SGD";
+}
+/** An explicitly evidenced maximum quoted in the same clause -- "subject to a
+ * maximum of S$X" / "capped at S$X" / "not exceeding S$X" -- required to be
+ * definite (no "may"/discretionary language) exactly like the formula itself. */
+function findDeathCap(segment: string, from: number, to: number): DeathCap {
+  const window = segment.slice(from, Math.min(segment.length, to));
+  const cap = window.match(/\b(?:subject\s+to\s+a\s+maximum\s+of|capped\s+at|not\s+exceeding|maximum\s+(?:benefit|payout)\s+of)\s+((?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*[\d,]+(?:\.\d+)?)/i);
+  if (!cap) return null;
+  const money = cap[1].match(MONEY_PATTERN);
+  if (!money) return null;
+  const amount = Number(money[1].replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return { amount, currency: explicitDeathCurrency(cap[1]) };
+}
+export function findDeathRule(pages: Page[], product: string): { page: number; pageEnd: number; quote: string; racingExclusion?: RacingExclusion; formula: DeathFormula; cap?: DeathCap } | null {
   const wanted = canonicalProduct(product);
   if (!["group term life", "group personal accident"].includes(wanted)) return null;
   let joined = "";
@@ -58,24 +90,49 @@ export function findDeathRule(pages: Page[], product: string): { page: number; p
       if (wanted === "group term life" && /accidental\s*$/i.test(segment.slice(Math.max(0, death.index! - 20), death.index))) continue;
       const tail = segment.slice(death.index! + death[0].length, death.index! + death[0].length + 220);
       const percentage = tail.match(/(\d+(?:\.\d+)?)\s*%\s*(?:of\s+(?:the\s+)?)?(?:Sum\s+Insured|Sum\s+Assured)\b/i);
+      const multiple = tail.match(/(\d+(?:\.\d+)?)\s*times?\s+(?:the\s+)?(?:Sum\s+Insured|Sum\s+Assured)\b/i);
       const fullSumPromise = tail.match(/^\s*If\s+an?\s+Insured\s+Person\s+dies\s+while\s+insured\s+for\s+this\s+Benefit\s*,\s*(?:the\s+Company|we)\s+will\s+pay\s+the\s+(?:relevant\s+)?(?:Sum\s+Insured|Sum\s+Assured)\s+for\s+death\b/i);
+      const fixedBenefit = tail.match(/\b(?:a\s+)?fixed\s+(?:additional\s+)?(?:death\s+)?benefit\s+of\s+((?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*[\d,]+(?:\.\d+)?)\s+(?:will\s+be\s+paid|is\s+payable|shall\s+be\s+paid)\b/i);
       let end: number;
-      if (fullSumPromise) end = fullSumPromise[0].length;
-      else {
-        if (!percentage || Number(percentage[1]) !== 100) continue;
+      let formula: DeathFormula;
+      if (fullSumPromise) {
+        end = fullSumPromise[0].length;
+        formula = { kind: "sum_insured_fraction", fraction: 1 };
+      } else if (percentage) {
         const intervening = tail.slice(0, percentage.index);
         if (/%|\b(?:disablement|disability|fracture|ambulance|medical|recuperation|education|compassionate|advance payment|terminal illness)\b/i.test(intervening)) continue;
+        if (DISCRETIONARY_LANGUAGE.test(intervening)) continue;
+        const fraction = Number(percentage[1]) / 100;
+        if (!Number.isFinite(fraction) || fraction <= 0) continue;
         end = percentage.index! + percentage[0].length;
-      }
+        formula = { kind: "sum_insured_fraction", fraction };
+      } else if (multiple) {
+        const intervening = tail.slice(0, multiple.index);
+        if (/\b(?:disablement|disability|fracture|ambulance|medical|recuperation|education|compassionate|advance payment|terminal illness)\b/i.test(intervening)) continue;
+        if (DISCRETIONARY_LANGUAGE.test(intervening)) continue;
+        const fraction = Number(multiple[1]);
+        if (!Number.isFinite(fraction) || fraction <= 0) continue;
+        end = multiple.index! + multiple[0].length;
+        formula = { kind: "sum_insured_fraction", fraction };
+      } else if (fixedBenefit) {
+        const intervening = tail.slice(0, fixedBenefit.index);
+        if (DISCRETIONARY_LANGUAGE.test(intervening)) continue;
+        const money = fixedBenefit[1].match(MONEY_PATTERN);
+        const amount = money ? Number(money[1].replace(/,/g, "")) : NaN;
+        if (!Number.isFinite(amount) || amount <= 0) continue;
+        end = fixedBenefit.index! + fixedBenefit[0].length;
+        formula = { kind: "fixed", amount, currency: explicitDeathCurrency(fixedBenefit[1]) };
+      } else continue;
       const absolute = start + death.index!;
       const quote = `${death[0]}${tail.slice(0, end)}`.trim();
+      const cap = findDeathCap(tail, end, end + 260);
       const exclusion = wanted === "group personal accident"
         ? segment.match(/\b(?:exclusions?|we (?:will|do) not pay|not covered)\b[\s\S]{0,4000}?\b(participation\s+in\s+competitive\s+racing\s+on\s+wheels(?:\s+except\s+for\s+those\s+sanctioned\s+by\s+the\s+Authority)?)/i) : null;
       const racingExclusion = exclusion ? {
         quote: exclusion[1], page: pageAt(start + exclusion.index! + exclusion[0].indexOf(exclusion[1])),
         authorityException: /except.*sanctioned/i.test(exclusion[1]),
       } : undefined;
-      return { page: pageAt(absolute), pageEnd: pageAt(absolute + quote.length - 1), quote, ...(racingExclusion ? { racingExclusion } : {}) };
+      return { page: pageAt(absolute), pageEnd: pageAt(absolute + quote.length - 1), quote, formula, ...(cap ? { cap } : {}), ...(racingExclusion ? { racingExclusion } : {}) };
     }
   }
   return null;
@@ -108,6 +165,7 @@ export function resolveDeathEvidence(coverages: OwnedCoverage[], rows: DeathWord
       const found = findDeathRule(pages, product);
       if (!found) continue;
       rules.push({ coverageId: coverage.id, benefit: product === "group term life" ? "gtl-death" : "gpa-accidental-death", quote: found.quote, racingExclusion: found.racingExclusion,
+        formula: found.formula, ...(found.cap ? { cap: found.cap } : {}),
         citation: { chunkId: `page:${first.policy_id}:${found.page}`, policyId: first.policy_id, policyName: first.product_name ?? first.original_filename,
           insurer: first.insurer ?? undefined, pageStart: found.page, pageEnd: found.pageEnd, documentRole: first.document_role,
           personalEvidence: false, evidenceLabel: "Death benefit wording" } });

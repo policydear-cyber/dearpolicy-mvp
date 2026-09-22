@@ -67,16 +67,23 @@ export async function runClaimWorkflowRegressions() {
   try {
     const request = new Request("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ familyMemberId: desmond, question: "Charmaine died from an accident yesterday. What can I claim?", timeZone: "Asia/Singapore", personContextRecordedAt: anchor }) });
     const result = await askDearPolicy({accountId:account,...await request.json()});
-    assert.equal(result.answer.resolvedFamilyMemberId, charmaine); assert.equal(result.answer.mode, "claim_assessment"); assert.match(result.answer.summary, /S\$1,600,000/); assert.deepEqual(result.answer.questions, []);
+    assert.equal(result.answer.resolvedFamilyMemberId, charmaine); assert.equal(result.answer.mode, "fact_finding"); assert.match(result.answer.summary, /S\$1,000,000/); assert.equal(result.answer.questions[0]?.id, "cause_of_death_document");
     assert.equal(result.answer.claimItems.length, 2); assert.equal(result.answer.citations.filter(c => c.personalEvidence === true).length, 2);
+    assert.equal(result.answer.claimItems.find(i => i.title.includes("Term Life"))?.amountText, "S$1,000,000"); assert.equal(result.answer.claimItems.find(i => i.title.includes("Accident"))?.amountText, null);
     assert.equal(sessions.get(result.answer.claimSessionId!)?.event_type, "death"); assert.equal((sessions.get(result.answer.claimSessionId!)?.facts as typeof EMPTY_CLAIM_FACTS).deathDate, "2026-09-13");
     assert.ok(result.answer.details.some((s: string) => s.includes("recent premium"))); cases++;
+    // Only once the cause-of-death document is confirmed does the accidental-death benefit join the total.
+    const confirmed = await askDearPolicy({ accountId: account, familyMemberId: charmaine, question: "Yes", claimSessionId: result.answer.claimSessionId, timeZone: "Asia/Singapore" });
+    assert.equal(confirmed.answer.mode, "claim_assessment"); assert.match(confirmed.answer.summary, /S\$1,600,000/); assert.deepEqual(confirmed.answer.questions, []);
+    assert.equal(sessions.get(confirmed.answer.claimSessionId!)?.status, "complete"); cases++;
     const before = created;
     family = [...family, { ...family[1], id: other, relationship: "sibling" }];
     const ambiguous = await askDearPolicy({ accountId: account, familyMemberId: desmond, question: "Charmaine died from an accident yesterday", timeZone: "Asia/Singapore", personContextRecordedAt: anchor });
     assert.equal(ambiguous.answer.questions[0].id, "claim_person"); assert.equal(created, before); assert.equal(ambiguous.answer.claimSessionId, null); assert.equal(ambiguous.answer.personContextMessage, "Charmaine died from an accident yesterday"); cases++;
     const clarified = await askDearPolicy({ accountId: account, familyMemberId: desmond, question: "Ong Pei Lin Charmaine", personChoiceId: charmaine, personContextMessage: ambiguous.answer.personContextMessage, personContextRecordedAt: ambiguous.answer.personContextRecordedAt, timeZone: "Asia/Singapore" });
-    assert.equal(clarified.answer.resolvedFamilyMemberId, charmaine); assert.deepEqual(clarified.answer.questions, []); assert.match(clarified.answer.summary, /S\$1,600,000/); assert.equal((sessions.get(clarified.answer.claimSessionId!)?.facts as typeof EMPTY_CLAIM_FACTS).deathDate, "2026-09-13"); cases++;
+    assert.equal(clarified.answer.resolvedFamilyMemberId, charmaine); assert.equal(clarified.answer.questions[0]?.id, "cause_of_death_document"); assert.match(clarified.answer.summary, /S\$1,000,000/); assert.equal((sessions.get(clarified.answer.claimSessionId!)?.facts as typeof EMPTY_CLAIM_FACTS).deathDate, "2026-09-13"); cases++;
+    const clarifiedConfirmed = await askDearPolicy({ accountId: account, familyMemberId: charmaine, question: "Yes", claimSessionId: clarified.answer.claimSessionId, timeZone: "Asia/Singapore" });
+    assert.deepEqual(clarifiedConfirmed.answer.questions, []); assert.match(clarifiedConfirmed.answer.summary, /S\$1,600,000/); cases++;
     family = family.slice(0, 2);
     includeWording = false;
     const missing = await askDearPolicy({ accountId: account, familyMemberId: desmond, question: "Charmaine died from an accident yesterday", timeZone: "Asia/Singapore" });
@@ -92,18 +99,23 @@ export async function runClaimWorkflowRegressions() {
     assert.ok(savedChats.length > 0 && savedChats.every(c => c.person === charmaine));
     wordingPersonal=false;wordingRole="benefit_guide";
     const shared=await askDearPolicy({accountId:account,familyMemberId:desmond,question:"Charmaine died from an accident yesterday",timeZone:"Asia/Singapore"});
-    assert.match(shared.answer.summary,/S\$1,600,000/);cases++;
+    assert.match(shared.answer.summary,/S\$1,000,000/);
+    const sharedConfirmed=await askDearPolicy({accountId:account,familyMemberId:charmaine,question:"Yes",claimSessionId:shared.answer.claimSessionId,timeZone:"Asia/Singapore"});
+    assert.match(sharedConfirmed.answer.summary,/S\$1,600,000/);cases++;
     expectedMember=desmond;wordingMember=other;wordingGroup=null;wordingPages=fixture.benefitSummary.pages;
     const actual=await askDearPolicy({accountId:account,familyMemberId:charmaine,question:"desmond died in a motorbike accident yesterday",timeZone:"Asia/Singapore",personContextRecordedAt:anchor});
     assert.equal(actual.answer.resolvedFamilyMemberId,desmond);assert.equal(actual.answer.mode,"fact_finding");
-    assert.match(actual.answer.summary,/S\$1,600,000/);assert.equal(actual.answer.claimItems.find(i=>i.title.includes("Term Life"))?.amountText,"S$1,000,000");assert.equal(actual.answer.claimItems.find(i=>i.title.includes("Accident"))?.amountText,"S$600,000");
+    assert.match(actual.answer.summary,/S\$1,000,000/);assert.equal(actual.answer.claimItems.find(i=>i.title.includes("Term Life"))?.amountText,"S$1,000,000");assert.equal(actual.answer.claimItems.find(i=>i.title.includes("Accident"))?.amountText,null);
     assert.deepEqual(actual.answer.questions.map(q=>q.id),["competitive_racing"]);
     assert.deepEqual(actual.answer.citations.filter(c=>!c.personalEvidence).map(c=>c.pageStart),[3,5,10]);
     assert.equal((sessions.get(actual.answer.claimSessionId!)?.facts as typeof EMPTY_CLAIM_FACTS).deathDate,"2026-09-13");
     assert.equal((sessions.get(actual.answer.claimSessionId!)?.decision_packet as {ready:boolean}).ready,false);cases++;
     const noRace=await askDearPolicy({accountId:account,familyMemberId:desmond,question:"No",claimSessionId:actual.answer.claimSessionId,timeZone:"Asia/Singapore"});
-    assert.equal(noRace.answer.mode,"claim_assessment");assert.deepEqual(noRace.answer.questions,[]);assert.match(noRace.answer.summary,/S\$1,600,000/);
-    const completed=sessions.get(noRace.answer.claimSessionId!)!;assert.equal((completed.facts as typeof EMPTY_CLAIM_FACTS).competitiveRacing,false);assert.equal((completed.facts as typeof EMPTY_CLAIM_FACTS).deathDate,"2026-09-13");assert.equal(completed.status,"complete");cases++;
+    assert.equal(noRace.answer.mode,"fact_finding");assert.equal(noRace.answer.questions[0]?.id,"cause_of_death_document");assert.match(noRace.answer.summary,/S\$1,000,000/);
+    // The racing exclusion is resolved, but the accidental-death amount still waits on the cause-of-death document.
+    const completed=await askDearPolicy({accountId:account,familyMemberId:desmond,question:"Yes",claimSessionId:noRace.answer.claimSessionId,timeZone:"Asia/Singapore"});
+    assert.equal(completed.answer.mode,"claim_assessment");assert.deepEqual(completed.answer.questions,[]);assert.match(completed.answer.summary,/S\$1,600,000/);
+    const completedSession=sessions.get(completed.answer.claimSessionId!)!;assert.equal((completedSession.facts as typeof EMPTY_CLAIM_FACTS).competitiveRacing,false);assert.equal((completedSession.facts as typeof EMPTY_CLAIM_FACTS).deathDate,"2026-09-13");assert.equal(completedSession.status,"complete");cases++;
     console.log(`DearPolicy API/orchestration/persistence fixture tests passed (${cases} scenarios).`);
   } finally { pool.query = originalQuery; }
 }

@@ -31,6 +31,7 @@ const ClaimFactsSchema = z.object({
   competitiveRacing: z.boolean().nullable(),
   racingAuthoritySanctioned: z.boolean().nullable(),
   medicalReportAvailable: z.boolean().nullable(),
+  causeOfDeathDocumented: z.boolean().nullable(),
   uncertainFacts: z.array(z.string()),
 });
 
@@ -61,7 +62,7 @@ function yesNoFromAnswer(text: string) {
 function argsTextMeaningful(text:string){ return text.trim().length>1 && !/^(?:not sure|unsure|unknown|i don'?t know|do not know|don'?t know|can'?t remember|cannot remember)\b/i.test(text.trim()); }
 
 function affirmedDeath(text: string) {
-  for (const match of text.matchAll(/\b(?:passed away|died|death|deceased|killed)\b/gi)) {
+  for (const match of text.matchAll(/\b(?:passed away|died|death|deceased|killed|murdered|homicide)\b/gi)) {
     const before = text.slice(Math.max(0, match.index! - 55), match.index).split(/[.!?;,]/).at(-1) ?? "";
     if (!/\b(?:not|never|almost|nearly|if|whether|no one|didn'?t|hasn'?t|haven'?t|could have|would have)\b/i.test(before)) return true;
   }
@@ -80,6 +81,7 @@ const QUESTION_FIELDS: Record<string, keyof ClaimFacts> = {
   ambulance_used: "ambulanceUsed", ambulance_bill: "ambulanceBill", hospitalised: "hospitalised", hospital_nights: "hospitalNights",
   hospital_bill: "hospitalBill", out_of_pocket: "outOfPocket", surgery: "surgery", permanent_impairment: "permanentImpairment",
   competitive_racing: "competitiveRacing", racing_authority_sanctioned: "racingAuthoritySanctioned", medical_report: "medicalReportAvailable",
+  cause_of_death_document: "causeOfDeathDocumented",
 };
 
 function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null, context: ClaimDateContext = {}): Partial<ClaimFacts> {
@@ -105,6 +107,16 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     ?? text.match(/\b(?:died|killed)\s+in\s+((?:an?\s+)?(?:motorcycle\s+|motorbike\s+|car\s+|road\s+)?(?:accident|crash|collision))\b/i)?.[1]?.trim();
   if (cause) {
     out.causeOfDeath = cause;
+    // A reported cause consistent with an accident (a crash, a fall) is
+    // recorded as accidentalDeath=true so DearPolicy does not re-ask a
+    // question the family has already answered in their own words, and a
+    // reported illness rules out an accident-only benefit the same way.
+    // Neither direction is a decision about the policy's own definition of
+    // an accidental death, and neither by itself authorises an amount --
+    // that additionally requires `causeOfDeathDocumented` (an official
+    // cause-of-death document/police/coroner's report actually checked
+    // against the policy's wording), which the accidental-death calculator
+    // enforces separately and explicitly.
     if (/accident|crash|collision|fall|fell|road traffic/i.test(cause)) out.accidentalDeath = true;
     else if (/illness|disease|cancer|natural cause|heart attack|stroke|infection/i.test(cause)) out.accidentalDeath = false;
   }
@@ -155,6 +167,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   const otherDiagnosis = text.match(/\b(?:stroke|heart attack|kidney failure|carcinoma|malignant tumou?r)\b/i)?.[0];
   if (otherDiagnosis && !out.diagnosis) out.diagnosis = otherDiagnosis;
   if (/pathology|medical report|doctor'?s report|oncologist report/i.test(text)) out.medicalReportAvailable = !/don'?t have|do not have|no report/i.test(text);
+  if (/death certificate|coroner|coroner's report|police report|medical examiner/i.test(text)) out.causeOfDeathDocumented = !/don't have|do not have|no (?:death certificate|report|coroner)/i.test(text);
 
   // Separate the accident date from a later death date in the same message.
   const deathIndex = death ? text.search(/\b(?:died|passed away|death|deceased|killed)\b/i) : -1;
@@ -183,7 +196,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   }
 
   // A terminal-event update invalidates an old routine-injury question.
-  const compatible = !death || ["event_date", "death_date", "cause_of_death", "competitive_racing", "racing_authority_sanctioned"].includes(pendingQuestion?.id ?? "");
+  const compatible = !death || ["event_date", "death_date", "cause_of_death", "cause_of_death_document", "competitive_racing", "racing_authority_sanctioned"].includes(pendingQuestion?.id ?? "");
   if (pendingQuestion && compatible) {
     const yn = yesNoFromAnswer(text);
     if (pendingQuestion.id === "injured" && yn != null) out.injured = yn;
@@ -200,6 +213,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     if (pendingQuestion.id === "competitive_racing" && yn != null) out.competitiveRacing = yn;
     if (pendingQuestion.id === "racing_authority_sanctioned" && yn != null) out.racingAuthoritySanctioned = yn;
     if (pendingQuestion.id === "medical_report" && yn != null) out.medicalReportAvailable = yn;
+    if (pendingQuestion.id === "cause_of_death_document" && yn != null) out.causeOfDeathDocumented = yn;
     if (pendingQuestion.id === "fracture_body_part" && argsTextMeaningful(text)) out.fractureBodyPart = lower.match(/\b(wrist|arm|leg|ankle|knee|hip|rib|ribs|shoulder|jaw|pelvis|skull|spine|neck|elbow|cheekbone)\b/)?.[1] ?? null;
     if (pendingQuestion.id === "ambulance_bill") { const n = targetedMoney(text); if (n != null) out.ambulanceBill = n; }
     if (pendingQuestion.id === "hospital_bill") { const n = targetedMoney(text); if (n != null) out.hospitalBill = n; }
