@@ -128,4 +128,111 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
         if(!whatIf&&v==null)continue;
         if(v===false||(gate.factKey==="eventType"&&v==="illness"))continue;
       }
-      for(const row of rows){¶–b†WfVçCÓÓÒ&g&7GW&R"bgG—Vöb&öG•'CÓÓÒ'7G&–ær"bbg&7GW&U&÷tÖF6†W2‡&÷ræFWF–ÂÆ&öG•'B’–6öçF–çVS°¢òò&÷r&W7G&–7FVBFòöæR6W6R—26¶—VBv†VâF†R6W6R6öçG&F–7G0¢òò—BÂæBv—G2†6¶–ær’v†–ÆRF†R6W6R—2Væ¶æ÷vâà¢–b‡&÷ræ6W6Rbbv†D–b—°¢–b‡&÷ræ6W6RÓÖ6W6R—°¢–b†6W6SÓÖçVÆÂ—¶6²‡W'6öâæ–BÄtDU2æ66–FVçBÆf7G2“¶6öçF–çVS·Ğ¢6öçF–çVS°¢Ğ¢Ğ¢–b‡&÷rç—4¶–æCÓÓÒ'7FFVB'ÇÇ&÷ræÖ÷VçCÓÖçVÆÇÇÂ‡&÷rç—4¶–æCÓÓÒ'W&6VçEööe÷7VÒ"bg&÷rç7VÔ&6—3ÓÖçVÆÂ’–÷WBæ6ö×ÆWFSÖfÇ6S°¢òòF‡&W6†öÆBF†RWfVçB†2æ÷B&V6†VB'VÆW2F†R&÷r÷WC²Væ¶æ÷vâÂ—B—26¶VBà¢–b‡&÷ræÖ–æ–×VÔf7Bbg&÷ræÖ–æ–×VÕfÇVRÖçVÆÂbbv†D–b—°¢6öç7B†fSÖ¶æ÷våfÇVR†f7G2Ç&÷ræÖ–æ–×VÔf7B“°¢–b‡G—Vöb†fSÓÓÒ&çVÖ&W""bf†fSÇ&÷ræÖ–æ–×VÕfÇVR—¶÷WBç'VÆVD÷WBçW6‚‡&÷uF—FÆR‡W'6öâÇ&÷r’²"(	BæVVG2"·&÷ræÖ–æ–×VÔf7Bç&WÆ6R‚ò…´Õ¥Ò’örÂ"C"’çFôÆ÷vW$66R‚’²"öbBÆV7B"·&÷ræÖ–æ–×VÕfÇVR²"ÂæB"¶†fR²"v2&W÷'FVB"“¶6öçF–çVS·Ğ¢–b††fSÓÖçVÆÂ—¶6öç7BÔÔ”ä”ÕTÕõTU5D”ôå5·&÷ræÖ–æ–×VÔf7EÓ¶–b‡–6²‡W'6öâæ–BÇÆf7G2“·Ğ¢Ğ¢÷WBæ6æF–FFW2çW6‚‡&÷rçÆäæÖR²"(	B"¶Æ&VÂ‡&÷r’²‡&÷ræFWF–Âbg&÷ræWfVçEG—SÓÓÒ&g&7GW&R#ò"‚"·&÷ræFWF–Â²"’#¢""’“°¢òòVçF—F–W2ÂöæÇ’v†VâF†RWfVçB—2–âÆ’æBF†—2—2æ÷Bv†BÖ–bà¢6öç7BVçF—G“ÕTåD•E•ôd5E¶WfVçEÓ°¢6öç7BæVVG5VçF—G“Ò‡&÷rç—4¶–æCÓÓÒ'W%öF’'ÇÇ&÷rç—4¶–æCÓÓÒ'&V–Ö'W'6VÖVçEö6"’bg&÷ræÖ÷VçBÖçVÆÂbgVçF—G“°¢–b†æVVG5VçF—G’bf¶æ÷våfÇVR†f7G2ÇVçF—G’æf7D¶W’“ÓÖçVÆÂ–6²‡W'6öâæ–BÇ²ââçVçF—G’ÇG—S¢'FW‡B'ÒÆf7G2“°¢6öç7B&6—3Ö&6—4öb‡&÷r“°¢ÆWBÖ÷VçC¦çVÖ&W'ÆçVÆÃÖçVÆÃ¶ÆWB&6—5FW‡CÒ"#¶6öç7BÖ—76–æs§7G&–æuµÓÕµÓ°¢7v—F6‚‡&÷rç—4¶–æB—°¢66R&ÇV×÷7VÒ#¦Ö÷VçC×&÷ræÖ÷VçC¶&6—5FW‡C×&÷ræÖ÷VçBÖçVÆÃöf÷&ÖDÖöæW’‡&÷ræÖ÷VçBÇ&÷ræ7W'&Væ7’’²"ÇV×7VÒ#¢"#¶'&V³°¢66R'W&6VçEööe÷7VÒ# ¢–b‡&÷ræÖ÷VçBÖçVÆÂbg&÷rç7VÔ&6—2ÖçVÆÂ—¶Ö÷VçCÔÖF‚ç&÷VæB‡&÷ræÖ÷VçB§&÷rç7VÔ&6—2£’ó¶&6—5FW‡CÔÖF‚ç&÷VæB‡&÷ræÖ÷VçB£’ó²"Röb"¶f÷&ÖDÖöæW’‡&÷rç7VÔ&6—2Ç&÷ræ7W'&Væ7’“·Ğ¢VÇ6R–b‡&÷ræÖ÷VçBÖçVÆÂ–Ö—76–ærçW6‚‚'F†R7VÒ–ç7W&VBf÷""·&÷rçÆäæÖR²"(	Bæò66†VGVÆR÷"6W'F–f–6FRöâf–ÆR7FFW2—B"“°¢'&V³°¢66R'W%öF’#§°¢6öç7Bæ–v‡G3Ö¶æ÷våfÇVR†f7G2ÇVçF—G“òæf7D¶W“óò&†÷7—FÄæ–v‡G2"“°¢6öç7Böævö–æsÒv†D–bbf¶æ÷våfÇVR†f7G2Â&†÷7—FÅ7F”öævö–ær"“ÓÓ×G'VS°¢–b‡&÷ræÖ÷VçBÖçVÆÂbföævö–ær—°¢òò6ö×ÆWFVBÆVæwF‚öb7F’—2v†BGW&ç2F†—2–çFòf–wW&S°¢òò6¶–ærF†R6ÖRVçF—G’VW7F–öâv—F‚æò6öçFW‡B&VG20¢òòFV%öÆ–7’–væ÷&–ærv†Bv2§W7B6–BÂ6òF†R&VæVf—B—0¢òòæÖVB2÷FVçF–ÆÇ’Æ–6&ÆRæBF†R&VÂ&Æö6¶W"‡F†P¢òò7F’†2æ÷BVæFVB–WB’—27FFVBÆ–æÇ’–ç7FVBà¢Ö—76–ærçW6‚‚'F†R6ö×ÆWFVBÆVæwF‚öb7F’(	BF†—2&VæVf—BÖ’7F–ÆÂÇ’öæ6RF†R7F’†2VæFVB"“°¢ÖVÇ6R–b‡&÷ræÖ÷VçBÖçVÆÂbgG—Vöbæ–v‡G3ÓÓÒ&çVÖ&W""—°¢òòF†R6Æ7VÆF÷"—2F†RöæÇ’Æ6RF†—2&—F†ÖWF–2'Vç3¢—@¢òò&÷VæG2–&ÆRF—2FòF†RF’6†æWfW"âVæ6VBF–Ç¢òò&VæVf—B’æB&WGW&ç2æ÷EöÆ–6&ÆR&F†W"F†âC–÷W@¢òòv†VâF†Rv—F–ærW&–öBv2æWfW"6ÆV&VBà¢6öç7B6Æ3Ö6Æ7VÆFT†÷7—FÄ66‚‡°¢F–Ç•&FS§&÷ræÖ÷VçBÆ7W'&Væ7“§&÷ræ7W'&Væ7’Æ†÷7—FÅ7F”öævö–æs¦fÇ6RÆ†÷7—FÄæ–v‡G3¦æ–v‡G2À¢öfg6WDF—3§&÷ræöfg6WDF—3óóÆÖ†–×VÔF—3§&÷ræÖ†–×VÔF—2À¢÷væW'6†—§¶6öçG&7D–C§&÷rçöÆ–7”–Có÷&÷ræ–BÆ6÷fW&vT–C§&÷ræ–BÆÆ&VÃ§&÷rçÆäæÖWÒÀ¢'VÆTWf–FVæ6S§¶6‡Væ´–C¢&ÆVFvW#¢"·&÷ræ–BÇöÆ–7”–C§&÷rçöÆ–7”–Có÷VæFVf–æVBÇvU7F'C§&÷rç6÷W&6UvSó÷VæFVf–æVBÇvTVæC§&÷rç6÷W&6UvSó÷VæFVf–æVBÆÆ&VÃ§&÷rçÆäæÖWÒÀ¢÷væW'6†—Wf–FVæ6S§¶6‡Væ´–C¢&ÆVFvW#¢"·&÷ræ–BÇöÆ–7”–C§&÷rçöÆ–7”–Có÷VæFVf–æVBÇvU7F'C§&÷rç6÷W&6UvSó÷VæFVf–æVBÇvTVæC§&÷rç6÷W&6UvSó÷VæFVf–æVBÆÆ&VÃ§&÷rçÆäæÖWÒÀ¢Ò“°¢–b†6Æ2ç7FGW3ÓÓÒ&6Æ7VÆFVB"—°¢Ö÷VçCÖ6Æ2ç÷FVçF–ÄÖ÷VçC°¢&6—5FW‡CÖf÷&ÖDÖöæW’‡&÷ræÖ÷VçBÇ&÷ræ7W'&Væ7’’²"9r"¶6Æ2ç–&ÆTF—2²"–&ÆRæ–v‡B"²†6Æ2ç–&ÆTF—3ÓÓÓò"#¢'2"’²†6Æ2æöfg6WDF—3ò"†gFW"F†Rf—'7B"¶6Æ2æöfg6WDF—2²"’#¢""“°¢ÖVÇ6R–b†6Æ2ç7FGW3ÓÓÒ&æ÷EöÆ–6&ÆR"—°¢Ö—76–ærçW6‚‚&6ö×ÆWFVB7F’ÆöærVæ÷Vv‚Fò6ÆV"F†R"¶6Æ2æöfg6WDF—2²"ÖF’v—F–ærW&–öB‚"¶6Æ2ç&W÷'FVD†÷7—FÄæ–v‡G2²"æ–v‡B"²†6Æ2ç&W÷'FVD†÷7—FÄæ–v‡G3ÓÓÓò"#¢'2"’²"&W÷'FVB’"“°¢ÖVÇ6W°¢òò7G'V7GW&Â&Æö6²†Ö÷7B6öÖÖöæÇ’Ö—76–ærF’6“¢æWfW ¢òò6†÷râVæ6VB÷"÷F†W'v—6RVçfW&–f–VBF–Ç’Ö÷VçBà¢Ö—76–ærçW6‚†6Æ2æÖW76vR“°¢Ğ¢ÖVÇ6R–b‚v†D–bbg&÷ræÖ÷VçBÖçVÆÂ–Ö—76–ærçW6‚‚'F†RçVÖ&W"öbæ–v‡G2"“°¢'&V³·Ğ¢66R'&V–Ö'W'6VÖVçEö6#§°¢6öç7B&–ÆÃÖ¶æ÷våfÇVR†f7G2ÇVçF—G“òæf7D¶W“óò&÷WDöeö6¶WB"“°¢–b‡&÷ræÖ÷VçBÖçVÆÂbgG—Vöb&–ÆÃÓÓÒ&çVÖ&W""—¶Ö÷VçCÔÖF‚æÖ–â†&–ÆÂÇ&÷ræÖ÷VçB“¶&6—5FW‡CÒ'F†RÆ÷vW"öbF†R&W÷'FVB6÷7B"¶f÷&ÖDÖöæW’†&–ÆÂÇ&÷ræ7W'&Væ7’’²"æBF†RÆ–Ö—B"¶f÷&ÖDÖöæW’‡&÷ræÖ÷VçBÇ&÷ræ7W'&Væ7’“·Ğ¢VÇ6R–b‚v†D–bbg&÷ræÖ÷VçBÖçVÆÂ–Ö—76–ærçW6‚‚'F†R7GVÂ6÷7B"“°¢'&V³·Ğ¢66R'W%öÖöçF‚#¦'&V³°¢FVfVÇC¦'&V³°¢Ğ¢6öç7B6öæF—F–öç3Õ²ââç&÷ræ6öæF—F–öç2æÖ†3Óæ2çG&–Ò‚’’æf–ÇFW"„&ööÆVâ•Ó°¢f÷"†6öç7BÒöbÖ—76–ær–6öæF—F–öç2çW6‚‚%7F–ÆÂæVVFVC¢"¶Ò“°¢–b‡&÷rç7FGW2ÓÒ&6öæf—&ÖVB"–6öæF—F–öç2çW6‚‡&÷ræ÷&–v–ãÓÓÒ'66†VGVÆR#ò$77VÖW2F†R7FæF&B'VÆRf÷"F†—2¶–æBöbÆâVçF–ÂF†Rv÷&F–ær—2&VBâ#¢$æ÷B–WBfW&–f–VBv–ç7BF†RöÆ–7’v÷&F–ærâ"“°¢6öæF—F–öç2çW6‚‚%7V&¦V7BFòF†R–ç7W&W"w276W76ÖVçBæBF†RÆâw2÷vâFW&×2æBW†6ÇW6–öç2â"“°¢òòf–wW&RW'6öâ6ææ÷BG&6R&6²FòöæRöbF†V—"÷vâ6÷fW'2—2¢òòf–wW&RF†W’6ææ÷B6†V6²ÂæBF†RÖöæWF'’vFR&Æö6·2ç¢òò6Æ7VÆFVBÖ÷VçBv—F†÷WBF†—2Ö–ærâ&÷rçöÆ–7”–F—2F†P¢òòFö7VÖVçBFV%öÆ–7’7GVÆÇ’&VBF†—2'VÆRg&öÒÒÒÇ&VG’&÷fV@¢òòFò&VÆöærFòâ÷væVB6öçG&7B&Vf÷&RF†R&÷rv2WfW"6VVFV@¢òò‡v÷&F–æu6VVG2÷66†VGVÆU6VVG2öæÇ’'Vâ÷fW"W'6öâw2÷và¢òò6öçG&7G2’ÒÒ6ò—B—2F†R&VÂÂ÷væVB–FVçF–f–W"Âæ÷B7FæBÖ–âà¢6öç7B&÷t6öçG&7D–C×&÷rçöÆ–7”–Cóò‚&ÆVFvW#¢"·&÷ræfÖ–Ç”ÖVÖ&W$–B“°¢6öç7B—FVÓ¤6Æ–Ô—FVÓ×°¢F—FÆS§&÷uF—FÆR‡W'6öâÇ&÷r’À¢6öçG&7D–C§&÷t6öçG&7D–BÀ¢6÷fW$¶W“¦6÷fW$¶W’‡¶–ç7W&W#§&÷ræ–ç7W&W"Ç&öGV7DæÖS§&÷rçÆäæÖRÆ6öçG&7D–C§&÷t6öçG&7D–GÒ’À¢7FGW3¦Ö÷VçBÖçVÆÃò†Ö—76–æræÆVæwF‡ÇÇ&÷rç7FGW2ÓÒ&6öæf—&ÖVB'ÇÇ&÷ræ6öæF—F–öç2æÆVæwFƒò'÷FVçF–ÆÇ•öÆ–6&ÆR#¢&Æ–¶VÇ•öÆ–6&ÆR"“¢&æVVG5öFö7VÖVçB"À¢Ö÷VçEFW‡C¦Ö÷VçBÖçVÆÃöf÷&ÖDÖöæW’†Ö÷VçBÇ&÷ræ7W'&Væ7’“¢‡&÷rç—4¶–æCÓÓÒ'7FFVB'ÇÇv†D–gÇÇ&÷rç—4¶–æCÓÓÒ'W%öÖöçF‚"“öFW67&–&U—2‡&÷r“¦çVÆÂÀ¢Ö÷VçDÆ&VÃ¦Ö÷VçBÖçVÆÃò‡&÷rç—4¶–æCÓÓÒ'&V–Ö'W'6VÖVçEö6#ò%÷FVçF–Â&V–Ö'W'6VÖVçB#¢%÷FVçF–Â–÷WB"“¢%v†BF†—2&VæVf—B—2"À¢âââ†Ö÷VçBÖçVÆÃ÷¶W7F–ÖFT&6—3¦&6—2Æ6Æ7VÆFVDÖ÷VçC¦Ö÷VçBÆ7W'&Væ7“§&÷ræ7W'&Væ7’À¢6Æ7VÆF–öä¶–æC§&÷rç—4¶–æCÓÓÒ'W&6VçEööe÷7VÒ#ò'7VÕö–ç7W&VB#§&÷rç—4¶–æCÓÓÒ&ÇV×÷7VÒ#ò&f—†VB#§&÷rç—4¶–æCÓÓÒ'W%öF’#ò&F–Ç’#¢&W‡Vç6Uö6"À¢vw&VvF–öã§&÷rç—4¶–æCÓÓÒ'&V–Ö'W'6VÖVçEö6#ò'&V–Ö'W'6VÖVçB"26öç7C¢&FF—F—fR"26öç7BÆ6Æ7VÆF–öä–C¢&ÆVFvW#¢"·&÷ræ–GÓ§·Ò’À¢&V6öã¢†Ö÷VçBÖçVÆÃö&6—5FW‡B²"â#¢%F†—2Æâ—2"¶FW67&–&U—2‡&÷r’²"â"’·v‡•FW‡B‡&÷rÆ&6—2’À¢6öæF—F–öç3¥²ââææWr6WB†6öæF—F–öç2•ÒÀ¢Ó°¢÷WBæ—FV×2çW6‚†—FVÒ“°¢÷WBæ6—FF–öç2çW6‚‡¶6‡Væ´–C¢&ÆVFvW#¢"·&÷ræ–BÇöÆ–7”–C§&÷rçöÆ–7”–Cóò""ÇöÆ–7”æÖS§&÷rçÆäæÖRÆ–ç7W&W#§&÷ræ–ç7W&W#ó÷VæFVf–æVBÀ¢vU7F'C§&÷rç6÷W&6UvSóóÇvTVæC§&÷rç6÷W&6UvSóóÇW'6öæÄWf–FVæ6S§&÷ræ÷&–v–âÓÒ'v÷&F–ær"À¢Wf–FVæ6TÆ&VÃ§&÷ræ÷&–v–ãÓÓÒ'66†VGVÆR#ò%–÷W"66†VGVÆR÷"6W'F–f–6FR#§&÷ræ÷&–v–ãÓÓÒ'W'6öâ#ò$VçFW&VBöâF†R6÷fW&vRvR#¢%öÆ–7’v÷&F–ærÂ&VBv†VâF†RFö7VÖVçBv2WÆöFVB'Ò“°¢Ğ¢Ğ¢Ğ¢÷WBæ6æF–FFW3Õ²ââææWr6WB†÷WBæ6æF–FFW2•Ó°¢–b‡VW7F–öç2æÆVæwF‚—¶÷WBçVW7F–öã×VW7F–öç5³Ó¶÷WBçVW7F–öç4ÆVgC×VW7F–öç2æÆVæwFƒ·Ğ¢&WGW&â÷WC°§Ğ 
+      for(const row of rows){
+        if(event==="fracture"&&typeof bodyPart==="string"&&!fractureRowMatches(row.detail,bodyPart))continue;
+        // A row restricted to one cause is skipped when the cause contradicts
+        // it, and waits (asking) while the cause is unknown.
+        if(row.cause&&!whatIf){
+          if(row.cause!==cause){
+            if(cause==null){ask(person.id,GATES.accident,facts);continue;}
+            continue;
+          }
+        }
+        if(row.paysKind==="stated"||row.amount==null||(row.paysKind==="percent_of_sum"&&row.sumBasis==null))out.complete=false;
+        // A threshold the event has not reached rules the row out; unknown, it is asked.
+        if(row.minimumFact&&row.minimumValue!=null&&!whatIf){
+          const have=knownValue(facts,row.minimumFact);
+          if(typeof have==="number"&&have<row.minimumValue){out.ruledOut.push(rowTitle(person,row)+" â€” needs "+row.minimumFact.replace(/([A-Z])/g," $1").toLowerCase()+" of at least "+row.minimumValue+", and "+have+" was reported");continue;}
+          if(have==null){const q=MINIMUM_QUESTIONS[row.minimumFact];if(q)ask(person.id,q,facts);}
+        }
+        out.candidates.push(row.planName+" â€” "+label(row)+(row.detail&&row.eventType==="fracture"?" ("+row.detail+")":""));
+        // Quantities, only when the event is in play and this is not a what-if.
+        const quantity=QUANTITY_FACT[event];
+        const needsQuantity=(row.paysKind==="per_day"||row.paysKind==="reimbursement_cap")&&row.amount!=null&&quantity;
+        if(needsQuantity&&knownValue(facts,quantity.factKey)==null)ask(person.id,{...quantity,type:"text"},facts);
+        const basis=basisOf(row);
+        let amount:number|null=null;let basisText="";const missing:string[]=[];
+        switch(row.paysKind){
+          case "lump_sum":amount=row.amount;basisText=row.amount!=null?formatMoney(row.amount,row.currency)+" lump sum":"";break;
+          case "percent_of_sum":
+            if(row.amount!=null&&row.sumBasis!=null){amount=Math.round(row.amount*row.sumBasis*100)/100;basisText=Math.round(row.amount*1000)/10+"% of "+formatMoney(row.sumBasis,row.currency);}
+            else if(row.amount!=null)missing.push("the sum insured for "+row.planName+" â€” no schedule or certificate on file states it");
+            break;
+          case "per_day":{
+            const nights=knownValue(facts,quantity?.factKey??"hospitalNights");
+            const ongoing=!whatIf&&knownValue(facts,"hospitalStayOngoing")===true;
+            if(row.amount!=null&&ongoing){
+              // A completed length of stay is what turns this into a figure;
+              // asking the same quantity question with no context reads as
+              // DearPolicy ignoring what was just said, so the benefit is
+              // named as potentially applicable and the real blocker (the
+              // stay has not ended yet) is stated plainly instead.
+              missing.push("the completed length of stay â€” this benefit may still apply once the stay has ended");
+            }else if(row.amount!=null&&typeof nights==="number"){
+              // The calculator is the only place this arithmetic runs: it
+              // bounds payable days to the day cap (never an uncapped daily
+              // benefit) and returns not_applicable rather than a $0 payout
+              // when the waiting period was never cleared.
+              const calc=calculateHospitalCash({
+                dailyRate:row.amount,currency:row.currency,hospitalStayOngoing:false,hospitalNights:nights,
+                offsetDays:row.offsetDays??0,maximumDays:row.maximumDays,
+                ownership:{contractId:row.policyId??row.id,coverageId:row.id,label:row.planName},
+                ruleEvidence:{chunkId:"ledger:"+row.id,policyId:row.policyId??undefined,pageStart:row.sourcePage??undefined,pageEnd:row.sourcePage??undefined,label:row.planName},
+                ownershipEvidence:{chunkId:"ledger:"+row.id,policyId:row.policyId??undefined,pageStart:row.sourcePage??undefined,pageEnd:row.sourcePage??undefined,label:row.planName},
+              });
+              if(calc.status==="calculated"){
+                amount=calc.potentialAmount;
+                basisText=formatMoney(row.amount,row.currency)+" Ã— "+calc.payableDays+" payable night"+(calc.payableDays===1?"":"s")+(calc.offsetDays?" (after the first "+calc.offsetDays+")":"");
+              }else if(calc.status==="not_applicable"){
+                missing.push("a completed stay long enough to clear the "+calc.offsetDays+"-day waiting period ("+calc.reportedHospitalNights+" night"+(calc.reportedHospitalNights===1?"":"s")+" reported)");
+              }else{
+                // A structural block (most commonly a missing day cap): never
+                // show an uncapped or otherwise unverified daily amount.
+                missing.push(calc.message);
+              }
+            }else if(!whatIf&&row.amount!=null)missing.push("the number of nights");
+            break;}
+          case "reimbursement_cap":{
+            const bill=knownValue(facts,quantity?.factKey??"outOfPocket");
+            if(row.amount!=null&&typeof bill==="number"){amount=Math.min(bill,row.amount);basisText="the lower of the reported cost "+formatMoney(bill,row.currency)+" and the limit "+formatMoney(row.amount,row.currency);}
+            else if(!whatIf&&row.amount!=null)missing.push("the actual cost");
+            break;}
+          case "per_month":break;
+          default:break;
+        }
+        const conditions=[...row.conditions.map(c=>c.trim()).filter(Boolean)];
+        for(const m of missing)conditions.push("Still needed: "+m);
+        if(row.status!=="confirmed")conditions.push(row.origin==="schedule"?"Assumes the standard rule for this kind of plan until the wording is read.":"Not yet verified against the policy wording.");
+        conditions.push("Subject to the insurer's assessment and the plan's own terms and exclusions.");
+        // A figure a person cannot trace back to one of their own covers is a
+        // figure they cannot check, and the monetary gate blocks any
+        // calculated amount without this mapping. `row.policyId` is the
+        // document DearPolicy actually read this rule from -- already proved
+        // to belong to an owned contract before the row was ever seeded
+        // (wordingSeeds/scheduleSeeds only run over a person's own
+        // contracts) -- so it is the real, owned identifier, not a stand-in.
+        const rowContractId=row.policyId??("ledger:"+row.familyMemberId);
+        const item:ClaimItem={
+          title:rowTitle(person,row),
+          contractId:rowContractId,
+          coverKey:coverKey({insurer:row.insurer,productName:row.planName,contractId:rowContractId}),
+          status:amount!=null?(missing.length||row.status!=="confirmed"||row.conditions.length?"potentially_applicable":"likely_applicable"):"needs_document",
+          amountText:amount!=null?formatMoney(amount,row.currency):(row.paysKind==="stated"||whatIf||row.paysKind==="per_month")?describePays(row):null,
+          amountLabel:amount!=null?(row.paysKind==="reimbursement_cap"?"Potential reimbursement":"Potential payout"):"What this benefit pays",
+          ...(amount!=null?{estimateBasis:basis,calculatedAmount:amount,currency:row.currency,
+            calculationKind:row.paysKind==="percent_of_sum"?"sum_insured":row.paysKind==="lump_sum"?"fixed":row.paysKind==="per_day"?"daily":"expense_cap",
+            aggregation:row.paysKind==="reimbursement_cap"?"reimbursement" as const:"additive" as const,calculationId:"ledger:"+row.id}:{}),
+          reason:(amount!=null?basisText+". ":"This plan pays "+describePays(row)+". ")+whyText(row,basis),
+          conditions:[...new Set(conditions)],
+        };
+        out.items.push(item);
+        out.citations.push({chunkId:"ledger:"+row.id,policyId:row.policyId??"",policyName:row.planName,insurer:row.insurer??undefined,
+          pageStart:row.sourcePage??1,pageEnd:row.sourcePage??1,personalEvidence:row.origin!=="wording",
+          evidenceLabel:row.origin==="schedule"?"Your schedule or certificate":row.origin==="person"?"Entered on the Coverage page":"Policy wording, read when the document was uploaded"});
+      }
+    }
+  }
+  out.candidates=[...new Set(out.candidates)];
+  if(questions.length){out.question=questions[0];out.questionsLeft=questions.length;}
+  return out;
+}

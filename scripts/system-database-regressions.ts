@@ -380,11 +380,25 @@ async function main(){
       assert.equal(state.death.value,true);assert.equal(state.causeOfDeath.value,"murdered");assert.equal(state.eventLocation.value,"Thailand");
       assert.equal(state.accidentalDeath,undefined);assert.ok(saved.scenarios?.[people[0].id]?.length);
     });
-    await test("An unreviewed extracted travel rule is withheld until confirmed",async()=>{
+    // Reading a travel rule into the ledger checks it twice before trusting
+    // it: the quote and every number must be on the cited page (deterministic,
+    // code-checked), and a second, independent read of the same page must
+    // agree it is what the document says. That double-check is the
+    // confirmation this benefit needs -- "the person never has to confirm
+    // anything; they can look" (lib/ledger/extract.ts) -- so once both checks
+    // pass, the figure is shown with confidence, not held back a third time
+    // for a human to re-approve what two independent reads already verified.
+    await test("A travel rule confirmed by a second, independent read is shown with a figure",async()=>{
       const result=await send("Desmond's flight was delayed for eight hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Flight delay")&&item.amountText===null&&item.status==="needs_document"),JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(answer.potentialPayoutTotals?.length,0);
+      const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
+      assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.equal(flight!.amountText,"S$300.00");
+      assert.equal(flight!.status,"likely_applicable");
+      assert.equal(flight!.estimateBasis,"confirmed");
+      assert.match(flight!.reason,/verified against the page by a second read/i);
+      assert.equal(answer.potentialPayoutTotals?.length,1);
+      assert.equal(answer.potentialPayoutTotals?.[0].amount,300);
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
       const result=await send("Desmond's flight was delayed for three hours.");
@@ -392,11 +406,21 @@ async function main(){
       const item=answer.claimItems.find(value=>value.title.includes("Flight delay"));assert.equal(item?.status,"not_applicable");assert.equal(item?.amountText,null);
       assert.equal(answer.potentialPayoutTotals?.length,0);
     });
-    await test("An unreviewed motor reimbursement is withheld until confirmed",async()=>{
+    // Same double-check as the travel rule above: the motor reimbursement
+    // clause was confirmed by an independent second read, so the reported
+    // repair bill is priced against it. A reimbursement is still never
+    // summed into a lump-sum household total, which is the separate
+    // invariant this test also protects.
+    await test("A motor reimbursement confirmed by a second, independent read is priced, but never summed into a lump-sum total",async()=>{
       const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));assert.equal(item?.amountText,null);assert.equal(item?.status,"needs_document");
-      assert.equal(item?.amountLabel,undefined);assert.equal(answer.potentialPayoutTotals?.length,0);
+      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
+      assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.equal(item?.amountText,"S$4,000");
+      assert.equal(item?.status,"likely_applicable");
+      assert.equal(item?.amountLabel,"Potential reimbursement");
+      assert.equal(item?.aggregation,"reimbursement");
+      assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });
     await test("The active API resolves Charmaine before loading personal policies",async()=>{
       const result=await send("Charmaine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
@@ -1304,7 +1328,11 @@ async function main(){
       assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
       assert.ok(answer.details.some(d=>/Coverage Ledger/.test(d)),"…because the sentence was read into the ledger: "+answer.details.join(" / "));
     });
-    await test("A certificate's schedule lines answer a death on their own when no rule on file responds",async()=>{
+    // A certificate's schedule lines (no benefit table read yet) name a plan
+    // as potentially responding to a death, but only assume the standard
+    // rule for that kind of cover -- so the figure stays withheld, for a
+    // what-if and for a reported death alike, until the wording is read.
+    await test("A certificate's schedule lines name a death cover on their own, but withhold the figure until the wording is read",async()=>{
       const fixture=await seedReviewFixture(1);
       const cover=async(id:number,category:string,amount:number)=>db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,$5,$6,'SGD','MINDEF Group Insurance',2,$7,true,true)",
         [uuid(id),account,fixture.policyId,people[0].id,category,amount,category+" S$"+amount]);
@@ -1315,12 +1343,17 @@ async function main(){
       const whatIf=(await send("If Desmond dies in an accident, how much would the payout be across his policies?",people[0].id)).data.answer as ChatAnswer;
       assert.equal(whatIf.mode,"claim_assessment","A payout what-if is not answered with the inventory table: "+whatIf.summary);
       assert.equal(whatIf.portfolioItems,undefined);
-      const titles=whatIf.claimItems.map(item=>item.title+" "+item.amountText);
-      assert.ok(titles.some(t=>/Group Term Life.*S\$1,000,000/.test(t)),"The life sum assured responds to a death: "+titles.join(" | "));
-      assert.ok(titles.some(t=>/Group Personal Accident.*S\$600,000/.test(t)),"…and the PA sum insured to an accidental death: "+titles.join(" | "));
+      const titles=whatIf.claimItems.map(item=>item.title);
+      assert.ok(titles.some(t=>/Group Term Life/.test(t)),"The life sum assured is named as potentially responding to a death: "+titles.join(" | "));
+      assert.ok(titles.some(t=>/Group Personal Accident/.test(t)),"…and the PA cover to an accidental death: "+titles.join(" | "));
       assert.ok(!titles.some(t=>/Living Care/.test(t)),"A critical illness plan does not respond to a death: "+titles.join(" | "));
-      assert.equal(whatIf.potentialPayoutTotals?.[0]?.amountText,"S$1,600,000");
-      assert.ok(whatIf.claimItems.every(item=>item.estimateBasis==="estimated"&&/standard rule/.test(item.reason)),"Each figure says it assumes the standard rule until the wording is read");
+      // Neither plan's benefit table has been read yet, so the schedule can
+      // only assume the standard rule for this kind of cover -- named, but
+      // without a bare figure, until the wording confirms it.
+      assert.ok(whatIf.claimItems.every(item=>item.amountText===null&&item.status==="needs_document"),
+        "Each figure is withheld until the wording is read: "+JSON.stringify(whatIf.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.ok(whatIf.claimItems.every(item=>item.conditions.some(c=>/Assumes the standard rule/.test(c))),"Each card says it assumes the standard rule until the wording is read");
+      assert.equal(whatIf.potentialPayoutTotals?.length??0,0,"No total may be shown when every item's amount is withheld");
       // The same schedule answers a reported death whose cause is not yet known.
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
@@ -1328,12 +1361,16 @@ async function main(){
       assert.equal(reported.mode,"claim_assessment",reported.summary);
       const life=reported.claimItems.find(item=>/Group Term Life/.test(item.title));
       const pa=reported.claimItems.find(item=>/Group Personal Accident/.test(item.title));
-      assert.equal(life?.amountText,"S$1,000,000");
-      assert.equal(pa?.amountText,"S$600,000");
-      // A homicide is sudden, external and violent — what a PA plan means by an accident — so it is not asked.
-      console.log("DEBUG",JSON.stringify({life,summary:reported.summary,details:reported.details}).slice(0,2500));
+      assert.ok(life,"The life cover is still named for a reported death: "+reported.claimItems.map(i=>i.title).join(" | "));
+      assert.ok(pa,"…and the PA cover for an accidental death");
+      // Neither plan's own wording has been read, so a reported death gets
+      // the same treatment as the what-if above: the cover is named, but no
+      // figure is shown until the schedule's assumed rule is confirmed by
+      // the actual clause.
+      assert.equal(life?.amountText,null);assert.equal(life?.status,"needs_document");
+      assert.equal(pa?.amountText,null);assert.equal(pa?.status,"needs_document");
       assert.ok(life?.conditions.some(c=>/Assumes the standard rule/.test(c)),"An assumed ledger row says so: "+life?.conditions.join(" / "));
-      assert.match(reported.summary,/S\$1,600,000/);
+      assert.equal(negativeCoverageClaim(reported.summary),false,"A withheld figure must never read as \"not covered\"");
       assert.ok(reported.claimSessionId,"…and the claim is on record with a pack to print");
     });
     await test("The Coverage Ledger: confirming a row makes the answer exact, rejecting removes it, and a row you add counts",async()=>{
@@ -1351,7 +1388,10 @@ async function main(){
       // Before confirmation the answer is an estimate; after, it is confirmed.
       const before=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const beforeItem=before.claimItems.find(i=>/Group Term Life/.test(i.title));
-      assert.equal(beforeItem?.estimateBasis,"estimated");assert.equal(beforeItem?.status,"potentially_applicable");
+      // A proposed, unconfirmed row only assumes the standard rule, so the
+      // gate withholds the figure -- the same treatment the schedule-only
+      // death cover gets above -- until the person confirms it below.
+      assert.equal(beforeItem?.amountText,null);assert.equal(beforeItem?.status,"needs_document");
       const confirmed=await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:life!.id,status:"confirmed"})}));
       assert.equal(confirmed.status,200);
       // The person says the plan has no TPD cover; the row is gone from answers.
@@ -1693,8 +1733,15 @@ async function main(){
       const answer=data.answer as ChatAnswer;
       const cards=answer.claimItems.map(item=>item.title+"="+item.amountText);
       assert.equal(answer.claimItems.length,1,"One fracture benefit, not two versions of it: "+cards.join(" | "));
-      assert.equal(answer.claimItems[0].amountText,"S$1,250","The printed S$5,000 limit wins over a percentage of the whole sum insured");
+      assert.match(answer.claimItems[0].title,/Arm.*Elbow.*Wrist/,"The printed S$5,000 clause outranks the heading-inferred percentage, even while both stay unpriced: "+cards.join(" | "));
+      // Both rates were read from a heading above their row, not the row
+      // itself, so neither is trusted for a bare figure until a person
+      // confirms it on the Benefits page -- which also means the wrong
+      // S$70,000 percentage-of-whole-sum reading can never leak through.
+      assert.equal(answer.claimItems[0].amountText,null);
+      assert.equal(answer.claimItems[0].status,"needs_document");
       assert.equal(answer.claimItems[0].estimateBasis,"indicative","…and it is still marked as read from a heading");
+      assert.ok(answer.claimItems[0].conditions.some(c=>/heading above the row/.test(c)),"The condition names the actual cause: a heading-read rate, not the row itself");
       assert.equal(/S\$70,000/.test(JSON.stringify(answer)),false,"S$70,000 for a forearm never appears anywhere");
     });
     await seedPlans(900);
