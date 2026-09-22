@@ -282,7 +282,7 @@ function makeCIRule(overrides: Partial<CIRuleEvidence> = {}): CIRuleEvidence {
   return {
     coverageId: COVERAGE, benefitCode: "ci-major", illnessName: "Major Cancer",
     quote: "100% of Sum Insured shall be paid for Major Cancer.", formula: { kind: "fixed", amount: 50_000, currency: CCY },
-    citation: { policyId: POLICY, chunkId: "page:policy-1:10", pageStart: 10, pageEnd: 10, evidenceLabel: "Major Cancer wording" },
+    citation: { policyId: POLICY, policyName: "Living Care", chunkId: "page:policy-1:10", pageStart: 10, pageEnd: 10, evidenceLabel: "Major Cancer wording" },
     ...overrides,
   };
 }
