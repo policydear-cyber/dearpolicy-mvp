@@ -250,8 +250,15 @@ function mergeNonNull(base: ClaimFacts, updates: Partial<ClaimFacts>) {
   const next: ClaimFacts = { ...EMPTY_CLAIM_FACTS, ...base, injuries: [...(base.injuries ?? [])], uncertainFacts: [...(base.uncertainFacts ?? [])], factSources: { ...(base.factSources ?? {}) } };
   for (const [key, value] of Object.entries(updates) as [keyof ClaimFacts, ClaimFacts[keyof ClaimFacts]][]) {
     if (value == null) continue;
-    if (key === "injuries" && Array.isArray(value)) next.injuries = [...new Set([...next.injuries, ...value])];
-    else if (key === "uncertainFacts" && Array.isArray(value)) next.uncertainFacts = [...new Set([...next.uncertainFacts, ...value])];
+    // Object.entries(updates) collapses every field's value type into the
+    // single union ClaimFacts[keyof ClaimFacts] -- now that ClaimFacts also
+    // carries a CauseDefinitionMatch[] field, that union includes non-string
+    // array members too, so Array.isArray(value) alone no longer narrows
+    // value back to string[] here. The key === "injuries" /
+    // key === "uncertainFacts" checks already prove at runtime which string[]
+    // field this is; the cast makes that explicit for the type checker.
+    if (key === "injuries" && Array.isArray(value)) next.injuries = [...new Set([...next.injuries, ...(value as string[])])];
+    else if (key === "uncertainFacts" && Array.isArray(value)) next.uncertainFacts = [...new Set([...next.uncertainFacts, ...(value as string[])])];
     else (next as unknown as Record<string, unknown>)[key] = value;
   }
   return next;

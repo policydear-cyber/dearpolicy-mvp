@@ -37,6 +37,13 @@ export type DeathBenefitEvidenceRef = {
   pageStart?: number;
   pageEnd?: number;
   label?: string;
+  /** Present on ownership evidence: a persistent coverage/ownership-record
+   * ID, structurally required by validateOwnershipEvidence(). Absent on
+   * plain rule/definition/cap evidence. */
+  coverageId?: string;
+  /** Present on ownership evidence when a family-member association was
+   * captured alongside the persistent coverage ID. */
+  familyMemberId?: string;
 };
 
 export type DeathBenefitOwnershipRef = {
@@ -226,11 +233,18 @@ export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitRes
   }
   const ruleEvidenceCheck = validatePolicyEvidence(input.ruleEvidence, "MALFORMED_RULE_EVIDENCE");
   if (!ruleEvidenceCheck.valid) {
-    return { status: "blocked", reasonCode: ruleEvidenceCheck.reasonCode, message: ruleEvidenceCheck.message };
+    // validatePolicyEvidence was called with the "MALFORMED_RULE_EVIDENCE"
+    // override above, so every failure branch inside it returns exactly
+    // that literal -- this narrows the function's general
+    // EvidenceBlockReasonCode return type back to the one reason code this
+    // calculator's own DeathBenefitBlockReasonCode actually declares.
+    return { status: "blocked", reasonCode: ruleEvidenceCheck.reasonCode as "MALFORMED_RULE_EVIDENCE", message: ruleEvidenceCheck.message };
   }
   const ownershipEvidenceCheck = validateOwnershipEvidence(input.ownershipEvidence);
   if (!ownershipEvidenceCheck.valid) {
-    return { status: "blocked", reasonCode: ownershipEvidenceCheck.reasonCode, message: ownershipEvidenceCheck.message };
+    // validateOwnershipEvidence() always returns "MALFORMED_OWNERSHIP_EVIDENCE"
+    // on failure -- see lib/claims/calculators/evidence.ts.
+    return { status: "blocked", reasonCode: ownershipEvidenceCheck.reasonCode as "MALFORMED_OWNERSHIP_EVIDENCE", message: ownershipEvidenceCheck.message };
   }
   if (input.unresolvedConditions?.length) {
     return { status: "blocked", reasonCode: "UNRESOLVED_CONDITION", message: "A required policy condition is still unresolved: " + input.unresolvedConditions[0] };
@@ -322,7 +336,15 @@ export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitRes
     ruleEvidence.policyId, ruleEvidence.chunkId, ruleEvidence.pageStart, ruleEvidence.pageEnd,
     ownershipEvidence.policyId, ownershipEvidence.coverageId,
     input.formula.kind, input.formula.kind === "sum_insured_fraction" ? input.formula.fraction : input.formula.amount,
-    capEvidence ? [input.cap!.amount, capEvidence.policyId, capEvidence.chunkId, capEvidence.pageStart, capEvidence.pageEnd] : null,
+    // Cap evidence fields are flattened to individual scalars rather than
+    // nested as an array -- stableId()'s parts are all scalars, and a cap
+    // amount/policyId/chunkId/pageStart/pageEnd changing still changes the
+    // resulting hash either way.
+    capEvidence ? input.cap!.amount : null,
+    capEvidence ? capEvidence.policyId : null,
+    capEvidence ? capEvidence.chunkId : null,
+    capEvidence ? capEvidence.pageStart : null,
+    capEvidence ? capEvidence.pageEnd : null,
     input.dateOfDeath, input.currency, input.sumInsured ?? null,
   ]);
 
