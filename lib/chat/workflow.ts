@@ -2,7 +2,7 @@ import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
-import { enforceChatMonetarySafety } from "@/lib/claims/monetary-gate";
+import { enforceChatMonetarySafety, evaluateChatMonetaryEligibility } from "@/lib/claims/monetary-gate";
 import { analysisSources,loadPolicyInventory,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
 import { contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { contractReviewCoverage,emptyReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
@@ -973,7 +973,14 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             if(status&&status.state!=="verified_recent")assessed.item.conditions=[...new Set([...assessed.item.conditions,status.label+": "+status.detail])];
             answer.claimItems.push(assessed.item);addCitations(answer.citations,assessed.citations);
             for(const missing of assessed.checks.filter(c=>["missing","deferred","document","review"].includes(c.result)))answer.missingFacts.push(contract.ownerName+": "+missing.r.why);
-            if(assessed.item.calculatedAmount!=null){
+            // A qualifier that says "the amount could settle differently" only
+            // makes sense next to an amount that is actually shown. The
+            // monetary gate runs later and may withhold this item's amount
+            // entirely (e.g. a definitional fact that needs the insurer's own
+            // confirmation) -- when it will, these qualifiers must not be
+            // raised at all, or the user sees caveats about a figure that
+            // was never displayed.
+            if(assessed.item.calculatedAmount!=null&&evaluateChatMonetaryEligibility(assessed.item).status==="allowed"){
               for(const check of assessed.checks){
                 if(check.result==="document")payoutQualifiers.push("the insurer must confirm "+check.r.why.replace(/\.$/,"").toLowerCase());
                 else if(check.result==="deferred")payoutQualifiers.push("a fact you have not confirmed yet still applies: "+check.r.why.replace(/\.$/,"").toLowerCase());
