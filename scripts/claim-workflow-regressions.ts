@@ -60,6 +60,16 @@ export async function runClaimWorkflowRegressions() {
     if (/^BEGIN$/.test(sql) || /^COMMIT$/.test(sql) || /^ROLLBACK$/.test(sql)) return { rows: [], rowCount: 0 };
     if (/pg_advisory_xact_lock/.test(sql)) return { rows: [], rowCount: 0 };
     if (/CREATE TABLE IF NOT EXISTS claim_evidence_documents/.test(sql)) return { rows: [], rowCount: 0 };
+    // lib/claims/composition/store.ts's ensureClaimCompositionSchema()
+    // follows the exact same pattern (its own pool.connect() session,
+    // BEGIN / advisory lock / the schema file's DDL / COMMIT), now reached
+    // on every claim turn via lib/claims/orchestrator.ts's
+    // recordCompositionSnapshot() call -- answered here the same way, plus
+    // the snapshot INSERT itself, which this suite never needs to assert on
+    // since it predates composition and none of its scenarios inspect
+    // claim_composition_snapshots rows.
+    if (/CREATE TABLE IF NOT EXISTS claim_composition_snapshots/.test(sql)) return { rows: [], rowCount: 0 };
+    if (/INSERT INTO claim_composition_snapshots/.test(sql)) return { rows: [], rowCount: 0 };
     // lib/claims/orchestrator.ts loads confirmed CauseDefinitionMatch rows
     // fresh on every turn (see session-matches.ts) -- none of these fixture
     // scenarios ever create one, so the fixture always answers "no active
