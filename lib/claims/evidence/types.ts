@@ -1,4 +1,4 @@
-import type { CauseOfDeathDocumentType, MedicalEvidenceDocumentType } from "@/lib/claims/calculators/evidence";
+import type { CauseOfDeathDocumentType, MedicalEvidenceDocumentType, MedicalClaimDocumentType } from "@/lib/claims/calculators/evidence";
 
 /** The claim-evidence pipeline (documents, extraction, identity, review
  * state machine, audit trail) is shared, generic infrastructure -- see
@@ -9,7 +9,7 @@ import type { CauseOfDeathDocumentType, MedicalEvidenceDocumentType } from "@/li
  * union, and CLAIM_EVIDENCE_DOCUMENT_TYPES below, is what lets a medical
  * document flow through createEvidenceDocument/processClaimEvidence/etc.
  * with zero changes to those functions. */
-export type ClaimEvidenceDocumentType = CauseOfDeathDocumentType | MedicalEvidenceDocumentType;
+export type ClaimEvidenceDocumentType = CauseOfDeathDocumentType | MedicalEvidenceDocumentType | MedicalClaimDocumentType;
 
 export const CAUSE_OF_DEATH_DOCUMENT_TYPES: CauseOfDeathDocumentType[] = [
   "death_certificate", "police_report", "coroners_report", "medical_examiner_report", "other_official_document",
@@ -18,11 +18,35 @@ export const MEDICAL_EVIDENCE_DOCUMENT_TYPES: MedicalEvidenceDocumentType[] = [
   "specialist_memo", "medical_report", "pathology_report", "imaging_report",
   "laboratory_report", "discharge_summary", "surgical_report", "other_medical_evidence",
 ];
+/** The medical-CLAIM document set (PR: v1-medical-claims-engine) -- a
+ * hospital bill and the records around it, as distinct from
+ * MEDICAL_EVIDENCE_DOCUMENT_TYPES above (clinical evidence for a
+ * critical-illness DIAGNOSIS). `discharge_summary` and `surgical_report`
+ * are deliberately not duplicated here: a medical claim reuses those two
+ * existing medical-evidence types as-is (see isMedicalClaimEligibleDocumentType
+ * below), so the same discharge summary a CI claim already accepts can
+ * also support a hospital-cash/medical-reimbursement claim without a
+ * second upload. */
+export const MEDICAL_CLAIM_DOCUMENT_TYPES: MedicalClaimDocumentType[] = [
+  "hospital_bill", "itemised_bill", "doctor_memo", "referral", "pre_authorisation",
+  "procedure_report", "receipt_payment_proof", "other_insurer_settlement_statement",
+  "medishield_integrated_shield_settlement_statement",
+];
 export const CLAIM_EVIDENCE_DOCUMENT_TYPES: ClaimEvidenceDocumentType[] = [
-  ...CAUSE_OF_DEATH_DOCUMENT_TYPES, ...MEDICAL_EVIDENCE_DOCUMENT_TYPES,
+  ...CAUSE_OF_DEATH_DOCUMENT_TYPES, ...MEDICAL_EVIDENCE_DOCUMENT_TYPES, ...MEDICAL_CLAIM_DOCUMENT_TYPES,
 ];
 export function isMedicalEvidenceDocumentType(value: ClaimEvidenceDocumentType): value is MedicalEvidenceDocumentType {
   return (MEDICAL_EVIDENCE_DOCUMENT_TYPES as string[]).includes(value);
+}
+export function isMedicalClaimDocumentType(value: ClaimEvidenceDocumentType): value is MedicalClaimDocumentType {
+  return (MEDICAL_CLAIM_DOCUMENT_TYPES as string[]).includes(value);
+}
+/** Every document type a medical claim's bill evidence may actually be
+ * drawn from -- the medical-claim set plus the two clinical-evidence types
+ * it reuses from MEDICAL_EVIDENCE_DOCUMENT_TYPES (see that const's own
+ * doc comment). */
+export function isMedicalClaimEligibleDocumentType(value: ClaimEvidenceDocumentType): boolean {
+  return isMedicalClaimDocumentType(value) || value === "discharge_summary" || value === "surgical_report";
 }
 
 /** uploaded -> quarantined -> processing -> extracted -> needs_review ->
@@ -133,6 +157,22 @@ export type ClaimEvidenceExtractedFields = {
   survivalPeriodDates?: string[];
   priorDiagnosisHistory?: string | null;
   priorCriticalIllnessClaims?: string | null;
+  /** The following medical-CLAIM-only fields (hospitalName..thirdPartyPayments)
+   * are the bill-evidence analogue of the medical-evidence fields above --
+   * see this type's own module doc comment for why one combined shape
+   * covers every claim-evidence document kind. Every amount is reported as
+   * the document's own printed text (`amountText`), never as a number the
+   * model computed -- see lib/claims/evidence/medical-bill-evidence.ts's
+   * parseAmountMinor(), the only place an amountText is ever turned into
+   * minor units, deterministically and never guessed. */
+  hospitalName?: string | null;
+  hospitalCountry?: string | null;
+  admissionDate?: string | null;
+  dischargeDate?: string | null;
+  admissionType?: string | null;
+  wardType?: string | null;
+  billLineItems?: { category: string; description: string | null; amountText: string; currency: string | null }[];
+  thirdPartyPayments?: { source: string; amountText: string; currency: string | null }[];
   issuingAuthority: string | null;
   documentReference: string | null;
   documentType: ClaimEvidenceDocumentType | null;

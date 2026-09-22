@@ -17,7 +17,8 @@ export type EvidenceBlockReasonCode =
   | "MALFORMED_RULE_EVIDENCE"
   | "MALFORMED_OWNERSHIP_EVIDENCE"
   | "MALFORMED_CAUSE_EVIDENCE"
-  | "MALFORMED_POLICY_DEFINITION_EVIDENCE";
+  | "MALFORMED_POLICY_DEFINITION_EVIDENCE"
+  | "MALFORMED_MEDICAL_CLAIM_EVIDENCE";
 
 export type EvidenceValidation<T> =
   | { valid: true; evidence: T }
@@ -296,3 +297,119 @@ export type CIDefinitionMatch = {
   result: CIDefinitionMatchResult;
   reviewedAt: string;
 };
+
+/**
+ * Medical-CLAIM evidence -- distinct from `MedicalEvidenceDocumentType`
+ * above, which is clinical evidence supporting a critical-illness
+ * DIAGNOSIS. These are the documents a hospital-cash/medical-reimbursement
+ * claim is actually proved from: the bill itself, and the records around
+ * it. `discharge_summary` and `surgical_report` are deliberately NOT
+ * repeated here -- they already exist in `MedicalEvidenceDocumentType` and
+ * are reused as-is for a medical claim (see MEDICAL_CLAIM_ELIGIBLE_DOCUMENT_TYPES
+ * below), exactly as lib/claims/evidence/types.ts's module doc comment
+ * already establishes for the shared pipeline.
+ */
+export type MedicalClaimDocumentType =
+  | "hospital_bill" | "itemised_bill" | "doctor_memo" | "referral" | "pre_authorisation"
+  | "procedure_report" | "receipt_payment_proof" | "other_insurer_settlement_statement"
+  | "medishield_integrated_shield_settlement_statement";
+
+const SUPPORTED_MEDICAL_CLAIM_DOCUMENT_TYPES = new Set<MedicalClaimDocumentType>([
+  "hospital_bill", "itemised_bill", "doctor_memo", "referral", "pre_authorisation",
+  "procedure_report", "receipt_payment_proof", "other_insurer_settlement_statement",
+  "medishield_integrated_shield_settlement_statement",
+]);
+/** The full set of document types a medical claim's bill evidence may be
+ * drawn from, including the two clinical-evidence types it shares with
+ * critical illness. */
+const MEDICAL_CLAIM_ELIGIBLE_DOCUMENT_TYPES = new Set<string>([
+  ...SUPPORTED_MEDICAL_CLAIM_DOCUMENT_TYPES, "discharge_summary", "surgical_report",
+]);
+
+/** Evidence that a specific medical-claim document (a bill, receipt,
+ * referral, pre-authorisation, etc.) was actually reviewed for this family
+ * member and this claim -- mirrors `ValidMedicalEvidenceRef` exactly. */
+export type ValidMedicalClaimEvidenceRef = {
+  documentId: string;
+  documentType: string;
+  pageStart?: number;
+  pageEnd?: number;
+  sourceLocation?: string;
+  familyMemberId: string;
+  claimEventId: string;
+};
+
+export function validateMedicalClaimEvidence(value: unknown): EvidenceValidation<ValidMedicalClaimEvidenceRef> {
+  if (!value || typeof value !== "object") return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "No medical-claim evidence was supplied." };
+  const v = value as Record<string, unknown>;
+  if (!nonEmptyString(v.documentId)) return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "The medical-claim evidence is missing a document ID." };
+  if (!nonEmptyString(v.documentType) || !MEDICAL_CLAIM_ELIGIBLE_DOCUMENT_TYPES.has(v.documentType as string)) {
+    return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "The medical-claim evidence does not name a supported document type." };
+  }
+  const pageStartOk = v.pageStart === undefined || validPage(v.pageStart);
+  const pageEndOk = v.pageEnd === undefined || (validPage(v.pageEnd) && (!validPage(v.pageStart) || (v.pageEnd as number) >= (v.pageStart as number)));
+  const hasValidPage = validPage(v.pageStart) && pageEndOk;
+  const hasSourceLocation = nonEmptyString(v.sourceLocation);
+  if (!pageStartOk || !pageEndOk) return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "The medical-claim evidence has an invalid or reversed page range." };
+  if (!hasValidPage && !hasSourceLocation) return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "The medical-claim evidence has no valid source page or structured source location." };
+  if (!nonEmptyString(v.familyMemberId)) return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "The medical-claim evidence is not associated with a family member." };
+  if (!nonEmptyString(v.claimEventId)) return { valid: false, reasonCode: "MALFORMED_MEDICAL_CLAIM_EVIDENCE", message: "The medical-claim evidence is not associated with a claim event." };
+  return {
+    valid: true,
+    evidence: {
+      documentId: (v.documentId as string).trim(),
+      documentType: (v.documentType as string).trim(),
+      pageStart: validPage(v.pageStart) ? (v.pageStart as number) : undefined,
+      pageEnd: validPage(v.pageEnd) ? (v.pageEnd as number) : undefined,
+      sourceLocation: hasSourceLocation ? (v.sourceLocation as string).trim() : undefined,
+      familyMemberId: (v.familyMemberId as string).trim(),
+      claimEventId: (v.claimEventId as string).trim(),
+    },
+  };
+}
+
+/** One line item DearPolicy has actually verified from a REVIEWED bill
+ * document -- never from chat text, never from a raw model proposal (see
+ * lib/claims/evidence/medical-bill-evidence.ts, the only writer of
+ * `VerifiedMedicalBillFacts`). `amountMinor` is always the result of a
+ * deterministic, structurally-validated parse of the document's own
+ * printed amount (see that module's `parseAmountMinor()`) -- the model
+ * that read the document is never trusted to do currency arithmetic
+ * itself. */
+export type MedicalBillLineItem = {
+  category: string;
+  description: string | null;
+  amountMinor: number;
+  currency: string;
+  documentId: string;
+  documentType: string;
+};
+
+export type MedicalBillThirdPartyPayment = {
+  source: string;
+  amountMinor: number;
+  currency: string;
+  documentId: string;
+};
+
+/** The aggregate of every "matched" (reviewer-confirmed) medical-claim
+ * document for one family member's one claim -- the ONLY source a medical
+ * calculator may treat as a verified eligible billed expense or a verified
+ * admission/discharge/ward/panel fact. A chat-reported figure
+ * (`ClaimFacts.hospitalBill`, an admission date the family typed) can
+ * drive a question or a low-confidence day-count estimate, but it is never
+ * substituted for this when a calculator needs a VERIFIED figure -- see
+ * lib/claims/medical-rules.ts. Empty/null fields simply mean nothing has
+ * been reviewed yet for that fact, never that the fact is zero. */
+export type VerifiedMedicalBillFacts = {
+  lineItems: MedicalBillLineItem[];
+  thirdPartyPayments: MedicalBillThirdPartyPayment[];
+  admissionISO: string | null;
+  dischargeISO: string | null;
+  hospitalName: string | null;
+  hospitalCountry: string | null;
+  admissionType: string | null;
+  wardType: string | null;
+  sourceDocumentIds: string[];
+};
+

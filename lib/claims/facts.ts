@@ -82,6 +82,8 @@ const QUESTION_FIELDS: Record<string, keyof ClaimFacts> = {
   hospital_bill: "hospitalBill", out_of_pocket: "outOfPocket", surgery: "surgery", permanent_impairment: "permanentImpairment",
   competitive_racing: "competitiveRacing", racing_authority_sanctioned: "racingAuthoritySanctioned", medical_report: "medicalReportAvailable",
   cause_of_death_document: "causeOfDeathDocumentAvailable",
+  admission_date: "admissionDate", discharge_date: "dischargeDate",
+  medical_bill_document: "medicalBillDocumentAvailable", panel_status: "panelStatusReported",
 };
 
 function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null, context: ClaimDateContext = {}): Partial<ClaimFacts> {
@@ -178,6 +180,14 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   // entry to causeDefinitionMatches, both of which require an actual
   // reviewed document and are never extracted from free text.
   if (/death certificate|coroner|coroner's report|police report|medical examiner/i.test(text)) out.causeOfDeathDocumentAvailable = !/don't have|do not have|no (?:death certificate|report|coroner)/i.test(text);
+  // Same availability-only pattern as causeOfDeathDocumentAvailable above --
+  // mentioning an itemised bill can prompt DearPolicy to ask for the
+  // upload, but never sets medicalBillEvidenceReviewed, which only an
+  // actual reviewed document (lib/claims/evidence/medical-bill-evidence.ts)
+  // can set.
+  if (/itemi[sz]ed (?:hospital )?bill/i.test(text)) out.medicalBillDocumentAvailable = !/don'?t have|do not have|no itemi[sz]ed/i.test(text);
+  if (/non-?panel/i.test(text)) out.panelStatusReported = "non_panel";
+  else if (/\bpanel\b/i.test(text)) out.panelStatusReported = "panel";
 
   // Separate the accident date from a later death date in the same message.
   const deathIndex = death ? text.search(/\b(?:died|passed away|death|deceased|killed)\b/i) : -1;
@@ -224,6 +234,12 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     if (pendingQuestion.id === "racing_authority_sanctioned" && yn != null) out.racingAuthoritySanctioned = yn;
     if (pendingQuestion.id === "medical_report" && yn != null) out.medicalReportAvailable = yn;
     if (pendingQuestion.id === "cause_of_death_document" && yn != null) out.causeOfDeathDocumentAvailable = yn;
+    if (pendingQuestion.id === "medical_bill_document" && yn != null) out.medicalBillDocumentAvailable = yn;
+    if (pendingQuestion.id === "panel_status") {
+      const t = text.trim().toLowerCase();
+      if (/^non[- ]?panel\b/.test(t)) out.panelStatusReported = "non_panel";
+      else if (/^panel\b/.test(t)) out.panelStatusReported = "panel";
+    }
     if (pendingQuestion.id === "fracture_body_part" && argsTextMeaningful(text)) out.fractureBodyPart = lower.match(/\b(wrist|arm|leg|ankle|knee|hip|rib|ribs|shoulder|jaw|pelvis|skull|spine|neck|elbow|cheekbone)\b/)?.[1] ?? null;
     if (pendingQuestion.id === "ambulance_bill") { const n = targetedMoney(text); if (n != null) out.ambulanceBill = n; }
     if (pendingQuestion.id === "hospital_bill") { const n = targetedMoney(text); if (n != null) out.hospitalBill = n; }
@@ -232,9 +248,15 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
       const n = Number(text.match(/\d+/)?.[0]); if (Number.isFinite(n)) out.hospitalNights = n;
     }
     if (pendingQuestion.id === "diagnosis" && argsTextMeaningful(text)) out.diagnosis ??= text.trim();
-    if (["event_date", "diagnosis_date", "death_date"].includes(pendingQuestion.id) && resolved && !claimDateInFuture(resolved.date, context)) {
+    if (["event_date", "diagnosis_date", "death_date", "admission_date", "discharge_date"].includes(pendingQuestion.id) && resolved && !claimDateInFuture(resolved.date, context)) {
       if (pendingQuestion.id === "diagnosis_date") out.diagnosisDate = resolved.date;
       else if (pendingQuestion.id === "death_date") out.deathDate = resolved.date;
+      // Plain "YYYY-MM-DD" here deliberately carries no time-of-day or UTC
+      // offset -- lib/claims/day-count.ts's own MISSING_TIMEZONE_OFFSET gate
+      // is what decides whether a hospital-cash calculation can actually use
+      // it, exactly as lib/claims/medical-rules.ts's own doc comment says.
+      else if (pendingQuestion.id === "admission_date") out.admissionDate = resolved.date;
+      else if (pendingQuestion.id === "discharge_date") out.dischargeDate = resolved.date;
       else out.eventDate = resolved.date;
     }
     if (pendingQuestion.id === "cause_of_death") {

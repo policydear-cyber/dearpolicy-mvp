@@ -16,7 +16,7 @@
 import { structuredCompletion } from "@/lib/ai/llm";
 import { modelFor } from "@/lib/ai/providers";
 import { ClaimEvidenceExtractionSchema } from "./extraction-schema";
-import { isMedicalEvidenceDocumentType } from "./types";
+import { isMedicalClaimEligibleDocumentType, isMedicalEvidenceDocumentType } from "./types";
 import type { ClaimEvidenceDocumentType, ClaimEvidenceExtractedFields, ClaimEvidencePageCitation } from "./types";
 
 export const CLAIM_EVIDENCE_EXTRACTION_VERSION = "claim-evidence-extract-v1";
@@ -38,7 +38,21 @@ const MEDICAL_EVIDENCE_SYSTEM = "You extract structured facts from a MEDICAL EVI
   + "You are reading evidence, not deciding a claim: never state or imply whether any policy applies, never diagnose, never invent a fact that is not actually printed on the page, and leave a field null when the document does not state it. "
   + "For every fact you report -- especially exactDiagnosis, diseaseStage, and every entry in supportingFindings -- cite the exact page number(s) and copy the exact supporting excerpt verbatim; do not paraphrase the excerpt and do not infer a stage or diagnosis that is not explicitly stated in the document's own words. "
   + "Report the patient's name under patientName, not deceasedName. If the document mentions more than one patient, list every other name under otherNamesMentioned. "
-  + "Leave every cause-of-death-only field (deceasedName, dateOfDeath, statedCauseOfDeath, mannerOfDeath) null -- this is not a cause-of-death document.";
+  + "Leave every cause-of-death-only field (deceasedName, dateOfDeath, statedCauseOfDeath, mannerOfDeath) null and every medical-CLAIM-only field (hospitalName, hospitalCountry, admissionDate, dischargeDate, admissionType, wardType, billLineItems, thirdPartyPayments) null/empty -- this is not a cause-of-death document or a hospital bill.";
+
+/** You never compute a total, apply a discount, or decide whether an
+ * expense is eligible under any policy -- you only transcribe what THIS
+ * bill/record itself explicitly states, with a citation, so a later
+ * deterministic parser (lib/claims/evidence/medical-bill-evidence.ts's
+ * parseAmountMinor()) can turn each amountText into minor units itself,
+ * never trusting arithmetic you performed. Report every amount exactly as
+ * printed (e.g. "1,250.00"), never rounded, summed, or converted. */
+const MEDICAL_BILL_SYSTEM = "You extract structured facts from a MEDICAL-CLAIM document (a hospital bill, itemised bill, doctor's memo, referral letter, pre-authorisation letter, procedure report, receipt/payment proof, other-insurer settlement statement, MediSave/MediShield/Integrated Shield Plan settlement statement, discharge summary, or surgical report) for a hospital-cash/medical-reimbursement insurance claim review. "
+  + "You are reading evidence, not deciding a claim: never state or imply whether any policy applies, never decide whether an expense is eligible, never invent a fact that is not actually printed on the page, and leave a field null/empty when the document does not state it. "
+  + "Report the patient's name under patientName. Report the hospital/clinic name under hospitalName, its country under hospitalCountry, the admission and discharge dates under admissionDate/dischargeDate exactly as printed, whether this was inpatient/day surgery/emergency/outpatient/ICU treatment under admissionType, and the ward/room type under wardType. "
+  + "List every itemised bill row under billLineItems with its category (e.g. surgical fees, room and board, specialist fees, medication, diagnostic tests), an optional description, and the EXACT amount as printed in amountText (e.g. \"1,250.00\") -- never a number you calculated, summed, rounded, or converted yourself. List every amount the document shows as already paid by another party (an insurer, MediShield, employer, or other third party) under thirdPartyPayments the same way. "
+  + "For every fact you report, cite the exact page number(s) and copy the exact supporting excerpt verbatim. "
+  + "Leave every cause-of-death-only field (deceasedName, dateOfDeath, statedCauseOfDeath, mannerOfDeath) and every critical-illness-only field (exactDiagnosis, diseaseStage, supportingFindings, priorDiagnosisHistory, priorCriticalIllnessClaims) null/empty -- this is not a cause-of-death document or a critical-illness clinical report.";
 
 function normalize(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 function tokenOverlap(hay: string, needle: string) {
@@ -71,7 +85,9 @@ export async function extractClaimEvidence(args: {
   documentType: ClaimEvidenceDocumentType;
 }): Promise<{ fields: ClaimEvidenceExtractedFields; model: string; provider: string; version: string }> {
   const choice = modelFor("reading");
-  const system = isMedicalEvidenceDocumentType(args.documentType) ? MEDICAL_EVIDENCE_SYSTEM : CAUSE_OF_DEATH_SYSTEM;
+  const system = isMedicalClaimEligibleDocumentType(args.documentType) && !isMedicalEvidenceDocumentType(args.documentType)
+    ? MEDICAL_BILL_SYSTEM
+    : isMedicalEvidenceDocumentType(args.documentType) ? MEDICAL_EVIDENCE_SYSTEM : CAUSE_OF_DEATH_SYSTEM;
   const user = `Document type declared at upload: ${args.documentType}.\n\n`
     + args.pages.map((p) => `--- Page ${p.pageNumber} ---\n${p.text}`).join("\n\n");
   const raw = await structuredCompletion({

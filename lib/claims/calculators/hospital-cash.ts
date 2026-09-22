@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 /**
  * Pure, deterministic hospital-cash benefit calculator.
  *
@@ -88,6 +90,14 @@ type HospitalCashComputedFields = {
   ruleEvidence: HospitalCashEvidenceRef;
   ownershipEvidence: HospitalCashEvidenceRef;
   ownership: HospitalCashOwnershipRef;
+  /** SHA-256 digest (prefix "hc:") over every material input field --
+   * exactly the lib/claims/calculators/critical-illness.ts pattern. A
+   * presentation-only change (e.g. relabeling `ownership.label`) never
+   * changes this; any change to a figure the arithmetic actually used
+   * always does. Optional so every pre-existing caller (lib/chat/
+   * policy-analysis.ts, lib/ledger/answer.ts) that destructures only the
+   * fields it already knew about keeps compiling unchanged. */
+  calculationId: string;
 };
 
 export type HospitalCashCalculated = HospitalCashComputedFields & {
@@ -194,6 +204,11 @@ export function calculateHospitalCash(input: HospitalCashInput): HospitalCashRes
   const potentialAmountMinor = payableDays * dailyRateMinor;
   const dailyRate = dailyRateMinor / 100;
 
+  const calculationId = "hc:" + createHash("sha256").update(JSON.stringify([
+    input.currency, dailyRateMinor, hospitalNights, offsetDays, maximumDays,
+    input.ownership, input.ruleEvidence, input.ownershipEvidence,
+  ])).digest("hex");
+
   const common: HospitalCashComputedFields = {
     currency: input.currency,
     dailyRate,
@@ -207,6 +222,7 @@ export function calculateHospitalCash(input: HospitalCashInput): HospitalCashRes
     ruleEvidence: input.ruleEvidence,
     ownershipEvidence: input.ownershipEvidence,
     ownership: input.ownership,
+    calculationId,
   };
 
   if (payableDays === 0) {

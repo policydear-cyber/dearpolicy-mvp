@@ -7,6 +7,7 @@ import { calculateAccidentalDeath } from "./calculators/accidental-death";
 import type { CauseDefinitionMatch } from "./calculators/evidence";
 import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { assessCriticalIllness, nextCIQuestion } from "./ci-rules";
+import { assessMedicalClaim, nextMedicalQuestion, type MedicalRuleEvidence } from "./medical-rules";
 
 function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
   return { chunkId: c.chunkId, policyId: c.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, label: c.evidenceLabel };
@@ -95,7 +96,7 @@ export function relevantOwnedProducts(facts: ClaimFacts, coverages: OwnedCoverag
   return [...result];
 }
 
-export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], ciRules: CIRuleEvidence[] = []): ClaimQuestion | null {
+export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], ciRules: CIRuleEvidence[] = [], medicalRules?: MedicalRuleEvidence): ClaimQuestion | null {
   if (!facts.eventType) return { id:"event_type", text:"Tell me what happened. Was this an accident, a diagnosis, a hospital admission, a disability, or a death claim?", type:"choice", options:["Accident","Diagnosis","Hospital admission","Disability","Death"], why:"DearPolicy needs the event type before it can choose the relevant owned policies." };
 
   const dateQuestion = eventDateQuestion(facts);
@@ -126,6 +127,8 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
 
   if (facts.eventType === "hospitalisation") {
     if (!facts.diagnosis && !facts.injuries.length && !facts.uncertainFacts.includes("diagnosis")) return { id:"diagnosis", text:"What were you admitted for? Tell me the diagnosis or injury.", type:"text", why:"The reason for admission determines which owned benefits may respond." };
+    const medicalQuestion = nextMedicalQuestion(facts, medicalRules);
+    if (medicalQuestion) return medicalQuestion;
     if (facts.hospitalNights == null && !facts.uncertainFacts.includes("hospital_nights")) return { id:"hospital_nights", text:"How many nights were you admitted?", type:"text", why:"Hospital cash and some inpatient benefits depend on the length of stay." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalBill == null && !facts.uncertainFacts.includes("hospital_bill")) return { id:"hospital_bill", text:"What was the total hospital bill?", type:"money", why:"Reimbursement benefits depend on the actual eligible expense." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalBill != null && facts.outOfPocket == null && !facts.uncertainFacts.includes("out_of_pocket")) return { id:"out_of_pocket", text:"How much did you personally pay after subsidies, MediSave and other insurance?", type:"money", why:"DearPolicy uses the actual financial exposure when assessing reimbursement benefits." };
@@ -159,7 +162,7 @@ function g007500(coverages: OwnedCoverage[]) {
   return coverages.some((c) => c.groupPolicyNumber === "G007500");
 }
 
-export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = []): ClaimAssessmentItem[] {
+export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = [], medicalRules?: MedicalRuleEvidence): ClaimAssessmentItem[] {
   const items: ClaimAssessmentItem[] = [];
   const isG007500 = g007500(coverages);
 
@@ -330,11 +333,20 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
 
   if (facts.eventType === "hospitalisation") {
     const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
-    if (gtl && isG007500 && facts.hospitalNights != null) {
+    // Additive: new evidence-gated med-* items from lib/claims/medical-rules.ts
+    // alongside the legacy hardcoded "gtl-hospital-cash"/"medical-reimbursement-review"
+    // items in this function. When medical-rules.ts has produced a real
+    // assessment for the SAME coverage (an evidenced cash or reimbursement rule
+    // matched to it), the corresponding legacy hardcoded item is suppressed so
+    // the family is never shown two competing estimates for one coverage.
+    const medicalAssessments = assessMedicalClaim(facts, coverages, medicalRules);
+    const medicalAssessedCoverageIds = new Set(medicalAssessments.map((i) => i.coverageId));
+    if (gtl && isG007500 && facts.hospitalNights != null && !medicalAssessedCoverageIds.has(gtl.id)) {
       const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
       if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30),reason:`The policy pays S$30 per day from day 11, for up to 30 payable days.`,conditions:["The reason for admission must not be excluded."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
       else items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"not_applicable",amountText:null,reason:`The reported ${facts.hospitalNights}-night stay does not pass the 10-day waiting period for this hospital cash benefit.`,conditions:[],evidenceTerms:["after the 10th day"],productName:"Group Term Life"});
     }
+    items.push(...medicalAssessments);
   }
 
   // Safe fallback for owned reimbursement-style medical cover that DearPolicy has

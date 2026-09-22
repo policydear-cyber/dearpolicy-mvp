@@ -22,7 +22,8 @@
     "system:test": "node --import tsx scripts/system-database-regressions.ts",
     "claims:evidence-test": "node --import tsx scripts/claim-evidence-regressions.ts",
     "claims:composition-test": "node --import tsx scripts/claim-composition-regressions.ts",
-    "claims:ci-test": "node --import tsx scripts/claim-ci-regressions.ts"
+    "claims:ci-test": "node --import tsx scripts/claim-ci-regressions.ts",
+    "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

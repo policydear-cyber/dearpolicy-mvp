@@ -1,4 +1,4 @@
-import type { CauseDefinitionMatch, CIDefinitionMatch } from "./calculators/evidence";
+import type { CauseDefinitionMatch, CIDefinitionMatch, VerifiedMedicalBillFacts } from "./calculators/evidence";
 
 export type ClaimEventType = "accident" | "diagnosis" | "hospitalisation" | "death" | "disability" | "other";
 
@@ -87,6 +87,44 @@ export type ClaimFacts = {
    * remaining lifetime capacity when wording establishes a lifetime cap
    * and no entry exists here for that policy. */
   priorPaidAmounts?: Record<string, { amount: number; currency: string; recordedAt: string }>;
+  /** Chat-REPORTED admission/discharge dates -- never treated as verified.
+   * lib/claims/medical-rules.ts prefers the VERIFIED equivalents on
+   * `verifiedMedicalBillFacts` when present, and only ever falls back to
+   * these for a lower-confidence day-count estimate, never for a
+   * reimbursement eligible-expense figure. */
+  admissionDate: string | null;
+  dischargeDate: string | null;
+  hospitalName: string | null;
+  wardType: string | null;
+  /** Whether the family SAYS the treating hospital/doctor was on the
+   * insurer's panel -- an availability/reported signal only, exactly like
+   * `causeOfDeathDocumentAvailable`. It can shape a question or a
+   * lower-confidence estimate, but the medical calculators only ever
+   * apply a non-panel restriction factor once it is backed by the
+   * evidenced policy wording (lib/claims/medical-evidence.ts's
+   * findPlanProvisions()) applied to this reported/verified status. */
+  panelStatusReported: "panel" | "non_panel" | "unknown" | null;
+  referralObtained: boolean | null;
+  preAuthorisationObtained: boolean | null;
+  /** Whether the family SAYS they possess a hospital bill, itemised bill,
+   * or related medical-claim document. Availability signal ONLY -- exactly
+   * like `causeOfDeathDocumentAvailable`/`medicalEvidenceDocumentAvailable`
+   * -- it can drive an upload request but can never by itself authorise a
+   * medical-claim amount. */
+  medicalBillDocumentAvailable: boolean | null;
+  /** Whether DearPolicy has actually processed an uploaded medical-claim
+   * document. Never set from a chat answer -- see
+   * lib/claims/evidence/medical-bill-evidence.ts, the only writer of the
+   * underlying review state. */
+  medicalBillEvidenceReviewed: boolean | null;
+  /** The aggregated, reviewer-CONFIRMED bill evidence for this claim --
+   * reloaded fresh from lib/claims/evidence/medical-bill-evidence.ts's
+   * loadVerifiedMedicalBillFacts() every turn, exactly like
+   * `causeDefinitionMatches`/`ciDefinitionMatches` above. Never set from
+   * chat text or any model output. The ONLY source a medical calculator
+   * may treat as a verified eligible billed expense or a verified
+   * admission/discharge/ward/panel/third-party-payment fact. */
+  verifiedMedicalBillFacts: VerifiedMedicalBillFacts | null;
   uncertainFacts: string[];
   factSources?: Record<string, { source: "user" | "system-derived"; text: string; recordedAt: string; timeZone?: string; anchorDate?: string }>;
 };
@@ -218,6 +256,16 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   medicalEvidenceDocumentAvailable: null,
   ciDefinitionMatches: [],
   priorPaidAmounts: {},
+  admissionDate: null,
+  dischargeDate: null,
+  hospitalName: null,
+  wardType: null,
+  panelStatusReported: null,
+  referralObtained: null,
+  preAuthorisationObtained: null,
+  medicalBillDocumentAvailable: null,
+  medicalBillEvidenceReviewed: null,
+  verifiedMedicalBillFacts: null,
   uncertainFacts: [],
   factSources: {},
 };

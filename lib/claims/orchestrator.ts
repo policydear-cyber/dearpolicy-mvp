@@ -7,6 +7,8 @@ import { evidenceForAssessment, ownedCoverageForItem } from "./evidence";
 import { enforceMonetarySafety } from "./monetary-gate";
 import { loadDeathEvidence } from "./death-evidence";
 import { loadCIEvidence } from "./ci-evidence";
+import { loadMedicalEvidence } from "./medical-evidence";
+import { loadVerifiedMedicalBillFacts } from "./evidence/medical-bill-evidence";
 import { loadCauseDefinitionMatchesForFacts } from "./evidence/session-matches";
 import { loadCIDefinitionMatchesForFacts } from "./evidence/ci-session-matches";
 import { composeClaim } from "./composition/engine";
@@ -124,6 +126,23 @@ function ciSummary(assessments:ClaimAssessmentItem[],personName?:string,question
   return summary;
 }
 
+/** The medical-claim analogue of deathSummary()/ciSummary() above -- same
+ * reliance on the ONE composition engine for any total shown, phrased as a
+ * potential estimate only. Never states an expense will be reimbursed,
+ * decides medical necessity, or authorises a claim -- see this module's own
+ * doc comments in lib/claims/medical-rules.ts and the calculators it calls. */
+function medicalSummary(assessments:ClaimAssessmentItem[],personName?:string,question?:ClaimQuestion|null,composition?:ClaimCompositionResult|null) {
+  const includedBenefits=composition?composition.policies.flatMap(p=>p.benefits).filter(b=>b.status==="included"):[];
+  const totals=composition?composition.totalsByCurrency.map(t=>formatMoney(t.includedAmount,t.currency)):[];
+  const includedCount=includedBenefits.length;
+  let summary=totals.length&&includedCount>0
+    ? `Potential policy-based estimate: ${personName??"this person"}'s ${includedCount>1?"combined potential medical-claim benefits total":"potential medical-claim benefit is"} ${totals.join(" and ")}. This is based on confirmed personal cover, evidenced policy wording and any reviewed bill/discharge evidence, but is not a guarantee of payment -- the insurer's own assessment still applies.`
+    : `I found ${personName?`${personName}'s`:"this person's"} confirmed hospitalisation-related cover. Evidence and policy review are still needed before DearPolicy can show a potential amount. This is not a guarantee that any expense will be reimbursed.`;
+  if(assessments.length&&assessments.every(a=>a.status==="not_applicable"))summary="The reported admission does not satisfy the checked medical-claim rules for the confirmed cover on file. See the reason for each policy below.";
+  if(question)summary+=" I still need the answer below to check the remaining policy condition.";
+  return summary;
+}
+
 export async function handleClaimTurn(args:{accountId:string;familyMemberId:string;message:string;claimSessionId?:string|null;personName?:string;timeZone?:string;now?:Date}):Promise<ChatAnswer>{
   let session=args.claimSessionId?await getClaimSession(args.accountId,args.familyMemberId,args.claimSessionId):null;
   if(!session) session=await createClaimSession(args.accountId,args.familyMemberId);
@@ -136,6 +155,11 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // lib/claims/evidence/session-matches.ts.
   if(facts.eventType==="death")facts.causeDefinitionMatches=await loadCauseDefinitionMatchesForFacts(args.accountId,args.familyMemberId,session.id);
   if(facts.eventType==="diagnosis")facts.ciDefinitionMatches=await loadCIDefinitionMatchesForFacts(args.accountId,args.familyMemberId,session.id);
+  // Verified (reviewer-confirmed) medical-claim bill facts are likewise never
+  // trusted from the stored session JSON -- reloaded fresh on every turn from
+  // the evidence pipeline's own source of truth. See lib/claims/evidence/
+  // medical-bill-evidence.ts's own doc comment.
+  if(facts.eventType==="hospitalisation")facts.verifiedMedicalBillFacts=await loadVerifiedMedicalBillFacts(args.accountId,args.familyMemberId,session.id);
   const coverages=await confirmedOwnedCoverages(args.accountId,args.familyMemberId);
   const currentness=await currentnessNote(args.accountId,args.familyMemberId);
   const knownFacts=[...(args.personName ? [`Person: ${args.personName}`] : []),...factsToLabels(facts)];
@@ -160,7 +184,10 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   const deathEvidence=facts.eventType === "death" ? await loadDeathEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[],pages:[]};
   const deathRules=deathEvidence.rules;
   const ciEvidence=facts.eventType === "diagnosis" ? await loadCIEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[],pages:[]};
-  const question=nextClaimQuestion(facts,coverages,deathRules,ciEvidence.rules);
+  // Same tiered evidence-resolution pattern as death/CI wording, reused for
+  // "hospitalisation" -- see lib/claims/medical-evidence.ts's own doc comment.
+  const medicalEvidence=facts.eventType === "hospitalisation" ? await loadMedicalEvidence(args.accountId,args.familyMemberId,coverages) : {cashRules:[],reimbursementRules:[],planProvisions:[],gaps:[],pages:[]};
+  const question=nextClaimQuestion(facts,coverages,deathRules,ciEvidence.rules,medicalEvidence);
   const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id) : null;
   const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages) : null;
   // Additive: the same deterministic pipeline, reused for a "diagnosis"
@@ -168,6 +195,12 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // See lib/claims/ci-rules.ts for why this never touches the death path.
   const rawDiagnosisAssessments=facts.eventType === "diagnosis" ? assessClaim(facts,coverages,[],[],session.id,ciEvidence.rules,ciEvidence.gaps) : null;
   const diagnosisAssessments=rawDiagnosisAssessments ? enforceMonetarySafety(rawDiagnosisAssessments,facts,coverages) : null;
+  // Additive: the same deterministic pipeline, reused for a "hospitalisation"
+  // event's medical-claim benefits (hospital cash, ICU cash, and
+  // reimbursement-type benefits) -- never a parallel claim system. See
+  // lib/claims/medical-rules.ts for why this never touches the death/CI path.
+  const rawHospitalisationAssessments=facts.eventType === "hospitalisation" ? assessClaim(facts,coverages,[],[],session.id,[],[],medicalEvidence) : null;
+  const hospitalisationAssessments=rawHospitalisationAssessments ? enforceMonetarySafety(rawHospitalisationAssessments,facts,coverages) : null;
   // The ONLY place a death claim's benefits are selected, composed, capped
   // and totalled -- see lib/claims/composition/engine.ts's own doc comment.
   // Computed whenever there is something to compose, even while a fact-
@@ -194,8 +227,16 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   if(diagnosisComposition){
     await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:diagnosisComposition});
   }
-  const primaryAssessments=deathAssessments??diagnosisAssessments;
-  const primaryComposition=deathComposition??diagnosisComposition;
+  // Same composition engine, same reasoning, reused for the medical-claim
+  // benefits of a "hospitalisation" event -- see lib/claims/composition/engine.ts.
+  const hospitalisationComposition:ClaimCompositionResult|null = facts.eventType==="hospitalisation" && hospitalisationAssessments
+    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:hospitalisationAssessments,wordingPages:medicalEvidence.pages,now:args.now})
+    : null;
+  if(hospitalisationComposition){
+    await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:hospitalisationComposition});
+  }
+  const primaryAssessments=deathAssessments??diagnosisAssessments??hospitalisationAssessments;
+  const primaryComposition=deathComposition??diagnosisComposition??hospitalisationComposition;
   const newDeath=facts.eventType === "death" && session.event_type !== "death";
   if(question){
     const names=relevantCoverageNames(coverages,relevantProducts);
@@ -203,6 +244,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
     const firstTurn=!session.event_type && !session.event_summary;
     const summary=deathAssessments ? deathSummary(deathAssessments,args.personName,question,newDeath,deathComposition)
       : diagnosisAssessments ? ciSummary(diagnosisAssessments,args.personName,question,diagnosisComposition)
+      : hospitalisationAssessments ? medicalSummary(hospitalisationAssessments,args.personName,question,hospitalisationComposition)
       : firstTurn
       ? `I found ${names.length?names.join(", "):"confirmed personal cover"} that may be relevant. Before I tell you what you can claim, I need to understand the event properly.`
       : "I have enough to narrow this down, but I still need one material fact before I calculate or rule on the next benefit.";
@@ -227,7 +269,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
     return answer;
   }
 
-  const assessments=deathAssessments??diagnosisAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id),facts,coverages);
+  const assessments=deathAssessments??diagnosisAssessments??hospitalisationAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id),facts,coverages);
   const citations=await assessmentCitations(args.accountId,args.familyMemberId,assessments,coverages);
   const nextSteps=claimNextSteps(facts,assessments);
   if(!currentness.verified)nextSteps.push("Upload the latest renewal notice or premium receipt if available so DearPolicy can verify current policy status separately from coverage ownership.");
@@ -244,7 +286,10 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   if (facts.eventType === "diagnosis") {
     summary=ciSummary(assessments,args.personName,null,diagnosisComposition);
   }
-  const finalComposition=deathComposition??diagnosisComposition;
+  if (facts.eventType === "hospitalisation") {
+    summary=medicalSummary(assessments,args.personName,null,hospitalisationComposition);
+  }
+  const finalComposition=deathComposition??diagnosisComposition??hospitalisationComposition;
   const missingFacts = [...new Set([...facts.uncertainFacts.map(missingLabel),...assessments.filter(a => a.status === "needs_document").map(a => `Evidence for ${a.title}`),...(finalComposition?.outstandingQuestions??[])])];
   const decisionPacket:ClaimDecisionPacket={sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments,nextSteps,ready:true,compositionResult:finalComposition??null};
   const answer:ChatAnswer={mode:"claim_assessment",summary,details:[`Event checked: ${eventSummary(facts)}.`,currentness.detail],claimItems:assessments.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:"DearPolicy's claim calculations come from confirmed personal cover plus the uploaded policy rules. Final claim approval and admissibility remain with the insurer.",claimSessionId:session.id,questions:[],knownFacts,missingFacts,composition:finalComposition?toClaimCompositionView(finalComposition):undefined};

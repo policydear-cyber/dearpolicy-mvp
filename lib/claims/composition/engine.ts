@@ -65,6 +65,10 @@ function benefitCategoryFor(benefitCode: string) {
   for (const [prefix, category] of Object.entries(CI_BENEFIT_CATEGORY)) {
     if (benefitCode === prefix || benefitCode.startsWith(`${prefix}-`)) return category;
   }
+  // lib/claims/medical-rules.ts's own ClaimAssessmentItem.id always starts
+  // with "med-" (see that module's BENEFIT_TITLES), exactly the same
+  // prefix-match pattern as the ci-* categories above.
+  if (benefitCode.startsWith("med-")) return "Medical";
   return "Death";
 }
 
@@ -118,6 +122,7 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
       calculationId: item.calculationId ?? stableId([item.id, item.coverageId, claimEventId, item.calculatedAmount, item.currency]),
       currency: item.currency, rawAmount: item.calculatedAmount, compositionType: "independent_additive", compositionGroupId: null, priority: 0,
       evidenceReferences: item.ruleEvidence ? [{ policyId: item.ruleEvidence.policyId, chunkId: item.ruleEvidence.chunkId, pageStart: item.ruleEvidence.pageStart, pageEnd: item.ruleEvidence.pageEnd, label: item.ruleEvidence.evidenceLabel }] : [],
+      ...(item.aggregation ? { aggregation: item.aggregation } : {}),
     };
     if (item.monetaryDecision?.status !== "allowed" || !item.calculationId) {
       excludedFromAssessment.push(blockedBenefit(base, ["SOURCE_CALCULATION_NOT_ALLOWED"]));
@@ -208,6 +213,32 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
     // under one policy default to additive (e.g. a base death benefit and
     // a genuinely separate accidental-death rider).
     composed.push(...benefits);
+  }
+
+  // Cross-policy reimbursement coordination: two DIFFERENT policies each
+  // independently INCLUDED as a reimbursement-type benefit (base plan +
+  // rider, integrated plan + employer plan, or two genuinely separate
+  // reimbursement policies) can both legitimately respond to the SAME
+  // underlying bill -- exactly the double-payment risk the medical-claims
+  // spec calls out. This V1 slice has no evidenced
+  // coordination-of-benefits-clause detector (relationships.ts only
+  // detects WITHIN-policy signals today), so rather than invent an
+  // allocation between insurers or silently add both, every such benefit
+  // is blocked here and DearPolicy shows each policy's own ceiling
+  // (via its own blocked item) plus an unresolved combined total as an
+  // outstanding question instead of a number it invented. See
+  // lib/claims/composition/types.ts's REIMBURSEMENT_COORDINATION_NOT_EVIDENCED.
+  const includedReimbursementPolicyIds = new Set(
+    composed.filter((b) => b.status === "included" && b.aggregation === "reimbursement").map((b) => b.policyId),
+  );
+  if (includedReimbursementPolicyIds.size > 1) {
+    for (let i = 0; i < composed.length; i++) {
+      const b = composed[i];
+      if (b.status === "included" && b.aggregation === "reimbursement") {
+        composed[i] = { ...b, status: "blocked", payableAmount: 0, blockedReasonCodes: [...b.blockedReasonCodes, "REIMBURSEMENT_COORDINATION_NOT_EVIDENCED"] };
+      }
+    }
+    outstandingQuestions.push("More than one policy may reimburse the same medical bill. DearPolicy has not included a combined total because it has not found evidenced coordination-of-benefits wording between these policies -- this needs insurer claims assessment.");
   }
 
   // Aggregate caps: policy-scope and event-scope, applied deterministically

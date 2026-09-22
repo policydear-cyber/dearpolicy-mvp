@@ -53,7 +53,20 @@ export type ComposedBenefitBlockReasonCode =
    * CI benefit rows that are frequently NOT independently payable
    * together, so assuming additive without evidence would risk silently
    * double-counting. */
-  | "CI_COMPOSITION_NOT_EVIDENCED";
+  | "CI_COMPOSITION_NOT_EVIDENCED"
+  /** More than one policy's independently-INCLUDED benefit is a
+   * reimbursement-type medical-claim benefit (`aggregation ===
+   * "reimbursement"") for the SAME claim event -- e.g. a base plan and a
+   * rider, an integrated plan and an employer plan, or two genuinely
+   * separate reimbursement policies. Two reimbursement benefits can both
+   * legitimately respond to the SAME underlying bill, which is exactly the
+   * double-payment risk the medical-claims spec calls out. This V1 slice
+   * has no evidenced coordination-of-benefits-clause detector (see
+   * lib/claims/composition/engine.ts's own comment at the blocking pass),
+   * so rather than invent an allocation between insurers or silently add
+   * both, every such benefit is blocked and an unresolved combined total
+   * is surfaced as an outstanding question instead. */
+  | "REIMBURSEMENT_COORDINATION_NOT_EVIDENCED";
 
 /** A reference to an aggregate cap that was evaluated against this benefit,
  * whether or not it ended up binding. `scope` says what the cap applies
@@ -100,6 +113,13 @@ export type ComposedBenefit = {
   capReferences: CapReference[];
   deductionReferences: DeductionReference[];
   evidenceReferences: EvidenceReference[];
+  /** Carried straight through from the source ClaimAssessmentItem's own
+   * `aggregation` (lib/claims/types.ts) -- "reimbursement" for a
+   * reimbursement-type medical-claim benefit (see lib/claims/medical-rules.ts),
+   * undefined/"additive" for a lump-sum benefit like a death or CI payout.
+   * Used only by the cross-policy reimbursement-coordination blocking pass
+   * in ./engine.ts; never used to compute an amount itself. */
+  aggregation?: "additive" | "reimbursement";
   status: ComposedBenefitStatus;
   blockedReasonCodes: ComposedBenefitBlockReasonCode[];
 };
@@ -149,7 +169,9 @@ export function validateComposedBenefit(value: unknown): ComposedBenefitValidati
       familyMemberId: v.familyMemberId as string, claimEventId: v.claimEventId as string, benefitCode: v.benefitCode as string,
       benefitCategory: v.benefitCategory as string, calculationId: v.calculationId as string, currency: v.currency as string,
       rawAmount: v.rawAmount as number, payableAmount, compositionType, compositionGroupId, priority: v.priority as number,
-      capReferences, deductionReferences, evidenceReferences, status, blockedReasonCodes: reasons,
+      capReferences, deductionReferences, evidenceReferences,
+      ...(v.aggregation === "reimbursement" || v.aggregation === "additive" ? { aggregation: v.aggregation } : {}),
+      status, blockedReasonCodes: reasons,
     },
   };
 }

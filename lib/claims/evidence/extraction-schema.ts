@@ -43,6 +43,18 @@ export const ClaimEvidenceExtractionSchema = z.object({
   survivalPeriodDates: z.array(z.string()).default([]),
   priorDiagnosisHistory: z.string().nullable().default(null),
   priorCriticalIllnessClaims: z.string().nullable().default(null),
+  hospitalName: z.string().nullable().default(null),
+  hospitalCountry: z.string().nullable().default(null),
+  admissionDate: z.string().nullable().default(null),
+  dischargeDate: z.string().nullable().default(null),
+  admissionType: z.string().nullable().default(null),
+  wardType: z.string().nullable().default(null),
+  billLineItems: z.array(z.object({
+    category: z.string(), description: z.string().nullable(), amountText: z.string(), currency: z.string().nullable(),
+  })).default([]),
+  thirdPartyPayments: z.array(z.object({
+    source: z.string(), amountText: z.string(), currency: z.string().nullable(),
+  })).default([]),
   issuingAuthority: z.string().nullable(),
   documentReference: z.string().nullable(),
   documentType: z.enum(CLAIM_EVIDENCE_DOCUMENT_TYPES as [ClaimEvidenceDocumentType, ...ClaimEvidenceDocumentType[]]).nullable(),
