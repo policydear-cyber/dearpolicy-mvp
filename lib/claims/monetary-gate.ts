@@ -202,8 +202,18 @@ export function evaluateChatMonetaryEligibility(item: ClaimItem): MonetaryDecisi
 
 export function enforceChatMonetarySafety(items: ClaimItem[]): ClaimItem[] {
   return items.map((item) => {
-    const hasMonetaryOutput =
-      item.amountText != null || item.calculatedAmount != null || item.currency != null;
+    // This gate polices a COMPUTED claim figure -- one this code actually
+    // calculated and is asserting as a potential payout. Several call sites
+    // set `amountText` to plain descriptive prose with no `calculatedAmount`
+    // at all: the benefit's own stated rule when no personal fact is known
+    // yet (describeBenefitFormula), a verified cover amount shown because
+    // the payout formula could not be confirmed (the ownershipOnly branch of
+    // assessmentFromBenefit), or "the actual cost, up to S$500" for a
+    // what-if (describePays). None of those claim to be a calculated
+    // amount, so gating them on "was a deterministic calculation performed"
+    // strips already-qualified informational text that was never subject to
+    // this invariant in the first place.
+    const hasMonetaryOutput = item.calculatedAmount != null;
     if (!hasMonetaryOutput) return item;
     const decision = evaluateChatMonetaryEligibility(item);
     if (decision.status === "allowed") return item;
