@@ -1,3 +1,5 @@
+import type { CauseDefinitionMatch } from "./calculators/evidence";
+
 export type ClaimEventType = "accident" | "diagnosis" | "hospitalisation" | "death" | "disability" | "other";
 
 export type ClaimFacts = {
@@ -39,21 +41,17 @@ export type ClaimFacts = {
    * is not DearPolicy having reviewed the document. It is set only once a
    * document has genuinely been read. */
   causeOfDeathEvidenceReviewed: boolean | null;
-  /** Whether a deterministic, evidence-backed comparison has matched the
-   * REVIEWED official cause-of-death evidence against the exact wording of
-   * this policy's own accidental-death definition. This is the only field
-   * that can authorise an accidental-death amount, and only together with
-   * `causeOfDeathEvidenceReviewed` and `causeOfDeathEvidence` both present.
-   * Never set from a chat answer, and never implied by
-   * `causeOfDeathDocumentAvailable` alone. */
-  causeMatchesAccidentDefinition: boolean | null;
-  /** Where the REVIEWED official cause-of-death document itself was read --
-   * the death certificate's cause-of-death entry, the police report, or the
-   * coroner's/medical examiner's report DearPolicy actually processed.
-   * Required whenever `causeMatchesAccidentDefinition` is set; the policy's
-   * own accident-definition wording is tracked separately, as the matching
-   * death rule's own evidence (see death-evidence.ts / DeathRuleEvidence). */
-  causeOfDeathEvidence: { documentId?: string; pageStart?: number; pageEnd?: number; label?: string } | null;
+  /** Policy-specific matches between a REVIEWED official cause-of-death
+   * document and a particular policy's own accidental-death definition.
+   * There is deliberately no single global "is this confirmed" boolean: a
+   * cause can satisfy one policy's definition and not another's, so each
+   * entry is scoped to one family member, one claim, one contract and
+   * (when relevant) one coverage. `calculateAccidentalDeath()` independently
+   * re-validates every field of the applicable entry -- this list is never
+   * trusted at face value, and is never set from a chat answer or any other
+   * free text, since no document-review pipeline exists in this slice yet
+   * to populate it. Empty by default. */
+  causeDefinitionMatches: CauseDefinitionMatch[];
   uncertainFacts: string[];
   factSources?: Record<string, { source: "user" | "system-derived"; text: string; recordedAt: string; timeZone?: string; anchorDate?: string }>;
 };
@@ -145,8 +143,7 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   medicalReportAvailable: null,
   causeOfDeathDocumentAvailable: null,
   causeOfDeathEvidenceReviewed: null,
-  causeMatchesAccidentDefinition: null,
-  causeOfDeathEvidence: null,
+  causeDefinitionMatches: [],
   uncertainFacts: [],
   factSources: {},
 };

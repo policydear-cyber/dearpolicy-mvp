@@ -4,12 +4,19 @@
  * This is the only place an ordinary (non-accidental) death-benefit amount
  * may be computed. It accepts only already-verified, structured inputs --
  * never LLM prose -- and either returns a bounded, evidence-backed potential
- * amount or a typed block reason. Every branch fails closed: a missing or
- * unverifiable input blocks the result rather than defaulting to a guess in
- * either direction. It does not decide that a death occurred, or that any
- * policy condition is met -- the caller supplies those as already-confirmed
- * facts; this module only turns a confirmed formula and a confirmed sum
- * insured into a bounded figure.
+ * amount or a typed block reason. Every branch fails closed: a missing,
+ * malformed, or unverifiable input blocks the result rather than defaulting
+ * to a guess in either direction. It does not decide that a death occurred,
+ * or that any policy condition is met -- the caller supplies those as
+ * already-confirmed facts; this module only turns a confirmed formula and a
+ * confirmed sum insured into a bounded figure.
+ *
+ * Evidence references (the payout rule, ownership of the cover, and any
+ * cap) are structurally validated at runtime by lib/claims/calculators/
+ * evidence.ts, not merely checked for presence: an empty object `{}`, a
+ * blank ID, or a reversed page range is rejected exactly like a missing
+ * field, because TypeScript's compile-time types cannot police input that
+ * arrives from extraction, storage or an API payload.
  *
  * Supported formulas: a percentage of the verified sum insured (100% or any
  * other quoted percentage), a multiple of the verified sum insured (value
@@ -22,6 +29,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { validateOwnershipEvidence, validatePolicyEvidence, type ValidPolicyEvidenceRef } from "./evidence";
 
 export type DeathBenefitEvidenceRef = {
   chunkId?: string;
@@ -72,6 +80,10 @@ export type DeathBenefitInput = {
    * Absent, or not confirmed, blocks -- a figure must never be attributed
    * to the wrong person. */
   familyMember: { id: string; confirmed: boolean } | null;
+  /** The specific claim (assessment session) this calculation belongs to.
+   * Included in the calculation identity so that evidence or a match
+   * recorded for one claim can never be mistaken for another. */
+  claimEventId?: string | null;
   /** Whether the insured's death is itself confirmed (a death certificate
    * or equivalent, not merely reported in passing). Anything other than
    * `true` blocks. */
@@ -92,11 +104,14 @@ export type DeathBenefitInput = {
   /** The payout formula. Absent blocks. */
   formula: DeathBenefitFormula | null;
   /** An explicitly evidenced ceiling on this benefit, if the wording states
-   * one. A cap object with no evidence blocks rather than being ignored. */
+   * one. A cap object with no valid evidence blocks rather than being
+   * ignored. */
   cap?: DeathBenefitCap;
-  /** Where the payout rule itself was read and verified. Absent blocks. */
+  /** Where the payout rule itself was read and verified. Structurally
+   * validated -- an empty object or a blank ID blocks. Absent blocks. */
   ruleEvidence: DeathBenefitEvidenceRef | null;
-  /** Where ownership of the policy was verified. Absent blocks. */
+  /** Where ownership of the policy was verified. Structurally validated --
+   * an empty object or a blank ID blocks. Absent blocks. */
   ownershipEvidence: DeathBenefitEvidenceRef | null;
   /** Any policy condition still requiring resolution before this benefit's
    * amount can be shown (e.g. an insurer-only definitional confirmation,
@@ -119,8 +134,8 @@ export type DeathBenefitBlockReasonCode =
   | "INVALID_FIXED_AMOUNT"
   | "INVALID_CAP"
   | "INVALID_CURRENCY"
-  | "MISSING_RULE_EVIDENCE"
-  | "MISSING_OWNERSHIP_EVIDENCE"
+  | "MALFORMED_RULE_EVIDENCE"
+  | "MALFORMED_OWNERSHIP_EVIDENCE"
   | "UNRESOLVED_CONDITION";
 
 export type DeathBenefitBlocked = {
@@ -173,13 +188,16 @@ function toMinorUnits(amount: number): number {
 }
 
 /** Stable across repeated calls with the same input, and distinct whenever
- * any determining input differs -- the property the "duplicate calculation
+ * any material input differs -- the property the "duplicate calculation
  * IDs" and "deterministic repeatability" tests check for. Uses SHA-256 over
  * the canonical (JSON-stringified) input, consistent with the calculation
  * IDs generated elsewhere in this codebase (lib/chat/policy-analysis.ts) --
  * a 32-bit hash is not collision-resistant enough for an identifier that
- * stands in for "this exact amount, once" across a household's benefits. */
-function stableId(parts: (string | number | boolean | null | undefined)[]): string {
+ * stands in for "this exact amount, once" across a household's benefits.
+ * Exported so the accidental-death calculator can extend the same identity
+ * with its own cause/definition-evidence identifiers rather than duplicate
+ * the hashing scheme. */
+export function stableId(parts: (string | number | boolean | null | undefined)[]): string {
   const text = JSON.stringify(parts);
   return "db:" + createHash("sha256").update(text).digest("hex");
 }
@@ -206,20 +224,27 @@ export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitRes
   if (!input.formula) {
     return { status: "blocked", reasonCode: "MISSING_FORMULA", message: "No verified payout formula is available for this benefit." };
   }
-  if (!input.ruleEvidence) {
-    return { status: "blocked", reasonCode: "MISSING_RULE_EVIDENCE", message: "The payout rule has no evidence reference." };
+  const ruleEvidenceCheck = validatePolicyEvidence(input.ruleEvidence, "MALFORMED_RULE_EVIDENCE");
+  if (!ruleEvidenceCheck.valid) {
+    return { status: "blocked", reasonCode: ruleEvidenceCheck.reasonCode, message: ruleEvidenceCheck.message };
   }
-  if (!input.ownershipEvidence) {
-    return { status: "blocked", reasonCode: "MISSING_OWNERSHIP_EVIDENCE", message: "Ownership of this policy has no evidence reference." };
+  const ownershipEvidenceCheck = validateOwnershipEvidence(input.ownershipEvidence);
+  if (!ownershipEvidenceCheck.valid) {
+    return { status: "blocked", reasonCode: ownershipEvidenceCheck.reasonCode, message: ownershipEvidenceCheck.message };
   }
   if (input.unresolvedConditions?.length) {
     return { status: "blocked", reasonCode: "UNRESOLVED_CONDITION", message: "A required policy condition is still unresolved: " + input.unresolvedConditions[0] };
   }
-  if (input.cap !== undefined && input.cap !== null && !input.cap.evidence) {
-    return { status: "blocked", reasonCode: "INVALID_CAP", message: "A cap was supplied without evidence for it." };
-  }
-  if (input.cap && (!isFiniteNumber(input.cap.amount) || input.cap.amount <= 0)) {
-    return { status: "blocked", reasonCode: "INVALID_CAP", message: "The evidenced cap amount is missing or invalid." };
+  let capEvidence: ValidPolicyEvidenceRef | null = null;
+  if (input.cap !== undefined && input.cap !== null) {
+    const capEvidenceCheck = validatePolicyEvidence(input.cap.evidence, "MALFORMED_RULE_EVIDENCE");
+    if (!capEvidenceCheck.valid) {
+      return { status: "blocked", reasonCode: "INVALID_CAP", message: "A cap was supplied without valid evidence for it." };
+    }
+    if (!isFiniteNumber(input.cap.amount) || input.cap.amount <= 0) {
+      return { status: "blocked", reasonCode: "INVALID_CAP", message: "The evidenced cap amount is missing or invalid." };
+    }
+    capEvidence = capEvidenceCheck.evidence;
   }
 
   // Cover-not-in-force is checked before the formula arithmetic: a death
@@ -272,7 +297,7 @@ export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitRes
   }
 
   let capApplied = false;
-  if (input.cap) {
+  if (input.cap && capEvidence) {
     const capMinor = toMinorUnits(input.cap.amount);
     if (potentialAmountMinor > capMinor) {
       potentialAmountMinor = capMinor;
@@ -281,10 +306,24 @@ export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitRes
     }
   }
 
+  const ruleEvidence = ruleEvidenceCheck.evidence;
+  const ownershipEvidence = ownershipEvidenceCheck.evidence;
+
+  // Every material identifier that could change what this figure means is
+  // in the hash: who it is for, which claim it was computed for, which
+  // contract/coverage, exactly which rule and ownership evidence backed it,
+  // the formula and cap, the date of death and the currency. Presentation
+  // text (evidence `label`s) is deliberately excluded -- it can change
+  // without changing what was actually calculated or why.
   const calculationId = stableId([
+    input.familyMember.id,
+    input.claimEventId ?? null,
     input.ownership.contractId, input.ownership.coverageId ?? null,
+    ruleEvidence.policyId, ruleEvidence.chunkId, ruleEvidence.pageStart, ruleEvidence.pageEnd,
+    ownershipEvidence.policyId, ownershipEvidence.coverageId,
     input.formula.kind, input.formula.kind === "sum_insured_fraction" ? input.formula.fraction : input.formula.amount,
-    input.cap?.amount ?? null, input.currency, input.sumInsured ?? null,
+    capEvidence ? [input.cap!.amount, capEvidence.policyId, capEvidence.chunkId, capEvidence.pageStart, capEvidence.pageEnd] : null,
+    input.dateOfDeath, input.currency, input.sumInsured ?? null,
   ]);
 
   return {
@@ -292,8 +331,8 @@ export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitRes
     potentialAmount: potentialAmountMinor / 100,
     currency: input.currency,
     formulaBasis,
-    ruleEvidence: input.ruleEvidence,
-    ownershipEvidence: input.ownershipEvidence,
+    ruleEvidence: input.ruleEvidence!,
+    ownershipEvidence: input.ownershipEvidence!,
     ownership: input.ownership,
     capApplied,
     calculationId,

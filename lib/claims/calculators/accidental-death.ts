@@ -6,50 +6,42 @@
  * duplicating it. What is different, and stricter, is the cause of death:
  * a policy's accidental-death benefit pays only when the death matches that
  * POLICY'S OWN definition of an accident, and this module never decides that
- * match itself. It accepts only a caller-supplied, already-resolved
- * confirmation of the match -- never a scenario guess, a keyword match on
- * free text, or an unconfirmed report -- and blocks (no amount, no
- * inference) whenever that confirmation is anything short of a genuine
- * match against documented evidence.
+ * match itself.
+ *
+ * A cause can satisfy one policy's definition and not another's, so there is
+ * no single global "is this confirmed" flag. The caller supplies the one
+ * applicable, policy-specific `CauseDefinitionMatch` record for this exact
+ * family member, claim, contract and (when relevant) coverage -- or `null`
+ * when none has been reviewed yet -- and this calculator independently
+ * re-validates every field of that record before it can unlock an amount.
+ * A caller's own filtering (e.g. picking the "right" match out of a list) is
+ * never trusted alone: the family member, claim event, contract, coverage,
+ * and the definition evidence the match was actually checked against are
+ * all re-checked here against this specific calculation's own context. A
+ * match confirmed for a different policy, a different claim, a different
+ * family member, or an earlier/different wording version can never unlock
+ * this one.
  *
  * Circumstances the policy itself carves out (suicide, self-inflicted
  * injury, intoxication, criminal activity, war, hazardous activity, and any
  * other named exclusion) are never assumed either way: each is passed in as
  * its own tri-state fact -- confirmed present, confirmed absent, or still
  * unresolved -- and an unresolved one blocks exactly like a missing formula
- * does. A death event with a merely plausible or reported accidental cause
+ * does. A death event with a merely plausible or reported accidental cause,
+ * or a cause that has not yet been matched against THIS policy specifically,
  * stays out of this calculator's "calculated" branch entirely; the caller is
  * expected to keep such a benefit visible with a `needs_document`-style
  * status and no amount, and this calculator's block reason is what explains
  * why.
  */
-import { calculateDeathBenefit, type DeathBenefitCap, type DeathBenefitEvidenceRef, type DeathBenefitFormula, type DeathBenefitOwnershipRef } from "./death-benefit";
+import {
+  calculateDeathBenefit, stableId,
+  type DeathBenefitCap, type DeathBenefitEvidenceRef, type DeathBenefitFormula, type DeathBenefitOwnershipRef,
+} from "./death-benefit";
+import { validateCauseEvidence, validatePolicyEvidence, type CauseDefinitionMatch } from "./evidence";
 
 export type { DeathBenefitEvidenceRef, DeathBenefitOwnershipRef, DeathBenefitFormula, DeathBenefitCap };
-
-/**
- * How sure DearPolicy can be that the reported death matches the policy's
- * own definition of an accidental death.
- *   confirmed_matches_definition -- an official document (death certificate
- *     cause-of-death entry, police report, coroner's/medical examiner's
- *     report) has been reviewed and its stated cause matches the exact
- *     wording of the policy's accidental-death definition.
- *   reported_unconfirmed -- the family has described circumstances
- *     consistent with an accident (e.g. "he died in a car crash"), but no
- *     official document has yet been checked against the policy's
- *     definition. This is exactly the case that must never authorise an
- *     amount by itself.
- *   ruled_out -- the reported or documented cause affirmatively does not
- *     meet the policy's accident definition (e.g. a confirmed illness-only
- *     death, or a cause the policy defines as excluded rather than
- *     accidental).
- *   unknown -- the cause of death has not been reported at all yet.
- */
-export type AccidentalDeathCauseConfirmation =
-  | "confirmed_matches_definition"
-  | "reported_unconfirmed"
-  | "ruled_out"
-  | "unknown";
+export type { CauseDefinitionMatch, CauseDefinitionMatchResult, ValidCauseEvidenceRef, ValidPolicyEvidenceRef } from "./evidence";
 
 /** A circumstance the POLICY itself carves out of its accidental-death
  * definition. Only circumstances the wording actually names are meaningful
@@ -72,6 +64,9 @@ export type AccidentalDeathExclusion = {
 export type AccidentalDeathInput = {
   ownership: DeathBenefitOwnershipRef | null;
   familyMember: { id: string; confirmed: boolean } | null;
+  /** The specific claim (assessment session) being assessed. A reviewed
+   * match recorded for a different claim can never unlock this one. */
+  claimEventId: string | null;
   deathConfirmed: boolean | null;
   dateOfDeath: string | null;
   policyEffectiveDate?: string | null;
@@ -80,17 +75,22 @@ export type AccidentalDeathInput = {
   formula: DeathBenefitFormula | null;
   cap?: DeathBenefitCap;
   /** Where the payout rule (rate/percentage/multiple/fixed amount) itself
-   * was read and verified. Absent blocks. */
+   * was read and verified. Absent or malformed blocks. */
   ruleEvidence: DeathBenefitEvidenceRef | null;
   ownershipEvidence: DeathBenefitEvidenceRef | null;
   /** Where the policy defines what counts as an accidental death. This is
    * distinct from ruleEvidence: one clause can state the payout formula
    * while a different clause (or the same one) defines the trigger. Absent
-   * blocks -- there is nothing to confirm the cause against. */
+   * or malformed blocks -- there is nothing to confirm the cause against. */
   accidentalDeathDefinitionEvidence: DeathBenefitEvidenceRef | null;
-  /** How sure DearPolicy can be that the reported cause matches that
-   * definition. Only "confirmed_matches_definition" can produce an amount. */
-  causeConfirmation: AccidentalDeathCauseConfirmation | null;
+  /** The one applicable, already-reviewed, policy-specific match between
+   * the official cause-of-death evidence and THIS policy's own
+   * accidental-death definition -- or `null` when none has been reviewed
+   * for this exact family member/claim/contract/coverage yet. Only a
+   * record whose every field independently re-validates against this
+   * calculation's own context, and whose `result` is exactly `"matches"`,
+   * can unlock an amount. */
+  causeDefinitionMatch: CauseDefinitionMatch | null;
   /** Circumstances the policy itself carves out. Any entry left `null`
    * (unresolved) blocks. Entries the policy does not define are simply
    * omitted by the caller -- there is nothing to resolve for those. */
@@ -113,12 +113,18 @@ export type AccidentalDeathBlockReasonCode =
   | "INVALID_FIXED_AMOUNT"
   | "INVALID_CAP"
   | "INVALID_CURRENCY"
-  | "MISSING_RULE_EVIDENCE"
-  | "MISSING_OWNERSHIP_EVIDENCE"
+  | "MALFORMED_RULE_EVIDENCE"
+  | "MALFORMED_OWNERSHIP_EVIDENCE"
   | "UNRESOLVED_CONDITION"
-  | "MISSING_ACCIDENT_DEFINITION_EVIDENCE"
-  | "CAUSE_NOT_CONFIRMED"
-  | "CAUSE_UNKNOWN"
+  | "MALFORMED_POLICY_DEFINITION_EVIDENCE"
+  | "MALFORMED_CAUSE_EVIDENCE"
+  | "CAUSE_MATCH_MISSING"
+  | "CAUSE_MATCH_FAMILY_MEMBER_MISMATCH"
+  | "CAUSE_MATCH_CLAIM_EVENT_MISMATCH"
+  | "CAUSE_MATCH_CONTRACT_MISMATCH"
+  | "CAUSE_MATCH_COVERAGE_MISMATCH"
+  | "CAUSE_MATCH_DEFINITION_MISMATCH"
+  | "CAUSE_MATCH_NOT_CONFIRMED"
   | "UNRESOLVED_EXCLUSION"
   | "INVALID_EXCLUSION_EVIDENCE";
 
@@ -152,30 +158,87 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
   // The cause gate runs first and independently of the base calculator: an
   // accidental-death benefit must never reach a computed amount on the
   // strength of the base death checks alone.
-  if (!input.accidentalDeathDefinitionEvidence) {
+  const definitionCheck = validatePolicyEvidence(input.accidentalDeathDefinitionEvidence, "MALFORMED_POLICY_DEFINITION_EVIDENCE");
+  if (!definitionCheck.valid) {
+    return { status: "blocked", reasonCode: definitionCheck.reasonCode, message: definitionCheck.message };
+  }
+  const definitionEvidence = definitionCheck.evidence;
+
+  const match = input.causeDefinitionMatch;
+  if (!match) {
     return {
       status: "blocked",
-      reasonCode: "MISSING_ACCIDENT_DEFINITION_EVIDENCE",
-      message: "The policy's own definition of an accidental death has not been located and quoted.",
+      reasonCode: "CAUSE_MATCH_MISSING",
+      message: "No reviewed cause-of-death evidence has been matched against this policy's own accidental-death definition yet.",
     };
   }
-  if (input.causeConfirmation === "ruled_out") {
-    return { status: "not_applicable", potentialAmount: null, reason: "The reported or documented cause of death does not meet this policy's accidental-death definition." };
+
+  const expectedFamilyMemberId = input.familyMember?.id ?? null;
+  const expectedContractId = input.ownership?.contractId ?? null;
+  const expectedCoverageId = input.ownership?.coverageId ?? null;
+
+  // The match record is re-validated against THIS calculation's own
+  // context field by field, never trusted just because a caller supplied
+  // it as "the applicable one" -- a match for a different person, claim,
+  // contract or coverage must never unlock this benefit.
+  if (!match.familyMemberId || match.familyMemberId !== expectedFamilyMemberId) {
+    return { status: "blocked", reasonCode: "CAUSE_MATCH_FAMILY_MEMBER_MISMATCH", message: "The reviewed cause-of-death match belongs to a different family member than the one insured under this cover." };
   }
-  if (input.causeConfirmation == null || input.causeConfirmation === "unknown") {
+  if (!match.claimEventId || match.claimEventId !== input.claimEventId) {
+    return { status: "blocked", reasonCode: "CAUSE_MATCH_CLAIM_EVENT_MISMATCH", message: "The reviewed cause-of-death match belongs to a different claim than the one being assessed." };
+  }
+  if (!match.contractId || match.contractId !== expectedContractId) {
+    return { status: "blocked", reasonCode: "CAUSE_MATCH_CONTRACT_MISMATCH", message: "A match confirmed for a different policy can never unlock this policy's accidental-death benefit." };
+  }
+  if (match.coverageId != null && match.coverageId !== expectedCoverageId) {
+    return { status: "blocked", reasonCode: "CAUSE_MATCH_COVERAGE_MISMATCH", message: "The reviewed cause-of-death match belongs to a different cover under this policy." };
+  }
+
+  const matchDefinitionCheck = validatePolicyEvidence(match.definitionEvidence, "MALFORMED_POLICY_DEFINITION_EVIDENCE");
+  if (!matchDefinitionCheck.valid) {
+    return { status: "blocked", reasonCode: matchDefinitionCheck.reasonCode, message: matchDefinitionCheck.message };
+  }
+  const matchDefinitionEvidence = matchDefinitionCheck.evidence;
+  // The match must have been checked against the EXACT same clause this
+  // calculation is using -- not merely the same policy. A match recorded
+  // against an earlier or otherwise different wording version therefore
+  // fails here (different chunkId/policyId/pages), and can never unlock a
+  // later or different version without the caller re-reviewing against it.
+  const sameDefinition = matchDefinitionEvidence.policyId === definitionEvidence.policyId
+    && matchDefinitionEvidence.chunkId === definitionEvidence.chunkId
+    && matchDefinitionEvidence.pageStart === definitionEvidence.pageStart
+    && matchDefinitionEvidence.pageEnd === definitionEvidence.pageEnd;
+  if (!sameDefinition) {
     return {
       status: "blocked",
-      reasonCode: "CAUSE_UNKNOWN",
-      message: "The cause of death has not been reported yet, so it cannot be checked against the policy's accidental-death definition.",
+      reasonCode: "CAUSE_MATCH_DEFINITION_MISMATCH",
+      message: "The reviewed match was checked against different policy wording than the definition this calculation is using -- for example an earlier or different policy version. It can never unlock this calculation.",
     };
   }
-  if (input.causeConfirmation === "reported_unconfirmed") {
+
+  const causeEvidenceCheck = validateCauseEvidence(match.causeEvidence);
+  if (!causeEvidenceCheck.valid) {
+    return { status: "blocked", reasonCode: causeEvidenceCheck.reasonCode, message: causeEvidenceCheck.message };
+  }
+  const causeEvidence = causeEvidenceCheck.evidence;
+  if (causeEvidence.familyMemberId !== expectedFamilyMemberId) {
+    return { status: "blocked", reasonCode: "CAUSE_MATCH_FAMILY_MEMBER_MISMATCH", message: "The reviewed cause-of-death document was reviewed for a different family member." };
+  }
+  if (causeEvidence.claimEventId !== input.claimEventId) {
+    return { status: "blocked", reasonCode: "CAUSE_MATCH_CLAIM_EVENT_MISMATCH", message: "The reviewed cause-of-death document was reviewed for a different claim." };
+  }
+
+  if (match.result === "does_not_match") {
+    return { status: "not_applicable", potentialAmount: null, reason: "The reviewed official cause-of-death document does not meet this policy's own accidental-death definition." };
+  }
+  if (match.result !== "matches") {
     return {
       status: "blocked",
-      reasonCode: "CAUSE_NOT_CONFIRMED",
-      message: "The reported circumstances may be consistent with an accident, but an official cause-of-death document, police report or coroner's report has not yet been checked against the policy's own definition. A reported circumstance alone does not authorise this amount.",
+      reasonCode: "CAUSE_MATCH_NOT_CONFIRMED",
+      message: "The reviewed cause-of-death evidence has not been explicitly confirmed to match this policy's own accidental-death definition.",
     };
   }
+
   for (const exclusion of input.exclusions ?? []) {
     if (!exclusion.evidence) {
       return { status: "blocked", reasonCode: "INVALID_EXCLUSION_EVIDENCE", message: "A policy exclusion was supplied without evidence for its wording." };
@@ -195,6 +258,7 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
   const base = calculateDeathBenefit({
     ownership: input.ownership,
     familyMember: input.familyMember,
+    claimEventId: input.claimEventId,
     deathConfirmed: input.deathConfirmed,
     dateOfDeath: input.dateOfDeath,
     policyEffectiveDate: input.policyEffectiveDate,
@@ -210,6 +274,19 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
   if (base.status !== "calculated") {
     return base as AccidentalDeathNotApplicable | AccidentalDeathBlocked;
   }
+  // The accidental-death identity extends the base calculation's own
+  // identity (which already covers family member, claim, contract,
+  // coverage, rule/ownership evidence, formula, cap, date of death and
+  // currency) with the cause and accident-definition evidence identifiers
+  // that are specific to this calculator -- so changing either evidence
+  // reference produces a different calculation ID, and repeated identical
+  // inputs always reproduce the same one.
+  const calculationId = "ad:" + stableId([
+    base.calculationId,
+    definitionEvidence.policyId, definitionEvidence.chunkId, definitionEvidence.pageStart, definitionEvidence.pageEnd,
+    causeEvidence.documentId, causeEvidence.documentType, causeEvidence.pageStart ?? null, causeEvidence.pageEnd ?? null,
+    causeEvidence.sourceLocation ?? null, causeEvidence.familyMemberId, causeEvidence.claimEventId,
+  ]);
   return {
     status: "calculated",
     potentialAmount: base.potentialAmount,
@@ -219,6 +296,6 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
     ownershipEvidence: base.ownershipEvidence,
     ownership: base.ownership,
     capApplied: base.capApplied,
-    calculationId: "ad:" + base.calculationId,
+    calculationId,
   };
 }

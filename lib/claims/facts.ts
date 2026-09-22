@@ -114,10 +114,11 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     // Neither direction is a decision about the policy's own definition of
     // an accidental death, and neither by itself authorises an amount --
     // that additionally requires the REVIEWED official cause-of-death
-    // evidence to be matched against the policy's own accidental-death
-    // definition (`causeOfDeathEvidenceReviewed` and
-    // `causeMatchesAccidentDefinition`, never set from chat text), which
-    // the accidental-death calculator enforces separately and explicitly.
+    // evidence to be matched, per policy, against that policy's own
+    // accidental-death definition (`causeOfDeathEvidenceReviewed` and a
+    // confirmed entry in `causeDefinitionMatches`, never set from chat
+    // text), which the accidental-death calculator enforces separately
+    // and explicitly.
     // Mentioning that a document exists only ever sets
     // `causeOfDeathDocumentAvailable`, an availability signal that can
     // prompt an upload request but never authorises an amount by itself.
@@ -173,9 +174,9 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   if (/pathology|medical report|doctor'?s report|oncologist report/i.test(text)) out.medicalReportAvailable = !/don'?t have|do not have|no report/i.test(text);
   // Mentioning a document -- even in passing -- is only ever availability.
   // It can prompt DearPolicy to ask for the upload; it can never, on its
-  // own or via any chat answer, set causeOfDeathEvidenceReviewed or
-  // causeMatchesAccidentDefinition, which require an actual reviewed
-  // document and are never extracted from free text.
+  // own or via any chat answer, set causeOfDeathEvidenceReviewed or add an
+  // entry to causeDefinitionMatches, both of which require an actual
+  // reviewed document and are never extracted from free text.
   if (/death certificate|coroner|coroner's report|police report|medical examiner/i.test(text)) out.causeOfDeathDocumentAvailable = !/don't have|do not have|no (?:death certificate|report|coroner)/i.test(text);
 
   // Separate the accident date from a later death date in the same message.
@@ -273,12 +274,12 @@ export async function extractClaimFacts(args: { text: string; current?: ClaimFac
       // the prompt would defeat the small-context GPU stability protections.
       const factContext = Object.fromEntries(Object.entries(current).filter(([key,value]) => key !== "factSources" && value != null && (!Array.isArray(value) || value.length)));
       const extractionRules = dearPolicyCoreRules().split("\n").filter(line => /^(?:Use only facts supplied|Do not fill gaps|Never (?:invent|ask|use|turn|combine)|A reported death)/.test(line.trim())).join("\n");
-      // ClaimFactsSchema deliberately omits causeOfDeathEvidenceReviewed,
-      // causeMatchesAccidentDefinition and causeOfDeathEvidence: no model
-      // output, however phrased, may ever set those -- only an actual,
-      // already-completed document review can. Partial<ClaimFacts> (not
-      // ClaimFacts) reflects that the AI-extracted shape is intentionally
-      // narrower than the full fact set.
+      // ClaimFactsSchema deliberately omits causeOfDeathEvidenceReviewed
+      // and causeDefinitionMatches: no model output, however phrased, may
+      // ever set those -- only an actual, already-completed, policy-specific
+      // document review can. Partial<ClaimFacts> (not ClaimFacts) reflects
+      // that the AI-extracted shape is intentionally narrower than the
+      // full fact set.
       const parsed = await structuredCompletion<Partial<ClaimFacts>>({
         system: `${extractionRules}\n\nCLAIM FACT EXTRACTION\nExtract all facts explicitly stated in this user's message. Do not infer medical severity, claim eligibility, policy ownership, dates or costs. A reported death overrides injuries. Keep cancer site and stage when stated. Unknown values must be null/[]. Relative dates are resolved by the application; leave date fields null unless an explicit ISO date is quoted.`,
         user: `Pending question: ${args.pendingQuestion?.text ?? "none"}\nExisting facts (context only; do not repeat unless user confirms): ${JSON.stringify(factContext)}\nUser message: ${args.text}`,

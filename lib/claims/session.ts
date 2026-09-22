@@ -17,7 +17,7 @@ export type ClaimSessionRow = {
 
 function normalizeFacts(value: unknown): ClaimFacts {
   const raw = (value && typeof value === "object" ? value : {}) as Partial<ClaimFacts>;
-  return { ...EMPTY_CLAIM_FACTS, ...raw, injuries: Array.isArray(raw.injuries) ? raw.injuries : [], uncertainFacts:Array.isArray(raw.uncertainFacts)?raw.uncertainFacts:[] };
+  return { ...EMPTY_CLAIM_FACTS, ...raw, injuries: Array.isArray(raw.injuries) ? raw.injuries : [], uncertainFacts:Array.isArray(raw.uncertainFacts)?raw.uncertainFacts:[], causeDefinitionMatches:Array.isArray(raw.causeDefinitionMatches)?raw.causeDefinitionMatches:[] };
 }
 
 export async function getClaimSession(accountId: string, familyMemberId: string, id: string) {

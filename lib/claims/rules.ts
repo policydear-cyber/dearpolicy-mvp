@@ -3,33 +3,34 @@ import { canonicalProduct, coverageByProduct, productFromCategory, type OwnedCov
 import type { ClaimAssessmentItem, ClaimEvidence, ClaimFacts, ClaimQuestion } from "./types";
 import type { DeathEvidenceGap, DeathRuleEvidence } from "./death-evidence";
 import { calculateDeathBenefit, type DeathBenefitEvidenceRef, type DeathBenefitFormula } from "./calculators/death-benefit";
-import { calculateAccidentalDeath, type AccidentalDeathCauseConfirmation } from "./calculators/accidental-death";
+import { calculateAccidentalDeath } from "./calculators/accidental-death";
+import type { CauseDefinitionMatch } from "./calculators/evidence";
 
 function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
   return { chunkId: c.chunkId, policyId: c.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, label: c.evidenceLabel };
 }
-/** How sure DearPolicy can be that a reported death matches this policy's
- * own accidental-death definition, from the facts gathered so far. A
- * reported cause consistent with an accident is only ever "relevant, not
- * yet confirmed" until an official cause-of-death document has actually
- * been REVIEWED and its cause explicitly MATCHED against the policy's own
- * definition, with evidence for both. None of the following, alone or
- * together, can substitute for that:
- *   - the family saying they possess a document
- *     (`causeOfDeathDocumentAvailable`) -- this is availability only;
- *   - a chat answer of "yes", "uploaded", or any other free text -- no
- *     chat answer ever sets `causeOfDeathEvidenceReviewed` or
- *     `causeMatchesAccidentDefinition`;
- *   - a review without a matched definition, or a claimed match without a
- *     citable reviewed document.
- * Only `causeOfDeathEvidenceReviewed === true` AND
- * `causeMatchesAccidentDefinition === true` AND a present
- * `causeOfDeathEvidence` reference, together, confirm the match. */
-function accidentalDeathCauseConfirmation(facts: ClaimFacts): AccidentalDeathCauseConfirmation {
-  if (facts.accidentalDeath === false) return "ruled_out";
-  if (facts.accidentalDeath == null) return "unknown";
-  const confirmed = facts.causeOfDeathEvidenceReviewed === true && facts.causeMatchesAccidentDefinition === true && facts.causeOfDeathEvidence != null;
-  return confirmed ? "confirmed_matches_definition" : "reported_unconfirmed";
+/** The one applicable, already-reviewed match between the official
+ * cause-of-death evidence and THIS SPECIFIC policy's own accidental-death
+ * definition, or `null` when none has been reviewed for this exact family
+ * member/claim/contract/coverage yet. A cause can satisfy one policy's
+ * definition and not another's, so this is a per-policy lookup rather than
+ * a single global flag -- and `calculateAccidentalDeath()` independently
+ * re-validates every field of whatever this returns, so a bug here can
+ * never by itself unlock an amount for the wrong policy or person. None of
+ * the following, alone or together, can ever produce a match: the family
+ * saying they possess a document (`causeOfDeathDocumentAvailable`), a chat
+ * answer of "yes"/"uploaded"/any other free text, or DearPolicy having
+ * merely reviewed a document without an explicitly confirmed match --
+ * `causeDefinitionMatches` is never populated from chat text or AI output
+ * in this slice, since no document-review pipeline exists yet to do so. */
+function applicableCauseDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, sessionId: string | null): CauseDefinitionMatch | null {
+  if (sessionId == null) return null;
+  return facts.causeDefinitionMatches.find(m =>
+    m.contractId === coverage.policyId &&
+    m.familyMemberId === coverage.familyMemberId &&
+    m.claimEventId === sessionId &&
+    (m.coverageId == null || m.coverageId === coverage.id),
+  ) ?? null;
 }
 
 function hasProduct(coverages: OwnedCoverage[], product: string) {
@@ -131,7 +132,7 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
     const racingRule = deathRules.find(r => r.benefit === "gpa-accidental-death" && r.coverageId === bestCoverage(coverages,"group personal accident","Personal Accident")?.id);
     if (facts.accidentalDeath === true && /motorcycle|motorbike/i.test(facts.accidentType ?? "") && racingRule?.racingExclusion && facts.competitiveRacing == null && !facts.uncertainFacts.includes("competitive_racing")) return { id:"competitive_racing", text:"Was the accident during competitive racing on wheels?", type:"yes_no", options:["Yes", "No", "Not sure"], why:racingRule.racingExclusion.authorityException ? "The Personal Accident wording excludes competitive racing on wheels, with an exception for racing sanctioned by MINDEF/MHA. This can change its death benefit." : "The matching Personal Accident wording excludes competitive racing on wheels, so this can change its death benefit." };
     if (facts.accidentalDeath === true && facts.competitiveRacing === true && racingRule?.racingExclusion?.authorityException && facts.racingAuthoritySanctioned == null && !facts.uncertainFacts.includes("racing_authority_sanctioned")) return { id:"racing_authority_sanctioned", text:"Was the racing sanctioned by MINDEF/MHA?", type:"yes_no", options:["Yes", "No", "Not sure"], why:"Your uploaded wording has an exception for racing sanctioned by the Authority. The insurer will need evidence of that sanction." };
-    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumentAvailable == null && !facts.uncertainFacts.includes("cause_of_death_document")) return { id:"cause_of_death_document", text:"Do you have an official cause-of-death document -- a death certificate, police report, or coroner's report -- confirming the accident? You can say \u201cnot sure\u201d if you have not checked yet.", type:"yes_no", options:["Yes", "No", "Not sure"], why:"The accidental death benefit needs the reported cause checked against the policy's own accident definition before DearPolicy can show an amount. A reported circumstance alone is not enough." };
+    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumentAvailable == null && !facts.uncertainFacts.includes("cause_of_death_document")) return { id:"cause_of_death_document", text:"Do you have an official cause-of-death document -- a death certificate, police report, or coroner's report -- confirming the accident? You can say “not sure” if you have not checked yet.", type:"yes_no", options:["Yes", "No", "Not sure"], why:"The accidental death benefit needs the reported cause checked against the policy's own accident definition before DearPolicy can show an amount. A reported circumstance alone is not enough." };
     // Saying the document exists is only ever availability -- it never
     // authorises an amount by itself. Once available, DearPolicy asks for
     // the document itself; only DearPolicy actually reviewing it and
@@ -154,7 +155,7 @@ function g007500(coverages: OwnedCoverage[]) {
   return coverages.some((c) => c.groupPolicyNumber === "G007500");
 }
 
-export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = []): ClaimAssessmentItem[] {
+export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null): ClaimAssessmentItem[] {
   const items: ClaimAssessmentItem[] = [];
   const isG007500 = g007500(coverages);
 
@@ -209,10 +210,11 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       const formula: DeathBenefitFormula = rule.formula.kind === "sum_insured_fraction"
         ? { kind: "sum_insured_fraction", fraction: rule.formula.fraction, evidence: evidenceRef }
         : { kind: "fixed", amount: rule.formula.amount, evidence: evidenceRef };
-      const ownershipEvidence: DeathBenefitEvidenceRef = { chunkId: `coverage:${coverage.id}`, policyId: coverage.policyId, label: coverage.productName ?? undefined };
+      const ownershipEvidence: DeathBenefitEvidenceRef & { coverageId?: string; familyMemberId?: string } = { chunkId: `coverage:${coverage.id}`, policyId: coverage.policyId, coverageId: coverage.id, familyMemberId: coverage.familyMemberId, label: coverage.productName ?? undefined };
       const sharedInput = {
         ownership: { contractId: coverage.policyId, coverageId: coverage.id, label: coverage.productName ?? undefined },
         familyMember: { id: coverage.familyMemberId, confirmed: true },
+        claimEventId: sessionId,
         deathConfirmed: facts.death === true,
         dateOfDeath: deathDate,
         policyEffectiveDate: coverage.effectiveDate,
@@ -224,11 +226,15 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         ownershipEvidence,
       };
       const calc = product === "group personal accident"
-        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeConfirmation: accidentalDeathCauseConfirmation(facts) })
+        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId) })
         : calculateDeathBenefit(sharedInput);
 
       if (calc.status === "blocked") {
-        const isCauseGap = product === "group personal accident" && (calc.reasonCode === "CAUSE_NOT_CONFIRMED" || calc.reasonCode === "CAUSE_UNKNOWN");
+        const isCauseGap = product === "group personal accident" && (
+          calc.reasonCode === "MALFORMED_POLICY_DEFINITION_EVIDENCE" ||
+          calc.reasonCode === "MALFORMED_CAUSE_EVIDENCE" ||
+          (typeof calc.reasonCode === "string" && calc.reasonCode.startsWith("CAUSE_MATCH_"))
+        );
         // The reason distinguishes the three unresolved states DearPolicy can
         // actually be in, so the family knows what still needs to happen --
         // never just "unconfirmed" once a document has genuinely been read.

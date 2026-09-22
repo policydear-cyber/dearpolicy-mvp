@@ -120,7 +120,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   const deathEvidence=facts.eventType === "death" ? await loadDeathEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[]};
   const deathRules=deathEvidence.rules;
   const question=nextClaimQuestion(facts,coverages,deathRules);
-  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps) : null;
+  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id) : null;
   const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages) : null;
   const newDeath=facts.eventType === "death" && session.event_type !== "death";
   if(question){
@@ -151,7 +151,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
     return answer;
   }
 
-  const assessments=deathAssessments??enforceMonetarySafety(assessClaim(facts,coverages),facts,coverages);
+  const assessments=deathAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id),facts,coverages);
   const citations=await assessmentCitations(args.accountId,args.familyMemberId,assessments,coverages);
   const nextSteps=claimNextSteps(facts,assessments);
   if(!currentness.verified)nextSteps.push("Upload the latest renewal notice or premium receipt if available so DearPolicy can verify current policy status separately from coverage ownership.");

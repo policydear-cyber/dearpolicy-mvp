@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { extractClaimFacts } from "@/lib/claims/facts";
 import { assessClaim, nextClaimQuestion } from "@/lib/claims/rules";
 import type { DeathRuleEvidence } from "@/lib/claims/death-evidence";
+import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 
 /** Contextual regressions for the V1 death-benefit and accidental-death
@@ -20,14 +21,25 @@ export async function runDeathBenefitContextualRegressions() {
     { coverageId: "gtl", benefit: "gtl-death", quote: "Death 100% of Sum Insured", citation, formula: { kind: "sum_insured_fraction", fraction: 1 } },
     { coverageId: "gpa", benefit: "gpa-accidental-death", quote: "Death due to Accident 100% of Sum Insured", citation, formula: { kind: "sum_insured_fraction", fraction: 1 } },
   ];
-  // The only combination that may unlock an accidental-death amount: the
-  // document is available, DearPolicy has actually reviewed it, AND a
-  // deterministic match against the policy's own definition has been
-  // confirmed, with a citable evidence reference for the reviewed cause.
-  // None of these ever come from a chat answer -- only from a genuine,
-  // already-completed document review, which these fixtures simulate
-  // directly since this V1 slice has no document-processing pipeline yet.
-  const fullyConfirmedEvidence = { causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeMatchesAccidentDefinition: true, causeOfDeathEvidence: { documentId: "police-report-1", label: "Police report" } };
+  // The claim (assessment session) these tests act inside.
+  const SESSION_ID = "session-death-benefit-contextual";
+  // The one applicable, policy-specific match: this exact family member,
+  // this exact claim, this exact contract/coverage, and definitionEvidence
+  // that is byte-for-byte the same clause rules.ts itself will quote as
+  // this policy's own accidental-death definition. None of this ever comes
+  // from a chat answer -- only from a genuine, already-completed document
+  // review, which these fixtures simulate directly since this V1 slice has
+  // no document-processing pipeline yet.
+  const confirmedMatch = (): CauseDefinitionMatch => {
+    const rule = deathRules.find(r => r.benefit === "gpa-accidental-death")!;
+    return {
+      familyMemberId: "charmaine", claimEventId: SESSION_ID, contractId: "certificate", coverageId: "gpa",
+      causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
+      definitionEvidence: { policyId: rule.citation.policyId, chunkId: rule.citation.chunkId, pageStart: rule.citation.pageStart, pageEnd: rule.citation.pageEnd },
+      result: "matches", reviewedAt: "2026-09-14",
+    };
+  };
+  const fullyConfirmed = () => ({ causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [confirmedMatch()] });
 
   // 1. Cancer death with ordinary death cover: ordinary is payable, the
   // accidental rider is never even considered because the reported cause
@@ -35,7 +47,7 @@ export async function runDeathBenefitContextualRegressions() {
   const cancer = await extractClaimFacts({ text: "Charmaine died from stage 4 cancer yesterday", ...context });
   test("Cancer death pays only the ordinary death benefit", () => {
     assert.equal(cancer.accidentalDeath, false);
-    const result = assessClaim(cancer, coverages, deathRules);
+    const result = assessClaim(cancer, coverages, deathRules, [], SESSION_ID);
     assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
     // A cause of death that is definitively not an accident rules the
     // accidental-death benefit out of the assessment entirely.
@@ -48,9 +60,9 @@ export async function runDeathBenefitContextualRegressions() {
   const carCrash = await extractClaimFacts({ text: "Charmaine died in a car crash yesterday", ...context });
   test("Car-crash death does not by itself authorise the accidental-death amount", () => {
     assert.equal(carCrash.accidentalDeath, true);
-    assert.equal(carCrash.causeOfDeathDocumentAvailable, null); assert.equal(carCrash.causeOfDeathEvidenceReviewed, null); assert.equal(carCrash.causeMatchesAccidentDefinition, null);
+    assert.equal(carCrash.causeOfDeathDocumentAvailable, null); assert.equal(carCrash.causeOfDeathEvidenceReviewed, null); assert.deepEqual(carCrash.causeDefinitionMatches, []);
     assert.equal(nextClaimQuestion(carCrash, coverages)?.id, "cause_of_death_document");
-    const result = assessClaim(carCrash, coverages, deathRules);
+    const result = assessClaim(carCrash, coverages, deathRules, [], SESSION_ID);
     assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
     const accidental = result.find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.status, "needs_document"); assert.equal(accidental?.amountText, null); assert.equal(accidental?.calculatedAmount, undefined);
@@ -60,9 +72,9 @@ export async function runDeathBenefitContextualRegressions() {
   // 3. Accidental cover confirmed by sufficient structured evidence: once the
   // document is confirmed, both benefits become payable and are additive.
   test("Accidental cover confirmed by structured evidence pays both benefits, once each", () => {
-    const confirmed = { ...carCrash, ...fullyConfirmedEvidence };
+    const confirmed = { ...carCrash, ...fullyConfirmed() };
     assert.equal(nextClaimQuestion(confirmed, coverages), null);
-    const result = assessClaim(confirmed, coverages, deathRules);
+    const result = assessClaim(confirmed, coverages, deathRules, [], SESSION_ID);
     assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
     assert.equal(result.find(i => i.id === "gpa-accidental-death")?.calculatedAmount, 600_000);
     const total = result.reduce((sum, i) => sum + (i.calculatedAmount ?? 0), 0);
@@ -76,9 +88,9 @@ export async function runDeathBenefitContextualRegressions() {
   test("A reported homicide never auto-confirms accidental death", () => {
     assert.equal(murdered.death, true); assert.equal(murdered.accidentalDeath, null);
     // DearPolicy asks what caused the death -- it never labels a homicide
-    // "accidental" on the user's behalf.
+    // \"accidental\" on the user's behalf.
     assert.equal(nextClaimQuestion(murdered, coverages)?.id, "cause_of_death");
-    const result = assessClaim(murdered, coverages, deathRules);
+    const result = assessClaim(murdered, coverages, deathRules, [], SESSION_ID);
     assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
     // The accidental-death benefit stays visible (the cause is still
     // genuinely unresolved) but with no amount and no assumption either way.
@@ -91,9 +103,9 @@ export async function runDeathBenefitContextualRegressions() {
   const unknown = await extractClaimFacts({ text: "Not sure", current: { ...murdered, accidentalDeath: null }, pendingQuestion: causeQuestion, ...context });
   test("An unknown cause of death is never assumed to be accidental or natural", () => {
     assert.equal(unknown.accidentalDeath, null);
-    // Having already said "not sure" once, DearPolicy does not keep asking.
+    // Having already said \"not sure\" once, DearPolicy does not keep asking.
     assert.equal(nextClaimQuestion(unknown, coverages), null);
-    const result = assessClaim(unknown, coverages, deathRules);
+    const result = assessClaim(unknown, coverages, deathRules, [], SESSION_ID);
     // The accidental-death benefit stays visible with no amount, never
     // silently dropped and never paid on a guess.
     const accidental = result.find(i => i.id === "gpa-accidental-death");
@@ -106,15 +118,15 @@ export async function runDeathBenefitContextualRegressions() {
   const natural = await extractClaimFacts({ text: "Charmaine died of a heart attack yesterday", ...context });
   test("Natural causes rule out the accidental-death benefit rather than deferring it", () => {
     assert.equal(natural.accidentalDeath, false);
-    assert.equal(assessClaim(natural, coverages, deathRules).find(i => i.id === "gpa-accidental-death"), undefined);
+    assert.equal(assessClaim(natural, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death"), undefined);
   });
 
   // 7. Ordinary and accidental death benefits are additive when both are
   // confirmed (already exercised above; re-asserted here against the
   // dedicated evidence-confirmed fixture for traceability to the task list).
   test("Ordinary and accidental death benefits are additive, not alternatives, under this scheme", () => {
-    const confirmed = { ...carCrash, ...fullyConfirmedEvidence };
-    const result = assessClaim(confirmed, coverages, deathRules);
+    const confirmed = { ...carCrash, ...fullyConfirmed() };
+    const result = assessClaim(confirmed, coverages, deathRules, [], SESSION_ID);
     assert.equal(result.length, 2);
     assert.equal(result.reduce((sum, i) => sum + (i.calculatedAmount ?? 0), 0), 1_600_000);
   });
@@ -126,8 +138,8 @@ export async function runDeathBenefitContextualRegressions() {
       ...deathRules,
       { coverageId: "gtl", benefit: "gtl-death", quote: "Death 100% of Sum Insured (benefit summary, second copy)", citation: { ...citation, chunkId: "page:wording:9", pageStart: 9, pageEnd: 9 }, formula: { kind: "sum_insured_fraction", fraction: 1 } },
     ];
-    const confirmed = { ...carCrash, ...fullyConfirmedEvidence };
-    const result = assessClaim(confirmed, coverages, duplicateRules);
+    const confirmed = { ...carCrash, ...fullyConfirmed() };
+    const result = assessClaim(confirmed, coverages, duplicateRules, [], SESSION_ID);
     assert.equal(result.filter(i => i.id === "gtl-death").length, 1);
     assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
     assert.equal(result.reduce((sum, i) => sum + (i.calculatedAmount ?? 0), 0), 1_600_000);
@@ -135,14 +147,14 @@ export async function runDeathBenefitContextualRegressions() {
 
   // 9. Missing wording produces no amount, never a fabricated one.
   test("Missing benefit wording produces no amount for either benefit", () => {
-    const confirmed = { ...carCrash, ...fullyConfirmedEvidence };
-    assert.equal(assessClaim(confirmed, coverages, []).some(i => i.amountText != null), false);
+    const confirmed = { ...carCrash, ...fullyConfirmed() };
+    assert.equal(assessClaim(confirmed, coverages, [], [], SESSION_ID).some(i => i.amountText != null), false);
   });
 
-  // 10. An incomplete review is never reported as "not covered" -- it stays
+  // 10. An incomplete review is never reported as \"not covered\" -- it stays
   // visibly pending (needs_document) rather than collapsing to not_applicable.
   test("An unresolved accidental-death review is needs_document, never not_applicable", () => {
-    const result = assessClaim(carCrash, coverages, deathRules);
+    const result = assessClaim(carCrash, coverages, deathRules, [], SESSION_ID);
     const accidental = result.find(i => i.id === "gpa-accidental-death");
     assert.notEqual(accidental?.status, "not_applicable");
     assert.equal(accidental?.status, "needs_document");
@@ -150,30 +162,30 @@ export async function runDeathBenefitContextualRegressions() {
 
   // 11. Blocked amounts never enter the household total.
   test("A blocked accidental-death amount never enters the combined total", () => {
-    const result = assessClaim(carCrash, coverages, deathRules);
+    const result = assessClaim(carCrash, coverages, deathRules, [], SESSION_ID);
     const total = result.reduce((sum, i) => sum + (i.calculatedAmount ?? 0), 0);
     assert.equal(total, 1_000_000);
   });
 
-  // 12. A safety correction to this same PR: a family's own "Yes" to
+  // 12. A safety correction to this same PR: a family's own \"Yes\" to
   // document availability must never, by itself, unlock the amount -- only
   // an actual reviewed-and-matched document can.
-  test("Answering \u201cYes\u201d to document availability does not unlock an amount", () => {
+  test("Answering “Yes” to document availability does not unlock an amount", () => {
     const available = { ...carCrash, causeOfDeathDocumentAvailable: true };
     assert.equal(nextClaimQuestion(available, coverages)?.id, "cause_of_death_document_upload");
-    const accidental = assessClaim(available, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    const accidental = assessClaim(available, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.status, "needs_document"); assert.equal(accidental?.amountText, null); assert.equal(accidental?.calculatedAmount, undefined);
   });
 
   // 13. Mentioning a document in free text is availability only, extracted
-  // the same deterministic way as an explicit "yes" -- and is just as
+  // the same deterministic way as an explicit \"yes\" -- and is just as
   // incapable of unlocking an amount.
   const mentionedReport = await extractClaimFacts({ text: "Charmaine died in a car crash yesterday, there's a police report", ...context });
-  test("Mentioning \u201cpolice report\u201d in chat does not unlock an amount", () => {
+  test("Mentioning “police report” in chat does not unlock an amount", () => {
     assert.equal(mentionedReport.causeOfDeathDocumentAvailable, true);
     assert.equal(mentionedReport.causeOfDeathEvidenceReviewed, null);
-    assert.equal(mentionedReport.causeMatchesAccidentDefinition, null);
-    const accidental = assessClaim(mentionedReport, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    assert.deepEqual(mentionedReport.causeDefinitionMatches, []);
+    const accidental = assessClaim(mentionedReport, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.status, "needs_document"); assert.equal(accidental?.amountText, null);
   });
 
@@ -181,7 +193,7 @@ export async function runDeathBenefitContextualRegressions() {
   // actually reviewed it -- does not unlock an amount either.
   test("An uploaded but unread document does not unlock an amount", () => {
     const unread = { ...carCrash, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: false };
-    const accidental = assessClaim(unread, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    const accidental = assessClaim(unread, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.status, "needs_document"); assert.equal(accidental?.amountText, null);
     assert.match(accidental?.reason ?? "", /has not yet been reviewed/i);
   });
@@ -190,11 +202,12 @@ export async function runDeathBenefitContextualRegressions() {
   // wording on file does not unlock an amount -- one cited source is not
   // both cited sources.
   test("Reviewed cause evidence without policy-definition evidence does not unlock an amount", () => {
-    const reviewedNoWording = { ...carCrash, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeMatchesAccidentDefinition: true, causeOfDeathEvidence: { documentId: "police-report-1" } };
-    // deathRules here carries no gpa-accidental-death rule at all, so the
-    // policy's own accident-definition wording is not on file for this cover.
+    const reviewedNoWording = { ...carCrash, ...fullyConfirmed() };
+    // gtlOnlyRules carries no gpa-accidental-death rule at all, so the
+    // policy's own accident-definition wording is not on file for this
+    // cover, regardless of how thoroughly the cause itself was reviewed.
     const gtlOnlyRules = deathRules.filter(r => r.benefit !== "gpa-accidental-death");
-    const accidental = assessClaim(reviewedNoWording, coverages, gtlOnlyRules).find(i => i.id === "gpa-accidental-death");
+    const accidental = assessClaim(reviewedNoWording, coverages, gtlOnlyRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.amountText, null);
     assert.notEqual(accidental?.calculatedAmount, 600_000);
   });
@@ -203,12 +216,21 @@ export async function runDeathBenefitContextualRegressions() {
   // not unlock an amount -- the other direction of the same requirement.
   test("Policy-definition evidence without a reviewed and matched cause does not unlock an amount", () => {
     const definitionOnly = { ...carCrash, causeOfDeathDocumentAvailable: true }; // deathRules already carries the gpa-accidental-death definition wording
-    const accidental = assessClaim(definitionOnly, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    const accidental = assessClaim(definitionOnly, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.amountText, null);
-    const reviewedNotMatched = { ...carCrash, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeMatchesAccidentDefinition: false, causeOfDeathEvidence: { documentId: "police-report-1" } };
-    const stillNoAmount = assessClaim(reviewedNotMatched, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    const reviewedNotMatched = { ...carCrash, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [{ ...confirmedMatch(), result: "needs_review" as const }] };
+    const stillNoAmount = assessClaim(reviewedNotMatched, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(stillNoAmount?.amountText, null);
     assert.match(stillNoAmount?.reason ?? "", /does not yet match/i);
+  });
+
+  // 16b. A cause explicitly confirmed NOT to satisfy the policy's own
+  // definition rules the benefit out entirely rather than leaving it
+  // pending -- the mirror image of a confirmed match.
+  test("A cause explicitly confirmed not to match the policy's definition rules the benefit out", () => {
+    const ruledOut = { ...carCrash, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [{ ...confirmedMatch(), result: "does_not_match" as const }] };
+    const accidental = assessClaim(ruledOut, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
+    assert.equal(accidental?.status, "not_applicable"); assert.equal(accidental?.amountText, null);
   });
 
   // 17. Only both cited evidence sources (the reviewed cause AND the
@@ -216,10 +238,19 @@ export async function runDeathBenefitContextualRegressions() {
   // unlock the amount -- re-asserted directly against the calculator-facing
   // confirmation state, for traceability to the correction that introduced it.
   test("Only both cited evidence sources plus a confirmed match unlock the amount", () => {
-    const confirmed = { ...carCrash, ...fullyConfirmedEvidence };
-    const accidental = assessClaim(confirmed, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    const confirmed = { ...carCrash, ...fullyConfirmed() };
+    const accidental = assessClaim(confirmed, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
     assert.equal(accidental?.calculatedAmount, 600_000);
     assert.equal(accidental?.status, "potentially_applicable");
+  });
+
+  // 18. A match reviewed for a different claim session can never unlock
+  // this one -- the same reviewed evidence, presented against the wrong
+  // claim, is exactly as ineffective as no evidence at all.
+  test("A match reviewed for a different claim never unlocks this claim's amount", () => {
+    const confirmed = { ...carCrash, ...fullyConfirmed() };
+    const accidental = assessClaim(confirmed, coverages, deathRules, [], "a-completely-different-session").find(i => i.id === "gpa-accidental-death");
+    assert.equal(accidental?.status, "needs_document"); assert.equal(accidental?.amountText, null);
   });
 
   console.log(`DearPolicy death-benefit contextual regressions passed (${cases} scenarios).`);
