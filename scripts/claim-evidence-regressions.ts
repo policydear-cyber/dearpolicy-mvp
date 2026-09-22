@@ -305,6 +305,14 @@ async function runDatabaseTests() {
         [policyId, account, desmond, groupNumber],
       );
       for (const p of pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [account, policyId, p.page_number, p.text]);
+      // lib/claims/death-evidence.ts's loadDeathEvidence() only reads a
+      // policy's own wording pages when EITHER policy_members links it to
+      // the family member being asked about, OR it is an unlinked shared
+      // reference document (personal_coverage_confirmed=false with a
+      // recognised reference role) -- a per-member personal certificate
+      // like this one (personal_coverage_confirmed=true, document_role
+      // 'certificate') has to be the former.
+      await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyId, desmond, account]);
     }
     await pool.query(
       `INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name)
