@@ -551,7 +551,17 @@ async function main(){
       const normalised=answer.details.map(d=>d.toLowerCase().replace(/[^a-z0-9]+/g," ").trim());
       assert.equal(new Set(normalised).size,normalised.length,"No detail may appear twice");
       assert.equal(negativeCoverageClaim(answer.summary),false);
-      assert.equal(answer.claimItems[0]?.amountText,"S$350,000");
+      // The wording section (13 pages) was never fully retrieved, so the
+      // payout rule is not fully verified. The gate must withhold the
+      // amount -- but the benefit itself, being potentially relevant, must
+      // stay visible rather than disappearing or reading as "not covered".
+      const item=answer.claimItems[0];
+      assert.ok(item,"The potentially relevant critical-illness benefit must remain visible");
+      assert.match(item!.title,/[Cc]ritical [Ii]llness/);
+      assert.equal(item!.status,"needs_document");
+      assert.equal(item!.amountText,null);
+      assert.match(item!.reason,/withheld/i,"The reason must explain the amount was withheld, not just state a fact");
+      assert.ok(item!.conditions.some(c=>/partial policy review/i.test(c)),"A condition must name the incomplete review as the cause");
     });
     await test("A fully read contract is reported as a complete review",async()=>{
       await seedReviewFixture(1);
@@ -572,9 +582,20 @@ async function main(){
       assert.equal(staleItem?.currentness?.state,"unknown");
       assert.equal(staleItem?.currentness?.label,"Active status not recently verified");
       assert.ok(stale.nextSteps.some(step=>/premium receipt or renewal notice/i.test(step)));
+      // The medical-definition match for a critical-illness diagnosis is a
+      // document-confirmation requirement the mock evidence never resolves
+      // (see the shared CI benefit fixture above), so this claim is withheld
+      // on that ground regardless of premium evidence. That withholding is
+      // separate from ownership/currentness -- the point under test here is
+      // that a missing premium receipt only ever adds its own qualifier and
+      // never substitutes for, or erases, the other reasons already present.
       const claim=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      assert.equal(claim.claimItems[0]?.amountText,"S$350,000","A missing receipt must not erase a supported amount");
-      assert.ok(claim.claimItems[0]?.conditions.some(c=>c.startsWith("Active status not recently verified")));
+      const claimItem=claim.claimItems[0];
+      assert.ok(claimItem,"The critical-illness benefit must remain visible");
+      assert.equal(claimItem!.status,"needs_document");
+      assert.equal(claimItem!.amountText,null,"A missing receipt must not manufacture an amount that was never confirmed");
+      assert.ok(claimItem!.conditions.some(c=>c.startsWith("Active status not recently verified")),"The currentness qualifier must still be present alongside the medical-definition qualifier");
+      assert.ok(claimItem!.conditions.some(c=>c.startsWith("The diagnosis must satisfy")),"The medical-definition qualifier that actually withholds the amount must also be present");
       await db.query("INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,policy_number,amount,currency,payment_date) VALUES($1,$2,$3,'Example Insurer','REVIEW-1',1200,'SGD',current_date - 30)",
         [account,fixture.policyId,fixture.person.id]);
       const fresh=(await send("What policies do we have?",people[0].id)).data.answer as ChatAnswer;
@@ -600,19 +621,34 @@ async function main(){
       assert.equal(answer.reviewCoverage?.pagesTotal,41);
       assert.ok((answer.reviewCoverage?.pagesRead??0)>=8,"A 40-passage booklet must not be read six passages at a time, got "+answer.reviewCoverage?.pagesRead);
       assert.equal(answer.reviewCoverage?.complete,false,"and what the call budget left unread is still reported");
-      assert.equal(answer.claimItems[0]?.amountText,"S$350,000");
+      // The critical-illness benefit's medical-definition match is a
+      // document-confirmation requirement (see the shared CI mock above),
+      // which the safety gate withholds regardless of how deep the read
+      // went -- the depth assertions above are what this test is actually
+      // about.
+      assert.equal(answer.claimItems[0]?.status,"needs_document");
+      assert.equal(answer.claimItems[0]?.amountText,null);
     });
     await test("A claim amount states the specific reasons it could settle differently",async()=>{
       await seedReviewFixture(1);
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
       const answer=data.answer as ChatAnswer;
-      assert.equal(answer.potentialPayoutTotals?.[0].amountText,"S$350,000");
-      assert.ok(answer.payoutQualifiers?.length,"A calculated amount must say what could change it");
-      assert.ok(answer.payoutQualifiers!.some(q=>/defined illness|definition/i.test(q)),"The outstanding definition is the real reason here: "+JSON.stringify(answer.payoutQualifiers));
-      assert.ok(answer.payoutQualifiers!.some(q=>/premium or renewal evidence/i.test(q)));
-      assert.match(answer.summary,/S\$350,000/);
-      assert.match(answer.summary,/final settled amount can differ because/i);
-      assert.ok(answer.payoutQualifiers!.every(q=>!/^\s*$/.test(q)));
+      // The medical-definition match is a document-confirmation requirement
+      // (see the shared CI mock above), so the monetary gate withholds the
+      // amount outright rather than showing it with a qualifier -- a
+      // qualifier next to a figure that is not displayed is its own defect
+      // (fixed in lib/chat/workflow.ts alongside this test). The specific
+      // reasons this test is about must still be visible, on the benefit's
+      // own conditions, exactly as strongly as before.
+      const item=answer.claimItems[0];
+      assert.ok(item,"The potentially relevant benefit must remain visible");
+      assert.equal(item!.status,"needs_document");
+      assert.equal(item!.amountText,null);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No total may be shown when its only item was withheld");
+      assert.ok(!answer.payoutQualifiers?.length,"A qualifier with no displayed total to qualify is a dangling caveat");
+      assert.ok(item!.conditions.some(c=>/defined illness|definition/i.test(c)),"The outstanding definition is the real reason here: "+JSON.stringify(item!.conditions));
+      assert.ok(item!.conditions.some(c=>/active status not recently verified/i.test(c)),"The missing premium/renewal evidence must also be named");
+      assert.doesNotMatch(answer.summary,/S\$350,000/,"An unconfirmed amount must never reach the summary text either");
     });
     await test("A failed evidence batch is never counted as text that was read",async()=>{
       await seedReviewFixture(1);
@@ -648,7 +684,8 @@ async function main(){
       const answer=data.answer as ChatAnswer;
       assert.doesNotMatch(answer.summary,/invalid structured JSON/i,"A raw JSON dump must never reach the user");
       assert.ok(!answer.details.some(d=>d.includes("subjectId")),"The raw model output must not be shown");
-      assert.equal(answer.claimItems[0]?.amountText,"S$350,000","A salvaged or retried interpretation still produces the assessment");
+      assert.ok(answer.claimItems[0],"A salvaged or retried interpretation still produces the assessment");
+      assert.equal(answer.claimItems[0]?.status,"needs_document");
     });
     await test("Short subject handles are mapped back to the real family member",async()=>{
       await seedReviewFixture(1);
