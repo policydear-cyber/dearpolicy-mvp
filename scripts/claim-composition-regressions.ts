@@ -137,9 +137,10 @@ function runPureTests() {
       makeCoverage({ id: "cov-b", policyId: "P2", insurer: "Singlife", policyNumber: "POL-DUP" }),
     ];
     const decisions = resolvePolicyVersions(coverages, "2024-06-01");
-    assert.equal(decisions.get("P1")?.status, "ambiguous");
+    const p1Decision = decisions.get("P1");
+    assert.equal(p1Decision?.status, "ambiguous");
     assert.equal(decisions.get("P2")?.status, "ambiguous");
-    if (decisions.get("P1")?.status === "ambiguous") assert.equal(decisions.get("P1")!.reasonCode, "DUPLICATE_POLICY_OR_VERSION");
+    if (p1Decision?.status === "ambiguous") assert.equal(p1Decision.reasonCode, "DUPLICATE_POLICY_OR_VERSION");
 
     const assessments = [
       makeAssessment({ id: "gtl-death", coverageId: "cov-a", calculatedAmount: 100000, currency: "SGD" }),
@@ -172,9 +173,10 @@ function runPureTests() {
       makeCoverage({ id: "cov-y", policyId: "P-Y", insurer: "Singlife", policyNumber: "POL-CONFLICT", effectiveDate: "2023-06-01", renewalOrExpiryDate: "2025-06-01" }),
     ];
     const decisions = resolvePolicyVersions(coverages, "2024-06-01");
-    assert.equal(decisions.get("P-X")?.status, "ambiguous");
+    const pxDecision = decisions.get("P-X");
+    assert.equal(pxDecision?.status, "ambiguous");
     assert.equal(decisions.get("P-Y")?.status, "ambiguous");
-    if (decisions.get("P-X")?.status === "ambiguous") assert.equal(decisions.get("P-X")!.reasonCode, "AMBIGUOUS_POLICY_VERSION");
+    if (pxDecision?.status === "ambiguous") assert.equal(pxDecision.reasonCode, "AMBIGUOUS_POLICY_VERSION");
   });
 
   test("composition never invents extra benefits from extra wording pages -- one assessment always yields exactly one included benefit", () => {

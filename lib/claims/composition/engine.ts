@@ -33,7 +33,8 @@ export type ComposeClaimArgs = {
   now?: Date;
 };
 
-function stableId(parts: (string | number | boolean | null | undefined)[]) {
+type StableIdPart = string | number | boolean | null | undefined | StableIdPart[];
+function stableId(parts: StableIdPart[]) {
   return "comp:" + createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
