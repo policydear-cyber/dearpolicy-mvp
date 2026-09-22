@@ -21,6 +21,8 @@
  * rounding.
  */
 
+import { createHash } from "node:crypto";
+
 export type DeathBenefitEvidenceRef = {
   chunkId?: string;
   policyId?: string;
@@ -172,18 +174,14 @@ function toMinorUnits(amount: number): number {
 
 /** Stable across repeated calls with the same input, and distinct whenever
  * any determining input differs -- the property the "duplicate calculation
- * IDs" and "deterministic repeatability" tests check for. No Node crypto
- * dependency: a compact FNV-1a hash of the canonical input is enough for a
- * stable identifier and keeps this module dependency-free like its sibling
- * calculators. */
+ * IDs" and "deterministic repeatability" tests check for. Uses SHA-256 over
+ * the canonical (JSON-stringified) input, consistent with the calculation
+ * IDs generated elsewhere in this codebase (lib/chat/policy-analysis.ts) --
+ * a 32-bit hash is not collision-resistant enough for an identifier that
+ * stands in for "this exact amount, once" across a household's benefits. */
 function stableId(parts: (string | number | boolean | null | undefined)[]): string {
   const text = JSON.stringify(parts);
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return "db:" + (hash >>> 0).toString(16).padStart(8, "0") + ":" + text.length;
+  return "db:" + createHash("sha256").update(text).digest("hex");
 }
 
 export function calculateDeathBenefit(input: DeathBenefitInput): DeathBenefitResult {

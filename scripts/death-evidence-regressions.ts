@@ -52,7 +52,7 @@ export async function runDeathEvidenceRegressions() {
   test("Payout uses personalised sums rather than available-product maximums",()=>{
     const owned=covers.map(c=>({...c,amount:c.id==="gtl"?250_000:100_000}));
     const evidence=resolveDeathEvidence(owned,rows);
-    assert.equal(assessClaim({...facts,competitiveRacing:false,causeOfDeathDocumented:true},owned,evidence.rules).reduce((sum,i)=>sum+(i.calculatedAmount??0),0),350_000);
+    assert.equal(assessClaim({...facts,competitiveRacing:false,causeOfDeathDocumentAvailable:true,causeOfDeathEvidenceReviewed:true,causeMatchesAccidentDefinition:true,causeOfDeathEvidence:{documentId:"police-report-1"}},owned,evidence.rules).reduce((sum,i)=>sum+(i.calculatedAmount??0),0),350_000);
   });
   test("Actual racing exclusion keeps its Authority-sanctioned exception",()=>{
     const exclusion=result.rules.find(r=>r.benefit==="gpa-accidental-death")?.racingExclusion;
@@ -62,7 +62,7 @@ export async function runDeathEvidenceRegressions() {
     const unknown=assessClaim({...facts,competitiveRacing:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
     assert.equal(unknown?.status,"needs_document");assert.equal(unknown?.amountText,null);
     assert.equal(assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:false},covers,result.rules).find(i=>i.id==="gpa-accidental-death")?.status,"not_applicable");
-    const sanctioned=assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:true,causeOfDeathDocumented:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
+    const sanctioned=assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:true,causeOfDeathDocumentAvailable:true,causeOfDeathEvidenceReviewed:true,causeMatchesAccidentDefinition:true,causeOfDeathEvidence:{documentId:"police-report-1"}},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
     assert.equal(sanctioned?.calculatedAmount,600_000);assert.ok(sanctioned?.conditions.some(c=>/proof.*sanctioned/i.test(c)));
   });
   test("Partial or discretionary promises cannot be treated as the full death sum",()=>{

@@ -31,7 +31,7 @@ const ClaimFactsSchema = z.object({
   competitiveRacing: z.boolean().nullable(),
   racingAuthoritySanctioned: z.boolean().nullable(),
   medicalReportAvailable: z.boolean().nullable(),
-  causeOfDeathDocumented: z.boolean().nullable(),
+  causeOfDeathDocumentAvailable: z.boolean().nullable(),
   uncertainFacts: z.array(z.string()),
 });
 
@@ -81,7 +81,7 @@ const QUESTION_FIELDS: Record<string, keyof ClaimFacts> = {
   ambulance_used: "ambulanceUsed", ambulance_bill: "ambulanceBill", hospitalised: "hospitalised", hospital_nights: "hospitalNights",
   hospital_bill: "hospitalBill", out_of_pocket: "outOfPocket", surgery: "surgery", permanent_impairment: "permanentImpairment",
   competitive_racing: "competitiveRacing", racing_authority_sanctioned: "racingAuthoritySanctioned", medical_report: "medicalReportAvailable",
-  cause_of_death_document: "causeOfDeathDocumented",
+  cause_of_death_document: "causeOfDeathDocumentAvailable",
 };
 
 function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null, context: ClaimDateContext = {}): Partial<ClaimFacts> {
@@ -113,10 +113,14 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     // reported illness rules out an accident-only benefit the same way.
     // Neither direction is a decision about the policy's own definition of
     // an accidental death, and neither by itself authorises an amount --
-    // that additionally requires `causeOfDeathDocumented` (an official
-    // cause-of-death document/police/coroner's report actually checked
-    // against the policy's wording), which the accidental-death calculator
-    // enforces separately and explicitly.
+    // that additionally requires the REVIEWED official cause-of-death
+    // evidence to be matched against the policy's own accidental-death
+    // definition (`causeOfDeathEvidenceReviewed` and
+    // `causeMatchesAccidentDefinition`, never set from chat text), which
+    // the accidental-death calculator enforces separately and explicitly.
+    // Mentioning that a document exists only ever sets
+    // `causeOfDeathDocumentAvailable`, an availability signal that can
+    // prompt an upload request but never authorises an amount by itself.
     if (/accident|crash|collision|fall|fell|road traffic/i.test(cause)) out.accidentalDeath = true;
     else if (/illness|disease|cancer|natural cause|heart attack|stroke|infection/i.test(cause)) out.accidentalDeath = false;
   }
@@ -167,7 +171,12 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   const otherDiagnosis = text.match(/\b(?:stroke|heart attack|kidney failure|carcinoma|malignant tumou?r)\b/i)?.[0];
   if (otherDiagnosis && !out.diagnosis) out.diagnosis = otherDiagnosis;
   if (/pathology|medical report|doctor'?s report|oncologist report/i.test(text)) out.medicalReportAvailable = !/don'?t have|do not have|no report/i.test(text);
-  if (/death certificate|coroner|coroner's report|police report|medical examiner/i.test(text)) out.causeOfDeathDocumented = !/don't have|do not have|no (?:death certificate|report|coroner)/i.test(text);
+  // Mentioning a document -- even in passing -- is only ever availability.
+  // It can prompt DearPolicy to ask for the upload; it can never, on its
+  // own or via any chat answer, set causeOfDeathEvidenceReviewed or
+  // causeMatchesAccidentDefinition, which require an actual reviewed
+  // document and are never extracted from free text.
+  if (/death certificate|coroner|coroner's report|police report|medical examiner/i.test(text)) out.causeOfDeathDocumentAvailable = !/don't have|do not have|no (?:death certificate|report|coroner)/i.test(text);
 
   // Separate the accident date from a later death date in the same message.
   const deathIndex = death ? text.search(/\b(?:died|passed away|death|deceased|killed)\b/i) : -1;
@@ -196,7 +205,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   }
 
   // A terminal-event update invalidates an old routine-injury question.
-  const compatible = !death || ["event_date", "death_date", "cause_of_death", "cause_of_death_document", "competitive_racing", "racing_authority_sanctioned"].includes(pendingQuestion?.id ?? "");
+  const compatible = !death || ["event_date", "death_date", "cause_of_death", "cause_of_death_document", "cause_of_death_document_upload", "competitive_racing", "racing_authority_sanctioned"].includes(pendingQuestion?.id ?? "");
   if (pendingQuestion && compatible) {
     const yn = yesNoFromAnswer(text);
     if (pendingQuestion.id === "injured" && yn != null) out.injured = yn;
@@ -213,7 +222,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     if (pendingQuestion.id === "competitive_racing" && yn != null) out.competitiveRacing = yn;
     if (pendingQuestion.id === "racing_authority_sanctioned" && yn != null) out.racingAuthoritySanctioned = yn;
     if (pendingQuestion.id === "medical_report" && yn != null) out.medicalReportAvailable = yn;
-    if (pendingQuestion.id === "cause_of_death_document" && yn != null) out.causeOfDeathDocumented = yn;
+    if (pendingQuestion.id === "cause_of_death_document" && yn != null) out.causeOfDeathDocumentAvailable = yn;
     if (pendingQuestion.id === "fracture_body_part" && argsTextMeaningful(text)) out.fractureBodyPart = lower.match(/\b(wrist|arm|leg|ankle|knee|hip|rib|ribs|shoulder|jaw|pelvis|skull|spine|neck|elbow|cheekbone)\b/)?.[1] ?? null;
     if (pendingQuestion.id === "ambulance_bill") { const n = targetedMoney(text); if (n != null) out.ambulanceBill = n; }
     if (pendingQuestion.id === "hospital_bill") { const n = targetedMoney(text); if (n != null) out.hospitalBill = n; }
@@ -264,7 +273,13 @@ export async function extractClaimFacts(args: { text: string; current?: ClaimFac
       // the prompt would defeat the small-context GPU stability protections.
       const factContext = Object.fromEntries(Object.entries(current).filter(([key,value]) => key !== "factSources" && value != null && (!Array.isArray(value) || value.length)));
       const extractionRules = dearPolicyCoreRules().split("\n").filter(line => /^(?:Use only facts supplied|Do not fill gaps|Never (?:invent|ask|use|turn|combine)|A reported death)/.test(line.trim())).join("\n");
-      const parsed = await structuredCompletion<ClaimFacts>({
+      // ClaimFactsSchema deliberately omits causeOfDeathEvidenceReviewed,
+      // causeMatchesAccidentDefinition and causeOfDeathEvidence: no model
+      // output, however phrased, may ever set those -- only an actual,
+      // already-completed document review can. Partial<ClaimFacts> (not
+      // ClaimFacts) reflects that the AI-extracted shape is intentionally
+      // narrower than the full fact set.
+      const parsed = await structuredCompletion<Partial<ClaimFacts>>({
         system: `${extractionRules}\n\nCLAIM FACT EXTRACTION\nExtract all facts explicitly stated in this user's message. Do not infer medical severity, claim eligibility, policy ownership, dates or costs. A reported death overrides injuries. Keep cancer site and stage when stated. Unknown values must be null/[]. Relative dates are resolved by the application; leave date fields null unless an explicit ISO date is quoted.`,
         user: `Pending question: ${args.pendingQuestion?.text ?? "none"}\nExisting facts (context only; do not repeat unless user confirms): ${JSON.stringify(factContext)}\nUser message: ${args.text}`,
         schema: ClaimFactsSchema,

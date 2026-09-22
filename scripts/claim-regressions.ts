@@ -78,7 +78,7 @@ export async function runClaimRegressions() {
   test("A hospital bill alone does not prove inpatient admission", () => { assert.equal(hospitalBillOnly.hospitalised, null); });
   const accidentalDisability = await extractClaimFacts({ text: "The motorcycle accident caused permanent disability yesterday", ...context });
   test("Permanent accident disability retains the established 150% rule", () => { assert.equal(accidentalDisability.eventType, "disability"); assert.equal(assessClaim(accidentalDisability, coverages).find(i => i.id === "gpa-tpd")?.amountText, "Up to S$900,000"); });
-  const documentedDeath = { ...death, causeOfDeathDocumented: true };
+  const documentedDeath = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeMatchesAccidentDefinition: true, causeOfDeathEvidence: { documentId: "police-report-1", label: "Police report" } };
   test("Death benefits are deterministic and limited to confirmed products", () => {
     const result = assessClaim(documentedDeath, coverages, deathRules); assert.equal(result.length, 2); assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000); assert.equal(result.find(i => i.id === "gpa-accidental-death")?.calculatedAmount, 600_000);
     assert.equal(result.reduce((sum, i) => sum + (i.calculatedAmount ?? 0), 0), 1_600_000);
@@ -90,6 +90,20 @@ export async function runClaimRegressions() {
     assert.match(reported?.reason ?? "", /official cause-of-death document/i);
     // The ordinary death benefit is unaffected by the accidental-death gap.
     assert.equal(assessClaim(death, coverages, deathRules).find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
+  });
+  test("Answering \u201cYes\u201d to document availability alone never authorises the accidental-death amount", () => {
+    const available = { ...death, causeOfDeathDocumentAvailable: true };
+    const reported = assessClaim(available, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    assert.equal(reported?.status, "needs_document"); assert.equal(reported?.amountText, null); assert.equal(reported?.calculatedAmount, undefined);
+    assert.equal(nextClaimQuestion(available, coverages)?.id, "cause_of_death_document_upload");
+  });
+  test("A reviewed document without a confirmed match to the policy's own definition never authorises an amount", () => {
+    const reviewedOnly = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeOfDeathEvidence: { documentId: "police-report-1" } };
+    const reviewedButUnmatched = assessClaim(reviewedOnly, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    assert.equal(reviewedButUnmatched?.status, "needs_document"); assert.equal(reviewedButUnmatched?.amountText, null);
+    const matchedNoEvidence = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeMatchesAccidentDefinition: true };
+    const noEvidenceRef = assessClaim(matchedNoEvidence, coverages, deathRules).find(i => i.id === "gpa-accidental-death");
+    assert.equal(noEvidenceRef?.status, "needs_document"); assert.equal(noEvidenceRef?.amountText, null);
   });
   test("Wording missing, wrong policy group or missing personal amount cannot produce a payout", () => {
     assert.equal(assessClaim(death, coverages).some(i => i.amountText != null), false);

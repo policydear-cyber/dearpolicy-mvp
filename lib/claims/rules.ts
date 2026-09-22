@@ -12,12 +12,24 @@ function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
  * own accidental-death definition, from the facts gathered so far. A
  * reported cause consistent with an accident is only ever "relevant, not
  * yet confirmed" until an official cause-of-death document has actually
- * been checked -- `causeOfDeathDocumented` is that check, and nothing else
- * (not a self-report, not a scenario guess) can substitute for it. */
+ * been REVIEWED and its cause explicitly MATCHED against the policy's own
+ * definition, with evidence for both. None of the following, alone or
+ * together, can substitute for that:
+ *   - the family saying they possess a document
+ *     (`causeOfDeathDocumentAvailable`) -- this is availability only;
+ *   - a chat answer of "yes", "uploaded", or any other free text -- no
+ *     chat answer ever sets `causeOfDeathEvidenceReviewed` or
+ *     `causeMatchesAccidentDefinition`;
+ *   - a review without a matched definition, or a claimed match without a
+ *     citable reviewed document.
+ * Only `causeOfDeathEvidenceReviewed === true` AND
+ * `causeMatchesAccidentDefinition === true` AND a present
+ * `causeOfDeathEvidence` reference, together, confirm the match. */
 function accidentalDeathCauseConfirmation(facts: ClaimFacts): AccidentalDeathCauseConfirmation {
   if (facts.accidentalDeath === false) return "ruled_out";
   if (facts.accidentalDeath == null) return "unknown";
-  return facts.causeOfDeathDocumented === true ? "confirmed_matches_definition" : "reported_unconfirmed";
+  const confirmed = facts.causeOfDeathEvidenceReviewed === true && facts.causeMatchesAccidentDefinition === true && facts.causeOfDeathEvidence != null;
+  return confirmed ? "confirmed_matches_definition" : "reported_unconfirmed";
 }
 
 function hasProduct(coverages: OwnedCoverage[], product: string) {
@@ -119,7 +131,13 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
     const racingRule = deathRules.find(r => r.benefit === "gpa-accidental-death" && r.coverageId === bestCoverage(coverages,"group personal accident","Personal Accident")?.id);
     if (facts.accidentalDeath === true && /motorcycle|motorbike/i.test(facts.accidentType ?? "") && racingRule?.racingExclusion && facts.competitiveRacing == null && !facts.uncertainFacts.includes("competitive_racing")) return { id:"competitive_racing", text:"Was the accident during competitive racing on wheels?", type:"yes_no", options:["Yes", "No", "Not sure"], why:racingRule.racingExclusion.authorityException ? "The Personal Accident wording excludes competitive racing on wheels, with an exception for racing sanctioned by MINDEF/MHA. This can change its death benefit." : "The matching Personal Accident wording excludes competitive racing on wheels, so this can change its death benefit." };
     if (facts.accidentalDeath === true && facts.competitiveRacing === true && racingRule?.racingExclusion?.authorityException && facts.racingAuthoritySanctioned == null && !facts.uncertainFacts.includes("racing_authority_sanctioned")) return { id:"racing_authority_sanctioned", text:"Was the racing sanctioned by MINDEF/MHA?", type:"yes_no", options:["Yes", "No", "Not sure"], why:"Your uploaded wording has an exception for racing sanctioned by the Authority. The insurer will need evidence of that sanction." };
-    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumented == null && !facts.uncertainFacts.includes("cause_of_death_document")) return { id:"cause_of_death_document", text:"Do you have an official cause-of-death document -- a death certificate, police report, or coroner's report -- confirming the accident? You can say \u201cnot sure\u201d if you have not checked yet.", type:"yes_no", options:["Yes", "No", "Not sure"], why:"The accidental death benefit needs the reported cause checked against the policy's own accident definition before DearPolicy can show an amount. A reported circumstance alone is not enough." };
+    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumentAvailable == null && !facts.uncertainFacts.includes("cause_of_death_document")) return { id:"cause_of_death_document", text:"Do you have an official cause-of-death document -- a death certificate, police report, or coroner's report -- confirming the accident? You can say \u201cnot sure\u201d if you have not checked yet.", type:"yes_no", options:["Yes", "No", "Not sure"], why:"The accidental death benefit needs the reported cause checked against the policy's own accident definition before DearPolicy can show an amount. A reported circumstance alone is not enough." };
+    // Saying the document exists is only ever availability -- it never
+    // authorises an amount by itself. Once available, DearPolicy asks for
+    // the document itself; only DearPolicy actually reviewing it and
+    // matching its cause against the policy's own definition (never a chat
+    // answer) can move this benefit past needs_document.
+    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumentAvailable === true && facts.causeOfDeathEvidenceReviewed !== true && !facts.uncertainFacts.includes("cause_of_death_document_upload")) return { id:"cause_of_death_document_upload", text:"Please upload the death certificate, police report or coroner's report. DearPolicy will check its stated cause against the policy's own accidental-death definition before showing an amount.", type:"text", why:"Saying the document exists is not the same as DearPolicy having read it. Only the reviewed document, checked against the policy's own definition, can confirm this benefit." };
   }
 
   if (facts.eventType === "disability") {
@@ -211,10 +229,16 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
 
       if (calc.status === "blocked") {
         const isCauseGap = product === "group personal accident" && (calc.reasonCode === "CAUSE_NOT_CONFIRMED" || calc.reasonCode === "CAUSE_UNKNOWN");
+        // The reason distinguishes the three unresolved states DearPolicy can
+        // actually be in, so the family knows what still needs to happen --
+        // never just "unconfirmed" once a document has genuinely been read.
+        const causeGapReason = facts.causeOfDeathEvidenceReviewed === true
+          ? "An accidental death benefit may apply. DearPolicy has reviewed the cause-of-death document, but it does not yet match this policy's own accidental-death definition, so no amount is included."
+          : facts.causeOfDeathDocumentAvailable === true
+            ? "An accidental death benefit may apply, but DearPolicy has not included an amount because the cause-of-death document has not yet been reviewed against this policy's own accidental-death definition."
+            : "An accidental death benefit may apply, but DearPolicy has not included an amount because the policy's accident definition still needs to be checked against an official cause-of-death document, police report or coroner's report.";
         items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null,
-          reason: isCauseGap
-            ? "An accidental death benefit may apply, but DearPolicy has not included an amount because the policy's accident definition still needs to be checked against an official cause-of-death document, police report or coroner's report."
-            : `The personal certificate confirms ownership of this cover. DearPolicy has not included an amount: ${calc.message}`,
+          reason: isCauseGap ? causeGapReason : `The personal certificate confirms ownership of this cover. DearPolicy has not included an amount: ${calc.message}`,
           conditions: isCauseGap ? ["Check the death certificate, police report or coroner's report against the policy's accidental-death definition."] : [calc.message] });
         continue;
       }
