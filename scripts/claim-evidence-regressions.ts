@@ -305,15 +305,25 @@ async function runDatabaseTests() {
         [policyId, account, desmond, groupNumber],
       );
       for (const p of pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [account, policyId, p.page_number, p.text]);
-      // lib/claims/death-evidence.ts's loadDeathEvidence() only reads a
-      // policy's own wording pages when EITHER policy_members links it to
-      // the family member being asked about, OR it is an unlinked shared
-      // reference document (personal_coverage_confirmed=false with a
-      // recognised reference role) -- a per-member personal certificate
-      // like this one (personal_coverage_confirmed=true, document_role
-      // 'certificate') has to be the former.
-      await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyId, desmond, account]);
     }
+    // lib/claims/death-evidence.ts's loadDeathEvidence() only reads a
+    // policy's own wording pages when EITHER policy_members links it to the
+    // family member being asked about, OR it is an unlinked shared reference
+    // document (personal_coverage_confirmed=false with a recognised
+    // reference role) -- a per-member personal certificate like these
+    // (personal_coverage_confirmed=true, document_role 'certificate') has to
+    // be the former. Only policyA is linked here (matching the only policy
+    // this suite ever calls confirmCauseDefinitionMatch against): linking
+    // BOTH policyA and policyB, despite them carrying byte-identical wording
+    // fixtures, would make resolveDeathEvidence's per-coverage document
+    // search -- which is not required to prefer a coverage's own policy
+    // document over any other linked/shared document with a matching
+    // insurer and group -- non-deterministically resolve coverageA's own
+    // accidental-death definition citation from policyB's document instead
+    // of policyA's, depending on row ordering. policyB is exercised below
+    // only through hand-constructed evidence, never through
+    // confirmCauseDefinitionMatch, so it needs no policy_members link.
+    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [policyA, desmond, account]);
     await pool.query(
       `INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name)
        VALUES($1,$2,$3,$4,'Personal Accident',600000,'SGD',true,true,'Group Personal Accident'),
