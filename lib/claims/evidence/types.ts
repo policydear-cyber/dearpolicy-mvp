@@ -1,10 +1,29 @@
-import type { CauseOfDeathDocumentType } from "@/lib/claims/calculators/evidence";
+import type { CauseOfDeathDocumentType, MedicalEvidenceDocumentType } from "@/lib/claims/calculators/evidence";
 
-export type ClaimEvidenceDocumentType = CauseOfDeathDocumentType;
+/** The claim-evidence pipeline (documents, extraction, identity, review
+ * state machine, audit trail) is shared, generic infrastructure -- see
+ * this module's other types below, none of which are cause-of-death
+ * specific. `ClaimEvidenceDocumentType` is therefore the union of every
+ * document kind the pipeline accepts: the original official cause-of-death
+ * set (PR #9) plus the medical-evidence set this PR adds. Widening this
+ * union, and CLAIM_EVIDENCE_DOCUMENT_TYPES below, is what lets a medical
+ * document flow through createEvidenceDocument/processClaimEvidence/etc.
+ * with zero changes to those functions. */
+export type ClaimEvidenceDocumentType = CauseOfDeathDocumentType | MedicalEvidenceDocumentType;
 
-export const CLAIM_EVIDENCE_DOCUMENT_TYPES: ClaimEvidenceDocumentType[] = [
+export const CAUSE_OF_DEATH_DOCUMENT_TYPES: CauseOfDeathDocumentType[] = [
   "death_certificate", "police_report", "coroners_report", "medical_examiner_report", "other_official_document",
 ];
+export const MEDICAL_EVIDENCE_DOCUMENT_TYPES: MedicalEvidenceDocumentType[] = [
+  "specialist_memo", "medical_report", "pathology_report", "imaging_report",
+  "laboratory_report", "discharge_summary", "surgical_report", "other_medical_evidence",
+];
+export const CLAIM_EVIDENCE_DOCUMENT_TYPES: ClaimEvidenceDocumentType[] = [
+  ...CAUSE_OF_DEATH_DOCUMENT_TYPES, ...MEDICAL_EVIDENCE_DOCUMENT_TYPES,
+];
+export function isMedicalEvidenceDocumentType(value: ClaimEvidenceDocumentType): value is MedicalEvidenceDocumentType {
+  return (MEDICAL_EVIDENCE_DOCUMENT_TYPES as string[]).includes(value);
+}
 
 /** uploaded -> quarantined -> processing -> extracted -> needs_review ->
  * matched | rejected | failed. See ./state-machine.ts for the allowed
@@ -60,7 +79,27 @@ export type ClaimEvidencePageCitation = {
 
 /** Untrusted model output, structurally validated (see ./extraction-schema.ts)
  * before it is ever persisted. Never authoritative by itself -- see the
- * module doc comment on ./extract.ts. */
+ * module doc comment on ./extract.ts.
+ *
+ * One combined shape covers both an official cause-of-death document and a
+ * medical-evidence document (the `deceasedName...mannerOfDeath` fields are
+ * death-specific and stay exactly as PR #9 defined them; the
+ * `patientName...priorCriticalIllnessClaims` fields are new here and are
+ * the medical equivalents) -- extractClaimEvidence() asks the model to fill
+ * in null for whichever half does not apply to the document type actually
+ * being read, exactly like every other optional/nullable field on this
+ * type. This keeps one shared pipeline (types, schema, identity check,
+ * state machine, storage, audit) rather than forking a second one -- see
+ * the module doc comment on ../evidence for why.
+ *
+ * The medical-evidence-only fields are additionally marked `?:` (optional),
+ * not just nullable, so a caller built before they existed -- constructing
+ * a death-only ClaimEvidenceExtractedFields literal, or an older stored
+ * extraction row -- stays valid without listing them. Every real reader
+ * (evaluateClaimEvidenceIdentity's `?? args.fields.patientName`, etc.)
+ * already treats `undefined` exactly like `null`, so this is purely
+ * additive: extract.ts's parsed output (extraction-schema.ts's `.default()`
+ * fields) still always populates them. */
 export type ClaimEvidenceExtractedFields = {
   deceasedName: string | null;
   otherNamesMentioned: string[];
@@ -68,6 +107,32 @@ export type ClaimEvidenceExtractedFields = {
   dateOfDeath: string | null;
   statedCauseOfDeath: string | null;
   mannerOfDeath: string | null;
+  /** The patient/subject named in a medical-evidence document -- the
+   * medical equivalent of `deceasedName`, used by evaluateClaimEvidenceIdentity()
+   * to confirm the document belongs to the family member the claim is for. */
+  patientName?: string | null;
+  /** The exact diagnosis as stated in THIS document -- distinct from a
+   * family's own chat-reported diagnosis, which is never treated as
+   * evidence. */
+  exactDiagnosis?: string | null;
+  diagnosisDate?: string | null;
+  firstSymptomDate?: string | null;
+  firstConsultationDate?: string | null;
+  /** The disease stage/severity as explicitly stated in the document (e.g.
+   * "Stage 2", "Early Stage", "Intermediate"). Left null when the document
+   * does not state one -- never inferred from the diagnosis name alone. */
+  diseaseStage?: string | null;
+  /** Pathology, imaging, laboratory, specialist, surgical or other
+   * supporting clinical findings explicitly stated in the document, each
+   * with its own exact excerpt -- the raw material a deterministic
+   * comparison against a policy's numeric/named threshold can be checked
+   * against (see lib/claims/ci-rules.ts's clinical-comparison boundary). */
+  supportingFindings?: { type: string; description: string; excerpt: string }[];
+  treatingSpecialist?: string | null;
+  issuingInstitution?: string | null;
+  survivalPeriodDates?: string[];
+  priorDiagnosisHistory?: string | null;
+  priorCriticalIllnessClaims?: string | null;
   issuingAuthority: string | null;
   documentReference: string | null;
   documentType: ClaimEvidenceDocumentType | null;
@@ -94,6 +159,7 @@ export type ClaimEvidenceExtractionRow = {
 };
 
 export type CauseDefinitionMatchResultValue = "matches" | "does_not_match" | "needs_review";
+export type CIDefinitionMatchResultValue = "matches" | "does_not_match" | "needs_medical_review" | "needs_policy_review" | "insufficient_evidence" | "ambiguous";
 
 export type ClaimCauseDefinitionMatchRow = {
   id: string;
@@ -106,6 +172,31 @@ export type ClaimCauseDefinitionMatchRow = {
   cause_evidence: unknown;
   definition_evidence: unknown;
   result: CauseDefinitionMatchResultValue;
+  reviewed_at: string;
+  reviewed_by: string;
+  reason: string | null;
+  superseded_at: string | null;
+  superseded_reason: string | null;
+  created_at: string;
+};
+
+/** The critical-illness analogue of ClaimCauseDefinitionMatchRow -- scoped
+ * additionally to `benefit_code` and `illness_name`, since one CI policy
+ * can define many benefit rows that must never cross-unlock each other
+ * (see lib/claims/calculators/evidence.ts's CIDefinitionMatch doc comment). */
+export type ClaimCIDefinitionMatchRow = {
+  id: string;
+  account_id: string;
+  family_member_id: string;
+  claim_session_id: string;
+  contract_id: string;
+  coverage_id: string | null;
+  evidence_document_id: string;
+  benefit_code: string;
+  illness_name: string;
+  medical_evidence: unknown;
+  definition_evidence: unknown;
+  result: CIDefinitionMatchResultValue;
   reviewed_at: string;
   reviewed_by: string;
   reason: string | null;

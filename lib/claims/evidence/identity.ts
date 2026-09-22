@@ -39,6 +39,13 @@ export function evaluateClaimEvidenceIdentity(args: {
   /** The claim's own already-stated date of death, if the family already
    * gave one in chat -- never overridden here, only checked against. */
   existingDeathDate: string | null;
+  /** The claim's own already-stated diagnosis date, for a medical-evidence
+   * document -- the medical equivalent of `existingDeathDate`. Optional so
+   * every pre-existing call site (which only ever supplied
+   * `existingDeathDate`, for a cause-of-death document) keeps compiling and
+   * behaving byte-for-byte unchanged; a medical document's caller supplies
+   * this instead. */
+  existingDiagnosisDate?: string | null;
   /** This exact file's content already seen under a different family
    * member or claim in this account (see store.findReusedEvidenceAcrossScopes). */
   reusedDocuments: ClaimEvidenceDocumentRow[];
@@ -55,14 +62,20 @@ export function evaluateClaimEvidenceIdentity(args: {
     }
   }
 
-  if (!args.fields.deceasedName || !args.fields.deceasedName.trim()) {
-    conflicts.push({ code: "MISSING_IDENTIFIERS", message: "The document does not clearly state the deceased person's name." });
+  // The document's SUBJECT -- the deceased person named on a cause-of-death
+  // document, or the patient named on a medical-evidence document. Exactly
+  // one of these two fields is ever populated for a given document type
+  // (see extract.ts's two system prompts), so falling back is safe and
+  // never masks a genuinely missing name with the wrong field.
+  const subjectName = args.fields.deceasedName ?? args.fields.patientName;
+  if (!subjectName || !subjectName.trim()) {
+    conflicts.push({ code: "MISSING_IDENTIFIERS", message: "The document does not clearly state the name of the person it is about." });
     return { status: "needs_review", conflicts };
   }
 
   const bestSimilarity = Math.max(
-    nameSimilarity(args.fields.deceasedName, args.familyMember.displayName),
-    args.familyMember.preferredName ? nameSimilarity(args.fields.deceasedName, args.familyMember.preferredName) : 0,
+    nameSimilarity(subjectName, args.familyMember.displayName),
+    args.familyMember.preferredName ? nameSimilarity(subjectName, args.familyMember.preferredName) : 0,
   );
 
   if (args.fields.otherNamesMentioned.length > 0) {
@@ -73,10 +86,12 @@ export function evaluateClaimEvidenceIdentity(args: {
     conflicts.push({ code: "MISSING_IDENTIFIERS", message: "The document does not include an identifier (e.g. NRIC, passport, case/report number) to independently confirm the person." });
   }
 
-  if (args.existingDeathDate && args.fields.dateOfDeath) {
-    const diff = daysBetween(args.existingDeathDate, args.fields.dateOfDeath);
+  const existingReferenceDate = args.existingDeathDate ?? args.existingDiagnosisDate ?? null;
+  const documentReferenceDate = args.fields.dateOfDeath ?? args.fields.diagnosisDate;
+  if (existingReferenceDate && documentReferenceDate) {
+    const diff = daysBetween(existingReferenceDate, documentReferenceDate);
     if (diff !== null && diff > 1) {
-      conflicts.push({ code: "CONFLICTING_DATE_OF_DEATH", message: "The document's date of death does not match the date already recorded for this claim." });
+      conflicts.push({ code: "CONFLICTING_DATE_OF_DEATH", message: "The document's date does not match the date already recorded for this claim." });
     }
   }
 
