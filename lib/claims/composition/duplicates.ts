@@ -33,10 +33,13 @@ function coversEventDate(coverage: OwnedCoverage, eventDate: string | null): "in
   return "in_force";
 }
 
-/** A single (unclustered, or alone in its identity cluster) coverage still
- * has its OWN effective/expiry window checked against the event date --
- * point-in-time validity applies to every policy, not only to disambiguating
- * between duplicates/versions that share an identity. */
+/** A single policy's own point-in-time-validity decision, independent of
+ * any duplicate/version clustering -- applied to EVERY policy, whether or
+ * not it shares an identity with another one. A policy whose own stated
+ * window explicitly excludes the event date is never treated as in force
+ * just because there happens to be no competing version to disambiguate
+ * against; an unknown window (no dates on file at all) stays "in_force",
+ * the same conservative default coversEventDate() itself documents. */
 function ownWindowDecision(coverage: OwnedCoverage): PolicyVersionDecision {
   return { status: "in_force", policyId: coverage.policyId };
 }
@@ -74,13 +77,13 @@ function identityKey(coverage: OwnedCoverage) {
  * only means DearPolicy fails to catch a duplicate it can't prove, never
  * that it silently drops or merges two policies it has no basis to link).
  *
- * Point-in-time validity applies to EVERY policy, not only ones sharing an
- * identity cluster: a single, unclustered policy (or the sole member of an
- * identity cluster) still has its own effective/expiry window checked
- * against the claim-event date via decisionForLoneCoverage() below -- a
- * policy whose own dates already exclude the event is never silently
- * treated as in force just because there was nothing to disambiguate it
- * from.
+ * Point-in-time validity is checked for EVERY policy, not only ones caught
+ * in a duplicate/version cluster: a lone policy (no competing version to
+ * disambiguate against) is still excluded as POLICY_NOT_IN_FORCE_AT_EVENT
+ * when its own stated effective/expiry window explicitly excludes the
+ * claim-event date, so a lapsed or not-yet-effective policy can never be
+ * silently included in a total just because nothing else shares its
+ * identity to compare it against.
  */
 export function resolvePolicyVersions(coverages: OwnedCoverage[], eventDate: string | null): Map<string, PolicyVersionDecision> {
   const byIdentity = new Map<string, OwnedCoverage[]>();

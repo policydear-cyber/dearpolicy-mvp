@@ -42,7 +42,18 @@ export type ComposedBenefitBlockReasonCode =
   | "CAP_EXCEEDED_FULLY"
   | "MISSING_PRIOR_PAID_AMOUNT"
   | "MISSING_EVIDENCE"
-  | "SOURCE_CALCULATION_NOT_ALLOWED";
+  | "SOURCE_CALCULATION_NOT_ALLOWED"
+  /** A same-policy group contains more than one critical-illness benefit
+   * (e.g. a major-CI benefit alongside an early/intermediate-stage
+   * benefit) and DearPolicy found no explicit wording evidence for how
+   * they relate (alternative / accelerated / additional) -- see
+   * lib/claims/composition/engine.ts's same-policy grouping loop. Unlike
+   * an ordinary death-benefit pairing, an unresolved CI relationship is
+   * never defaulted to additive: a policy can define dozens of distinct
+   * CI benefit rows that are frequently NOT independently payable
+   * together, so assuming additive without evidence would risk silently
+   * double-counting. */
+  | "CI_COMPOSITION_NOT_EVIDENCED";
 
 /** A reference to an aggregate cap that was evaluated against this benefit,
  * whether or not it ended up binding. `scope` says what the cap applies
