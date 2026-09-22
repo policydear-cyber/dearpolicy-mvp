@@ -160,7 +160,13 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
   // strength of the base death checks alone.
   const definitionCheck = validatePolicyEvidence(input.accidentalDeathDefinitionEvidence, "MALFORMED_POLICY_DEFINITION_EVIDENCE");
   if (!definitionCheck.valid) {
-    return { status: "blocked", reasonCode: definitionCheck.reasonCode, message: definitionCheck.message };
+    // validatePolicyEvidence was called with the "MALFORMED_POLICY_DEFINITION_EVIDENCE"
+    // override above, so every failure branch inside it returns exactly that
+    // literal -- this narrows the function's general EvidenceBlockReasonCode
+    // return type back to the one reason code this calculator's own
+    // AccidentalDeathBlockReasonCode actually declares (see the same pattern
+    // in lib/claims/calculators/death-benefit.ts).
+    return { status: "blocked", reasonCode: definitionCheck.reasonCode as "MALFORMED_POLICY_DEFINITION_EVIDENCE", message: definitionCheck.message };
   }
   const definitionEvidence = definitionCheck.evidence;
 
@@ -196,7 +202,9 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
 
   const matchDefinitionCheck = validatePolicyEvidence(match.definitionEvidence, "MALFORMED_POLICY_DEFINITION_EVIDENCE");
   if (!matchDefinitionCheck.valid) {
-    return { status: "blocked", reasonCode: matchDefinitionCheck.reasonCode, message: matchDefinitionCheck.message };
+    // Same narrowing as definitionCheck above -- this call site is also
+    // fixed to the "MALFORMED_POLICY_DEFINITION_EVIDENCE" override.
+    return { status: "blocked", reasonCode: matchDefinitionCheck.reasonCode as "MALFORMED_POLICY_DEFINITION_EVIDENCE", message: matchDefinitionCheck.message };
   }
   const matchDefinitionEvidence = matchDefinitionCheck.evidence;
   // The match must have been checked against the EXACT same clause this
@@ -218,7 +226,9 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
 
   const causeEvidenceCheck = validateCauseEvidence(match.causeEvidence);
   if (!causeEvidenceCheck.valid) {
-    return { status: "blocked", reasonCode: causeEvidenceCheck.reasonCode, message: causeEvidenceCheck.message };
+    // validateCauseEvidence() always returns "MALFORMED_CAUSE_EVIDENCE" on
+    // failure -- see lib/claims/calculators/evidence.ts.
+    return { status: "blocked", reasonCode: causeEvidenceCheck.reasonCode as "MALFORMED_CAUSE_EVIDENCE", message: causeEvidenceCheck.message };
   }
   const causeEvidence = causeEvidenceCheck.evidence;
   if (causeEvidence.familyMemberId !== expectedFamilyMemberId) {
