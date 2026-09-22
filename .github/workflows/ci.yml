@@ -46,5 +46,8 @@ jobs:
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 
+      - name: Critical-illness engine regression suite (PGlite, no live DB needed)
+        run: npm run claims:ci-test
+
       - name: Build
         run: npm run build
