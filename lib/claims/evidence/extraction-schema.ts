@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CLAIM_EVIDENCE_DOCUMENT_TYPES } from "./types";
+import { CLAIM_EVIDENCE_DOCUMENT_TYPES, type ClaimEvidenceDocumentType } from "./types";
 
 /** What the model is asked to propose from a claim-evidence document. This
  * is a PROPOSAL schema, not a source of truth -- see extract.ts's module
@@ -25,7 +25,7 @@ export const ClaimEvidenceExtractionSchema = z.object({
   mannerOfDeath: z.string().nullable(),
   issuingAuthority: z.string().nullable(),
   documentReference: z.string().nullable(),
-  documentType: z.enum(CLAIM_EVIDENCE_DOCUMENT_TYPES as [string, ...string[]]).nullable(),
+  documentType: z.enum(CLAIM_EVIDENCE_DOCUMENT_TYPES as [ClaimEvidenceDocumentType, ...ClaimEvidenceDocumentType[]]).nullable(),
   pageCitations: z.array(PageCitationSchema),
   /** Per-field confidence in [0,1], keyed by field name. Missing = unknown,
    * never assumed to be high confidence. */
