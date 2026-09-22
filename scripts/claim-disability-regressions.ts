@@ -45,7 +45,7 @@
 import assert from "node:assert/strict";
 
 import {
-  calculateDisabilityBenefit, TOTAL_PERMANENT_DISABILITY_MATCH_KEY, type DisabilityBenefitInput, type DisabilityDefinitionMatch as _Unused,
+  calculateDisabilityBenefit, TOTAL_PERMANENT_DISABILITY_MATCH_KEY, type DisabilityBenefitInput,
 } from "@/lib/claims/calculators/disability-benefit";
 import { calculateDisabilityIncome, DISABILITY_INCOME_MATCH_KEY, type DisabilityIncomeInput } from "@/lib/claims/calculators/disability-income";
 import { findDisabilityRules, resolveDisabilityEvidence, type DisabilityWordingPage } from "@/lib/claims/disability-evidence";
