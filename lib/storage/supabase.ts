@@ -63,3 +63,63 @@ export async function deletePolicyFile(storageKey: string) {
   const { error } = await client().storage.from(BUCKET).remove(paths);
   if (error) throw new Error(`Could not delete the stored PDF: ${error.message}`);
 }
+
+// --- Claim evidence: its own private bucket, never the policy-files bucket
+// above, and never made public -- every read goes through a short-lived
+// signed URL (createClaimEvidenceSignedUrl) rather than a public object URL.
+const CLAIM_EVIDENCE_BUCKET = process.env.SUPABASE_CLAIM_EVIDENCE_BUCKET ?? "claim-evidence-files";
+const SIGNED_URL_TTL_SECONDS = 300;
+
+function claimEvidenceObjectKey(args: { accountId: string; familyMemberId: string; claimSessionId: string; documentId: string; filename: string }) {
+  const filename = safeSegment(args.filename || "evidence.pdf");
+  return [safeSegment(args.accountId), safeSegment(args.familyMemberId), safeSegment(args.claimSessionId), safeSegment(args.documentId), filename].join("/");
+}
+
+export async function saveClaimEvidenceFile(args: {
+  accountId: string;
+  familyMemberId: string;
+  claimSessionId: string;
+  documentId: string;
+  filename: string;
+  bytes: Uint8Array;
+}) {
+  const key = claimEvidenceObjectKey(args);
+  const { error } = await client()
+    .storage.from(CLAIM_EVIDENCE_BUCKET)
+    // upsert:false -- a claim-evidence object key already includes the
+    // document's own id, so a second write to the same key would only ever
+    // happen from a genuine retry of the same upload, and overwriting
+    // silently there is fine; a real collision (two different documents
+    // somehow computing the same key) should fail loudly instead of one
+    // silently clobbering the other.
+    .upload(key, args.bytes, { contentType: "application/pdf", upsert: true });
+  if (error) throw new Error(`Could not save the claim-evidence file to storage: ${error.message}`);
+  return key;
+}
+
+export async function readClaimEvidenceFile(storageKey: string) {
+  const { data, error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).download(storageKey);
+  if (error) throw new Error(`Could not read the stored claim-evidence file: ${error.message}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function deleteClaimEvidenceFile(storageKey: string) {
+  const folder = storageKey.split("/").slice(0, -1).join("/");
+  const { data: entries, error: listError } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).list(folder);
+  if (listError) throw new Error(`Could not list stored claim-evidence files to delete: ${listError.message}`);
+  const paths = (entries ?? []).map((entry) => `${folder}/${entry.name}`);
+  if (!paths.length) return;
+  const { error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).remove(paths);
+  if (error) throw new Error(`Could not delete the stored claim-evidence file: ${error.message}`);
+}
+
+/** A short-lived signed URL -- never a public object URL -- for the review
+ * UI to preview or download the document. The service-role key used by
+ * client() bypasses bucket-level access rules, which is exactly why this
+ * function, not a public bucket, is the only way this file is ever read
+ * from the browser. */
+export async function createClaimEvidenceSignedUrl(storageKey: string): Promise<string | null> {
+  const { data, error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).createSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS);
+  if (error) throw new Error(`Could not create a signed URL for the claim-evidence file: ${error.message}`);
+  return data.signedUrl;
+}

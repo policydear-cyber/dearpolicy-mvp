@@ -6,6 +6,7 @@ import { createClaimSession, getClaimSession, saveClaimSession } from "./session
 import { evidenceForAssessment, ownedCoverageForItem } from "./evidence";
 import { enforceMonetarySafety } from "./monetary-gate";
 import { loadDeathEvidence } from "./death-evidence";
+import { loadCauseDefinitionMatchesForFacts } from "./evidence/session-matches";
 import { formatMoney } from "@/lib/format/currency";
 import type { ChatAnswer, ChatCitation } from "@/types";
 import type { ClaimAssessmentItem, ClaimDecisionPacket, ClaimFacts, ClaimQuestion } from "./types";
@@ -96,6 +97,12 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   if(!session) session=await createClaimSession(args.accountId,args.familyMemberId);
 
   const facts=await extractClaimFacts({text:args.message,current:session.facts,pendingQuestion:session.pending_question,timeZone:args.timeZone,now:args.now});
+  // Reviewer-confirmed cause-definition matches are never trusted from the
+  // stored session JSON alone -- reloaded fresh from the evidence
+  // pipeline's own source of truth on every turn, so a superseded document
+  // or an invalidated match takes effect immediately. See
+  // lib/claims/evidence/session-matches.ts.
+  if(facts.eventType==="death")facts.causeDefinitionMatches=await loadCauseDefinitionMatchesForFacts(args.accountId,args.familyMemberId,session.id);
   const coverages=await confirmedOwnedCoverages(args.accountId,args.familyMemberId);
   const currentness=await currentnessNote(args.accountId,args.familyMemberId);
   const knownFacts=[...(args.personName ? [`Person: ${args.personName}`] : []),...factsToLabels(facts)];

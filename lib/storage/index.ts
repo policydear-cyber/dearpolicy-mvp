@@ -36,3 +36,31 @@ export async function readPolicyFile(storageKey: string) {
 export async function deletePolicyFile(storageKey: string) {
   return backend().deletePolicyFile(storageKey);
 }
+
+// --- Claim evidence: a private, separate location from policy documents
+// (see ./local.ts and ./supabase.ts). Signed URLs only, never a public path
+// -- createClaimEvidenceSignedUrl returns null on the local driver, which
+// tells the caller to stream the bytes itself through an authenticated
+// route instead (see app/api/claims/evidence/[id]/file/route.ts).
+export async function saveClaimEvidenceFile(args: {
+  accountId: string;
+  familyMemberId: string;
+  claimSessionId: string;
+  documentId: string;
+  filename: string;
+  bytes: Uint8Array;
+}) {
+  return backend().saveClaimEvidenceFile(args);
+}
+
+export async function readClaimEvidenceFile(storageKey: string) {
+  return backend().readClaimEvidenceFile(storageKey);
+}
+
+export async function deleteClaimEvidenceFile(storageKey: string) {
+  return backend().deleteClaimEvidenceFile(storageKey);
+}
+
+export async function createClaimEvidenceSignedUrl(storageKey: string) {
+  return backend().createClaimEvidenceSignedUrl(storageKey);
+}

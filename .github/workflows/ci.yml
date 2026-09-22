@@ -40,5 +40,8 @@ jobs:
       - name: Extraction accuracy on stored document fixtures
         run: npm run eval:extraction
 
+      - name: Claim-evidence pipeline regression suite (PGlite, no live DB needed)
+        run: npm run claims:evidence-test
+
       - name: Build
         run: npm run build

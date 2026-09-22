@@ -19,7 +19,8 @@
     "replay": "node --import tsx -e \"import('./scripts/real-household-replay.ts').then(m=>m.runRealHouseholdReplay())\"",
     "ocr:test": "node --import tsx scripts/ocr-regressions.ts",
     "eval:extraction": "node --import tsx scripts/extraction-eval.ts",
-    "system:test": "node --import tsx scripts/system-database-regressions.ts"
+    "system:test": "node --import tsx scripts/system-database-regressions.ts",
+    "claims:evidence-test": "node --import tsx scripts/claim-evidence-regressions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
