@@ -52,6 +52,19 @@ export async function runClaimWorkflowRegressions() {
       Object.assign(row, { status: params[0], event_type: params[1], event_summary: params[2], facts: JSON.parse(String(params[3])), pending_question: params[4] ? JSON.parse(String(params[4])) : null, decision_packet: params[5] ? JSON.parse(String(params[5])) : null }); return { rows: [], rowCount: 1 };
     }
     if (/INSERT INTO chat_messages/.test(sql)) { assert.equal(params[0], account); assert.equal(params[1], expectedMember); savedChats.push({ person: String(params[1]), role: sql.includes("'user'") ? "user" : "assistant", text: String(params[3]) }); return { rows: [], rowCount: 1 }; }
+    // lib/claims/evidence/schema.ts's ensureClaimEvidenceSchema() opens its
+    // own pool.connect() session (BEGIN / advisory lock / the schema file's
+    // DDL / COMMIT) rather than going through pool.query() -- see the
+    // pool.connect monkeypatch below, which routes that session's queries
+    // back through this same fixture so a strict mock can still answer them.
+    if (/^BEGIN$/.test(sql) || /^COMMIT$/.test(sql) || /^ROLLBACK$/.test(sql)) return { rows: [], rowCount: 0 };
+    if (/pg_advisory_xact_lock/.test(sql)) return { rows: [], rowCount: 0 };
+    if (/CREATE TABLE IF NOT EXISTS claim_evidence_documents/.test(sql)) return { rows: [], rowCount: 0 };
+    // lib/claims/orchestrator.ts loads confirmed CauseDefinitionMatch rows
+    // fresh on every turn (see session-matches.ts) -- none of these fixture
+    // scenarios ever create one, so the fixture always answers "no active
+    // match", exactly like a real, freshly-migrated, still-empty table.
+    if (/FROM claim_cause_definition_matches/.test(sql)) return { rows: [] };
     // lib/db/client.ts makes sure the single-household accounts row exists
     // before the app's first real query. It means to skip that against a
     // fixture mock, but the guard it uses is "no DATABASE_URL", and CI sets
@@ -62,7 +75,12 @@ export async function runClaimWorkflowRegressions() {
     throw new Error(`Unexpected fixture SQL: ${sql}`);
   };
   const originalQuery = pool.query;
+  const originalConnect = pool.connect;
   pool.query = fixtureQuery as typeof pool.query;
+  pool.connect = (async () => ({
+    query: fixtureQuery,
+    release: () => {},
+  })) as typeof pool.connect;
   let cases = 0;
   try {
     const request = new Request("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ familyMemberId: desmond, question: "Charmaine died from an accident yesterday. What can I claim?", timeZone: "Asia/Singapore", personContextRecordedAt: anchor }) });
@@ -124,5 +142,5 @@ export async function runClaimWorkflowRegressions() {
     assert.equal(completed.answer.claimItems.find(i=>i.title.includes("Accident"))?.amountText,null);
     const completedSession=sessions.get(completed.answer.claimSessionId!)!;assert.equal((completedSession.facts as typeof EMPTY_CLAIM_FACTS).competitiveRacing,false);assert.equal((completedSession.facts as typeof EMPTY_CLAIM_FACTS).deathDate,"2026-09-13");assert.equal(completedSession.status,"fact_finding");cases++;
     console.log(`DearPolicy API/orchestration/persistence fixture tests passed (${cases} scenarios).`);
-  } finally { pool.query = originalQuery; }
+  } finally { pool.query = originalQuery; pool.connect = originalConnect; }
 }
