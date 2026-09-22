@@ -16,14 +16,29 @@
 import { structuredCompletion } from "@/lib/ai/llm";
 import { modelFor } from "@/lib/ai/providers";
 import { ClaimEvidenceExtractionSchema } from "./extraction-schema";
+import { isMedicalEvidenceDocumentType } from "./types";
 import type { ClaimEvidenceDocumentType, ClaimEvidenceExtractedFields, ClaimEvidencePageCitation } from "./types";
 
 export const CLAIM_EVIDENCE_EXTRACTION_VERSION = "claim-evidence-extract-v1";
 
-const SYSTEM = "You extract structured facts from an OFFICIAL cause-of-death document (a death certificate, police report, or coroner's/medical examiner's report) for an insurance claim review. "
+const CAUSE_OF_DEATH_SYSTEM = "You extract structured facts from an OFFICIAL cause-of-death document (a death certificate, police report, or coroner's/medical examiner's report) for an insurance claim review. "
   + "You are reading evidence, not deciding a claim: never state or imply whether any policy applies, never invent a fact that is not actually printed on the page, and leave a field null when the document does not state it. "
   + "For every fact you report, cite the exact page number(s) and copy the exact supporting excerpt verbatim -- do not paraphrase the excerpt. "
-  + "If the document mentions more than one deceased person (e.g. a multi-fatality accident), list every other name under otherNamesMentioned; do not guess which one is the subject of this claim.";
+  + "If the document mentions more than one deceased person (e.g. a multi-fatality accident), list every other name under otherNamesMentioned; do not guess which one is the subject of this claim. "
+  + "Leave every medical-evidence-only field (patientName, exactDiagnosis, diagnosisDate, firstSymptomDate, firstConsultationDate, diseaseStage, supportingFindings, treatingSpecialist, issuingInstitution, survivalPeriodDates, priorDiagnosisHistory, priorCriticalIllnessClaims) null or empty -- this is not a medical document.";
+
+/** You are NEVER diagnosing anyone and you NEVER decide whether a finding
+ * meets any policy's definition -- you only transcribe what THIS document
+ * itself explicitly states, with a citation, so a later deterministic
+ * comparison (see lib/claims/ci-rules.ts) can check it against a policy's
+ * own wording. Never infer a stage, diagnosis or finding from context, a
+ * condition's usual presentation, or general medical knowledge -- only
+ * from words actually printed on the page. */
+const MEDICAL_EVIDENCE_SYSTEM = "You extract structured facts from a MEDICAL EVIDENCE document (a specialist memo, medical report, pathology report, imaging report, laboratory report, discharge summary, surgical report, or other insurer-requested medical evidence) for a critical-illness insurance claim review. "
+  + "You are reading evidence, not deciding a claim: never state or imply whether any policy applies, never diagnose, never invent a fact that is not actually printed on the page, and leave a field null when the document does not state it. "
+  + "For every fact you report -- especially exactDiagnosis, diseaseStage, and every entry in supportingFindings -- cite the exact page number(s) and copy the exact supporting excerpt verbatim; do not paraphrase the excerpt and do not infer a stage or diagnosis that is not explicitly stated in the document's own words. "
+  + "Report the patient's name under patientName, not deceasedName. If the document mentions more than one patient, list every other name under otherNamesMentioned. "
+  + "Leave every cause-of-death-only field (deceasedName, dateOfDeath, statedCauseOfDeath, mannerOfDeath) null -- this is not a cause-of-death document.";
 
 function normalize(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 function tokenOverlap(hay: string, needle: string) {
@@ -56,10 +71,11 @@ export async function extractClaimEvidence(args: {
   documentType: ClaimEvidenceDocumentType;
 }): Promise<{ fields: ClaimEvidenceExtractedFields; model: string; provider: string; version: string }> {
   const choice = modelFor("reading");
+  const system = isMedicalEvidenceDocumentType(args.documentType) ? MEDICAL_EVIDENCE_SYSTEM : CAUSE_OF_DEATH_SYSTEM;
   const user = `Document type declared at upload: ${args.documentType}.\n\n`
     + args.pages.map((p) => `--- Page ${p.pageNumber} ---\n${p.text}`).join("\n\n");
   const raw = await structuredCompletion({
-    system: SYSTEM,
+    system,
     user,
     schema: ClaimEvidenceExtractionSchema,
     role: "reading",

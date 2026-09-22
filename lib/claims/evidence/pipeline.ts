@@ -72,6 +72,15 @@ async function existingDeathDate(accountId: string, claimSessionId: string): Pro
   return (facts?.deathDate ?? facts?.eventDate) ?? null;
 }
 
+async function existingDiagnosisDate(accountId: string, claimSessionId: string): Promise<string | null> {
+  const result = await query<{ facts: Partial<ClaimFacts> | null }>(
+    `SELECT facts FROM claim_sessions WHERE id=$1 AND account_id=$2`,
+    [claimSessionId, accountId],
+  );
+  const facts = result.rows[0]?.facts;
+  return facts?.diagnosisDate ?? null;
+}
+
 export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Promise<void> {
   const initial = await getEvidenceDocument(args.accountId, args.documentId);
   if (!initial) return; // Deleted/foreign id -- nothing to do, not an error.
@@ -131,16 +140,17 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
       documentType: current.document_type,
     });
 
-    const [member, deathDate, reused] = await Promise.all([
+    const [member, deathDate, diagnosisDate, reused] = await Promise.all([
       familyMemberIdentity(args.accountId, current.family_member_id),
       existingDeathDate(args.accountId, current.claim_session_id),
+      existingDiagnosisDate(args.accountId, current.claim_session_id),
       findReusedEvidenceAcrossScopes({ accountId: args.accountId, familyMemberId: current.family_member_id, claimSessionId: current.claim_session_id, fileHash: current.file_hash }),
     ]);
     if (!member) throw Object.assign(new Error("Family member for this claim evidence no longer exists."), { code: "FAMILY_MEMBER_NOT_FOUND" });
 
     const identity = evaluateClaimEvidenceIdentity({
       familyMember: { displayName: member.display_name, preferredName: member.preferred_name },
-      fields, existingDeathDate: deathDate, reusedDocuments: reused,
+      fields, existingDeathDate: deathDate, existingDiagnosisDate: diagnosisDate, reusedDocuments: reused,
       claimSessionId: current.claim_session_id, familyMemberId: current.family_member_id,
     });
 
