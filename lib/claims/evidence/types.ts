@@ -200,6 +200,7 @@ export type ClaimEvidenceExtractionRow = {
 
 export type CauseDefinitionMatchResultValue = "matches" | "does_not_match" | "needs_review";
 export type CIDefinitionMatchResultValue = "matches" | "does_not_match" | "needs_medical_review" | "needs_policy_review" | "insufficient_evidence" | "ambiguous";
+export type DisabilityDefinitionMatchResultValue = "matches" | "does_not_match" | "needs_medical_review" | "needs_policy_review" | "insufficient_evidence" | "ambiguous";
 
 export type ClaimCauseDefinitionMatchRow = {
   id: string;
@@ -237,6 +238,35 @@ export type ClaimCIDefinitionMatchRow = {
   medical_evidence: unknown;
   definition_evidence: unknown;
   result: CIDefinitionMatchResultValue;
+  reviewed_at: string;
+  reviewed_by: string;
+  reason: string | null;
+  superseded_at: string | null;
+  superseded_reason: string | null;
+  created_at: string;
+};
+
+/** The disability analogue of ClaimCIDefinitionMatchRow -- scoped
+ * additionally to `benefit_code` and `match_key` (a fixed
+ * "total_permanent_disability"/"disability_income" sentinel, or an exact
+ * schedule-of-injuries row code), since one disability policy can define
+ * many benefit rows -- TPD, several schedule-of-injuries rows, disability
+ * income -- that must never cross-unlock each other. See
+ * lib/claims/calculators/evidence.ts's DisabilityDefinitionMatch doc
+ * comment. */
+export type ClaimDisabilityDefinitionMatchRow = {
+  id: string;
+  account_id: string;
+  family_member_id: string;
+  claim_session_id: string;
+  contract_id: string;
+  coverage_id: string | null;
+  evidence_document_id: string;
+  benefit_code: string;
+  match_key: string;
+  medical_evidence: unknown;
+  definition_evidence: unknown;
+  result: DisabilityDefinitionMatchResultValue;
   reviewed_at: string;
   reviewed_by: string;
   reason: string | null;

@@ -1,11 +1,12 @@
 import { pool, query } from "@/lib/db/client";
 import { ensureClaimEvidenceSchema } from "./schema";
 import { ensureCriticalIllnessSchema } from "./ci-schema";
+import { ensureDisabilitySchema } from "./disability-schema";
 import { assertValidEvidenceTransition } from "./state-machine";
 import type {
-  ClaimCauseDefinitionMatchRow, ClaimCIDefinitionMatchRow, ClaimEvidenceDocumentRow, ClaimEvidenceDocumentType,
+  ClaimCauseDefinitionMatchRow, ClaimCIDefinitionMatchRow, ClaimDisabilityDefinitionMatchRow, ClaimEvidenceDocumentRow, ClaimEvidenceDocumentType,
   ClaimEvidenceExtractedFields, ClaimEvidenceExtractionRow, ClaimEvidenceIdentityConflict,
-  ClaimEvidenceIdentityStatus, ClaimEvidenceStatus, CauseDefinitionMatchResultValue, CIDefinitionMatchResultValue,
+  ClaimEvidenceIdentityStatus, ClaimEvidenceStatus, CauseDefinitionMatchResultValue, CIDefinitionMatchResultValue, DisabilityDefinitionMatchResultValue,
 } from "./types";
 
 const DOCUMENT_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,document_type,original_filename,storage_key,mime_type,byte_size,
@@ -319,6 +320,65 @@ export async function loadActiveCIDefinitionMatches(accountId: string, familyMem
   await ensureCriticalIllnessSchema();
   const result = await query<ClaimCIDefinitionMatchRow>(
     `SELECT ${CI_MATCH_COLUMNS} FROM claim_ci_definition_matches
+      WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND superseded_at IS NULL`,
+    [accountId, familyMemberId, claimSessionId],
+  );
+  return result.rows;
+}
+
+// --- Disability definition matches --------------------------------------
+
+const DISABILITY_MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,
+  benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,created_at::text`;
+
+/** Records a reviewer's (or a deterministic rule's) finalised decision that
+ * reviewed medical evidence does or does not match ONE policy's own
+ * disability definition for ONE exact benefit and match key (a fixed TPD/
+ * disability-income sentinel, or an exact schedule-of-injuries row code --
+ * see lib/claims/calculators/evidence.ts's DisabilityDefinitionMatch doc
+ * comment). Never called from chat text or model output -- see
+ * lib/claims/evidence/disability-matches.ts, the only caller. Any prior
+ * ACTIVE match for the exact same (family member, claim, contract,
+ * coverage, benefit code, match key) scope is superseded first, in the
+ * same transaction, exactly mirroring recordCIDefinitionMatch() above. */
+export async function recordDisabilityDefinitionMatch(args: {
+  accountId: string; familyMemberId: string; claimSessionId: string; contractId: string; coverageId: string | null;
+  evidenceDocumentId: string; benefitCode: string; matchKey: string; medicalEvidence: unknown; definitionEvidence: unknown;
+  result: DisabilityDefinitionMatchResultValue; reviewedBy: string; reason: string | null;
+}): Promise<ClaimDisabilityDefinitionMatchRow> {
+  await ensureDisabilitySchema();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE claim_disability_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
+        WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
+          AND benefit_code=$6 AND match_key=$7 AND superseded_at IS NULL`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.matchKey],
+    );
+    const inserted = await client.query<ClaimDisabilityDefinitionMatchRow>(
+      `INSERT INTO claim_disability_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_by,reason)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13)
+       RETURNING ${DISABILITY_MATCH_COLUMNS}`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId,
+        args.benefitCode, args.matchKey, JSON.stringify(args.medicalEvidence), JSON.stringify(args.definitionEvidence),
+        args.result, args.reviewedBy, args.reason],
+    );
+    await client.query("COMMIT");
+    return inserted.rows[0];
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
+}
+
+/** Every currently-active (non-superseded) disability match for this
+ * family member/claim, across every contract, coverage, benefit and match
+ * key -- the disability analogue of loadActiveCIDefinitionMatches(),
+ * loaded fresh by lib/claims/evidence/disability-session-matches.ts on
+ * every chat turn. */
+export async function loadActiveDisabilityDefinitionMatches(accountId: string, familyMemberId: string, claimSessionId: string): Promise<ClaimDisabilityDefinitionMatchRow[]> {
+  await ensureDisabilitySchema();
+  const result = await query<ClaimDisabilityDefinitionMatchRow>(
+    `SELECT ${DISABILITY_MATCH_COLUMNS} FROM claim_disability_definition_matches
       WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND superseded_at IS NULL`,
     [accountId, familyMemberId, claimSessionId],
   );

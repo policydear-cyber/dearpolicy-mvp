@@ -49,5 +49,11 @@ jobs:
       - name: Critical-illness engine regression suite (PGlite, no live DB needed)
         run: npm run claims:ci-test
 
+      - name: Medical-claims engine regression suite
+        run: npm run claims:medical-test
+
+      - name: Disability/TPD engine regression suite
+        run: npm run claims:disability-test
+
       - name: Build
         run: npm run build

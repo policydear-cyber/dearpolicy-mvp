@@ -66,7 +66,20 @@ export type ComposedBenefitBlockReasonCode =
    * so rather than invent an allocation between insurers or silently add
    * both, every such benefit is blocked and an unresolved combined total
    * is surfaced as an outstanding question instead. */
-  | "REIMBURSEMENT_COORDINATION_NOT_EVIDENCED";
+  | "REIMBURSEMENT_COORDINATION_NOT_EVIDENCED"
+  /** A same-policy group contains more than one disability benefit --
+   * typically a Total & Permanent Disability lump sum alongside a
+   * permanent-partial-disability/dismemberment amount from the same
+   * policy's own schedule of injuries -- and DearPolicy found no explicit
+   * wording evidence for how they relate (alternative / accelerated /
+   * additional). These two are frequently mutually exclusive for the SAME
+   * disability under a policy's own wording (see
+   * lib/claims/calculators/disability-benefit.ts's own module doc
+   * comment), so exactly like an unresolved critical-illness relationship,
+   * an unresolved disability relationship is never defaulted to additive --
+   * assuming additive without evidence would risk double-counting one
+   * disability under both the schedule and TPD. */
+  | "DISABILITY_COMPOSITION_NOT_EVIDENCED";
 
 /** A reference to an aggregate cap that was evaluated against this benefit,
  * whether or not it ended up binding. `scope` says what the cap applies

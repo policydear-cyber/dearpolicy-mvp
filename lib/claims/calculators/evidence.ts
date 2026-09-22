@@ -413,3 +413,51 @@ export type VerifiedMedicalBillFacts = {
   sourceDocumentIds: string[];
 };
 
+
+/**
+ * Evidence for a disability claim -- the disability analogue of
+ * `CIDefinitionMatch`/`CIDefinitionMatchResult` above.
+ *
+ * TPD (Total & Permanent Disability), permanent partial disability and
+ * dismemberment (paid via a policy's own schedule-of-injuries table), and
+ * disability income all share the same safety requirement: DearPolicy must
+ * NEVER autonomously decide that a disability is permanent, or that an
+ * injury matches a named schedule row -- only a reviewed clinical
+ * assessment, explicitly matched against the policy's own wording by a
+ * human reviewer (or a deterministic rule standing in for one), can ever
+ * establish that. `matchKey` plays exactly the role `illnessName` plays for
+ * critical illness: a fixed, calculator-facing identifier for WHAT this
+ * match was reviewed against --
+ *   - "total_permanent_disability" for a TPD benefit (see
+ *     lib/claims/calculators/disability-benefit.ts's TOTAL_PERMANENT_DISABILITY_MATCH_KEY),
+ *   - the exact, verbatim schedule-row code (never a fuzzy/paraphrased
+ *     injury description) for a permanent-partial-disability/dismemberment
+ *     benefit paid from a schedule of injuries, and
+ *   - "disability_income" for a disability-income benefit.
+ * A match for one of these can never unlock another, even under the same
+ * policy and the same claim -- calculateDisabilityBenefit() and
+ * calculateDisabilityIncome() independently re-validate every field of
+ * whichever match a caller supplies, exactly like calculateCriticalIllness()
+ * does for CIDefinitionMatch.
+ */
+export type DisabilityDefinitionMatchResult = "matches" | "does_not_match" | "needs_medical_review" | "needs_policy_review" | "insufficient_evidence" | "ambiguous";
+
+export type DisabilityDefinitionMatch = {
+  familyMemberId: string;
+  claimEventId: string;
+  contractId: string;
+  coverageId?: string;
+  /** The exact calculator-facing benefit code this match applies to (e.g.
+   * "tpd-lump-sum", "ppd-schedule", "di-monthly"). A match for one code can
+   * never unlock a calculation for another. */
+  benefitCode: string;
+  /** What this match was reviewed against -- see this type's own doc
+   * comment above. Strict, exact-string equality only: never normalised
+   * beyond trimming/case-folding, and never fuzzily compared against an
+   * injury description. */
+  matchKey: string;
+  medicalEvidence: unknown;
+  definitionEvidence: unknown;
+  result: DisabilityDefinitionMatchResult;
+  reviewedAt: string;
+};

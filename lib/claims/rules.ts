@@ -8,6 +8,7 @@ import type { CauseDefinitionMatch } from "./calculators/evidence";
 import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { assessCriticalIllness, nextCIQuestion } from "./ci-rules";
 import { assessMedicalClaim, nextMedicalQuestion, type MedicalRuleEvidence } from "./medical-rules";
+import { assessDisabilityClaim, nextDisabilityQuestion, type DisabilityRuleSet } from "./disability-rules";
 
 function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
   return { chunkId: c.chunkId, policyId: c.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, label: c.evidenceLabel };
@@ -96,7 +97,7 @@ export function relevantOwnedProducts(facts: ClaimFacts, coverages: OwnedCoverag
   return [...result];
 }
 
-export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], ciRules: CIRuleEvidence[] = [], medicalRules?: MedicalRuleEvidence): ClaimQuestion | null {
+export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], ciRules: CIRuleEvidence[] = [], medicalRules?: MedicalRuleEvidence, disabilityRules?: DisabilityRuleSet): ClaimQuestion | null {
   if (!facts.eventType) return { id:"event_type", text:"Tell me what happened. Was this an accident, a diagnosis, a hospital admission, a disability, or a death claim?", type:"choice", options:["Accident","Diagnosis","Hospital admission","Disability","Death"], why:"DearPolicy needs the event type before it can choose the relevant owned policies." };
 
   const dateQuestion = eventDateQuestion(facts);
@@ -151,6 +152,8 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
   if (facts.eventType === "disability") {
     if (facts.permanentImpairment == null && !facts.uncertainFacts.includes("permanent_impairment")) return { id:"permanent_impairment", text:"Has the disability been medically assessed as permanent, or is that still uncertain?", type:"yes_no", options:["Permanent","Not permanent","Not sure"], why:"TPD and accident disability benefits depend on permanence and the policy definition." };
     if (!facts.diagnosis && !facts.injuries.length && !facts.uncertainFacts.includes("diagnosis")) return { id:"diagnosis", text:"What caused the disability—an illness or an injury?", type:"text", why:"Different owned policies respond depending on the cause." };
+    const disabilityQuestion = nextDisabilityQuestion(facts, disabilityRules);
+    if (disabilityQuestion) return disabilityQuestion;
   }
 
   return null;
@@ -162,9 +165,18 @@ function g007500(coverages: OwnedCoverage[]) {
   return coverages.some((c) => c.groupPolicyNumber === "G007500");
 }
 
-export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = [], medicalRules?: MedicalRuleEvidence): ClaimAssessmentItem[] {
+export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = [], medicalRules?: MedicalRuleEvidence, disabilityRules?: DisabilityRuleSet): ClaimAssessmentItem[] {
   const items: ClaimAssessmentItem[] = [];
   const isG007500 = g007500(coverages);
+  // Additive: new evidence-gated disability items from
+  // lib/claims/disability-rules.ts alongside the legacy hardcoded
+  // "gpa-tpd" item below -- when disability-rules.ts has produced a real,
+  // wording-evidenced TPD assessment for the SAME Group Personal Accident
+  // coverage, the legacy hardcoded item is suppressed so the family is
+  // never shown two competing TPD estimates for one coverage. See
+  // lib/claims/medical-rules.ts's identical suppression pattern for
+  // "gtl-hospital-cash".
+  const disabilityTPDCoverageIds = new Set((disabilityRules?.rules ?? []).filter((r) => r.benefitCode === "tpd-lump-sum").map((r) => r.coverageId));
 
   if (facts.eventType === "death") {
     const deathDate = facts.deathDate ?? facts.eventDate;
@@ -284,7 +296,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       if (facts.hospitalised === true) {
         items.push({id:"gpa-hospital-recovery",title:"Accidental hospital recuperation",status:"likely_applicable",amountText:"S$250",reason:"The uploaded Personal Accident summary lists a S$250 accidental hospital recuperation benefit.",conditions:["The hospital admission must satisfy the policy's accident-related admission conditions."],evidenceTerms:["Accidental Hospital Recuperation Benefit","S$250"],productName:"Group Personal Accident"});
       }
-      if ((facts.permanentImpairment === true || facts.uncertainFacts.includes("permanent_impairment")) && gpa.amount != null) {
+      if ((facts.permanentImpairment === true || facts.uncertainFacts.includes("permanent_impairment")) && gpa.amount != null && !disabilityTPDCoverageIds.has(gpa.id)) {
         const amount = gpa.amount * 1.5;
         items.push({id:"gpa-tpd",title:"Accidental Total & Permanent Disability",status:"needs_document",amountText:`Up to ${amountText(amount,gpa.currency)}`,reason:facts.permanentImpairment===true?"Your Personal Accident cover is confirmed and the wording pays 150% of Sum Insured for qualifying accidental TPD.":"Permanent impairment is still uncertain, but this high-value benefit should be checked if doctors suspect lasting loss of function.",conditions:["A medical assessment must satisfy the policy's Total & Permanent Disability definition.","The disability must result from the accident."],evidenceTerms:["Total and Permanent Disablement","150% of Sum Insured"],productName:"Group Personal Accident"});
       }
@@ -329,6 +341,15 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
   // additive rather than a replacement.
   if (facts.eventType === "diagnosis") {
     items.push(...assessCriticalIllness(facts, coverages, ciRules, ciGaps, sessionId));
+  }
+
+  // Additive: the same deterministic pipeline, reused for a "disability"
+  // event's TPD/permanent-partial-disability/schedule-of-injuries/
+  // disability-income benefits -- never a parallel claim system. See
+  // lib/claims/disability-rules.ts for why this never touches the
+  // death/CI/medical path.
+  if (facts.eventType === "disability") {
+    items.push(...assessDisabilityClaim(facts, coverages, disabilityRules, sessionId));
   }
 
   if (facts.eventType === "hospitalisation") {

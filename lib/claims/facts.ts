@@ -84,6 +84,7 @@ const QUESTION_FIELDS: Record<string, keyof ClaimFacts> = {
   cause_of_death_document: "causeOfDeathDocumentAvailable",
   admission_date: "admissionDate", discharge_date: "dischargeDate",
   medical_bill_document: "medicalBillDocumentAvailable", panel_status: "panelStatusReported",
+  disability_assessment_document: "disabilityAssessmentDocumentAvailable",
 };
 
 function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null, context: ClaimDateContext = {}): Partial<ClaimFacts> {
@@ -186,6 +187,10 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
   // actual reviewed document (lib/claims/evidence/medical-bill-evidence.ts)
   // can set.
   if (/itemi[sz]ed (?:hospital )?bill/i.test(text)) out.medicalBillDocumentAvailable = !/don'?t have|do not have|no itemi[sz]ed/i.test(text);
+  // Same availability-only pattern as causeOfDeathDocumentAvailable/
+  // medicalBillDocumentAvailable above -- a mention never authorises an
+  // amount, it only signals DearPolicy should ask for the document.
+  if (/medical assessment|specialist(?:'s)? report|specialist(?:'s)? assessment|disability assessment/i.test(text)) out.disabilityAssessmentDocumentAvailable = !/don'?t have|do not have|no (?:medical assessment|specialist report|specialist assessment|disability assessment)/i.test(text);
   if (/non-?panel/i.test(text)) out.panelStatusReported = "non_panel";
   else if (/\bpanel\b/i.test(text)) out.panelStatusReported = "panel";
 
@@ -235,6 +240,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
     if (pendingQuestion.id === "medical_report" && yn != null) out.medicalReportAvailable = yn;
     if (pendingQuestion.id === "cause_of_death_document" && yn != null) out.causeOfDeathDocumentAvailable = yn;
     if (pendingQuestion.id === "medical_bill_document" && yn != null) out.medicalBillDocumentAvailable = yn;
+    if (pendingQuestion.id === "disability_assessment_document" && yn != null) out.disabilityAssessmentDocumentAvailable = yn;
     if (pendingQuestion.id === "panel_status") {
       const t = text.trim().toLowerCase();
       if (/^non[- ]?panel\b/.test(t)) out.panelStatusReported = "non_panel";

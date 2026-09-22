@@ -1,4 +1,4 @@
-import type { CauseDefinitionMatch, CIDefinitionMatch, VerifiedMedicalBillFacts } from "./calculators/evidence";
+import type { CauseDefinitionMatch, CIDefinitionMatch, DisabilityDefinitionMatch, VerifiedMedicalBillFacts } from "./calculators/evidence";
 
 export type ClaimEventType = "accident" | "diagnosis" | "hospitalisation" | "death" | "disability" | "other";
 
@@ -125,6 +125,30 @@ export type ClaimFacts = {
    * may treat as a verified eligible billed expense or a verified
    * admission/discharge/ward/panel/third-party-payment fact. */
   verifiedMedicalBillFacts: VerifiedMedicalBillFacts | null;
+  /** Whether the family SAYS they possess a medical specialist's report or
+   * assessment establishing whether a disability is permanent (for TPD) or
+   * describing its exact nature (for a schedule-of-injuries claim).
+   * Availability signal ONLY -- exactly like `causeOfDeathDocumentAvailable`/
+   * `medicalEvidenceDocumentAvailable` -- it can drive an upload request
+   * but can never by itself authorise a disability amount, however the
+   * family answers. */
+  disabilityAssessmentDocumentAvailable: boolean | null;
+  /** Whether DearPolicy has actually processed an uploaded disability
+   * assessment document. Never set from a chat answer -- see
+   * lib/claims/evidence/disability-matches.ts, the only writer of the
+   * underlying review state. */
+  disabilityAssessmentEvidenceReviewed: boolean | null;
+  /** Policy-specific matches between REVIEWED medical evidence and ONE
+   * policy's own disability definition (TPD, one exact schedule-of-injuries
+   * row, or disability income). Never set from chat text or any model
+   * output -- see lib/claims/evidence/disability-matches.ts, the only
+   * writer, and lib/claims/orchestrator.ts, which reloads this fresh from
+   * the database every turn exactly like `ciDefinitionMatches`. A match for
+   * one benefit/match-key/policy/coverage/member/document-version can never
+   * unlock another -- calculateDisabilityBenefit()/calculateDisabilityIncome()
+   * independently re-validate every field of whichever entry a caller
+   * supplies. */
+  disabilityDefinitionMatches: DisabilityDefinitionMatch[];
   uncertainFacts: string[];
   factSources?: Record<string, { source: "user" | "system-derived"; text: string; recordedAt: string; timeZone?: string; anchorDate?: string }>;
 };
@@ -266,6 +290,9 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   medicalBillDocumentAvailable: null,
   medicalBillEvidenceReviewed: null,
   verifiedMedicalBillFacts: null,
+  disabilityAssessmentDocumentAvailable: null,
+  disabilityAssessmentEvidenceReviewed: null,
+  disabilityDefinitionMatches: [],
   uncertainFacts: [],
   factSources: {},
 };

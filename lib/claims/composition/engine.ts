@@ -69,6 +69,11 @@ function benefitCategoryFor(benefitCode: string) {
   // with "med-" (see that module's BENEFIT_TITLES), exactly the same
   // prefix-match pattern as the ci-* categories above.
   if (benefitCode.startsWith("med-")) return "Medical";
+  // lib/claims/disability-rules.ts's own ClaimAssessmentItem.id always
+  // starts with "tpd-", "ppd-" or "di-" (see that module's assessDisabilityClaim()),
+  // or is exactly "premium-waiver" for the non-monetary premium-waiver
+  // status item.
+  if (benefitCode.startsWith("tpd-") || benefitCode.startsWith("ppd-") || benefitCode.startsWith("di-") || benefitCode === "premium-waiver") return "Disability";
   return "Death";
 }
 
@@ -206,6 +211,23 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
     if (benefits.some((b) => b.benefitCode.startsWith("ci-"))) {
       for (const b of benefits) {
         composed.push({ ...b, status: "blocked", payableAmount: 0, blockedReasonCodes: [...b.blockedReasonCodes, "CI_COMPOSITION_NOT_EVIDENCED"] });
+      }
+      continue;
+    }
+    // Same reasoning as the CI block above, for a same-policy group
+    // containing more than one disability benefit (typically a TPD lump
+    // sum alongside a schedule-of-injuries/permanent-partial-disability
+    // amount) -- see lib/claims/composition/types.ts's
+    // DISABILITY_COMPOSITION_NOT_EVIDENCED and
+    // lib/claims/calculators/disability-benefit.ts's own module doc
+    // comment on why these are frequently mutually exclusive for the SAME
+    // disability. relationships.ts has no evidenced disability-specific
+    // coordination-signal detector in this V1 slice, so DearPolicy never
+    // guesses which one the policy actually intends to pay -- it blocks
+    // both rather than risk double-counting.
+    if (benefits.some((b) => b.benefitCode.startsWith("tpd-") || b.benefitCode.startsWith("ppd-"))) {
+      for (const b of benefits) {
+        composed.push({ ...b, status: "blocked", payableAmount: 0, blockedReasonCodes: [...b.blockedReasonCodes, "DISABILITY_COMPOSITION_NOT_EVIDENCED"] });
       }
       continue;
     }
