@@ -88,7 +88,7 @@ export async function runDeathBenefitContextualRegressions() {
   test("A reported homicide never auto-confirms accidental death", () => {
     assert.equal(murdered.death, true); assert.equal(murdered.accidentalDeath, null);
     // DearPolicy asks what caused the death -- it never labels a homicide
-    // \"accidental\" on the user's behalf.
+    // "accidental" on the user's behalf.
     assert.equal(nextClaimQuestion(murdered, coverages)?.id, "cause_of_death");
     const result = assessClaim(murdered, coverages, deathRules, [], SESSION_ID);
     assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
@@ -103,7 +103,7 @@ export async function runDeathBenefitContextualRegressions() {
   const unknown = await extractClaimFacts({ text: "Not sure", current: { ...murdered, accidentalDeath: null }, pendingQuestion: causeQuestion, ...context });
   test("An unknown cause of death is never assumed to be accidental or natural", () => {
     assert.equal(unknown.accidentalDeath, null);
-    // Having already said \"not sure\" once, DearPolicy does not keep asking.
+    // Having already said "not sure" once, DearPolicy does not keep asking.
     assert.equal(nextClaimQuestion(unknown, coverages), null);
     const result = assessClaim(unknown, coverages, deathRules, [], SESSION_ID);
     // The accidental-death benefit stays visible with no amount, never
@@ -151,7 +151,7 @@ export async function runDeathBenefitContextualRegressions() {
     assert.equal(assessClaim(confirmed, coverages, [], [], SESSION_ID).some(i => i.amountText != null), false);
   });
 
-  // 10. An incomplete review is never reported as \"not covered\" -- it stays
+  // 10. An incomplete review is never reported as "not covered" -- it stays
   // visibly pending (needs_document) rather than collapsing to not_applicable.
   test("An unresolved accidental-death review is needs_document, never not_applicable", () => {
     const result = assessClaim(carCrash, coverages, deathRules, [], SESSION_ID);
@@ -167,7 +167,7 @@ export async function runDeathBenefitContextualRegressions() {
     assert.equal(total, 1_000_000);
   });
 
-  // 12. A safety correction to this same PR: a family's own \"Yes\" to
+  // 12. A safety correction to this same PR: a family's own "Yes" to
   // document availability must never, by itself, unlock the amount -- only
   // an actual reviewed-and-matched document can.
   test("Answering “Yes” to document availability does not unlock an amount", () => {
@@ -178,7 +178,7 @@ export async function runDeathBenefitContextualRegressions() {
   });
 
   // 13. Mentioning a document in free text is availability only, extracted
-  // the same deterministic way as an explicit \"yes\" -- and is just as
+  // the same deterministic way as an explicit "yes" -- and is just as
   // incapable of unlocking an amount.
   const mentionedReport = await extractClaimFacts({ text: "Charmaine died in a car crash yesterday, there's a police report", ...context });
   test("Mentioning “police report” in chat does not unlock an amount", () => {

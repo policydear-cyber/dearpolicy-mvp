@@ -1,4 +1,4 @@
-import type { CauseDefinitionMatch } from "./calculators/evidence";
+import type { CauseDefinitionMatch, CIDefinitionMatch } from "./calculators/evidence";
 
 export type ClaimEventType = "accident" | "diagnosis" | "hospitalisation" | "death" | "disability" | "other";
 
@@ -52,6 +52,34 @@ export type ClaimFacts = {
    * free text, since no document-review pipeline exists in this slice yet
    * to populate it. Empty by default. */
   causeDefinitionMatches: CauseDefinitionMatch[];
+  /** ISO date symptoms were first noticed, when the policy's own wording
+   * makes it relevant (e.g. a waiting period measured from first symptom
+   * rather than diagnosis). Chat-reported only -- like every other date
+   * here, it is a REPORTED fact, not evidence; the CI calculator only ever
+   * uses it where a formula input explicitly calls for it and never to
+   * infer a diagnosis or its timing. */
+  firstSymptomDate: string | null;
+  /** ISO date of the first consultation with a doctor about the reported
+   * condition, when relevant to a policy's own wording. Chat-reported. */
+  firstConsultationDate: string | null;
+  /** Whether the family SAYS they possess a medical document supporting the
+   * reported diagnosis (a specialist memo, pathology/imaging/laboratory
+   * report, discharge summary, surgical report, or other insurer-requested
+   * medical evidence). Availability signal ONLY -- exactly like
+   * `causeOfDeathDocumentAvailable` -- it may drive a request to upload the
+   * document, but it can never by itself authorise a critical-illness
+   * amount, however the family answers. */
+  medicalEvidenceDocumentAvailable: boolean | null;
+  /** Policy-specific matches between REVIEWED medical evidence and ONE
+   * policy's own critical-illness benefit definition (for one illness,
+   * stage and benefit). Never set from chat text or any model output --
+   * see lib/claims/evidence/ci-matches.ts, the only writer, and
+   * lib/claims/orchestrator.ts, which reloads this fresh from the
+   * database every turn exactly like `causeDefinitionMatches`. A match for
+   * one illness, stage, policy, coverage, member or document version can
+   * never unlock another -- calculateCriticalIllness() independently
+   * re-validates every field of whichever entry a caller supplies. */
+  ciDefinitionMatches: CIDefinitionMatch[];
   /** Explicit, user-reported amount already paid under a policy's own
    * lifetime aggregate benefit maximum -- keyed by policyId. NEVER
    * inferred or defaulted: the composition engine (lib/claims/
@@ -185,6 +213,10 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   causeOfDeathDocumentAvailable: null,
   causeOfDeathEvidenceReviewed: null,
   causeDefinitionMatches: [],
+  firstSymptomDate: null,
+  firstConsultationDate: null,
+  medicalEvidenceDocumentAvailable: null,
+  ciDefinitionMatches: [],
   priorPaidAmounts: {},
   uncertainFacts: [],
   factSources: {},
