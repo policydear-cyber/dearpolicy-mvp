@@ -16,6 +16,7 @@ import type { ChatCitation,ChatQuestion,ClaimItem } from "@/types";
 import { EVENTS,GATES,QUANTITY_FACT,candidateEvents,eventsFromText,fractureRowMatches,type EventCandidate,type EventType } from "@/lib/ledger/events";
 import type { LedgerRow } from "@/lib/ledger/store";
 import { calculateHospitalCash } from "@/lib/claims/calculators/hospital-cash";
+import { coverKey } from "@/lib/insurance/claim-events";
 
 export type LedgerQuestion=ChatQuestion&{subjectId:string;factKey:string};
 export type LedgerAnswer={
@@ -127,101 +128,4 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
         if(!whatIf&&v==null)continue;
         if(v===false||(gate.factKey==="eventType"&&v==="illness"))continue;
       }
-      for(const row of rows){
-        if(event==="fracture"&&typeof bodyPart==="string"&&!fractureRowMatches(row.detail,bodyPart))continue;
-        // A row restricted to one cause is skipped when the cause contradicts
-        // it, and waits (asking) while the cause is unknown.
-        if(row.cause&&!whatIf){
-          if(row.cause!==cause){
-            if(cause==null){ask(person.id,GATES.accident,facts);continue;}
-            continue;
-          }
-        }
-        if(row.paysKind==="stated"||row.amount==null||(row.paysKind==="percent_of_sum"&&row.sumBasis==null))out.complete=false;
-        // A threshold the event has not reached rules the row out; unknown, it is asked.
-        if(row.minimumFact&&row.minimumValue!=null&&!whatIf){
-          const have=knownValue(facts,row.minimumFact);
-          if(typeof have==="number"&&have<row.minimumValue){out.ruledOut.push(rowTitle(person,row)+" — needs "+row.minimumFact.replace(/([A-Z])/g," $1").toLowerCase()+" of at least "+row.minimumValue+", and "+have+" was reported");continue;}
-          if(have==null){const q=MINIMUM_QUESTIONS[row.minimumFact];if(q)ask(person.id,q,facts);}
-        }
-        out.candidates.push(row.planName+" — "+label(row)+(row.detail&&row.eventType==="fracture"?" ("+row.detail+")":""));
-        // Quantities, only when the event is in play and this is not a what-if.
-        const quantity=QUANTITY_FACT[event];
-        const needsQuantity=(row.paysKind==="per_day"||row.paysKind==="reimbursement_cap")&&row.amount!=null&&quantity;
-        if(needsQuantity&&knownValue(facts,quantity.factKey)==null)ask(person.id,{...quantity,type:"text"},facts);
-        const basis=basisOf(row);
-        let amount:number|null=null;let basisText="";const missing:string[]=[];
-        switch(row.paysKind){
-          case "lump_sum":amount=row.amount;basisText=row.amount!=null?formatMoney(row.amount,row.currency)+" lump sum":"";break;
-          case "percent_of_sum":
-            if(row.amount!=null&&row.sumBasis!=null){amount=Math.round(row.amount*row.sumBasis*100)/100;basisText=Math.round(row.amount*1000)/10+"% of "+formatMoney(row.sumBasis,row.currency);}
-            else if(row.amount!=null)missing.push("the sum insured for "+row.planName+" — no schedule or certificate on file states it");
-            break;
-          case "per_day":{
-            const nights=knownValue(facts,quantity?.factKey??"hospitalNights");
-            const ongoing=!whatIf&&knownValue(facts,"hospitalStayOngoing")===true;
-            if(row.amount!=null&&ongoing){
-              // A completed length of stay is what turns this into a figure;
-              // asking the same quantity question with no context reads as
-              // DearPolicy ignoring what was just said, so the benefit is
-              // named as potentially applicable and the real blocker (the
-              // stay has not ended yet) is stated plainly instead.
-              missing.push("the completed length of stay — this benefit may still apply once the stay has ended");
-            }else if(row.amount!=null&&typeof nights==="number"){
-              // The calculator is the only place this arithmetic runs: it
-              // bounds payable days to the day cap (never an uncapped daily
-              // benefit) and returns not_applicable rather than a $0 payout
-              // when the waiting period was never cleared.
-              const calc=calculateHospitalCash({
-                dailyRate:row.amount,currency:row.currency,hospitalStayOngoing:false,hospitalNights:nights,
-                offsetDays:row.offsetDays??0,maximumDays:row.maximumDays,
-                ownership:{contractId:row.policyId??row.id,coverageId:row.id,label:row.planName},
-                ruleEvidence:{chunkId:"ledger:"+row.id,policyId:row.policyId??undefined,pageStart:row.sourcePage??undefined,pageEnd:row.sourcePage??undefined,label:row.planName},
-                ownershipEvidence:{chunkId:"ledger:"+row.id,policyId:row.policyId??undefined,pageStart:row.sourcePage??undefined,pageEnd:row.sourcePage??undefined,label:row.planName},
-              });
-              if(calc.status==="calculated"){
-                amount=calc.potentialAmount;
-                basisText=formatMoney(row.amount,row.currency)+" × "+calc.payableDays+" payable night"+(calc.payableDays===1?"":"s")+(calc.offsetDays?" (after the first "+calc.offsetDays+")":"");
-              }else if(calc.status==="not_applicable"){
-                missing.push("a completed stay long enough to clear the "+calc.offsetDays+"-day waiting period ("+calc.reportedHospitalNights+" night"+(calc.reportedHospitalNights===1?"":"s")+" reported)");
-              }else{
-                // A structural block (most commonly a missing day cap): never
-                // show an uncapped or otherwise unverified daily amount.
-                missing.push(calc.message);
-              }
-            }else if(!whatIf&&row.amount!=null)missing.push("the number of nights");
-            break;}
-          case "reimbursement_cap":{
-            const bill=knownValue(facts,quantity?.factKey??"outOfPocket");
-            if(row.amount!=null&&typeof bill==="number"){amount=Math.min(bill,row.amount);basisText="the lower of the reported cost "+formatMoney(bill,row.currency)+" and the limit "+formatMoney(row.amount,row.currency);}
-            else if(!whatIf&&row.amount!=null)missing.push("the actual cost");
-            break;}
-          case "per_month":break;
-          default:break;
-        }
-        const conditions=[...row.conditions.map(c=>c.trim()).filter(Boolean)];
-        for(const m of missing)conditions.push("Still needed: "+m);
-        if(row.status!=="confirmed")conditions.push(row.origin==="schedule"?"Assumes the standard rule for this kind of plan until the wording is read.":"Not yet verified against the policy wording.");
-        conditions.push("Subject to the insurer's assessment and the plan's own terms and exclusions.");
-        const item:ClaimItem={
-          title:rowTitle(person,row),
-          status:amount!=null?(missing.length||row.status!=="confirmed"||row.conditions.length?"potentially_applicable":"likely_applicable"):"needs_document",
-          amountText:amount!=null?formatMoney(amount,row.currency):(row.paysKind==="stated"||whatIf||row.paysKind==="per_month")?describePays(row):null,
-          amountLabel:amount!=null?(row.paysKind==="reimbursement_cap"?"Potential reimbursement":"Potential payout"):"What this benefit pays",
-          ...(amount!=null?{estimateBasis:basis,calculatedAmount:amount,currency:row.currency,
-            calculationKind:row.paysKind==="percent_of_sum"?"sum_insured":row.paysKind==="lump_sum"?"fixed":row.paysKind==="per_day"?"daily":"expense_cap",
-            aggregation:row.paysKind==="reimbursement_cap"?"reimbursement" as const:"additive" as const,calculationId:"ledger:"+row.id}:{}),
-          reason:(amount!=null?basisText+". ":"This plan pays "+describePays(row)+". ")+whyText(row,basis),
-          conditions:[...new Set(conditions)],
-        };
-        out.items.push(item);
-        out.citations.push({chunkId:"ledger:"+row.id,policyId:row.policyId??"",policyName:row.planName,insurer:row.insurer??undefined,
-          pageStart:row.sourcePage??1,pageEnd:row.sourcePage??1,personalEvidence:row.origin!=="wording",
-          evidenceLabel:row.origin==="schedule"?"Your schedule or certificate":row.origin==="person"?"Entered on the Coverage page":"Policy wording, read when the document was uploaded"});
-      }
-    }
-  }
-  out.candidates=[...new Set(out.candidates)];
-  if(questions.length){out.question=questions[0];out.questionsLeft=questions.length;}
-  return out;
-}
+      for(const row of rows){	
