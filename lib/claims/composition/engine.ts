@@ -38,8 +38,34 @@ function stableId(parts: StableIdPart[]) {
   return "comp:" + createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
+const CI_BENEFIT_CATEGORY: Record<string, string> = {
+  "ci-major": "Critical Illness",
+  "ci-early": "Early Critical Illness",
+  "ci-intermediate": "Intermediate Critical Illness",
+};
+
+/** True for the "base" benefit a same-policy group's accelerated/
+ * additional/alternative relationship is evaluated against -- the
+ * existing death-benefit base ("gtl-death") plus the critical-illness
+ * analogue ("ci-major", i.e. the major/100% CI benefit that an
+ * early/intermediate-stage benefit typically accelerates or is additional
+ * to). Every other benefit code in a group is the "other" side. */
+function isPrimaryBenefitCode(benefitCode: string) {
+  return benefitCode === "gtl-death" || benefitCode.startsWith("ci-major-") || benefitCode === "ci-major";
+}
+
+/** benefitCode here is lib/claims/rules.ts's/lib/claims/ci-rules.ts's own
+ * ClaimAssessmentItem.id (see composeClaim()'s `benefitCode: item.id`
+ * below) -- every ci-* item's id always starts with its calculator-facing
+ * benefit code ("ci-major-...", "ci-early-...", "ci-intermediate-..."),
+ * so a prefix match is all that is needed, exactly as the existing
+ * "gpa-accidental-death" exact match is for the death benefits. */
 function benefitCategoryFor(benefitCode: string) {
-  return benefitCode === "gpa-accidental-death" ? "Personal Accident" : "Death";
+  if (benefitCode === "gpa-accidental-death") return "Personal Accident";
+  for (const [prefix, category] of Object.entries(CI_BENEFIT_CATEGORY)) {
+    if (benefitCode === prefix || benefitCode.startsWith(`${prefix}-`)) return category;
+  }
+  return "Death";
 }
 
 function groupCitationPages(wordingPages: WordingPages, policyId: string) {
@@ -130,8 +156,8 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
     if (benefits.length < 2) { composed.push(...benefits); continue; }
     const pages = groupCitationPages(wordingPages, policyId);
     const signals = findCompositionSignals(pages);
-    const base = benefits.find((b) => b.benefitCode === "gtl-death");
-    const other = benefits.find((b) => b.benefitCode !== "gtl-death");
+    const base = benefits.find((b) => isPrimaryBenefitCode(b.benefitCode));
+    const other = benefits.find((b) => !isPrimaryBenefitCode(b.benefitCode));
     const alternative = signals.find((s) => s.compositionType === "alternative_highest");
     const accelerated = signals.find((s) => s.compositionType === "accelerated_from_base");
     const additional = signals.find((s) => s.compositionType === "additional_to_base");
@@ -158,6 +184,24 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
       const citation = { policyId, chunkId: `page:${policyId}:${additional.page}`, pageStart: additional.page, pageEnd: additional.pageEnd, label: "Additional-benefit wording" };
       composed.push(base);
       composed.push({ ...other, compositionType: "additional_to_base", evidenceReferences: [...other.evidenceReferences, citation] });
+      continue;
+    }
+    // No evidenced relationship signal resolved this group. For an
+    // ordinary death/accident group (gtl-death + gpa-accidental-death)
+    // that is the pre-existing, tested, safe default: two genuinely
+    // independent covers add. That default is NOT safe for a same-policy
+    // group containing any critical-illness benefit -- a policy can
+    // define dozens of distinct CI benefit rows (major, early/
+    // intermediate stage tables, accelerated/additional riders, multi-pay
+    // tranches) that are frequently NOT independently payable together,
+    // so DearPolicy never infers composition from benefit names alone:
+    // it blocks every CI benefit in an unresolved same-policy group
+    // rather than assuming additive. See
+    // lib/claims/composition/types.ts's CI_COMPOSITION_NOT_EVIDENCED.
+    if (benefits.some((b) => b.benefitCode.startsWith("ci-"))) {
+      for (const b of benefits) {
+        composed.push({ ...b, status: "blocked", payableAmount: 0, blockedReasonCodes: [...b.blockedReasonCodes, "CI_COMPOSITION_NOT_EVIDENCED"] });
+      }
       continue;
     }
     // No evidenced relationship at all: independently eligible benefits

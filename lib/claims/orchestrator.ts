@@ -6,7 +6,9 @@ import { createClaimSession, getClaimSession, saveClaimSession } from "./session
 import { evidenceForAssessment, ownedCoverageForItem } from "./evidence";
 import { enforceMonetarySafety } from "./monetary-gate";
 import { loadDeathEvidence } from "./death-evidence";
+import { loadCIEvidence } from "./ci-evidence";
 import { loadCauseDefinitionMatchesForFacts } from "./evidence/session-matches";
+import { loadCIDefinitionMatchesForFacts } from "./evidence/ci-session-matches";
 import { composeClaim } from "./composition/engine";
 import { recordCompositionSnapshot } from "./composition/store";
 import { toClaimCompositionView } from "./composition/view";
@@ -103,6 +105,25 @@ function deathSummary(assessments:ClaimAssessmentItem[],personName?:string,quest
   return (acknowledgeLoss?"I'm sorry for your loss. ":"")+summary;
 }
 
+/** The critical-illness analogue of deathSummary() above -- same shape,
+ * same reliance on the ONE composition engine for any total shown, but
+ * with the required policy-based-estimate wording and none of the
+ * forbidden claim-of-entitlement phrasing (see the CI spec's User-facing
+ * result section): never "you definitely have a covered illness", never
+ * "your claim will be approved", never "you are entitled to this
+ * amount", never "the insurer must pay". */
+function ciSummary(assessments:ClaimAssessmentItem[],personName?:string,question?:ClaimQuestion|null,composition?:ClaimCompositionResult|null) {
+  const includedBenefits=composition?composition.policies.flatMap(p=>p.benefits).filter(b=>b.status==="included"):[];
+  const totals=composition?composition.totalsByCurrency.map(t=>formatMoney(t.includedAmount,t.currency)):[];
+  const includedCount=includedBenefits.length;
+  let summary=totals.length&&includedCount>0
+    ? `Potential policy-based estimate: ${personName??"this person"}'s ${includedCount>1?"combined potential critical-illness benefits total":"potential critical-illness benefit is"} ${totals.join(" and ")}. The uploaded evidence appears consistent with this policy's definition, but medical or insurer review is still required. This is not a diagnosis, claim approval, or guarantee of payment.`
+    : `I found ${personName?`${personName}'s`:"this person's"} confirmed critical-illness cover. Medical evidence and policy review are still needed before DearPolicy can show a potential amount. This is not a diagnosis, claim approval, or guarantee of payment.`;
+  if(assessments.length&&assessments.every(a=>a.status==="not_applicable"))summary="The reported diagnosis does not satisfy the checked critical-illness definitions for the confirmed cover on file. See the reason for each policy below.";
+  if(question)summary+=" I still need the answer below to check the remaining policy condition.";
+  return summary;
+}
+
 export async function handleClaimTurn(args:{accountId:string;familyMemberId:string;message:string;claimSessionId?:string|null;personName?:string;timeZone?:string;now?:Date}):Promise<ChatAnswer>{
   let session=args.claimSessionId?await getClaimSession(args.accountId,args.familyMemberId,args.claimSessionId):null;
   if(!session) session=await createClaimSession(args.accountId,args.familyMemberId);
@@ -114,6 +135,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // or an invalidated match takes effect immediately. See
   // lib/claims/evidence/session-matches.ts.
   if(facts.eventType==="death")facts.causeDefinitionMatches=await loadCauseDefinitionMatchesForFacts(args.accountId,args.familyMemberId,session.id);
+  if(facts.eventType==="diagnosis")facts.ciDefinitionMatches=await loadCIDefinitionMatchesForFacts(args.accountId,args.familyMemberId,session.id);
   const coverages=await confirmedOwnedCoverages(args.accountId,args.familyMemberId);
   const currentness=await currentnessNote(args.accountId,args.familyMemberId);
   const knownFacts=[...(args.personName ? [`Person: ${args.personName}`] : []),...factsToLabels(facts)];
@@ -137,9 +159,15 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
 
   const deathEvidence=facts.eventType === "death" ? await loadDeathEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[],pages:[]};
   const deathRules=deathEvidence.rules;
-  const question=nextClaimQuestion(facts,coverages,deathRules);
+  const ciEvidence=facts.eventType === "diagnosis" ? await loadCIEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[],pages:[]};
+  const question=nextClaimQuestion(facts,coverages,deathRules,ciEvidence.rules);
   const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id) : null;
   const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages) : null;
+  // Additive: the same deterministic pipeline, reused for a "diagnosis"
+  // event's critical-illness benefits -- never a parallel claim system.
+  // See lib/claims/ci-rules.ts for why this never touches the death path.
+  const rawDiagnosisAssessments=facts.eventType === "diagnosis" ? assessClaim(facts,coverages,[],[],session.id,ciEvidence.rules,ciEvidence.gaps) : null;
+  const diagnosisAssessments=rawDiagnosisAssessments ? enforceMonetarySafety(rawDiagnosisAssessments,facts,coverages) : null;
   // The ONLY place a death claim's benefits are selected, composed, capped
   // and totalled -- see lib/claims/composition/engine.ts's own doc comment.
   // Computed whenever there is something to compose, even while a fact-
@@ -155,16 +183,31 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   if(deathComposition){
     await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:deathComposition});
   }
+  // Same composition engine, same reasoning, reused for the critical-illness
+  // benefits of a "diagnosis" event -- see lib/claims/composition/engine.ts,
+  // whose same-policy grouping now also refuses to default a same-policy
+  // multi-CI-benefit group to additive without explicit relationship
+  // evidence (lib/claims/composition/types.ts's CI_COMPOSITION_NOT_EVIDENCED).
+  const diagnosisComposition:ClaimCompositionResult|null = facts.eventType==="diagnosis" && diagnosisAssessments
+    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:diagnosisAssessments,wordingPages:ciEvidence.pages,now:args.now})
+    : null;
+  if(diagnosisComposition){
+    await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:diagnosisComposition});
+  }
+  const primaryAssessments=deathAssessments??diagnosisAssessments;
+  const primaryComposition=deathComposition??diagnosisComposition;
   const newDeath=facts.eventType === "death" && session.event_type !== "death";
   if(question){
     const names=relevantCoverageNames(coverages,relevantProducts);
     const policySummary=coverageListSummary(coverages,relevantProducts);
     const firstTurn=!session.event_type && !session.event_summary;
-    const summary=deathAssessments ? deathSummary(deathAssessments,args.personName,question,newDeath,deathComposition) : firstTurn
+    const summary=deathAssessments ? deathSummary(deathAssessments,args.personName,question,newDeath,deathComposition)
+      : diagnosisAssessments ? ciSummary(diagnosisAssessments,args.personName,question,diagnosisComposition)
+      : firstTurn
       ? `I found ${names.length?names.join(", "):"confirmed personal cover"} that may be relevant. Before I tell you what you can claim, I need to understand the event properly.`
       : "I have enough to narrow this down, but I still need one material fact before I calculate or rule on the next benefit.";
-    const preview=deathAssessments??[];
-    const citations=deathAssessments ? await assessmentCitations(args.accountId,args.familyMemberId,preview,coverages) : [];
+    const preview=primaryAssessments??[];
+    const citations=primaryAssessments ? await assessmentCitations(args.accountId,args.familyMemberId,preview,coverages) : [];
     if(["competitive_racing","racing_authority_sanctioned"].includes(question.id)){
       const rule=deathRules.find(r=>r.benefit==="gpa-accidental-death"&&preview.some(a=>a.coverageId===r.coverageId));
       if(rule?.racingExclusion){
@@ -173,18 +216,18 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
         if(!citations.some(c=>c.chunkId===citation.chunkId))citations.push(citation);
       }
     }
-    const nextSteps=deathAssessments ? claimNextSteps(facts,preview) : [];
-    const missingFacts=[...new Set([missingLabel(question.id),...facts.uncertainFacts.map(missingLabel),...preview.filter(a=>a.status==="needs_document").map(a=>`Evidence for ${a.title}`),...(deathComposition?.outstandingQuestions??[])])];
+    const nextSteps=primaryAssessments ? claimNextSteps(facts,preview) : [];
+    const missingFacts=[...new Set([missingLabel(question.id),...facts.uncertainFacts.map(missingLabel),...preview.filter(a=>a.status==="needs_document").map(a=>`Evidence for ${a.title}`),...(primaryComposition?.outstandingQuestions??[])])];
     const details=policySummary.length?[`Confirmed cover in scope: ${policySummary.join(" · ")}`]:[];
-    if(deathAssessments)details.push(currentness.detail);
-    const answer:ChatAnswer={mode:"fact_finding",summary,details,claimItems:preview.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:deathAssessments?"These are potential benefits based on confirmed personal cover and uploaded wording. Remaining conditions and final approval stay with the insurer.":"DearPolicy asks only for facts that can change eligibility, payout or claim steps.",claimSessionId:session.id,questions:[question],knownFacts,missingFacts,composition:deathComposition?toClaimCompositionView(deathComposition):undefined};
-    const decisionPacket:ClaimDecisionPacket|null=deathAssessments?{sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments:preview,nextSteps,ready:false,compositionResult:deathComposition??null}:null;
+    if(primaryAssessments)details.push(currentness.detail);
+    const answer:ChatAnswer={mode:"fact_finding",summary,details,claimItems:preview.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:primaryAssessments?"These are potential benefits based on confirmed personal cover and uploaded wording. Remaining conditions and final approval stay with the insurer.":"DearPolicy asks only for facts that can change eligibility, payout or claim steps.",claimSessionId:session.id,questions:[question],knownFacts,missingFacts,composition:primaryComposition?toClaimCompositionView(primaryComposition):undefined};
+    const decisionPacket:ClaimDecisionPacket|null=primaryAssessments?{sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments:preview,nextSteps,ready:false,compositionResult:primaryComposition??null}:null;
     await saveClaimSession({accountId:args.accountId,familyMemberId:args.familyMemberId,id:session.id,status:"fact_finding",facts,pendingQuestion:question,eventSummary:eventSummary(facts),decisionPacket});
     await storeChat({accountId:args.accountId,familyMemberId:args.familyMemberId,sessionId:session.id,user:args.message,answer});
     return answer;
   }
 
-  const assessments=deathAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id),facts,coverages);
+  const assessments=deathAssessments??diagnosisAssessments??enforceMonetarySafety(assessClaim(facts,coverages,[],[],session.id),facts,coverages);
   const citations=await assessmentCitations(args.accountId,args.familyMemberId,assessments,coverages);
   const nextSteps=claimNextSteps(facts,assessments);
   if(!currentness.verified)nextSteps.push("Upload the latest renewal notice or premium receipt if available so DearPolicy can verify current policy status separately from coverage ownership.");
@@ -198,9 +241,13 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   if (facts.eventType === "death") {
     summary=deathSummary(assessments,args.personName,null,newDeath,deathComposition);
   }
-  const missingFacts = [...new Set([...facts.uncertainFacts.map(missingLabel),...assessments.filter(a => a.status === "needs_document").map(a => `Evidence for ${a.title}`),...(deathComposition?.outstandingQuestions??[])])];
-  const decisionPacket:ClaimDecisionPacket={sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments,nextSteps,ready:true,compositionResult:deathComposition??null};
-  const answer:ChatAnswer={mode:"claim_assessment",summary,details:[`Event checked: ${eventSummary(facts)}.`,currentness.detail],claimItems:assessments.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:"DearPolicy's claim calculations come from confirmed personal cover plus the uploaded policy rules. Final claim approval and admissibility remain with the insurer.",claimSessionId:session.id,questions:[],knownFacts,missingFacts,composition:deathComposition?toClaimCompositionView(deathComposition):undefined};
+  if (facts.eventType === "diagnosis") {
+    summary=ciSummary(assessments,args.personName,null,diagnosisComposition);
+  }
+  const finalComposition=deathComposition??diagnosisComposition;
+  const missingFacts = [...new Set([...facts.uncertainFacts.map(missingLabel),...assessments.filter(a => a.status === "needs_document").map(a => `Evidence for ${a.title}`),...(finalComposition?.outstandingQuestions??[])])];
+  const decisionPacket:ClaimDecisionPacket={sessionId:session.id,eventSummary:eventSummary(facts),facts,knownFacts,missingFacts,relevantOwnedProducts:relevantCoverageNames(coverages,relevantProducts),assessments,nextSteps,ready:true,compositionResult:finalComposition??null};
+  const answer:ChatAnswer={mode:"claim_assessment",summary,details:[`Event checked: ${eventSummary(facts)}.`,currentness.detail],claimItems:assessments.map(a=>({title:a.title,status:a.status,amountText:a.amountText,reason:a.reason,conditions:a.conditions})),nextSteps,confidence:null,citations,disclaimer:"DearPolicy's claim calculations come from confirmed personal cover plus the uploaded policy rules. Final claim approval and admissibility remain with the insurer.",claimSessionId:session.id,questions:[],knownFacts,missingFacts,composition:finalComposition?toClaimCompositionView(finalComposition):undefined};
   await saveClaimSession({accountId:args.accountId,familyMemberId:args.familyMemberId,id:session.id,status:"complete",facts,pendingQuestion:null,eventSummary:eventSummary(facts),decisionPacket});
   await storeChat({accountId:args.accountId,familyMemberId:args.familyMemberId,sessionId:session.id,user:args.message,answer});
   return answer;
