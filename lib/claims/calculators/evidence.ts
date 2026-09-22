@@ -188,3 +188,111 @@ export function validateCauseEvidence(value: unknown): EvidenceValidation<ValidC
     },
   };
 }
+
+/**
+ * Evidence for a critical-illness claim -- the medical-evidence analogue of
+ * `ValidCauseEvidenceRef`/`validateCauseEvidence` above, and
+ * `CIDefinitionMatch`/`CIDefinitionMatchResult` the analogue of
+ * `CauseDefinitionMatch`/`CauseDefinitionMatchResult`.
+ *
+ * Critical illness is stricter in one respect death is not: a policy can
+ * define dozens of distinct benefit rows (major cancer, an early-stage
+ * table, an accelerated benefit, an additional rider, several multi-pay
+ * tranches), so a match is scoped to one exact `benefitCode` and
+ * `illnessName` as well as to family member/claim/contract/coverage -- a
+ * match confirmed for "Major Cancer" can never unlock "Early Stage Cancer",
+ * even under the very same policy and the very same claim.
+ */
+
+export type MedicalEvidenceDocumentType =
+  | "specialist_memo" | "medical_report" | "pathology_report" | "imaging_report"
+  | "laboratory_report" | "discharge_summary" | "surgical_report" | "other_medical_evidence";
+
+const SUPPORTED_MEDICAL_DOCUMENT_TYPES = new Set<MedicalEvidenceDocumentType>([
+  "specialist_memo", "medical_report", "pathology_report", "imaging_report",
+  "laboratory_report", "discharge_summary", "surgical_report", "other_medical_evidence",
+]);
+
+/** Evidence that specific, reviewed medical evidence was actually checked
+ * for this family member and this claim -- mirrors `ValidCauseEvidenceRef`
+ * exactly, with a `documentType` drawn from the medical set instead of the
+ * official cause-of-death set. Either a valid page range or a structured
+ * source location is required; a label describing the document is not, by
+ * itself, a source location. */
+export type ValidMedicalEvidenceRef = {
+  documentId: string;
+  documentType: MedicalEvidenceDocumentType;
+  pageStart?: number;
+  pageEnd?: number;
+  sourceLocation?: string;
+  familyMemberId: string;
+  claimEventId: string;
+};
+
+export function validateMedicalEvidence(value: unknown): EvidenceValidation<ValidMedicalEvidenceRef> {
+  if (!value || typeof value !== "object") return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "No medical evidence was supplied." };
+  const v = value as Record<string, unknown>;
+  if (!nonEmptyString(v.documentId)) return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "The medical evidence is missing a document ID." };
+  if (!nonEmptyString(v.documentType) || !SUPPORTED_MEDICAL_DOCUMENT_TYPES.has(v.documentType as MedicalEvidenceDocumentType)) {
+    return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "The medical evidence does not name a supported document type." };
+  }
+  const pageStartOk = v.pageStart === undefined || validPage(v.pageStart);
+  const pageEndOk = v.pageEnd === undefined || (validPage(v.pageEnd) && (!validPage(v.pageStart) || (v.pageEnd as number) >= (v.pageStart as number)));
+  const hasValidPage = validPage(v.pageStart) && pageEndOk;
+  const hasSourceLocation = nonEmptyString(v.sourceLocation);
+  if (!pageStartOk || !pageEndOk) return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "The medical evidence has an invalid or reversed page range." };
+  if (!hasValidPage && !hasSourceLocation) return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "The medical evidence has no valid source page or structured source location." };
+  if (!nonEmptyString(v.familyMemberId)) return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "The medical evidence is not associated with a family member." };
+  if (!nonEmptyString(v.claimEventId)) return { valid: false, reasonCode: "MALFORMED_CAUSE_EVIDENCE", message: "The medical evidence is not associated with a claim event." };
+  return {
+    valid: true,
+    evidence: {
+      documentId: (v.documentId as string).trim(),
+      documentType: v.documentType as MedicalEvidenceDocumentType,
+      pageStart: validPage(v.pageStart) ? (v.pageStart as number) : undefined,
+      pageEnd: validPage(v.pageEnd) ? (v.pageEnd as number) : undefined,
+      sourceLocation: hasSourceLocation ? (v.sourceLocation as string).trim() : undefined,
+      familyMemberId: (v.familyMemberId as string).trim(),
+      claimEventId: (v.claimEventId as string).trim(),
+    },
+  };
+}
+
+/** Six-valued per the critical-illness policy-matching requirement -- wider
+ * than `CauseDefinitionMatchResult`'s three, because clinical comparison
+ * carries two distinct kinds of "not yet": evidence that has not been
+ * medically reviewed at all (`needs_medical_review`), and evidence that HAS
+ * been reviewed but whose comparison against the policy's own wording is
+ * unclear (`needs_policy_review`), plus a case with no usable evidence at
+ * all (`insufficient_evidence`) distinct from one that is merely unclear
+ * (`ambiguous`). Only `matches` may ever unlock a monetary calculation. */
+export type CIDefinitionMatchResult = "matches" | "does_not_match" | "needs_medical_review" | "needs_policy_review" | "insufficient_evidence" | "ambiguous";
+
+/**
+ * A policy-specific record that reviewed medical evidence has been checked
+ * against ONE specific policy's own critical-illness benefit definition,
+ * for ONE specific benefit and illness. See `CauseDefinitionMatch`'s doc
+ * comment for the general shape and rationale; this is stricter in scope
+ * (`benefitCode`/`illnessName`) because one CI policy can define many
+ * benefit rows that must never cross-unlock each other.
+ */
+export type CIDefinitionMatch = {
+  familyMemberId: string;
+  claimEventId: string;
+  contractId: string;
+  coverageId?: string;
+  /** The exact calculator-facing benefit code this match applies to (e.g.
+   * "ci-major", "ci-early", "ci-intermediate", "ci-accelerated",
+   * "ci-additional", or a multi-pay tranche code). A match for one code can
+   * never unlock a calculation for another. */
+  benefitCode: string;
+  /** The exact illness/condition name the match was reviewed against, as
+   * named in the policy's own schedule. A match for one illness can never
+   * unlock another, even under the same benefitCode (e.g. two different
+   * cancers under "Major Cancer"). */
+  illnessName: string;
+  medicalEvidence: unknown;
+  definitionEvidence: unknown;
+  result: CIDefinitionMatchResult;
+  reviewedAt: string;
+};

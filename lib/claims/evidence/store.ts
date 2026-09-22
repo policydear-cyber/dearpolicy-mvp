@@ -1,10 +1,11 @@
 import { pool, query } from "@/lib/db/client";
 import { ensureClaimEvidenceSchema } from "./schema";
+import { ensureCriticalIllnessSchema } from "./ci-schema";
 import { assertValidEvidenceTransition } from "./state-machine";
 import type {
-  ClaimCauseDefinitionMatchRow, ClaimEvidenceDocumentRow, ClaimEvidenceDocumentType,
+  ClaimCauseDefinitionMatchRow, ClaimCIDefinitionMatchRow, ClaimEvidenceDocumentRow, ClaimEvidenceDocumentType,
   ClaimEvidenceExtractedFields, ClaimEvidenceExtractionRow, ClaimEvidenceIdentityConflict,
-  ClaimEvidenceIdentityStatus, ClaimEvidenceStatus, CauseDefinitionMatchResultValue,
+  ClaimEvidenceIdentityStatus, ClaimEvidenceStatus, CauseDefinitionMatchResultValue, CIDefinitionMatchResultValue,
 } from "./types";
 
 const DOCUMENT_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,document_type,original_filename,storage_key,mime_type,byte_size,
@@ -22,7 +23,13 @@ export async function createEvidenceDocument(args: {
   accountId: string; familyMemberId: string; claimSessionId: string; documentType: ClaimEvidenceDocumentType;
   originalFilename: string; storageKey: string; mimeType: string; byteSize: number; fileHash: string;
 }): Promise<{ document: ClaimEvidenceDocumentRow; created: boolean }> {
-  await ensureClaimEvidenceSchema();
+  // Uses ensureCriticalIllnessSchema() rather than ensureClaimEvidenceSchema()
+  // directly -- this is the one place that INSERTs a document_type value,
+  // and the document_type CHECK constraint is only widened to accept the
+  // medical-evidence set by sql/critical-illness.sql (see ci-schema.ts's
+  // own comment). ensureCriticalIllnessSchema() applies both migrations in
+  // order, so behaviour for a cause-of-death document is unchanged.
+  await ensureCriticalIllnessSchema();
   const inserted = await query<ClaimEvidenceDocumentRow>(
     `INSERT INTO claim_evidence_documents(account_id,family_member_id,claim_session_id,document_type,original_filename,storage_key,mime_type,byte_size,file_hash)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -120,7 +127,11 @@ export async function incrementProcessingAttempts(accountId: string, id: string)
  * match built from it is superseded too, so it can never keep unlocking an
  * amount once the evidence behind it has been replaced. */
 export async function supersedeEvidenceDocument(args: { accountId: string; oldId: string; newId: string; reason: string }): Promise<void> {
-  await ensureClaimEvidenceSchema();
+  // ensureCriticalIllnessSchema() (which also applies ensureClaimEvidenceSchema())
+  // guarantees claim_ci_definition_matches exists before the UPDATE against
+  // it below runs, for a death-evidence re-upload exactly the same as a
+  // medical-evidence one.
+  await ensureCriticalIllnessSchema();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -134,6 +145,11 @@ export async function supersedeEvidenceDocument(args: { accountId: string; oldId
     );
     await client.query(
       `UPDATE claim_cause_definition_matches SET superseded_at=now(), superseded_reason=$1
+        WHERE account_id=$2 AND evidence_document_id=$3 AND superseded_at IS NULL`,
+      [args.reason, args.accountId, args.oldId],
+    );
+    await client.query(
+      `UPDATE claim_ci_definition_matches SET superseded_at=now(), superseded_reason=$1
         WHERE account_id=$2 AND evidence_document_id=$3 AND superseded_at IS NULL`,
       [args.reason, args.accountId, args.oldId],
     );
@@ -243,6 +259,66 @@ export async function loadActiveCauseDefinitionMatches(accountId: string, family
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimCauseDefinitionMatchRow>(
     `SELECT ${MATCH_COLUMNS} FROM claim_cause_definition_matches
+      WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND superseded_at IS NULL`,
+    [accountId, familyMemberId, claimSessionId],
+  );
+  return result.rows;
+}
+
+// --- Critical-illness definition matches --------------------------------
+
+const CI_MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,
+  benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,created_at::text`;
+
+/** Records a reviewer's (or a deterministic rule's) finalised decision that
+ * reviewed medical evidence does or does not match ONE policy's own
+ * critical-illness definition for ONE exact benefit and illness. Never
+ * called from chat text or model output -- see
+ * lib/claims/evidence/ci-matches.ts, the only caller. Any prior ACTIVE
+ * match for the exact same (family member, claim, contract, coverage,
+ * benefit code, illness name) scope is superseded first, in the same
+ * transaction, so a match for one illness/stage/benefit can never keep
+ * being read alongside a corrected one for that exact same slot -- and,
+ * crucially, superseding is scoped by benefit_code and illness_name too,
+ * so confirming "Major Cancer" never touches an existing "Early Stage
+ * Cancer" match under the very same policy and claim. */
+export async function recordCIDefinitionMatch(args: {
+  accountId: string; familyMemberId: string; claimSessionId: string; contractId: string; coverageId: string | null;
+  evidenceDocumentId: string; benefitCode: string; illnessName: string; medicalEvidence: unknown; definitionEvidence: unknown;
+  result: CIDefinitionMatchResultValue; reviewedBy: string; reason: string | null;
+}): Promise<ClaimCIDefinitionMatchRow> {
+  await ensureCriticalIllnessSchema();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE claim_ci_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
+        WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
+          AND benefit_code=$6 AND illness_name=$7 AND superseded_at IS NULL`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.illnessName],
+    );
+    const inserted = await client.query<ClaimCIDefinitionMatchRow>(
+      `INSERT INTO claim_ci_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_by,reason)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13)
+       RETURNING ${CI_MATCH_COLUMNS}`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId,
+        args.benefitCode, args.illnessName, JSON.stringify(args.medicalEvidence), JSON.stringify(args.definitionEvidence),
+        args.result, args.reviewedBy, args.reason],
+    );
+    await client.query("COMMIT");
+    return inserted.rows[0];
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
+}
+
+/** Every currently-active (non-superseded) CI match for this family
+ * member/claim, across every contract, coverage, benefit and illness --
+ * the CI analogue of loadActiveCauseDefinitionMatches(), loaded fresh by
+ * lib/claims/evidence/ci-session-matches.ts on every chat turn. */
+export async function loadActiveCIDefinitionMatches(accountId: string, familyMemberId: string, claimSessionId: string): Promise<ClaimCIDefinitionMatchRow[]> {
+  await ensureCriticalIllnessSchema();
+  const result = await query<ClaimCIDefinitionMatchRow>(
+    `SELECT ${CI_MATCH_COLUMNS} FROM claim_ci_definition_matches
       WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND superseded_at IS NULL`,
     [accountId, familyMemberId, claimSessionId],
   );
