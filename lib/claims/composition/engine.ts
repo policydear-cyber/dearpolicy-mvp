@@ -74,6 +74,10 @@ function benefitCategoryFor(benefitCode: string) {
   // or is exactly "premium-waiver" for the non-monetary premium-waiver
   // status item.
   if (benefitCode.startsWith("tpd-") || benefitCode.startsWith("ppd-") || benefitCode.startsWith("di-") || benefitCode === "premium-waiver") return "Disability";
+  // lib/claims/travel-rules.ts's own ClaimAssessmentItem.id is always
+  // exactly "travel-medical-expenses" or "travel-accidental-death" -- see
+  // that module's assessTravelClaim().
+  if (benefitCode.startsWith("travel-")) return "Travel";
   return "Death";
 }
 

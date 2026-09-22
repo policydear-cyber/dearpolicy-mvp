@@ -149,6 +149,14 @@ export type ClaimFacts = {
    * independently re-validate every field of whichever entry a caller
    * supplies. */
   disabilityDefinitionMatches: DisabilityDefinitionMatch[];
+  /** ISO dates of this trip's departure and return, when relevant to a
+   * "hospitalisation" or "death" claim event for a family member who also
+   * owns Travel cover. Chat-REPORTED only -- like every other date here,
+   * never evidence. lib/claims/travel-rules.ts's own safety boundary
+   * (see that module's doc comment) never assumes a health or death event
+   * occurred during a covered trip without BOTH of these confirmed. */
+  tripDepartureDate: string | null;
+  tripReturnDate: string | null;
   uncertainFacts: string[];
   factSources?: Record<string, { source: "user" | "system-derived"; text: string; recordedAt: string; timeZone?: string; anchorDate?: string }>;
 };
@@ -293,6 +301,8 @@ export const EMPTY_CLAIM_FACTS: ClaimFacts = {
   disabilityAssessmentDocumentAvailable: null,
   disabilityAssessmentEvidenceReviewed: null,
   disabilityDefinitionMatches: [],
+  tripDepartureDate: null,
+  tripReturnDate: null,
   uncertainFacts: [],
   factSources: {},
 };

@@ -9,6 +9,7 @@ import { loadDeathEvidence } from "./death-evidence";
 import { loadCIEvidence } from "./ci-evidence";
 import { loadMedicalEvidence } from "./medical-evidence";
 import { loadDisabilityEvidence } from "./disability-evidence";
+import { loadTravelEvidence } from "./travel-evidence";
 import { loadVerifiedMedicalBillFacts } from "./evidence/medical-bill-evidence";
 import { loadDisabilityDefinitionMatchesForFacts } from "./evidence/disability-session-matches";
 import { loadCauseDefinitionMatchesForFacts } from "./evidence/session-matches";
@@ -211,8 +212,21 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // reused for "disability" -- see lib/claims/disability-evidence.ts's own
   // doc comment.
   const disabilityEvidence=facts.eventType === "disability" ? await loadDisabilityEvidence(args.accountId,args.familyMemberId,coverages) : {rules:[],gaps:[],pages:[]};
-  const question=nextClaimQuestion(facts,coverages,deathRules,ciEvidence.rules,medicalEvidence,disabilityEvidence);
-  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id) : null;
+  // Same tiered evidence-resolution pattern as death/CI/medical/disability
+  // wording, reused for a family member's Travel cover -- see
+  // lib/claims/travel-evidence.ts's own doc comment. Loaded for both
+  // "hospitalisation" (Overseas Medical Expenses) and "death" (Accidental
+  // Death) events, since lib/claims/travel-rules.ts is additive within
+  // BOTH of those existing branches rather than its own top-level event
+  // type -- see that module's own doc comment for the V1 scope this
+  // implies (an "accident"/"diagnosis" event does not yet surface a travel
+  // benefit, even with Travel cover on file). Skipped entirely (no query)
+  // when this family member owns no Travel-category coverage.
+  const travelEvidence=(facts.eventType === "hospitalisation" || facts.eventType === "death") && coverages.some(c=>c.category==="Travel")
+    ? await loadTravelEvidence(args.accountId,args.familyMemberId,coverages)
+    : {rules:[],gaps:[],pages:[]};
+  const question=nextClaimQuestion(facts,coverages,deathRules,ciEvidence.rules,medicalEvidence,disabilityEvidence,travelEvidence);
+  const rawDeathAssessments=facts.eventType === "death" ? assessClaim(facts,coverages,deathRules,deathEvidence.gaps,session.id,[],[],undefined,undefined,travelEvidence) : null;
   const deathAssessments=rawDeathAssessments ? enforceMonetarySafety(rawDeathAssessments,facts,coverages) : null;
   // Additive: the same deterministic pipeline, reused for a "diagnosis"
   // event's critical-illness benefits -- never a parallel claim system.
@@ -223,7 +237,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // event's medical-claim benefits (hospital cash, ICU cash, and
   // reimbursement-type benefits) -- never a parallel claim system. See
   // lib/claims/medical-rules.ts for why this never touches the death/CI path.
-  const rawHospitalisationAssessments=facts.eventType === "hospitalisation" ? assessClaim(facts,coverages,[],[],session.id,[],[],medicalEvidence) : null;
+  const rawHospitalisationAssessments=facts.eventType === "hospitalisation" ? assessClaim(facts,coverages,[],[],session.id,[],[],medicalEvidence,undefined,travelEvidence) : null;
   const hospitalisationAssessments=rawHospitalisationAssessments ? enforceMonetarySafety(rawHospitalisationAssessments,facts,coverages) : null;
   // Additive: the same deterministic pipeline, reused for a "disability"
   // event's TPD/schedule-of-injuries/disability-income benefits -- never a
@@ -241,7 +255,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // calculationId) on every turn it is computed, giving a full audit trail
   // of how the calculated total evolved as facts and evidence were added.
   const deathComposition:ClaimCompositionResult|null = facts.eventType==="death" && deathAssessments
-    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:deathAssessments,wordingPages:deathEvidence.pages,now:args.now})
+    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:deathAssessments,wordingPages:[...deathEvidence.pages,...travelEvidence.pages],now:args.now})
     : null;
   if(deathComposition){
     await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:deathComposition});
@@ -260,7 +274,7 @@ export async function handleClaimTurn(args:{accountId:string;familyMemberId:stri
   // Same composition engine, same reasoning, reused for the medical-claim
   // benefits of a "hospitalisation" event -- see lib/claims/composition/engine.ts.
   const hospitalisationComposition:ClaimCompositionResult|null = facts.eventType==="hospitalisation" && hospitalisationAssessments
-    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:hospitalisationAssessments,wordingPages:medicalEvidence.pages,now:args.now})
+    ? composeClaim({claimEventId:session.id,familyMemberId:args.familyMemberId,facts,coverages,assessments:hospitalisationAssessments,wordingPages:[...medicalEvidence.pages,...travelEvidence.pages],now:args.now})
     : null;
   if(hospitalisationComposition){
     await recordCompositionSnapshot({accountId:args.accountId,familyMemberId:args.familyMemberId,claimSessionId:session.id,facts,coverages,result:hospitalisationComposition});

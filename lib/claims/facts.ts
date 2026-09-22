@@ -85,6 +85,7 @@ const QUESTION_FIELDS: Record<string, keyof ClaimFacts> = {
   admission_date: "admissionDate", discharge_date: "dischargeDate",
   medical_bill_document: "medicalBillDocumentAvailable", panel_status: "panelStatusReported",
   disability_assessment_document: "disabilityAssessmentDocumentAvailable",
+  trip_departure_date: "tripDepartureDate", trip_return_date: "tripReturnDate",
 };
 
 function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null, context: ClaimDateContext = {}): Partial<ClaimFacts> {
@@ -254,7 +255,7 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
       const n = Number(text.match(/\d+/)?.[0]); if (Number.isFinite(n)) out.hospitalNights = n;
     }
     if (pendingQuestion.id === "diagnosis" && argsTextMeaningful(text)) out.diagnosis ??= text.trim();
-    if (["event_date", "diagnosis_date", "death_date", "admission_date", "discharge_date"].includes(pendingQuestion.id) && resolved && !claimDateInFuture(resolved.date, context)) {
+    if (["event_date", "diagnosis_date", "death_date", "admission_date", "discharge_date", "trip_departure_date", "trip_return_date"].includes(pendingQuestion.id) && resolved && !claimDateInFuture(resolved.date, context)) {
       if (pendingQuestion.id === "diagnosis_date") out.diagnosisDate = resolved.date;
       else if (pendingQuestion.id === "death_date") out.deathDate = resolved.date;
       // Plain "YYYY-MM-DD" here deliberately carries no time-of-day or UTC
@@ -263,6 +264,14 @@ function deterministicFacts(text: string, pendingQuestion?: ClaimQuestion | null
       // it, exactly as lib/claims/medical-rules.ts's own doc comment says.
       else if (pendingQuestion.id === "admission_date") out.admissionDate = resolved.date;
       else if (pendingQuestion.id === "discharge_date") out.dischargeDate = resolved.date;
+      // A trip's return date can be reported as a future date relative to
+      // "now" when the family is reporting mid-trip -- but claimDateInFuture()
+      // above already only strips dates that resolveClaimDate() itself could
+      // not otherwise place, so this branch still only ever sets an
+      // explicitly resolved, non-future calendar date, exactly like every
+      // other date branch here.
+      else if (pendingQuestion.id === "trip_departure_date") out.tripDepartureDate = resolved.date;
+      else if (pendingQuestion.id === "trip_return_date") out.tripReturnDate = resolved.date;
       else out.eventDate = resolved.date;
     }
     if (pendingQuestion.id === "cause_of_death") {

@@ -55,5 +55,8 @@ jobs:
       - name: Disability/TPD engine regression suite
         run: npm run claims:disability-test
 
+      - name: Travel-claims engine regression suite
+        run: npm run claims:travel-test
+
       - name: Build
         run: npm run build
