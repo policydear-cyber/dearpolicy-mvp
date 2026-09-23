@@ -68,17 +68,26 @@ function toRow(r:Row):LedgerRow{
     inferred:r.inferred,status:r.status as LedgerRow["status"],updatedAt:r.updated_at};
 }
 const SELECT="SELECT id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,minimum_fact,minimum_value::text,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,updated_at::text FROM coverage_rules";
+// A row whose policy_id points at a policy that is no longer active must
+// stop appearing on the Coverage Ledger and out of chat answers the moment
+// that policy is deleted (Checkpoint 7's "policy totals are invalidated
+// immediately" requirement) -- this table has no lifecycle_state column of
+// its own (it is derived data keyed by policy_id), so the guard has to be a
+// subquery back to policies rather than an activePredicate() on this table
+// directly. A NULL policy_id (a standard-rule default not tied to any one
+// document, or a manually-added row) is never filtered out by this.
+const ACTIVE_POLICY_GUARD="(policy_id IS NULL OR EXISTS(SELECT 1 FROM policies p WHERE p.id=coverage_rules.policy_id AND "+activePredicate("p")+"))";
 
 export async function loadLedger(accountId:string,memberIds?:string[]):Promise<LedgerRow[]>{
   await ensureLedgerSchema();
   const r=memberIds
-    ?await query<Row>(SELECT+" WHERE account_id=$1 AND family_member_id=ANY($2::uuid[]) AND status<>'rejected' ORDER BY plan_name,event_type,detail",[accountId,memberIds])
-    :await query<Row>(SELECT+" WHERE account_id=$1 ORDER BY family_member_id,plan_name,event_type,detail",[accountId]);
+    ?await query<Row>(SELECT+" WHERE account_id=$1 AND family_member_id=ANY($2::uuid[]) AND status<>'rejected' AND "+ACTIVE_POLICY_GUARD+" ORDER BY plan_name,event_type,detail",[accountId,memberIds])
+    :await query<Row>(SELECT+" WHERE account_id=$1 AND "+ACTIVE_POLICY_GUARD+" ORDER BY family_member_id,plan_name,event_type,detail",[accountId]);
   return r.rows.map(toRow);
 }
 export async function loadLedgerRow(accountId:string,id:string){
   await ensureLedgerSchema();
-  const r=await query<Row>(SELECT+" WHERE account_id=$1 AND id=$2",[accountId,id]);
+  const r=await query<Row>(SELECT+" WHERE account_id=$1 AND id=$2 AND "+ACTIVE_POLICY_GUARD,[accountId,id]);
   return r.rows[0]?toRow(r.rows[0]):null;
 }
 export async function updateLedgerRow(accountId:string,id:string,patch:Partial<Pick<LedgerRow,"status"|"amount"|"paysKind"|"eventType"|"sumBasis"|"detail"|"planName">>){

@@ -121,6 +121,15 @@ jobs:
       - name: Deletion lifecycle query-guard regression suite (static scan -- a normal active-record query must not omit the lifecycle predicate)
         run: npm run security:lifecycle-query-guard-test
 
+      - name: Active-read scopes behavioral regression suite (seeded active+non-active rows through the real application functions, not static scanning -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:active-read-scopes-test
+
+      - name: Whole-policy deletion regression suite (version-chain resolution, shared reference-document protection & orphan cascade, open/completed claim invalidation, coverage-ledger exclusion -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:policy-deletion-test
+
+      - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
+        run: npm run security:placeholder-content-test
+
       - name: Build
         run: npm run build
 

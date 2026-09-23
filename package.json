@@ -50,7 +50,10 @@
     "security:household-export-test": "node --import tsx scripts/household-export-regressions.ts",
     "household-export:cleanup": "node --import tsx scripts/household-export-cleanup.ts",
     "security:lifecycle-test": "node --import tsx scripts/lifecycle-regressions.ts",
-    "security:lifecycle-query-guard-test": "node --import tsx scripts/lifecycle-query-guard-regressions.ts"
+    "security:lifecycle-query-guard-test": "node --import tsx scripts/lifecycle-query-guard-regressions.ts",
+    "security:active-read-scopes-test": "node --import tsx scripts/active-read-scopes-regressions.ts",
+    "security:policy-deletion-test": "node --import tsx scripts/policy-deletion-regressions.ts",
+    "security:placeholder-content-test": "node --import tsx scripts/placeholder-content-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

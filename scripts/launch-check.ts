@@ -634,7 +634,7 @@ function checkDataDeletionAndInvalidation() {
     "blocked_by_code",
     `Deletion & invalidation lifecycle in progress, not launch-ready: ${problems.join("; ")}. ` +
       `Implemented and tested so far (scripts/lifecycle-regressions.ts, scripts/lifecycle-query-guard-regressions.ts, ` +
-      `scripts/active-read-scopes-regressions.ts): ` +
+      `scripts/active-read-scopes-regressions.ts, scripts/policy-deletion-regressions.ts): ` +
       `${implementedFlows.map(([name]) => name).join(", ") || "none"}; a central CAS-based state machine ` +
       `(active/pending_deletion/soft_deleted/permanently_deleted/audit_tombstone) with recovery only before permanent ` +
       `deletion; idempotent deletion_requests bookkeeping; immediate read-side exclusion wired into chat retrieval, ` +
@@ -643,8 +643,17 @@ function checkDataDeletionAndInvalidation() {
       `-- the query-guard allowlist is at zero, and scripts/active-read-scopes-regressions.ts proves the exclusion ` +
       `behaviorally (seeded active+non-active rows through the real application functions), not just via static ` +
       `text scanning; storage-cleanup engine integration (a pending_deletion+ row stops protecting its storage ` +
-      `object); a redacted deletion_audit_log. This capability stays blocked until every one of the 8 deletion flows ` +
-      `the spec requires is implemented and regression-tested, not merely until the shared machinery exists.`,
+      `object); a redacted deletion_audit_log. Whole-policy deletion additionally resolves the full supersedes_id ` +
+      `version chain, protects a shared reference/wording document still authorizing another active family ` +
+      `member's confirmed cover (refusing the delete rather than silently breaking their coverage) while ` +
+      `cascading an orphaned reference document into the same deletion, supersedes any cause/CI/disability ` +
+      `definition-match citing a deleted policy, and resets an open claim session's stale decision-packet to a ` +
+      `needs-document state -- see scripts/policy-deletion-regressions.ts for the 11 behavioral cases proving ` +
+      `this, including a sabotage-and-restore-verified reference-document protection check and a fix to ` +
+      `lib/ledger/store.ts (a real, previously-undiscovered gap where a deleted policy's Coverage Ledger rows ` +
+      `kept appearing indefinitely, since coverage_rules has no lifecycle_state column of its own and was not ` +
+      `joined back to policies). This capability stays blocked until every one of the 8 deletion flows the spec ` +
+      `requires is implemented and regression-tested, not merely until the shared machinery exists.`,
   );
 }
 
@@ -884,6 +893,7 @@ async function checkGithubCiStatus() {
       "security:lifecycle-test",
       "security:lifecycle-query-guard-test",
       "security:active-read-scopes-test",
+      "security:policy-deletion-test",
       "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
