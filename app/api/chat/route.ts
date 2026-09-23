@@ -6,6 +6,7 @@ import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=300;
 const BodySchema=z.object({
   familyMemberId:z.string().uuid().nullable(),

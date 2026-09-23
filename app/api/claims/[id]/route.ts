@@ -4,6 +4,7 @@ import { factsToLabels } from "@/lib/claims/facts";
 import { EMPTY_CLAIM_FACTS,type ClaimFacts, type ClaimQuestion, type ClaimDecisionPacket } from "@/lib/claims/types";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
  try{
   const {id}=await params;if(!isUuid(id))return NextResponse.json({error:"Claim session not found"},{status:404});const accountId=devAccountId();

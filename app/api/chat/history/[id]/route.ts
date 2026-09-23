@@ -4,6 +4,7 @@ import { devAccountId,query } from "@/lib/db/client";
 import { getConversation } from "@/lib/chat/store";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const {id}=await params;z.string().uuid().parse(id);

@@ -4,6 +4,7 @@ import { buildClaimPack } from "@/lib/claims/claim-pack";
 import { EMPTY_CLAIM_FACTS,type ClaimDecisionPacket,type ClaimFacts } from "@/lib/claims/types";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** One printable sheet for an insurer: who is claiming, what happened, which
  * benefit under which policy, how the figure was reached, and what to attach.

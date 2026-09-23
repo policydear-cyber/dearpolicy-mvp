@@ -6,6 +6,7 @@ import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** Reading a document's benefit rules from the page text already stored.
  *

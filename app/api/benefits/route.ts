@@ -9,6 +9,7 @@ import { conditionEffect,describeCondition,type CoverCondition,type CoverConditi
 import { formatMoney } from "@/lib/format/currency";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** The benefit schedule: every payout rule DearPolicy has read out of the
  * household's documents, in plain English, with the page it came from.
