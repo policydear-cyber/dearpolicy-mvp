@@ -51,6 +51,21 @@ export async function resolveActiveHouseholdId(userId: string, requestedHousehol
   return memberships[0].householdId;
 }
 
+/** Lists every current member of `householdId`, for a member-management
+ * UI. Uses the RLS-enforced client with household_members_select's policy
+ * (is_household_member()) -- so this only returns rows at all if the
+ * caller is themselves a genuine current member; a caller no longer in the
+ * household gets an empty list, never another household's members. */
+export async function listHouseholdMembers(callerUserId: string, householdId: string, poolOverride?: Pick<Pool, "connect">): Promise<Membership[]> {
+  return createUserSupabaseClient(callerUserId, async (client) => {
+    const { rows } = await client.query<{ household_id: string; user_id: string; role: Role; created_at: string }>(
+      `select household_id, user_id, role, created_at from household_members where household_id = $1 order by created_at asc`,
+      [householdId],
+    );
+    return rows.map((r) => ({ householdId: r.household_id, userId: r.user_id, role: r.role, createdAt: r.created_at }));
+  }, poolOverride);
+}
+
 /** Provisions a brand-new household with `userId` as its sole owner. Uses
  * the service client because, by definition, the user has no
  * household_members row yet -- RLS's household_members_insert policy
@@ -219,6 +234,61 @@ export async function revokeInvitation(callerUserId: string, invitationId: strin
     );
     if (rowCount === 0) throw new NotFoundError("Invitation not found, already used, or already revoked");
   }, poolOverride);
+}
+
+export type InvitationSummary = {
+  id: string;
+  householdId: string;
+  email: string;
+  role: Role;
+  invitedBy: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+/** Owner-only: lists still-pending (not accepted, not revoked, not expired)
+ * invitations for a household, for display in the invite-management UI.
+ * household_invitations_select's RLS policy (is_household_owner()) means a
+ * non-owner querying this gets zero rows back rather than an error, so the
+ * route layer still classifies its GET "household-owner" -- a plain member
+ * should see a clear 403-shaped response, not a silently empty list. Never
+ * returns token_hash (the plaintext token is returned once, by
+ * createInvitation(), and never persisted or re-read). */
+export async function listInvitations(
+  callerUserId: string,
+  householdId: string,
+  poolOverride?: Pick<Pool, "connect">,
+): Promise<InvitationSummary[]> {
+  return createUserSupabaseClient(
+    callerUserId,
+    async (client) => {
+      const { rows } = await client.query<{
+        id: string;
+        household_id: string;
+        email: string;
+        role: Role;
+        invited_by: string;
+        created_at: string;
+        expires_at: string;
+      }>(
+        `select id, household_id, email, role, invited_by, created_at, expires_at
+         from household_invitations
+         where household_id = $1 and accepted_at is null and revoked_at is null and expires_at > now()
+         order by created_at desc`,
+        [householdId],
+      );
+      return rows.map((r) => ({
+        id: r.id,
+        householdId: r.household_id,
+        email: r.email,
+        role: r.role,
+        invitedBy: r.invited_by,
+        createdAt: r.created_at,
+        expiresAt: r.expires_at,
+      }));
+    },
+    poolOverride,
+  );
 }
 
 /** Accepts an invitation for the ALREADY-AUTHENTICATED user identified by
