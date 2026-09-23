@@ -314,13 +314,13 @@ async function main(){
   const blank:ChatAnswer={mode:"answer",summary:"Saved answer",details:[],claimItems:[],nextSteps:[],confidence:null,citations:[],disclaimer:"",
     claimSessionId:null,questions:[],knownFacts:[],missingFacts:[]};
   const send=async(message:string,member:string|null=people[0].id,conversationId?:string,revision?:number,asynchronous=false)=>{
-    const response=await POST(new Request("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
+    const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({familyMemberId:member,scope:member?"member":"family",question:message,conversationId,conversationRevision:revision,asynchronous,timeZone:"Asia/Singapore"})}));
     return {response,data:await response.json()};
   };
   const awaitJob=async(id:string)=>{
     for(let i=0;i<3000;i++){
-      const response=await getJob(new Request("http://localhost/api/chat/jobs/"+id),{params:Promise.resolve({id})});
+      const response=await getJob(new NextRequest("http://localhost/api/chat/jobs/"+id),{params:Promise.resolve({id})});
       const data=await response.json();
       if(data.job?.status==="complete")return data.result.answer as ChatAnswer;
       if(["failed","cancelled"].includes(data.job?.status))throw new Error(data.job.error);
@@ -388,7 +388,7 @@ async function main(){
       assert.equal(first.response.status,200,JSON.stringify(first.data));
       const prompt=first.data.answer as ChatAnswer;
       assert.equal(prompt.mode,"fact_finding");assert.ok((prompt.personCandidates?.length??0)>1);
-      const response=await POST(new Request("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
+      const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:people[0].id,scope:"member",question:people[5].display_name,
           conversationId:prompt.conversationId,conversationRevision:prompt.conversationRevision,personChoiceId:people[5].id,
           personContextMessage:prompt.personContextMessage,personContextRecordedAt:prompt.personContextRecordedAt,
@@ -508,7 +508,7 @@ async function main(){
       const result=await send("What policies does my family have?",null,undefined,undefined,true);
       assert.equal(result.response.status,202,JSON.stringify(result.data));assert.ok(result.data.jobId);
       const answer=await awaitJob(result.data.jobId);assert.equal(answer.portfolioItems?.length,90);
-      const saved=await getSavedChat(new Request("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
+      const saved=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
       const payload=await saved.json();assert.equal(saved.status,200);assert.equal(payload.messages.length,2);assert.equal(payload.messages[1].answer_json.portfolioItems.length,90);
     });
     await test("A malformed model response is saved as an incomplete analysis",async()=>{
@@ -519,9 +519,9 @@ async function main(){
     await test("Saved chats and API requests cannot access another account",async()=>{
       const c=await openConversation({accountId:foreign,memberId:foreignPerson,title:"Other account secret"});
       assert.equal(await getConversation(account,c.id),null);
-      const response=await getSavedChat(new Request("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})});assert.equal(response.status,404);
+      const response=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})});assert.equal(response.status,404);
       const result=await send("What policies are there?",foreignPerson);assert.equal(result.response.status,404);
-      const removal=await removeHistory(new Request("http://localhost/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:c.id})}));
+      const removal=await removeHistory(new NextRequest("http://localhost/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:c.id})}));
       assert.equal(removal.status,404);assert.ok(await getConversation(foreign,c.id));
     });
     await test("Concurrent replies cannot overwrite an already-saved revision",async()=>{
@@ -558,9 +558,9 @@ async function main(){
     });
     await test("History is paginated, with no fixed limit on retained conversations",async()=>{
       for(let i=0;i<61;i++)await openConversation({accountId:account,memberId:people[0].id,title:"History "+i});
-      const response=await getHistory(new Request("http://localhost/api/chat/history?scope="+people[0].id)),data=await response.json();
+      const response=await getHistory(new NextRequest("http://localhost/api/chat/history?scope="+people[0].id)),data=await response.json();
       assert.equal(response.status,200);assert.equal(data.conversations.length,50);assert.ok(data.nextCursor);
-      const next=await getHistory(new Request("http://localhost/api/chat/history?scope="+people[0].id+"&cursor="+data.nextCursor)),page=await next.json();
+      const next=await getHistory(new NextRequest("http://localhost/api/chat/history?scope="+people[0].id+"&cursor="+data.nextCursor)),page=await next.json();
       assert.equal(page.conversations.length,11);
     });
     const seedReviewFixture=async(wordingPages:number)=>{
