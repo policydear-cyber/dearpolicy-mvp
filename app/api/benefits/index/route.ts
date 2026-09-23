@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { devAccountId,query } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
 import { readingModelLabel } from "@/lib/ai/reading-model";
@@ -52,15 +54,17 @@ async function conditionlessDocuments(accountId:string){
       ORDER BY p.created_at`,[accountId]);
   return result.rows;
 }
-export async function GET(request:Request){
+export async function GET(request:NextRequest){
   try{
     await ensureBenefitSchema();
-    const accountId=devAccountId();
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     const all=new URL(request.url).searchParams.get("all")==="1";
     return NextResponse.json({unread:await unreadDocuments(accountId),...(all?{all:await allDocuments(accountId)}:{}),
       reader:readingModelLabel()});
   }catch(error){
-    return NextResponse.json({error:"Could not check which documents still need reading"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not check which documents still need reading"},{status:500});
+    return authResponse;
   }
 }
 
@@ -72,10 +76,10 @@ const Schema=z.object({policyId:z.string().uuid().optional(),
 /** Reads ONE document per request. A booklet can take minutes, so the screen
  * asks for the next one each time and can show real progress instead of
  * freezing on a single call that covers the whole household. */
-export async function POST(request:Request){
+export async function POST(request:NextRequest){
   try{
     const body=Schema.parse(await request.json().catch(()=>({})));
-    const accountId=devAccountId();
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
     // The conditions table carries the column the query below filters on.
     await ensureConditionSchema().catch(()=>{});
@@ -103,6 +107,8 @@ export async function POST(request:Request){
     return NextResponse.json({policyId:target.id,name:target.name,stored,conditions,remaining,done:remaining===0});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That request could not be read."},{status:400});
-    return NextResponse.json({error:"Could not read that document's benefit rules"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not read that document's benefit rules"},{status:500});
+    return authResponse;
   }
 }

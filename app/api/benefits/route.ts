@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { devAccountId,isUuid,query } from "@/lib/db/client";
+import { isUuid,query } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,looksLikeCoverageLine,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
 import { loadPolicyInventory } from "@/lib/policies/inventory";
@@ -27,12 +29,12 @@ type Row={
   owner_names:string[]|null;
 };
 
-export async function GET(request:Request){
+export async function GET(request:NextRequest){
   try{
     const url=new URL(request.url);
     const member=url.searchParams.get("familyMemberId");
     if(member&&!isUuid(member))return NextResponse.json({benefits:[],summary:{total:0,needsYou:0,unreadable:0,usable:0,documents:0,unclaimed:0}});
-    const accountId=devAccountId();
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
     const rows=await query<Row>(
       `SELECT b.id,b.policy_id,b.product_name,b.benefit_name,b.traits,b.formula_kind,b.formula_value::text,
@@ -184,7 +186,9 @@ export async function GET(request:Request){
       },
     });
   }catch(error){
-    return NextResponse.json({error:"Could not load the benefit schedule"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not load the benefit schedule"},{status:500});
+    return authResponse;
   }
 }
 
@@ -202,10 +206,10 @@ const Patch=z.object({
   needsReview:z.boolean().optional(),
 });
 
-export async function PATCH(request:Request){
+export async function PATCH(request:NextRequest){
   try{
     const body=Patch.parse(await request.json().catch(()=>({})));
-    const accountId=devAccountId();
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     await ensureBenefitSchema();
     const existing=await query<{id:string}>("SELECT id FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,accountId]);
     if(!existing.rows[0])return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
@@ -233,7 +237,9 @@ export async function PATCH(request:Request){
     return NextResponse.json({ok:true});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That correction could not be read."},{status:400});
-    return NextResponse.json({error:"Could not save the correction"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not save the correction"},{status:500});
+    return authResponse;
   }
 }
 
@@ -241,15 +247,18 @@ const Remove=z.object({id:z.string().uuid()});
 /** A row that is not a benefit at all — a heading the parser mistook for one.
  * Only the catalogue is affected: the document, its pages and any confirmed
  * cover are untouched, and re-indexing the document rebuilds the row. */
-export async function DELETE(request:Request){
+export async function DELETE(request:NextRequest){
   try{
     const body=Remove.parse(await request.json().catch(()=>({})));
+    const ctx=await requireHouseholdContext(request);
     await ensureBenefitSchema();
-    const result=await query("DELETE FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,devAccountId()]);
+    const result=await query("DELETE FROM policy_benefits WHERE id=$1 AND account_id=$2",[body.id,ctx.householdId]);
     if(!result.rowCount)return NextResponse.json({error:"That benefit is not in your schedule."},{status:404});
     return NextResponse.json({ok:true});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"That request could not be read."},{status:400});
-    return NextResponse.json({error:"Could not remove the benefit"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not remove the benefit"},{status:500});
+    return authResponse;
   }
 }

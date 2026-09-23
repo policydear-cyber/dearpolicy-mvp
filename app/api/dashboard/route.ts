@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { runAfterResponse } from "@/lib/http/background";
-import { devAccountId,query } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { annualisePremium,COVERAGE_CATEGORIES,monthlyEquivalent,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 
@@ -29,9 +31,9 @@ function productFromCategory(category:string){
   return "";
 }
 
-export async function GET(request:Request){
+export async function GET(request:NextRequest){
  try{
-  const accountId=devAccountId(); const url=new URL(request.url);
+  const ctx=await requireHouseholdContext(request); const accountId=ctx.householdId; const url=new URL(request.url);
   // The person should never have to ask DearPolicy to read a document or
   // check its own work — opening the app is enough. after() runs this once
   // the response has been sent, without holding up the dashboard, but — unlike
@@ -120,5 +122,9 @@ export async function GET(request:Request){
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
   return NextResponse.json({family:familyResult.rows,activeMember:active,coverages:categories,premiums:{monthly,annual,items:premiumItems},reminders,unclaimed:unclaimed.rows,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}});
- }catch(error){return NextResponse.json({error:"Dashboard error"},{status:500});}
+ }catch(error){
+  const authResponse=routeErrorResponse(error);
+  if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});
+  return authResponse;
+ }
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { devAccountId,query } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { addLedgerRow,ledgerFor,loadLedgerRow,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -23,9 +25,9 @@ function shape(row:LedgerRow,people:ClaimPerson[]){
     hasFigure:row.paysKind!=="stated"&&row.amount!=null&&!(row.paysKind==="percent_of_sum"&&row.sumBasis==null)};
 }
 
-export async function GET(request:Request){
+export async function GET(request:NextRequest){
   try{
-    const accountId=devAccountId();
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     const url=new URL(request.url);
     const member=url.searchParams.get("familyMemberId");
     const people=(await family(accountId)).rows;
@@ -41,7 +43,9 @@ export async function GET(request:Request){
     return NextResponse.json({rows:shown,summary,family:people,events:Object.entries(EVENTS).map(([value,e])=>({value,label:e.label})),
       reading:{pending,inProgress:ledgerReadingInProgress(accountId)}});
   }catch(error){
-    return NextResponse.json({error:"Could not load the coverage ledger"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not load the coverage ledger"},{status:500});
+    return authResponse;
   }
 }
 
@@ -55,10 +59,10 @@ const Patch=z.object({
   detail:z.string().max(200).nullable().optional(),
   planName:z.string().min(1).max(200).optional(),
 });
-export async function PATCH(request:Request){
+export async function PATCH(request:NextRequest){
   try{
-    const accountId=devAccountId();
     const body=Patch.parse(await request.json().catch(()=>({})));
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(body.eventType&&!(body.eventType in EVENTS))return NextResponse.json({error:"Unknown event"},{status:400});
     const existing=await loadLedgerRow(accountId,body.id);
     if(!existing)return NextResponse.json({error:"Row not found"},{status:404});
@@ -71,7 +75,10 @@ export async function PATCH(request:Request){
     const people=(await family(accountId)).rows;
     return NextResponse.json({row:row?shape(row,people):null});
   }catch(error){
-    return NextResponse.json({error:"Could not update the row"},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Could not update the row"},{status:400});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not update the row"},{status:400});
+    return authResponse;
   }
 }
 
@@ -84,10 +91,10 @@ const Add=z.object({
   currency:z.string().max(3).optional(),
   detail:z.string().max(200).nullable().optional(),
 });
-export async function POST(request:Request){
+export async function POST(request:NextRequest){
   try{
-    const accountId=devAccountId();
     const body=await request.json().catch(()=>({}));
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(body?.action==="rebuild"){
       const added=await seedLedger(accountId);
       return NextResponse.json({added:added.added});
@@ -105,6 +112,9 @@ export async function POST(request:Request){
     const people=(await family(accountId)).rows;
     return NextResponse.json({row:row?shape(row,people):null});
   }catch(error){
-    return NextResponse.json({error:"Could not add the row"},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Could not add the row"},{status:400});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not add the row"},{status:400});
+    return authResponse;
   }
 }

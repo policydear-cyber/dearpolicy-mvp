@@ -887,7 +887,7 @@ async function main(){
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(data.summary.total,2);
       assert.equal(data.summary.needsYou,0,"A daily rule that states its own rate, waiting period and cap needs nothing from anyone");
       assert.equal(data.summary.usable,2);
@@ -899,16 +899,16 @@ async function main(){
       assert.match(hospital.quote,/S\$30 per day/);
       const illness=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Major Critical Illness");
       assert.equal(illness.pays,"100% of the sum insured on your schedule");
-      const mine=await (await getBenefits(new Request("http://localhost/api/benefits?familyMemberId="+people[0].id))).json();
+      const mine=await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+people[0].id))).json();
       assert.equal(mine.summary.total,2);
-      const other=await (await getBenefits(new Request("http://localhost/api/benefits?familyMemberId="+people[2].id))).json();
+      const other=await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+people[2].id))).json();
       assert.equal(other.summary.total,0,"A person sees only the documents that are linked to them");
     });
     await test("A rule with no readable amount says so rather than showing a figure",async()=>{
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Dental',ARRAY['other']::text[],'none',NULL,NULL,12,'Dental treatment is covered as charged.','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const dental=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Dental");
       assert.equal(dental.pays,"Not yet readable — tell DearPolicy what this pays");
       assert.equal(data.summary.unreadable,1);
@@ -919,12 +919,12 @@ async function main(){
       const wording="We pay 100% of the Sum Insured for a qualifying critical illness.";
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,$4,'[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness",wording]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const target=listed.benefits[0];
-      const saved=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+      const saved=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:target.id,formula:{kind:"sum_insured",value:0.5,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null}})}));
       assert.equal(saved.status,200);
-      const after=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const after=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(after.benefits[0].pays,"50% of the sum insured on your schedule");
       assert.equal(after.summary.needsYou,0,"Correcting a rule is itself the answer");
       assert.ok(after.benefits[0].reviewedAt,"The correction is recorded as human review");
@@ -947,10 +947,10 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Hospital Cash',ARRAY['hospitalisation']::text[],'none',NULL,NULL,4,'A daily amount is payable while confined.','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const id=listed.benefits[0].id;
       const attempt=async(formula:Record<string,unknown>)=>{
-        const response=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+        const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
           body:JSON.stringify({id,formula})}));
         return {status:response.status,error:(await response.json()).error as string};
       };
@@ -965,7 +965,7 @@ async function main(){
       for(const message of [uncapped.error,unbound.error,negative.error])
         for(const leak of ["invalid_type","ZodError","{\"","received","formulaKind"])
           assert.equal(message.includes(leak),false,"Raw validation output leaked to the user: "+leak);
-      const unchanged=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const unchanged=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(unchanged.benefits[0].formulaKind,"none","A refused correction changes nothing");
       assert.equal(unchanged.benefits[0].needsReview,true);
     });
@@ -973,11 +973,11 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
-      const response=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
+      const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:listed.benefits[0].id,needsReview:false})}));
       assert.equal(response.status,200);
-      const after=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const after=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(after.benefits[0].formulaValue,1,"Confirming a rule must not alter it");
       assert.equal(after.benefits[0].needsReview,false);
       assert.ok(after.benefits[0].reviewedAt);
@@ -986,13 +986,13 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Table of Contents',ARRAY['other']::text[],'none',NULL,NULL,2,'Contents','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const pagesBefore=(await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length;
       const coveragesBefore=(await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length;
-      const response=await deleteBenefit(new Request("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
+      const response=await deleteBenefit(new NextRequest("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:listed.benefits[0].id})}));
       assert.equal(response.status,200);
-      assert.equal((await (await getBenefits(new Request("http://localhost/api/benefits"))).json()).summary.total,0);
+      assert.equal((await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json()).summary.total,0);
       assert.equal((await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length,pagesBefore);
       assert.equal((await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length,coveragesBefore);
     });
@@ -1002,7 +1002,7 @@ async function main(){
       await db.query("ALTER TABLE policy_benefits DROP COLUMN reviewed_at");
       await db.query("ALTER TABLE policy_benefits DROP COLUMN basis_inferred");
       delete (globalThis as {__dearpolicyBenefitSchema?:unknown}).__dearpolicyBenefitSchema;
-      const response=await getBenefits(new Request("http://localhost/api/benefits"));
+      const response=await getBenefits(new NextRequest("http://localhost/api/benefits"));
       assert.equal(response.status,200,"A missing column must never reach the user as an error");
       const columns=await db.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_name='policy_benefits' AND column_name IN ('reviewed_at','basis_inferred')");
       assert.equal(columns.rows.length,2,"Every column the catalogue needs is added on first use");
@@ -1015,13 +1015,13 @@ async function main(){
       await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[foreignPolicy,foreignPerson,foreign]);
       const inserted=await db.query<{id:string}>("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,'Other Plan','Other Benefit',ARRAY['illness']::text[],'fixed',1000,'SGD',1,'Other wording','[]'::jsonb,'[]'::jsonb,true) RETURNING id",
         [foreign,foreignPolicy]);
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(data.benefits.some((b:{benefitName:string})=>b.benefitName==="Other Benefit"),false);
-      const response=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+      const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:inserted.rows[0].id,needsReview:false})}));
       assert.equal(response.status,404);
       assert.equal((await db.query<{needs_review:boolean}>("SELECT needs_review FROM policy_benefits WHERE id=$1",[inserted.rows[0].id])).rows[0].needs_review,true);
-      const removal=await deleteBenefit(new Request("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
+      const removal=await deleteBenefit(new NextRequest("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:inserted.rows[0].id})}));
       assert.equal(removal.status,404);
       assert.equal((await db.query("SELECT id FROM policy_benefits WHERE id=$1",[inserted.rows[0].id])).rows.length,1);
@@ -1073,7 +1073,7 @@ async function main(){
       const orphan=uuid(701400);
       await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Example Insurer','Household Shield Plan','ORPHAN-1','Personal Accident','policy_wording',60,'ready','shield-booklet.pdf','shield-booklet.pdf')",
         [orphan,account,people[0].id]);
-      const before=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
+      const before=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       const listed=before.unclaimed.find((doc:{id:string})=>doc.id===orphan);
       assert.ok(listed,"An uploaded document with no owner is invisible everywhere else");
       assert.equal(listed.product_name,"Household Shield Plan");
@@ -1083,7 +1083,7 @@ async function main(){
       const linked=await linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:orphan,familyMemberId:people[1].id,declared:true})}));
       assert.equal(linked.status,200);
-      const after=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
+      const after=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       assert.equal(after.unclaimed.some((doc:{id:string})=>doc.id===orphan),false);
       assert.equal(after.reminders.some((r:{title:string})=>/whose/i.test(r.title)),false,"Answered questions leave the to-do list");
       assert.equal((await db.query("SELECT source FROM policy_members WHERE policy_id=$1",[orphan])).rows.length,1);
@@ -1094,7 +1094,7 @@ async function main(){
       const foreignOrphan=uuid(701500);
       await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Booklet','OTHER-2','Personal Accident','policy_wording',60,'ready','other-booklet.pdf','other-booklet.pdf')",
         [foreignOrphan,foreign,foreignPerson]);
-      const data=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
+      const data=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       assert.equal(data.unclaimed.some((doc:{id:string})=>doc.id===foreignOrphan),false);
       await db.query("DELETE FROM policies WHERE id=$1",[foreignOrphan]);
     });
@@ -1102,19 +1102,19 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       // What an install upgraded from an older version actually looks like.
       await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1",[account]);
-      const listed=await (await getIndexStatus(new Request("http://localhost/api/benefits/index"))).json();
+      const listed=await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json();
       assert.ok(listed.unread.length>=1,"A ready document with stored pages that has never been read is offered for reading");
       assert.ok(listed.unread.every((doc:{pages:number})=>doc.pages>0),"Only documents whose pages are already stored: reading them needs no PDF and no OCR");
-      const first=await (await indexBenefits(new Request("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json();
+      const first=await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json();
       assert.ok(first.stored>=0);
       assert.equal(typeof first.name,"string");
       // Reading is one document per request so the screen can show progress.
       let guard=0,remaining=first.remaining;
       while(remaining>0&&guard++<10)
-        remaining=(await (await indexBenefits(new Request("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json()).remaining;
+        remaining=(await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json()).remaining;
       assert.equal(remaining,0,"Every document is read in the end");
-      assert.equal((await (await getIndexStatus(new Request("http://localhost/api/benefits/index"))).json()).unread.length,0,"Nothing is left asking to be read");
-      const catalog=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      assert.equal((await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json()).unread.length,0,"Nothing is left asking to be read");
+      const catalog=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.ok(catalog.summary.total>0,"Reading them is what puts amounts on the Benefits page");
       assert.ok(catalog.benefits.some((b:{policyId:string})=>b.policyId===fixture.referenceId));
       // A document that stated no rules has still been read, and must not keep asking.
@@ -1128,7 +1128,7 @@ async function main(){
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,reviewed_at) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',0.5,'SGD',1,'We pay 100% of Sum Insured for qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false,now())",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1 AND id=$2",[account,fixture.referenceId]);
-      const response=await indexBenefits(new Request("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
+      const response=await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:fixture.referenceId})}));
       assert.equal(response.status,200);
       const kept=await db.query<{formula_value:string}>("SELECT formula_value::text FROM policy_benefits WHERE account_id=$1 AND policy_id=$2 AND benefit_name='Major Critical Illness'",[account,fixture.referenceId]);
@@ -1148,7 +1148,7 @@ async function main(){
       await insert("Daily Hospital Cash",",fact_key,offset_days,maximum_days","'daily',30,'SGD',9,'S$30 per day.','[]'::jsonb,'[]'::jsonb,true,'hospitalNights',0,NULL");
       // 4. No amount could be read at all: an admission, not a task.
       await insert("Dental","","'none',NULL,NULL,12,'Dental treatment as charged.','[]'::jsonb,'[]'::jsonb,true");
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const by=(name:string)=>data.benefits.find((b:{benefitName:string})=>b.benefitName===name);
       assert.equal(by("Accidental Hospital Recuperation").attention,null);
       assert.equal(by("Loss of speech").attention,"confirm");
@@ -1411,7 +1411,7 @@ async function main(){
       await db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,'Group Term Life',1000000,'SGD','MINDEF Group Insurance',2,'Group Term Life S$1,000,000',true,true)",
         [uuid(700520),account,fixture.policyId,people[0].id]);
       // The page lists what was read, marked as proposed.
-      const listed=await (await getLedger(new Request("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
+      const listed=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       type LRow={id:string;eventType:string;status:string;pays:string;planName:string;origin:string};
       const life=(listed.rows as LRow[]).find(r=>r.eventType==="death"&&/Group Term Life/.test(r.planName));
       assert.ok(life,"The certificate's life cover is a ledger row: "+JSON.stringify(listed.rows.map((r:LRow)=>r.planName+"/"+r.eventType)));
@@ -1425,12 +1425,12 @@ async function main(){
       // gate withholds the figure -- the same treatment the schedule-only
       // death cover gets above -- until the person confirms it below.
       assert.equal(beforeItem?.amountText,null);assert.equal(beforeItem?.status,"needs_document");
-      const confirmed=await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:life!.id,status:"confirmed"})}));
+      const confirmed=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:life!.id,status:"confirmed"})}));
       assert.equal(confirmed.status,200);
       // The person says the plan has no TPD cover; the row is gone from answers.
-      await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:tpd!.id,status:"rejected"})}));
+      await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:tpd!.id,status:"rejected"})}));
       // And DPS, which no document states, is entered by hand.
-      const added=await (await postLedger(new Request("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+      const added=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:people[0].id,planName:"DPS",eventType:"death",paysKind:"lump_sum",amount:70000})}))).json();
       assert.equal(added.row.status,"confirmed");
       const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
@@ -1438,16 +1438,16 @@ async function main(){
       assert.equal(afterItem?.estimateBasis,"confirmed");assert.equal(afterItem?.status,"likely_applicable");
       assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText==="S$70,000"),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
       assert.equal(after.potentialPayoutTotals?.[0]?.amountText,"S$1,070,000");
-      const again=await (await getLedger(new Request("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
+      const again=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       assert.equal((again.rows as LRow[]).some(r=>r.id===tpd!.id),false,"A rejected row is not shown");
       // Re-seeding after a new upload adds nothing twice and never touches a confirmed row.
-      const rebuilt=await (await postLedger(new Request("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"rebuild"})}))).json();
+      const rebuilt=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"rebuild"})}))).json();
       assert.equal(rebuilt.added,0);
-      const still=await (await getLedger(new Request("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
+      const still=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       assert.equal((still.rows as LRow[]).find(r=>r.id===life!.id)?.status,"confirmed");
       // Another account's rows are never visible or editable.
       const foreignRow=await db.query<{id:string}>("INSERT INTO coverage_rules(account_id,family_member_id,plan_name,event_type,pays_kind,amount,origin) VALUES($1,$2,'Other Plan','death','lump_sum',5,'person') RETURNING id",[foreign,foreignPerson]);
-      const denied=await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
+      const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
       assert.equal(denied.status,404);
       assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
     });
