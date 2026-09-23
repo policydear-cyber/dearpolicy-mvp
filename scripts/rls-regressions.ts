@@ -23,8 +23,10 @@
  *
  * "Storage ownership matches database ownership" is NOT covered here --
  * Supabase Storage bucket policies are a separate configuration surface from
- * Postgres table RLS and are tracked as a separate, still-open requirement
- * in the PR description's "Storage security" section.
+ * Postgres table RLS. See scripts/storage-rls-regressions.ts for that half,
+ * proving sql/storage-rls.sql's household-scoped storage.objects/
+ * storage.buckets policies the same way this file proves the Postgres
+ * table policies above.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
