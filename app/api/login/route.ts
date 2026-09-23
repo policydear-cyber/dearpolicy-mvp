@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, checkPassword, expectedToken } from "@/lib/auth/gate";
-import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
+import { clientKey } from "@/lib/http/rate-limit";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -8,12 +9,13 @@ export const ROUTE_AUTH = "public" as const;
 // One shared household password has no per-account lockout to fall back on.
 // The fixed per-attempt delay below slows a single sequential guesser; this
 // caps how many guesses a given source can even queue up in parallel within
-// a window, which the delay alone does not stop. Per warm-instance only --
-// see lib/http/rate-limit.ts.
-const loginAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
+// a window, which the delay alone does not stop. Backed by the shared
+// Postgres counter (lib/http/db-rate-limit.ts), so this holds across every
+// serverless instance, not just whichever one answers a given request.
+const loginAttempts = createDbRateLimiter({ name: "login", windowMs: 15 * 60 * 1000, max: 20 });
 
 export async function POST(request: Request) {
-  const attempt = loginAttempts.attempt(clientKey(request));
+  const attempt = await loginAttempts.attempt(clientKey(request));
   if (!attempt.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },

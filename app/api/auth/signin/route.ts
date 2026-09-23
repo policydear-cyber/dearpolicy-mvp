@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
-import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
+import { clientKey } from "@/lib/http/rate-limit";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
 
-const signinAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
+const signinAttempts = createDbRateLimiter({ name: "signin", windowMs: 15 * 60 * 1000, max: 20 });
 
 export async function POST(request: Request) {
-  const attempt = signinAttempts.attempt(clientKey(request));
+  const attempt = await signinAttempts.attempt(clientKey(request));
   if (!attempt.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },

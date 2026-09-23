@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
-import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
+import { clientKey } from "@/lib/http/rate-limit";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
 
-// Per-warm-instance brake on account creation -- see lib/http/rate-limit.ts
-// for why this is not yet a real distributed limit (Priority 5).
-const signupAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+// Backed by the shared Postgres counter (lib/http/db-rate-limit.ts), so this
+// brake holds across every serverless instance, not just whichever one
+// answers a given request.
+const signupAttempts = createDbRateLimiter({ name: "signup", windowMs: 15 * 60 * 1000, max: 10 });
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export async function POST(request: Request) {
-  const attempt = signupAttempts.attempt(clientKey(request));
+  const attempt = await signupAttempts.attempt(clientKey(request));
   if (!attempt.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },

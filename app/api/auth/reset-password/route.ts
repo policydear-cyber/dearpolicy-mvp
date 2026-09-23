@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
+import { clientKey } from "@/lib/http/rate-limit";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
 
-const resetAttempts = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
+const resetAttempts = createDbRateLimiter({ name: "reset-password", windowMs: 60 * 60 * 1000, max: 5 });
 
 export async function POST(request: Request) {
-  const attempt = resetAttempts.attempt(clientKey(request));
+  const attempt = await resetAttempts.attempt(clientKey(request));
   if (!attempt.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },

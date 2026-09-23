@@ -1,16 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { listInvitations, createInvitation, type Role } from "@/lib/household/repo";
-import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
+import { clientKey } from "@/lib/http/rate-limit";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-owner" as const;
 
-// Per-warm-instance brake on invitation creation -- see
-// lib/http/rate-limit.ts for why this isn't yet a real distributed limit
-// (Priority 5). Bounds how fast an owner account (or a compromised
-// session) can spam invitation emails.
-const inviteAttempts = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20 });
+// Backed by the shared Postgres counter (lib/http/db-rate-limit.ts), so this
+// bounds how fast an owner account (or a compromised session) can spam
+// invitation emails across every serverless instance, not just whichever
+// one answers a given request.
+const inviteAttempts = createDbRateLimiter({ name: "invitations-create", windowMs: 60 * 60 * 1000, max: 20 });
 
 function isRole(value: unknown): value is Role {
   return value === "owner" || value === "member" || value === undefined;
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
-    const attempt = inviteAttempts.attempt(`${ctx.userId}:${clientKey(request)}`);
+    const attempt = await inviteAttempts.attempt(`${ctx.userId}:${clientKey(request)}`);
     if (!attempt.allowed) {
       return NextResponse.json(
         { error: "Too many invitations sent. Try again later." },

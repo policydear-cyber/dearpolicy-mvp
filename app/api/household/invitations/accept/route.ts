@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser, UnauthenticatedError } from "@/lib/auth/session";
 import { acceptInvitation, ForbiddenError, NotFoundError } from "@/lib/household/repo";
 import { ACTIVE_HOUSEHOLD_COOKIE } from "@/lib/auth/request-context";
-import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
+import { clientKey } from "@/lib/http/rate-limit";
+import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
 
 export const runtime = "nodejs";
 // "authenticated" rather than "household-member": accepting an invitation
@@ -15,7 +16,7 @@ export const ROUTE_AUTH = "authenticated" as const;
 // abused (the token itself is 256 bits of randomness, so brute force is
 // already infeasible, but rate limiting is a cheap, standard second layer
 // against any single caller hammering this route).
-const acceptAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
+const acceptAttempts = createDbRateLimiter({ name: "invitations-accept", windowMs: 15 * 60 * 1000, max: 20 });
 
 /** Accepts a household invitation for the signed-in caller. The caller
  * authenticates first (requireCurrentUser()); acceptInvitation() then does
@@ -28,7 +29,7 @@ const acceptAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
 export async function POST(request: Request) {
   try {
     const user = await requireCurrentUser();
-    const attempt = acceptAttempts.attempt(clientKey(request));
+    const attempt = await acceptAttempts.attempt(clientKey(request));
     if (!attempt.allowed) {
       return NextResponse.json(
         { error: "Too many attempts. Try again later." },

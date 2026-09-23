@@ -5,13 +5,20 @@
  * this app runs as one or more independent serverless instances with no
  * shared cache between them, so a counter here is a per-instance brake,
  * not a global one -- an attacker spread across many cold-started
- * instances is not fully stopped by this alone. That is an acceptable
- * trade for the actual threat model of app/api/login/route.ts: one shared
- * household password, guarded by IP plus a fixed per-attempt delay. This
- * closes the gap that delay alone leaves open -- a guesser firing many
- * requests in parallel isn't slowed by a delay that only applies per
- * request -- by capping how many attempts a given source can even queue up
- * within a window, on whichever instance answers them. */
+ * instances is not fully stopped by this alone.
+ *
+ * Every state-changing, unauthenticated-or-early-authenticated route that
+ * previously used this (login, signup, signin, password reset, invitation
+ * accept/create) has moved onto lib/http/db-rate-limit.ts's
+ * createDbRateLimiter() instead -- the same fixed-window algorithm, backed
+ * by a shared Postgres counter, so the brake holds across every instance,
+ * not just whichever one answers a given request. This in-memory version
+ * stays in the codebase, still exported and still covered by
+ * scripts/security-regressions.ts, as a lighter-weight option for any
+ * future use that genuinely does not need a cross-instance guarantee (no
+ * network round trip, no dependency on the database being up) -- it is not
+ * dead code, just no longer the production choice for the routes above.
+ * clientKey() below is shared by both implementations. */
 
 type Bucket = { count: number; windowStart: number };
 
