@@ -31,9 +31,11 @@
     "security:tls-test": "node --import tsx scripts/tls-config-regressions.ts",
     "security:launch-guard-test": "node --import tsx scripts/launch-guard-regressions.ts",
     "security:rls-test": "node --import tsx scripts/rls-regressions.ts",
-    "launch:check": "node --import tsx scripts/launch-check.ts"
+    "launch:check": "node --import tsx scripts/launch-check.ts",
+    "security:authz-client-test": "node --import tsx scripts/authz-client-regressions.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
     "next": "^16.0.0",
     "pdf-lib": "^1.17.1",

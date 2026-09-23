@@ -107,8 +107,69 @@ async function checkRlsState() {
   }
 }
 
+async function checkAuthenticatedRoleNotBypassRls() {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url || /localhost|127\.0\.0\.1/.test(url)) {
+    report(
+      "Per-request database access (authenticated role) does not bypass RLS",
+      "BLOCKED_BY_EXTERNAL_CONFIG",
+      "No production DATABASE_URL configured in this environment -- cannot verify the live `authenticated` " +
+        "role's bypassrls flag here.",
+    );
+    return;
+  }
+  const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: true }, connectionTimeoutMillis: 5_000 });
+  try {
+    await client.connect();
+    // lib/db/authz-client.ts's createUserSupabaseClient() puts every
+    // authenticated request's queries under `SET LOCAL ROLE authenticated`.
+    // If THAT role itself has BYPASSRLS (or is a superuser), the whole
+    // per-request authorization boundary is silently a no-op even though
+    // every policy in sql/household-rls.sql looks correct in isolation --
+    // this is the exact live check for "does production-facing database
+    // access use a bypass-RLS role".
+    const roles = await client.query<{ rolname: string; rolbypassrls: boolean; rolsuper: boolean }>(
+      `select rolname, rolbypassrls, rolsuper from pg_roles where rolname in ('authenticated', 'anon')`,
+    );
+    const authenticated = roles.rows.find((r) => r.rolname === "authenticated");
+    if (!authenticated) {
+      report(
+        "Per-request database access (authenticated role) does not bypass RLS",
+        "BLOCKED_BY_CODE",
+        "The `authenticated` role does not exist on this database -- sql/household-rls.sql has not been " +
+          "applied, so createUserSupabaseClient()'s SET LOCAL ROLE authenticated would fail outright.",
+      );
+      return;
+    }
+    if (authenticated.rolbypassrls || authenticated.rolsuper) {
+      report(
+        "Per-request database access (authenticated role) does not bypass RLS",
+        "BLOCKED_BY_CODE",
+        "The `authenticated` role has BYPASSRLS or SUPERUSER set -- every request routed through " +
+          "createUserSupabaseClient() would silently bypass every RLS policy despite SET ROLE succeeding.",
+      );
+      return;
+    }
+    report(
+      "Per-request database access (authenticated role) does not bypass RLS",
+      "READY",
+      "The `authenticated` role (what createUserSupabaseClient() switches every authenticated request's " +
+        "transaction to) has neither BYPASSRLS nor SUPERUSER -- real RLS enforcement applies to it.",
+    );
+  } catch (error) {
+    report(
+      "Per-request database access (authenticated role) does not bypass RLS",
+      "BLOCKED_BY_EXTERNAL_CONFIG",
+      `Could not connect to verify: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
 async function main() {
   await checkRlsState();
+  await checkAuthenticatedRoleNotBypassRls();
 
   const strict = process.argv.includes("--strict");
   const byStatus = (status: Status) => results.filter((r) => r.status === status);
