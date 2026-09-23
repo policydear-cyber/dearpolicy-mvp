@@ -13,7 +13,11 @@ export const runtime = "nodejs";
 export const ROUTE_AUTH = "authenticated" as const;
 
 /** Lists every household the caller belongs to, plus which one is
- * currently active (server-resolved -- see lib/auth/request-context.ts).
+ * currently active (server-resolved -- see lib/auth/request-context.ts)
+ * and its display name (the household settings page needs the real name
+ * both to show it and, for the delete-household confirmation, so the
+ * person knows exactly what to type -- fetched the same RLS-scoped way
+ * the DELETE handler below already re-fetches it for its own comparison).
  * Never 404s for a user with zero households; that's a valid state for a
  * freshly signed-up account before ensureDefaultHousehold() has run, or
  * (in principle) a user who left every household they were in. */
@@ -22,12 +26,17 @@ export async function GET(request: NextRequest) {
     const user = await requireCurrentUser();
     const memberships = await listMemberships(user.id);
     let activeHouseholdId: string | null = null;
+    let activeHouseholdName: string | null = null;
     try {
       activeHouseholdId = (await requireHouseholdContext(request)).householdId;
+      const nameRows = await createUserSupabaseClient(user.id, (client) =>
+        client.query<{ name: string }>(`select name from accounts where id = $1`, [activeHouseholdId]),
+      );
+      activeHouseholdName = nameRows.rows[0]?.name ?? null;
     } catch {
       // No household yet -- memberships is simply [] in that case.
     }
-    return NextResponse.json({ memberships, activeHouseholdId });
+    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName });
   } catch (error) {
     if (error instanceof UnauthenticatedError) return routeErrorResponse(error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

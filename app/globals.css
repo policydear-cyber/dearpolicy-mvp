@@ -342,6 +342,8 @@ table { font-variant-numeric: tabular-nums; }
 .detected-row select { min-width: 220px; min-height: 40px; padding: 8px 10px; }
 .matched { color: var(--good-text); font-weight: 650; }
 .document-warning, .accuracy-warning { font-size: var(--fs-xs); line-height: 1.5; background: var(--warn-tint); color: var(--warn-text); padding: 10px 12px; border-radius: var(--r-sm); border: 1px solid var(--warn-line); }
+.danger-zone { border: 1px solid var(--critical-line); background: var(--critical-tint); border-radius: var(--r-lg); padding: 20px; }
+.danger-zone h2 { color: var(--critical); }
 .accuracy-warning { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
 .accuracy-warning b { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .05em; }
 .accuracy-warning span { font-size: var(--fs-xs); line-height: 1.45; }

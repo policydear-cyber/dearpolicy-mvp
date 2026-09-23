@@ -191,6 +191,7 @@ async function main() {
   const { GET: getLedger, PATCH: patchLedger } = await import("@/app/api/ledger/route");
   const { GET: getInvitations } = await import("@/app/api/household/invitations/route");
   const { DELETE: deleteInvitation } = await import("@/app/api/household/invitations/[id]/route");
+  const { GET: getHousehold } = await import("@/app/api/household/route");
 
   scenario("1. valid household member sees their own household's data", async () => {
     asUser(memberA);
@@ -327,6 +328,19 @@ async function main() {
       const body = await res.json();
       assert.equal(body.error, "Not found");
       assertNoInternalLeak(JSON.stringify(body), "missing-invitation response");
+    },
+  );
+
+  scenario(
+    "10. GET /api/household returns the caller's real active household name (UI wiring for the household settings page), never another household's",
+    async () => {
+      asUser(ownerA);
+      const res = await getHousehold(requestFor("http://localhost/api/household", { household: accountA }));
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.activeHouseholdId, accountA);
+      assert.equal(body.activeHouseholdName, "Household A");
+      assert.ok(!JSON.stringify(body).includes("Household B"), "must never leak a different household's name");
     },
   );
 
