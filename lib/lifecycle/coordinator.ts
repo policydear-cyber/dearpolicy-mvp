@@ -30,13 +30,15 @@
  * profile -- refused rather than cascaded whenever it has any linked
  * policy/claim/coverage/chat activity, see requestFamilyMemberDeletion),
  * household_member (an owner removing another member, see
- * requestHouseholdMemberRemoval), and household_leave (a member removing
+ * requestHouseholdMemberRemoval), household_leave (a member removing
  * themselves, see requestHouseholdLeave -- both wrap the same
  * lib/household/repo.ts's removeMember(), which already owns the
  * last-owner-protection business rule and is deliberately not
- * reimplemented here) are implemented here. The remaining two flows
- * (invitation revocation, household/account deletion) are tracked as
- * follow-up work -- see PR #16's own status notes and
+ * reimplemented here), and invitation (revoking a still-pending
+ * invitation, see requestInvitationRevocation -- wraps
+ * lib/household/repo.ts's revokeInvitation() the same way) are
+ * implemented here. The remaining flow (household/account deletion) is
+ * tracked as follow-up work -- see PR #16's own status notes and
  * scripts/launch-check.ts's checkDataDeletionAndInvalidation(), which
  * reports this capability as still blocked_by_code and itemizes exactly
  * what remains.
@@ -50,7 +52,7 @@ import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
-import { removeMember } from "@/lib/household/repo";
+import { removeMember, revokeInvitation } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
 
 export type DeletionOutcome = {
@@ -1130,6 +1132,105 @@ export async function requestHouseholdLeave(args: {
   idempotencyKey: string;
 }): Promise<DeletionOutcome> {
   return performMembershipRemoval({ ...args, resourceType: "household_leave", reasonCategory: "member_left" });
+}
+
+/**
+ * Invitation revocation (resource_type='invitation'). Wraps
+ * lib/household/repo.ts's revokeInvitation() the same way Flows 5-6 wrap
+ * removeMember() -- see performMembershipRemoval()'s doc comment for the
+ * shared rationale (do not reimplement an existing, well-tested,
+ * RLS-authorized business operation; defer to it and let its errors
+ * propagate). household_invitations has a real `id` column (unlike
+ * household_members' composite key) but, like household_member/
+ * household_leave, no entry in LIFECYCLE_TABLE_BY_RESOURCE -- revoking an
+ * invitation is a single soft-update (revoked_at=now()) inside
+ * revokeInvitation()'s own RLS-scoped transaction, not a lifecycle_state
+ * transition, so this flow too is represented entirely through
+ * deletion_requests, with no transitionLifecycle() step and no separate
+ * finish...() step (nothing external to defer).
+ *
+ * Idempotent: a repeat with the same idempotencyKey short-circuits on
+ * the already-created deletion_requests row without calling
+ * revokeInvitation() again -- a second call against an
+ * already-revoked invitation would otherwise throw NotFoundError
+ * (revokeInvitation()'s WHERE clause excludes rows that already have
+ * revoked_at set), which a retry must never surface as a fresh failure.
+ */
+export async function requestInvitationRevocation(args: {
+  callerUserId: string;
+  invitationId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  // household_invitations always has a real household_id of its own,
+  // and it is NOT necessarily the caller's currently active household --
+  // revokeInvitation() authorizes by the invitation's own household
+  // ownership via RLS (is_household_owner(household_id) read FROM THE
+  // INVITATION ROW), not the caller's active household context (see
+  // app/api/household/invitations/[id]/route.ts's own comment on why
+  // that is deliberate: a caller who owns two households can revoke
+  // either one's invitations regardless of which is "active"). Reading
+  // household_id here (service-level, plain pool -- an infrastructure-
+  // table-style lookup, not an authorization decision; revokeInvitation()'s
+  // RLS-scoped UPDATE below is what actually decides whether this caller
+  // may revoke it) keeps the deletion_requests/deletion_audit_log
+  // bookkeeping correctly scoped to the invitation's REAL household even
+  // when it differs from the caller's active one.
+  const invitationRow = await pool.query<{ household_id: string }>(
+    `SELECT household_id FROM household_invitations WHERE id=$1`,
+    [args.invitationId],
+  );
+  const accountId = invitationRow.rows[0]?.household_id;
+  if (!accountId) {
+    throw new DeletionValidationError("Invitation not found");
+  }
+
+  const { row: request, created } = await createOrGetDeletionRequest(pool, {
+    accountId,
+    resourceType: "invitation",
+    resourceId: args.invitationId,
+    requestedBy: args.callerUserId,
+    reasonCategory: "invitation_revoked",
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  if (!created) {
+    return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.invitationId };
+  }
+
+  // The actual revocation -- see this function's own doc comment on why
+  // revokeInvitation() is called rather than reimplemented. A thrown
+  // error here (NotFoundError: already revoked/accepted/no such
+  // invitation, or the RLS-enforced "not this household's owner" case)
+  // leaves this deletion_requests row at its default pending_deletion
+  // state; a retry with the same idempotencyKey is caught by the
+  // `!created` branch above and never attempts the revocation again.
+  await revokeInvitation(args.callerUserId, args.invitationId);
+
+  await transitionDeletionRequest(pool, {
+    id: request.id,
+    fromStates: ["pending_deletion"],
+    toState: "soft_deleted",
+    completedAt: new Date(),
+  }).catch(() => {
+    // A repeat call (idempotent retry) may already be past this state --
+    // unreachable in practice since the `!created` branch above already
+    // short-circuits every retry, kept for the same defensive symmetry
+    // every other flow's transition uses.
+  });
+
+  await appendDeletionAudit(pool, {
+    accountId,
+    deletionRequestId: request.id,
+    resourceType: "invitation",
+    resourceId: args.invitationId,
+    actor: args.callerUserId,
+    fromState: null, // no lifecycle-tracked resource row exists for this flow to report a fromState for
+    toState: "soft_deleted",
+    correlationId: randomUUID(),
+    cleanupStatus: null,
+  });
+
+  return { status: "completed", deletionRequestId: request.id, resourceId: args.invitationId };
 }
 
 function mapRequestStateToStatus(request: DeletionRequestRow): DeletionRequestStatus {

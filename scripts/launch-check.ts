@@ -683,8 +683,17 @@ function checkDataDeletionAndInvalidation() {
       `another member, and idempotency proven by a sabotage-and-restore-verified check confirming that without ` +
       `the deletion_requests short-circuit, a retry would re-invoke removeMember() and throw NotFoundError ` +
       `against an already-removed member. See scripts/household-membership-deletion-regressions.ts for the 7 ` +
-      `behavioral cases proving this. This capability stays blocked until every one of the 8 deletion flows the ` +
-      `spec requires is implemented and regression-tested, not merely until the shared machinery exists.`,
+      `behavioral cases proving this. Invitation revocation wraps lib/household/repo.ts's revokeInvitation() the ` +
+      `same way (deliberately not reimplemented), scoping its deletion_requests/deletion_audit_log bookkeeping to ` +
+      `the invitation's OWN household_id (read directly, service-level) rather than the caller's currently active ` +
+      `household -- the two can legitimately differ for a caller who owns more than one household, and ` +
+      `revokeInvitation()'s RLS-scoped UPDATE remains the actual authorization decision either way. Proven that a ` +
+      `revoked invitation can no longer be accepted (an end-to-end check through acceptInvitation(), not just ` +
+      `revokeInvitation()'s own guard) and that a plain member is correctly refused (RLS-enforced) when trying to ` +
+      `revoke another owner's invitation. See scripts/invitation-revocation-deletion-regressions.ts for the 9 ` +
+      `behavioral cases proving this, including a sabotage-and-restore-verified check on the idempotency ` +
+      `short-circuit. This capability stays blocked until every one of the 8 deletion flows the spec requires is ` +
+      `implemented and regression-tested, not merely until the shared machinery exists.`,
   );
 }
 
@@ -928,6 +937,7 @@ async function checkGithubCiStatus() {
       "security:claim-evidence-deletion-test",
       "security:family-member-deletion-test",
       "security:household-membership-deletion-test",
+      "security:invitation-revocation-deletion-test",
       "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
