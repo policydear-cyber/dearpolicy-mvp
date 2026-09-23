@@ -191,7 +191,7 @@ async function main() {
   const { GET: getLedger, PATCH: patchLedger } = await import("@/app/api/ledger/route");
   const { GET: getInvitations } = await import("@/app/api/household/invitations/route");
   const { DELETE: deleteInvitation } = await import("@/app/api/household/invitations/[id]/route");
-  const { GET: getHousehold } = await import("@/app/api/household/route");
+  const { GET: getHousehold, DELETE: deleteHousehold } = await import("@/app/api/household/route");
 
   scenario("1. valid household member sees their own household's data", async () => {
     asUser(memberA);
@@ -341,6 +341,32 @@ async function main() {
       assert.equal(body.activeHouseholdId, accountA);
       assert.equal(body.activeHouseholdName, "Household A");
       assert.ok(!JSON.stringify(body).includes("Household B"), "must never leak a different household's name");
+    },
+  );
+
+  scenario(
+    "11. a stale/expired session is refused for household deletion, even with a correct confirmName (recent-auth guard, Flow 8 sabotage-verified)",
+    async () => {
+      asUser(ownerA);
+      process.env.DEV_LAST_SIGN_IN_AT = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+      try {
+        const res = await deleteHousehold(
+          requestFor("http://localhost/api/household", {
+            household: accountA,
+            method: "DELETE",
+            body: { confirmName: "Household A" },
+          }),
+        );
+        assert.equal(res.status, 401, "a session that signed in 20 minutes ago must be refused before any deletion logic runs");
+        const body = await res.json();
+        assert.equal(body.error, "Please sign in again to confirm it's you before continuing.");
+        assertNoInternalLeak(JSON.stringify(body), "stale-session household-deletion response");
+      } finally {
+        delete process.env.DEV_LAST_SIGN_IN_AT;
+      }
+
+      const stillThere = await db.query("select id from accounts where id = $1", [accountA]);
+      assert.equal(stillThere.rows.length, 1, "the household must still exist -- a blocked deletion must never partially apply");
     },
   );
 
