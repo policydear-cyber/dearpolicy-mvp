@@ -64,13 +64,30 @@ async function asUser(
   }
 }
 
-async function expectRejected(promise: Promise<unknown>, pattern: RegExp, message: string) {
+let savepointCounter = 0;
+
+/**
+ * Runs `fn` expecting it to reject with an error matching `pattern`. A real
+ * Postgres transaction is left in an "aborted" state after any statement
+ * fails (error 25P02, "current transaction is aborted") -- every later
+ * statement in the same BEGIN/COMMIT block would then fail too, even ones
+ * that have nothing to do with the rejection under test. Wrapping the call
+ * in its own SAVEPOINT and rolling back to it afterwards (success or
+ * failure) keeps the outer transaction usable for the assertions that
+ * follow, the same way a real app would isolate a single expected-to-fail
+ * statement inside a longer request-scoped transaction.
+ */
+async function expectRejected(db: PGlite, fn: () => Promise<unknown>, pattern: RegExp, message: string) {
+  const savepoint = `sp_${savepointCounter++}`;
+  await db.query(`SAVEPOINT ${savepoint}`);
   try {
-    await promise;
+    await fn();
     throw new Error(`expected rejection but succeeded: ${message}`);
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error);
     assert.match(text, pattern, `${message} (got: ${text})`);
+  } finally {
+    await db.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
   }
 }
 
@@ -105,7 +122,7 @@ async function main() {
     householdA,
   ]);
   await db.query(
-    "INSERT INTO policies(id, account_id, family_member_id, insurer, storage_key) VALUES ($1,$2,$3,'Insurer','k')",
+    "INSERT INTO policies(id, account_id, family_member_id, insurer, original_filename, storage_key) VALUES ($1,$2,$3,'Insurer','policy.pdf','k')",
     [policyA, householdA, familyA],
   );
 
@@ -126,12 +143,16 @@ async function main() {
     const guessed = await db.query("SELECT id FROM policies WHERE account_id = $1", [strangerUuid]);
     assert.equal(guessed.rows.length, 0, "a guessed/unrelated household id must return zero rows, not an error");
 
-    // INSERT into household B is rejected by the WITH CHECK clause.
+    // INSERT into household B is rejected by the WITH CHECK clause. Isolated
+    // in its own savepoint so the aborted-transaction state it leaves behind
+    // doesn't poison the UPDATE/DELETE assertions that follow.
     await expectRejected(
-      db.query(
-        "INSERT INTO policies(id, account_id, family_member_id, insurer, storage_key) VALUES ($1,$2,$3,'x','k')",
-        [uuid(40), householdB, familyA],
-      ),
+      db,
+      () =>
+        db.query(
+          "INSERT INTO policies(id, account_id, family_member_id, insurer, original_filename, storage_key) VALUES ($1,$2,$3,'x','policy.pdf','k')",
+          [uuid(40), householdB, familyA],
+        ),
       /row-level security/i,
       "inserting a row into household B as a household A member must be rejected",
     );
@@ -150,10 +171,12 @@ async function main() {
   // --- A household member cannot perform owner-only actions --------------
   await asUser(db, { userId: memberA, role: "authenticated" }, async () => {
     await expectRejected(
-      db.query("INSERT INTO household_members(household_id, user_id, role) VALUES ($1,$2,'member')", [
-        householdA,
-        uuid(50),
-      ]),
+      db,
+      () =>
+        db.query("INSERT INTO household_members(household_id, user_id, role) VALUES ($1,$2,'member')", [
+          householdA,
+          uuid(50),
+        ]),
       /row-level security/i,
       "a plain member must not be able to add another household member (owner-only)",
     );
@@ -180,7 +203,8 @@ async function main() {
   // --- Anonymous access is rejected ---------------------------------------
   await asUser(db, { userId: null, role: "anon" }, async () => {
     await expectRejected(
-      db.query("SELECT id FROM policies WHERE account_id = $1", [householdA]),
+      db,
+      () => db.query("SELECT id FROM policies WHERE account_id = $1", [householdA]),
       /permission denied/i,
       "the anon role must not even have table-level access (it was explicitly revoked)",
     );
