@@ -19,6 +19,7 @@ import { isProduction } from "@/lib/launch/guards";
 const OPEN_PATHS = new Set([
   "/login",
   "/signup",
+  "/reset-password",
   "/api/auth/signup",
   "/api/auth/signin",
   "/api/auth/callback",
