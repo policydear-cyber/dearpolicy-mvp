@@ -32,7 +32,8 @@
     "security:launch-guard-test": "node --import tsx scripts/launch-guard-regressions.ts",
     "security:rls-test": "node --import tsx scripts/rls-regressions.ts",
     "launch:check": "node --import tsx scripts/launch-check.ts",
-    "security:authz-client-test": "node --import tsx scripts/authz-client-regressions.ts"
+    "security:authz-client-test": "node --import tsx scripts/authz-client-regressions.ts",
+    "security:household-test": "node --import tsx scripts/household-repo-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

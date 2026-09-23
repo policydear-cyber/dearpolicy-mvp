@@ -121,3 +121,30 @@ export function createServiceSupabaseClient(): ScopedDbClient {
     },
   };
 }
+
+/** A transactional variant of createServiceSupabaseClient(), for the rare
+ * service-role operations that must be atomic across more than one
+ * statement (e.g. household provisioning: the accounts row and the owner's
+ * household_members row must either both exist or neither does). Still
+ * bypasses RLS -- same auditing rule applies: every call site is a
+ * deliberate, narrow exception. */
+export async function withServiceTransaction<T>(
+  fn: (client: ScopedDbClient) => Promise<T>,
+  poolOverride: Pick<Pool, "connect"> = pool,
+): Promise<T> {
+  const client = (await poolOverride.connect()) as PoolClient;
+  try {
+    await client.query("BEGIN");
+    const scoped: ScopedDbClient = {
+      query: (text, params = []) => client.query(text, params),
+    };
+    const result = await fn(scoped);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
