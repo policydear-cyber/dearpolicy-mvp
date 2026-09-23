@@ -62,7 +62,8 @@
     "security:telemetry-test": "node --import tsx scripts/telemetry-regressions.ts",
     "security:placeholder-content-test": "node --import tsx scripts/placeholder-content-regressions.ts",
     "security:model-provenance-test": "node --import tsx scripts/model-provenance-regressions.ts",
-    "security:rollout-staleness-test": "node --import tsx scripts/rollout-staleness-regressions.ts"
+    "security:rollout-staleness-test": "node --import tsx scripts/rollout-staleness-regressions.ts",
+    "security:pipeline-worker-test": "node --import tsx scripts/pipeline-worker-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

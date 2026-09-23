@@ -739,16 +739,26 @@ function checkBackgroundJobReliability() {
   report(
     "background_job_reliability",
     "blocked_by_code",
-    "lib/jobs/queue.ts now provides a shared durable job model -- idempotency-key enqueue, a FOR UPDATE SKIP " +
+    "lib/jobs/queue.ts provides the shared durable job model -- idempotency-key enqueue, a FOR UPDATE SKIP " +
       "LOCKED claim with a time-boxed lease, heartbeatJob() lease extension, an ownership-CAS guard on complete/" +
-      "fail/finalize-cancellation (sabotage-and-restore-verified: a worker that never held a still-valid lease " +
-      "cannot mark a job succeeded), and recoverExpiredLeases() to reclaim a job whose worker stopped " +
-      "heartbeating -- see scripts/background-jobs-regressions.ts's 13 cases. This capability stays blocked_by_code " +
-      "regardless: the primitive existing is not the same as it being used. lib/claims/evidence/queue.ts and " +
-      "lib/rag/processing-queue.ts -- the actual call sites this checkpoint exists to fix -- have not been migrated " +
-      "onto it yet and still run as an in-memory, single-process promise chain with none of these properties in " +
-      "production. Not reporting ready until at least the real processing pipeline is wired onto lib/jobs/queue.ts " +
-      "and proven end to end, not merely until the shared machinery exists -- Priority 7.",
+      "fail/finalize-cancellation, and recoverExpiredLeases() to reclaim a job whose worker stopped heartbeating " +
+      "-- see scripts/background-jobs-regressions.ts's 13 cases. Checkpoint 8 (claude/v1-launch-hardening) wired " +
+      "the two real call sites onto it through lib/jobs/pipeline-worker.ts's runAsDurableJob(): " +
+      "lib/claims/evidence/queue.ts and lib/rag/processing-queue.ts now persist an idempotency-keyed " +
+      "background_jobs row (documentId / policyId) around every real attempt instead of an in-memory-only promise " +
+      "chain, so a retried/duplicate upload can never double-process and two instances racing on the same " +
+      "document now share one lease. The claim-evidence path is proven end to end against a real fixture " +
+      "(scripts/pipeline-worker-regressions.ts) -- this run also found and fixed a genuine bug where " +
+      "processClaimEvidence() swallowed its own errors instead of re-throwing, which would have made every " +
+      "failure silently read as a succeeded background_jobs row; sabotage-and-restore-verified (6 cycles, " +
+      "including that exact re-throw). The policy-processing path (lib/rag/ingest.ts's processPolicy(), which " +
+      "already re-threw correctly) is structurally identical and scoped-typecheck-clean but has no dedicated live " +
+      "end-to-end fixture test yet -- honestly left as a gap, not asserted. Still blocked_by_code: both call sites " +
+      "remain a single process claiming and running the job it just enqueued, synchronously, inside its own " +
+      "process -- the deployment topology has not changed to a distributed worker fleet pulling from the queue, " +
+      "so cross-process crash recovery via recoverExpiredLeases() is proven for the primitive in isolation " +
+      "(background-jobs-regressions.ts) but not for either of these two call sites running as separate worker " +
+      "processes -- Priority 7.",
   );
 }
 
@@ -756,14 +766,20 @@ function checkDeadLetterRetrySupport() {
   report(
     "dead_letter_retry_support",
     "blocked_by_code",
-    "lib/jobs/queue.ts's failJob() now classifies every failure as transient (bounded-retried with exponential " +
+    "lib/jobs/queue.ts's failJob() classifies every failure as transient (bounded-retried with exponential " +
       "backoff via computeBackoffMs(), dead_letter once attempt_count reaches max_attempts) or non_retryable " +
       "(dead_letter immediately, regardless of attempt_count) -- sabotage-and-restore-verified: removing the " +
       "attempt_count >= max_attempts bound was confirmed to let a job retry past its limit instead of dead-" +
       "lettering, then restored. recoverExpiredLeases() applies the identical bound to a lease that expired " +
-      "mid-processing, so a crashed worker cannot reset a job's effective retry budget. Still blocked_by_code for " +
-      "the same reason as background_job_reliability above: no real job type in this codebase is dead-letter-" +
-      "classified yet, because none has been migrated onto this framework -- Priority 7.",
+      "mid-processing. lib/jobs/pipeline-worker.ts's classifyPipelineError() now maps real pipeline failures onto " +
+      "this (rate-limit/network-shaped messages transient, everything else non_retryable) for both real call " +
+      "sites, and the claim-evidence path is proven to actually reach failJob() and dead-letter end to end " +
+      "(scripts/pipeline-worker-regressions.ts) -- catching a real bug where the underlying pipeline never threw, " +
+      "so no failure could ever have been classified in production before this checkpoint. Still blocked_by_code: " +
+      "the policy-processing path's classification is unverified by a live fixture (see background_job_reliability " +
+      "above), and dead-letter volume has no operational consumer yet -- nothing drains, alerts on, or replays a " +
+      "dead_letter row once it exists, beyond the dead_letter_growth alert condition already defined in " +
+      "lib/telemetry/alerts.ts -- Priority 7.",
   );
 }
 

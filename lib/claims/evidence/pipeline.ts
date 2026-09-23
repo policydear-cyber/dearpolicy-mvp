@@ -36,6 +36,7 @@ import {
 } from "./store";
 import type { ClaimEvidenceDocumentRow, ClaimEvidenceStatus } from "./types";
 import type { ClaimFacts } from "@/lib/claims/types";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export type ProcessClaimEvidenceArgs = { accountId: string; documentId: string };
 
@@ -57,7 +58,7 @@ async function markFailed(accountId: string, id: string, from: ClaimEvidenceStat
 
 async function familyMemberIdentity(accountId: string, familyMemberId: string) {
   const result = await query<{ display_name: string; preferred_name: string | null }>(
-    `SELECT display_name, preferred_name FROM family_members WHERE id=$1 AND account_id=$2`,
+    `SELECT display_name, preferred_name FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
     [familyMemberId, accountId],
   );
   return result.rows[0] ?? null;
@@ -198,12 +199,31 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
       : "PROCESSING_ERROR";
     const message = error instanceof Error ? error.message : "Claim-evidence processing failed.";
     await markFailed(args.accountId, args.documentId, current.status, code, message);
+    // Checkpoint 8 (claude/v1-launch-hardening): re-throw after recording the
+    // document-level failure. The document's own status='failed' is the
+    // user-visible terminal state either way -- this throw exists so the
+    // caller (lib/jobs/pipeline-worker.ts's runAsDurableJob(), when this runs
+    // as a durable job) actually sees the failure and can classify it into
+    // bounded retry vs. immediate dead-letter, instead of every failure
+    // silently reading as a successful background_jobs row. Previously this
+    // function swallowed every error here, which meant the durable-job
+    // framework's retry/dead-letter logic could never fire for this pipeline
+    // no matter how it was invoked.
+    throw error;
   }
 }
 
 export async function reprocessNeedsAttention(accountId: string, claimSessionId: string): Promise<void> {
   const documents = await listEvidenceDocuments(accountId, claimSessionId);
   for (const doc of documents) {
-    if (RESUMABLE.includes(doc.status)) await processClaimEvidence({ accountId, documentId: doc.id });
+    if (!RESUMABLE.includes(doc.status)) continue;
+    try {
+      await processClaimEvidence({ accountId, documentId: doc.id });
+    } catch {
+      // processClaimEvidence() now re-throws after recording its own
+      // document-level failure (Checkpoint 8) so a durable-job caller can
+      // classify it -- this direct batch caller isn't one, so a failure on
+      // one document must not stop the rest of the batch from reprocessing.
+    }
   }
 }

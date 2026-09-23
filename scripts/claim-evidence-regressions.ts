@@ -653,16 +653,24 @@ async function runDatabaseTests() {
       const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "clean.pdf", storageKey: "k-clean-nonexistent", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-clean" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "clean" });
 
-      await processClaimEvidence({ accountId: account, documentId: document.id });
-      const after = await getEvidenceDocument(account, document.id);
       // storageKey does not point at a real stored file in this suite, so
       // the pipeline is expected to fail once it actually tries to read
       // and process the (nonexistent) file -- the point of this test is
       // only that a clean-scanned document is let PAST quarantine at all,
       // unlike the not-yet-clean case above which stays quarantined
-      // forever. Reaching "processing" or "failed" (from the downstream
-      // read error) both prove that; staying "quarantined" would not.
+      // forever. Reaching "failed" (from the downstream read error) proves
+      // that; staying "quarantined" would not.
+      //
+      // Checkpoint 8 (claude/v1-launch-hardening): processClaimEvidence()
+      // now re-throws after recording its own document-level failure (see
+      // lib/claims/evidence/pipeline.ts), so a durable-job caller such as
+      // lib/jobs/pipeline-worker.ts's runAsDurableJob() actually observes
+      // the failure and can classify it -- this direct caller isn't one,
+      // so it must expect and swallow that rejection itself.
+      await assert.rejects(() => processClaimEvidence({ accountId: account, documentId: document.id }));
+      const after = await getEvidenceDocument(account, document.id);
       assert.notEqual(after?.status, "quarantined", "a document with an explicit clean scan result must be allowed past quarantine");
+      assert.equal(after?.status, "failed", "the downstream read error must land as a terminal failed status, not silently vanish");
     });
 
     await testAsync("an infected scan result is persisted to scan_status on the rejected transition too", async () => {
