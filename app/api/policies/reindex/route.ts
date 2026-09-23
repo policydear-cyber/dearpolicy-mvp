@@ -3,6 +3,7 @@ import { devAccountId } from "@/lib/db/client";
 import { backfillSemanticIndex, semanticIndexState } from "@/lib/rag/backfill";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 // Sending a household's stored passages to Pinecone is quick per document, but
 // a large library on a cold start should not be cut off half way.
 export const maxDuration = 300;

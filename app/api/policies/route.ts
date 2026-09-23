@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { devAccountId, isUuid, query } from "@/lib/db/client";
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 type PolicyRow = {
   id: string; family_member_id: string; insurer: string | null; product_name: string | null; policy_number: string | null;

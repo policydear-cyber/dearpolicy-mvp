@@ -5,6 +5,7 @@ import { syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 const Schema = z.object({
   policyId: z.string().uuid(),

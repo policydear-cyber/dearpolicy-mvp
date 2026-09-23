@@ -4,6 +4,7 @@ import { deletePolicyFile } from "@/lib/storage";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 type PolicyFileRow = {
   id: string;

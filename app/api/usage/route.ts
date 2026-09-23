@@ -4,6 +4,7 @@ import { usageThisMonth } from "@/lib/ai/ledger";
 import { describeChoice,modelFor,priceFor } from "@/lib/ai/providers";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 export async function GET(){
   try{
     const usage=await usageThisMonth(devAccountId());

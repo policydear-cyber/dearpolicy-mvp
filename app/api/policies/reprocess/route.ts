@@ -5,6 +5,7 @@ import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { runAfterResponse } from "@/lib/http/background";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 // Re-reading a document can take as long as the original upload; give the
 // background job room to finish inside after() rather than being cut off.
 export const maxDuration = 300;

@@ -7,6 +7,7 @@ import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { looksLikePdf } from "@/lib/claims/evidence/validation";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 // Reading a scanned PDF (hosted OCR + LLM extraction) can take a couple of
 // minutes for a long policy document; give the background job room to finish
 // inside after() rather than being cut off.
