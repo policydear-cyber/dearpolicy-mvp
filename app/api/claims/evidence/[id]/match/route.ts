@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { devAccountId, isUuid } from "@/lib/db/client";
+import type { NextRequest } from "next/server";
+import { isUuid } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { confirmCauseDefinitionMatch, ClaimEvidenceMatchError } from "@/lib/claims/evidence/matches";
 import type { CauseDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 
@@ -12,10 +14,11 @@ const RESULTS: CauseDefinitionMatchResult[] = ["matches", "does_not_match", "nee
  * CauseDefinitionMatch (see lib/claims/evidence/matches.ts's module doc
  * comment for why this -- never chat text, never model output -- is the
  * only path that can). */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Invalid claim-evidence document id." }, { status: 400 });
+    const ctx = await requireHouseholdContext(request);
     const body = (await request.json()) as {
       familyMemberId?: string; claimSessionId?: string; contractId?: string; coverageId?: string | null;
       result?: string; reason?: string; reviewerName?: string;
@@ -28,16 +31,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "result must be one of matches, does_not_match, needs_review." }, { status: 400 });
     }
 
-    const accountId = devAccountId();
     const reviewerName = (body.reviewerName ?? "Household reviewer").trim() || "Household reviewer";
     const match = await confirmCauseDefinitionMatch({
-      accountId, reviewerName, familyMemberId: body.familyMemberId, claimSessionId: body.claimSessionId,
+      accountId: ctx.householdId, reviewerName, familyMemberId: body.familyMemberId, claimSessionId: body.claimSessionId,
       evidenceDocumentId: id, contractId: body.contractId, coverageId: body.coverageId ?? null,
       result: body.result as CauseDefinitionMatchResult, reason: body.reason ?? null, causeEvidenceOverride: body.causeEvidence,
     });
     return NextResponse.json({ match });
   } catch (error) {
     if (error instanceof ClaimEvidenceMatchError) return NextResponse.json({ error: error.message, reasonCode: error.code }, { status: 409 });
-    return NextResponse.json({ error: "Could not record the match decision." }, { status: 500 });
+    const authResponse = routeErrorResponse(error);
+    if (authResponse.status === 500) return NextResponse.json({ error: "Could not record the match decision." }, { status: 500 });
+    return authResponse;
   }
 }

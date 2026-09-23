@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { devAccountId, isUuid } from "@/lib/db/client";
+import type { NextRequest } from "next/server";
+import { isUuid } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { confirmCIDefinitionMatch, ClaimEvidenceMatchError } from "@/lib/claims/evidence/ci-matches";
 import type { CIDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 
@@ -13,10 +15,11 @@ const BENEFIT_CODES = ["ci-major", "ci-early", "ci-intermediate"] as const;
  * CIDefinitionMatch (see lib/claims/evidence/ci-matches.ts's module doc
  * comment for why this -- never chat text, never model output -- is the
  * only path that can). */
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Invalid claim-evidence document id." }, { status: 400 });
+    const ctx = await requireHouseholdContext(request);
     const body = (await request.json()) as {
       familyMemberId?: string; claimSessionId?: string; contractId?: string; coverageId?: string | null;
       benefitCode?: string; illnessName?: string;
@@ -36,10 +39,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "result must be one of matches, does_not_match, needs_medical_review, needs_policy_review, insufficient_evidence, ambiguous." }, { status: 400 });
     }
 
-    const accountId = devAccountId();
     const reviewerName = (body.reviewerName ?? "Household reviewer").trim() || "Household reviewer";
     const match = await confirmCIDefinitionMatch({
-      accountId, reviewerName, familyMemberId: body.familyMemberId, claimSessionId: body.claimSessionId,
+      accountId: ctx.householdId, reviewerName, familyMemberId: body.familyMemberId, claimSessionId: body.claimSessionId,
       evidenceDocumentId: id, contractId: body.contractId, coverageId: body.coverageId ?? null,
       benefitCode: body.benefitCode as (typeof BENEFIT_CODES)[number], illnessName: body.illnessName.trim(),
       result: body.result as CIDefinitionMatchResult, reason: body.reason ?? null, medicalEvidenceOverride: body.medicalEvidence,
@@ -47,6 +49,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ match });
   } catch (error) {
     if (error instanceof ClaimEvidenceMatchError) return NextResponse.json({ error: error.message, reasonCode: error.code }, { status: 409 });
-    return NextResponse.json({ error: "Could not record the match decision." }, { status: 500 });
+    const authResponse = routeErrorResponse(error);
+    if (authResponse.status === 500) return NextResponse.json({ error: "Could not record the match decision." }, { status: 500 });
+    return authResponse;
   }
 }

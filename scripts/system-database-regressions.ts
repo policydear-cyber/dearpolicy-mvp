@@ -18,6 +18,7 @@ import { GET as getClaimPack } from "@/app/api/claims/[id]/pack/route";
 import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
+import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
 import type { Interpretation } from "@/lib/chat/facts";
 import type { PolicyAnalysis } from "@/lib/chat/types";
@@ -32,13 +33,45 @@ async function main(){
   await db.exec(await readFile(path.resolve("sql/benefit-catalog.sql"),"utf8"));
   await db.exec(await readFile(path.resolve("sql/model-usage.sql"),"utf8"));
   await db.exec(await readFile(path.resolve("sql/coverage-ledger.sql"),"utf8"));
+  // Household-scoped routes now resolve identity through
+  // requireHouseholdContext()/createUserSupabaseClient(), which needs the
+  // authenticated/anon/service_role shim roles and the household_members
+  // RLS policies this file defines (see sql/household-rls.sql's own doc
+  // comment -- a real Supabase project already has the authenticated role
+  // and its default table grants; this file recreates just enough of that
+  // for a non-Supabase Postgres, including this PGlite instance, to behave
+  // the same way).
+  await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
+  // No domain table outside accounts/household_members/household_invitations
+  // has its own RLS policy file yet (see the Checkpoint 1/2 commit messages'
+  // disclosed gap: the claims/policies repository layer is authorized at the
+  // application layer -- explicit account_id filters -- not via Postgres
+  // RLS). A real Supabase project grants `authenticated` broad table access
+  // by default as part of its own bootstrapping; this mirrors that default
+  // for every table so createUserSupabaseClient()'s `SET LOCAL ROLE
+  // authenticated` can still reach them here, exactly as it can in production.
+  await db.exec("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;");
   const account="00000000-0000-0000-0000-000000000001",foreign="00000000-0000-0000-0000-000000000099";
+  // requireCurrentUser() resolves through the dev-only session fallback
+  // (lib/auth/session.ts's devSessionUser(), gated behind DEV_AUTH_ENABLED
+  // and unconditionally unavailable in production) rather than a real
+  // Supabase session cookie -- there is no browser here, only a route
+  // handler invoked directly. DEV_ACCOUNT_ID is pinned to this fixture's
+  // own `account` id so every already-migrated route under test resolves
+  // to the same household its seeded rows belong to.
+  process.env.DEV_AUTH_ENABLED="1";
+  process.env.DEV_ACCOUNT_ID=account;
   const uuid=(n:number)=>"10000000-0000-4000-8000-"+String(n).padStart(12,"0");
   const people=Array.from({length:9},(_,i)=>({
     id:uuid(i+1),display_name:i===0?"Tan Yi Chuen Desmond":i===1?"Ong Pei Lin Charmaine":"Family Member "+i,
     preferred_name:i===0?"Desmond":i===1?"Charmaine":"Member "+i,relationship:i===0?"self":i===1?"spouse":i<5?"child":"parent",
   }));
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Test Family'),($2,'Other Account')",[account,foreign]);
+  // The dev-fallback session user (id == DEV_ACCOUNT_ID == account, see
+  // above) needs a genuine household_members row of their own --
+  // resolveActiveHouseholdId() re-verifies real membership on every call,
+  // so a route under test can't reach `account`'s data without one.
+  await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')",[account]);
   for(const p of people)await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)",[p.id,account,p.display_name,p.preferred_name,p.relationship]);
   const foreignPerson=uuid(9999);
   await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Other Account Person','self')",[foreignPerson,foreign]);
@@ -1009,7 +1042,7 @@ async function main(){
         [assessed,account,people[0].id,JSON.stringify(packet.facts),JSON.stringify(packet)]);
       await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts) VALUES($1,$2,$3,'fact_finding','Still answering questions','{}'::jsonb)",
         [unassessed,account,people[0].id]);
-      const pack=await getClaimPack(new Request("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
+      const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
       assert.equal(pack.status,200);
       assert.equal(pack.headers.get("content-type"),"application/pdf");
       assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Yi Chuen Desmond\.pdf"/);
@@ -1021,7 +1054,7 @@ async function main(){
       assert.match(printed,/S\$1,250/);
       assert.match(printed,/page 14/,"The insurer can check the figure against the wording");
       assert.match(printed,/Hospital discharge summary/,"The checklist follows the reported event");
-      const pending=await getClaimPack(new Request("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
+      const pending=await getClaimPack(new NextRequest("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
       assert.equal(pending.status,409);
       assert.match((await pending.json()).error,/has not been assessed yet/);
       await db.query("DELETE FROM claim_sessions WHERE id=ANY($1::uuid[])",[[assessed,unassessed]]);
@@ -1030,7 +1063,7 @@ async function main(){
       const foreignClaim=uuid(701300);
       await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts,decision_packet) VALUES($1,$2,$3,'complete','Other event','{}'::jsonb,$4::jsonb)",
         [foreignClaim,foreign,foreignPerson,JSON.stringify({sessionId:foreignClaim,eventSummary:"Other event",facts:{},knownFacts:[],missingFacts:[],relevantOwnedProducts:[],assessments:[],nextSteps:[],ready:true})]);
-      const response=await getClaimPack(new Request("http://localhost/api/claims/"+foreignClaim+"/pack"),{params:Promise.resolve({id:foreignClaim})});
+      const response=await getClaimPack(new NextRequest("http://localhost/api/claims/"+foreignClaim+"/pack"),{params:Promise.resolve({id:foreignClaim})});
       assert.equal(response.status,404);
       assert.equal(response.headers.get("content-type")?.includes("pdf"),false);
       await db.query("DELETE FROM claim_sessions WHERE id=$1",[foreignClaim]);
@@ -1047,7 +1080,7 @@ async function main(){
       assert.ok(before.reminders.some((r:{title:string})=>/whose/i.test(r.title)),"It is on the to-do list, not only in a list of documents");
       assert.equal(before.unclaimed.some((doc:{id:string})=>doc.id===fixture.referenceId),false,"A document that already has an owner is not asked about again");
       // The person says whose it is. That is the whole interaction.
-      const linked=await linkPerson(new Request("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+      const linked=await linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:orphan,familyMemberId:people[1].id,declared:true})}));
       assert.equal(linked.status,200);
       const after=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
@@ -1427,7 +1460,7 @@ async function main(){
       assert.ok(answer.claimSessionId,"The claim is on record");
       assert.ok(answer.nextSteps.some(step=>/claim pack/i.test(step)),"The last thing said is what to do next: "+answer.nextSteps.join(" / "));
       assert.ok(answer.nextSteps.some(step=>/Gather:/.test(step)&&/medical report/i.test(step)),"…and what to gather follows the event: "+answer.nextSteps.join(" / "));
-      const pack=await getClaimPack(new Request("http://localhost/api/claims/"+answer.claimSessionId+"/pack"),{params:Promise.resolve({id:answer.claimSessionId!})});
+      const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+answer.claimSessionId+"/pack"),{params:Promise.resolve({id:answer.claimSessionId!})});
       assert.equal(pack.status,200,"The pack can be printed straight from a chat answer");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(new Uint8Array(await pack.arrayBuffer()))).map(page=>page.text).join(" ").replace(/\s+/g," ");
