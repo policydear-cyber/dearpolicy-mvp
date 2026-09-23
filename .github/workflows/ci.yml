@@ -61,5 +61,80 @@ jobs:
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
 
+      - name: Launch-hardening security regression suite
+        run: npm run security:test
+
+      - name: Database TLS configuration regression suite (no live DB needed)
+        run: npm run security:tls-test
+
+      - name: Production launch-guard regression suite (gate.ts/devAccountId() production-disable, launch guards)
+        run: npm run security:launch-guard-test
+
+      - name: Row Level Security regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:rls-test
+
+      - name: Authorization-client regression suite (createUserSupabaseClient RLS boundary)
+        run: npm run security:authz-client-test
+
+      - name: Household repository regression suite
+        run: npm run security:household-test
+
+      - name: Route inventory regression suite (every app/api/**/route.ts classified and authorized)
+        run: npm run security:route-inventory-test
+
+      - name: Import-boundary regression suite (devAccountId/service-client/rate-limiter bans under app/)
+        run: npm run security:import-boundary-test
+
+      - name: Authorization HTTP regression suite (real route handlers, real auth boundary)
+        run: npm run security:authz-http-test
+
+      - name: Storage RLS regression suite
+        run: npm run security:storage-rls-test
+
+      - name: Storage orphan audit regression suite
+        run: npm run security:storage-orphans-test
+
+      - name: Shared Postgres-backed rate-limiter regression suite
+        run: npm run security:db-rate-limit-test
+
+      - name: CSRF protection regression suite
+        run: npm run security:csrf-test
+
+      - name: Launch capability manifest regression suite
+        run: npm run security:launch-check-test
+
+      - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:policy-quarantine-test
+
+      - name: Scan-provider callback authentication regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:scan-callback-test
+
+      - name: Storage cleanup regression suite (manifest/confirmation, protection rules, lock, audit trail -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:storage-cleanup-test
+
+      - name: Household export regression suite (recent-auth guard, snapshot exclusions, idempotency, CAS lifecycle, race-safe expiry -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-export-test
+
+      - name: Deletion lifecycle regression suite (state-machine CAS, deletion-request idempotency, policy-document flow, chat-retrieval exclusion, storage-cleanup integration -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:lifecycle-test
+
+      - name: Deletion lifecycle query-guard regression suite (static scan -- a normal active-record query must not omit the lifecycle predicate)
+        run: npm run security:lifecycle-query-guard-test
+
+      - name: Active-read scopes behavioral regression suite (seeded active+non-active rows through the real application functions, not static scanning -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:active-read-scopes-test
+
+      - name: Whole-policy deletion regression suite (version-chain resolution, shared reference-document protection & orphan cascade, open/completed claim invalidation, coverage-ledger exclusion -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:policy-deletion-test
+
+      - name: Claim-evidence deletion regression suite (logical-access revocation, open/completed claim invalidation via evidence_document_id, single-writer audit trail, business-supersede-chain isolation -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:claim-evidence-deletion-test
+
+      - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
+        run: npm run security:placeholder-content-test
+
       - name: Build
         run: npm run build
+
+      - name: Launch readiness report (non-blocking here: this environment has no real production secrets to check against)
+        run: npm run launch:check
