@@ -43,7 +43,8 @@
     "security:db-rate-limit-test": "node --import tsx scripts/db-rate-limit-regressions.ts",
     "security:csrf-test": "node --import tsx scripts/csrf-regressions.ts",
     "security:launch-check-test": "node --import tsx scripts/launch-check-regressions.ts",
-    "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts"
+    "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts",
+    "security:scan-callback-test": "node --import tsx scripts/scan-callback-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

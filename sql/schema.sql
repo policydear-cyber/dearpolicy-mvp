@@ -419,3 +419,23 @@ CREATE TABLE IF NOT EXISTS policy_document_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_policy_document_audit_policy ON policy_document_audit_log(policy_id);
 CREATE INDEX IF NOT EXISTS idx_policy_document_audit_account ON policy_document_audit_log(account_id, occurred_at DESC);
+
+-- Scan-provider callback replay protection (checkpoint 4,
+-- claude/v1-launch-hardening). Insert-only: a provider's (provider,
+-- event_id) pair may be recorded exactly once, ever, regardless of which
+-- document it was for or what verdict it carried -- lib/scanning/
+-- callback-auth.ts inserts a row here BEFORE looking up or mutating any
+-- document, so a replayed or duplicated callback (a MITM replay, a
+-- provider's own at-least-once retry) is rejected at this layer even
+-- before the document-level CAS in lib/policies/quarantine/store.ts's
+-- recordPolicyScanResult() gets a chance to run. Deliberately holds no
+-- document/account reference and no payload -- only enough to detect a
+-- repeat, so it carries none of the privacy weight a full callback log
+-- would.
+CREATE TABLE IF NOT EXISTS scan_provider_events (
+  provider text NOT NULL,
+  event_id text NOT NULL,
+  received_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (provider, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_scan_provider_events_received ON scan_provider_events(received_at);

@@ -28,6 +28,24 @@ const OPEN_PATHS = new Set([
   "/api/health",
 ]);
 
+/** Server-to-server callback routes (checkpoint 4, claude/v1-launch-
+ * hardening) -- a real scan-provider webhook, unlike every other route in
+ * this app, is never sent by a browser and carries no Origin/Referer
+ * header at all, so lib/http/csrf.ts's Origin check would reject it
+ * outright (it fails closed on a missing Origin by design). These routes
+ * are exempt from BOTH the CSRF Origin check and the Supabase-session
+ * requirement below -- they are not unauthenticated: each one verifies an
+ * HMAC signature, a bounded timestamp and a single-use event id itself
+ * (see lib/scanning/callback-auth.ts's verifyAndConsumeCallback()), a
+ * STRONGER authentication than an Origin header check would provide. This
+ * updates the invariant lib/http/csrf.ts's own module comment used to
+ * document ("no webhooks, no server-to-server caller") -- see that file's
+ * regression suite for the explicit proof this exemption is scoped to
+ * exactly these paths and nothing else. */
+const INTERNAL_CALLBACK_PATHS = new Set([
+  "/api/policies/scan-callback",
+]);
+
 function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (isProduction(env)) return false;
   return /^(1|true|on|yes)$/i.test(env.DEV_AUTH_ENABLED?.trim() ?? "");
@@ -43,7 +61,8 @@ export async function middleware(request: NextRequest) {
   // this check's job as one against an authenticated route. See
   // lib/http/csrf.ts for the full reasoning (Origin-first, Referer
   // fallback, fails closed).
-  if (isApi) {
+  const isInternalCallback = INTERNAL_CALLBACK_PATHS.has(pathname);
+  if (isApi && !isInternalCallback) {
     const originCheck = checkRequestOrigin(request, request.nextUrl.origin);
     if (!originCheck.allowed) {
       return NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 });
@@ -71,7 +90,11 @@ export async function middleware(request: NextRequest) {
   // explicitly closes that off instead of relying on the framework default.
   if (isApi) response.headers.set("Cache-Control", "private, no-store");
 
-  if (OPEN_PATHS.has(pathname)) return response;
+  // isInternalCallback routes authenticate themselves (see the comment on
+  // INTERNAL_CALLBACK_PATHS above) and are never reachable via a Supabase
+  // session at all -- exempt from the session requirement below for the
+  // same reason they are exempt from the CSRF check above.
+  if (OPEN_PATHS.has(pathname) || isInternalCallback) return response;
   if (user) return response;
   if (devAuthEnabled()) return response;
 

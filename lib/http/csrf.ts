@@ -20,7 +20,7 @@
  * falls back to `Referer` only when `Origin` is absent, matching Chrome's
  * own fallback behavior for older/edge-case requests.
  *
- * ## Deliberately fails CLOSED, unlike lib/http/db-rate-limit.ts
+* ## Deliberately fails CLOSED, unlike lib/http/db-rate-limit.ts
  * A request with neither header is rejected, not allowed through. This is
  * the opposite trade-off from db-rate-limit.ts's fail-open choice, and
  * deliberately so: rate limiting is one layer of defense in depth behind
@@ -28,11 +28,23 @@
  * hole. A CSRF check IS the authorization boundary being enforced here --
  * failing it open would mean the one request shape a forged cross-site
  * form submission naturally produces (no Origin, an absent or stripped
- * Referer) sails straight through. This app has no documented API client
- * that calls it without a browser (no webhooks, no mobile app, no
- * server-to-server caller -- see this file's own regression suite's header
- * for how that was checked), so rejecting an Origin-less state-changing
- * request costs nothing today.
+ * Referer) sails straight through. Every browser-facing route in this app
+ * requires a browser-set session cookie via requireHouseholdContext()/
+ * requireCurrentUser() or is itself a browser-facing auth form endpoint,
+ * so rejecting an Origin-less request costs nothing for those.
+ *
+ * ## The one exception: authenticated server-to-server callbacks
+ * checkpoint 4 (claude/v1-launch-hardening) added a real webhook receiver
+ * (a scan-provider callback, app/api/policies/scan-callback/route.ts) that
+ * is never sent by a browser and so never carries an Origin/Referer header
+ * at all. middleware.ts exempts that route -- by exact path, via its own
+ * INTERNAL_CALLBACK_PATHS set, checked BEFORE this module's check ever
+ * runs -- rather than weakening checkRequestOrigin() itself, which stays
+ * exactly as strict as before for every route not on that explicit list.
+ * The exempted route is not unauthenticated: it verifies an HMAC
+ * signature, a bounded timestamp and a single-use event id instead (see
+ * lib/scanning/callback-auth.ts), which an Origin header could not provide
+ * anyway (an attacker fully controls what Origin their own server sends).
  */
 
 export const CSRF_CHECKED_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);

@@ -118,6 +118,26 @@ async function main() {
   const getResponse = await middleware(crossOriginGet);
   assert.notEqual(getResponse.status, 403, "GET requests must never be blocked by the CSRF check, even cross-origin");
 
+  // The one explicit exemption (checkpoint 4): a real scan-provider
+  // callback carries no Origin/Referer at all and must not be blocked by
+  // this check -- but the exemption must be scoped to EXACTLY that path,
+  // never a prefix match that could be abused.
+  const callbackNoOrigin = new NextRequest("http://localhost/api/policies/scan-callback", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ eventId: "evt-1" }),
+  });
+  const callbackResponse = await middleware(callbackNoOrigin);
+  assert.notEqual(callbackResponse.status, 403, "the scan-callback route must not be blocked by the CSRF check even with no Origin header");
+
+  const notActuallyExempt = new NextRequest("http://localhost/api/policies/scan-callback-evil", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  const notExemptResponse = await middleware(notActuallyExempt);
+  assert.equal(notExemptResponse.status, 403, "a similarly-named path must NOT be swept into the exemption by a prefix match");
+
   console.log("middleware() CSRF-wiring regressions passed.");
 }
 

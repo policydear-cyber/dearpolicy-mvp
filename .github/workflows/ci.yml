@@ -106,6 +106,9 @@ jobs:
       - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:policy-quarantine-test
 
+      - name: Scan-provider callback authentication regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:scan-callback-test
+
       - name: Build
         run: npm run build
 
