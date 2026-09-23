@@ -3,6 +3,7 @@ import { devAccountId,isUuid,query } from "@/lib/db/client";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 function canonicalProduct(value:string|null|undefined){const v=(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();if(/group term life|\bgtl\b/.test(v))return"group term life";if(/group personal accident|\bgpa\b/.test(v))return"group personal accident";if(/living care plus/.test(v))return"living care plus";if(/\bliving care\b/.test(v))return"living care";if(/disability income/.test(v))return"disability income";if(/outpatient medicare/.test(v))return"outpatient medicare";return v;}
 function productFromCategory(category:string){if(category==="Death"||category==="Total Permanent Disability"||category==="Hospital Cash")return"group term life";if(category==="Personal Accident")return"group personal accident";if(category==="Critical Illness")return"living care";if(category==="Early Critical Illness")return"living care plus";if(category==="Disability Income")return"disability income";if(category==="Outpatient")return"outpatient medicare";return"";}
 export async function GET(request:Request){

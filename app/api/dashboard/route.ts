@@ -5,6 +5,7 @@ import { annualisePremium,COVERAGE_CATEGORIES,monthlyEquivalent,normalizeCoverag
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=60;
 type PremiumRow={id:string;policy_id:string|null;family_member_id:string|null;insurer:string|null;product_name:string|null;policy_number:string|null;amount:string;currency:string;frequency:string|null;payment_date:string|null;period_start:string|null;created_at:string};
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { devAccountId, isValidDateString, query } from "@/lib/db/client";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 type FamilyRow = { id: string; display_name: string; relationship: string; date_of_birth: string | null; preferred_name: string | null; notes: string | null; policy_count: number };
 

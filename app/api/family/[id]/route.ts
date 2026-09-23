@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { devAccountId, isUuid, isValidDateString, query } from "@/lib/db/client";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {

@@ -11,6 +11,7 @@ import { enqueueClaimEvidenceProcessing } from "@/lib/claims/evidence/queue";
 import type { ClaimEvidenceDocumentType } from "@/lib/claims/evidence/types";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 // Same rationale as app/api/policies/upload/route.ts: hosted OCR + LLM
 // extraction on a scanned document can take a while; keep the background
 // job alive past the response instead of racing the function being frozen.

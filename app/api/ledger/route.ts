@@ -8,6 +8,7 @@ import { describePays } from "@/lib/ledger/answer";
 import { ledgerReadingInProgress,pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** The Coverage Ledger, as a screen: one row per (person, plan, event, pays),
  * with what it came from and whether the person has confirmed it. Every payout
