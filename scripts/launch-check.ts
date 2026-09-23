@@ -835,10 +835,26 @@ function checkModelPromptSchemaGovernance() {
       "minimum-schema-version compatibility check -- caught; (3) disabling assertVerifiedForMonetaryUse()'s " +
       "throw -- caught; (4) letting a null resolved identity verify as true -- caught; (5) hiding the primary " +
       "attempt's failed record before a fallback -- caught by the real end-to-end fallback-chain test, not a " +
-      "unit stub. Still blocked_by_code: assertVerifiedForMonetaryUse() is a sabotage-verified primitive that " +
-      "NOTHING in this codebase's calculators or evidence-linking code actually calls yet, so no monetary result " +
-      "is presently gated by it -- wiring that enforcement into the calculation engine, plus Checkpoint 11's " +
-      "controlled-rollout/stale-data invalidation on top of this same identity, is Priority 9/10.",
+      "unit stub. Checkpoint 11 (lib/ai/rollout.ts, lib/ai/staleness.ts): a canary model for one operation, " +
+      "turned on purely by CANARY_<OPERATION>_MODEL/_PERCENTAGE configuration (absent/default = zero behavior " +
+      "change), routed to a deterministic percentage of subjects via a keyed hash (never a per-call random draw, " +
+      "so one household's experience stays consistent call to call), with a per-operation and a global " +
+      "CANARY_KILL_SWITCH_ALL override, and the resolved cohort persisted onto the model_executions row it " +
+      "produced (requested_rollout). Stale-data invalidation: checkStaleness() marks a record stale when it is " +
+      "unverified OR its schema_version is behind the operation's CURRENT_SCHEMA_VERSION (distinct from this " +
+      "same file's MINIMUM_SCHEMA_VERSION floor -- current is a target, minimum is a grace-period floor); " +
+      "staleExecutionSummary() reports counts grouped by operation/schema_version as an operational worklist " +
+      "(model_executions' refs are pseudonymized by design, so this reports HOW MANY records need reprocessing, " +
+      "not WHICH real rows -- a real invalidation queue needs a call site that still holds the real id). All 5 " +
+      "of Checkpoint 11's own named sabotage cycles were performed against live source and genuinely verified: " +
+      "kill-switch bypass, non-deterministic/gameable cohort assignment (real hash swapped for Math.random(), " +
+      "caught by a 20-iteration same-subject determinism check), a stale schema version accepted as current, an " +
+      "unverified record accepted as fresh, and hiding which cohort actually produced a persisted row (caught by " +
+      "a real end-to-end structuredCompletion() run, not a unit stub). Still blocked_by_code on two fronts: (1) " +
+      "assertVerifiedForMonetaryUse() is a sabotage-verified primitive that NOTHING in this codebase's " +
+      "calculators or evidence-linking code actually calls yet, so no monetary result is presently gated by it; " +
+      "(2) staleExecutionSummary()'s worklist is not wired to any real re-processing trigger -- an operator can " +
+      "see the count, nothing automatically acts on it yet. Both are Priority 9.",
   );
 }
 

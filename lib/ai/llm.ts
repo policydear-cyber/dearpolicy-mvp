@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
 import { recordModelExecution, type KnownOperation } from "./provenance";
+import { canaryConfigFor, resolveRollout } from "./rollout";
 function ledgerAccountId() { return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001"; }
 
 type CompletionRuntimeOptions = {
@@ -81,8 +82,16 @@ export async function structuredCompletion<T>(args: {
   const budget = args.maxOutputTokens;
 
   const role: ModelRole = args.role ?? "chat";
-  const choice = modelFor(role);
   const operation: KnownOperation = args.operation ?? "chat_reply";
+  // Checkpoint 11: a configured canary (CANARY_<OPERATION>_MODEL etc., see
+  // lib/ai/rollout.ts) can replace the primary target for a deterministic
+  // slice of subjects. Bucketing prefers householdId, falling back to
+  // resourceId, so the whole household/resource sees one consistent
+  // cohort; with no subject at all (or no canary configured, the default
+  // for every existing call site), this resolves to stable and `choice` is
+  // exactly modelFor(role) -- unchanged behavior.
+  const rollout = resolveRollout(canaryConfigFor(operation), args.householdId ?? args.resourceId ?? null);
+  const choice = rollout.target ?? modelFor(role);
   const attemptGroupId = randomUUID();
   await assertUnderSpendCap(ledgerAccountId());
     const call = async (target: typeof choice, attemptIndex: number) => {
@@ -96,7 +105,7 @@ export async function structuredCompletion<T>(args: {
         await recordModelExecution({
           correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
           householdId: args.householdId, resourceId: args.resourceId,
-          requested: { provider: target.provider, model: target.model, capability: role, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
+          requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
           requestedAt, resolved: reply.resolved, status: "succeeded",
           usage: reply.usage, latencyMs: durationMs,
         });
@@ -107,7 +116,7 @@ export async function structuredCompletion<T>(args: {
         await recordModelExecution({
           correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
           householdId: args.householdId, resourceId: args.resourceId,
-          requested: { provider: target.provider, model: target.model, capability: role, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
+          requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
           requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
         });
         throw error;
