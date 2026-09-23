@@ -22,15 +22,28 @@
  *   9. record an immutable audit event (appendDeletionAudit)
  *  10. return a deletion-request id and a safe, structured status
  *
- * policy_document (a single document version) and policy (the whole
+ * policy_document (a single document version), policy (the whole
  * logical policy -- its full version chain plus any shared reference
  * document it orphans, see requestPolicyDeletion/resolvePolicyDeletionChain
- * below) are implemented here. The remaining six flows (claim-evidence,
- * family-member, household-member removal, leave-household, invitation
- * revocation, household/account deletion) are tracked as follow-up work
- * -- see PR #16's own status notes and scripts/launch-check.ts's
- * checkDataDeletionAndInvalidation(), which reports this capability as
- * still blocked_by_code and itemizes exactly what remains.
+ * below), claim_evidence (one claim-evidence document, see
+ * requestClaimEvidenceDeletion), family_member (one family-member
+ * profile -- refused rather than cascaded whenever it has any linked
+ * policy/claim/coverage/chat activity, see requestFamilyMemberDeletion),
+ * household_member (an owner removing another member, see
+ * requestHouseholdMemberRemoval), household_leave (a member removing
+ * themselves, see requestHouseholdLeave -- both wrap the same
+ * lib/household/repo.ts's removeMember(), which already owns the
+ * last-owner-protection business rule and is deliberately not
+ * reimplemented here), and invitation (revoking a still-pending
+ * invitation, see requestInvitationRevocation -- wraps
+ * lib/household/repo.ts's revokeInvitation() the same way), and household
+ * (the whole account, see requestHouseholdDeletion -- wraps
+ * lib/household/repo.ts's deleteHousehold(); see that function's own doc
+ * comment for why this flow, alone among the eight, keeps an immediate
+ * hard delete rather than a deferred soft-delete) are implemented here.
+ * All 8 deletion flows this checkpoint's LIFECYCLE_RESOURCE_TYPES
+ * anticipated are now implemented -- see scripts/launch-check.ts's
+ * checkDataDeletionAndInvalidation() for the up-to-date per-flow report.
  */
 import { randomUUID } from "node:crypto";
 import { pool } from "@/lib/db/client";
@@ -38,8 +51,12 @@ import type { ScopedDbClient } from "@/lib/db/authz-client";
 import { deletePolicyFile } from "@/lib/storage";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
-import { readIncludingDeletedForInternalUse } from "./scopes";
+import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
+import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
+import { recordEvent } from "@/lib/telemetry";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
+import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
 
 export type DeletionOutcome = {
@@ -208,6 +225,8 @@ export async function finishPolicyDocumentDeletion(args: {
     // that determination.
   });
 
+  const correlationId = randomUUID();
+
   await appendDeletionAudit(pool, {
     accountId: args.accountId,
     deletionRequestId: args.deletionRequestId,
@@ -216,8 +235,18 @@ export async function finishPolicyDocumentDeletion(args: {
     actor: args.actorUserId,
     fromState: "pending_deletion",
     toState: "soft_deleted",
-    correlationId: randomUUID(),
+    correlationId,
     cleanupStatus: "storage_object_pending_cleanup_engine",
+  });
+
+  await recordEvent({
+    name: "lifecycle.deletion.finished",
+    correlationId,
+    status: "success",
+    processingState: "soft_deleted",
+    resourceRef: pseudonymizeId(args.policyId),
+    householdRef: pseudonymizeId(args.accountId),
+    extra: { resourceType: "policy_document" },
   });
 
   return { storageWarning };
@@ -387,16 +416,51 @@ async function invalidateClaimMatchesForDeletedPolicies(
   accountId: string,
   policyIds: string[],
 ): Promise<string[]> {
+  return invalidateClaimMatchesReferencing(client, accountId, { contractIds: policyIds });
+}
+/** Generalized form of the match-invalidation logic Flow 2 (whole-policy
+ * deletion) introduced: supersedes every non-superseded cause/CI/
+ * disability definition-match row citing ANY of the given deleted
+ * contracts (policies) and/or deleted evidence documents -- either
+ * reference going stale is exactly the same "cannot keep unlocking
+ * anything" problem, since loadActiveCauseDefinitionMatches() and its
+ * CI/disability siblings (lib/claims/evidence/store.ts) only filter
+ * superseded_at IS NULL, with no JOIN back to policies or
+ * claim_evidence_documents to catch a deleted contract or evidence
+ * document on their own. For any claim_session this leaves with a stale,
+ * now-unsupported decision that is still OPEN, its cached decision_packet/
+ * pending_question is cleared and status reset to 'fact_finding'. Returns
+ * the ids of every open session actually reset. */
+async function invalidateClaimMatchesReferencing(
+  client: ScopedDbClient,
+  accountId: string,
+  refs: { contractIds?: string[]; evidenceDocumentIds?: string[] },
+): Promise<string[]> {
+  const contractIds = refs.contractIds ?? [];
+  const evidenceDocumentIds = refs.evidenceDocumentIds ?? [];
+  if (!contractIds.length && !evidenceDocumentIds.length) return [];
+
   const affectedSessions = new Set<string>();
   const MATCH_TABLES = ["claim_cause_definition_matches", "claim_ci_definition_matches", "claim_disability_definition_matches"] as const;
   for (const table of MATCH_TABLES) {
-    const { rows } = await client.query<{ claim_session_id: string }>(
-      `UPDATE ${table} SET superseded_at=now(), superseded_reason='policy_deleted'
-        WHERE account_id=$1 AND contract_id=ANY($2::uuid[]) AND superseded_at IS NULL
-       RETURNING claim_session_id`,
-      [accountId, policyIds],
-    );
-    for (const r of rows) affectedSessions.add(r.claim_session_id);
+    if (contractIds.length) {
+      const { rows } = await client.query<{ claim_session_id: string }>(
+        `UPDATE ${table} SET superseded_at=now(), superseded_reason='policy_deleted'
+          WHERE account_id=$1 AND contract_id=ANY($2::uuid[]) AND superseded_at IS NULL
+         RETURNING claim_session_id`,
+        [accountId, contractIds],
+      );
+      for (const r of rows) affectedSessions.add(r.claim_session_id);
+    }
+    if (evidenceDocumentIds.length) {
+      const { rows } = await client.query<{ claim_session_id: string }>(
+        `UPDATE ${table} SET superseded_at=now(), superseded_reason='evidence_deleted'
+          WHERE account_id=$1 AND evidence_document_id=ANY($2::uuid[]) AND superseded_at IS NULL
+         RETURNING claim_session_id`,
+        [accountId, evidenceDocumentIds],
+      );
+      for (const r of rows) affectedSessions.add(r.claim_session_id);
+    }
   }
   if (!affectedSessions.size) return [];
 
@@ -408,6 +472,187 @@ async function invalidateClaimMatchesForDeletedPolicies(
   );
   return reset.map((r) => r.id);
 }
+
+type ClaimEvidenceRow = { id: string; family_member_id: string; claim_session_id: string; original_filename: string; storage_key: string; lifecycle_state: string };
+
+export type ClaimEvidenceDeletionOutcome = DeletionOutcome & {
+  filename: string | null;
+  affectedOpenClaimSessionIds: string[];
+};
+
+/**
+ * Deletes ONE claim-evidence document (resource_type='claim_evidence',
+ * table claim_evidence_documents -- already lifecycle-tracked, see
+ * lib/lifecycle/types.ts's LIFECYCLE_TABLE_BY_RESOURCE). Unlike Flow 2,
+ * this is deliberately a single-document action, not a whole-chain one:
+ * an evidence document's own supersedes_id/superseded_at pair (set by
+ * lib/claims/evidence/store.ts's supersedeEvidenceDocument() on a
+ * re-upload) is business-level version history that this codebase's own
+ * comments say must stay "intact and inspectable" for audit -- a
+ * superseded-but-not-deleted row is not itself a target of this flow,
+ * and deleting the CURRENT version of a slot never reaches back into its
+ * own superseded predecessors.
+ *
+ * Runs inside the caller's own RLS-scoped transaction for every step
+ * that must be atomic with the lifecycle transition, matching every
+ * other flow's split between in-transaction work here and the
+ * deliberately-non-transactional cleanup in finishClaimEvidenceDeletion.
+ * There is no Pinecone/vector index to clean up for this resource type
+ * (claim-evidence documents are never chunked/embedded, unlike policy
+ * documents), so finishing this flow is lighter than the policy flows.
+ *
+ * Idempotent: a retry with the same idempotencyKey returns the SAME
+ * deletion_requests row and performs no further mutation once the
+ * document has already reached soft_deleted.
+ */
+export async function requestClaimEvidenceDeletion(args: {
+  client: ScopedDbClient;
+  accountId: string;
+  actorUserId: string;
+  evidenceDocumentId: string;
+  reasonCategory: DeletionReasonCategory;
+  idempotencyKey: string;
+}): Promise<ClaimEvidenceDeletionOutcome> {
+  const { row: request, created } = await createOrGetDeletionRequest(pool, {
+    accountId: args.accountId,
+    resourceType: "claim_evidence",
+    resourceId: args.evidenceDocumentId,
+    requestedBy: args.actorUserId,
+    reasonCategory: args.reasonCategory,
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  if (!created && request.lifecycle_state !== "pending_deletion") {
+    return {
+      status: mapRequestStateToStatus(request),
+      deletionRequestId: request.id,
+      resourceId: args.evidenceDocumentId,
+      filename: null,
+      affectedOpenClaimSessionIds: [],
+    };
+  }
+
+  // Deliberately reads regardless of lifecycle_state -- same
+  // justification as every other flow: idempotent retries and recovery
+  // both require seeing a row that may already be pending_deletion/
+  // soft_deleted from a prior attempt.
+  readIncludingDeletedForInternalUse(
+    "deletion_coordinator",
+    "must read a claim-evidence document regardless of its current lifecycle state to validate/transition/retry a deletion request",
+  );
+  const result = await args.client.query<ClaimEvidenceRow>(
+    `SELECT id, family_member_id, claim_session_id, original_filename, storage_key, lifecycle_state
+       FROM claim_evidence_documents
+      WHERE id=$1 AND account_id=$2
+      FOR UPDATE`,
+    [args.evidenceDocumentId, args.accountId],
+  );
+  const doc = result.rows[0];
+  if (!doc) {
+    throw new DeletionValidationError("Evidence document not found");
+  }
+
+  if (doc.lifecycle_state === "active") {
+    // Step 4/5: transition + immediate logical-access revocation, in the
+    // SAME transaction as the match-invalidation below -- every read
+    // this checkpoint has migrated (getEvidenceDocument,
+    // listEvidenceDocuments, etc. in lib/claims/evidence/store.ts)
+    // already filters lifecycle_state='active'.
+    await transitionLifecycle(args.client as unknown as LifecycleDbClient, {
+      resourceType: "claim_evidence",
+      resourceId: doc.id,
+      accountId: args.accountId,
+      fromState: "active",
+      toState: "pending_deletion",
+    });
+  }
+
+  // Step 6: derived-data invalidation. loadActiveCauseDefinitionMatches()
+  // and its CI/disability siblings only filter superseded_at IS NULL --
+  // they do not join back to claim_evidence_documents -- so a match
+  // citing this evidence document must be explicitly superseded or it
+  // would keep being read (and keep unlocking a claim amount) even after
+  // its source document is gone.
+  const affectedOpenClaimSessionIds = await invalidateClaimMatchesReferencing(args.client, args.accountId, {
+    evidenceDocumentIds: [doc.id],
+  });
+
+  // Step 9 (partial, in-transaction): the append-only claim-evidence
+  // audit trail has exactly one writer (lib/claims/evidence/audit.ts's
+  // appendClaimEvidenceAudit -- "the one place allowed to write to
+  // claim_evidence_audit_log"), so the deletion event goes through it
+  // rather than a raw INSERT here, unlike policy_document_audit_log
+  // (which this coordinator already writes directly for the policy
+  // flows -- that table has no such single-writer convention).
+  await appendClaimEvidenceAudit(args.accountId, {
+    actor: args.actorUserId,
+    action: "deleted",
+    previousValue: { lifecycleState: "active" },
+    newValue: { lifecycleState: "pending_deletion" },
+    evidenceDocumentId: doc.id,
+    claimSessionId: doc.claim_session_id,
+  });
+
+  return {
+    status: "accepted",
+    deletionRequestId: request.id,
+    resourceId: args.evidenceDocumentId,
+    filename: doc.original_filename,
+    affectedOpenClaimSessionIds,
+  };
+}
+
+/**
+ * Finishes a claim-evidence deletion outside the caller's transaction:
+ * marks the deletion request completed. The physical storage object is
+ * deliberately left for the Checkpoint 5 storage-cleanup engine, same
+ * convention as the policy flows -- lib/storage/cleanup.ts's
+ * activeStorageKeys(db, "claim-evidence") already excludes this row the
+ * instant its lifecycle_state left 'active' above (that domain's
+ * predicate, ` AND lifecycle_state='active'`, was already wired in
+ * Checkpoint 5, ahead of this flow existing).
+ */
+export async function finishClaimEvidenceDeletion(args: {
+  accountId: string;
+  actorUserId: string;
+  evidenceDocumentId: string;
+  deletionRequestId: string;
+}): Promise<void> {
+  await transitionDeletionRequest(pool, {
+    id: args.deletionRequestId,
+    fromStates: ["pending_deletion"],
+    toState: "soft_deleted",
+    completedAt: new Date(),
+  }).catch(() => {
+    // A repeat call (idempotent retry) may already be past this state.
+  });
+
+  const correlationId = randomUUID();
+
+  await appendDeletionAudit(pool, {
+    accountId: args.accountId,
+    deletionRequestId: args.deletionRequestId,
+    resourceType: "claim_evidence",
+    resourceId: args.evidenceDocumentId,
+    actor: args.actorUserId,
+    fromState: "pending_deletion",
+    toState: "soft_deleted",
+    correlationId,
+    cleanupStatus: "storage_object_pending_cleanup_engine",
+  });
+
+  await recordEvent({
+    name: "lifecycle.deletion.finished",
+    correlationId,
+    status: "success",
+    processingState: "soft_deleted",
+    resourceRef: pseudonymizeId(args.evidenceDocumentId),
+    householdRef: pseudonymizeId(args.accountId),
+    extra: { resourceType: "claim_evidence" },
+  });
+}
+
+
 
 export type PolicyDeletionOutcome = DeletionOutcome & {
   filename: string | null;
@@ -589,6 +834,8 @@ export async function finishPolicyDeletion(args: {
     // A repeat call (idempotent retry) may already be past this state.
   });
 
+  const correlationId = randomUUID();
+
   await appendDeletionAudit(pool, {
     accountId: args.accountId,
     deletionRequestId: args.deletionRequestId,
@@ -597,11 +844,590 @@ export async function finishPolicyDeletion(args: {
     actor: args.actorUserId,
     fromState: "pending_deletion",
     toState: "soft_deleted",
-    correlationId: randomUUID(),
+    correlationId,
     cleanupStatus: "storage_object_pending_cleanup_engine",
   });
 
+  await recordEvent({
+    name: "lifecycle.deletion.finished",
+    correlationId,
+    status: "success",
+    processingState: "soft_deleted",
+    resourceRef: pseudonymizeId(args.policyId),
+    householdRef: pseudonymizeId(args.accountId),
+    extra: { resourceType: "policy", chainSize: args.chainPolicyIds.length },
+  });
+
   return { storageWarning };
+}
+
+export class HasLinkedActivityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HasLinkedActivityError";
+  }
+}
+
+type FamilyMemberRow = {
+  id: string;
+  relationship: string;
+  display_name: string;
+  lifecycle_state: string;
+};
+
+export type FamilyMemberDeletionOutcome = DeletionOutcome & {
+  displayName: string | null;
+};
+
+/**
+ * Deletes a single family-member profile (resource_type='family_member',
+ * table family_members -- already lifecycle-tracked, see
+ * lib/lifecycle/types.ts's LIFECYCLE_TABLE_BY_RESOURCE). Migrates the
+ * hard, irrecoverable `DELETE FROM family_members` previously done
+ * directly in app/api/family/[id]/route.ts's DELETE handler onto this
+ * checkpoint's CAS state machine (pending_deletion, recoverable window,
+ * audited, idempotent) -- family_members was already migrated for READS
+ * (lib/lifecycle/scopes.ts's activePredicate() call sites) but its own
+ * deletion path still bypassed the lifecycle machinery entirely, doing
+ * an immediate, unrecoverable row delete with no deletion_requests
+ * bookkeeping and no audit trail. That real gap is what this flow
+ * closes.
+ *
+ * Preserves, unchanged, the pre-existing product rule the original route
+ * enforced: deletion is REFUSED (not cascaded) whenever the profile has
+ * any real linked activity -- an uploaded policy, a policy-ownership
+ * link, chat history, a claim session, a coverage-ledger rule, or a
+ * premium record. That rule predates this checkpoint and its own
+ * route-level comment explains why: silently cascading a delete through
+ * a family member's policy documents and claim history in a family
+ * insurance app is exactly the kind of data loss that must never be a
+ * single click. This flow keeps that refusal as a precondition checked
+ * BEFORE any mutation, consistent with how Flow 2 refuses rather than
+ * cascades through a still-authorizing shared reference document.
+ *
+ * Idempotent: a retry with the same idempotencyKey returns the SAME
+ * deletion_requests row and performs no further mutation once the
+ * profile has already reached soft_deleted.
+ */
+export async function requestFamilyMemberDeletion(args: {
+  client: ScopedDbClient;
+  accountId: string;
+  actorUserId: string;
+  familyMemberId: string;
+  reasonCategory: DeletionReasonCategory;
+  idempotencyKey: string;
+}): Promise<FamilyMemberDeletionOutcome> {
+  const { row: request, created } = await createOrGetDeletionRequest(pool, {
+    accountId: args.accountId,
+    resourceType: "family_member",
+    resourceId: args.familyMemberId,
+    requestedBy: args.actorUserId,
+    reasonCategory: args.reasonCategory,
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  if (!created && request.lifecycle_state !== "pending_deletion") {
+    return {
+      status: mapRequestStateToStatus(request),
+      deletionRequestId: request.id,
+      resourceId: args.familyMemberId,
+      displayName: null,
+    };
+  }
+
+  // Deliberately reads regardless of lifecycle_state -- same
+  // justification as every other flow: idempotent retries and recovery
+  // both require seeing a row that may already be pending_deletion/
+  // soft_deleted from a prior attempt.
+  readIncludingDeletedForInternalUse(
+    "deletion_coordinator",
+    "must read a family member regardless of its current lifecycle state to validate/transition/retry a deletion request",
+  );
+  const result = await args.client.query<FamilyMemberRow>(
+    `SELECT id, relationship, display_name, lifecycle_state
+       FROM family_members
+      WHERE id=$1 AND account_id=$2
+      FOR UPDATE`,
+    [args.familyMemberId, args.accountId],
+  );
+  const member = result.rows[0];
+  if (!member) {
+    throw new DeletionValidationError("Family member not found");
+  }
+
+  if (member.lifecycle_state === "active") {
+    // Step 3: validate relational constraints BEFORE any mutation --
+    // the exact same usage count app/api/family/[id]/route.ts's DELETE
+    // handler computed, now the coordinator's own precondition rather
+    // than a route-level check that bypassed the lifecycle machinery.
+    // Only `policies` carries its own lifecycle_state among these
+    // tables, so it is the only count scoped by activePredicate(); the
+    // others (policy_members, chat_conversations, claim_sessions,
+    // coverage_rules, premium_records) have no lifecycle column of
+    // their own and are counted as-is, exactly matching prior behavior.
+    const usage = await args.client.query<{ n: number }>(
+      `SELECT (
+          (SELECT count(*) FROM policies WHERE family_member_id=$1 AND ${activePredicate()})
+        + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
+        + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
+        + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
+        + (SELECT count(*) FROM coverage_rules WHERE family_member_id=$1)
+        + (SELECT count(*) FROM premium_records WHERE family_member_id=$1)
+       )::int AS n`,
+      [args.familyMemberId],
+    );
+    if ((usage.rows[0]?.n ?? 0) > 0) {
+      throw new HasLinkedActivityError("This profile has linked documents or activity, so it can't be deleted. Remove those first.");
+    }
+
+    // Step 4/5: transition + immediate logical-access revocation -- every
+    // read this checkpoint has migrated for this table (lib/lifecycle/
+    // scopes.ts's activePredicate() call sites) already filters
+    // lifecycle_state='active'.
+    await transitionLifecycle(args.client as unknown as LifecycleDbClient, {
+      resourceType: "family_member",
+      resourceId: member.id,
+      accountId: args.accountId,
+      fromState: "active",
+      toState: "pending_deletion",
+    });
+  }
+
+  // Step 6: no derived data to invalidate here -- the precondition above
+  // guarantees zero policies/claims/coverage rows reference this member
+  // by the time the transition above runs, so nothing else could keep
+  // surfacing stale results.
+  // Step 9: no dedicated per-resource audit table exists for
+  // family_members (unlike policy_document_audit_log/
+  // claim_evidence_audit_log) -- the shared deletion_audit_log written
+  // in finishFamilyMemberDeletion() below is this flow's only audit
+  // trail, same convention as every flow with no dedicated table of its
+  // own.
+
+  return {
+    status: "accepted",
+    deletionRequestId: request.id,
+    resourceId: args.familyMemberId,
+    displayName: member.display_name,
+  };
+}
+
+/**
+ * Finishes a family-member deletion outside the caller's transaction:
+ * marks the deletion request completed and writes the audit event.
+ * Unlike the policy/claim-evidence flows, there is no storage object or
+ * search-index entry belonging directly to a family_members row itself
+ * (those belong to the policies/claim-evidence rows this flow's own
+ * precondition guarantees are already absent), so there is nothing for
+ * the storage-cleanup engine to pick up here -- this flow finishes
+ * immediately rather than staying pending_cleanup.
+ */
+export async function finishFamilyMemberDeletion(args: {
+  accountId: string;
+  actorUserId: string;
+  familyMemberId: string;
+  deletionRequestId: string;
+}): Promise<void> {
+  await transitionDeletionRequest(pool, {
+    id: args.deletionRequestId,
+    fromStates: ["pending_deletion"],
+    toState: "soft_deleted",
+    completedAt: new Date(),
+  }).catch(() => {
+    // A repeat call (idempotent retry) may already be past this state.
+  });
+
+  const correlationId = randomUUID();
+
+  await appendDeletionAudit(pool, {
+    accountId: args.accountId,
+    deletionRequestId: args.deletionRequestId,
+    resourceType: "family_member",
+    resourceId: args.familyMemberId,
+    actor: args.actorUserId,
+    fromState: "pending_deletion",
+    toState: "soft_deleted",
+    correlationId,
+    cleanupStatus: null,
+  });
+
+  await recordEvent({
+    name: "lifecycle.deletion.finished",
+    correlationId,
+    status: "success",
+    processingState: "soft_deleted",
+    resourceRef: pseudonymizeId(args.familyMemberId),
+    householdRef: pseudonymizeId(args.accountId),
+    extra: { resourceType: "family_member" },
+  });
+}
+
+/**
+ * Household-member removal (resource_type='household_member', an owner
+ * removing someone else) and leave-household (resource_type=
+ * 'household_leave', a member removing themselves) both compile down to
+ * the SAME underlying operation -- lib/household/repo.ts's removeMember()
+ * already treats them as one DELETE, distinguished only by whether
+ * callerUserId===targetUserId, with RLS's household_members_delete
+ * policy (not this coordinator) enforcing who's allowed to do which.
+ * household_members has no id column of its own (its primary key is the
+ * composite (household_id, user_id)) and, per lib/lifecycle/types.ts's
+ * LIFECYCLE_TABLE_BY_RESOURCE, no lifecycle-tracked table at all -- so
+ * unlike every flow above, there is no transitionLifecycle() step here;
+ * this flow is represented entirely through deletion_requests, exactly
+ * as that module's own comment anticipates (see also
+ * lib/lifecycle/state-machine.ts's LifecycleResourceUntrackedError,
+ * which documents this exact fallback).
+ *
+ * removeMember() already carries its own well-tested authorization (RLS)
+ * and business rule (refuses to remove/leave the household's LAST
+ * remaining owner -- see removeMember()'s own ConflictError and
+ * scripts/household-regressions.ts's existing coverage of it) -- this
+ * coordinator deliberately does NOT reimplement or duplicate that rule.
+ * Reimplementing a security-critical invariant in a second place is how
+ * the two copies drift; calling the single existing function is the
+ * safer choice, at the cost of removeMember()'s mutation running in its
+ * OWN internal transaction (via createUserSupabaseClient) rather than
+ * inside a coordinator-supplied client. Because there is nothing
+ * external to defer afterward (no storage, no search index), the
+ * bookkeeping transition and audit write happen immediately after
+ * removeMember() returns, in this same function -- unlike the flows
+ * above, there is no separate finish...() step to call.
+ *
+ * Idempotent at the deletion_requests level: a repeat with the same
+ * idempotencyKey short-circuits on the ALREADY-CREATED row without
+ * calling removeMember() again (whether the first attempt succeeded or
+ * was refused), so a retry can never duplicate an audit event or attempt
+ * a second destructive call against a member already removed. A refusal
+ * (ConflictError/NotFoundError/ForbiddenError from removeMember()) is
+ * allowed to propagate unhandled -- app/api/household/members/[userId]/
+ * route.ts's existing routeErrorResponse() already maps all three to the
+ * correct HTTP status, so this coordinator does not need its own error
+ * class for this flow.
+ */
+async function performMembershipRemoval(args: {
+  accountId: string;
+  callerUserId: string;
+  targetUserId: string;
+  resourceType: "household_member" | "household_leave";
+  reasonCategory: DeletionReasonCategory;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  const { row: request, created } = await createOrGetDeletionRequest(pool, {
+    accountId: args.accountId,
+    resourceType: args.resourceType,
+    resourceId: args.targetUserId,
+    requestedBy: args.callerUserId,
+    reasonCategory: args.reasonCategory,
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  if (!created) {
+    return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.targetUserId };
+  }
+
+  // The actual removal -- see this function's own doc comment on why
+  // removeMember() is called rather than reimplemented. A thrown error
+  // here leaves this deletion_requests row at its default
+  // pending_deletion state; a retry with the same idempotencyKey is
+  // caught by the `!created` branch above and safely returns without
+  // attempting the removal again.
+  await removeMember(args.callerUserId, args.accountId, args.targetUserId);
+
+  await transitionDeletionRequest(pool, {
+    id: request.id,
+    fromStates: ["pending_deletion"],
+    toState: "soft_deleted",
+    completedAt: new Date(),
+  }).catch(() => {
+    // A repeat call (idempotent retry) may already be past this state --
+    // unreachable in practice since the `!created` branch above already
+    // short-circuits every retry, kept for the same defensive symmetry
+    // every other flow's transition uses.
+  });
+
+  const correlationId = randomUUID();
+
+  await appendDeletionAudit(pool, {
+    accountId: args.accountId,
+    deletionRequestId: request.id,
+    resourceType: args.resourceType,
+    resourceId: args.targetUserId,
+    actor: args.callerUserId,
+    fromState: null, // no lifecycle-tracked resource row exists for this flow to report a fromState for
+    toState: "soft_deleted",
+    correlationId,
+    cleanupStatus: null,
+  });
+
+  await recordEvent({
+    name: "lifecycle.deletion.finished",
+    correlationId,
+    status: "success",
+    processingState: "soft_deleted",
+    resourceRef: pseudonymizeId(args.targetUserId),
+    householdRef: pseudonymizeId(args.accountId),
+    extra: { resourceType: args.resourceType },
+  });
+
+  return { status: "completed", deletionRequestId: request.id, resourceId: args.targetUserId };
+}
+
+/** Owner removes another member. See performMembershipRemoval()'s doc
+ * comment for the shared implementation and its rationale. */
+export async function requestHouseholdMemberRemoval(args: {
+  accountId: string;
+  callerUserId: string;
+  targetUserId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  return performMembershipRemoval({ ...args, resourceType: "household_member", reasonCategory: "owner_removed_member" });
+}
+
+/** A member removes themselves ("leave"). See performMembershipRemoval()'s
+ * doc comment for the shared implementation and its rationale -- in
+ * particular, removeMember()'s own last-owner protection applies exactly
+ * the same way here as for an owner-initiated removal, refusing a leave
+ * that would empty the household of owners. */
+export async function requestHouseholdLeave(args: {
+  accountId: string;
+  callerUserId: string;
+  targetUserId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  return performMembershipRemoval({ ...args, resourceType: "household_leave", reasonCategory: "member_left" });
+}
+
+/**
+ * Invitation revocation (resource_type='invitation'). Wraps
+ * lib/household/repo.ts's revokeInvitation() the same way Flows 5-6 wrap
+ * removeMember() -- see performMembershipRemoval()'s doc comment for the
+ * shared rationale (do not reimplement an existing, well-tested,
+ * RLS-authorized business operation; defer to it and let its errors
+ * propagate). household_invitations has a real `id` column (unlike
+ * household_members' composite key) but, like household_member/
+ * household_leave, no entry in LIFECYCLE_TABLE_BY_RESOURCE -- revoking an
+ * invitation is a single soft-update (revoked_at=now()) inside
+ * revokeInvitation()'s own RLS-scoped transaction, not a lifecycle_state
+ * transition, so this flow too is represented entirely through
+ * deletion_requests, with no transitionLifecycle() step and no separate
+ * finish...() step (nothing external to defer).
+ *
+ * Idempotent: a repeat with the same idempotencyKey short-circuits on
+ * the already-created deletion_requests row without calling
+ * revokeInvitation() again -- a second call against an
+ * already-revoked invitation would otherwise throw NotFoundError
+ * (revokeInvitation()'s WHERE clause excludes rows that already have
+ * revoked_at set), which a retry must never surface as a fresh failure.
+ */
+export async function requestInvitationRevocation(args: {
+  callerUserId: string;
+  invitationId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  // household_invitations always has a real household_id of its own,
+  // and it is NOT necessarily the caller's currently active household --
+  // revokeInvitation() authorizes by the invitation's own household
+  // ownership via RLS (is_household_owner(household_id) read FROM THE
+  // INVITATION ROW), not the caller's active household context (see
+  // app/api/household/invitations/[id]/route.ts's own comment on why
+  // that is deliberate: a caller who owns two households can revoke
+  // either one's invitations regardless of which is "active"). Reading
+  // household_id here (service-level, plain pool -- an infrastructure-
+  // table-style lookup, not an authorization decision; revokeInvitation()'s
+  // RLS-scoped UPDATE below is what actually decides whether this caller
+  // may revoke it) keeps the deletion_requests/deletion_audit_log
+  // bookkeeping correctly scoped to the invitation's REAL household even
+  // when it differs from the caller's active one.
+  const invitationRow = await pool.query<{ household_id: string }>(
+    `SELECT household_id FROM household_invitations WHERE id=$1`,
+    [args.invitationId],
+  );
+  const accountId = invitationRow.rows[0]?.household_id;
+  if (!accountId) {
+    throw new DeletionValidationError("Invitation not found");
+  }
+
+  const { row: request, created } = await createOrGetDeletionRequest(pool, {
+    accountId,
+    resourceType: "invitation",
+    resourceId: args.invitationId,
+    requestedBy: args.callerUserId,
+    reasonCategory: "invitation_revoked",
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  if (!created) {
+    return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.invitationId };
+  }
+
+  // The actual revocation -- see this function's own doc comment on why
+  // revokeInvitation() is called rather than reimplemented. A thrown
+  // error here (NotFoundError: already revoked/accepted/no such
+  // invitation, or the RLS-enforced "not this household's owner" case)
+  // leaves this deletion_requests row at its default pending_deletion
+  // state; a retry with the same idempotencyKey is caught by the
+  // `!created` branch above and never attempts the revocation again.
+  await revokeInvitation(args.callerUserId, args.invitationId);
+
+  await transitionDeletionRequest(pool, {
+    id: request.id,
+    fromStates: ["pending_deletion"],
+    toState: "soft_deleted",
+    completedAt: new Date(),
+  }).catch(() => {
+    // A repeat call (idempotent retry) may already be past this state --
+    // unreachable in practice since the `!created` branch above already
+    // short-circuits every retry, kept for the same defensive symmetry
+    // every other flow's transition uses.
+  });
+
+  const correlationId = randomUUID();
+
+  await appendDeletionAudit(pool, {
+    accountId,
+    deletionRequestId: request.id,
+    resourceType: "invitation",
+    resourceId: args.invitationId,
+    actor: args.callerUserId,
+    fromState: null, // no lifecycle-tracked resource row exists for this flow to report a fromState for
+    toState: "soft_deleted",
+    correlationId,
+    cleanupStatus: null,
+  });
+
+  await recordEvent({
+    name: "lifecycle.deletion.finished",
+    correlationId,
+    status: "success",
+    processingState: "soft_deleted",
+    resourceRef: pseudonymizeId(args.invitationId),
+    householdRef: pseudonymizeId(accountId),
+    extra: { resourceType: "invitation" },
+  });
+
+  return { status: "completed", deletionRequestId: request.id, resourceId: args.invitationId };
+}
+
+/**
+ * Household (whole-account) deletion (resource_type='household'), the
+ * most destructive flow in this checkpoint -- wraps lib/household/repo.ts's
+ * pre-existing deleteHousehold() (`DELETE FROM accounts WHERE id=$1`, which
+ * cascades via ON DELETE CASCADE to every table this household owns:
+ * policies, family_members, claim_evidence_documents, household_members,
+ * household_invitations, deletion_requests, deletion_audit_log, and every
+ * other account_id/household_id-scoped table in the schema).
+ *
+ * Unlike every flow above, `household` genuinely cannot follow the
+ * "transition to pending_deletion now, physically delete later" pattern
+ * those flows use, even though it has its own LIFECYCLE_TABLE_BY_RESOURCE
+ * entry (accounts). Two schema facts rule that pattern out here:
+ *   1. Both deletion_requests.account_id and deletion_audit_log.account_id
+ *      are `REFERENCES accounts(id) ON DELETE CASCADE` (sql/lifecycle.sql).
+ *      The instant accounts.id is hard-deleted, EVERY deletion_requests/
+ *      deletion_audit_log row for that account_id is destroyed with it --
+ *      there is no way to keep a durable audit trail scoped to an account
+ *      that no longer exists, in this schema, however the work is
+ *      sequenced. So this flow's own audit record is only ever committed
+ *      IMMEDIATELY BEFORE the physical delete (see below), not after --
+ *      there is no separate finishHouseholdDeletion() step, because there
+ *      would be nothing left afterward to finish.
+ *   2. No existing read path (resolveActiveHouseholdId/listMemberships,
+ *      requireHouseholdContext, or any RLS policy on a household-scoped
+ *      table) filters by accounts.lifecycle_state -- only household_members'
+ *      own row presence gates access. So merely transitioning
+ *      accounts.lifecycle_state to pending_deletion, without also hard-
+ *      deleting, would revoke NOTHING: every member would keep full,
+ *      unrestricted access indefinitely, since no Checkpoint-8 durable job
+ *      exists yet to ever finish the job. That would be a silent
+ *      regression from deleteHousehold()'s current, real, immediate
+ *      behavior to a deletion request that visibly does nothing at all --
+ *      worse than not wrapping it here.
+ * Given both, this flow keeps deleteHousehold()'s existing semantics
+ * (immediate, real, irreversible deletion, gated by the caller's own
+ * confirmName re-entry and, as of this flow, recent re-authentication --
+ * see app/api/household/route.ts's DELETE handler) and adds only what
+ * Checkpoint 7 requires around it: idempotency bookkeeping and a best-
+ * effort audit record for the moment the deletion was authorized, written
+ * just before the irreversible step -- not a durable post-hoc trail,
+ * since none can survive the account's own deletion.
+ */
+export async function requestHouseholdDeletion(args: {
+  actorUserId: string;
+  householdId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  // A retry (same idempotencyKey) against an ALREADY-fully-deleted
+  // household has nothing left to attach a deletion_requests row to --
+  // the accounts row, and via ON DELETE CASCADE every deletion_requests/
+  // deletion_audit_log row that ever referenced it, is already gone. The
+  // common case (a signed-in caller re-submitting) never reaches this
+  // function at all, since requireHouseholdContext() itself fails first
+  // once household_members is empty -- this check is for the rarer path
+  // of a retry driven by a stored idempotency key rather than session
+  // state. Checked before attempting the deletion_requests insert below
+  // so that case surfaces as the same NotFoundError deleteHousehold()
+  // itself already throws for "no such household", not a raw foreign-key
+  // violation from inserting a deletion_requests row against a
+  // nonexistent account_id.
+  const existing = await pool.query<{ id: string }>(`SELECT id FROM accounts WHERE id=$1`, [args.householdId]);
+  if (!existing.rows[0]) {
+    throw new NotFoundError("Household not found");
+  }
+
+  const { row: request } = await createOrGetDeletionRequest(pool, {
+    accountId: args.householdId,
+    resourceType: "household",
+    resourceId: args.householdId,
+    requestedBy: args.actorUserId,
+    reasonCategory: "account_closure",
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  // Unlike every flow above, a retry that finds an EXISTING deletion_requests
+  // row does NOT short-circuit here -- there is no separate finish() step
+  // to resume, and the existence check above already proved the household
+  // is still present, so re-attempting deleteHousehold() below is safe
+  // whether this is a genuine first attempt or a retry of one that
+  // crashed between the deletion_requests insert and the physical delete.
+  const correlationId = randomUUID();
+
+  await appendDeletionAudit(pool, {
+    accountId: args.householdId,
+    deletionRequestId: request.id,
+    resourceType: "household",
+    resourceId: args.householdId,
+    actor: args.actorUserId,
+    fromState: "active",
+    toState: "pending_deletion",
+    correlationId,
+    cleanupStatus: null,
+  }).catch(() => {
+    // Best-effort: a repeat of an already-audited attempt (same request
+    // row, retried before the delete completed) duplicating this one
+    // "pending_deletion" audit line is harmless and expected, not an
+    // error worth failing the deletion over.
+  });
+
+  await recordEvent({
+    name: "lifecycle.deletion.household_closure_started",
+    correlationId,
+    status: "in_progress",
+    processingState: "pending_deletion",
+    resourceRef: pseudonymizeId(args.householdId),
+    householdRef: pseudonymizeId(args.householdId),
+    extra: { resourceType: "household" },
+  });
+
+  await deleteHousehold(args.actorUserId, args.householdId);
+  // The accounts row -- and with it, via ON DELETE CASCADE, the
+  // deletion_requests row created above and the deletion_audit_log row
+  // just written -- no longer exists past this point. See this
+  // function's own doc comment for why that is a deliberate, schema-
+  // driven trade-off (no finishHouseholdDeletion(), no durable post-
+  // completion audit trail) rather than an oversight.
+
+  return { status: "completed", deletionRequestId: request.id, resourceId: args.householdId };
 }
 
 function mapRequestStateToStatus(request: DeletionRequestRow): DeletionRequestStatus {

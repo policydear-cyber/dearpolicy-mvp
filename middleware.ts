@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { refreshSupabaseSession } from "@/lib/supabase/middleware";
 import { isProduction } from "@/lib/launch/guards";
 import { checkRequestOrigin } from "@/lib/http/csrf";
+import { CORRELATION_ID_HEADER, resolveCorrelationId } from "@/lib/telemetry/correlation";
 
 /** Routes reachable before a visitor has a session: the sign-in/sign-up
  * pages and their APIs, the invitation-acceptance and password-reset/
@@ -55,6 +56,21 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
 
+  // Checkpoint 9: resolved once, here, for every request this middleware
+  // sees (matching this file's own `config.matcher` below) -- accepted
+  // from the incoming header only under lib/telemetry/correlation.ts's
+  // strict format/length rule, generated fresh otherwise. Attached to
+  // EVERY response this function returns (including the CSRF-block and
+  // unauthenticated-401 short-circuits below) via withCorrelationId() so
+  // a caller always gets one back, whether or not the request succeeded.
+  // Never used for authorization or as a database identifier anywhere --
+  // see that module's doc comment.
+  const correlationId = resolveCorrelationId(request.headers.get(CORRELATION_ID_HEADER));
+  const withCorrelationId = <T extends NextResponse>(res: T): T => {
+    res.headers.set(CORRELATION_ID_HEADER, correlationId);
+    return res;
+  };
+
   // Checked first, before session refresh or the auth-gate below, and
   // regardless of OPEN_PATHS -- a forged cross-site request against an
   // unauthenticated endpoint (e.g. login/signup CSRF) is exactly as much
@@ -65,7 +81,7 @@ export async function middleware(request: NextRequest) {
   if (isApi && !isInternalCallback) {
     const originCheck = checkRequestOrigin(request, request.nextUrl.origin);
     if (!originCheck.allowed) {
-      return NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 });
+      return withCorrelationId(NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 }));
     }
   }
 
@@ -94,15 +110,15 @@ export async function middleware(request: NextRequest) {
   // INTERNAL_CALLBACK_PATHS above) and are never reachable via a Supabase
   // session at all -- exempt from the session requirement below for the
   // same reason they are exempt from the CSRF check above.
-  if (OPEN_PATHS.has(pathname) || isInternalCallback) return response;
-  if (user) return response;
-  if (devAuthEnabled()) return response;
+  if (OPEN_PATHS.has(pathname) || isInternalCallback) return withCorrelationId(response);
+  if (user) return withCorrelationId(response);
+  if (devAuthEnabled()) return withCorrelationId(response);
 
-  if (isApi) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (isApi) return withCorrelationId(NextResponse.json({ error: "Not authenticated" }, { status: 401 }));
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.searchParams.set("next", pathname);
-  return NextResponse.redirect(url);
+  return withCorrelationId(NextResponse.redirect(url));
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png).*)"] };

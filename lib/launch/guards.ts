@@ -71,7 +71,7 @@ export function checkDatabaseTlsIsSecure(env: NodeJS.ProcessEnv = process.env): 
   return { ok: true, message: "Database TLS is configured to verify certificates in production." };
 }
 
-const REQUIRED_PRODUCTION_SECRETS = ["DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_ANON_KEY"] as const;
+const REQUIRED_PRODUCTION_SECRETS = ["DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_ANON_KEY", "TELEMETRY_PSEUDONYM_SECRET"] as const;
 
 export function checkRequiredProductionSecrets(env: NodeJS.ProcessEnv = process.env): GuardResult {
   if (!isProduction(env)) return { ok: true, message: "Not production; required-secret check skipped." };
@@ -97,12 +97,35 @@ export function checkServiceRoleKeyNotPublic(env: NodeJS.ProcessEnv = process.en
 
 /** Guards that must hold for the server to start at all. Checked by both
  * instrumentation.ts (production runtime) and launch:check (pre-deploy). */
+/** Checkpoint 9: lib/telemetry/index.ts's default adapter in production
+ * is NoopTelemetryAdapter (lib/telemetry/adapters.ts) until a real
+ * production destination is wired in and this flag is explicitly set --
+ * there is no live vendor configured in this environment to build one
+ * against, so this guard is EXPECTED to fail in a from-scratch
+ * production environment (an external-configuration blocker, not a code
+ * gap) until that adapter and this flag are both provided. */
+export function checkTelemetryProductionAdapterConfigured(env: NodeJS.ProcessEnv = process.env): GuardResult {
+  if (!isProduction(env)) return { ok: true, message: "Not production; telemetry-adapter check skipped." };
+  if (!truthy(env.TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED)) {
+    return {
+      ok: false,
+      message:
+        "No production telemetry adapter is configured (TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED is not set). " +
+        "lib/telemetry/index.ts is silently using NoopTelemetryAdapter -- every recordEvent() call succeeds but " +
+        "nothing is actually emitted anywhere. Wire a real TelemetryAdapter (lib/telemetry/adapters.ts) for the " +
+        "production destination and set this flag once it is verified working.",
+    };
+  }
+  return { ok: true, message: "A production telemetry adapter has been confirmed configured." };
+}
+
 export const PRODUCTION_STARTUP_GUARDS: Guard[] = [
   checkDevAuthNotInProduction,
   checkDevAccountIdNotInProduction,
   checkDatabaseTlsIsSecure,
   checkRequiredProductionSecrets,
   checkServiceRoleKeyNotPublic,
+  checkTelemetryProductionAdapterConfigured,
 ];
 
 export function runGuards(guards: Guard[], env: NodeJS.ProcessEnv = process.env): GuardResult[] {

@@ -53,6 +53,13 @@
     "security:lifecycle-query-guard-test": "node --import tsx scripts/lifecycle-query-guard-regressions.ts",
     "security:active-read-scopes-test": "node --import tsx scripts/active-read-scopes-regressions.ts",
     "security:policy-deletion-test": "node --import tsx scripts/policy-deletion-regressions.ts",
+    "security:claim-evidence-deletion-test": "node --import tsx scripts/claim-evidence-deletion-regressions.ts",
+    "security:family-member-deletion-test": "node --import tsx scripts/family-member-deletion-regressions.ts",
+    "security:household-membership-deletion-test": "node --import tsx scripts/household-membership-deletion-regressions.ts",
+    "security:invitation-revocation-deletion-test": "node --import tsx scripts/invitation-revocation-deletion-regressions.ts",
+    "security:household-deletion-test": "node --import tsx scripts/household-deletion-regressions.ts",
+    "security:background-jobs-test": "node --import tsx scripts/background-jobs-regressions.ts",
+    "security:telemetry-test": "node --import tsx scripts/telemetry-regressions.ts",
     "security:placeholder-content-test": "node --import tsx scripts/placeholder-content-regressions.ts"
   },
   "dependencies": {

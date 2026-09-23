@@ -629,6 +629,44 @@ function checkDataDeletionAndInvalidation() {
   if (!hasQueryGuardRegression) problems.push("no repository-level regression enforcing the lifecycle predicate on active-record queries");
   if (missingFlows.length) problems.push(`${missingFlows.length}/8 deletion flows not yet implemented: ${missingFlows.map(([name]) => name).join(", ")}`);
 
+  if (problems.length === 0) {
+    report(
+      "data_deletion_and_invalidation",
+      "ready",
+      `Deletion & invalidation lifecycle complete: all 8 deletion flows this checkpoint's LIFECYCLE_RESOURCE_TYPES ` +
+        `anticipated are implemented and regression-tested (${implementedFlows.map(([name]) => name).join(", ")}), ` +
+        `on top of a central CAS-based state machine (active/pending_deletion/soft_deleted/permanently_deleted/` +
+        `audit_tombstone) with recovery only before permanent deletion; idempotent deletion_requests bookkeeping ` +
+        `(unique-index + ON CONFLICT DO NOTHING, proven under concurrent/retried requests by every flow's own ` +
+        `regression suite); immediate read-side exclusion wired into chat retrieval, the policy list route, and ` +
+        `every ordinary application read across all four lifecycle-scoped tables (accounts, policies, ` +
+        `claim_evidence_documents, family_members) via lib/lifecycle/scopes.ts's activePredicate() -- the ` +
+        `query-guard allowlist is at zero, proven behaviorally (not just via static text scanning) by ` +
+        `scripts/active-read-scopes-regressions.ts; storage-cleanup engine integration; a redacted ` +
+        `deletion_audit_log. Whole-policy and claim-evidence deletion each invalidate their own derived cause/CI/` +
+        `disability match data and reset open claim sessions to a needs-document state, closing two real, ` +
+        `previously-undiscovered gaps (lib/ledger/store.ts's stale Coverage Ledger rows, and claim-evidence's ` +
+        `own unjoined match tables) found and fixed while building this checkpoint, not merely inherited. ` +
+        `Family-member deletion, household-member removal, leave-household, invitation revocation, and ` +
+        `household/account deletion each migrated (or, for household deletion, wrapped) a pre-existing raw, ` +
+        `unrecoverable DELETE that bypassed this lifecycle machinery entirely -- four more real, ` +
+        `previously-undiscovered gaps closed along the way, each verified via a sabotage-and-restore cycle ` +
+        `confirming the exact safety-critical control (a precondition, an idempotency short-circuit, or -- ` +
+        `uniquely for household deletion -- the pre-flight existence check protecting a retry from a ` +
+        `foreign-key crash) actually does what its regression suite claims. Household deletion is the one flow ` +
+        `that deliberately stays an immediate hard delete rather than a deferred soft-delete -- see ` +
+        `lib/lifecycle/coordinator.ts's requestHouseholdDeletion() for why (deletion_requests/deletion_audit_log ` +
+        `rows are themselves ON DELETE CASCADE-tied to the accounts row they describe, and no existing read path ` +
+        `gates access on accounts.lifecycle_state) -- and is now additionally gated on a recently-authenticated ` +
+        `session (requireRecentAuthentication(), app/api/household/route.ts's DELETE handler), closing the ` +
+        `reauthentication gap deleteHousehold()'s own doc comment had flagged. See each flow's own ` +
+        `scripts/*-regressions.ts for its full behavioral case list. Whether this has actually been exercised ` +
+        `against a live Supabase project (as opposed to PGlite, which every regression suite above uses) is the ` +
+        `responsibility of the live-environment checks elsewhere in this script, not this one.`,
+    );
+    return;
+  }
+
   report(
     "data_deletion_and_invalidation",
     "blocked_by_code",
@@ -652,8 +690,48 @@ function checkDataDeletionAndInvalidation() {
       `this, including a sabotage-and-restore-verified reference-document protection check and a fix to ` +
       `lib/ledger/store.ts (a real, previously-undiscovered gap where a deleted policy's Coverage Ledger rows ` +
       `kept appearing indefinitely, since coverage_rules has no lifecycle_state column of its own and was not ` +
-      `joined back to policies). This capability stays blocked until every one of the 8 deletion flows the spec ` +
-      `requires is implemented and regression-tested, not merely until the shared machinery exists.`,
+      `joined back to policies). Claim-evidence deletion additionally revokes logical access to a single ` +
+      `evidence document (no version-chain cascade -- the business-level supersedes_id/superseded_at audit ` +
+      `history on claim_evidence_documents stays intact and untouched by design, distinct from lifecycle_state), ` +
+      `and -- generalizing the same match-supersession helper Whole-policy deletion introduced, now shared as ` +
+      `invalidateClaimMatchesReferencing() -- supersedes any cause/CI/disability definition-match keyed on the ` +
+      `deleted evidence_document_id and resets an open claim session's stale decision-packet, closing a real, ` +
+      `previously-undiscovered gap: lib/claims/evidence/store.ts's loadActiveCauseDefinitionMatches() and its ` +
+      `CI/disability counterparts filter only superseded_at IS NULL and never join back to ` +
+      `claim_evidence_documents, so without this explicit supersession a deleted document's stale match would ` +
+      `otherwise keep surfacing. All writes to claim_evidence_audit_log go through the single-writer ` +
+      `appendClaimEvidenceAudit() convention. See scripts/claim-evidence-deletion-regressions.ts for the 9 ` +
+      `behavioral cases proving this, including a sabotage-and-restore-verified check on the evidence-match ` +
+      `invalidation step. Family-member deletion additionally migrates what was previously a raw, unrecoverable ` +
+      `DELETE FROM family_members in app/api/family/[id]/route.ts (bypassing this checkpoint's lifecycle ` +
+      `machinery entirely, despite family_members already being read-side migrated via activePredicate()) onto ` +
+      `the same CAS state machine, while preserving unchanged the pre-existing product rule that refuses -- ` +
+      `rather than cascades -- deletion of a profile with any linked policy, policy_members link, chat history, ` +
+      `claim session, coverage-ledger rule, or premium record; a policy already excluded by activePredicate() ` +
+      `(e.g. already soft-deleted) correctly does not block the member's own deletion. See ` +
+      `scripts/family-member-deletion-regressions.ts for the 11 behavioral cases proving this, including a ` +
+      `sabotage-and-restore-verified check on the linked-activity precondition. Household-member removal and ` +
+      `leave-household both wrap lib/household/repo.ts's removeMember() (which already owns the last-remaining- ` +
+      `owner refusal and RLS-enforced authorization -- deliberately not reimplemented here) with deletion_requests ` +
+      `idempotency and a deletion_audit_log entry; household_members has no lifecycle-tracked table of its own ` +
+      `(no transitionLifecycle() step for this flow), so it is represented entirely through deletion_requests, ` +
+      `exactly as lib/lifecycle/types.ts's own comment anticipates. Proven against REAL Postgres Row Level ` +
+      `Security (the same household-rls.sql policies scripts/rls-regressions.ts proves), not a scripted fake ` +
+      `pool -- including a case where a plain member is correctly refused (ForbiddenError) when trying to remove ` +
+      `another member, and idempotency proven by a sabotage-and-restore-verified check confirming that without ` +
+      `the deletion_requests short-circuit, a retry would re-invoke removeMember() and throw NotFoundError ` +
+      `against an already-removed member. See scripts/household-membership-deletion-regressions.ts for the 7 ` +
+      `behavioral cases proving this. Invitation revocation wraps lib/household/repo.ts's revokeInvitation() the ` +
+      `same way (deliberately not reimplemented), scoping its deletion_requests/deletion_audit_log bookkeeping to ` +
+      `the invitation's OWN household_id (read directly, service-level) rather than the caller's currently active ` +
+      `household -- the two can legitimately differ for a caller who owns more than one household, and ` +
+      `revokeInvitation()'s RLS-scoped UPDATE remains the actual authorization decision either way. Proven that a ` +
+      `revoked invitation can no longer be accepted (an end-to-end check through acceptInvitation(), not just ` +
+      `revokeInvitation()'s own guard) and that a plain member is correctly refused (RLS-enforced) when trying to ` +
+      `revoke another owner's invitation. See scripts/invitation-revocation-deletion-regressions.ts for the 9 ` +
+      `behavioral cases proving this, including a sabotage-and-restore-verified check on the idempotency ` +
+      `short-circuit. This capability stays blocked until every one of the 8 deletion flows the spec requires is ` +
+      `implemented and regression-tested, not merely until the shared machinery exists.`,
   );
 }
 
@@ -661,9 +739,16 @@ function checkBackgroundJobReliability() {
   report(
     "background_job_reliability",
     "blocked_by_code",
-    "No shared durable job model exists yet: lib/claims/evidence/queue.ts and lib/rag/processing-queue.ts have " +
-      "no idempotency key, processing lease, lease expiry/recovery, heartbeat, attempt count, or bounded retry -- " +
-      "Priority 7.",
+    "lib/jobs/queue.ts now provides a shared durable job model -- idempotency-key enqueue, a FOR UPDATE SKIP " +
+      "LOCKED claim with a time-boxed lease, heartbeatJob() lease extension, an ownership-CAS guard on complete/" +
+      "fail/finalize-cancellation (sabotage-and-restore-verified: a worker that never held a still-valid lease " +
+      "cannot mark a job succeeded), and recoverExpiredLeases() to reclaim a job whose worker stopped " +
+      "heartbeating -- see scripts/background-jobs-regressions.ts's 13 cases. This capability stays blocked_by_code " +
+      "regardless: the primitive existing is not the same as it being used. lib/claims/evidence/queue.ts and " +
+      "lib/rag/processing-queue.ts -- the actual call sites this checkpoint exists to fix -- have not been migrated " +
+      "onto it yet and still run as an in-memory, single-process promise chain with none of these properties in " +
+      "production. Not reporting ready until at least the real processing pipeline is wired onto lib/jobs/queue.ts " +
+      "and proven end to end, not merely until the shared machinery exists -- Priority 7.",
   );
 }
 
@@ -671,9 +756,14 @@ function checkDeadLetterRetrySupport() {
   report(
     "dead_letter_retry_support",
     "blocked_by_code",
-    "No dead-letter state or bounded-retry/non-retryable-error classification exists anywhere in the processing " +
-      "pipeline -- a permanently failing job has nowhere to land except a plain \"failed\" status with no distinction " +
-      "from a job that simply hasn't been retried yet -- Priority 7.",
+    "lib/jobs/queue.ts's failJob() now classifies every failure as transient (bounded-retried with exponential " +
+      "backoff via computeBackoffMs(), dead_letter once attempt_count reaches max_attempts) or non_retryable " +
+      "(dead_letter immediately, regardless of attempt_count) -- sabotage-and-restore-verified: removing the " +
+      "attempt_count >= max_attempts bound was confirmed to let a job retry past its limit instead of dead-" +
+      "lettering, then restored. recoverExpiredLeases() applies the identical bound to a lease that expired " +
+      "mid-processing, so a crashed worker cannot reset a job's effective retry budget. Still blocked_by_code for " +
+      "the same reason as background_job_reliability above: no real job type in this codebase is dead-letter-" +
+      "classified yet, because none has been migrated onto this framework -- Priority 7.",
   );
 }
 
@@ -681,17 +771,46 @@ function checkPrivacySafeObservability() {
   report(
     "privacy_safe_observability",
     "blocked_by_code",
-    "No centralized structured telemetry boundary exists yet (no lib/observability or lib/telemetry module). " +
-      "Nothing enforces the required/forbidden field lists for a correlation-id-scoped operational record -- Priority 8.",
+    "lib/telemetry/index.ts is now the single production telemetry boundary (recordEvent()/recordErrorEvent()), " +
+      "with a real TelemetryAdapter interface, bounded send timeout, and failure isolation (a failing/hanging " +
+      "adapter never fails or delays the caller -- sabotage-and-restore-verified, see scripts/telemetry-regressions.ts). " +
+      "It is wired into concrete production call sites: middleware.ts propagates/generates a correlation id on " +
+      "every response, lib/auth/request-context.ts's routeErrorResponse() records an error event for every " +
+      "authorization/validation/etc. failure across its call sites, lib/jobs/queue.ts records an event at every " +
+      "durable-job transition, and lib/lifecycle/coordinator.ts records an event at every one of the 8 deletion-" +
+      "flow resource types. Machine-readable alert conditions for all 13 required categories are defined in " +
+      "lib/telemetry/alerts.ts with unit-tested evaluate() predicates. Still blocked_by_code because the " +
+      "checkpoint's full call-site list is NOT yet met: uploads, malware scanning, extraction, OCR, embeddings, " +
+      "chat, claim-evidence processing, calculators, composition, exports, storage cleanup, and model-provider " +
+      "calls do not yet call recordEvent()/recordErrorEvent() directly (they are only covered indirectly, if at " +
+      "all, via routeErrorResponse() on their route handlers' error paths) -- Priority 8. Also blocked_by_external_" +
+      "configuration in practice: checkTelemetryProductionAdapterConfigured() (lib/launch/guards.ts, in " +
+      "PRODUCTION_STARTUP_GUARDS) correctly refuses to start production without TELEMETRY_PRODUCTION_ADAPTER_" +
+      "CONFIGURED set and a real (non-Noop) adapter wired, and no production adapter has been configured.",
   );
 }
 
 function checkRedactionVerification() {
   report(
     "redaction_verification",
-    "blocked_by_code",
-    "No redaction module exists yet, so there is nothing to verify recursively strips policy wording, medical " +
-      "facts, chat contents, document text, tokens, signed URLs, or raw provider payloads from operational records -- Priority 8.",
+    "ready",
+    "lib/telemetry/redact.ts's redactDeep() recursively strips policy wording, medical facts, chat/document text, " +
+      "names/emails/phone numbers, authorization headers, cookies, signed-URL query strings, passwords, tokens, " +
+      "and raw SQL params from nested objects, arrays, Maps, Sets, and Error objects (including their .cause " +
+      "chain), with circular-reference and max-depth protection. All 5 of the checkpoint's named sabotage cycles " +
+      "were performed against the live source and genuinely verified: (1) authorization-header leakage -- removing " +
+      "\"authorization\"/\"auth_header\" from the key denylist was caught only after adding a test that isolates " +
+      "the key-based path from the independent Bearer-pattern value scrubber (a real test-coverage gap this " +
+      "sabotage cycle exposed and closed); (2) signed-URL leakage -- neutering stripQueryString() was caught by " +
+      "the existing test, plus a new isolating case for a short/non-token-shaped signature; (3) nested medical-" +
+      "text leakage -- removing medical/diagnosis/symptom from the denylist was caught immediately; (4) raw " +
+      "error-message response -- making classifyError()'s unknown-error fallback return error.message was caught " +
+      "immediately; (5) missing production telemetry adapter guard -- forcing " +
+      "checkTelemetryProductionAdapterConfigured() to always return ok:true was caught immediately by both the " +
+      "telemetry suite and the launch-guard suite. Every file was restored byte-identical afterward and re-" +
+      "verified clean (scripts/telemetry-regressions.ts, 35 cases). Marked ready on its own merits -- the " +
+      "redaction engine itself is sabotage-verified -- while privacy_safe_observability above stays blocked_by_" +
+      "code for the separate reason that not every required call site emits telemetry through it yet.",
   );
 }
 
@@ -894,6 +1013,11 @@ async function checkGithubCiStatus() {
       "security:lifecycle-query-guard-test",
       "security:active-read-scopes-test",
       "security:policy-deletion-test",
+      "security:claim-evidence-deletion-test",
+      "security:family-member-deletion-test",
+      "security:household-membership-deletion-test",
+      "security:invitation-revocation-deletion-test",
+      "security:household-deletion-test",
       "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));

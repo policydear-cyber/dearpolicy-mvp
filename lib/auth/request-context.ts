@@ -38,6 +38,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCurrentUser, UnauthenticatedError, StaleAuthenticationError, type SessionUser } from "@/lib/auth/session";
+import { recordErrorEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { resolveActiveHouseholdId, ForbiddenError, NotFoundError, ConflictError, NotHouseholdOwnerError } from "@/lib/household/repo";
 
 /** The active-household cookie set by POST /api/household/switch. Plain
@@ -95,7 +97,23 @@ export async function requireHouseholdContext(request: NextRequest): Promise<Hou
  * error is still whatever the caller's own logging/observability layer
  * captures upstream of this function; this function only decides what the
  * HTTP response looks like. */
-export function routeErrorResponse(error: unknown): NextResponse {
+/** Checkpoint 9: the optional second argument lets a route pass its own
+ * request/route name through so the resulting event is attributable
+ * (`route`) and correlated (`correlationId`, resolved from the incoming
+ * `x-correlation-id` header under lib/telemetry/correlation.ts's strict
+ * rule -- the same value middleware.ts independently resolves and returns
+ * in every response header, so a caller can match the two up even though
+ * they're computed twice on the request's way through). Both existing and
+ * new call sites work: `routeErrorResponse(error)` alone still returns
+ * the exact same response body/status as before -- this is additive
+ * telemetry, never a change to what a client receives. Recording is
+ * fire-and-forget (never awaited): recordErrorEvent() is itself failure-
+ * isolated and time-bounded (lib/telemetry/index.ts), so this can never
+ * slow down or fail the actual HTTP response. */
+export function routeErrorResponse(error: unknown, context: { request?: NextRequest; route?: string } = {}): NextResponse {
+  const correlationId = resolveCorrelationId(context.request?.headers.get("x-correlation-id"));
+  void recordErrorEvent({ name: "route.error", correlationId, route: context.route ?? context.request?.nextUrl?.pathname ?? null, error });
+
   if (error instanceof UnauthenticatedError) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

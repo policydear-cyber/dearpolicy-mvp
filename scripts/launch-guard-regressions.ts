@@ -14,6 +14,7 @@ import {
   checkDevAccountIdNotInProduction,
   checkRequiredProductionSecrets,
   checkServiceRoleKeyNotPublic,
+  checkTelemetryProductionAdapterConfigured,
   assertProductionSafe,
 } from "@/lib/launch/guards";
 
@@ -63,6 +64,8 @@ function runGuardRegressions() {
     SUPABASE_URL: "https://example.supabase.co",
     SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
     SUPABASE_ANON_KEY: "anon-key",
+    TELEMETRY_PSEUDONYM_SECRET: "test-pseudonym-secret-32-bytes-min",
+    TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED: "true",
   };
 
   assert.equal(checkDevAuthNotInProduction(prodBase).ok, true, "DEV_AUTH_ENABLED unset in production must pass");
@@ -91,7 +94,29 @@ function runGuardRegressions() {
     "a service-role key under a NEXT_PUBLIC_* name must fail the guard",
   );
 
+  assert.equal(
+    checkTelemetryProductionAdapterConfigured(prodBase).ok,
+    true,
+    "TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true in production must pass",
+  );
+  const { TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED: _omitAdapter, ...missingAdapterFlag } = prodBase;
+  assert.equal(
+    checkTelemetryProductionAdapterConfigured(missingAdapterFlag).ok,
+    false,
+    "no production telemetry adapter configured must fail the guard -- this is a launch blocker",
+  );
+  assert.equal(
+    checkTelemetryProductionAdapterConfigured({ ...missingAdapterFlag, NODE_ENV: "development" }).ok,
+    true,
+    "the telemetry-adapter guard must be a no-op outside production",
+  );
+
   assert.doesNotThrow(() => assertProductionSafe(prodBase), "a fully safe production configuration must not throw");
+  assert.throws(
+    () => assertProductionSafe(missingAdapterFlag),
+    /Refusing to start/,
+    "assertProductionSafe() must throw when no production telemetry adapter is configured",
+  );
   assert.throws(
     () => assertProductionSafe({ ...prodBase, DEV_AUTH_ENABLED: "true" }),
     /Refusing to start/,
