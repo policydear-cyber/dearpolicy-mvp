@@ -19,6 +19,7 @@ import { isUuid } from "@/lib/db/client";
 export class ForbiddenError extends Error {}
 export class NotFoundError extends Error {}
 export class ConflictError extends Error {}
+export class NotHouseholdOwnerError extends Error {}
 
 export type Role = "owner" | "member";
 export type Membership = { householdId: string; userId: string; role: Role; createdAt: string };
@@ -49,6 +50,23 @@ export async function resolveActiveHouseholdId(userId: string, requestedHousehol
     return requestedHouseholdId;
   }
   return memberships[0].householdId;
+}
+
+/** Guards an owner-only action (household export, invitations, rename/
+ * delete -- see each route's own comment for why it's owner-gated).
+ * Built on listHouseholdMembers() below, so it inherits that function's
+ * own RLS scoping: a caller who is not a genuine current member of
+ * `householdId` gets an empty list back, and therefore NotHouseholdOwnerError
+ * here too, never a distinguishable "you're not a member" vs "you're not
+ * the owner" response -- see lib/auth/request-context.ts's
+ * routeErrorResponse() doc comment on why that distinction is
+ * deliberately never surfaced to the caller. */
+export async function requireHouseholdOwner(callerUserId: string, householdId: string, poolOverride?: Pick<Pool, "connect">): Promise<void> {
+  const members = await listHouseholdMembers(callerUserId, householdId, poolOverride);
+  const self = members.find((m) => m.userId === callerUserId);
+  if (!self || self.role !== "owner") {
+    throw new NotHouseholdOwnerError("Only the household owner can perform this action.");
+  }
 }
 
 /** Lists every current member of `householdId`, for a member-management

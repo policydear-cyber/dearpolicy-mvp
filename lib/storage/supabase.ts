@@ -123,3 +123,35 @@ export async function createClaimEvidenceSignedUrl(storageKey: string): Promise<
   if (error) throw new Error(`Could not create a signed URL for the claim-evidence file: ${error.message}`);
   return data.signedUrl;
 }
+
+// --- Household export (checkpoint 6): see lib/storage/local.ts's own
+// comment on this domain. Its own private bucket -- never public, never a
+// long-lived signed URL; app/api/household/export/[id]/download/route.ts
+// streams the bytes itself through an authenticated route, exactly like
+// claim evidence does on the local driver, rather than redirecting to a
+// signed URL, so this file never needs to mint or track one.
+const HOUSEHOLD_EXPORT_BUCKET = process.env.SUPABASE_HOUSEHOLD_EXPORT_BUCKET ?? "household-exports";
+
+function householdExportObjectKey(args: { householdId: string; exportId: string }) {
+  return [safeSegment(args.householdId), `${safeSegment(args.exportId)}.json`].join("/");
+}
+
+export async function saveHouseholdExportFile(args: { householdId: string; exportId: string; bytes: Uint8Array }) {
+  const key = householdExportObjectKey(args);
+  const { error } = await client()
+    .storage.from(HOUSEHOLD_EXPORT_BUCKET)
+    .upload(key, args.bytes, { contentType: "application/json", upsert: true });
+  if (error) throw new Error(`Could not save the household export to storage: ${error.message}`);
+  return key;
+}
+
+export async function readHouseholdExportFile(storageKey: string) {
+  const { data, error } = await client().storage.from(HOUSEHOLD_EXPORT_BUCKET).download(storageKey);
+  if (error) throw new Error(`Could not read the stored household export: ${error.message}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function deleteHouseholdExportFile(storageKey: string) {
+  const { error } = await client().storage.from(HOUSEHOLD_EXPORT_BUCKET).remove([storageKey]);
+  if (error) throw new Error(`Could not delete the stored household export: ${error.message}`);
+}

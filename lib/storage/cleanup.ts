@@ -81,12 +81,17 @@ export type QueryableDb = {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
 };
 
-export type StorageDomain = "policy" | "claim-evidence";
+export type StorageDomain = "policy" | "claim-evidence" | "household-export";
 export type StorageDriverName = "local" | "supabase";
 
-const DOMAIN_TABLE: Record<StorageDomain, "policies" | "claim_evidence_documents"> = {
+const DOMAIN_TABLE: Record<StorageDomain, "policies" | "claim_evidence_documents" | "household_exports"> = {
   policy: "policies",
   "claim-evidence": "claim_evidence_documents",
+  // household_exports (checkpoint 6) -- unlike the other two domains,
+  // storage_key is NULL until a generated export is actually written to
+  // storage (a pending/running/failed row has none yet), which is why
+  // both queries below filter it out rather than assuming NOT NULL.
+  "household-export": "household_exports",
 };
 
 // ---------------------------------------------------------------------
@@ -124,8 +129,8 @@ export function redactStorageKey(key: string): string {
  * interpolation (same pattern scripts/storage-orphans.ts already uses). */
 export async function activeStorageKeys(db: QueryableDb, domain: StorageDomain): Promise<Set<string>> {
   const table = DOMAIN_TABLE[domain];
-  const { rows } = await db.query<{ storage_key: string }>(`SELECT storage_key FROM ${table}`);
-  return new Set(rows.map((r) => r.storage_key));
+  const { rows } = await db.query<{ storage_key: string | null }>(`SELECT storage_key FROM ${table} WHERE storage_key IS NOT NULL`);
+  return new Set(rows.map((r) => r.storage_key as string));
 }
 
 export interface MissingObjectRow {
@@ -138,10 +143,10 @@ export interface MissingObjectRow {
  * integrity problem, never auto-fixed here, only reported. */
 export async function dbRowsMissingObjects(db: QueryableDb, domain: StorageDomain, objectKeys: Set<string>): Promise<MissingObjectRow[]> {
   const table = DOMAIN_TABLE[domain];
-  const { rows } = await db.query<{ id: string; storage_key: string }>(`SELECT id, storage_key FROM ${table}`);
+  const { rows } = await db.query<{ id: string; storage_key: string | null }>(`SELECT id, storage_key FROM ${table} WHERE storage_key IS NOT NULL`);
   return rows
-    .filter((r) => !objectKeys.has(r.storage_key))
-    .map((r) => ({ id: r.id, storageKey: r.storage_key }))
+    .filter((r) => !objectKeys.has(r.storage_key as string))
+    .map((r) => ({ id: r.id, storageKey: r.storage_key as string }))
     .sort((a, b) => a.storageKey.localeCompare(b.storageKey));
 }
 

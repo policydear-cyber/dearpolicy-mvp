@@ -96,3 +96,36 @@ export async function deleteClaimEvidenceFile(storageKey: string) {
 export async function createClaimEvidenceSignedUrl(_storageKey: string): Promise<string | null> {
   return null;
 }
+
+// --- Household export (checkpoint 6): a versioned, deterministic JSON
+// snapshot of everything a household is entitled to export (see
+// lib/household/export.ts). Its own root, entirely separate from policy
+// documents and claim evidence above -- an export is generated content,
+// not an uploaded document, and is meant to disappear on a much shorter
+// horizon (see lib/household/export-store.ts's expiry handling).
+function householdExportRoot() {
+  return path.resolve(/* turbopackIgnore: true */ process.env.LOCAL_HOUSEHOLD_EXPORT_DIR ?? "./data/household-exports");
+}
+
+export async function saveHouseholdExportFile(args: { householdId: string; exportId: string; bytes: Uint8Array }) {
+  const dir = path.join(/* turbopackIgnore: true */ householdExportRoot(), safeSegment(args.householdId));
+  await mkdir(dir, { recursive: true });
+  const filename = `${safeSegment(args.exportId)}.json`;
+  const fullPath = path.join(/* turbopackIgnore: true */ dir, filename);
+  await writeFile(fullPath, args.bytes);
+  return path.relative(householdExportRoot(), fullPath).replaceAll(path.sep, "/");
+}
+
+export async function readHouseholdExportFile(storageKey: string) {
+  const storageRoot = householdExportRoot();
+  const fullPath = path.resolve(storageRoot, storageKey);
+  if (fullPath !== storageRoot && !fullPath.startsWith(`${storageRoot}${path.sep}`)) throw new Error("Invalid storage path");
+  return readFile(/* turbopackIgnore: true */ fullPath);
+}
+
+export async function deleteHouseholdExportFile(storageKey: string) {
+  const storageRoot = householdExportRoot();
+  const fullPath = path.resolve(storageRoot, storageKey);
+  if (fullPath !== storageRoot && !fullPath.startsWith(`${storageRoot}${path.sep}`)) throw new Error("Invalid storage path");
+  await rm(fullPath, { force: true });
+}

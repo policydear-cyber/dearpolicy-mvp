@@ -478,4 +478,53 @@ CREATE TABLE IF NOT EXISTS storage_cleanup_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_storage_cleanup_audit_log_created ON storage_cleanup_audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_storage_cleanup_audit_log_manifest ON storage_cleanup_audit_log(manifest_hash);
+
+-- Household export (checkpoint 6, claude/v1-launch-hardening) --
+-- lib/household/export.ts (snapshot content), lib/household/export-store.ts
+-- (this lifecycle), lib/storage/{local,supabase}.ts's household-export
+-- domain (where the generated JSON actually lives).
+--  household_exports -- one row per requested export. `idempotency_key`
+--    plus the unique index below makes a repeated POST with the same key
+--    return the SAME row rather than generating a duplicate export;
+--    `storage_key` is NULL until generation succeeds (see
+--    lib/storage/cleanup.ts's household-export domain, which already
+--    accounts for that). `expires_at` is set once the export becomes
+--    'ready' -- a short-lived artifact by design, not a permanent copy of
+--    the household's data sitting in storage indefinitely.
+--  household_export_audit_log -- append-only, mirrors
+--    policy_document_audit_log/claim_evidence_audit_log/
+--    storage_cleanup_audit_log's own shape.
+CREATE TABLE IF NOT EXISTS household_exports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  requested_by uuid NOT NULL,
+  idempotency_key text NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  schema_version integer NOT NULL DEFAULT 1,
+  storage_key text,
+  byte_size integer,
+  manifest_hash text,
+  error text,
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  expires_at timestamptz,
+  CONSTRAINT household_exports_status_check CHECK (status IN ('pending','running','ready','failed','expired'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_household_exports_idempotency ON household_exports(household_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_household_exports_household ON household_exports(household_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_household_exports_expiry ON household_exports(expires_at) WHERE status = 'ready';
+
+CREATE TABLE IF NOT EXISTS household_export_audit_log (
+  id bigserial PRIMARY KEY,
+  household_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  export_id uuid REFERENCES household_exports(id) ON DELETE SET NULL,
+  actor uuid,
+  action text NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  detail text,
+  CONSTRAINT household_export_audit_log_action_check
+    CHECK (action IN ('requested','generated','generation_failed','downloaded','expired','deleted'))
+);
+CREATE INDEX IF NOT EXISTS idx_household_export_audit_export ON household_export_audit_log(export_id);
+CREATE INDEX IF NOT EXISTS idx_household_export_audit_household ON household_export_audit_log(household_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_provider_events_received ON scan_provider_events(received_at);

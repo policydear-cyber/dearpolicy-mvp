@@ -46,7 +46,9 @@
     "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts",
     "security:scan-callback-test": "node --import tsx scripts/scan-callback-regressions.ts",
     "security:storage-cleanup-test": "node --import tsx scripts/storage-cleanup-regressions.ts",
-    "storage:cleanup": "node --import tsx scripts/storage-cleanup.ts"
+    "storage:cleanup": "node --import tsx scripts/storage-cleanup.ts",
+    "security:household-export-test": "node --import tsx scripts/household-export-regressions.ts",
+    "household-export:cleanup": "node --import tsx scripts/household-export-cleanup.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

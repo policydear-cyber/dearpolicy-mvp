@@ -39,14 +39,26 @@ import {
   type StorageObjectInfo,
 } from "@/lib/storage/cleanup";
 
-const DOMAINS: StorageDomain[] = ["policy", "claim-evidence"];
+// household-export objects have their own dedicated, sooner expiry-driven
+// cleanup (lib/household/export-store.ts's lazy expiry + scripts/
+// household-export-cleanup.ts's proactive sweep) since an export is meant
+// to disappear on a much shorter horizon than an orphaned policy/evidence
+// file ever would. It is still included in this general sweep as a safety
+// net -- an export whose row-level expiry cleanup failed partway (storage
+// delete succeeded, row update didn't, or vice versa) is exactly what an
+// orphan/missing-object audit is for.
+const DOMAINS: StorageDomain[] = ["policy", "claim-evidence", "household-export"];
 
 function resolveLocalRoot(domain: StorageDomain): string {
-  return domain === "policy" ? (process.env.LOCAL_STORAGE_DIR ?? "./data/storage") : (process.env.LOCAL_CLAIM_EVIDENCE_DIR ?? "./data/claim-evidence");
+  if (domain === "policy") return process.env.LOCAL_STORAGE_DIR ?? "./data/storage";
+  if (domain === "claim-evidence") return process.env.LOCAL_CLAIM_EVIDENCE_DIR ?? "./data/claim-evidence";
+  return process.env.LOCAL_HOUSEHOLD_EXPORT_DIR ?? "./data/household-exports";
 }
 
 function resolveSupabaseBucket(domain: StorageDomain): string {
-  return domain === "policy" ? (process.env.SUPABASE_STORAGE_BUCKET ?? "policy-files") : (process.env.SUPABASE_CLAIM_EVIDENCE_BUCKET ?? "claim-evidence-files");
+  if (domain === "policy") return process.env.SUPABASE_STORAGE_BUCKET ?? "policy-files";
+  if (domain === "claim-evidence") return process.env.SUPABASE_CLAIM_EVIDENCE_BUCKET ?? "claim-evidence-files";
+  return process.env.SUPABASE_HOUSEHOLD_EXPORT_BUCKET ?? "household-exports";
 }
 
 function driverFor(domain: StorageDomain, name: StorageDriverName): StorageCleanupDriver {

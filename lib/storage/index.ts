@@ -64,3 +64,17 @@ export async function deleteClaimEvidenceFile(storageKey: string) {
 export async function createClaimEvidenceSignedUrl(storageKey: string) {
   return backend().createClaimEvidenceSignedUrl(storageKey);
 }
+
+// --- Household export (checkpoint 6). See lib/storage/local.ts/
+// supabase.ts's own comments on this domain.
+export async function saveHouseholdExportFile(args: { householdId: string; exportId: string; bytes: Uint8Array }) {
+  return backend().saveHouseholdExportFile(args);
+}
+
+export async function readHouseholdExportFile(storageKey: string) {
+  return backend().readHouseholdExportFile(storageKey);
+}
+
+export async function deleteHouseholdExportFile(storageKey: string) {
+  return backend().deleteHouseholdExportFile(storageKey);
+}

@@ -503,11 +503,63 @@ function checkCsrfProtection() {
 // external-configuration blocker.
 // ---------------------------------------------------------------------
 function checkDataExport() {
+  // Checkpoint 6 (claude/v1-launch-hardening): lib/household/export.ts
+  // (snapshot content) + lib/household/export-store.ts (idempotency/CAS/
+  // expiry) + app/api/household/export/**\/route.ts (owner-gated,
+  // recent-auth-gated routes). Checked by source shape below; the
+  // executable DB-backed proof (content inclusions/exclusions,
+  // cross-household isolation, idempotency, CAS lifecycle, race-safe
+  // expiry) is scripts/household-export-regressions.ts, run as part of
+  // security:household-export-test.
+  const exportPath = "lib/household/export.ts";
+  const storePath = "lib/household/export-store.ts";
+  const createRoutePath = "app/api/household/export/route.ts";
+  const downloadRoutePath = "app/api/household/export/[id]/download/route.ts";
+  const missing = [exportPath, storePath, createRoutePath, downloadRoutePath].filter((p) => !existsSync(p));
+  if (missing.length) {
+    report("data_export", "blocked_by_code", `Missing: ${missing.join(", ")}.`);
+    return;
+  }
+  const exportSource = readFileSync(exportPath, "utf8");
+  const storeSource = readFileSync(storePath, "utf8");
+  const createRouteSource = readFileSync(createRoutePath, "utf8");
+  const downloadRouteSource = readFileSync(downloadRoutePath, "utf8");
+
+  // The content builder's own SELECTs must never name storage_key or
+  // extracted_json -- these are exactly the signed-url-adjacent/raw-
+  // provider-payload fields the spec's exclude list names.
+  const policySelect = /SELECT id, family_member_id, insurer[^;]*FROM policies/s.exec(exportSource)?.[0] ?? "";
+  const evidenceSelect = /SELECT id, claim_session_id, document_type[^;]*FROM claim_evidence_documents/s.exec(exportSource)?.[0] ?? "";
+  const noStorageKeys = policySelect.length > 0 && evidenceSelect.length > 0 &&
+    !policySelect.includes("storage_key") && !evidenceSelect.includes("storage_key") && !policySelect.includes("extracted_json");
+
+  const isIdempotent = /idx_household_exports_idempotency/.test(readFileSync("sql/schema.sql", "utf8")) &&
+    /ON CONFLICT \(household_id, idempotency_key\) DO NOTHING/.test(storeSource);
+  const hasExpiry = /expireIfPast/.test(storeSource) && /status='expired'/.test(storeSource);
+  const createRequiresOwnerAndRecentAuth = /requireHouseholdOwner\(/.test(createRouteSource) && /requireRecentAuthentication\(/.test(createRouteSource);
+  const downloadRequiresOwnerAndRecentAuth = /requireHouseholdOwner\(/.test(downloadRouteSource) && /requireRecentAuthentication\(/.test(downloadRouteSource);
+  const downloadNeverRedirectsToSignedUrl = !/signedUrl|createSignedUrl/i.test(downloadRouteSource);
+
+  const problems: string[] = [];
+  if (!noStorageKeys) problems.push("the snapshot builder's own SELECTs still reference storage_key or extracted_json");
+  if (!isIdempotent) problems.push("no idempotency-key unique index/ON CONFLICT DO NOTHING path");
+  if (!hasExpiry) problems.push("no expiry handling");
+  if (!createRequiresOwnerAndRecentAuth) problems.push("the create route does not require both household-owner authorization and recent authentication");
+  if (!downloadRequiresOwnerAndRecentAuth) problems.push("the download route does not require both household-owner authorization and recent authentication");
+  if (!downloadNeverRedirectsToSignedUrl) problems.push("the download route appears to hand out a signed URL rather than streaming the content itself");
+
+  if (problems.length > 0) {
+    report("data_export", "blocked_by_code", `Household export does not fully satisfy the spec: ${problems.join("; ")}.`);
+    return;
+  }
   report(
     "data_export",
-    "blocked_by_code",
-    "No data-export implementation exists yet (no lib/export module, no export route). Household data export, " +
-      "policy/claim metadata and audit-history export are unimplemented -- Priority 6.",
+    "ready",
+    "lib/household/export.ts builds a versioned, deterministic snapshot excluding storage keys/raw provider payloads/internal " +
+      "telemetry; lib/household/export-store.ts is idempotent (unique index + ON CONFLICT) with CAS status transitions and " +
+      "expiry; the create and download routes require household-owner authorization and a recently-authenticated session; " +
+      "the download route streams content directly rather than minting a signed URL. Exercised end to end (including " +
+      "cross-household isolation and a race-safety case) by scripts/household-export-regressions.ts.",
   );
 }
 
@@ -754,6 +806,7 @@ async function checkGithubCiStatus() {
       "security:policy-quarantine-test",
       "security:scan-callback-test",
       "security:storage-cleanup-test",
+      "security:household-export-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
     if (missingCiSteps.length > 0) {

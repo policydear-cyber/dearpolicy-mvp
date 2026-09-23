@@ -112,6 +112,9 @@ jobs:
       - name: Storage cleanup regression suite (manifest/confirmation, protection rules, lock, audit trail -- real Postgres via PGlite, no live DB needed)
         run: npm run security:storage-cleanup-test
 
+      - name: Household export regression suite (recent-auth guard, snapshot exclusions, idempotency, CAS lifecycle, race-safe expiry -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-export-test
+
       - name: Build
         run: npm run build
 

@@ -37,8 +37,8 @@
  */
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { requireCurrentUser, UnauthenticatedError, type SessionUser } from "@/lib/auth/session";
-import { resolveActiveHouseholdId, ForbiddenError, NotFoundError, ConflictError } from "@/lib/household/repo";
+import { requireCurrentUser, UnauthenticatedError, StaleAuthenticationError, type SessionUser } from "@/lib/auth/session";
+import { resolveActiveHouseholdId, ForbiddenError, NotFoundError, ConflictError, NotHouseholdOwnerError } from "@/lib/household/repo";
 
 /** The active-household cookie set by POST /api/household/switch. Plain
  * (non-httpOnly) is fine -- it names which household the UI is currently
@@ -99,11 +99,17 @@ export function routeErrorResponse(error: unknown): NextResponse {
   if (error instanceof UnauthenticatedError) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (error instanceof StaleAuthenticationError) {
+    return NextResponse.json({ error: "Please sign in again to confirm it's you before continuing." }, { status: 401 });
+  }
   if (error instanceof NoHouseholdError) {
     return NextResponse.json({ error: "No household" }, { status: 404 });
   }
   if (error instanceof ForbiddenError || error instanceof NotFoundError) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (error instanceof NotHouseholdOwnerError) {
+    return NextResponse.json({ error: error.message }, { status: 403 });
   }
   if (error instanceof ConflictError) {
     return NextResponse.json({ error: error.message }, { status: 409 });
