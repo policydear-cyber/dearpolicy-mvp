@@ -878,9 +878,33 @@ function checkFullHouseholdE2eJourney() {
   report(
     "full_household_e2e_journey",
     "blocked_by_code",
-    "No end-to-end application-level test exists covering the 22-step authenticated household journey " +
-      "(signup through household deletion). The claim-ci-regressions.ts and similar suites test calculation " +
-      "engines directly, not the full route-authorization-to-storage journey -- Priority 10.",
+    "scripts/full-household-e2e-regressions.ts (Checkpoint 12, claude/v1-launch-hardening) now proves 17 real, " +
+      "authenticated, route-level steps through actual API route handlers -- not lib/ functions called directly, " +
+      "the way claim-ci-regressions.ts and similar suites test their engines: household visibility and rename, " +
+      "family-member creation (2 members) and listing, a real policy upload reaching a real quarantine-rejected " +
+      "terminal state through the real quarantine gate with its durable job actually completing, a real " +
+      "claim-evidence upload reaching a real rejected terminal state through the real pipeline with its durable " +
+      "job actually completing, a claim-pack fetch, and household export create/list/download with the real " +
+      "snapshot content verified against the household data created earlier in the same run -- reliably passing " +
+      "twice in this sandbox with no OOM. Three substitutions are used and documented in the file's own header: " +
+      "(1) signup/sign-in uses the dev-auth identity path (DEV_AUTH_ENABLED/DEV_ACCOUNT_ID) plus direct-seeded " +
+      "household membership, not real Supabase Auth -- there is no real Supabase project in this sandbox, the " +
+      "same limitation scripts/authz-http-regressions.ts already accepted; (2) claim-session creation calls " +
+      "lib/claims/session.ts's createClaimSession() directly, the same function the chat orchestrator itself " +
+      "calls, since there is no REST route for it; (3) both uploads are short-circuited by a fake malware-scan " +
+      "adapter reporting \"infected\", so neither ever reaches pdf.js or real AI extraction -- avoiding this " +
+      "sandbox's pre-existing PDF-parsing OOM ceiling (Checkpoint 10) while still proving the full upload -> " +
+      "storage -> quarantine-gate -> durable-job chain; extraction-content quality itself stays proven elsewhere " +
+      "(scripts/claim-evidence-regressions.ts, scripts/pipeline-worker-regressions.ts). Family-member and " +
+      "household deletion are deliberately excluded from this suite: reproduced in isolation, " +
+      "lib/lifecycle/coordinator.ts's deletion code paths reliably get silently OOM-killed when run alongside " +
+      "this suite's other 17 steps in the same process -- a genuine sandbox memory constraint, not a code " +
+      "defect -- and both flows are already proven, in more depth than one route call each, by their own " +
+      "dedicated suites (security:family-member-deletion-test, security:household-deletion-test), reconfirmed " +
+      "passing this checkpoint. Still blocked_by_code: this is not the full 22-step signup-through-deletion " +
+      "journey exercised live and in-process end to end -- signup remains a documented identity substitute and " +
+      "deletion remains a documented same-process exclusion rather than either being exercised live within this " +
+      "suite -- Priority 10.",
   );
 }
 
