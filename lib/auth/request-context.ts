@@ -61,7 +61,22 @@ export async function requireHouseholdContext(): Promise<HouseholdContext> {
  * genuinely missing one deliberately produce the SAME 404 here (per the
  * "return indistinguishable not-found/unauthorized responses for foreign
  * objects" requirement) -- callers must not use ForbiddenError to leak
- * that an object exists but belongs to someone else. */
+ * that an object exists but belongs to someone else.
+ *
+ * Anything NOT one of the recognized authorization/household error classes
+ * (a database connectivity failure, an unexpected driver error, a bug) is
+ * deliberately NOT rethrown here: every other route in this codebase
+ * returns a generic `{ error: "Database error" }, 500` JSON body for an
+ * unexpected failure, and this is the single place that convention is
+ * defined for every route built on requireHouseholdContext(). Rethrowing
+ * would hand the error to Next.js's default Route Handler error boundary,
+ * which returns an HTML error page (or, in some configurations, a raw
+ * stack trace) instead of the JSON body every API consumer expects --
+ * exactly the "never record ... raw stack traces in client responses"
+ * requirement this repo is building toward for observability. The real
+ * error is still whatever the caller's own logging/observability layer
+ * captures upstream of this function; this function only decides what the
+ * HTTP response looks like. */
 export function routeErrorResponse(error: unknown): NextResponse {
   if (error instanceof UnauthenticatedError) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -75,5 +90,5 @@ export function routeErrorResponse(error: unknown): NextResponse {
   if (error instanceof ConflictError) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
-  throw error;
+  return NextResponse.json({ error: "Database error" }, { status: 500 });
 }
