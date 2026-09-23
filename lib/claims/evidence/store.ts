@@ -6,7 +6,7 @@ import { assertValidEvidenceTransition } from "./state-machine";
 import type {
   ClaimCauseDefinitionMatchRow, ClaimCIDefinitionMatchRow, ClaimDisabilityDefinitionMatchRow, ClaimEvidenceDocumentRow, ClaimEvidenceDocumentType,
   ClaimEvidenceExtractedFields, ClaimEvidenceExtractionRow, ClaimEvidenceIdentityConflict,
-  ClaimEvidenceIdentityStatus, ClaimEvidenceStatus, CauseDefinitionMatchResultValue, CIDefinitionMatchResultValue, DisabilityDefinitionMatchResultValue,
+  ClaimEvidenceIdentityStatus, ClaimEvidenceScanStatus, ClaimEvidenceStatus, CauseDefinitionMatchResultValue, CIDefinitionMatchResultValue, DisabilityDefinitionMatchResultValue,
 } from "./types";
 
 const DOCUMENT_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,document_type,original_filename,storage_key,mime_type,byte_size,
@@ -99,16 +99,22 @@ export async function findReusedEvidenceAcrossScopes(args: { accountId: string; 
 export async function transitionEvidenceStatus(args: {
   accountId: string; id: string; from: ClaimEvidenceStatus; to: ClaimEvidenceStatus;
   errorMessage?: string | null; errorCode?: string | null; identityStatus?: ClaimEvidenceIdentityStatus;
+  /** Persists the real scan outcome from ./scan-adapter.ts's scanFile() to
+   * the queryable scan_status column -- previously only ever recorded in
+   * the audit log's JSON blob, never on the row itself, so the column
+   * stayed permanently at its 'pending_scan' default and neither the UI
+   * nor ./pipeline.ts's processing gate could ever see a real result. */
+  scanStatus?: ClaimEvidenceScanStatus;
 }): Promise<ClaimEvidenceDocumentRow | null> {
   assertValidEvidenceTransition(args.from, args.to);
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
     `UPDATE claim_evidence_documents
         SET status=$1, processing_error=$2, processing_error_code=$3,
-            identity_status=COALESCE($4,identity_status), updated_at=now()
-      WHERE id=$5 AND account_id=$6 AND status=$7
+            identity_status=COALESCE($4,identity_status), scan_status=COALESCE($5,scan_status), updated_at=now()
+      WHERE id=$6 AND account_id=$7 AND status=$8
       RETURNING ${DOCUMENT_COLUMNS}`,
-    [args.to, args.errorMessage ?? null, args.errorCode ?? null, args.identityStatus ?? null, args.id, args.accountId, args.from],
+    [args.to, args.errorMessage ?? null, args.errorCode ?? null, args.identityStatus ?? null, args.scanStatus ?? null, args.id, args.accountId, args.from],
   );
   return result.rows[0] ?? null;
 }

@@ -55,6 +55,7 @@ import {
 } from "@/lib/launch/capability-manifest";
 import { classifyRoutes } from "./route-inventory-regressions";
 import { checkRequestOrigin } from "@/lib/http/csrf";
+import { checkMalwareScannerConfigured } from "@/lib/claims/evidence/scan-adapter";
 
 const results: CapabilityResult[] = [];
 const labelOf = new Map(REQUIRED_CAPABILITIES.map((c) => [c.id, c.label]));
@@ -351,42 +352,53 @@ function checkClaimEvidenceQuarantine() {
     return;
   }
   const source = readFileSync(pipelinePath, "utf8");
-  const gatesOnInfectedOnly = /scan\.status === ["']infected["']/.test(source);
-  const hasScanCleanGate = /scan_clean|scanStatus\s*===\s*["']scan_clean["']|scan\.status\s*===\s*["']clean["']/.test(source);
-  if (gatesOnInfectedOnly && !hasScanCleanGate) {
+  // The real gate: quarantined -> processing must require scan_status ===
+  // "clean" before it transitions. Checked by source shape (an executable
+  // DB-backed proof of this is scripts/claim-evidence-regressions.ts's
+  // dedicated quarantine-gating tests, run as part of claims:evidence-test).
+  const hasCleanGate = /current\.scan_status\s*!==\s*["']clean["']/.test(source);
+  if (!hasCleanGate) {
     report(
       "claim_evidence_quarantine",
       "blocked_by_code",
-      `${pipelinePath} only rejects a scan result of "infected" and proceeds to processing/extraction for every ` +
-        `other scan outcome, including "scan_unavailable" from the null scanner (see lib/claims/evidence/scan-adapter.ts). ` +
-        `This does not satisfy "Only scan_clean documents may be parsed, OCRed, embedded, indexed, or sent to a model" -- ` +
-        `an unscanned document is currently processed, not blocked.`,
+      `${pipelinePath} does not gate the quarantined -> processing transition on an explicit clean scan result. ` +
+        `This does not satisfy "Only scan_clean documents may be parsed, OCRed, embedded, indexed, or sent to a model".`,
     );
     return;
   }
-  report("claim_evidence_quarantine", "ready", `${pipelinePath} gates processing on an explicit clean-scan result.`);
+  report(
+    "claim_evidence_quarantine",
+    "ready",
+    `${pipelinePath} gates processing on an explicit clean-scan result (current.scan_status !== "clean" stays in ` +
+      `quarantined). See claims:evidence-test for the executable DB-backed proof.`,
+  );
 }
 
 function checkMalwareScanningConfiguration() {
-  const path = "lib/claims/evidence/scan-adapter.ts";
-  if (!existsSync(path)) {
-    report("malware_scanning_configuration", "blocked_by_code", `${path} does not exist.`);
+  // Real executable check: evaluates checkMalwareScannerConfigured() (the
+  // same function wired into instrumentation.ts's production startup
+  // guard) against a simulated production environment, exactly like
+  // guardStatus() does for lib/launch/guards.ts's guards.
+  const result = checkMalwareScannerConfigured(prodEnv);
+  const hasRealScannerSelected = (prodEnv.MALWARE_SCANNER_PROVIDER?.trim() ?? "") !== "" && prodEnv.MALWARE_SCANNER_PROVIDER?.trim() !== "null";
+  if (result.ok && hasRealScannerSelected) {
+    report("malware_scanning_configuration", "ready", result.message);
     return;
   }
-  const source = readFileSync(path, "utf8");
-  const alwaysNull = /currentScanAdapter[\s\S]*?return nullScanAdapter;\s*\}/.test(source) && !/isProduction|NODE_ENV/.test(source);
-  if (alwaysNull) {
+  if (result.ok) {
+    // Only reachable via MALWARE_SCANNING_INTENTIONALLY_DISABLED -- an
+    // operator's explicit, acknowledged choice, not a code gap, but still
+    // not "ready": there is no real scanner, so claim-evidence quarantine
+    // is permanently blocked by design until one is configured.
     report(
       "malware_scanning_configuration",
       "blocked_by_code",
-      `${path}'s currentScanAdapter() unconditionally returns the null scanner (nullScanAdapter), with no production ` +
-        `guard and no adapter implementation for a real malware-scanning provider. This does not satisfy "production ` +
-        `cannot silently use the null scanner" -- there is currently no other adapter to select and no check that would ` +
-        `stop a production deploy from running with scanning effectively disabled.`,
+      `${result.message} No real scanner adapter is implemented yet regardless -- there is currently only the null ` +
+        `adapter to select (see lib/claims/evidence/scan-adapter.ts's SCAN_ADAPTERS).`,
     );
     return;
   }
-  report("malware_scanning_configuration", "ready", `${path} selects a real scanning adapter and guards production against the null scanner.`);
+  report("malware_scanning_configuration", "blocked_by_code", result.message);
 }
 
 // ---------------------------------------------------------------------

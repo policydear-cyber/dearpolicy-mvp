@@ -386,7 +386,7 @@ async function runDatabaseTests() {
       recordCauseDefinitionMatch, loadActiveCauseDefinitionMatches, supersedeEvidenceDocument,
     } = await import("@/lib/claims/evidence/store");
     const { appendClaimEvidenceAudit, listClaimEvidenceAudit } = await import("@/lib/claims/evidence/audit");
-    const { processClaimEvidence } = await import("@/lib/claims/evidence/pipeline");
+    const { processClaimEvidence, reprocessNeedsAttention } = await import("@/lib/claims/evidence/pipeline");
     const { confirmCauseDefinitionMatch, ClaimEvidenceMatchError } = await import("@/lib/claims/evidence/matches");
     const { loadCauseDefinitionMatchesForFacts } = await import("@/lib/claims/evidence/session-matches");
 
@@ -603,6 +603,67 @@ async function runDatabaseTests() {
 
       const resultB = calculateAccidentalDeath({ ...sharedInput, ownership: { contractId: policyB, coverageId: coverageB }, ruleEvidence: definitionB, ownershipEvidence: { policyId: policyB, chunkId: `coverage:${coverageB}`, coverageId: coverageB, familyMemberId: desmond }, formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: definitionB }, accidentalDeathDefinitionEvidence: definitionB, causeDefinitionMatch: forPolicyA! });
       assert.equal(resultB.status, "blocked");
+    });
+
+    // --- Quarantine gating (launch-hardening: "Only scan_clean documents
+    // may be parsed, OCRed, embedded, indexed, or sent to a model") -----
+
+    await testAsync("transitionEvidenceStatus persists the real scan_status column, not just the audit log", async () => {
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "scanstatus.pdf", storageKey: "k-scanstatus", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-scanstatus" });
+      assert.equal(document.scan_status, "pending_scan", "a freshly created document defaults to pending_scan");
+      const moved = await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "scan_unavailable" });
+      assert.equal(moved?.scan_status, "scan_unavailable", "scanStatus must be persisted to the queryable column, not only the audit log");
+      const reread = await getEvidenceDocument(account, document.id);
+      assert.equal(reread?.scan_status, "scan_unavailable");
+    });
+
+    await testAsync("quarantine gate: an unscanned/unavailable-scan document stays quarantined and processClaimEvidence is a safe no-op on it", async () => {
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "unscanned.pdf", storageKey: "k-unscanned", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-unscanned" });
+      await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "scan_unavailable" });
+      const auditForDoc = async () => (await listClaimEvidenceAudit(account, claimA)).filter((r) => r.evidence_document_id === document.id);
+      const before = await auditForDoc();
+
+      await processClaimEvidence({ accountId: account, documentId: document.id });
+      const afterFirst = await getEvidenceDocument(account, document.id);
+      assert.equal(afterFirst?.status, "quarantined", "a document whose scan is not clean must stay quarantined, never silently proceed to processing/extraction/OCR/embedding/model calls");
+      assert.equal(afterFirst?.scan_status, "scan_unavailable");
+
+      // Reprocessing (whether a single retry, a duplicate queue delivery,
+      // or reprocessNeedsAttention()'s sweep over every RESUMABLE document
+      // in the claim session -- which also touches other documents from
+      // other tests sharing claimA, so this test's own assertions are
+      // scoped to THIS document only) must never bypass the gate -- prove
+      // it holds across several repeated calls, not just one.
+      await processClaimEvidence({ accountId: account, documentId: document.id });
+      await reprocessNeedsAttention(account, claimA);
+      const afterRetries = await getEvidenceDocument(account, document.id);
+      assert.equal(afterRetries?.status, "quarantined", "reprocessing a quarantined, not-yet-clean document must not bypass quarantine");
+
+      const after = await auditForDoc();
+      assert.equal(after.length, before.length, "repeatedly finding this document still not clean must not spam the audit log with a new event every pass");
+    });
+
+    await testAsync("quarantine gate: a document whose scan is explicitly clean is allowed past quarantine", async () => {
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "clean.pdf", storageKey: "k-clean-nonexistent", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-clean" });
+      await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "clean" });
+
+      await processClaimEvidence({ accountId: account, documentId: document.id });
+      const after = await getEvidenceDocument(account, document.id);
+      // storageKey does not point at a real stored file in this suite, so
+      // the pipeline is expected to fail once it actually tries to read
+      // and process the (nonexistent) file -- the point of this test is
+      // only that a clean-scanned document is let PAST quarantine at all,
+      // unlike the not-yet-clean case above which stays quarantined
+      // forever. Reaching "processing" or "failed" (from the downstream
+      // read error) both prove that; staying "quarantined" would not.
+      assert.notEqual(after?.status, "quarantined", "a document with an explicit clean scan result must be allowed past quarantine");
+    });
+
+    await testAsync("an infected scan result is persisted to scan_status on the rejected transition too", async () => {
+      const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "infected.pdf", storageKey: "k-infected", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-infected" });
+      const moved = await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "rejected", errorCode: "MALWARE_DETECTED", errorMessage: "flagged", scanStatus: "infected" });
+      assert.equal(moved?.status, "rejected");
+      assert.equal(moved?.scan_status, "infected", "an infected scan result must be persisted to scan_status, not only recorded in the audit log");
     });
   } finally {
     pool.query = originalQuery; pool.connect = originalConnect;

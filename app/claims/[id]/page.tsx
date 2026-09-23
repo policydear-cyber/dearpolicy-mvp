@@ -125,6 +125,13 @@ export default function ClaimEvidencePage() {
               <span className="status">{doc.document_type.replace(/_/g, " ")}</span>{" "}
               <span className="status">identity: {doc.identity_status.replace(/_/g, " ")}</span>
               {doc.processing_error && <p><em>{doc.processing_error}</em></p>}
+              {doc.status === "quarantined" && doc.scan_status !== "clean" && (
+                <p><em>
+                  {doc.scan_status === "scan_unavailable"
+                    ? "This document is on hold: malware scanning is not configured in this environment, so it cannot be processed until it is."
+                    : "This document is waiting for a malware scan to complete before it can be processed."}
+                </em></p>
+              )}
 
               {doc.extraction && (
                 <div style={{ marginTop: 8 }}>

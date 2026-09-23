@@ -19,7 +19,10 @@ export function isProduction(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.NODE_ENV === "production";
 }
 
-function truthy(value: string | undefined): boolean {
+/** Shared truthy-env-var parser -- also used by lib/claims/evidence/
+ * scan-adapter.ts's production scanner-configuration guard, so both
+ * "truthy" boolean flags in this codebase parse identically. */
+export function truthy(value: string | undefined): boolean {
   return /^(1|true|on|yes)$/i.test(value?.trim() ?? "");
 }
 

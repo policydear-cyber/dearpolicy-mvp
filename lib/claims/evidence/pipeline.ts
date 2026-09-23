@@ -95,11 +95,17 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
       const bytes = await readClaimEvidenceFile(current.storage_key);
       const scan = await currentScanAdapter().scanFile(bytes);
       if (scan.status === "infected") {
-        const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "uploaded", to: "rejected", errorCode: "MALWARE_DETECTED", errorMessage: "This file was flagged by malware scanning and cannot be processed." });
-        if (moved) await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "rejected", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, reasonCode: "MALWARE_DETECTED", newValue: { status: "rejected" } });
+        const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "uploaded", to: "rejected", errorCode: "MALWARE_DETECTED", errorMessage: "This file was flagged by malware scanning and cannot be processed.", scanStatus: scan.status });
+        if (moved) await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "rejected", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, reasonCode: "MALWARE_DETECTED", newValue: { status: "rejected", scanStatus: scan.status } });
         return;
       }
-      const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "uploaded", to: "quarantined" });
+      // scan.status here is "clean" or "scan_unavailable" (never
+      // "pending_scan" -- that value only ever describes a document that
+      // has not been scanned yet, i.e. before this call). Persisted to the
+      // real scan_status column (previously only ever recorded in the
+      // audit log's JSON blob, never queryable) so both the gate just
+      // below and the UI can see the real outcome.
+      const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "uploaded", to: "quarantined", scanStatus: scan.status });
       if (moved) {
         current = moved;
         await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "status_transition", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, previousValue: { status: "uploaded" }, newValue: { status: "quarantined", scanStatus: scan.status } });
@@ -110,7 +116,20 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     if (!RESUMABLE.includes(current.status)) return;
 
     // --- quarantined -> processing -------------------------------------
+    // Gate strictly on an explicit clean scan: "Only scan_clean documents
+    // may be parsed, OCRed, embedded, indexed, or sent to a model." A
+    // document whose recorded scan_status is "scan_unavailable" (no
+    // scanner configured -- see ./scan-adapter.ts) or still "pending_scan"
+    // stays in `quarantined`: a safe, expected hold state, not a failure,
+    // and this is exactly what makes reprocessing a quarantined document
+    // safe too (reprocessNeedsAttention() below calls this function for
+    // every RESUMABLE document including "quarantined" ones -- it can
+    // never bypass this gate, only re-check it). No audit event is written
+    // here for the "still not clean" case: retrying a still-quarantined
+    // document on every queue pass must not spam the audit log; the one
+    // audit event recorded above already captures the scan outcome.
     if (current.status === "quarantined") {
+      if (current.scan_status !== "clean") return;
       const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "quarantined", to: "processing" });
       if (moved) {
         current = moved;
