@@ -137,12 +137,14 @@ async function main() {
     );
 
     // UPDATE targeting household B's policy id is filtered to zero rows by USING.
+    // NOTE: PGlite's query() result is { rows, fields, affectedRows, blob } --
+    // "affectedRows" is PGlite's own field name, not node-postgres's "rowCount".
     const updated = await db.query("UPDATE policies SET insurer = 'changed' WHERE account_id = $1", [householdB]);
-    assert.equal(updated.rowCount ?? 0, 0, "updating household B's row as a household A member must affect zero rows");
+    assert.equal(updated.affectedRows ?? 0, 0, "updating household B's row as a household A member must affect zero rows");
 
     // DELETE targeting household B's row is likewise filtered to zero rows.
     const deleted = await db.query("DELETE FROM policies WHERE account_id = $1", [householdB]);
-    assert.equal(deleted.rowCount ?? 0, 0, "deleting household B's row as a household A member must affect zero rows");
+    assert.equal(deleted.affectedRows ?? 0, 0, "deleting household B's row as a household A member must affect zero rows");
   });
 
   // --- A household member cannot perform owner-only actions --------------
@@ -159,7 +161,7 @@ async function main() {
       householdA,
       memberA,
     ]);
-    assert.equal(roleChange.rowCount ?? 0, 0, "a plain member must not be able to self-promote to owner");
+    assert.equal(roleChange.affectedRows ?? 0, 0, "a plain member must not be able to self-promote to owner");
   });
 
   // --- Removed members immediately lose access ---------------------------
@@ -168,7 +170,7 @@ async function main() {
       householdA,
       memberA,
     ]);
-    assert.equal(removed.rowCount, 1, "the owner must be able to remove a member");
+    assert.equal(removed.affectedRows, 1, "the owner must be able to remove a member");
   });
   await asUser(db, { userId: memberA, role: "authenticated" }, async () => {
     const afterRemoval = await db.query("SELECT id FROM policies WHERE account_id = $1", [householdA]);
