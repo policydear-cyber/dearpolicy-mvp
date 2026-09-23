@@ -109,6 +109,9 @@ jobs:
       - name: Scan-provider callback authentication regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:scan-callback-test
 
+      - name: Storage cleanup regression suite (manifest/confirmation, protection rules, lock, audit trail -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:storage-cleanup-test
+
       - name: Build
         run: npm run build
 

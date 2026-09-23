@@ -438,4 +438,44 @@ CREATE TABLE IF NOT EXISTS scan_provider_events (
   received_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (provider, event_id)
 );
+
+-- Storage cleanup (checkpoint 5, claude/v1-launch-hardening) --
+-- lib/storage/cleanup.ts. Two tables:
+--  storage_cleanup_locks -- a row-based mutual-exclusion lock so two
+--    concurrent cleanup runs targeting the same (driver,domain) pair
+--    cannot race each other's in-flight deletions. Not a Postgres
+--    advisory lock, deliberately -- see lib/storage/cleanup.ts's
+--    withCleanupLock() doc comment for why. A stale (crashed-holder) row
+--    is reclaimed by the next run rather than blocking forever.
+--  storage_cleanup_audit_log -- one row per actual deletion attempt
+--    (success, failure, or skip), mirroring policy_document_audit_log /
+--    claim_evidence_audit_log's own append-only shape. Deliberately never
+--    stores a raw storage_key -- only display_key, the redacted form
+--    (lib/storage/cleanup.ts's redactStorageKey()) -- so the audit trail
+--    itself can never leak an original filename, not just this tool's
+--    console output.
+CREATE TABLE IF NOT EXISTS storage_cleanup_locks (
+  lock_key text PRIMARY KEY,
+  holder text NOT NULL,
+  acquired_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS storage_cleanup_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver text NOT NULL,
+  domain text NOT NULL,
+  action text NOT NULL,
+  display_key text NOT NULL,
+  size_bytes integer,
+  manifest_hash text NOT NULL,
+  actor text NOT NULL,
+  detail text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT storage_cleanup_audit_log_driver_check CHECK (driver IN ('local','supabase')),
+  CONSTRAINT storage_cleanup_audit_log_domain_check CHECK (domain IN ('policy','claim-evidence')),
+  CONSTRAINT storage_cleanup_audit_log_action_check
+    CHECK (action IN ('object_deleted','object_delete_failed','object_skipped_referenced','object_skipped_already_gone'))
+);
+CREATE INDEX IF NOT EXISTS idx_storage_cleanup_audit_log_created ON storage_cleanup_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_storage_cleanup_audit_log_manifest ON storage_cleanup_audit_log(manifest_hash);
 CREATE INDEX IF NOT EXISTS idx_scan_provider_events_received ON scan_provider_events(received_at);

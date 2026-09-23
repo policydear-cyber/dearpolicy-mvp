@@ -751,6 +751,9 @@ async function checkGithubCiStatus() {
       "security:db-rate-limit-test",
       "security:csrf-test",
       "security:launch-check-test",
+      "security:policy-quarantine-test",
+      "security:scan-callback-test",
+      "security:storage-cleanup-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
     if (missingCiSteps.length > 0) {
