@@ -37,7 +37,9 @@
     "security:route-inventory-test": "node --import tsx scripts/route-inventory-regressions.ts",
     "security:import-boundary-test": "node --import tsx scripts/import-boundary-regressions.ts",
     "security:authz-http-test": "node --import tsx scripts/authz-http-regressions.ts",
-    "security:storage-rls-test": "node --import tsx scripts/storage-rls-regressions.ts"
+    "security:storage-rls-test": "node --import tsx scripts/storage-rls-regressions.ts",
+    "security:storage-orphans-test": "node --import tsx scripts/storage-orphans-regressions.ts",
+    "storage:audit-orphans": "node --import tsx scripts/storage-orphans.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
