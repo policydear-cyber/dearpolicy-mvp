@@ -73,6 +73,36 @@ jobs:
       - name: Row Level Security regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:rls-test
 
+      - name: Authorization-client regression suite (createUserSupabaseClient RLS boundary)
+        run: npm run security:authz-client-test
+
+      - name: Household repository regression suite
+        run: npm run security:household-test
+
+      - name: Route inventory regression suite (every app/api/**/route.ts classified and authorized)
+        run: npm run security:route-inventory-test
+
+      - name: Import-boundary regression suite (devAccountId/service-client/rate-limiter bans under app/)
+        run: npm run security:import-boundary-test
+
+      - name: Authorization HTTP regression suite (real route handlers, real auth boundary)
+        run: npm run security:authz-http-test
+
+      - name: Storage RLS regression suite
+        run: npm run security:storage-rls-test
+
+      - name: Storage orphan audit regression suite
+        run: npm run security:storage-orphans-test
+
+      - name: Shared Postgres-backed rate-limiter regression suite
+        run: npm run security:db-rate-limit-test
+
+      - name: CSRF protection regression suite
+        run: npm run security:csrf-test
+
+      - name: Launch capability manifest regression suite
+        run: npm run security:launch-check-test
+
       - name: Build
         run: npm run build
 
