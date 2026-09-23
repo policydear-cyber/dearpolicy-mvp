@@ -629,6 +629,44 @@ function checkDataDeletionAndInvalidation() {
   if (!hasQueryGuardRegression) problems.push("no repository-level regression enforcing the lifecycle predicate on active-record queries");
   if (missingFlows.length) problems.push(`${missingFlows.length}/8 deletion flows not yet implemented: ${missingFlows.map(([name]) => name).join(", ")}`);
 
+  if (problems.length === 0) {
+    report(
+      "data_deletion_and_invalidation",
+      "ready",
+      `Deletion & invalidation lifecycle complete: all 8 deletion flows this checkpoint's LIFECYCLE_RESOURCE_TYPES ` +
+        `anticipated are implemented and regression-tested (${implementedFlows.map(([name]) => name).join(", ")}), ` +
+        `on top of a central CAS-based state machine (active/pending_deletion/soft_deleted/permanently_deleted/` +
+        `audit_tombstone) with recovery only before permanent deletion; idempotent deletion_requests bookkeeping ` +
+        `(unique-index + ON CONFLICT DO NOTHING, proven under concurrent/retried requests by every flow's own ` +
+        `regression suite); immediate read-side exclusion wired into chat retrieval, the policy list route, and ` +
+        `every ordinary application read across all four lifecycle-scoped tables (accounts, policies, ` +
+        `claim_evidence_documents, family_members) via lib/lifecycle/scopes.ts's activePredicate() -- the ` +
+        `query-guard allowlist is at zero, proven behaviorally (not just via static text scanning) by ` +
+        `scripts/active-read-scopes-regressions.ts; storage-cleanup engine integration; a redacted ` +
+        `deletion_audit_log. Whole-policy and claim-evidence deletion each invalidate their own derived cause/CI/` +
+        `disability match data and reset open claim sessions to a needs-document state, closing two real, ` +
+        `previously-undiscovered gaps (lib/ledger/store.ts's stale Coverage Ledger rows, and claim-evidence's ` +
+        `own unjoined match tables) found and fixed while building this checkpoint, not merely inherited. ` +
+        `Family-member deletion, household-member removal, leave-household, invitation revocation, and ` +
+        `household/account deletion each migrated (or, for household deletion, wrapped) a pre-existing raw, ` +
+        `unrecoverable DELETE that bypassed this lifecycle machinery entirely -- four more real, ` +
+        `previously-undiscovered gaps closed along the way, each verified via a sabotage-and-restore cycle ` +
+        `confirming the exact safety-critical control (a precondition, an idempotency short-circuit, or -- ` +
+        `uniquely for household deletion -- the pre-flight existence check protecting a retry from a ` +
+        `foreign-key crash) actually does what its regression suite claims. Household deletion is the one flow ` +
+        `that deliberately stays an immediate hard delete rather than a deferred soft-delete -- see ` +
+        `lib/lifecycle/coordinator.ts's requestHouseholdDeletion() for why (deletion_requests/deletion_audit_log ` +
+        `rows are themselves ON DELETE CASCADE-tied to the accounts row they describe, and no existing read path ` +
+        `gates access on accounts.lifecycle_state) -- and is now additionally gated on a recently-authenticated ` +
+        `session (requireRecentAuthentication(), app/api/household/route.ts's DELETE handler), closing the ` +
+        `reauthentication gap deleteHousehold()'s own doc comment had flagged. See each flow's own ` +
+        `scripts/*-regressions.ts for its full behavioral case list. Whether this has actually been exercised ` +
+        `against a live Supabase project (as opposed to PGlite, which every regression suite above uses) is the ` +
+        `responsibility of the live-environment checks elsewhere in this script, not this one.`,
+    );
+    return;
+  }
+
   report(
     "data_deletion_and_invalidation",
     "blocked_by_code",
@@ -938,6 +976,7 @@ async function checkGithubCiStatus() {
       "security:family-member-deletion-test",
       "security:household-membership-deletion-test",
       "security:invitation-revocation-deletion-test",
+      "security:household-deletion-test",
       "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));

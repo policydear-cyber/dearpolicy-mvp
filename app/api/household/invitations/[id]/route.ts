@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { isUuid } from "@/lib/db/client";
-import { requestInvitationRevocation } from "@/lib/lifecycle/coordinator";
+import { DeletionValidationError, requestInvitationRevocation } from "@/lib/lifecycle/coordinator";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-owner" as const;
@@ -29,6 +29,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     await requestInvitationRevocation({ callerUserId: ctx.userId, invitationId: id, idempotencyKey });
     return NextResponse.json({ ok: true });
   } catch (error) {
+    // Fixed alongside Flow 8: DeletionValidationError (thrown when the id
+    // is well-formed but no such invitation exists) has no mapping in the
+    // shared routeErrorResponse() -- every other coordinator caller that
+    // can hit this error catches it explicitly (see app/api/family/[id]/
+    // route.ts's DELETE handler for the established convention) rather
+    // than letting it fall through to routeErrorResponse()'s generic 500.
+    // This route was missing that catch since Flow 7 shipped; without it,
+    // a nonexistent invitation id returned an unwarranted 500 instead of
+    // 404.
+    if (error instanceof DeletionValidationError) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return routeErrorResponse(error);
   }
 }

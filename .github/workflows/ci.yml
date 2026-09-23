@@ -139,6 +139,9 @@ jobs:
       - name: Invitation-revocation deletion regression suite (owner revocation, RLS-enforced forbidden revocation, already-revoked/accepted refusal, revoked-invitation-acceptance proof, idempotency -- real Postgres RLS via PGlite, no live DB needed)
         run: npm run security:invitation-revocation-deletion-test
 
+      - name: Household deletion regression suite (owner deletion cascades everything, this flow's own audit rows are cascade-gone afterward by design, RLS-enforced forbidden deletion, missing-household and retry-after-completion refusal -- real Postgres RLS via PGlite, no live DB needed)
+        run: npm run security:household-deletion-test
+
       - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
         run: npm run security:placeholder-content-test
 

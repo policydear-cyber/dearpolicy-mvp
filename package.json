@@ -57,6 +57,7 @@
     "security:family-member-deletion-test": "node --import tsx scripts/family-member-deletion-regressions.ts",
     "security:household-membership-deletion-test": "node --import tsx scripts/household-membership-deletion-regressions.ts",
     "security:invitation-revocation-deletion-test": "node --import tsx scripts/invitation-revocation-deletion-regressions.ts",
+    "security:household-deletion-test": "node --import tsx scripts/household-deletion-regressions.ts",
     "security:placeholder-content-test": "node --import tsx scripts/placeholder-content-regressions.ts"
   },
   "dependencies": {

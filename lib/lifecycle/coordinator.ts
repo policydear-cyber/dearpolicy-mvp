@@ -36,12 +36,14 @@
  * last-owner-protection business rule and is deliberately not
  * reimplemented here), and invitation (revoking a still-pending
  * invitation, see requestInvitationRevocation -- wraps
- * lib/household/repo.ts's revokeInvitation() the same way) are
- * implemented here. The remaining flow (household/account deletion) is
- * tracked as follow-up work -- see PR #16's own status notes and
- * scripts/launch-check.ts's checkDataDeletionAndInvalidation(), which
- * reports this capability as still blocked_by_code and itemizes exactly
- * what remains.
+ * lib/household/repo.ts's revokeInvitation() the same way), and household
+ * (the whole account, see requestHouseholdDeletion -- wraps
+ * lib/household/repo.ts's deleteHousehold(); see that function's own doc
+ * comment for why this flow, alone among the eight, keeps an immediate
+ * hard delete rather than a deferred soft-delete) are implemented here.
+ * All 8 deletion flows this checkpoint's LIFECYCLE_RESOURCE_TYPES
+ * anticipated are now implemented -- see scripts/launch-check.ts's
+ * checkDataDeletionAndInvalidation() for the up-to-date per-flow report.
  */
 import { randomUUID } from "node:crypto";
 import { pool } from "@/lib/db/client";
@@ -52,7 +54,7 @@ import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
-import { removeMember, revokeInvitation } from "@/lib/household/repo";
+import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
 
 export type DeletionOutcome = {
@@ -1231,6 +1233,115 @@ export async function requestInvitationRevocation(args: {
   });
 
   return { status: "completed", deletionRequestId: request.id, resourceId: args.invitationId };
+}
+
+/**
+ * Household (whole-account) deletion (resource_type='household'), the
+ * most destructive flow in this checkpoint -- wraps lib/household/repo.ts's
+ * pre-existing deleteHousehold() (`DELETE FROM accounts WHERE id=$1`, which
+ * cascades via ON DELETE CASCADE to every table this household owns:
+ * policies, family_members, claim_evidence_documents, household_members,
+ * household_invitations, deletion_requests, deletion_audit_log, and every
+ * other account_id/household_id-scoped table in the schema).
+ *
+ * Unlike every flow above, `household` genuinely cannot follow the
+ * "transition to pending_deletion now, physically delete later" pattern
+ * those flows use, even though it has its own LIFECYCLE_TABLE_BY_RESOURCE
+ * entry (accounts). Two schema facts rule that pattern out here:
+ *   1. Both deletion_requests.account_id and deletion_audit_log.account_id
+ *      are `REFERENCES accounts(id) ON DELETE CASCADE` (sql/lifecycle.sql).
+ *      The instant accounts.id is hard-deleted, EVERY deletion_requests/
+ *      deletion_audit_log row for that account_id is destroyed with it --
+ *      there is no way to keep a durable audit trail scoped to an account
+ *      that no longer exists, in this schema, however the work is
+ *      sequenced. So this flow's own audit record is only ever committed
+ *      IMMEDIATELY BEFORE the physical delete (see below), not after --
+ *      there is no separate finishHouseholdDeletion() step, because there
+ *      would be nothing left afterward to finish.
+ *   2. No existing read path (resolveActiveHouseholdId/listMemberships,
+ *      requireHouseholdContext, or any RLS policy on a household-scoped
+ *      table) filters by accounts.lifecycle_state -- only household_members'
+ *      own row presence gates access. So merely transitioning
+ *      accounts.lifecycle_state to pending_deletion, without also hard-
+ *      deleting, would revoke NOTHING: every member would keep full,
+ *      unrestricted access indefinitely, since no Checkpoint-8 durable job
+ *      exists yet to ever finish the job. That would be a silent
+ *      regression from deleteHousehold()'s current, real, immediate
+ *      behavior to a deletion request that visibly does nothing at all --
+ *      worse than not wrapping it here.
+ * Given both, this flow keeps deleteHousehold()'s existing semantics
+ * (immediate, real, irreversible deletion, gated by the caller's own
+ * confirmName re-entry and, as of this flow, recent re-authentication --
+ * see app/api/household/route.ts's DELETE handler) and adds only what
+ * Checkpoint 7 requires around it: idempotency bookkeeping and a best-
+ * effort audit record for the moment the deletion was authorized, written
+ * just before the irreversible step -- not a durable post-hoc trail,
+ * since none can survive the account's own deletion.
+ */
+export async function requestHouseholdDeletion(args: {
+  actorUserId: string;
+  householdId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  // A retry (same idempotencyKey) against an ALREADY-fully-deleted
+  // household has nothing left to attach a deletion_requests row to --
+  // the accounts row, and via ON DELETE CASCADE every deletion_requests/
+  // deletion_audit_log row that ever referenced it, is already gone. The
+  // common case (a signed-in caller re-submitting) never reaches this
+  // function at all, since requireHouseholdContext() itself fails first
+  // once household_members is empty -- this check is for the rarer path
+  // of a retry driven by a stored idempotency key rather than session
+  // state. Checked before attempting the deletion_requests insert below
+  // so that case surfaces as the same NotFoundError deleteHousehold()
+  // itself already throws for "no such household", not a raw foreign-key
+  // violation from inserting a deletion_requests row against a
+  // nonexistent account_id.
+  const existing = await pool.query<{ id: string }>(`SELECT id FROM accounts WHERE id=$1`, [args.householdId]);
+  if (!existing.rows[0]) {
+    throw new NotFoundError("Household not found");
+  }
+
+  const { row: request } = await createOrGetDeletionRequest(pool, {
+    accountId: args.householdId,
+    resourceType: "household",
+    resourceId: args.householdId,
+    requestedBy: args.actorUserId,
+    reasonCategory: "account_closure",
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  // Unlike every flow above, a retry that finds an EXISTING deletion_requests
+  // row does NOT short-circuit here -- there is no separate finish() step
+  // to resume, and the existence check above already proved the household
+  // is still present, so re-attempting deleteHousehold() below is safe
+  // whether this is a genuine first attempt or a retry of one that
+  // crashed between the deletion_requests insert and the physical delete.
+  await appendDeletionAudit(pool, {
+    accountId: args.householdId,
+    deletionRequestId: request.id,
+    resourceType: "household",
+    resourceId: args.householdId,
+    actor: args.actorUserId,
+    fromState: "active",
+    toState: "pending_deletion",
+    correlationId: randomUUID(),
+    cleanupStatus: null,
+  }).catch(() => {
+    // Best-effort: a repeat of an already-audited attempt (same request
+    // row, retried before the delete completed) duplicating this one
+    // "pending_deletion" audit line is harmless and expected, not an
+    // error worth failing the deletion over.
+  });
+
+  await deleteHousehold(args.actorUserId, args.householdId);
+  // The accounts row -- and with it, via ON DELETE CASCADE, the
+  // deletion_requests row created above and the deletion_audit_log row
+  // just written -- no longer exists past this point. See this
+  // function's own doc comment for why that is a deliberate, schema-
+  // driven trade-off (no finishHouseholdDeletion(), no durable post-
+  // completion audit trail) rather than an oversight.
+
+  return { status: "completed", deletionRequestId: request.id, resourceId: args.householdId };
 }
 
 function mapRequestStateToStatus(request: DeletionRequestRow): DeletionRequestStatus {
