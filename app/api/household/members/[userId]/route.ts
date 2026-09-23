@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { removeMember, setMemberRole, type Role } from "@/lib/household/repo";
 import { isUuid } from "@/lib/db/client";
@@ -18,9 +18,9 @@ function isRole(value: unknown): value is Role {
 /** Owner-only: change a member's role. RLS enforces both the owner
  * requirement and "never demote the last owner" is enforced by
  * setMemberRole() itself (see lib/household/repo.ts). */
-export async function PATCH(request: Request, { params }: { params: Promise<{ userId: string }> }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const { userId: targetUserId } = await params;
     if (!isUuid(targetUserId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const body = await request.json().catch(() => ({}));
@@ -40,9 +40,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ us
  * RLS/removeMember() distinguish who's allowed to do which; the route
  * doesn't need to know which case it is. Refuses to remove the household's
  * last remaining owner (see removeMember()'s ConflictError). */
-export async function DELETE(_request: Request, { params }: { params: Promise<{ userId: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const { userId: targetUserId } = await params;
     if (!isUuid(targetUserId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
     await removeMember(ctx.userId, ctx.householdId, targetUserId);

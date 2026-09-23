@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { runAfterResponse } from "@/lib/http/background";
 import { createHash, randomUUID } from "node:crypto";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
@@ -22,9 +22,9 @@ class DuplicateDocument extends Error {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const form = await request.formData();
     const file = form.get("file");
     let familyMemberId = String(form.get("familyMemberId") ?? "");

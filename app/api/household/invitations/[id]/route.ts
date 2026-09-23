@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { revokeInvitation } from "@/lib/household/repo";
 import { isUuid } from "@/lib/db/client";
@@ -11,9 +11,9 @@ export const ROUTE_AUTH = "household-owner" as const;
  * (is_household_owner(household_id) READ FROM THE ROW ITSELF) -- so a
  * caller cannot revoke an invitation belonging to a household they don't
  * own even by guessing a valid invitation id from another household. */
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
     // The actual authorization decision (does this invitation belong to a

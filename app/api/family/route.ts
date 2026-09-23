@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -8,9 +8,9 @@ export const ROUTE_AUTH = "household-member" as const;
 
 type FamilyRow = { id: string; display_name: string; relationship: string; date_of_birth: string | null; preferred_name: string | null; notes: string | null; policy_count: number };
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const result = await createUserSupabaseClient(ctx.userId, (client) =>
       client.query<FamilyRow>(
         `SELECT f.id, f.display_name, f.relationship, f.date_of_birth::text, f.preferred_name, f.notes,
@@ -29,9 +29,9 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null };
     if (!body.displayName?.trim() || !body.relationship?.trim()) {
       return NextResponse.json({ error: "Full name and relationship are required" }, { status: 400 });

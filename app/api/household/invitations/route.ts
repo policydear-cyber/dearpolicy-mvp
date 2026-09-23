@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { listInvitations, createInvitation, type Role } from "@/lib/household/repo";
 import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
@@ -20,9 +20,9 @@ function isRole(value: unknown): value is Role {
  * itself enforces the owner requirement (a member's query would just
  * return zero rows), but the classification here still labels this
  * "household-owner" so the route inventory reflects intent. */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const invitations = await listInvitations(ctx.userId, ctx.householdId);
     return NextResponse.json({ invitations });
   } catch (error) {
@@ -36,9 +36,9 @@ export async function GET() {
  * embedding it in an emailed accept link); this route does not send email
  * itself yet (tracked in the PR description -- invitation delivery is
  * currently a manual/out-of-band step). */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const attempt = inviteAttempts.attempt(`${ctx.userId}:${clientKey(request)}`);
     if (!attempt.allowed) {
       return NextResponse.json(

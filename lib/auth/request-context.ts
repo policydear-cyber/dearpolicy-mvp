@@ -8,16 +8,34 @@
  *
  * A route handler that needs a signed-in household member should do:
  *
- *   const ctx = await requireHouseholdContext();
- *   // ctx.userId, ctx.householdId are both server-resolved -- NEVER take
- *   // either from a client-supplied body/query/header field.
- *   return createUserSupabaseClient(ctx.userId, async (client) => { ... });
+ *   export async function GET(request: NextRequest) {
+ *     const ctx = await requireHouseholdContext(request);
+ *     // ctx.userId, ctx.householdId are both server-resolved -- NEVER take
+ *     // either from a client-supplied body/query/header field.
+ *     return createUserSupabaseClient(ctx.userId, async (client) => { ... });
+ *   }
  *
  * and catch failures with routeErrorResponse() (below) so every route
  * returns the same shape of 401/403/404 for the same failure, rather than
  * each route inventing its own.
+ *
+ * ## Why this takes a NextRequest instead of reading next/headers' cookies()
+ *
+ * next/headers' cookies() only works inside Next's own App Router request
+ * dispatch (it reads an AsyncLocalStorage-backed "work unit store" that
+ * Next itself sets up around a Route Handler invocation) -- calling it from
+ * anywhere else, including a script that imports a route handler's
+ * exported GET/POST and calls it directly the way an HTTP-level regression
+ * suite needs to, throws "`cookies` was called outside a request scope".
+ * NextRequest (what Next.js actually passes as a Route Handler's first
+ * argument at runtime, real HTTP request or not) exposes the same Cookie
+ * header directly via its own `.cookies` reader, with no ambient storage
+ * required -- so reading the household-selection cookie from the request
+ * object a route handler already receives, instead of from next/headers,
+ * is what makes these routes callable both by real HTTP traffic and by a
+ * script that constructs its own NextRequest.
  */
-import { cookies } from "next/headers";
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireCurrentUser, UnauthenticatedError, type SessionUser } from "@/lib/auth/session";
 import { resolveActiveHouseholdId, ForbiddenError, NotFoundError, ConflictError } from "@/lib/household/repo";
@@ -37,18 +55,18 @@ export type HouseholdContext = { userId: string; householdId: string; user: Sess
 /** Resolves the signed-in user and their active household for this
  * request, in one call, every protected route can rely on:
  *  1. Authenticates (throws UnauthenticatedError if not signed in).
- *  2. Reads the requested household id from a cookie -- NEVER from a body,
- *     query string, or header, which a client could set to any value.
+ *  2. Reads the requested household id from the request's own cookie --
+ *     NEVER from a body, query string, or header, which a client could set
+ *     to any value.
  *  3. Verifies the caller is a genuine current member of that household
  *     (resolveActiveHouseholdId() re-checks membership server-side on
  *     every call; a removed or never-a-member caller cannot use a stale
  *     cookie to keep pointing at a household they don't belong to).
  *  4. Falls back to the caller's own oldest household if the cookie is
  *     missing/stale, or throws NoHouseholdError if they have none. */
-export async function requireHouseholdContext(): Promise<HouseholdContext> {
+export async function requireHouseholdContext(request: NextRequest): Promise<HouseholdContext> {
   const user = await requireCurrentUser();
-  const cookieStore = await cookies();
-  const requested = cookieStore.get(ACTIVE_HOUSEHOLD_COOKIE)?.value ?? null;
+  const requested = request.cookies.get(ACTIVE_HOUSEHOLD_COOKIE)?.value ?? null;
   const householdId = await resolveActiveHouseholdId(user.id, requested);
   if (!householdId) {
     throw new NoHouseholdError("This account has no household yet.");

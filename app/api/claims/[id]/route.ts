@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { factsToLabels } from "@/lib/claims/facts";
 import { EMPTY_CLAIM_FACTS,type ClaimFacts, type ClaimQuestion, type ClaimDecisionPacket } from "@/lib/claims/types";
@@ -7,9 +7,9 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
-export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
+export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
  try{
-  const ctx = await requireHouseholdContext();
+  const ctx = await requireHouseholdContext(request);
   const {id}=await params;if(!isUuid(id))return NextResponse.json({error:"Claim session not found"},{status:404});
   const result=await createUserSupabaseClient(ctx.userId, (client) =>
     client.query<{id:string;family_member_id:string;status:string;event_summary:string|null;facts:Partial<ClaimFacts>;pending_question:ClaimQuestion|null;decision_packet:ClaimDecisionPacket|null;updated_at:string}>(

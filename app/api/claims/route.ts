@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
-export async function GET(request:Request){
+export async function GET(request:NextRequest){
   try{
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const url=new URL(request.url);const member=url.searchParams.get("familyMemberId");
     if(member&&!isUuid(member))return NextResponse.json({claims:[]});
     const params:unknown[]=[ctx.householdId];let where="cs.account_id=$1";

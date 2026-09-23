@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { requireCurrentUser, UnauthenticatedError } from "@/lib/auth/session";
 import { listMemberships, renameHousehold, deleteHousehold } from "@/lib/household/repo";
@@ -16,13 +16,13 @@ export const ROUTE_AUTH = "authenticated" as const;
  * Never 404s for a user with zero households; that's a valid state for a
  * freshly signed-up account before ensureDefaultHousehold() has run, or
  * (in principle) a user who left every household they were in. */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireCurrentUser();
     const memberships = await listMemberships(user.id);
     let activeHouseholdId: string | null = null;
     try {
-      activeHouseholdId = (await requireHouseholdContext()).householdId;
+      activeHouseholdId = (await requireHouseholdContext(request)).householdId;
     } catch {
       // No household yet -- memberships is simply [] in that case.
     }
@@ -38,9 +38,9 @@ export async function GET() {
  * renameHousehold() surfaces a non-owner's attempt as the same
  * NotFoundError a genuinely missing household would produce (see
  * lib/household/repo.ts's comment on why that's deliberate). */
-export async function PATCH(request: Request) {
+export async function PATCH(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const body = await request.json().catch(() => ({}));
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name || name.length > 200) {
@@ -60,9 +60,9 @@ export async function PATCH(request: Request) {
  * confirmation step for an irreversible action, in place of a full
  * re-authentication flow (tracked as a possible future hardening in the PR
  * description's data-lifecycle section). */
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const body = await request.json().catch(() => ({}));
     const confirmName = typeof body.confirmName === "string" ? body.confirmName.trim() : "";
     // Re-fetch the real household name to compare against, rather than

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -15,9 +15,9 @@ type PolicyRow = {
   detected_people: { name: string; matchedFamilyMemberId: string | null }[]; created_at: Date;
 };
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const url = new URL(request.url);
     const familyMemberId = url.searchParams.get("familyMemberId");
     if (familyMemberId && !isUuid(familyMemberId)) return NextResponse.json({ policies: [] });

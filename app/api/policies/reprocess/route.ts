@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -15,10 +15,10 @@ const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().o
 
 class AlreadyProcessing extends Error {}
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
 
     const policy = await createUserSupabaseClient(ctx.userId, async (client) => {
       // Authorize the specific policy against this household before doing

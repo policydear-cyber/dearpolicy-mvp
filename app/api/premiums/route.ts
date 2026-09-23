@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const result = await createUserSupabaseClient(ctx.userId, (client) =>
       client.query(
         `SELECT pr.id,pr.family_member_id,f.display_name AS family_member_name,pr.insurer,pr.product_name,pr.policy_number,

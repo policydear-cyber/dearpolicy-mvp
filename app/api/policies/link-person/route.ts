@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -19,10 +19,10 @@ const Schema = z.object({
 class PolicyNotFound extends Error {}
 class FamilyMemberNotFound extends Error {}
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = Schema.parse(await request.json().catch(() => ({})));
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
 
     const result = await createUserSupabaseClient(ctx.userId, async (client) => {
       // Both ids are client-supplied -- authorize each against the caller's

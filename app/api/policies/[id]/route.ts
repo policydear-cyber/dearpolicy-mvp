@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -15,7 +15,7 @@ type PolicyFileRow = {
 };
 
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: policyId } = await params;
@@ -24,7 +24,7 @@ export async function DELETE(
   let policy: PolicyFileRow | null;
   let householdId: string;
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     householdId = ctx.householdId;
 
     policy = await createUserSupabaseClient(ctx.userId, async (client) => {

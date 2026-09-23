@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { isUuid, isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -8,9 +8,9 @@ export const ROUTE_AUTH = "household-member" as const;
 
 class SelfProfileConflict extends Error {}
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null };
@@ -62,9 +62,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 // (remove the documents/history) before the profile itself can go.
 class HasLinkedActivity extends Error {}
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const ctx = await requireHouseholdContext();
+    const ctx = await requireHouseholdContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
 

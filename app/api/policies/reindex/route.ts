@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { backfillSemanticIndex, semanticIndexState } from "@/lib/rag/backfill";
 
@@ -9,10 +9,10 @@ export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration = 300;
 
 /** How much of this household's library semantic search can actually see. */
-export async function GET() {
+export async function GET(request: NextRequest) {
   let householdId: string;
   try {
-    householdId = (await requireHouseholdContext()).householdId;
+    householdId = (await requireHouseholdContext(request)).householdId;
   } catch (error) {
     return routeErrorResponse(error);
   }
@@ -23,10 +23,10 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   let householdId: string;
   try {
-    householdId = (await requireHouseholdContext()).householdId;
+    householdId = (await requireHouseholdContext(request)).householdId;
   } catch (error) {
     return routeErrorResponse(error);
   }
