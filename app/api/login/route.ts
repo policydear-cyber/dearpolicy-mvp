@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, checkPassword, expectedToken } from "@/lib/auth/gate";
+import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
 
+// One shared household password has no per-account lockout to fall back on.
+// The fixed per-attempt delay below slows a single sequential guesser; this
+// caps how many guesses a given source can even queue up in parallel within
+// a window, which the delay alone does not stop. Per warm-instance only --
+// see lib/http/rate-limit.ts.
+const loginAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
+
 export async function POST(request: Request) {
+  const attempt = loginAttempts.attempt(clientKey(request));
+  if (!attempt.allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(attempt.retryAfterMs / 1000)) } },
+    );
+  }
+
   const body = await request.json().catch(() => ({}));
   const password = typeof body.password === "string" ? body.password : "";
   if (!(await checkPassword(password))) {

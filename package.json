@@ -26,7 +26,8 @@
     "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts",
     "claims:disability-test": "node --import tsx scripts/claim-disability-regressions.ts",
     "claims:travel-test": "node --import tsx scripts/claim-travel-regressions.ts",
-    "eval:claim-quality": "node --import tsx scripts/claim-quality-eval.ts"
+    "eval:claim-quality": "node --import tsx scripts/claim-quality-eval.ts",
+    "security:test": "node --import tsx scripts/security-regressions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

@@ -18,8 +18,25 @@ export async function expectedToken(): Promise<string | null> {
   return secret ? sha256Hex(secret) : null;
 }
 
+// A plain `===` comparison returns as soon as it finds a mismatched
+// character, so how long it takes leaks how many leading characters of a
+// guess were right -- over many requests, that timing difference is a real
+// side channel against a single shared password. crypto.timingSafeEqual
+// compares in constant time, but only for equal-length buffers (it throws
+// otherwise, and its own length check happens before any constant-time
+// work); padding both sides out to the same length first means a
+// wrong-length guess takes the same code path, and roughly the same time,
+// as a right-length one.
 export async function checkPassword(candidate: string): Promise<boolean> {
   const secret = process.env.SITE_PASSWORD?.trim();
   if (!secret) return true;
-  return candidate.trim() === secret;
+  const { timingSafeEqual } = await import("node:crypto");
+  const guess = Buffer.from(candidate.trim(), "utf8");
+  const actual = Buffer.from(secret, "utf8");
+  const length = Math.max(guess.length, actual.length, 1);
+  const guessPadded = Buffer.alloc(length);
+  const actualPadded = Buffer.alloc(length);
+  guess.copy(guessPadded);
+  actual.copy(actualPadded);
+  return timingSafeEqual(guessPadded, actualPadded) && guess.length === actual.length;
 }

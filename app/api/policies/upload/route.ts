@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { devAccountId, query } from "@/lib/db/client";
 import { savePolicyFile } from "@/lib/storage";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
+import { looksLikePdf } from "@/lib/claims/evidence/validation";
 
 export const runtime = "nodejs";
 // Reading a scanned PDF (hosted OCR + LLM extraction) can take a couple of
@@ -40,6 +41,13 @@ export async function POST(request: Request) {
 
     const policyId = randomUUID();
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // The extension/MIME checks above only look at client-supplied labels --
+    // trivial to spoof (a renamed file, a doctored form field). This checks
+    // the actual bytes for a PDF's own magic header, the same check the
+    // claim-evidence upload path already applies (see
+    // lib/claims/evidence/validation.ts) before anything not genuinely a
+    // PDF reaches storage or the PDF-parsing pipeline downstream.
+    if (!looksLikePdf(bytes)) return NextResponse.json({ error: "The uploaded file is not a valid PDF." }, { status: 400 });
     const fileHash = createHash("sha256").update(bytes).digest("hex");
     const duplicate = await query<{ id: string; original_filename: string }>(
       `SELECT id,original_filename FROM policies WHERE account_id=$1 AND file_hash=$2 LIMIT 1`,
