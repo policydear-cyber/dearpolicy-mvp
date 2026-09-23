@@ -142,6 +142,9 @@ jobs:
       - name: Household deletion regression suite (owner deletion cascades everything, this flow's own audit rows are cascade-gone afterward by design, RLS-enforced forbidden deletion, missing-household and retry-after-completion refusal -- real Postgres RLS via PGlite, no live DB needed)
         run: npm run security:household-deletion-test
 
+      - name: Background-jobs regression suite (Checkpoint 8: idempotent enqueue, claim/SKIP LOCKED exclusivity, heartbeat lease extension, the zombie-worker ownership CAS on complete/fail, bounded transient retry into dead_letter, lease-expiry recovery, cooperative cancellation -- disposable PGlite, no live DB needed)
+        run: npm run security:background-jobs-test
+
       - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
         run: npm run security:placeholder-content-test
 

@@ -739,9 +739,16 @@ function checkBackgroundJobReliability() {
   report(
     "background_job_reliability",
     "blocked_by_code",
-    "No shared durable job model exists yet: lib/claims/evidence/queue.ts and lib/rag/processing-queue.ts have " +
-      "no idempotency key, processing lease, lease expiry/recovery, heartbeat, attempt count, or bounded retry -- " +
-      "Priority 7.",
+    "lib/jobs/queue.ts now provides a shared durable job model -- idempotency-key enqueue, a FOR UPDATE SKIP " +
+      "LOCKED claim with a time-boxed lease, heartbeatJob() lease extension, an ownership-CAS guard on complete/" +
+      "fail/finalize-cancellation (sabotage-and-restore-verified: a worker that never held a still-valid lease " +
+      "cannot mark a job succeeded), and recoverExpiredLeases() to reclaim a job whose worker stopped " +
+      "heartbeating -- see scripts/background-jobs-regressions.ts's 13 cases. This capability stays blocked_by_code " +
+      "regardless: the primitive existing is not the same as it being used. lib/claims/evidence/queue.ts and " +
+      "lib/rag/processing-queue.ts -- the actual call sites this checkpoint exists to fix -- have not been migrated " +
+      "onto it yet and still run as an in-memory, single-process promise chain with none of these properties in " +
+      "production. Not reporting ready until at least the real processing pipeline is wired onto lib/jobs/queue.ts " +
+      "and proven end to end, not merely until the shared machinery exists -- Priority 7.",
   );
 }
 
@@ -749,9 +756,14 @@ function checkDeadLetterRetrySupport() {
   report(
     "dead_letter_retry_support",
     "blocked_by_code",
-    "No dead-letter state or bounded-retry/non-retryable-error classification exists anywhere in the processing " +
-      "pipeline -- a permanently failing job has nowhere to land except a plain \"failed\" status with no distinction " +
-      "from a job that simply hasn't been retried yet -- Priority 7.",
+    "lib/jobs/queue.ts's failJob() now classifies every failure as transient (bounded-retried with exponential " +
+      "backoff via computeBackoffMs(), dead_letter once attempt_count reaches max_attempts) or non_retryable " +
+      "(dead_letter immediately, regardless of attempt_count) -- sabotage-and-restore-verified: removing the " +
+      "attempt_count >= max_attempts bound was confirmed to let a job retry past its limit instead of dead-" +
+      "lettering, then restored. recoverExpiredLeases() applies the identical bound to a lease that expired " +
+      "mid-processing, so a crashed worker cannot reset a job's effective retry budget. Still blocked_by_code for " +
+      "the same reason as background_job_reliability above: no real job type in this codebase is dead-letter-" +
+      "classified yet, because none has been migrated onto this framework -- Priority 7.",
   );
 }
 
