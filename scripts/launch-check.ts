@@ -29,6 +29,7 @@ import {
   checkRequiredProductionSecrets,
   checkServiceRoleKeyNotPublic,
 } from "@/lib/launch/guards";
+import { evaluateBucketPrivacy, requiredPrivateBucketIds } from "@/lib/launch/storage-guards";
 
 type Status = "READY" | "BLOCKED_BY_CODE" | "BLOCKED_BY_EXTERNAL_CONFIG";
 type Item = { name: string; status: Status; detail: string };
@@ -167,9 +168,51 @@ async function checkAuthenticatedRoleNotBypassRls() {
   }
 }
 
+async function checkStorageBucketsPrivate() {
+  const url = process.env.SUPABASE_URL?.trim();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  const requiredBuckets = requiredPrivateBucketIds();
+  if (!url || !key) {
+    report(
+      "Storage buckets are private (live Supabase check)",
+      "BLOCKED_BY_EXTERNAL_CONFIG",
+      "SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY not configured in this environment -- cannot verify real bucket " +
+        "state. This does NOT mean the buckets are private; it means this check has nothing to check against here.",
+    );
+    return;
+  }
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const client = createClient(url, key, { auth: { persistSession: false } });
+    const { data, error } = await client.storage.listBuckets();
+    if (error) throw new Error(error.message);
+    const problems = evaluateBucketPrivacy((data ?? []).map((b) => ({ id: b.id, public: b.public })), requiredBuckets);
+    if (problems.length > 0) {
+      report(
+        "Storage buckets are private (live Supabase check)",
+        "BLOCKED_BY_CODE",
+        problems.map((p) => `${p.bucket}: ${p.reason}`).join("; "),
+      );
+    } else {
+      report(
+        "Storage buckets are private (live Supabase check)",
+        "READY",
+        `Both required buckets (${requiredBuckets.join(", ")}) exist and are private.`,
+      );
+    }
+  } catch (error) {
+    report(
+      "Storage buckets are private (live Supabase check)",
+      "BLOCKED_BY_EXTERNAL_CONFIG",
+      `Could not verify: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 async function main() {
   await checkRlsState();
   await checkAuthenticatedRoleNotBypassRls();
+  await checkStorageBucketsPrivate();
 
   const strict = process.argv.includes("--strict");
   const byStatus = (status: Status) => results.filter((r) => r.status === status);

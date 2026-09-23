@@ -35,6 +35,23 @@
  *    a deliberate, documented service-client use is supposed to live; the
  *    boundary this protects is "a route/page never reaches for it
  *    directly", not "no lib file may ever use it".
+ *
+ * 3. `createRateLimiter` (lib/http/rate-limit.ts, the in-memory, single-
+ *    instance-only limiter) must never be imported by anything under
+ *    app/ -- every route that needs a production rate limit must use
+ *    `createDbRateLimiter` (lib/http/db-rate-limit.ts) instead, whose
+ *    counter is shared across every serverless instance (see that
+ *    file's own header comment for why the in-memory version cannot
+ *    make the same guarantee). This is the launch-readiness gap the PR
+ *    description originally flagged as "rate-limiting-uses-memory",
+ *    closed here as a permanent regression rather than a one-time fix --
+ *    a future route that imports the in-memory limiter by mistake (e.g.
+ *    copy-pasting an older route as a template) fails this check
+ *    immediately rather than silently shipping a per-instance-only
+ *    brake again. lib/http/rate-limit.ts itself stays a legitimate,
+ *    documented option for non-app code (its own regression suite,
+ *    scripts/security-regressions.ts, is outside app/ and is not
+ *    scanned), so only app/ is checked, not lib/ or components/.
  */
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -88,15 +105,19 @@ async function main() {
   // doc comment above.
   const devAccountIdRoots = ["app", "lib", "components"].map((d) => path.resolve(d));
   const serviceClientRoots = ["app", "components"].map((d) => path.resolve(d));
+  const rateLimiterRoots = ["app"].map((d) => path.resolve(d));
   const devAccountIdFiles = (await Promise.all(devAccountIdRoots.map(findSourceFiles))).flat();
   devAccountIdFiles.push(path.resolve("middleware.ts"));
   const serviceClientFiles = (await Promise.all(serviceClientRoots.map(findSourceFiles))).flat();
   serviceClientFiles.push(path.resolve("middleware.ts"));
+  const rateLimiterFiles = (await Promise.all(rateLimiterRoots.map(findSourceFiles))).flat();
   assert.ok(devAccountIdFiles.length > 20, "sanity check: the devAccountId scan should cover dozens of files, not a near-empty list");
   assert.ok(serviceClientFiles.length > 10, "sanity check: the service-client scan should cover a real number of files, not a near-empty list");
+  assert.ok(rateLimiterFiles.length > 10, "sanity check: the rate-limiter scan should cover a real number of files, not a near-empty list");
 
   const devAccountIdViolations: string[] = [];
   const serviceClientViolations: string[] = [];
+  const rateLimiterViolations: string[] = [];
   const clientDefinitionFile = path.resolve("lib/db/client.ts");
 
   for (const file of devAccountIdFiles) {
@@ -128,6 +149,19 @@ async function main() {
     }
   }
 
+  for (const file of rateLimiterFiles) {
+    let text: string;
+    try {
+      text = await readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+    const relative = path.relative(process.cwd(), file);
+    for (const clause of importClausesFrom(text, "/lib/http/rate-limit")) {
+      if (clauseImportsName(clause, "createRateLimiter")) rateLimiterViolations.push(relative);
+    }
+  }
+
   assert.equal(
     devAccountIdViolations.length,
     0,
@@ -141,11 +175,18 @@ async function main() {
       `function instead (see lib/household/repo.ts for the pattern), keeping every intentional RLS bypass in one auditable, non-request-path place. ` +
       `Found in: ${serviceClientViolations.join(", ")}`,
   );
+  assert.equal(
+    rateLimiterViolations.length,
+    0,
+    `createRateLimiter() (the in-memory, single-instance-only limiter) must not be imported anywhere under app/ -- use createDbRateLimiter() ` +
+      `(lib/http/db-rate-limit.ts) instead, whose counter is shared across every serverless instance. Found in: ${rateLimiterViolations.join(", ")}`,
+  );
 
   console.log(
     `import-boundary regressions passed: scanned ${devAccountIdFiles.length} files under app/, lib/, components/ and middleware.ts for devAccountId() -- ` +
       `none found outside lib/db/client.ts's own definition; scanned ${serviceClientFiles.length} files under app/, components/ and middleware.ts for ` +
-      `createServiceSupabaseClient()/withServiceTransaction() -- none found.`,
+      `createServiceSupabaseClient()/withServiceTransaction() -- none found; scanned ${rateLimiterFiles.length} files under app/ for the in-memory ` +
+      `createRateLimiter() -- none found (every route uses the shared Postgres-backed createDbRateLimiter() instead).`,
   );
 }
 
