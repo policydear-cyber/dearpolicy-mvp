@@ -335,3 +335,87 @@ CREATE INDEX IF NOT EXISTS idx_model_usage_month ON model_usage(account_id, at);
 CREATE INDEX IF NOT EXISTS idx_claim_sessions_family_member_id ON claim_sessions(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_claim_session_id ON chat_messages(claim_session_id);
 CREATE INDEX IF NOT EXISTS idx_policy_reference_coverages_policy_id ON policy_reference_coverages(policy_id);
+
+-- Policy-document quarantine gate (checkpoint 3, claude/v1-launch-hardening).
+-- A separate, dedicated state machine layered IN FRONT OF the existing
+-- processing_status column above (uploaded -> extracting -> indexing ->
+-- ready|failed, see lib/rag/ingest.ts's processPolicy()): nothing may move
+-- processing_status past 'uploaded'/'queued' until quarantine_status is
+-- 'scan_clean' (see lib/policies/quarantine/store.ts's
+-- runPolicyQuarantineGate(), the single choke point processPolicy() calls
+-- at its own entry point). This deliberately reuses the EXISTING
+-- processing_status values for "processing"/"processed"/"failed" (the
+-- checkpoint's naming-convention instruction) rather than inventing a
+-- second copy of them here -- this column's job is only the gate itself:
+--   uploaded -> quarantined -> scan_pending -> scan_clean | scan_rejected
+-- scan_pending is a stable resting state (mirrors claim_evidence_documents'
+-- "quarantined" -- see sql/claim-evidence.sql): a scan_unavailable, still-
+-- pending, timed-out, missing or malformed verdict leaves a document here
+-- indefinitely, never silently promoted to scan_clean. `deleted` is
+-- reachable from every other state and is terminal.
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS quarantine_status text;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_provider text;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_result_detail text;
+-- Reserved for a future real async scan-provider callback (checkpoint 4)
+-- to key its idempotency/replay checks on; unused by the synchronous null
+-- adapter today, exactly like claim_evidence_documents has no equivalent
+-- column yet either.
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_event_id text;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scanned_at timestamptz;
+-- A re-upload of a corrected/updated document creates a NEW policies row
+-- and points back at the one it replaces, mirroring
+-- claim_evidence_documents' supersedes_id/superseded_at exactly (see that
+-- table's own comment in sql/claim-evidence.sql) -- the old row's audit
+-- history, coverages and any downstream evidence match stay inspectable
+-- rather than being mutated in place.
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS supersedes_id uuid REFERENCES policies(id) ON DELETE SET NULL;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS superseded_at timestamptz;
+
+-- Backfill: a document already at processing_status='ready' predates this
+-- gate and was already fully processed and served before it existed --
+-- grandfathered as scan_clean rather than stranding it in permanent
+-- quarantine on migration (there is no real bytes-on-disk retroactive scan
+-- to run here). Everything else defaults to 'uploaded', the true starting
+-- point of the gate for a document that has not been through it yet. This
+-- UPDATE is idempotent: it only ever touches rows where quarantine_status
+-- is still NULL, so re-running this file is a no-op on a database that has
+-- already been migrated once.
+UPDATE policies SET quarantine_status = 'scan_clean' WHERE quarantine_status IS NULL AND processing_status = 'ready';
+UPDATE policies SET quarantine_status = 'uploaded' WHERE quarantine_status IS NULL;
+ALTER TABLE policies ALTER COLUMN quarantine_status SET DEFAULT 'uploaded';
+ALTER TABLE policies ALTER COLUMN quarantine_status SET NOT NULL;
+
+ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_quarantine_status_check;
+ALTER TABLE policies ADD CONSTRAINT policies_quarantine_status_check
+  CHECK (quarantine_status IN ('uploaded','quarantined','scan_pending','scan_clean','scan_rejected','deleted'));
+
+-- Re-scoped to exclude superseded rows so a re-upload of byte-identical
+-- content as a new VERSION (supersedes_id pointing at the old row,
+-- marked superseded_at once the new row is inserted) is never blocked by
+-- the old row's own hash -- mirrors claim_evidence_documents' own dedupe
+-- index exactly (idx_claim_evidence_documents_dedupe in
+-- sql/claim-evidence.sql).
+DROP INDEX IF EXISTS idx_policies_account_file_hash;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_account_file_hash ON policies(account_id,file_hash) WHERE file_hash IS NOT NULL AND superseded_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_policies_quarantine_status ON policies(account_id, quarantine_status);
+CREATE INDEX IF NOT EXISTS idx_policies_supersedes ON policies(supersedes_id);
+
+-- Append-only audit trail for the policy-document quarantine gate, mirroring
+-- claim_evidence_audit_log exactly (see sql/claim-evidence.sql's own
+-- comment). Application code only ever INSERTs here -- see
+-- lib/policies/quarantine/audit.ts, the one place allowed to write to this
+-- table -- and never UPDATEs or DELETEs a row.
+CREATE TABLE IF NOT EXISTS policy_document_audit_log (
+  id bigserial PRIMARY KEY,
+  account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  actor text NOT NULL,
+  action text NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  previous_value jsonb,
+  new_value jsonb,
+  policy_id uuid REFERENCES policies(id) ON DELETE SET NULL,
+  reason text,
+  reason_code text
+);
+CREATE INDEX IF NOT EXISTS idx_policy_document_audit_policy ON policy_document_audit_log(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_document_audit_account ON policy_document_audit_log(account_id, occurred_at DESC);

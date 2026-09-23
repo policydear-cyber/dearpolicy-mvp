@@ -103,6 +103,9 @@ jobs:
       - name: Launch capability manifest regression suite
         run: npm run security:launch-check-test
 
+      - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:policy-quarantine-test
+
       - name: Build
         run: npm run build
 

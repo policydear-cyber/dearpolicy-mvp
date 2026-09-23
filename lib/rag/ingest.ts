@@ -9,6 +9,7 @@ import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/int
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatch, linkRelatedReferenceDocuments, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -59,6 +60,22 @@ async function progress(args: ProcessPolicyArgs, stage: string, percent: number,
 }
 
 export async function processPolicy(args: ProcessPolicyArgs) {
+  // Quarantine gate (checkpoint 3, claude/v1-launch-hardening): this is the
+  // SINGLE entry point for OCR, parsing, structured extraction, embeddings
+  // and indexing on a policy document (see lib/rag/processing-queue.ts --
+  // it is the only real caller), so gating here covers every route,
+  // background job and UI action that can trigger processing, with no
+  // separate copy of this check needed anywhere else. Always re-reads the
+  // persisted quarantine_status from the database (never trusts anything
+  // the caller assumed), so a reprocess or a resumed/retried background
+  // job re-checks real state every time rather than an in-memory guess.
+  const gate = await runPolicyQuarantineGate({
+    accountId: args.accountId,
+    policyId: args.policyId,
+    readBytes: async () => new Uint8Array(await readPolicyFile(args.storageKey)),
+  });
+  if (!gate.cleared) return; // Still quarantined/scan_pending, rejected, deleted, or superseded -- the gate itself already recorded why.
+
   try {
     await query(
       `UPDATE policies SET processing_status='extracting',processing_stage='opening',processing_progress=3,

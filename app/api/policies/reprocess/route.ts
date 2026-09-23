@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
+import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { runAfterResponse } from "@/lib/http/background";
 
 export const runtime = "nodejs";
@@ -14,6 +15,7 @@ export const maxDuration = 300;
 const Schema = z.object({ policyId: z.string().uuid(), pdfPassword: z.string().optional() });
 
 class AlreadyProcessing extends Error {}
+class NotClearedForProcessing extends Error {}
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +33,15 @@ export async function POST(request: NextRequest) {
       const row = result.rows[0];
       if (!row) return null;
       if (["queued", "extracting", "indexing"].includes(row.processing_status)) throw new AlreadyProcessing();
+
+      // Re-check the PERSISTED quarantine/scan state here, on every
+      // reprocess request -- never assume a document that was clean once
+      // is still clear to process. A document that has not (yet, or ever)
+      // passed a clean scan must not be silently re-queued only to have
+      // lib/rag/ingest.ts's own gate no-op it a moment later with no
+      // feedback to the person who asked for it.
+      const quarantine = await getPolicyQuarantineRow(ctx.householdId, body.policyId);
+      if (!quarantine || quarantine.quarantine_status !== "scan_clean") throw new NotClearedForProcessing();
 
       await client.query(
         `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
@@ -62,6 +73,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Invalid request", issues: error.issues }, { status: 400 });
     if (error instanceof AlreadyProcessing) return NextResponse.json({ error: "This document is already being analysed." }, { status: 409 });
+    if (error instanceof NotClearedForProcessing) return NextResponse.json({ error: "This document has not passed malware scanning yet and cannot be re-analysed." }, { status: 409 });
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Re-analysis failed" }, { status: 500 });
     return authResponse;

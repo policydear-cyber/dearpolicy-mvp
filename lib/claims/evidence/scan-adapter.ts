@@ -1,5 +1,20 @@
+/**
+ * Thin, domain-specific wrapper around the shared @/lib/scanning/adapter.ts
+ * registry. This file used to own its own adapter registry/selection logic
+ * directly; it is now kept only so the 3 existing call sites (pipeline.ts's
+ * currentScanAdapter, scripts/launch-check.ts's checkMalwareScannerConfigured,
+ * instrumentation.ts's dynamic import) do not need to change, and so a
+ * ClaimEvidenceScanStatus-shaped result keeps flowing through
+ * transitionEvidenceStatus exactly as before. See lib/scanning/adapter.ts's
+ * module doc comment for why the actual registry now lives there, shared
+ * with the policy-document quarantine gate (lib/policies/quarantine/store.ts),
+ * instead of being duplicated here a second time.
+ */
 import type { ClaimEvidenceScanStatus } from "./types";
-import { isProduction, truthy } from "@/lib/launch/guards";
+import {
+  currentFileScanAdapter, selectedFileScanAdapterName, checkFileScannerConfigured,
+  nullFileScanAdapter, type FileScanAdapter, type FileScanResult,
+} from "@/lib/scanning/adapter";
 
 export type ScanResult = { status: ClaimEvidenceScanStatus; detail?: string };
 
@@ -8,86 +23,42 @@ export interface EvidenceScanAdapter {
   scanFile(bytes: Uint8Array): Promise<ScanResult>;
 }
 
-/**
- * No malware scanner is wired into this environment. This adapter is
- * honest about that: it always returns "scan_unavailable", never "clean".
- *
- * Nothing downstream is allowed to treat "scan_unavailable" as safe to
- * process -- see ./pipeline.ts's quarantined -> processing gate, which
- * proceeds ONLY on an explicit "clean" result. A document scanned by this
- * adapter therefore stays in `quarantined` indefinitely (the UI states
- * why -- see app/claims/[id]/page.tsx), which is the correct, safe
- * behavior for "no scanner configured", not a bug to route around.
- *
- * Before this goes live with real users, implement a real
- * EvidenceScanAdapter (calling an actual anti-malware service) and
- * register it in SCAN_ADAPTERS below, then select it via
- * MALWARE_SCANNER_PROVIDER. checkMalwareScannerConfigured() below refuses
- * production startup while this adapter is still selected, unless an
- * operator has explicitly acknowledged that with
- * MALWARE_SCANNING_INTENTIONALLY_DISABLED=true.
- */
-export const nullScanAdapter: EvidenceScanAdapter = {
-  name: "null",
-  async scanFile(): Promise<ScanResult> {
-    return { status: "scan_unavailable", detail: "No malware-scanning adapter is configured in this environment." };
-  },
-};
+/** The shared registry's FileScanStatus ("clean"|"infected"|"scan_unavailable")
+ * is a strict subset of ClaimEvidenceScanStatus (which also has
+ * "pending_scan", a DB-default-only value no adapter ever emits), so this
+ * mapping is total and lossless. */
+function toEvidenceScanStatus(result: FileScanResult): ClaimEvidenceScanStatus {
+  return result.status;
+}
 
-/** Real adapters register here by the name MALWARE_SCANNER_PROVIDER
- * selects. Empty today -- this is the extension point a real
- * malware-scanning integration plugs into. Nothing here may ever return
- * "clean" without a real scanner backing it; that would be fabricating a
- * scan result, which is exactly what this interface exists to prevent. */
-const SCAN_ADAPTERS: Record<string, EvidenceScanAdapter> = {
-  null: nullScanAdapter,
-};
+function wrapAdapter(inner: FileScanAdapter): EvidenceScanAdapter {
+  return {
+    name: inner.name,
+    async scanFile(bytes: Uint8Array): Promise<ScanResult> {
+      const result = await inner.scanFile(bytes);
+      return { status: toEvidenceScanStatus(result), detail: result.detail };
+    },
+  };
+}
+
+export const nullScanAdapter: EvidenceScanAdapter = wrapAdapter(nullFileScanAdapter);
+
+const wrapperCache = new Map<string, EvidenceScanAdapter>();
 
 export function selectedScanAdapterName(env: NodeJS.ProcessEnv = process.env): string {
-  return env.MALWARE_SCANNER_PROVIDER?.trim() || "null";
+  return selectedFileScanAdapterName(env);
 }
 
 export function currentScanAdapter(env: NodeJS.ProcessEnv = process.env): EvidenceScanAdapter {
-  const name = selectedScanAdapterName(env);
-  return SCAN_ADAPTERS[name] ?? nullScanAdapter;
+  const name = selectedFileScanAdapterName(env);
+  const inner = currentFileScanAdapter(env);
+  const cached = wrapperCache.get(name);
+  if (cached && cached.name === inner.name) return cached;
+  const wrapped = wrapAdapter(inner);
+  wrapperCache.set(name, wrapped);
+  return wrapped;
 }
 
-/**
- * Production startup guard (wired into lib/launch/guards.ts's
- * PRODUCTION_STARTUP_GUARDS, and into scripts/launch-check.ts's
- * malware_scanning_configuration capability).
- *
- * This does NOT change document safety by itself -- processClaimEvidence()
- * never processes a document whose scan_status isn't "clean" regardless of
- * which adapter is selected (see ./pipeline.ts). It exists so a production
- * deploy that is still on the null scanner fails LOUDLY at startup instead
- * of silently leaving every uploaded document stuck in quarantine forever
- * with no operator aware why -- "production cannot silently use the null
- * scanner" in the launch-hardening spec's own words.
- */
 export function checkMalwareScannerConfigured(env: NodeJS.ProcessEnv = process.env): { ok: boolean; message: string } {
-  if (!isProduction(env)) {
-    return { ok: true, message: "Not production; malware-scanner configuration check skipped." };
-  }
-  const name = selectedScanAdapterName(env);
-  if (name !== "null") {
-    return { ok: true, message: `Malware scanner "${name}" is configured for production.` };
-  }
-  if (truthy(env.MALWARE_SCANNING_INTENTIONALLY_DISABLED)) {
-    return {
-      ok: true,
-      message:
-        "No malware scanner is configured, but MALWARE_SCANNING_INTENTIONALLY_DISABLED=true explicitly " +
-        "acknowledges this -- every claim-evidence upload will remain quarantined indefinitely until a real " +
-        "scanner is configured.",
-    };
-  }
-  return {
-    ok: false,
-    message:
-      "No malware scanner is configured in production (MALWARE_SCANNER_PROVIDER is unset) and " +
-      "MALWARE_SCANNING_INTENTIONALLY_DISABLED has not been set to acknowledge it. Every claim-evidence upload " +
-      "will be stuck in quarantine with no operator aware why. Configure a real scanner via " +
-      "MALWARE_SCANNER_PROVIDER, or set MALWARE_SCANNING_INTENTIONALLY_DISABLED=true if this is intentional.",
-  };
+  return checkFileScannerConfigured(env);
 }

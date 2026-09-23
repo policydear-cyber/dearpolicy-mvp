@@ -315,25 +315,47 @@ async function checkLiveBucketPrivacy() {
 // policy_document_quarantine / claim_evidence_quarantine
 // ---------------------------------------------------------------------
 function checkPolicyDocumentQuarantine() {
-  // Mirrors lib/claims/evidence/{state-machine,scan-adapter,pipeline}.ts's
-  // location convention -- none of these exist yet for policy documents.
-  const candidates = ["lib/policies/quarantine", "lib/rag/quarantine", "lib/policies/state-machine.ts", "lib/rag/state-machine.ts"];
-  const present = candidates.filter((p) => existsSync(p));
-  if (present.length > 0) {
+  // Checkpoint 3 (claude/v1-launch-hardening): lib/policies/quarantine/
+  // store.ts's runPolicyQuarantineGate()/assertPolicyProcessingAllowed()
+  // gate lib/rag/ingest.ts's processPolicy() -- the single entry point for
+  // OCR, parsing, extraction, embeddings and indexing on a policy document
+  // -- on a persisted quarantine_status of exactly "scan_clean". Checked by
+  // source shape below; the executable DB-backed proof (including
+  // duplicate/out-of-order/deleted/superseded/cross-household callback
+  // idempotency, and a sabotage-then-restore cycle against the gate) is
+  // scripts/policy-quarantine-regressions.ts, run as part of
+  // security:policy-quarantine-test.
+  const storePath = "lib/policies/quarantine/store.ts";
+  const statePath = "lib/policies/quarantine/state-machine.ts";
+  const ingestPath = "lib/rag/ingest.ts";
+  const missing = [storePath, statePath, ingestPath].filter((p) => !existsSync(p));
+  if (missing.length) {
+    report("policy_document_quarantine", "blocked_by_code", `Missing: ${missing.join(", ")}.`);
+    return;
+  }
+  const storeSource = readFileSync(storePath, "utf8");
+  const ingestSource = readFileSync(ingestPath, "utf8");
+  const hasCleanGateFn = /export function isPolicyProcessingAllowed\(/.test(storeSource) &&
+    /row\.quarantine_status\s*===\s*["']scan_clean["']/.test(storeSource);
+  const ingestCallsGate = /runPolicyQuarantineGate\(/.test(ingestSource) && /if \(!gate\.cleared\) return;/.test(ingestSource);
+  if (!hasCleanGateFn || !ingestCallsGate) {
     report(
       "policy_document_quarantine",
       "blocked_by_code",
-      `Found ${present.join(", ")} but launch-check has not yet been updated to verify it against the full quarantine requirement -- treat as incomplete until this check is rewritten alongside it.`,
+      `${storePath} does not gate on an explicit scan_clean status, or ${ingestPath}'s processPolicy() does not call ` +
+        `the gate at its own entry point -- this does not satisfy "Only scan_clean documents may be parsed, OCRed, ` +
+        `embedded, indexed, or sent to a model".`,
     );
     return;
   }
   report(
     "policy_document_quarantine",
-    "blocked_by_code",
-    "No policy-document quarantine state machine exists yet. Policy uploads go directly into the existing " +
-      "ingest pipeline (lib/rag/ingest.ts) with no uploaded/quarantined/scan_pending/scan_clean/scan_rejected/" +
-      "processing/processed/failed/deleted state machine, no scan gate before extraction, and no per-transition " +
-      "audit event -- this is Priority 4's primary remaining deliverable.",
+    "ready",
+    `${ingestPath}'s processPolicy() -- the single entry point for a policy document's OCR/parsing/extraction/` +
+      `embedding/indexing -- gates on ${storePath}'s isPolicyProcessingAllowed(), which requires a persisted ` +
+      `quarantine_status of exactly "scan_clean" (uploaded/quarantined/scan_pending/scan_rejected/deleted all stay ` +
+      `blocked). Re-checked on every reprocess and reindex, not cached. See security:policy-quarantine-test for the ` +
+      `executable DB-backed proof, including a sabotage-then-restore cycle against this exact check.`,
   );
 }
 
@@ -378,7 +400,11 @@ function checkMalwareScanningConfiguration() {
   // Real executable check: evaluates checkMalwareScannerConfigured() (the
   // same function wired into instrumentation.ts's production startup
   // guard) against a simulated production environment, exactly like
-  // guardStatus() does for lib/launch/guards.ts's guards.
+  // guardStatus() does for lib/launch/guards.ts's guards. This one check
+  // now covers BOTH claim-evidence and policy-document uploads -- both
+  // route through the same shared lib/scanning/adapter.ts registry (see
+  // lib/claims/evidence/scan-adapter.ts's header comment for why it is a
+  // thin wrapper around that module rather than its own copy).
   const result = checkMalwareScannerConfigured(prodEnv);
   const hasRealScannerSelected = (prodEnv.MALWARE_SCANNER_PROVIDER?.trim() ?? "") !== "" && prodEnv.MALWARE_SCANNER_PROVIDER?.trim() !== "null";
   if (result.ok && hasRealScannerSelected) {
@@ -394,7 +420,7 @@ function checkMalwareScanningConfiguration() {
       "malware_scanning_configuration",
       "blocked_by_code",
       `${result.message} No real scanner adapter is implemented yet regardless -- there is currently only the null ` +
-        `adapter to select (see lib/claims/evidence/scan-adapter.ts's SCAN_ADAPTERS).`,
+        `adapter to select (see lib/scanning/adapter.ts's SCAN_ADAPTERS, shared by both claim evidence and policy documents).`,
     );
     return;
   }

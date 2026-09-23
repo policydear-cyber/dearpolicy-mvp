@@ -55,6 +55,26 @@ export async function DELETE(
         [ctx.householdId, policyId],
       );
 
+      // Recorded in the quarantine audit trail, in this SAME transaction,
+      // immediately before the row is removed below -- so "deleted" is
+      // this document's last quarantine state (the audit_log row survives
+      // via ON DELETE SET NULL on policy_document_audit_log.policy_id),
+      // and a scan result racing this delete is rejected by
+      // recordPolicyScanResult()'s own CAS the instant this transaction
+      // commits: a deleted document can never be revived by a late-arriving
+      // scan callback. Deliberately inline (not via
+      // lib/policies/quarantine/store.ts's own helpers, which open their
+      // own connection) so this stays part of the SAME FOR-UPDATE-locked
+      // transaction as the delete itself, preserving the concurrency
+      // guarantee described above -- splitting this into a second,
+      // separate transaction would reopen exactly the race window FOR
+      // UPDATE exists to close.
+      await client.query(
+        `INSERT INTO policy_document_audit_log(account_id,actor,action,previous_value,new_value,policy_id)
+         VALUES($1,'system','deleted',$2::jsonb,$3::jsonb,$4)`,
+        [ctx.householdId, JSON.stringify({ quarantineStatus: null }), JSON.stringify({ quarantineStatus: "deleted" }), policyId],
+      );
+
       // policy_pages, policy_chunks, policy_coverages, policy_members,
       // policy_detected_people and policy_corrections are removed by ON DELETE CASCADE.
       await client.query(`DELETE FROM policies WHERE id=$1 AND account_id=$2`, [policyId, ctx.householdId]);

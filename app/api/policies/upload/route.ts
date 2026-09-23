@@ -6,6 +6,8 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { savePolicyFile } from "@/lib/storage";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { looksLikePdf } from "@/lib/claims/evidence/validation";
+import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
+import { isUuid } from "@/lib/db/client";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -30,6 +32,13 @@ export async function POST(request: NextRequest) {
     let familyMemberId = String(form.get("familyMemberId") ?? "");
     const explicitFamilyMember = Boolean(familyMemberId);
     const pdfPassword = String(form.get("pdfPassword") ?? "");
+    // Optional: this upload is a corrected re-upload of an existing
+    // document, not a brand-new one. When present and valid, the OLD row
+    // is marked superseded (never deleted -- its audit history stays
+    // intact) once the new row is safely inserted below. See
+    // lib/policies/quarantine/store.ts's supersedePolicyDocument().
+    const supersedesPolicyIdRaw = String(form.get("supersedesPolicyId") ?? "");
+    const supersedesPolicyId = isUuid(supersedesPolicyIdRaw) ? supersedesPolicyIdRaw : null;
 
     if (!(file instanceof File)) return NextResponse.json({ error: "PDF file is required." }, { status: 400 });
     if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
@@ -67,12 +76,21 @@ export async function POST(request: NextRequest) {
       if (!owner.rows[0]) throw new FamilyMemberNotFound();
 
       const duplicate = await client.query<{ id: string; original_filename: string }>(
-        `SELECT id,original_filename FROM policies WHERE account_id=$1 AND file_hash=$2 LIMIT 1`,
+        `SELECT id,original_filename FROM policies WHERE account_id=$1 AND file_hash=$2 AND superseded_at IS NULL LIMIT 1`,
         [ctx.householdId, fileHash],
       );
       if (duplicate.rows[0]) throw new DuplicateDocument(duplicate.rows[0].original_filename);
 
-      return { familyMemberId };
+      // A supersedesPolicyId must genuinely belong to this household -- a
+      // forged id from another account must not be able to mark someone
+      // else's document superseded via this upload.
+      let verifiedSupersedesId: string | null = null;
+      if (supersedesPolicyId) {
+        const owned = await client.query<{ id: string }>(`SELECT id FROM policies WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL`, [supersedesPolicyId, ctx.householdId]);
+        verifiedSupersedesId = owned.rows[0]?.id ?? null;
+      }
+
+      return { familyMemberId, verifiedSupersedesId };
     });
 
     // Server-generated storage path -- the object key is derived from the
@@ -83,11 +101,14 @@ export async function POST(request: NextRequest) {
     try {
       await createUserSupabaseClient(ctx.userId, async (client) => {
         await client.query(
-          `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message)
-           VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting to be analysed…')`,
-          [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash],
+          `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,supersedes_id)
+           VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting to be analysed…',$7)`,
+          [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash, outcome.verifiedSupersedesId],
         );
       });
+      if (outcome.verifiedSupersedesId) {
+        await supersedePolicyDocument({ accountId: ctx.householdId, oldPolicyId: outcome.verifiedSupersedesId, newPolicyId: policyId });
+      }
     } catch (error) {
       // A double-click or two tabs can both pass the pre-check and race each
       // other to the insert; the unique index on (account_id,file_hash) is the
