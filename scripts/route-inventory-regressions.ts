@@ -66,10 +66,24 @@ async function findRouteFiles(dir: string): Promise<string[]> {
 const CLASSIFICATION_PATTERN = /export const ROUTE_AUTH\s*=\s*"([a-z-]+)"\s*as const\s*;/;
 const HOUSEHOLD_REPO_IMPORT = /import\s*\{([^}]*)\}\s*from\s*["'][^"']*\/lib\/household\/repo["']/g;
 
-async function main() {
+export interface RouteInventoryResult {
+  routeFiles: string[];
+  unclassified: string[];
+  invalid: { file: string; value: string }[];
+  byClass: Record<string, number>;
+  missingHouseholdContext: string[];
+  publicRouteViolations: { file: string; reason: string }[];
+}
+
+/** The classification scan itself, with no assertions and no console
+ * output -- exported so scripts/launch-check.ts can run the exact same
+ * scan and report its own result, rather than re-implementing the regex
+ * logic a second time or shelling out to this script as a subprocess.
+ * main() below is the only other caller, and turns this result into the
+ * hard assert()s this file is run as a regression suite for. */
+export async function classifyRoutes(): Promise<RouteInventoryResult> {
   const apiDir = path.resolve("app/api");
   const routeFiles = await findRouteFiles(apiDir);
-  assert.ok(routeFiles.length > 0, "sanity check: at least one app/api/**/route.ts must exist");
 
   const unclassified: string[] = [];
   const invalid: { file: string; value: string }[] = [];
@@ -118,6 +132,13 @@ async function main() {
     }
   }
 
+  return { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations };
+}
+
+async function main() {
+  const { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations } = await classifyRoutes();
+  assert.ok(routeFiles.length > 0, "sanity check: at least one app/api/**/route.ts must exist");
+
   assert.equal(
     unclassified.length,
     0,
@@ -144,7 +165,12 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// Guarded so importing classifyRoutes() from scripts/launch-check.ts (or
+// any other future caller) never triggers this file's own assert-based
+// run as an import side effect -- only running this file directly does.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

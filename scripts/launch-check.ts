@@ -30,6 +30,7 @@ import {
   checkServiceRoleKeyNotPublic,
 } from "@/lib/launch/guards";
 import { evaluateBucketPrivacy, requiredPrivateBucketIds } from "@/lib/launch/storage-guards";
+import { classifyRoutes } from "./route-inventory-regressions";
 
 type Status = "READY" | "BLOCKED_BY_CODE" | "BLOCKED_BY_EXTERNAL_CONFIG";
 type Item = { name: string; status: Status; detail: string };
@@ -209,10 +210,41 @@ async function checkStorageBucketsPrivate() {
   }
 }
 
+function checkRouteInventory() {
+  // Reuses the exact same scan scripts/route-inventory-regressions.ts runs
+  // as its own regression suite (`npm run security:route-inventory-test`),
+  // rather than re-implementing it or shelling out -- see that function's
+  // own doc comment. This makes launch:check itself catch an unclassified
+  // or misauthorized route directly, not just when someone remembers to
+  // run the separate suite.
+  return classifyRoutes().then((result) => {
+    const problems: string[] = [];
+    if (result.unclassified.length > 0) problems.push(`unclassified route(s): ${result.unclassified.join(", ")}`);
+    if (result.invalid.length > 0) problems.push(`invalid ROUTE_AUTH value(s): ${result.invalid.map((i) => `${i.file}="${i.value}"`).join(", ")}`);
+    if (result.missingHouseholdContext.length > 0) {
+      problems.push(`household-scoped route(s) never calling requireHouseholdContext(): ${result.missingHouseholdContext.join(", ")}`);
+    }
+    if (result.publicRouteViolations.length > 0) {
+      problems.push(result.publicRouteViolations.map((v) => `${v.file} (${v.reason})`).join("; "));
+    }
+    if (problems.length > 0) {
+      report("Every API route is classified and authorized correctly (route inventory)", "BLOCKED_BY_CODE", problems.join("; "));
+    } else {
+      report(
+        "Every API route is classified and authorized correctly (route inventory)",
+        "READY",
+        `All ${result.routeFiles.length} app/api/**/route.ts files carry a valid ROUTE_AUTH classification ` +
+          `(${Object.entries(result.byClass).map(([k, v]) => `${k}=${v}`).join(", ")}).`,
+      );
+    }
+  });
+}
+
 async function main() {
   await checkRlsState();
   await checkAuthenticatedRoleNotBypassRls();
   await checkStorageBucketsPrivate();
+  await checkRouteInventory();
 
   const strict = process.argv.includes("--strict");
   const byStatus = (status: Status) => results.filter((r) => r.status === status);
