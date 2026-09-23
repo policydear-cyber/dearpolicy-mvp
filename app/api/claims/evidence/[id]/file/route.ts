@@ -5,6 +5,7 @@ import { getScopedEvidenceDocument } from "@/lib/claims/evidence/store";
 import { readClaimEvidenceFile, createClaimEvidenceSignedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** Never a public URL. On the Supabase driver this redirects to a
  * short-lived signed URL (see lib/storage/supabase.ts); on local disk,

@@ -4,6 +4,7 @@ import { confirmMedicalBillReview, MedicalBillEvidenceError } from "@/lib/claims
 import type { ClaimEvidenceExtractedFields } from "@/lib/claims/evidence/types";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** The single, explicit reviewer action that can move a medical-claim bill
  * document to "matched" and make its figures usable by

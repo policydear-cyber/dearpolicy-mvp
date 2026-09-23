@@ -4,6 +4,7 @@ import { confirmDisabilityDefinitionMatch, ClaimEvidenceMatchError } from "@/lib
 import type { DisabilityDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 const RESULTS: DisabilityDefinitionMatchResult[] = ["matches", "does_not_match", "needs_medical_review", "needs_policy_review", "insufficient_evidence", "ambiguous"];
 const BENEFIT_CODES = ["tpd-lump-sum", "ppd-schedule", "di-monthly"] as const;

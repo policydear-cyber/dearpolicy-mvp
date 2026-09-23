@@ -6,6 +6,7 @@ import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { InvalidEvidenceTransitionError } from "@/lib/claims/evidence/state-machine";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 /** A reviewer rejecting the DOCUMENT itself (wrong file, unreadable,
  * unrelated) -- distinct from rejecting a policy-specific MATCH (see

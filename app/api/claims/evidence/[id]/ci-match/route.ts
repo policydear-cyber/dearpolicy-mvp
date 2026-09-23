@@ -4,6 +4,7 @@ import { confirmCIDefinitionMatch, ClaimEvidenceMatchError } from "@/lib/claims/
 import type { CIDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 const RESULTS: CIDefinitionMatchResult[] = ["matches", "does_not_match", "needs_medical_review", "needs_policy_review", "insufficient_evidence", "ambiguous"];
 const BENEFIT_CODES = ["ci-major", "ci-early", "ci-intermediate"] as const;

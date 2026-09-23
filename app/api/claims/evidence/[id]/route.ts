@@ -6,6 +6,7 @@ import { listClaimEvidenceAudit, appendClaimEvidenceAudit } from "@/lib/claims/e
 import type { ClaimEvidenceExtractedFields } from "@/lib/claims/evidence/types";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 async function scopedDocument(request: Request, id: string) {
   const url = new URL(request.url);

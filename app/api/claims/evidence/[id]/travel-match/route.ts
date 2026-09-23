@@ -4,6 +4,7 @@ import { confirmTravelDeathMatch, ClaimEvidenceMatchError } from "@/lib/claims/e
 import type { CauseDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
 const RESULTS: CauseDefinitionMatchResult[] = ["matches", "does_not_match", "needs_review"];
 
