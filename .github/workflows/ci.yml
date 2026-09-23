@@ -64,5 +64,17 @@ jobs:
       - name: Launch-hardening security regression suite
         run: npm run security:test
 
+      - name: Database TLS configuration regression suite (no live DB needed)
+        run: npm run security:tls-test
+
+      - name: Production launch-guard regression suite (gate.ts/devAccountId() production-disable, launch guards)
+        run: npm run security:launch-guard-test
+
+      - name: Row Level Security regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:rls-test
+
       - name: Build
         run: npm run build
+
+      - name: Launch readiness report (non-blocking here: this environment has no real production secrets to check against)
+        run: npm run launch:check

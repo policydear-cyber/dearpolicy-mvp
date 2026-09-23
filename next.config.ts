@@ -1,15 +1,35 @@
 import type { NextConfig } from "next";
 
 // Every response from this app can carry a household's private insurance,
-// health and financial data, behind nothing more than one shared password
-// (see lib/auth/gate.ts) -- these are the baseline response headers any
+// health and financial data -- these are the baseline response headers any
 // app in that position should send regardless of what a browser happens to
-// do by default. Deliberately conservative: no Content-Security-Policy
-// script-src/style-src restriction here, because this repo cannot exercise
-// a real browser to verify one wouldn't break Next's own inline hydration
-// output; frame-ancestors (below) is the one CSP directive that is safe to
-// set blind, since nothing in this app legitimately embeds itself in a
-// frame either way.
+// do by default.
+//
+// The Content-Security-Policy below is scoped to what this app actually
+// needs rather than left permissive: 'self' for scripts/styles/fonts/images
+// (Next.js's own hydration and CSS-in-JS output all serve from the app's
+// own origin), 'unsafe-inline' on script-src and style-src because Next.js
+// emits inline bootstrap/hydration script and inline styles that a strict
+// nonce-based policy would require wiring through every layout (not
+// verified against a real browser in this repo -- see the PR description's
+// "Security controls" section for that caveat), and connect-src widened
+// only to this app's own origin plus Supabase (auth/storage calls made
+// directly from the browser once Supabase Auth ships). object-src 'none'
+// and base-uri 'self' close off two classic CSP-bypass vectors (plugins,
+// injected <base> tags) that cost nothing to restrict.
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "form-action 'self'",
+].join("; ");
+
 const SECURITY_HEADERS = [
   // Stops a browser from guessing a different content type than the
   // response declares (e.g. treating an uploaded PDF as HTML/script).
@@ -18,7 +38,7 @@ const SECURITY_HEADERS = [
   // older browsers that ignore CSP still honour this header. Nothing in
   // DearPolicy is meant to be embedded in another site's frame.
   { key: "X-Frame-Options", value: "DENY" },
-  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Content-Security-Policy", value: CSP_DIRECTIVES },
   // Don't leak the current page's full URL (which can contain no secrets
   // today, but may in future carry a claim or policy id) to a third-party
   // site linked from within the app.
