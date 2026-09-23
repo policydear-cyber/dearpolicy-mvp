@@ -118,6 +118,10 @@ async function main() {
   await db.exec(await readFile(path.resolve("sql/model-usage.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/coverage-ledger.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/household-rls.sql"), "utf8"));
+  // Checkpoint 7: app/api/ledger/route.ts's family() now filters on
+  // family_members.lifecycle_state via activePredicate() -- exec
+  // sql/lifecycle.sql so that column exists here too.
+  await db.exec(await readFile(path.resolve("sql/lifecycle.sql"), "utf8"));
   await db.exec("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;");
 
   // Mirrors scripts/system-database-regressions.ts's pool monkey-patch

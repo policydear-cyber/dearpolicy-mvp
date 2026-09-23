@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isUuid, isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -24,7 +25,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const member = await createUserSupabaseClient(ctx.userId, async (client) => {
       if (body.relationship!.trim().toLowerCase() === "self") {
         const existingSelf = await client.query<{ id: string }>(
-          `SELECT id FROM family_members WHERE account_id=$1 AND relationship='self' AND id<>$2`,
+          `SELECT id FROM family_members WHERE account_id=$1 AND relationship='self' AND id<>$2 AND ${activePredicate()}`,
           [ctx.householdId, id],
         );
         if (existingSelf.rows.length) throw new SelfProfileConflict();
@@ -70,13 +71,13 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
 
     const deleted = await createUserSupabaseClient(ctx.userId, async (client) => {
       const owned = await client.query<{ id: string }>(
-        `SELECT id FROM family_members WHERE id=$1 AND account_id=$2`,
+        `SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
         [id, ctx.householdId],
       );
       if (!owned.rows.length) return false;
       const usage = await client.query<{ n: number }>(
         `SELECT (
-            (SELECT count(*) FROM policies WHERE family_member_id=$1)
+            (SELECT count(*) FROM policies WHERE family_member_id=$1 AND ${activePredicate()})
           + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
           + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
           + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
@@ -86,7 +87,7 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
         [id],
       );
       if ((usage.rows[0]?.n ?? 0) > 0) throw new HasLinkedActivity();
-      await client.query(`DELETE FROM family_members WHERE id=$1 AND account_id=$2`, [id, ctx.householdId]);
+      await client.query(`DELETE FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [id, ctx.householdId]);
       return true;
     });
     if (!deleted) return NextResponse.json({ error: "Family member not found" }, { status: 404 });

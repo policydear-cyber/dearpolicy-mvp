@@ -37,6 +37,7 @@
  *    above.
  */
 import type { ScopedDbClient } from "@/lib/db/authz-client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const HOUSEHOLD_EXPORT_SCHEMA_VERSION = 1;
 
@@ -144,7 +145,7 @@ const EVIDENCE_AUDIT_ALLOWLIST = new Set([
 
 export async function buildHouseholdExportSnapshot(client: ScopedDbClient, householdId: string): Promise<HouseholdExportSnapshot> {
   const household = await client.query<{ id: string; name: string; created_at: string }>(
-    `SELECT id, name, created_at FROM accounts WHERE id=$1`,
+    `SELECT id, name, created_at FROM accounts WHERE id=$1 AND ${activePredicate()}`,
     [householdId],
   );
   if (household.rows.length === 0) {
@@ -166,7 +167,7 @@ export async function buildHouseholdExportSnapshot(client: ScopedDbClient, house
     created_at: string;
   }>(
     `SELECT id, display_name, relationship, date_of_birth, preferred_name, notes, created_at
-       FROM family_members WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
+       FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
     [householdId],
   );
 
@@ -186,7 +187,7 @@ export async function buildHouseholdExportSnapshot(client: ScopedDbClient, house
   }>(
     `SELECT id, family_member_id, insurer, product_name, policy_number, policy_type, document_role, status,
             quarantine_status, original_filename, page_count, created_at
-       FROM policies WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
+       FROM policies WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
     [householdId],
   );
 
@@ -249,7 +250,7 @@ export async function buildHouseholdExportSnapshot(client: ScopedDbClient, house
     created_at: string;
   }>(
     `SELECT id, claim_session_id, document_type, original_filename, mime_type, byte_size, status, scan_status, identity_status, created_at
-       FROM claim_evidence_documents WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
+       FROM claim_evidence_documents WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
     [householdId],
   );
 

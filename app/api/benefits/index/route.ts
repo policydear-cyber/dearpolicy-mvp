@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { ensureBenefitSchema } from "@/lib/policies/benefit-catalog";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
@@ -24,7 +25,7 @@ async function unreadDocuments(accountId:string){
     `SELECT p.id,coalesce(p.product_name,p.original_filename) AS name,p.product_name,
             (SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS pages
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.benefits_indexed_at IS NULL
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.benefits_indexed_at IS NULL AND ${activePredicate("p")}
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
       ORDER BY p.created_at`,[accountId]);
   return result.rows;
@@ -37,7 +38,7 @@ async function allDocuments(accountId:string){
     `SELECT p.id,coalesce(p.product_name,p.original_filename) AS name,p.product_name,
             (SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS pages
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready'
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND ${activePredicate("p")}
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
       ORDER BY p.created_at`,[accountId]);
   return result.rows;
@@ -49,7 +50,7 @@ async function conditionlessDocuments(accountId:string){
     `SELECT p.id,coalesce(p.product_name,p.original_filename) AS name,p.product_name,
             (SELECT count(*)::int FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id) AS pages
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.conditions_indexed_at IS NULL
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.conditions_indexed_at IS NULL AND ${activePredicate("p")}
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
       ORDER BY p.created_at`,[accountId]);
   return result.rows;
@@ -86,7 +87,7 @@ export async function POST(request:NextRequest){
     const pending=body.conditionsOnly?await conditionlessDocuments(accountId):await unreadDocuments(accountId);
     const target=body.policyId
       ?(await query<{id:string;name:string;product_name:string|null}>(
-        `SELECT id,coalesce(product_name,original_filename) AS name,product_name FROM policies WHERE id=$1 AND account_id=$2 AND processing_status='ready'`,
+        `SELECT id,coalesce(product_name,original_filename) AS name,product_name FROM policies WHERE id=$1 AND account_id=$2 AND processing_status='ready' AND ${activePredicate()}`,
         [body.policyId,accountId])).rows[0]
       :pending[0];
     if(!target)return NextResponse.json({done:true,remaining:0});

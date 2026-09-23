@@ -8,6 +8,7 @@ import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { looksLikePdf } from "@/lib/claims/evidence/validation";
 import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
 import { isUuid } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -65,18 +66,18 @@ export async function POST(request: NextRequest) {
     const outcome = await createUserSupabaseClient(ctx.userId, async (client) => {
       if (!familyMemberId) {
         const fallback = await client.query<{ id: string }>(
-          `SELECT id FROM family_members WHERE account_id=$1 ORDER BY CASE WHEN relationship='self' THEN 0 ELSE 1 END,created_at LIMIT 1`,
+          `SELECT id FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY CASE WHEN relationship='self' THEN 0 ELSE 1 END,created_at LIMIT 1`,
           [ctx.householdId],
         );
         familyMemberId = fallback.rows[0]?.id ?? "";
       }
       if (!familyMemberId) throw new NoFamilyMember();
 
-      const owner = await client.query<{ id: string }>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2`, [familyMemberId, ctx.householdId]);
+      const owner = await client.query<{ id: string }>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [familyMemberId, ctx.householdId]);
       if (!owner.rows[0]) throw new FamilyMemberNotFound();
 
       const duplicate = await client.query<{ id: string; original_filename: string }>(
-        `SELECT id,original_filename FROM policies WHERE account_id=$1 AND file_hash=$2 AND superseded_at IS NULL LIMIT 1`,
+        `SELECT id,original_filename FROM policies WHERE account_id=$1 AND file_hash=$2 AND superseded_at IS NULL AND ${activePredicate()} LIMIT 1`,
         [ctx.householdId, fileHash],
       );
       if (duplicate.rows[0]) throw new DuplicateDocument(duplicate.rows[0].original_filename);
@@ -86,7 +87,7 @@ export async function POST(request: NextRequest) {
       // else's document superseded via this upload.
       let verifiedSupersedesId: string | null = null;
       if (supersedesPolicyId) {
-        const owned = await client.query<{ id: string }>(`SELECT id FROM policies WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL`, [supersedesPolicyId, ctx.householdId]);
+        const owned = await client.query<{ id: string }>(`SELECT id FROM policies WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL AND ${activePredicate()}`, [supersedesPolicyId, ctx.householdId]);
         verifiedSupersedesId = owned.rows[0]?.id ?? null;
       }
 

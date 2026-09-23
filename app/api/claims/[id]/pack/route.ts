@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isUuid, query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { buildClaimPack } from "@/lib/claims/claim-pack";
 import { EMPTY_CLAIM_FACTS, type ClaimDecisionPacket, type ClaimFacts } from "@/lib/claims/types";
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const ctx = await requireHouseholdContext(request);
     const result = await query<{ decision_packet: ClaimDecisionPacket | null; facts: Partial<ClaimFacts>; event_summary: string | null; display_name: string; relationship: string }>(
       `SELECT cs.decision_packet,cs.facts,cs.event_summary,f.display_name,f.relationship
-         FROM claim_sessions cs JOIN family_members f ON f.id=cs.family_member_id AND f.account_id=cs.account_id
+         FROM claim_sessions cs JOIN family_members f ON f.id=cs.family_member_id AND f.account_id=cs.account_id AND ${activePredicate("f")}
         WHERE cs.id=$1 AND cs.account_id=$2`,
       [id, ctx.householdId],
     );

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { structuredCompletion } from "@/lib/ai/llm";
 import { hasQuote } from "@/lib/chat/facts";
 import type { ClaimEventType } from "@/lib/insurance/claim-events";
@@ -231,7 +232,7 @@ export async function readWhateverIsStillUnread(args:{accountId:string;policyIds
             (p.benefits_indexed_at IS NULL) AS needs_benefits,
             (p.conditions_indexed_at IS NULL) AS needs_conditions
        FROM policies p
-      WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND p.processing_status='ready'
+      WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND p.processing_status='ready' AND ${activePredicate("p")}
         AND (p.benefits_indexed_at IS NULL OR p.conditions_indexed_at IS NULL)
         AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
       ORDER BY p.created_at`,[args.accountId,args.policyIds]);

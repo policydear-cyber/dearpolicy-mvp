@@ -42,6 +42,10 @@ async function main(){
   // for a non-Supabase Postgres, including this PGlite instance, to behave
   // the same way).
   await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
+  // Checkpoint 7: lib/policies/inventory.ts's loadPolicyInventory() now filters
+  // on policies.lifecycle_state via activePredicate() -- exec sql/lifecycle.sql
+  // so that column exists here too.
+  await db.exec(await readFile(path.resolve("sql/lifecycle.sql"),"utf8"));
   // No domain table outside accounts/household_members/household_invitations
   // has its own RLS policy file yet (see the Checkpoint 1/2 commit messages'
   // disclosed gap: the claims/policies repository layer is authorized at the

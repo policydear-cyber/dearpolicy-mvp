@@ -46,6 +46,9 @@ async function runDatabaseTests() {
   const db = new PGlite({ extensions: { vector, pgcrypto } });
   await db.waitReady;
   await db.exec(await readFile(path.resolve("sql/schema.sql"), "utf8"));
+  // Checkpoint 7: the scan-callback route now filters on policies.lifecycle_state
+  // via activePredicate() -- exec sql/lifecycle.sql so that column exists here too.
+  await db.exec(await readFile(path.resolve("sql/lifecycle.sql"), "utf8"));
 
   let tail = Promise.resolve();
   const acquire = async () => {

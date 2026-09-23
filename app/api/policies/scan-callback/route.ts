@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { verifyAndConsumeCallback } from "@/lib/scanning/callback-auth";
 import { recordPolicyScanResult } from "@/lib/policies/quarantine/store";
 
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
   // superseded, wrong id, or a probe) gets the exact same response as a
   // real one below: no existence signal leaks through an authenticated
   // request's response shape or status code either.
-  const owner = await query<{ account_id: string }>(`SELECT account_id::text FROM policies WHERE id=$1`, [parsed.policyId]);
+  const owner = await query<{ account_id: string }>(`SELECT account_id::text FROM policies WHERE id=$1 AND ${activePredicate()}`, [parsed.policyId]);
   const accountId = owner.rows[0]?.account_id;
   if (accountId) {
     await recordPolicyScanResult({

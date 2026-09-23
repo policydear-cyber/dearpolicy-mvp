@@ -14,6 +14,7 @@
  * for the full decision table.
  */
 import { query, pool } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { currentFileScanAdapter } from "@/lib/scanning/adapter";
 import { assertValidPolicyQuarantineTransition } from "./state-machine";
 import { appendPolicyDocumentAudit } from "./audit";
@@ -24,7 +25,7 @@ const ROW_COLUMNS = `id::text,account_id,quarantine_status,scan_provider,scan_re
 
 export async function getPolicyQuarantineRow(accountId: string, policyId: string): Promise<PolicyQuarantineRow | null> {
   const result = await query<PolicyQuarantineRow>(
-    `SELECT ${ROW_COLUMNS} FROM policies WHERE id=$1 AND account_id=$2`,
+    `SELECT ${ROW_COLUMNS} FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
     [policyId, accountId],
   );
   return result.rows[0] ?? null;
@@ -47,7 +48,7 @@ async function transitionQuarantineStatus(args: {
             scan_event_id=COALESCE($4,scan_event_id),
             scanned_at=CASE WHEN $5 THEN now() ELSE scanned_at END,
             updated_at=now()
-      WHERE id=$6 AND account_id=$7 AND quarantine_status=$8 AND superseded_at IS NULL
+      WHERE id=$6 AND account_id=$7 AND quarantine_status=$8 AND superseded_at IS NULL AND ${activePredicate()}
       RETURNING ${ROW_COLUMNS}`,
     [args.to, args.scanProvider ?? null, args.scanResultDetail ?? null, args.scanEventId ?? null,
      Boolean(args.markScanned), args.policyId, args.accountId, args.from],

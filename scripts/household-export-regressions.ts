@@ -145,6 +145,10 @@ async function runDatabaseTests() {
   await db.exec(await readFile(path.resolve("sql/claim-composition.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/benefit-catalog.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/household-rls.sql"), "utf8"));
+  // Checkpoint 7: buildHouseholdExportSnapshot() now filters on lifecycle_state
+  // (accounts/policies/family_members/claim_evidence_documents) via
+  // activePredicate() -- exec sql/lifecycle.sql so those columns exist here too.
+  await db.exec(await readFile(path.resolve("sql/lifecycle.sql"), "utf8"));
 
   let tail = Promise.resolve();
   const acquire = async () => {

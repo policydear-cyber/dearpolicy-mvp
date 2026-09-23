@@ -633,11 +633,16 @@ function checkDataDeletionAndInvalidation() {
     "data_deletion_and_invalidation",
     "blocked_by_code",
     `Deletion & invalidation lifecycle in progress, not launch-ready: ${problems.join("; ")}. ` +
-      `Implemented and tested so far (scripts/lifecycle-regressions.ts, scripts/lifecycle-query-guard-regressions.ts): ` +
+      `Implemented and tested so far (scripts/lifecycle-regressions.ts, scripts/lifecycle-query-guard-regressions.ts, ` +
+      `scripts/active-read-scopes-regressions.ts): ` +
       `${implementedFlows.map(([name]) => name).join(", ") || "none"}; a central CAS-based state machine ` +
       `(active/pending_deletion/soft_deleted/permanently_deleted/audit_tombstone) with recovery only before permanent ` +
-      `deletion; idempotent deletion_requests bookkeeping; immediate read-side exclusion wired into chat retrieval and ` +
-      `the policy list route; storage-cleanup engine integration (a pending_deletion+ row stops protecting its storage ` +
+      `deletion; idempotent deletion_requests bookkeeping; immediate read-side exclusion wired into chat retrieval, ` +
+      `the policy list route, and now every ordinary application read across all four lifecycle-scoped tables ` +
+      `(accounts, policies, claim_evidence_documents, family_members) via lib/lifecycle/scopes.ts's activePredicate() ` +
+      `-- the query-guard allowlist is at zero, and scripts/active-read-scopes-regressions.ts proves the exclusion ` +
+      `behaviorally (seeded active+non-active rows through the real application functions), not just via static ` +
+      `text scanning; storage-cleanup engine integration (a pending_deletion+ row stops protecting its storage ` +
       `object); a redacted deletion_audit_log. This capability stays blocked until every one of the 8 deletion flows ` +
       `the spec requires is implemented and regression-tested, not merely until the shared machinery exists.`,
   );
@@ -878,6 +883,8 @@ async function checkGithubCiStatus() {
       "security:household-export-test",
       "security:lifecycle-test",
       "security:lifecycle-query-guard-test",
+      "security:active-read-scopes-test",
+      "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
     if (missingCiSteps.length > 0) {

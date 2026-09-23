@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { runAfterResponse } from "@/lib/http/background";
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
       // anything else -- a client-supplied policyId for another household's
       // document must not even reveal whether it exists.
       const result = await client.query<{ family_member_id: string; storage_key: string; processing_status: string }>(
-        `SELECT family_member_id,storage_key,processing_status FROM policies WHERE id=$1 AND account_id=$2`,
+        `SELECT family_member_id,storage_key,processing_status FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
         [body.policyId, ctx.householdId],
       );
       const row = result.rows[0];

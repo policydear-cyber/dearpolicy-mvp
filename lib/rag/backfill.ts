@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { countPolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 
 /** Indexing documents that were read before there was anywhere to put vectors.
@@ -35,7 +36,7 @@ async function indexableDocuments(accountId: string): Promise<IndexableDocument[
     `SELECT p.id, COALESCE(p.product_name, p.original_filename) AS label,
             (SELECT count(*)::int FROM policy_chunks c WHERE c.account_id=p.account_id AND c.policy_id=p.id) AS chunks
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.quarantine_status='scan_clean'
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.quarantine_status='scan_clean' AND ${activePredicate("p")}
       ORDER BY p.created_at`,
     [accountId],
   );

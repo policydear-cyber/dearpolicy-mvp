@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { structuredCompletion } from "@/lib/ai/llm";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalText } from "@/lib/chat/facts";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { ensureLedgerSchema } from "@/lib/ledger/store";
@@ -158,11 +159,11 @@ function seedKeyFor(policyId:string,row:ExtractedRow,familyMemberId:string){
 /** Reads one document into the ledger. Additive; never touches an existing row. */
 export async function readDocumentIntoLedger(args:{accountId:string;policyId:string;report?:(stage:string)=>void}):Promise<{added:number;read:number;dropped:number}>{
   await ensureLedgerSchema();
-  const doc=(await query<{product_name:string|null;insurer:string|null}>("SELECT product_name,insurer FROM policies WHERE id=$1 AND account_id=$2",[args.policyId,args.accountId])).rows[0];
+  const doc=(await query<{product_name:string|null;insurer:string|null}>(`SELECT product_name,insurer FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[args.policyId,args.accountId])).rows[0];
   if(!doc)return {added:0,read:0,dropped:0};
   const pages=(await query<Page>("SELECT page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id=$2 ORDER BY page_number",[args.accountId,args.policyId])).rows;
   const members=(await query<{id:string;display_name:string;preferred_name:string|null}>(
-    "SELECT f.id,f.display_name,f.preferred_name FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id WHERE pm.account_id=$1 AND pm.policy_id=$2",[args.accountId,args.policyId])).rows
+    `SELECT f.id,f.display_name,f.preferred_name FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND pm.policy_id=$2`,[args.accountId,args.policyId])).rows
     .map(m=>({id:m.id,names:[m.display_name,...(m.preferred_name?[m.preferred_name]:[])]}));
   const extraction=await extractLedgerRows({accountId:args.accountId,policyId:args.policyId,pages,members,planName:doc.product_name,insurer:doc.insurer,report:args.report});
   let added=0;
@@ -191,7 +192,7 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
   const job=(async()=>{
     await ensureLedgerSchema();
     const pending=(await query<{id:string;original_filename:string}>(
-      `SELECT p.id,p.original_filename FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL
+      `SELECT p.id,p.original_filename FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")}
          AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
          AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id) ORDER BY p.created_at`,[accountId])).rows;
     let added=0;
@@ -211,7 +212,7 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
 export async function pendingDocumentCount(accountId:string){
   await ensureLedgerSchema();
   const r=await query<{n:number}>(
-    `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL
+    `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")}
        AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
        AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id)`,[accountId]);
   return Number(r.rows[0]?.n??0);

@@ -14,6 +14,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
@@ -158,7 +159,7 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
 /** Adds ledger rows for everything read so far that is not in the ledger yet. */
 export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise<{added:number}>{
   await ensureLedgerSchema();
-  const family=people??(await query<ClaimPerson>("SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at",[accountId])).rows;
+  const family=people??(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId])).rows;
   if(!family.length)return {added:0};
   const inventory=await loadPolicyInventory(accountId,family);
   const contracts=inventory.contracts;

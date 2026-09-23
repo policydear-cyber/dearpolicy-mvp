@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { isUuid,query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,looksLikeCoverageLine,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
@@ -43,11 +44,11 @@ export async function GET(request:NextRequest){
               p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,
               owners.names AS owner_names
          FROM policy_benefits b
-         JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id
+         JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id AND ${activePredicate("p")}
          LEFT JOIN LATERAL (
               SELECT array_agg(f.display_name ORDER BY f.display_name) AS names
                 FROM policy_members pm
-                JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id
+                JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")}
                WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id
          ) owners ON true
         WHERE b.account_id=$1
@@ -76,7 +77,7 @@ export async function GET(request:NextRequest){
     // decides whether a "% of Sum Insured" row ever becomes money. Shown, so a
     // wrong or missing join is a thing a person can see and fix.
     const inventory=await loadPolicyInventory(accountId,(await query<{id:string;display_name:string;preferred_name:string|null;relationship:string}>(
-      "SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1",[accountId])).rows).catch(()=>null);
+      `SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()}`,[accountId])).rows).catch(()=>null);
     const contractsByDocument=new Map<string,typeof inventory extends null?never:NonNullable<typeof inventory>["contracts"]>();
     for(const contract of inventory?.contracts??[])
       for(const doc of [...contract.documents,...contract.references])contractsByDocument.set(doc.id,[...(contractsByDocument.get(doc.id)??[]),contract]);
@@ -150,7 +151,7 @@ export async function GET(request:NextRequest){
         `SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.cause,c.condition_names,c.days,c.amount::text,
                 c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename
            FROM policy_cover_conditions c
-           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id
+           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id AND ${activePredicate("p")}
           WHERE c.account_id=$1
             AND ($2::uuid IS NULL OR EXISTS (
                   SELECT 1 FROM policy_members pm

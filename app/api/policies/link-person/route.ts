@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 
@@ -31,13 +32,13 @@ export async function POST(request: NextRequest) {
       // another household's policy or family member must fail here, not
       // silently create a cross-household link.
       const policyRow = await client.query<{ id: string; extracted_json: PolicyExtraction | null }>(
-        `SELECT id, extracted_json FROM policies WHERE id=$1 AND account_id=$2`,
+        `SELECT id, extracted_json FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
         [body.policyId, ctx.householdId],
       );
       if (!policyRow.rows[0]) throw new PolicyNotFound();
 
       const memberRow = await client.query<{ id: string }>(
-        `SELECT id FROM family_members WHERE id=$1 AND account_id=$2`,
+        `SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
         [body.familyMemberId, ctx.householdId],
       );
       if (!memberRow.rows[0]) throw new FamilyMemberNotFound();

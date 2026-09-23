@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { addLedgerRow,ledgerFor,loadLedgerRow,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
@@ -17,7 +18,7 @@ export const ROUTE_AUTH = "household-member" as const;
  * answer is a lookup in this table, so confirming a row here is what makes the
  * next answer exact. */
 function family(accountId:string){
-  return query<ClaimPerson>("SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at",[accountId]);
+  return query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
 }
 function shape(row:LedgerRow,people:ClaimPerson[]){
   return {...row,eventLabel:EVENTS[row.eventType]?.label??row.eventType,pays:describePays(row),

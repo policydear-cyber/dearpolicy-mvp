@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
                 count(DISTINCT pm.policy_id)::int AS policy_count
            FROM family_members f
            LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id
-          WHERE f.account_id=$1
+          WHERE f.account_id=$1 AND ${activePredicate("f")}
           GROUP BY f.id
           ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END, f.created_at`,
         [ctx.householdId],
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
         // fallback in the app picks "the self profile" (the upload default,
         // portfolio ordering) into silently choosing one over the other.
         const existingSelf = await client.query<{ id: string }>(
-          `SELECT id FROM family_members WHERE account_id=$1 AND relationship='self'`,
+          `SELECT id FROM family_members WHERE account_id=$1 AND relationship='self' AND ${activePredicate()}`,
           [ctx.householdId],
         );
         if (existingSelf.rows.length) {

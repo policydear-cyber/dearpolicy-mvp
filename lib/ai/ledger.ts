@@ -1,4 +1,5 @@
 import { pool,query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { costUsd,type ModelChoice,type ModelRole } from "./providers";
@@ -65,7 +66,7 @@ export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
     `SELECT count(*)::int AS count FROM chat_messages m JOIN chat_conversations c ON c.id=m.conversation_id
       WHERE c.account_id=$1 AND m.role='user' AND m.created_at>=date_trunc('month',now())`,[accountId]).catch(()=>({rows:[{count:0}]}));
   const documents=await query<{count:number}>(
-    `SELECT count(*)::int AS count FROM policies WHERE account_id=$1 AND benefits_indexed_at>=date_trunc('month',now())`,[accountId]).catch(()=>({rows:[{count:0}]}));
+    `SELECT count(*)::int AS count FROM policies WHERE account_id=$1 AND benefits_indexed_at>=date_trunc('month',now()) AND ${activePredicate()}`,[accountId]).catch(()=>({rows:[{count:0}]}));
   const byRole=rows.rows.map(row=>({role:row.role,calls:row.calls,inputTokens:row.input_tokens,outputTokens:row.output_tokens,costUsd:Number(row.cost_usd)}));
   const plan=planLimits();
   const summary:UsageSummary={

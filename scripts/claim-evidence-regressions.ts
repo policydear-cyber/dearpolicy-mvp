@@ -380,6 +380,12 @@ async function runDatabaseTests() {
   try {
     const { ensureClaimEvidenceSchema } = await import("@/lib/claims/evidence/schema");
     await ensureClaimEvidenceSchema();
+    // Checkpoint 7: lib/claims/evidence/store.ts and lib/claims/evidence.ts now
+    // filter on lifecycle_state (claim_evidence_documents/policies) via
+    // activePredicate() -- exec sql/lifecycle.sql now that the table actually
+    // exists (ensureClaimEvidenceSchema() just created it above; lifecycle.sql's
+    // claim_evidence_documents ALTER is a no-op if run before the table exists).
+    await db.exec(await readFile(path.resolve("sql/lifecycle.sql"), "utf8"));
     const {
       createEvidenceDocument, getEvidenceDocument, getScopedEvidenceDocument, listEvidenceDocuments,
       findReusedEvidenceAcrossScopes, transitionEvidenceStatus, recordExtraction, getLatestExtraction,

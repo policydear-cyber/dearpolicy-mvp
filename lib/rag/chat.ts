@@ -1,4 +1,5 @@
 import { retrieveRelevantChunks } from "./retrieve";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { answerFromEvidence } from "./answer";
 import { query } from "@/lib/db/client";
 import type { StructuredCoverageFact } from "@/types";
@@ -21,7 +22,7 @@ async function confirmedCoverageFacts(accountId: string, familyMemberId: string)
     `SELECT pc.id,pc.policy_id,pc.category,pc.amount::text,pc.currency,pc.product_name,pc.source_page,pc.evidence_text,
             p.insurer,p.product_name AS policy_name,p.policy_number,p.document_role
      FROM policy_coverages pc
-     JOIN policies p ON p.id=pc.policy_id AND p.account_id=pc.account_id
+     JOIN policies p ON p.id=pc.policy_id AND p.account_id=pc.account_id AND ${activePredicate("p")}
      WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true
      ORDER BY p.document_authority DESC,p.effective_date DESC NULLS LAST,p.created_at DESC`,
     [accountId, familyMemberId],
@@ -35,7 +36,7 @@ async function confirmedCoverageFacts(accountId: string, familyMemberId: string)
 
 /** Historical guided-session compatibility. New requests use the contextual workflow. */
 export async function legacyAskDearPolicy(args: { accountId: string; familyMemberId: string; question: string; claimSessionId?: string | null; timeZone?: string; personContextMessage?: string; personContextRecordedAt?: string; personChoiceId?: string }) {
-  const family = await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at`, [args.accountId]);
+  const family = await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`, [args.accountId]);
   const chosen = args.personContextMessage && args.personChoiceId ? family.rows.find(p => p.id === args.personChoiceId) : null;
   const resolution = chosen ? { status: "resolved" as const, person: chosen, explicit: true } : resolveClaimPerson(args.question, family.rows, args.familyMemberId);
   if (resolution.status !== "resolved") {

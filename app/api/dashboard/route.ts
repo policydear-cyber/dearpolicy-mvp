@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { runAfterResponse } from "@/lib/http/background";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { annualisePremium,COVERAGE_CATEGORIES,monthlyEquivalent,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
@@ -51,11 +52,11 @@ export async function GET(request:NextRequest){
       await seedLedger(accountId);
     }catch(error){console.warn("Background coverage-ledger read failed:",error instanceof Error?error.message:error);}
   });
-  const familyResult=await query<{id:string;display_name:string;relationship:string;policy_count:number}>(`SELECT f.id,f.display_name,f.relationship,count(DISTINCT pm.policy_id)::int AS policy_count FROM family_members f LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id WHERE f.account_id=$1 GROUP BY f.id ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END,f.created_at`,[accountId]);
+  const familyResult=await query<{id:string;display_name:string;relationship:string;policy_count:number}>(`SELECT f.id,f.display_name,f.relationship,count(DISTINCT pm.policy_id)::int AS policy_count FROM family_members f LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id WHERE f.account_id=$1 AND ${activePredicate("f")} GROUP BY f.id ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END,f.created_at`,[accountId]);
   const requested=url.searchParams.get("familyMemberId"); const active=familyResult.rows.find((m)=>m.id===requested)??familyResult.rows[0]??null;
   if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:0,annual:0,items:[]},reminders:[],unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0}});
 
-  const coverageRows=await query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
+  const coverageRows=await query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
   type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;ownedProduct:string;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
   const byPolicyCategory=new Map<string,Chosen[]>();
   for(const row of coverageRows.rows){
@@ -78,7 +79,7 @@ export async function GET(request:NextRequest){
 
   // Reference wording can expand an OWNED product into its included benefits.
   // It never creates ownership on its own.
-  const refs=await query<{category:string;product_name:string|null;insurer:string|null;group_policy_number:string|null}>(`SELECT prc.category,prc.product_name,p.insurer,p.group_policy_number FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
+  const refs=await query<{category:string;product_name:string|null;insurer:string|null;group_policy_number:string|null}>(`SELECT prc.category,prc.product_name,p.insurer,p.group_policy_number FROM policy_reference_coverages prc JOIN policies p ON p.id=prc.policy_id AND ${activePredicate("p")} JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE prc.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
   const ownedByProduct=new Map<string,Chosen[]>();
   for(const row of selected){if(!row.ownedProduct)continue;const list=ownedByProduct.get(row.ownedProduct)??[];list.push(row);ownedByProduct.set(row.ownedProduct,list);}
   for(const ref of refs.rows){
@@ -99,8 +100,8 @@ export async function GET(request:NextRequest){
   const premiumItems=[...latest.values()].map((row)=>({...row,currency:normalizeCurrencyCode(row.currency,"SGD"),shared:row.family_member_id==null,amount:Number(row.amount),annual:annualisePremium(Number(row.amount),row.frequency),monthly:monthlyEquivalent(Number(row.amount),row.frequency)}));
   const annual=premiumItems.reduce((s,r)=>s+r.annual,0),monthly=premiumItems.reduce((s,r)=>s+r.monthly,0);
 
-  const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true`,[accountId]);
-  const quality=await query<{needs_review:number;reference_docs:number;personal_docs:number}>(`SELECT count(*) FILTER(WHERE p.needs_review)::int AS needs_review,count(*) FILTER(WHERE p.personal_coverage_confirmed=false)::int AS reference_docs,count(*) FILTER(WHERE p.personal_coverage_confirmed=true)::int AS personal_docs FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE p.account_id=$1 AND pm.family_member_id=$2`,[accountId,active.id]);
+  const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id AND ${activePredicate("p")} WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true`,[accountId]);
+  const quality=await query<{needs_review:number;reference_docs:number;personal_docs:number}>(`SELECT count(*) FILTER(WHERE p.needs_review)::int AS needs_review,count(*) FILTER(WHERE p.personal_coverage_confirmed=false)::int AS reference_docs,count(*) FILTER(WHERE p.personal_coverage_confirmed=true)::int AS personal_docs FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE p.account_id=$1 AND ${activePredicate("p")} AND pm.family_member_id=$2`,[accountId,active.id]);
   const q=quality.rows[0]??{needs_review:0,reference_docs:0,personal_docs:0};
   // Documents nobody has claimed are invisible everywhere else: they are not
   // on anyone's portfolio, so nothing about them appears until someone says
@@ -109,7 +110,7 @@ export async function GET(request:NextRequest){
   const unclaimed=await query<{id:string;original_filename:string;product_name:string|null;insurer:string|null;document_role:string|null}>(
     `SELECT p.id,p.original_filename,p.product_name,p.insurer,p.document_role
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready'
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND ${activePredicate("p")}
         AND NOT EXISTS(SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id)
       ORDER BY p.created_at DESC LIMIT 12`,[accountId]);
   const reminders:{kind:string;title:string;detail:string;href:string}[]=[];
