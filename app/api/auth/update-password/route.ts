@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requireCurrentUser, UnauthenticatedError } from "@/lib/auth/session";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "authenticated" as const;
 
 /** Sets a new password for the CURRENTLY SIGNED-IN session only -- either an
  * ordinary authenticated user changing their password, or the short-lived

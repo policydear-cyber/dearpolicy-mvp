@@ -5,6 +5,7 @@ import { describeChoice,modelFor } from "@/lib/ai/providers";
 import { describePineconeState,pineconeEnabled } from "@/lib/rag/pinecone";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "public" as const;
 
 /** What the app needs to work, in the words the person will read.
  *

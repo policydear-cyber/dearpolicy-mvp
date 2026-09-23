@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "public" as const;
 
 const resetAttempts = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5 });
 

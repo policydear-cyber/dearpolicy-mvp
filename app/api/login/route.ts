@@ -3,6 +3,7 @@ import { AUTH_COOKIE, checkPassword, expectedToken } from "@/lib/auth/gate";
 import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "public" as const;
 
 // One shared household password has no per-account lockout to fall back on.
 // The fixed per-attempt delay below slows a single sequential guesser; this

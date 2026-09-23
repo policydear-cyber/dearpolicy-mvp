@@ -4,6 +4,7 @@ import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "public" as const;
 
 // Per-warm-instance brake on account creation -- see lib/http/rate-limit.ts
 // for why this is not yet a real distributed limit (Priority 5).

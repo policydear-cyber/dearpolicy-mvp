@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "public" as const;
 
 // Only ever redirect within this app. `next` is attacker-controlled query
 // input (an email link's query string can be tampered with before it's

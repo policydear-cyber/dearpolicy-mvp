@@ -4,6 +4,7 @@ import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { clientKey, createRateLimiter } from "@/lib/http/rate-limit";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "public" as const;
 
 const signinAttempts = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20 });
 
