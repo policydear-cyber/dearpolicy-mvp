@@ -1,29 +1,65 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { AUTH_COOKIE, expectedToken } from "@/lib/auth/gate";
+import { refreshSupabaseSession } from "@/lib/supabase/middleware";
+import { isProduction } from "@/lib/launch/guards";
 
-/** Everything else needs the household's shared password; the sign-in page
- * and its own API, plus the health check the sidebar polls before anyone
- * has signed in, are the only doors left unlocked. */
-const OPEN_PATHS = new Set(["/login", "/api/login", "/api/health"]);
+/** Routes reachable before a visitor has a session: the sign-in/sign-up
+ * pages and their APIs, the invitation-acceptance and password-reset/
+ * callback flows (which authenticate the visitor as their own first step),
+ * and the health check the sidebar polls before anyone has signed in.
+ *
+ * The household's former shared-password gate (lib/auth/gate.ts,
+ * app/api/login/route.ts) is intentionally NOT in this allowlist and is no
+ * longer consulted anywhere below -- real per-user Supabase Auth sessions
+ * are now the only authentication mechanism this middleware recognizes, in
+ * every environment, not just production. lib/auth/gate.ts's functions
+ * still exist (and are still hard-disabled in production, still covered by
+ * scripts/launch-guard-regressions.ts) only because app/api/login/route.ts
+ * itself has not been deleted yet -- neither is reachable through any
+ * protected page or API any more. */
+const OPEN_PATHS = new Set([
+  "/login",
+  "/signup",
+  "/api/auth/signup",
+  "/api/auth/signin",
+  "/api/auth/callback",
+  "/api/auth/reset-password",
+  "/api/health",
+]);
+
+function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (isProduction(env)) return false;
+  return /^(1|true|on|yes)$/i.test(env.DEV_AUTH_ENABLED?.trim() ?? "");
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
+
+  let response: NextResponse = NextResponse.next({ request });
+  let user: { id: string } | null = null;
+  try {
+    const refreshed = await refreshSupabaseSession(request);
+    response = refreshed.response;
+    user = refreshed.user;
+  } catch {
+    // Supabase Auth isn't configured yet (e.g. local development before a
+    // real Supabase project is wired up). Production can't reach this
+    // branch: instrumentation.ts's assertProductionSafe() refuses to boot
+    // without SUPABASE_URL/SUPABASE_ANON_KEY configured. Falls through to
+    // the dev-auth-enabled check below.
+  }
+
   // Every /api/* response can carry a household's private insurance, health
-  // and financial data, gated only by one shared password rather than a
-  // per-visitor login. Next.js's own default for a dynamic route handler
+  // and financial data. Next.js's own default for a dynamic route handler
   // ("public, max-age=0, must-revalidate") still lets a shared cache or
   // proxy between here and the browser store the response; setting this
   // explicitly closes that off instead of relying on the framework default.
-  function pass() {
-    const res = NextResponse.next();
-    if (isApi) res.headers.set("Cache-Control", "private, no-store");
-    return res;
-  }
-  if (OPEN_PATHS.has(pathname)) return pass();
-  const expected = await expectedToken();
-  if (!expected) return pass();
-  if (request.cookies.get(AUTH_COOKIE)?.value === expected) return pass();
+  if (isApi) response.headers.set("Cache-Control", "private, no-store");
+
+  if (OPEN_PATHS.has(pathname)) return response;
+  if (user) return response;
+  if (devAuthEnabled()) return response;
+
   if (isApi) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const url = request.nextUrl.clone();
   url.pathname = "/login";
