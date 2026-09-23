@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { refreshSupabaseSession } from "@/lib/supabase/middleware";
 import { isProduction } from "@/lib/launch/guards";
+import { checkRequestOrigin } from "@/lib/http/csrf";
 
 /** Routes reachable before a visitor has a session: the sign-in/sign-up
  * pages and their APIs, the invitation-acceptance and password-reset/
@@ -35,6 +36,19 @@ function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApi = pathname.startsWith("/api/");
+
+  // Checked first, before session refresh or the auth-gate below, and
+  // regardless of OPEN_PATHS -- a forged cross-site request against an
+  // unauthenticated endpoint (e.g. login/signup CSRF) is exactly as much
+  // this check's job as one against an authenticated route. See
+  // lib/http/csrf.ts for the full reasoning (Origin-first, Referer
+  // fallback, fails closed).
+  if (isApi) {
+    const originCheck = checkRequestOrigin(request, request.nextUrl.origin);
+    if (!originCheck.allowed) {
+      return NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 });
+    }
+  }
 
   let response: NextResponse = NextResponse.next({ request });
   let user: { id: string } | null = null;

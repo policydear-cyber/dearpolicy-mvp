@@ -40,7 +40,8 @@
     "security:storage-rls-test": "node --import tsx scripts/storage-rls-regressions.ts",
     "security:storage-orphans-test": "node --import tsx scripts/storage-orphans-regressions.ts",
     "storage:audit-orphans": "node --import tsx scripts/storage-orphans.ts",
-    "security:db-rate-limit-test": "node --import tsx scripts/db-rate-limit-regressions.ts"
+    "security:db-rate-limit-test": "node --import tsx scripts/db-rate-limit-regressions.ts",
+    "security:csrf-test": "node --import tsx scripts/csrf-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
