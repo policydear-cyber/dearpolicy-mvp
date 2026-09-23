@@ -34,7 +34,8 @@
     "launch:check": "node --import tsx scripts/launch-check.ts",
     "security:authz-client-test": "node --import tsx scripts/authz-client-regressions.ts",
     "security:household-test": "node --import tsx scripts/household-repo-regressions.ts",
-    "security:route-inventory-test": "node --import tsx scripts/route-inventory-regressions.ts"
+    "security:route-inventory-test": "node --import tsx scripts/route-inventory-regressions.ts",
+    "security:import-boundary-test": "node --import tsx scripts/import-boundary-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
