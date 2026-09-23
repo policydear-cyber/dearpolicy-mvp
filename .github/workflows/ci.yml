@@ -133,6 +133,9 @@ jobs:
       - name: Family-member deletion regression suite (active-policy/policy_members/chat/claim/coverage-rule/premium-record refusal, inactive-policy exclusion, idempotency -- real Postgres via PGlite, no live DB needed)
         run: npm run security:family-member-deletion-test
 
+      - name: Household-membership deletion regression suite (owner-initiated removal, self-leave, last-owner refusal, RLS-enforced forbidden removal, idempotency -- real Postgres RLS via PGlite, no live DB needed)
+        run: npm run security:household-membership-deletion-test
+
       - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
         run: npm run security:placeholder-content-test
 

@@ -672,9 +672,19 @@ function checkDataDeletionAndInvalidation() {
       `claim session, coverage-ledger rule, or premium record; a policy already excluded by activePredicate() ` +
       `(e.g. already soft-deleted) correctly does not block the member's own deletion. See ` +
       `scripts/family-member-deletion-regressions.ts for the 11 behavioral cases proving this, including a ` +
-      `sabotage-and-restore-verified check on the linked-activity precondition. This capability stays blocked ` +
-      `until every one of the 8 deletion flows the spec requires is implemented and regression-tested, not ` +
-      `merely until the shared machinery exists.`,
+      `sabotage-and-restore-verified check on the linked-activity precondition. Household-member removal and ` +
+      `leave-household both wrap lib/household/repo.ts's removeMember() (which already owns the last-remaining- ` +
+      `owner refusal and RLS-enforced authorization -- deliberately not reimplemented here) with deletion_requests ` +
+      `idempotency and a deletion_audit_log entry; household_members has no lifecycle-tracked table of its own ` +
+      `(no transitionLifecycle() step for this flow), so it is represented entirely through deletion_requests, ` +
+      `exactly as lib/lifecycle/types.ts's own comment anticipates. Proven against REAL Postgres Row Level ` +
+      `Security (the same household-rls.sql policies scripts/rls-regressions.ts proves), not a scripted fake ` +
+      `pool -- including a case where a plain member is correctly refused (ForbiddenError) when trying to remove ` +
+      `another member, and idempotency proven by a sabotage-and-restore-verified check confirming that without ` +
+      `the deletion_requests short-circuit, a retry would re-invoke removeMember() and throw NotFoundError ` +
+      `against an already-removed member. See scripts/household-membership-deletion-regressions.ts for the 7 ` +
+      `behavioral cases proving this. This capability stays blocked until every one of the 8 deletion flows the ` +
+      `spec requires is implemented and regression-tested, not merely until the shared machinery exists.`,
   );
 }
 
@@ -917,6 +927,7 @@ async function checkGithubCiStatus() {
       "security:policy-deletion-test",
       "security:claim-evidence-deletion-test",
       "security:family-member-deletion-test",
+      "security:household-membership-deletion-test",
       "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));

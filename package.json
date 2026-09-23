@@ -55,6 +55,7 @@
     "security:policy-deletion-test": "node --import tsx scripts/policy-deletion-regressions.ts",
     "security:claim-evidence-deletion-test": "node --import tsx scripts/claim-evidence-deletion-regressions.ts",
     "security:family-member-deletion-test": "node --import tsx scripts/family-member-deletion-regressions.ts",
+    "security:household-membership-deletion-test": "node --import tsx scripts/household-membership-deletion-regressions.ts",
     "security:placeholder-content-test": "node --import tsx scripts/placeholder-content-regressions.ts"
   },
   "dependencies": {

@@ -26,15 +26,20 @@
  * logical policy -- its full version chain plus any shared reference
  * document it orphans, see requestPolicyDeletion/resolvePolicyDeletionChain
  * below), claim_evidence (one claim-evidence document, see
- * requestClaimEvidenceDeletion), and family_member (one family-member
+ * requestClaimEvidenceDeletion), family_member (one family-member
  * profile -- refused rather than cascaded whenever it has any linked
- * policy/claim/coverage/chat activity, see requestFamilyMemberDeletion)
- * are implemented here. The remaining four flows (household-member
- * removal, leave-household, invitation revocation, household/account
- * deletion) are tracked as follow-up work -- see PR #16's own status
- * notes and scripts/launch-check.ts's checkDataDeletionAndInvalidation(),
- * which reports this capability as still blocked_by_code and itemizes
- * exactly what remains.
+ * policy/claim/coverage/chat activity, see requestFamilyMemberDeletion),
+ * household_member (an owner removing another member, see
+ * requestHouseholdMemberRemoval), and household_leave (a member removing
+ * themselves, see requestHouseholdLeave -- both wrap the same
+ * lib/household/repo.ts's removeMember(), which already owns the
+ * last-owner-protection business rule and is deliberately not
+ * reimplemented here) are implemented here. The remaining two flows
+ * (invitation revocation, household/account deletion) are tracked as
+ * follow-up work -- see PR #16's own status notes and
+ * scripts/launch-check.ts's checkDataDeletionAndInvalidation(), which
+ * reports this capability as still blocked_by_code and itemizes exactly
+ * what remains.
  */
 import { randomUUID } from "node:crypto";
 import { pool } from "@/lib/db/client";
@@ -45,6 +50,7 @@ import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
+import { removeMember } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
 
 export type DeletionOutcome = {
@@ -1000,6 +1006,130 @@ export async function finishFamilyMemberDeletion(args: {
     correlationId: randomUUID(),
     cleanupStatus: null,
   });
+}
+
+/**
+ * Household-member removal (resource_type='household_member', an owner
+ * removing someone else) and leave-household (resource_type=
+ * 'household_leave', a member removing themselves) both compile down to
+ * the SAME underlying operation -- lib/household/repo.ts's removeMember()
+ * already treats them as one DELETE, distinguished only by whether
+ * callerUserId===targetUserId, with RLS's household_members_delete
+ * policy (not this coordinator) enforcing who's allowed to do which.
+ * household_members has no id column of its own (its primary key is the
+ * composite (household_id, user_id)) and, per lib/lifecycle/types.ts's
+ * LIFECYCLE_TABLE_BY_RESOURCE, no lifecycle-tracked table at all -- so
+ * unlike every flow above, there is no transitionLifecycle() step here;
+ * this flow is represented entirely through deletion_requests, exactly
+ * as that module's own comment anticipates (see also
+ * lib/lifecycle/state-machine.ts's LifecycleResourceUntrackedError,
+ * which documents this exact fallback).
+ *
+ * removeMember() already carries its own well-tested authorization (RLS)
+ * and business rule (refuses to remove/leave the household's LAST
+ * remaining owner -- see removeMember()'s own ConflictError and
+ * scripts/household-regressions.ts's existing coverage of it) -- this
+ * coordinator deliberately does NOT reimplement or duplicate that rule.
+ * Reimplementing a security-critical invariant in a second place is how
+ * the two copies drift; calling the single existing function is the
+ * safer choice, at the cost of removeMember()'s mutation running in its
+ * OWN internal transaction (via createUserSupabaseClient) rather than
+ * inside a coordinator-supplied client. Because there is nothing
+ * external to defer afterward (no storage, no search index), the
+ * bookkeeping transition and audit write happen immediately after
+ * removeMember() returns, in this same function -- unlike the flows
+ * above, there is no separate finish...() step to call.
+ *
+ * Idempotent at the deletion_requests level: a repeat with the same
+ * idempotencyKey short-circuits on the ALREADY-CREATED row without
+ * calling removeMember() again (whether the first attempt succeeded or
+ * was refused), so a retry can never duplicate an audit event or attempt
+ * a second destructive call against a member already removed. A refusal
+ * (ConflictError/NotFoundError/ForbiddenError from removeMember()) is
+ * allowed to propagate unhandled -- app/api/household/members/[userId]/
+ * route.ts's existing routeErrorResponse() already maps all three to the
+ * correct HTTP status, so this coordinator does not need its own error
+ * class for this flow.
+ */
+async function performMembershipRemoval(args: {
+  accountId: string;
+  callerUserId: string;
+  targetUserId: string;
+  resourceType: "household_member" | "household_leave";
+  reasonCategory: DeletionReasonCategory;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  const { row: request, created } = await createOrGetDeletionRequest(pool, {
+    accountId: args.accountId,
+    resourceType: args.resourceType,
+    resourceId: args.targetUserId,
+    requestedBy: args.callerUserId,
+    reasonCategory: args.reasonCategory,
+    idempotencyKey: args.idempotencyKey,
+  });
+
+  if (!created) {
+    return { status: mapRequestStateToStatus(request), deletionRequestId: request.id, resourceId: args.targetUserId };
+  }
+
+  // The actual removal -- see this function's own doc comment on why
+  // removeMember() is called rather than reimplemented. A thrown error
+  // here leaves this deletion_requests row at its default
+  // pending_deletion state; a retry with the same idempotencyKey is
+  // caught by the `!created` branch above and safely returns without
+  // attempting the removal again.
+  await removeMember(args.callerUserId, args.accountId, args.targetUserId);
+
+  await transitionDeletionRequest(pool, {
+    id: request.id,
+    fromStates: ["pending_deletion"],
+    toState: "soft_deleted",
+    completedAt: new Date(),
+  }).catch(() => {
+    // A repeat call (idempotent retry) may already be past this state --
+    // unreachable in practice since the `!created` branch above already
+    // short-circuits every retry, kept for the same defensive symmetry
+    // every other flow's transition uses.
+  });
+
+  await appendDeletionAudit(pool, {
+    accountId: args.accountId,
+    deletionRequestId: request.id,
+    resourceType: args.resourceType,
+    resourceId: args.targetUserId,
+    actor: args.callerUserId,
+    fromState: null, // no lifecycle-tracked resource row exists for this flow to report a fromState for
+    toState: "soft_deleted",
+    correlationId: randomUUID(),
+    cleanupStatus: null,
+  });
+
+  return { status: "completed", deletionRequestId: request.id, resourceId: args.targetUserId };
+}
+
+/** Owner removes another member. See performMembershipRemoval()'s doc
+ * comment for the shared implementation and its rationale. */
+export async function requestHouseholdMemberRemoval(args: {
+  accountId: string;
+  callerUserId: string;
+  targetUserId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  return performMembershipRemoval({ ...args, resourceType: "household_member", reasonCategory: "owner_removed_member" });
+}
+
+/** A member removes themselves ("leave"). See performMembershipRemoval()'s
+ * doc comment for the shared implementation and its rationale -- in
+ * particular, removeMember()'s own last-owner protection applies exactly
+ * the same way here as for an owner-initiated removal, refusing a leave
+ * that would empty the household of owners. */
+export async function requestHouseholdLeave(args: {
+  accountId: string;
+  callerUserId: string;
+  targetUserId: string;
+  idempotencyKey: string;
+}): Promise<DeletionOutcome> {
+  return performMembershipRemoval({ ...args, resourceType: "household_leave", reasonCategory: "member_left" });
 }
 
 function mapRequestStateToStatus(request: DeletionRequestRow): DeletionRequestStatus {
