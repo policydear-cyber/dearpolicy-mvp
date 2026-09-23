@@ -137,7 +137,17 @@ export function costUsd(choice:ModelChoice,usage:{input:number;output:number;cac
 // waited out with the server's own retry-after, never treated as the document's
 // fault.
 // ---------------------------------------------------------------------------
-export type HostedReply={content:string;truncated:boolean;usage:{input:number;output:number;cached?:number}};
+/** Checkpoint 10: what the provider actually reported about the call it
+ * served, as opposed to what was requested (ModelChoice). A family alias
+ * ("flash", "haiku") is a request, never a resolved identity -- resolvedModel
+ * is populated ONLY from a field the provider's response itself returned for
+ * THIS call, never derived, defaulted, or copied from the request. When a
+ * provider's response shape does not carry one (or parsing it fails), the
+ * field is null, honestly, rather than falling back to the requested model
+ * name -- lib/ai/provenance.ts treats a null resolvedModel as grounds to
+ * mark the execution unverified. */
+export type ResolvedModelIdentity={resolvedModel:string|null;providerRequestId:string|null;finishReason:string|null;region:string|null};
+export type HostedReply={content:string;truncated:boolean;usage:{input:number;output:number;cached?:number};resolved:ResolvedModelIdentity};
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 // maxAttempts defaults to 8 (existing behaviour for every caller that does
 // not name it). A caller that DOES pass one -- like judgeRelevance's
@@ -174,6 +184,8 @@ async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeo
   throw lastError??new Error("Model service did not answer");
 }
 const OpenAIShape=z.object({
+  id:z.string().optional(),
+  model:z.string().optional(),
   choices:z.array(z.object({message:z.object({content:z.string().nullable()}),finish_reason:z.string().nullable().optional()})).min(1),
   usage:z.object({prompt_tokens:z.number().optional(),completion_tokens:z.number().optional(),
     prompt_tokens_details:z.object({cached_tokens:z.number().optional()}).optional()}).optional(),
@@ -200,9 +212,12 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
   if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
   const payload=OpenAIShape.parse(await response.json());
   return {content:payload.choices[0].message.content??"",truncated:payload.choices[0].finish_reason==="length",
-    usage:{input:payload.usage?.prompt_tokens??0,output:payload.usage?.completion_tokens??0,cached:payload.usage?.prompt_tokens_details?.cached_tokens}};
+    usage:{input:payload.usage?.prompt_tokens??0,output:payload.usage?.completion_tokens??0,cached:payload.usage?.prompt_tokens_details?.cached_tokens},
+    resolved:{resolvedModel:payload.model??null,providerRequestId:payload.id??null,finishReason:payload.choices[0].finish_reason??null,region:null}};
 }
 const AnthropicShape=z.object({
+  id:z.string().optional(),
+  model:z.string().optional(),
   content:z.array(z.object({type:z.string(),text:z.string().optional()})),
   stop_reason:z.string().nullable().optional(),
   usage:z.object({input_tokens:z.number(),output_tokens:z.number(),cache_read_input_tokens:z.number().optional()}).optional(),
@@ -227,13 +242,22 @@ export async function anthropicMessages(choice:ModelChoice,args:{system:string;u
   // The model may wrap the object in a code fence; the object is what counts.
   const content=text.replace(/^\s*```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"");
   return {content,truncated:payload.stop_reason==="max_tokens",
-    usage:{input:payload.usage?.input_tokens??0,output:payload.usage?.output_tokens??0,cached:payload.usage?.cache_read_input_tokens}};
+    usage:{input:payload.usage?.input_tokens??0,output:payload.usage?.output_tokens??0,cached:payload.usage?.cache_read_input_tokens},
+    resolved:{resolvedModel:payload.model??null,providerRequestId:payload.id??null,finishReason:payload.stop_reason??null,region:null}};
 }
 /** Gemini, natively. Google issues two kinds of key: AI Studio keys ("AIza…")
  * that work against generativelanguage.googleapis.com, and Vertex AI express
  * keys ("AQ.…") that work against aiplatform.googleapis.com. The request and
  * reply shapes are the same; only the host differs, so the key decides. */
 const GeminiShape=z.object({
+  // modelVersion is the exact resolved model Google actually served this
+  // call with (the requested name may be a family alias like "flash" that
+  // resolves to a specific dated model); responseId is Google's own id for
+  // this call, when the API version in use returns one. Neither is
+  // guaranteed present on every Gemini API surface/version -- absent means
+  // absent, never backfilled from the request.
+  modelVersion:z.string().optional(),
+  responseId:z.string().optional(),
   candidates:z.array(z.object({content:z.object({parts:z.array(z.object({text:z.string().optional()})).optional()}).optional(),
     finishReason:z.string().optional()})).optional(),
   usageMetadata:z.object({promptTokenCount:z.number().optional(),candidatesTokenCount:z.number().optional(),cachedContentTokenCount:z.number().optional()}).optional(),
@@ -302,7 +326,8 @@ export async function geminiGenerate(choice:ModelChoice,args:{system:string;user
   const text=(candidate?.content?.parts??[]).map(part=>part.text??"").join("");
   const content=text.replace(/^\s*```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"");
   return {content,truncated:candidate?.finishReason==="MAX_TOKENS",
-    usage:{input:payload.usageMetadata?.promptTokenCount??0,output:payload.usageMetadata?.candidatesTokenCount??0,cached:payload.usageMetadata?.cachedContentTokenCount}};
+    usage:{input:payload.usageMetadata?.promptTokenCount??0,output:payload.usageMetadata?.candidatesTokenCount??0,cached:payload.usageMetadata?.cachedContentTokenCount},
+    resolved:{resolvedModel:payload.modelVersion??null,providerRequestId:payload.responseId??null,finishReason:candidate?.finishReason??null,region:null}};
 }
 /** The provider's own explanation, as a sentence: the "message" field when the
  * body is JSON, otherwise the text. Never the key, never braces. */
@@ -330,7 +355,7 @@ export async function hostedStructuredCompletion(choice:ModelChoice,args:{system
 // needed. Local development keeps using PaddleOCR by default; see
 // lib/documents/ocr.ts for how the two paths are chosen.
 // ---------------------------------------------------------------------------
-export type HostedDocumentReply = { text: string; truncated: boolean; usage: { input: number; output: number; cached?: number } };
+export type HostedDocumentReply = { text: string; truncated: boolean; usage: { input: number; output: number; cached?: number }; resolved: ResolvedModelIdentity };
 
 const HOSTED_DOCUMENT_PROVIDERS: Provider[] = ["anthropic", "gemini"];
 export function supportsHostedDocumentReading(provider: Provider) {
@@ -360,7 +385,8 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
   if (!response.ok) throw new Error("Model request failed (" + response.status + "): " + providerMessage(await response.text()));
   const payload = AnthropicShape.parse(await response.json());
   const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
-  return { text, truncated: payload.stop_reason === "max_tokens", usage: { input: payload.usage?.input_tokens ?? 0, output: payload.usage?.output_tokens ?? 0, cached: payload.usage?.cache_read_input_tokens } };
+  return { text, truncated: payload.stop_reason === "max_tokens", usage: { input: payload.usage?.input_tokens ?? 0, output: payload.usage?.output_tokens ?? 0, cached: payload.usage?.cache_read_input_tokens },
+    resolved: { resolvedModel: payload.model ?? null, providerRequestId: payload.id ?? null, finishReason: payload.stop_reason ?? null, region: null } };
 }
 
 async function geminiDocumentText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
@@ -380,7 +406,8 @@ async function geminiDocumentText(choice: ModelChoice, args: { system: string; u
   if (payload.promptFeedback?.blockReason) throw new Error("The model declined this page: " + payload.promptFeedback.blockReason);
   const candidate = payload.candidates?.[0];
   const text = (candidate?.content?.parts ?? []).map((part) => part.text ?? "").join("");
-  return { text, truncated: candidate?.finishReason === "MAX_TOKENS", usage: { input: payload.usageMetadata?.promptTokenCount ?? 0, output: payload.usageMetadata?.candidatesTokenCount ?? 0, cached: payload.usageMetadata?.cachedContentTokenCount } };
+  return { text, truncated: candidate?.finishReason === "MAX_TOKENS", usage: { input: payload.usageMetadata?.promptTokenCount ?? 0, output: payload.usageMetadata?.candidatesTokenCount ?? 0, cached: payload.usageMetadata?.cachedContentTokenCount },
+    resolved: { resolvedModel: payload.modelVersion ?? null, providerRequestId: payload.responseId ?? null, finishReason: candidate?.finishReason ?? null, region: null } };
 }
 
 /** Reads a (small, single- or few-page) PDF document natively, returning its

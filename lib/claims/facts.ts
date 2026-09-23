@@ -325,6 +325,7 @@ export async function extractClaimFacts(args: { text: string; current?: ClaimFac
       // that the AI-extracted shape is intentionally narrower than the
       // full fact set.
       const parsed = await structuredCompletion<Partial<ClaimFacts>>({
+        operation: "claim_fact_finding",
         system: `${extractionRules}\n\nCLAIM FACT EXTRACTION\nExtract all facts explicitly stated in this user's message. Do not infer medical severity, claim eligibility, policy ownership, dates or costs. A reported death overrides injuries. Keep cancer site and stage when stated. Unknown values must be null/[]. Relative dates are resolved by the application; leave date fields null unless an explicit ISO date is quoted.`,
         user: `Pending question: ${args.pendingQuestion?.text ?? "none"}\nExisting facts (context only; do not repeat unless user confirms): ${JSON.stringify(factContext)}\nUser message: ${args.text}`,
         schema: ClaimFactsSchema,

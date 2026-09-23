@@ -95,6 +95,8 @@ export async function extractClaimEvidence(args: {
     user,
     schema: ClaimEvidenceExtractionSchema,
     role: "reading",
+    operation: "claim_evidence_extraction",
+    schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
     temperature: 0,
   });
   // structuredCompletion() already validated `raw` against

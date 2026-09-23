@@ -94,6 +94,7 @@ export async function readPageConditions(page:{page_number:number;text:string},p
   try{
     extraction=await structuredCompletion({
       role:"reading",
+      operation:"condition_catalog_extraction",
       schema:ConditionExtractionSchema,coerce:coerceConditions,
       temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
       system:SYSTEM,

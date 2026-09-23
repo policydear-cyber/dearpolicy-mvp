@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
+import { recordModelExecution, type KnownOperation } from "./provenance";
 function ledgerAccountId() { return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001"; }
 
 type CompletionRuntimeOptions = {
@@ -62,29 +64,59 @@ export async function structuredCompletion<T>(args: {
    * is acceptable; this only stops one malformed field discarding a whole
    * section of a reply that was otherwise correct. */
   coerce?: (value: unknown) => unknown;
+  /** Checkpoint 10: which governed operation this call is (see
+   * lib/ai/provenance.ts's KNOWN_OPERATIONS). Every call site SHOULD pass
+   * one; omitted defaults to "chat_reply" so existing callers keep working
+   * while they are migrated one at a time, but an execution recorded
+   * without an explicit operation is honestly a lower-fidelity provenance
+   * record, not a gap this default is meant to paper over. */
+  operation?: KnownOperation;
+  promptVersion?: string;
+  schemaVersion?: string;
+  correlationId?: string;
+  householdId?: string;
+  resourceId?: string;
 } & CompletionRuntimeOptions): Promise<T> {
   const jsonSchema = z.toJSONSchema(args.schema);
   const budget = args.maxOutputTokens;
 
   const role: ModelRole = args.role ?? "chat";
   const choice = modelFor(role);
+  const operation: KnownOperation = args.operation ?? "chat_reply";
+  const attemptGroupId = randomUUID();
   await assertUnderSpendCap(ledgerAccountId());
-    const call = async (target: typeof choice) => {
+    const call = async (target: typeof choice, attemptIndex: number) => {
       const started = Date.now();
+      const requestedAt = new Date();
       try {
         const reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
           temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
-        await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs: Date.now() - started, ok: true });
+        const durationMs = Date.now() - started;
+        await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
+        await recordModelExecution({
+          correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
+          householdId: args.householdId, resourceId: args.resourceId,
+          requested: { provider: target.provider, model: target.model, capability: role, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
+          requestedAt, resolved: reply.resolved, status: "succeeded",
+          usage: reply.usage, latencyMs: durationMs,
+        });
         return reply;
       } catch (error) {
-        await recordUsage({ role, choice: target, input: 0, output: 0, durationMs: Date.now() - started, ok: false });
+        const durationMs = Date.now() - started;
+        await recordUsage({ role, choice: target, input: 0, output: 0, durationMs, ok: false });
+        await recordModelExecution({
+          correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
+          householdId: args.householdId, resourceId: args.resourceId,
+          requested: { provider: target.provider, model: target.model, capability: role, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
+          requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
+        });
         throw error;
       }
     };
     let usedChoice = choice;
     let reply;
     try {
-      reply = await call(choice);
+      reply = await call(choice, 0);
     } catch (error) {
       // A rate limit is specific to the model, not to the household's
       // question -- when a cheaper tier of the same provider exists for this
@@ -93,7 +125,7 @@ export async function structuredCompletion<T>(args: {
       const fallback = /\(429\)|busy|rate limit|quota/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
       if (!fallback) throw error;
       usedChoice = fallback;
-      reply = await call(fallback);
+      reply = await call(fallback, 1);
     }
     let json: unknown;
     try { json = JSON.parse(reply.content); }

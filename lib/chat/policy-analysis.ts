@@ -176,6 +176,8 @@ export async function analyzePolicyWindow(args:{accountId:string;contract:Policy
   if(cache.rows[0])return validateAnalysis(PolicyAnalysisSchema.parse(cache.rows[0].analysis_json),args.sources,args.contract);
   const raw=await structuredCompletion({
     role:"reading",
+    operation:"coverage_extraction",
+    schemaVersion:"policy-analysis-v3",
     schema:PolicyAnalysisSchema,coerce:coercePolicyAnalysis,
     // 150 seconds was set when sections were read one after another, where a
     // retry cost the whole remaining budget. Read together, a section that has

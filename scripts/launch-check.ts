@@ -815,19 +815,30 @@ function checkRedactionVerification() {
 }
 
 function checkModelPromptSchemaGovernance() {
-  const hasUsageTable = existsSync("sql/model-usage.sql");
   report(
     "model_prompt_schema_governance",
     "blocked_by_code",
-    (hasUsageTable
-      ? "sql/model-usage.sql records provider/model/tokens/cost/duration per call, but not the resolved execution " +
-        "identity the spec requires: "
-      : "No model-usage persistence exists at all, and none of the following is recorded: ") +
-      "exact returned provider model ID/version, provider response/request id, prompt/schema version, input/" +
-      "output artifact version, retry/fallback chain, or region. lib/ai/providers.ts's alias resolution " +
-      "(gemini:flash etc.) is a legitimate, deliberate design choice per that file's own comment -- the gap is " +
-      "that no resolved execution identity is persisted alongside it, so a dynamically-resolved alias is not yet " +
-      "reproducible/invalidatable as the spec requires -- Priority 9.",
+    "Checkpoint 10: sql/model-provenance.sql's model_executions table now persists two-level identity per " +
+      "attempt -- requested (what the caller asked for, which may legitimately be a family alias such as " +
+      "\"flash\"/\"haiku\") and resolved (the exact model ID/version, provider request id, finish reason and " +
+      "region the PROVIDER'S OWN RESPONSE reported for that call, never backfilled from the requested alias) -- " +
+      "plus prompt/schema version, input artifact type/version, and attempt_group_id/attempt_index ordering for " +
+      "a fallback chain. lib/ai/provenance.ts's recordModelExecution() is wired into both of this codebase's " +
+      "governed AI chokepoints (lib/ai/llm.ts's structuredCompletion(), lib/documents/ocr-hosted.ts's " +
+      "attemptHostedOcr()) and, through them, all 13 call sites that reach a model provider, persisting every " +
+      "attempt -- success, failure, and each step of a fallback chain -- in order, confirmed end to end against " +
+      "a mocked provider response (not inferred from source: scripts/model-provenance-regressions.ts's real " +
+      "structuredCompletion() runs, not a reimplementation). computeVerified()/assertVerifiedForMonetaryUse() " +
+      "and validateCompatibility() are sabotage-and-restore-verified against live source for all 5 of the " +
+      "checkpoint's named cycles: (1) storing a family alias as the resolved identity when the provider returned " +
+      "none -- caught by a dedicated assertion on the persisted row, restored byte-identical; (2) skipping the " +
+      "minimum-schema-version compatibility check -- caught; (3) disabling assertVerifiedForMonetaryUse()'s " +
+      "throw -- caught; (4) letting a null resolved identity verify as true -- caught; (5) hiding the primary " +
+      "attempt's failed record before a fallback -- caught by the real end-to-end fallback-chain test, not a " +
+      "unit stub. Still blocked_by_code: assertVerifiedForMonetaryUse() is a sabotage-verified primitive that " +
+      "NOTHING in this codebase's calculators or evidence-linking code actually calls yet, so no monetary result " +
+      "is presently gated by it -- wiring that enforcement into the calculation engine, plus Checkpoint 11's " +
+      "controlled-rollout/stale-data invalidation on top of this same identity, is Priority 9/10.",
   );
 }
 

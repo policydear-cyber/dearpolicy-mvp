@@ -1,6 +1,8 @@
 import { PDFDocument } from "pdf-lib";
+import { randomUUID } from "node:crypto";
 import { hostedDocumentToText, modelFor } from "@/lib/ai/providers";
 import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
+import { recordModelExecution } from "@/lib/ai/provenance";
 import type { PdfPage } from "@/lib/documents/pdf";
 
 type BridgePage = { pageNumber: number; text: string };
@@ -24,12 +26,20 @@ const SYSTEM = "You transcribe scanned insurance-document pages exactly as print
  * model actually reported rather than throwing, so the caller can retry just
  * the pages it dropped instead of failing the whole document on one flaky
  * response. */
-async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pageNumbers: number[] }): Promise<BridgePage[]> {
+async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pageNumbers: number[]; correlationId?: string }): Promise<BridgePage[]> {
   const choice = modelFor("reading");
   await assertUnderSpendCap(args.accountId);
   const subset = await subsetPdf(args.bytes, args.pageNumbers);
   const pdfBase64 = Buffer.from(subset).toString("base64");
   const started = Date.now();
+  const requestedAt = new Date();
+  // Checkpoint 10: each attemptHostedOcr() call is its own single-attempt
+  // provenance group -- unlike structuredCompletion()'s model-tier fallback,
+  // there is no alternate-model retry here, only the caller
+  // (completePdfPagesWithHostedOcr) re-invoking this function for pages a
+  // prior call dropped, which is a new OCR operation on a different page
+  // subset, not a fallback attempt of the same one.
+  const attemptGroupId = randomUUID();
   let reply;
   try {
     reply = await hostedDocumentToText(choice, {
@@ -41,10 +51,22 @@ async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pa
       maxOutputTokens: Math.max(2048, args.pageNumbers.length * 1200),
     });
   } catch (error) {
-    await recordUsage({ role: "reading", choice, input: 0, output: 0, durationMs: Date.now() - started, ok: false });
+    const durationMs = Date.now() - started;
+    await recordUsage({ role: "reading", choice, input: 0, output: 0, durationMs, ok: false });
+    await recordModelExecution({
+      correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
+      requested: { provider: choice.provider, model: choice.model, capability: "reading" },
+      requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
+    });
     throw error;
   }
-  await recordUsage({ role: "reading", choice, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs: Date.now() - started, ok: true });
+  const durationMs = Date.now() - started;
+  await recordUsage({ role: "reading", choice, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
+  await recordModelExecution({
+    correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
+    requested: { provider: choice.provider, model: choice.model, capability: "reading" },
+    requestedAt, resolved: reply.resolved, status: "succeeded", usage: reply.usage, latencyMs: durationMs,
+  });
 
   let parsed: { pages?: BridgePage[] };
   try {

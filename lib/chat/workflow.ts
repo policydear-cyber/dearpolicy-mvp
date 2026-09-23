@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 import { readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
@@ -133,7 +134,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 }
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
-  const family=(await query<ClaimPerson>("SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at",[request.accountId])).rows;
+  const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
   if(!family.length)throw new Error("Add a family profile before starting a chat.");
   if(request.familyMemberId&&!family.some(p=>p.id===request.familyMemberId))throw new Error("Family profile not found.");
   const previousId=request.conversationId??request.claimSessionId;
@@ -193,6 +194,7 @@ async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknow
   try{
     const explanation=await structuredCompletion({
       role:"narration",
+      operation:"chat_reply",
       schema:ExplanationSchema,temperature:0.3,maxOutputTokens:450,timeoutMs:60_000,attempts:1,
       system:NARRATION_SYSTEM,user:JSON.stringify(packet),
     });

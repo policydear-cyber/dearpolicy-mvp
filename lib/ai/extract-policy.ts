@@ -215,6 +215,7 @@ export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyEx
   try {
     return await structuredCompletion({
       role: "reading",
+      operation: "policy_extraction",
       system: systemPrompt,
       user: `Extract only facts supported by these selected pages. The complete document will be indexed separately.\n\n${primarySample}`,
       schema: PolicyExtractionSchema,
@@ -230,6 +231,7 @@ export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyEx
     const fallbackSample = compactSample(pages, 4_200, 1_350);
     return structuredCompletion({
       role: "reading",
+      operation: "policy_extraction",
       system: systemPrompt,
       user: `Retry with a minimal evidence sample. Extract only clearly visible facts; use null/[] for everything else.\n\n${fallbackSample}`,
       schema: PolicyExtractionSchema,

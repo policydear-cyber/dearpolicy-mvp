@@ -105,7 +105,7 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
   for(const [index,batch] of batches(pages).entries()){
     args.report?.("Reading pages "+batch[0].page_number+"–"+batch[batch.length-1].page_number);
     const extraction=await structuredCompletion({
-      role:"reading",schema:ExtractionSchema,temperature:0,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
+      role:"reading",operation:"benefit_extraction",schema:ExtractionSchema,temperature:0,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         const rows=Array.isArray(source.rows)?source.rows:[];
         return {rows:rows.map(r=>{const row=(r&&typeof r==="object"?r:{}) as Record<string,unknown>;
@@ -132,7 +132,7 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
     try{
       args.report?.("Checking what was read");
       const verdict=await structuredCompletion({
-        role:"reading",schema:VerifySchema,temperature:0,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
+        role:"reading",operation:"benefit_extraction",schema:VerifySchema,temperature:0,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
         coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;return {verdicts:Array.isArray(source.verdicts)?source.verdicts:[]};},
         system:VERIFY_SYSTEM,
         user:JSON.stringify({rows:kept.map((row,i)=>({index:i,insuredName:row.insuredName??null,planName:row.planName,eventType:row.eventType,detail:row.detail??null,cause:row.cause??null,

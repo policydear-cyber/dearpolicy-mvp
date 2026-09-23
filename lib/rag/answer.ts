@@ -51,6 +51,7 @@ export async function answerFromEvidence(args: {
   const system = `${dearPolicyCoreRules()}\n\nYou are the explanation layer for DearPolicy. This is a normal policy question, not a guided claim intake. Answer only from the supplied personal coverage facts and policy wording. Start with the direct answer. Generic wording may explain an owned product but may never create ownership. Do not introduce any fact that is not present below.`;
 
   const parsed = await structuredCompletion<z.infer<typeof ModelAnswerSchema>>({
+    operation: "rag_answer",
     system,
     user: `QUESTION:\n${args.question}\n\nPERSONAL COVERAGE FACTS:\n${ownership}\n\nSUPPORTING POLICY WORDING:\n${evidence}`,
     schema: ModelAnswerSchema,
