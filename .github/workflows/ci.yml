@@ -130,6 +130,9 @@ jobs:
       - name: Claim-evidence deletion regression suite (logical-access revocation, open/completed claim invalidation via evidence_document_id, single-writer audit trail, business-supersede-chain isolation -- real Postgres via PGlite, no live DB needed)
         run: npm run security:claim-evidence-deletion-test
 
+      - name: Family-member deletion regression suite (active-policy/policy_members/chat/claim/coverage-rule/premium-record refusal, inactive-policy exclusion, idempotency -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:family-member-deletion-test
+
       - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
         run: npm run security:placeholder-content-test
 

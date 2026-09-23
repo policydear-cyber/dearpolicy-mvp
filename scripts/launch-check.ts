@@ -664,8 +664,17 @@ function checkDataDeletionAndInvalidation() {
       `otherwise keep surfacing. All writes to claim_evidence_audit_log go through the single-writer ` +
       `appendClaimEvidenceAudit() convention. See scripts/claim-evidence-deletion-regressions.ts for the 9 ` +
       `behavioral cases proving this, including a sabotage-and-restore-verified check on the evidence-match ` +
-      `invalidation step. This capability stays blocked until every one of the 8 deletion flows the spec ` +
-      `requires is implemented and regression-tested, not merely until the shared machinery exists.`,
+      `invalidation step. Family-member deletion additionally migrates what was previously a raw, unrecoverable ` +
+      `DELETE FROM family_members in app/api/family/[id]/route.ts (bypassing this checkpoint's lifecycle ` +
+      `machinery entirely, despite family_members already being read-side migrated via activePredicate()) onto ` +
+      `the same CAS state machine, while preserving unchanged the pre-existing product rule that refuses -- ` +
+      `rather than cascades -- deletion of a profile with any linked policy, policy_members link, chat history, ` +
+      `claim session, coverage-ledger rule, or premium record; a policy already excluded by activePredicate() ` +
+      `(e.g. already soft-deleted) correctly does not block the member's own deletion. See ` +
+      `scripts/family-member-deletion-regressions.ts for the 11 behavioral cases proving this, including a ` +
+      `sabotage-and-restore-verified check on the linked-activity precondition. This capability stays blocked ` +
+      `until every one of the 8 deletion flows the spec requires is implemented and regression-tested, not ` +
+      `merely until the shared machinery exists.`,
   );
 }
 
@@ -907,6 +916,7 @@ async function checkGithubCiStatus() {
       "security:active-read-scopes-test",
       "security:policy-deletion-test",
       "security:claim-evidence-deletion-test",
+      "security:family-member-deletion-test",
       "security:placeholder-content-test",
     ];
     const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
