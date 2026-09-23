@@ -1,6 +1,9 @@
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
 import type { ClaimAssessmentItem, ClaimFacts } from "./types";
+import { recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export type MonetaryBlockReason =
   | "STATUS_NOT_ELIGIBLE"
@@ -98,6 +101,38 @@ export function evaluateMonetaryEligibility(args: {
   return { status: "allowed" };
 }
 
+/** Checkpoint 14b: production telemetry for the ONE chokepoint every
+ * calculator's output (accidental-death.ts, critical-illness.ts,
+ * death-benefit.ts, disability-benefit.ts, disability-income.ts,
+ * hospital-cash.ts, medical-reimbursement.ts, evidence.ts) passes
+ * through before a monetary figure is allowed to become user-visible.
+ * Fire-and-forget (never awaited by its caller) and failure-isolated --
+ * recordEvent() itself guarantees telemetry can never fail or slow down
+ * a real claim assessment. Never constructs a raw payload by hand: only
+ * structural fields (counts, reason codes, pseudonymized refs) ever
+ * reach recordEvent(), which still runs everything through redactDeep()
+ * regardless. */
+function recordMonetaryGateEvent(args: {
+  name: string;
+  correlationId?: string;
+  householdId?: string;
+  resourceId?: string;
+  blockedReasonCodes: string[];
+  totalItems: number;
+}) {
+  const blockedCount = args.blockedReasonCodes.length;
+  void recordEvent({
+    name: args.name,
+    correlationId: resolveCorrelationId(args.correlationId),
+    status: blockedCount > 0 ? "failure" : "success",
+    errorCategory: blockedCount > 0 ? "calculation" : null,
+    householdRef: args.householdId ? pseudonymizeId(args.householdId) : null,
+    resourceRef: args.resourceId ? pseudonymizeId(args.resourceId) : null,
+    monetaryGateReason: blockedCount > 0 ? args.blockedReasonCodes[0] : null,
+    extra: { totalItems: args.totalItems, blockedCount, blockedReasonCodes: args.blockedReasonCodes },
+  });
+}
+
 /**
  * Removes unsafe monetary output while preserving the benefit and the exact
  * reason it needs review. This function is intentionally idempotent.
@@ -106,16 +141,21 @@ export function enforceMonetarySafety(
   items: ClaimAssessmentItem[],
   facts: ClaimFacts,
   coverages: OwnedCoverage[],
+  context: { correlationId?: string; householdId?: string; resourceId?: string } = {},
 ): ClaimAssessmentItem[] {
-  return items.map((item) => {
+  const blockedReasonCodes: string[] = [];
+  let totalGated = 0;
+  const result = items.map((item) => {
     const hasMonetaryOutput =
       item.amountText != null || item.calculatedAmount != null || item.currency != null;
     if (!hasMonetaryOutput) return item;
+    totalGated++;
 
     const decision = evaluateMonetaryEligibility({ item, facts, coverages });
     if (decision.status === "allowed") {
       return { ...item, monetaryDecision: decision };
     }
+    blockedReasonCodes.push(decision.reasonCode);
 
     return {
       ...item,
@@ -130,6 +170,10 @@ export function enforceMonetarySafety(
       conditions: [...new Set([...item.conditions, decision.message])],
     };
   });
+  if (totalGated > 0) {
+    recordMonetaryGateEvent({ name: "claims.calculator.monetary_gate", ...context, blockedReasonCodes, totalItems: totalGated });
+  }
+  return result;
 }
 
 
@@ -200,8 +244,13 @@ export function evaluateChatMonetaryEligibility(item: ClaimItem): MonetaryDecisi
   return { status: "allowed" };
 }
 
-export function enforceChatMonetarySafety(items: ClaimItem[]): ClaimItem[] {
-  return items.map((item) => {
+export function enforceChatMonetarySafety(
+  items: ClaimItem[],
+  context: { correlationId?: string; householdId?: string; resourceId?: string } = {},
+): ClaimItem[] {
+  const blockedReasonCodes: string[] = [];
+  let totalGated = 0;
+  const result = items.map((item) => {
     // This gate polices a COMPUTED claim figure -- one this code actually
     // calculated and is asserting as a potential payout. Several call sites
     // set `amountText` to plain descriptive prose with no `calculatedAmount`
@@ -215,8 +264,10 @@ export function enforceChatMonetarySafety(items: ClaimItem[]): ClaimItem[] {
     // this invariant in the first place.
     const hasMonetaryOutput = item.calculatedAmount != null;
     if (!hasMonetaryOutput) return item;
+    totalGated++;
     const decision = evaluateChatMonetaryEligibility(item);
     if (decision.status === "allowed") return item;
+    blockedReasonCodes.push(decision.reasonCode);
     return {
       ...item,
       status: ["likely_applicable", "potentially_applicable"].includes(item.status)
@@ -233,4 +284,8 @@ export function enforceChatMonetarySafety(items: ClaimItem[]): ClaimItem[] {
       conditions: [...new Set([...item.conditions, decision.message])],
     };
   });
+  if (totalGated > 0) {
+    recordMonetaryGateEvent({ name: "chat.calculator.monetary_gate", ...context, blockedReasonCodes, totalItems: totalGated });
+  }
+  return result;
 }

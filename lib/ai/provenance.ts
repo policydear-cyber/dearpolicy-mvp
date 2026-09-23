@@ -93,6 +93,38 @@ export function isKnownOperation(value: string): value is KnownOperation {
   return (KNOWN_OPERATIONS as readonly string[]).includes(value);
 }
 
+/** Checkpoint 14b: which KNOWN_OPERATIONS entries can feed a monetary
+ * result, an evidence match, a claim-eligibility determination, a
+ * composed decision packet, or a user-facing policy answer presented as
+ * current -- exactly the surfaces assertVerifiedForMonetaryUse()'s own
+ * doc comment names. Gated centrally at the two real chokepoints every
+ * one of these operations already goes through (lib/ai/llm.ts's
+ * structuredCompletion(), lib/documents/ocr-hosted.ts's
+ * attemptHostedOcr()) rather than at each individual calculator/
+ * evidence-matching call site -- those sites never see a raw model
+ * response or a ModelExecutionRecord to check in the first place, only
+ * the already-extracted structured data, so the chokepoint is the only
+ * place a "was this actually verified" decision can be made before that
+ * data starts propagating. relevance_judging is deliberately excluded:
+ * it only narrows which candidates get considered downstream (a ranking
+ * aid), it is never itself persisted as a fact, a monetary figure, or a
+ * user-facing answer. */
+export const MONETARY_GATED_OPERATIONS: ReadonlySet<KnownOperation> = new Set([
+  "policy_extraction",
+  "coverage_extraction",
+  "benefit_extraction",
+  "condition_catalog_extraction",
+  "claim_evidence_extraction",
+  "claim_fact_finding",
+  "medical_evidence_extraction",
+  "chat_reply",
+  "chat_fact_finding",
+  "rag_answer",
+  "catalog_building",
+  "ledger_extraction",
+  "hosted_ocr",
+]);
+
 export type RequestedModelIdentity = {
   provider: Provider;
   model: string;

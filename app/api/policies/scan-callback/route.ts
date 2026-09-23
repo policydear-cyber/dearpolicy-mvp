@@ -4,6 +4,9 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { verifyAndConsumeCallback } from "@/lib/scanning/callback-auth";
 import { recordPolicyScanResult } from "@/lib/policies/quarantine/store";
+import { recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export const runtime = "nodejs";
 // Never reachable from a browser session -- authenticated by an HMAC
@@ -63,6 +66,20 @@ export async function POST(request: NextRequest) {
   });
   if (!result.ok) {
     logRejectedCallback(provider, result.code, result.message);
+    // Checkpoint 14b: "malware scanning" was named as a required
+    // telemetry call site -- a rejected scan callback (bad signature,
+    // replay, expired timestamp) is exactly the kind of security-relevant
+    // event lib/telemetry/alerts.ts's alert conditions are meant to
+    // watch for. Never includes the raw signature/body -- only the
+    // structural failure code, already safe by design.
+    void recordEvent({
+      name: "scan_callback.rejected",
+      correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")),
+      route: "/api/policies/scan-callback",
+      status: "failure",
+      errorCategory: "scanner",
+      extra: { provider, code: result.code },
+    });
     const status = result.code === "REPLAYED_EVENT" ? 409 : 401;
     return NextResponse.json({ error: result.message }, { status });
   }
@@ -71,6 +88,14 @@ export async function POST(request: NextRequest) {
     // unreachable in practice (a real provider signs a real payload), but
     // handled explicitly rather than asserted away.
     logRejectedCallback(provider, "MALFORMED_PAYLOAD", "Signature verified but body did not match the expected payload shape.");
+    void recordEvent({
+      name: "scan_callback.rejected",
+      correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")),
+      route: "/api/policies/scan-callback",
+      status: "failure",
+      errorCategory: "scanner",
+      extra: { provider, code: "MALFORMED_PAYLOAD" },
+    });
     return NextResponse.json({ error: "Malformed payload" }, { status: 400 });
   }
 
@@ -81,6 +106,7 @@ export async function POST(request: NextRequest) {
   // request's response shape or status code either.
   const owner = await query<{ account_id: string }>(`SELECT account_id::text FROM policies WHERE id=$1 AND ${activePredicate()}`, [parsed.policyId]);
   const accountId = owner.rows[0]?.account_id;
+  const correlationId = resolveCorrelationId(request.headers.get("x-correlation-id"));
   if (accountId) {
     await recordPolicyScanResult({
       accountId,
@@ -89,6 +115,30 @@ export async function POST(request: NextRequest) {
       scanProvider: provider,
       scanResultDetail: parsed.detail ?? null,
       scanEventId: parsed.eventId,
+    });
+    void recordEvent({
+      name: "scan_callback.result",
+      correlationId,
+      route: "/api/policies/scan-callback",
+      status: parsed.verdict === "clean" ? "success" : "failure",
+      errorCategory: parsed.verdict === "clean" ? null : "scanner",
+      householdRef: pseudonymizeId(accountId),
+      resourceRef: pseudonymizeId(parsed.policyId),
+      extra: { provider, verdict: parsed.verdict },
+    });
+  } else {
+    // An authenticated callback for a policyId this account can no longer
+    // resolve (deleted/superseded/unknown) -- worth knowing about
+    // operationally even though the HTTP response stays identical to the
+    // success case (no existence signal leaks through the response).
+    void recordEvent({
+      name: "scan_callback.unresolved_policy",
+      correlationId,
+      route: "/api/policies/scan-callback",
+      status: "failure",
+      errorCategory: "scanner",
+      resourceRef: pseudonymizeId(parsed.policyId),
+      extra: { provider },
     });
   }
 

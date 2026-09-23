@@ -76,6 +76,8 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
+import { recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 
 export type QueryableDb = {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
@@ -645,6 +647,28 @@ export async function executeManifest(args: ExecuteCleanupArgs): Promise<Execute
       });
     }
   }
+
+  // Checkpoint 14b: "storage cleanup" was named as a required telemetry
+  // call site -- one summary event per executeManifest() run, the same
+  // "one call = one event" convention this checkpoint's other chokepoint
+  // integrations use. Every per-object outcome is already durably
+  // recorded by appendCleanupAudit() above (its own redacted audit log);
+  // this is the operational signal an alert/dashboard watches. Never
+  // includes a raw storage key -- only counts and the driver/domain,
+  // which are not secrets.
+  void recordEvent({
+    name: "storage.cleanup.executed",
+    correlationId: resolveCorrelationId(undefined),
+    status: result.failed.length > 0 ? "failure" : "success",
+    errorCategory: result.failed.length > 0 ? "storage" : null,
+    processingState: `${args.driver.name}/${args.domain}`,
+    extra: {
+      deleted: result.deleted.length,
+      skippedReferenced: result.skippedReferenced.length,
+      skippedAlreadyGone: result.skippedAlreadyGone.length,
+      failed: result.failed.length,
+    },
+  });
 
   return result;
 }

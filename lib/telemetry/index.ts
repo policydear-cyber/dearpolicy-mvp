@@ -92,9 +92,21 @@ export async function recordEvent(input: RecordEventInput): Promise<void> {
   // indistinguishable from an opaque token to LONG_TOKEN_PATTERN and gets
   // mangled into "[REDACTED:token]", corrupting the one field every
   // downstream alert/dashboard groups and matches on.
-  const { correlationId, timestamp, name, ...rest } = event;
-  const redactedRest = redactDeep(rest) as Omit<TelemetryEvent, "correlationId" | "timestamp" | "name">;
-  const redacted: TelemetryEvent = { name, correlationId, timestamp, ...redactedRest };
+  // Checkpoint 14b: monetaryGateReason joins this carve-out for the exact
+  // same reason as name -- it is always a short, closed-enum,
+  // code-defined literal (lib/claims/monetary-gate.ts's
+  // MonetaryBlockReason, e.g. "UNRESOLVED_COVERAGE_MAPPING", 28 chars),
+  // never user- or model-derived text, and several of that enum's own
+  // values are >=20 chars -- discovered because wiring real telemetry
+  // into the calculator chokepoint (enforceMonetarySafety()) was the
+  // first production call site to actually populate this field, and its
+  // own regression suite (scripts/monetary-gate-regressions.ts) caught
+  // "NO_DETERMINISTIC_AMOUNT"/"UNRESOLVED_COVERAGE_MAPPING"/
+  // "MISSING_RULE_EVIDENCE" all silently becoming "[REDACTED:token]" to
+  // LONG_TOKEN_PATTERN before this carve-out existed.
+  const { correlationId, timestamp, name, monetaryGateReason, ...rest } = event;
+  const redactedRest = redactDeep(rest) as Omit<TelemetryEvent, "correlationId" | "timestamp" | "name" | "monetaryGateReason">;
+  const redacted: TelemetryEvent = { name, correlationId, timestamp, monetaryGateReason, ...redactedRest };
   try {
     await withTimeout(currentAdapter.send([redacted]), TELEMETRY_SEND_TIMEOUT_MS);
   } catch {

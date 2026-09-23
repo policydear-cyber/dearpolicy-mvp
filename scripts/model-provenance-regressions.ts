@@ -37,6 +37,7 @@ import {
   validateCompatibility,
   isKnownOperation,
   KNOWN_OPERATIONS,
+  MONETARY_GATED_OPERATIONS,
   ensureProvenanceSchema,
   type RecordModelExecutionInput,
 } from "@/lib/ai/provenance";
@@ -475,20 +476,124 @@ async function runEndToEndTests() {
           { status: 200, headers: { "content-type": "application/json" } },
         )) as typeof fetch;
 
-      await structuredCompletion({
-        role: "reading",
-        operation: "policy_extraction",
-        system: "test",
-        user: "test",
-        schema: z.object({ ok: z.boolean() }),
-        attempts: 1,
-      });
+      // Checkpoint 14b: policy_extraction is a MONETARY_GATED_OPERATIONS
+      // entry, so structuredCompletion() itself now refuses to hand back
+      // an unverified result (see the dedicated gate cases below) --
+      // this test's own concern is narrower and unchanged: what actually
+      // got PERSISTED for the unverified attempt, which is why it still
+      // needs to reach past the now-expected rejection.
+      await assert.rejects(
+        () =>
+          structuredCompletion({
+            role: "reading",
+            operation: "policy_extraction",
+            system: "test",
+            user: "test",
+            schema: z.object({ ok: z.boolean() }),
+            attempts: 1,
+          }),
+        UnverifiedModelProvenanceError,
+      );
 
       const rows = await pool.query<{ resolved_model: string | null; verified: boolean; requested_model: string }>(
         `SELECT resolved_model, verified, requested_model FROM model_executions WHERE operation='policy_extraction' ORDER BY created_at DESC LIMIT 1`,
       );
       assert.equal(rows.rows[0].resolved_model, null, "must stay null -- never silently defaulted to the requested family alias");
       assert.equal(rows.rows[0].verified, false, "an execution with no exact resolved identity must remain unverified, per the checkpoint's own requirement");
+    });
+
+    // -------------------------------------------------------------------
+    // Checkpoint 14b: assertVerifiedForMonetaryUse() had zero real callers
+    // before this checkpoint (scripts/launch-check.ts's own text said so).
+    // These cases prove the REAL production chokepoint -- structuredCompletion()
+    // itself, not a reimplementation or a unit test of assertVerifiedForMonetaryUse()
+    // in isolation -- now refuses to hand a monetary-gated operation's caller
+    // (a calculator, evidence-matching code, composition) an unverified
+    // result, and that a non-gated operation (relevance_judging) is
+    // deliberately left alone.
+    // -------------------------------------------------------------------
+    await testAsync("end-to-end: structuredCompletion() REJECTS a monetary-gated operation (claim_evidence_extraction) when the provider reports no resolved model", async () => {
+      global.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            id: "msg_unverified_gated",
+            content: [{ type: "text", text: '{"ok":true}' }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 2 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )) as typeof fetch;
+
+      assert.equal(MONETARY_GATED_OPERATIONS.has("claim_evidence_extraction"), true, "test assumption: claim_evidence_extraction must be a gated operation");
+
+      await assert.rejects(
+        () =>
+          structuredCompletion({
+            role: "reading",
+            operation: "claim_evidence_extraction",
+            system: "test",
+            user: "test",
+            schema: z.object({ ok: z.boolean() }),
+            attempts: 1,
+          }),
+        UnverifiedModelProvenanceError,
+        "an unverified claim_evidence_extraction result must never reach the caller -- calculators/evidence-matching downstream must not be able to trust it",
+      );
+
+      const rows = await pool.query<{ status: string; verified: boolean }>(
+        `SELECT status, verified FROM model_executions WHERE operation='claim_evidence_extraction' ORDER BY created_at DESC LIMIT 5`,
+      );
+      assert.equal(rows.rows.length, 1, "exactly one model_executions row for this attempt -- assertVerifiedForMonetaryUse() rejecting must not be re-caught and re-recorded as a second failed attempt");
+      assert.equal(rows.rows[0].status, "succeeded", "the provider call itself succeeded -- only the monetary gate refused it");
+      assert.equal(rows.rows[0].verified, false);
+    });
+
+    await testAsync("end-to-end: structuredCompletion() does NOT gate a non-monetary operation (relevance_judging) even when unverified", async () => {
+      global.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            content: [{ type: "text", text: '{"ok":true}' }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 2 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )) as typeof fetch;
+
+      assert.equal(MONETARY_GATED_OPERATIONS.has("relevance_judging"), false, "test assumption: relevance_judging must NOT be a gated operation");
+
+      const result = await structuredCompletion({
+        role: "judgement",
+        operation: "relevance_judging",
+        system: "test",
+        user: "test",
+        schema: z.object({ ok: z.boolean() }),
+        attempts: 1,
+      });
+      assert.equal(result.ok, true, "a non-gated operation must still return its result even when unverified -- gating is scoped to monetary-relevant operations only");
+    });
+
+    await testAsync("end-to-end: a VERIFIED monetary-gated operation (claim_evidence_extraction) is returned normally, not blocked", async () => {
+      global.fetch = (async () =>
+        new Response(
+          JSON.stringify({
+            id: "msg_verified_gated",
+            model: "claude-haiku-4-5-20250620",
+            content: [{ type: "text", text: '{"ok":true}' }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 12, output_tokens: 4 },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )) as typeof fetch;
+
+      const result = await structuredCompletion({
+        role: "reading",
+        operation: "claim_evidence_extraction",
+        system: "test",
+        user: "test",
+        schema: z.object({ ok: z.boolean() }),
+        attempts: 1,
+      });
+      assert.equal(result.ok, true, "the gate must never block a genuinely verified result");
     });
   } finally {
     global.fetch = originalFetch;
@@ -504,9 +609,11 @@ async function main() {
   console.log(
     `model-provenance regressions passed: ${cases} cases (computeVerified\\'s verified/unverified boundary, persistence of succeeded/failed/unverified attempts, ` +
       `an in-order failed-primary-then-succeeded-fallback pair sharing one attempt group, pseudonymized household/resource refs, a mirrored telemetry event, ` +
-      `persistence failure isolation, the assertVerifiedForMonetaryUse gate, compatibility validation, known-operation closure, and three real end-to-end ` +
-      `structuredCompletion() runs against a mocked provider: a clean success, a rate-limited primary with a successful fallback, and a response with no ` +
-      `resolved model at all).`,
+      `persistence failure isolation, the assertVerifiedForMonetaryUse gate, compatibility validation, known-operation closure, six real end-to-end ` +
+      `structuredCompletion() runs against a mocked provider (a clean success, a rate-limited primary with a successful fallback, a response with no ` +
+      `resolved model at all, a monetary-gated operation REJECTED for lack of verification without double-recording the attempt, a non-gated operation ` +
+      `left unblocked even when unverified, and a verified monetary-gated operation returned normally) -- proving Checkpoint 14b's real production wiring ` +
+      `of assertVerifiedForMonetaryUse() into structuredCompletion() itself, not a reimplementation).`,
   );
 }
 

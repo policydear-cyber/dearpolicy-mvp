@@ -3,6 +3,8 @@ import { enforceChatMonetarySafety, enforceMonetarySafety, evaluateChatMonetaryE
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimFacts } from "@/lib/claims/types";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimItem } from "@/types";
+import { setTelemetryAdapter, getTelemetryAdapter } from "@/lib/telemetry";
+import { CapturingTelemetryAdapter } from "@/lib/telemetry/adapters";
 
 const coverage: OwnedCoverage = {
   id: "coverage-1",
@@ -170,6 +172,46 @@ export function runMonetaryGateRegressions() {
   }]);
   assert.equal(blockedLiveMapping.amountText, null);
   assert.equal(blockedLiveMapping.status, "needs_document");
+
+  // -------------------------------------------------------------------
+  // Checkpoint 14b: privacy_safe_observability -- "calculators" was named
+  // as a required telemetry call site scripts/launch-check.ts's own text
+  // said was NOT yet wired. These cases exercise the REAL production
+  // chokepoint (enforceMonetarySafety()/enforceChatMonetarySafety(),
+  // called from lib/claims/orchestrator.ts and lib/chat/workflow.ts) end
+  // to end with a CapturingTelemetryAdapter, not a reimplementation or a
+  // direct unit test of recordEvent() in isolation.
+  // -------------------------------------------------------------------
+  const previousAdapter = getTelemetryAdapter();
+  const capturing = new CapturingTelemetryAdapter();
+  setTelemetryAdapter(capturing);
+  try {
+    capturing.events.length = 0;
+    enforceMonetarySafety([formattedOnly], facts, [coverage], { householdId: "household-abc", resourceId: "session-xyz" });
+    const calcEvents = capturing.events.filter((e) => e.name === "claims.calculator.monetary_gate");
+    assert.equal(calcEvents.length, 1, "enforceMonetarySafety() must emit exactly one telemetry event per call when it gates at least one item");
+    assert.equal(calcEvents[0].status, "failure");
+    assert.equal(calcEvents[0].errorCategory, "calculation");
+    assert.equal(calcEvents[0].monetaryGateReason, "NO_DETERMINISTIC_AMOUNT");
+    assert.ok(calcEvents[0].householdRef, "the household ref must be present and pseudonymized, never the raw id");
+    assert.notEqual(calcEvents[0].householdRef, "household-abc", "must never emit the raw household id -- pseudonymizeId() must have run");
+
+    capturing.events.length = 0;
+    enforceMonetarySafety([supported], facts, [coverage], { householdId: "household-abc" });
+    const successEvents = capturing.events.filter((e) => e.name === "claims.calculator.monetary_gate");
+    assert.equal(successEvents.length, 1, "an all-allowed batch must still emit one success event, not silence");
+    assert.equal(successEvents[0].status, "success");
+    assert.equal(successEvents[0].errorCategory, null);
+
+    capturing.events.length = 0;
+    enforceChatMonetarySafety([{ ...liveSupported, contractId: undefined }], { householdId: "household-abc" });
+    const chatEvents = capturing.events.filter((e) => e.name === "chat.calculator.monetary_gate");
+    assert.equal(chatEvents.length, 1, "enforceChatMonetarySafety() must emit exactly one telemetry event per call when it gates at least one item");
+    assert.equal(chatEvents[0].status, "failure");
+    assert.equal(chatEvents[0].monetaryGateReason, "UNRESOLVED_COVERAGE_MAPPING");
+  } finally {
+    setTelemetryAdapter(previousAdapter);
+  }
 
   console.log("DearPolicy monetary eligibility gate regressions passed.");
 }

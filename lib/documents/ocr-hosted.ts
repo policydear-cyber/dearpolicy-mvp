@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import { randomUUID } from "node:crypto";
 import { hostedDocumentToText, modelFor } from "@/lib/ai/providers";
 import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
-import { recordModelExecution } from "@/lib/ai/provenance";
+import { recordModelExecution, assertVerifiedForMonetaryUse } from "@/lib/ai/provenance";
 import type { PdfPage } from "@/lib/documents/pdf";
 
 type BridgePage = { pageNumber: number; text: string };
@@ -62,11 +62,17 @@ async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pa
   }
   const durationMs = Date.now() - started;
   await recordUsage({ role: "reading", choice, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
-  await recordModelExecution({
+  const record = await recordModelExecution({
     correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
     requested: { provider: choice.provider, model: choice.model, capability: "reading" },
     requestedAt, resolved: reply.resolved, status: "succeeded", usage: reply.usage, latencyMs: durationMs,
   });
+  // Checkpoint 14b: hosted_ocr output feeds claim-evidence/document
+  // extraction directly -- gate here, the one real chokepoint, rather than
+  // at each downstream extraction call site. record === null (persistence
+  // failure) deliberately does not block the caller -- same failure-
+  // isolation contract as lib/ai/llm.ts's structuredCompletion().
+  if (record) assertVerifiedForMonetaryUse(record);
 
   let parsed: { pages?: BridgePage[] };
   try {

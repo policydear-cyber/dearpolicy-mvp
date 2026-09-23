@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { runAfterResponse } from "@/lib/http/background";
 import { createHash, randomUUID } from "node:crypto";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { savePolicyFile } from "@/lib/storage";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
@@ -134,12 +136,34 @@ export async function POST(request: NextRequest) {
       linkUploadMember: explicitFamilyMember,
     }));
 
+    // Checkpoint 14b: "uploads" was named as a required telemetry call
+    // site -- a successful queue outcome and the custom, early-return
+    // error branches below all bypassed routeErrorResponse() (and so
+    // never recorded telemetry) before this. Fire-and-forget, following
+    // the exact same shape recordErrorEvent() calls use throughout this
+    // codebase -- never blocks or slows the actual HTTP response.
+    void recordEvent({
+      name: "upload.policy.queued",
+      correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")),
+      route: "/api/policies/upload",
+      status: "success",
+    });
     return NextResponse.json({ policyId, status: "queued" }, { status: 202 });
   } catch (error) {
-    if (error instanceof NoFamilyMember) return NextResponse.json({ error: "Create at least one family profile before uploading documents." }, { status: 400 });
-    if (error instanceof FamilyMemberNotFound) return NextResponse.json({ error: "Family member not found." }, { status: 404 });
-    if (error instanceof DuplicateDocument) return NextResponse.json({ error: `This exact document is already in DearPolicy as ${error.filename}.` }, { status: 409 });
-    const authResponse = routeErrorResponse(error);
+    const correlationId = resolveCorrelationId(request.headers.get("x-correlation-id"));
+    if (error instanceof NoFamilyMember) {
+      void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
+      return NextResponse.json({ error: "Create at least one family profile before uploading documents." }, { status: 400 });
+    }
+    if (error instanceof FamilyMemberNotFound) {
+      void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
+      return NextResponse.json({ error: "Family member not found." }, { status: 404 });
+    }
+    if (error instanceof DuplicateDocument) {
+      void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
+      return NextResponse.json({ error: `This exact document is already in DearPolicy as ${error.filename}.` }, { status: 409 });
+    }
+    const authResponse = routeErrorResponse(error, { request, route: "/api/policies/upload" });
     if (authResponse.status === 500) return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     return authResponse;
   }

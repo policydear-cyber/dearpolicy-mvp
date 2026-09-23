@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
-import { recordModelExecution, type KnownOperation } from "./provenance";
+import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
 function ledgerAccountId() { return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001"; }
 
@@ -97,19 +97,20 @@ export async function structuredCompletion<T>(args: {
     const call = async (target: typeof choice, attemptIndex: number) => {
       const started = Date.now();
       const requestedAt = new Date();
+      let reply: Awaited<ReturnType<typeof hostedStructuredCompletion>>;
+      let record: Awaited<ReturnType<typeof recordModelExecution>>;
       try {
-        const reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
+        reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
           temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
         const durationMs = Date.now() - started;
         await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
-        await recordModelExecution({
+        record = await recordModelExecution({
           correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
           householdId: args.householdId, resourceId: args.resourceId,
           requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
           requestedAt, resolved: reply.resolved, status: "succeeded",
           usage: reply.usage, latencyMs: durationMs,
         });
-        return reply;
       } catch (error) {
         const durationMs = Date.now() - started;
         await recordUsage({ role, choice: target, input: 0, output: 0, durationMs, ok: false });
@@ -121,6 +122,27 @@ export async function structuredCompletion<T>(args: {
         });
         throw error;
       }
+      // Checkpoint 14b: this is the ONE place every monetary-relevant AI
+      // operation's output becomes available to its caller -- gate here,
+      // not in each calculator/evidence-matching call site downstream,
+      // which never sees a ModelExecutionRecord to check in the first
+      // place. Deliberately OUTSIDE the try/catch above: assertVerified-
+      // ForMonetaryUse() rejecting a genuinely successful provider call
+      // must never be re-caught and re-recorded as a second, misleading
+      // "failed"/model_provider model_executions row for the same
+      // attemptIndex -- the call itself succeeded; only its trustworthiness
+      // for a monetary result did not. A record that failed to persist
+      // (record === null) is a provenance-INFRASTRUCTURE failure, not an
+      // identity problem, and deliberately does not block the caller
+      // either -- the same failure-isolation contract recordModelExecution()'s
+      // own doc comment describes. Throws UnverifiedModelProvenanceError,
+      // which does not match the rate-limit-shaped fallback trigger below,
+      // so an unverified primary attempt is rejected outright rather than
+      // silently retried on a fallback model.
+      if (record && MONETARY_GATED_OPERATIONS.has(operation)) {
+        assertVerifiedForMonetaryUse(record);
+      }
+      return reply;
     };
     let usedChoice = choice;
     let reply;

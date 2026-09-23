@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimAssessmentItem, ClaimFacts } from "../types";
+import { recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { findAggregateCapSignals, findCompositionSignals, type AggregateCapSignal } from "./relationships";
 import { resolvePolicyVersions } from "./duplicates";
 import {
@@ -31,6 +34,12 @@ export type ComposeClaimArgs = {
    * exact same evidenced source, never a second unverified fetch. */
   wordingPages: WordingPages;
   now?: Date;
+  /** Checkpoint 14b: household this composition run belongs to --
+   * telemetry-only, never used in a composition/calculation decision.
+   * Optional so every existing caller (and scripts/*-regressions.ts's
+   * direct unit-level calls) keeps compiling unchanged. */
+  accountId?: string;
+  correlationId?: string;
 };
 
 type StableIdPart = string | number | boolean | null | undefined | StableIdPart[];
@@ -114,7 +123,7 @@ const OWNERSHIP_DOCUMENT_ROLES = new Set(["certificate", "schedule", "endorsemen
  * split a shortfall between two benefits.
  */
 export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
-  const { claimEventId, familyMemberId, facts, coverages, assessments, wordingPages, now = new Date() } = args;
+  const { claimEventId, familyMemberId, facts, coverages, assessments, wordingPages, now = new Date(), accountId, correlationId } = args;
   const coverageById = new Map(coverages.map((c) => [c.id, c]));
   const eventDate = facts.eventType === "death" ? (facts.deathDate ?? facts.eventDate) : facts.eventType === "diagnosis" ? facts.diagnosisDate : facts.eventDate;
   const versionDecisions = resolvePolicyVersions(coverages, eventDate);
@@ -325,6 +334,27 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
     ]),
   ]);
 
+  // Checkpoint 14b: "composition" was named as a required telemetry call
+  // site -- composeClaim() is the ONE place more than one calculated
+  // benefit ever becomes a total (see its own doc comment above), so
+  // this is the single chokepoint for observing that outcome, exactly
+  // the same "one call = one event" convention lib/jobs/queue.ts's
+  // recordJobEvent() and lib/claims/monetary-gate.ts's
+  // recordMonetaryGateEvent() already use. Fire-and-forget, never awaited.
+  void recordEvent({
+    name: "claims.composition.completed",
+    correlationId: resolveCorrelationId(correlationId),
+    status: excludedBenefits.length > 0 ? "failure" : "success",
+    errorCategory: excludedBenefits.length > 0 ? "calculation" : null,
+    engineVersion: COMPOSITION_ENGINE_VERSION,
+    householdRef: accountId ? pseudonymizeId(accountId) : null,
+    resourceRef: pseudonymizeId(claimEventId),
+    extra: {
+      includedCount: policySections.flatMap((s) => s.benefits).filter((b) => b.status === "included").length,
+      excludedCount: excludedBenefits.length,
+      excludedReasonCodes: [...new Set(excludedBenefits.flatMap((b) => b.blockedReasonCodes))],
+    },
+  });
   return {
     claimEventId, familyMemberId, engineVersion: COMPOSITION_ENGINE_VERSION, calculationId, calculatedAt: now.toISOString(),
     policies: policySections, alternativeGroups, totalsByCurrency, excludedBenefits,
