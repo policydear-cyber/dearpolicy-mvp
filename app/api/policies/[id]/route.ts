@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { devAccountId, isUuid, pool } from "@/lib/db/client";
+import { isUuid } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { deletePolicyFile } from "@/lib/storage";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 
@@ -18,54 +20,52 @@ export async function DELETE(
 ) {
   const { id: policyId } = await params;
   if (!isUuid(policyId)) return NextResponse.json({ error: "Document not found" }, { status: 404 });
-  const accountId = devAccountId();
-  const client = await pool.connect();
-  let policy: PolicyFileRow | undefined;
 
+  let policy: PolicyFileRow | null;
+  let householdId: string;
   try {
-    await client.query("BEGIN");
+    const ctx = await requireHouseholdContext();
+    householdId = ctx.householdId;
 
-    const existing = await client.query<PolicyFileRow>(
-      `SELECT id, storage_key, original_filename
-         FROM policies
-        WHERE id=$1 AND account_id=$2
-        FOR UPDATE`,
-      [policyId, accountId],
-    );
+    policy = await createUserSupabaseClient(ctx.userId, async (client) => {
+      // FOR UPDATE locks the row for the duration of this transaction so a
+      // concurrent reprocess/link-person request can't race the delete --
+      // the row-level security predicate on account_id is what actually
+      // keeps this scoped to the caller's own household; FOR UPDATE only
+      // adds the concurrency guarantee the original implementation relied on.
+      const existing = await client.query<PolicyFileRow>(
+        `SELECT id, storage_key, original_filename
+           FROM policies
+          WHERE id=$1 AND account_id=$2
+          FOR UPDATE`,
+        [policyId, ctx.householdId],
+      );
 
-    policy = existing.rows[0];
-    if (!policy) {
-      await client.query("ROLLBACK");
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
-    }
+      const row = existing.rows[0];
+      if (!row) return null;
 
-    // Premium/payment rows use SET NULL foreign keys so that records can survive
-    // policy changes. When a user explicitly deletes an uploaded document, though,
-    // DearPolicy should also remove payment data derived from that document.
-    await client.query(
-      `DELETE FROM premium_records
-        WHERE account_id=$1
-          AND (source_document_id=$2 OR policy_id=$2)`,
-      [accountId, policyId],
-    );
+      // Premium/payment rows use SET NULL foreign keys so that records can
+      // survive policy changes. When a user explicitly deletes an uploaded
+      // document, though, DearPolicy should also remove payment data derived
+      // from that document.
+      await client.query(
+        `DELETE FROM premium_records
+          WHERE account_id=$1
+            AND (source_document_id=$2 OR policy_id=$2)`,
+        [ctx.householdId, policyId],
+      );
 
-    // policy_pages, policy_chunks, policy_coverages, policy_members,
-    // policy_detected_people and policy_corrections are removed by ON DELETE CASCADE.
-    await client.query(
-      `DELETE FROM policies WHERE id=$1 AND account_id=$2`,
-      [policyId, accountId],
-    );
+      // policy_pages, policy_chunks, policy_coverages, policy_members,
+      // policy_detected_people and policy_corrections are removed by ON DELETE CASCADE.
+      await client.query(`DELETE FROM policies WHERE id=$1 AND account_id=$2`, [policyId, ctx.householdId]);
 
-    await client.query("COMMIT");
+      return row;
+    });
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    return NextResponse.json(
-      { error: "Could not delete document" },
-      { status: 500 },
-    );
-  } finally {
-    client.release();
+    return routeErrorResponse(error);
   }
+
+  if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
   let storageWarning: string | null = null;
   try {
@@ -78,7 +78,7 @@ export async function DELETE(
   // store: without this, a deleted document's sentences would keep coming back
   // as evidence for questions the person asks afterwards.
   if (pineconeEnabled()) {
-    await deletePolicyPassages({ accountId, policyId }).catch((error) => {
+    await deletePolicyPassages({ accountId: householdId, policyId }).catch((error) => {
       console.warn("Pinecone cleanup failed for deleted policy " + policyId + ":", error instanceof Error ? error.message : error);
     });
   }

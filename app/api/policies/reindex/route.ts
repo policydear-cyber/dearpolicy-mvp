@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { devAccountId } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { backfillSemanticIndex, semanticIndexState } from "@/lib/rag/backfill";
 
 export const runtime = "nodejs";
@@ -10,17 +10,29 @@ export const maxDuration = 300;
 
 /** How much of this household's library semantic search can actually see. */
 export async function GET() {
+  let householdId: string;
   try {
-    return NextResponse.json(await semanticIndexState(devAccountId()));
+    householdId = (await requireHouseholdContext()).householdId;
+  } catch (error) {
+    return routeErrorResponse(error);
+  }
+  try {
+    return NextResponse.json(await semanticIndexState(householdId));
   } catch {
     return NextResponse.json({ enabled: false, total: 0, indexed: 0, pending: 0 });
   }
 }
 
 export async function POST() {
+  let householdId: string;
   try {
-    const result = await backfillSemanticIndex(devAccountId());
-    const state = await semanticIndexState(devAccountId());
+    householdId = (await requireHouseholdContext()).householdId;
+  } catch (error) {
+    return routeErrorResponse(error);
+  }
+  try {
+    const result = await backfillSemanticIndex(householdId);
+    const state = await semanticIndexState(householdId);
     return NextResponse.json({ ...result, state });
   } catch (error) {
     // The underlying failure (a Pinecone/embedding-provider error, a
