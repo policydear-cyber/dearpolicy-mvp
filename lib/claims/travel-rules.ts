@@ -43,6 +43,7 @@ import type { TravelDeathRule, TravelEvidenceGap, TravelMedicalRule, TravelRuleE
 import { calculateMedicalReimbursement, type BilledExpenseItem, type MedicalReimbursementEvidenceRef } from "./calculators/medical-reimbursement";
 import { calculateAccidentalDeath, type DeathBenefitEvidenceRef } from "./calculators/accidental-death";
 import type { CauseDefinitionMatch } from "./calculators/evidence";
+import { evaluateAggregateEvidenceAuthority } from "./evidence-authority";
 
 export type TravelRuleSet = { rules: TravelRuleEvidence[]; gaps: TravelEvidenceGap[] };
 const EMPTY_TRAVEL_RULES: TravelRuleSet = { rules: [], gaps: [] };
@@ -108,6 +109,14 @@ function assessTravelMedicalBenefit(rule: TravelMedicalRule, coverage: OwnedCove
   }
   if (!verified || verified.lineItems.length === 0) {
     return { ...base, status: "needs_document", amountText: null, reason: "Overseas Medical Expenses may apply, but DearPolicy has not yet reviewed an itemised bill for this claim.", conditions: ["Upload the itemised medical bill so DearPolicy can check it against this benefit's evidenced eligible expense categories."] };
+  }
+  // Checkpoint (Wave 2, D4/D8/D9): identical gate to lib/claims/medical-rules.ts's
+  // assessReimbursementBenefit() -- Overseas Medical Expenses always rests
+  // on verified, AI-extracted bill evidence, so this applies unconditionally
+  // once `verified` has usable line items. See lib/claims/evidence-authority.ts.
+  const travelReimbursementAuthority = evaluateAggregateEvidenceAuthority(verified.provenance);
+  if (!travelReimbursementAuthority.authorized) {
+    return { ...base, status: "needs_document", amountText: null, reason: `Overseas Medical Expenses may apply. DearPolicy has not included an amount: ${travelReimbursementAuthority.message}`, conditions: [travelReimbursementAuthority.message] };
   }
   const claimCurrency = /^[A-Z]{3}$/.test(coverage.currency ?? "") ? (coverage.currency as string) : (verified.lineItems[0]?.currency ?? null);
   if (!claimCurrency) {
