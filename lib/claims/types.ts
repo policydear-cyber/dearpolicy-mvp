@@ -1,4 +1,5 @@
 import type { CauseDefinitionMatch, CIDefinitionMatch, DisabilityDefinitionMatch, VerifiedMedicalBillFacts } from "./calculators/evidence";
+import type { EvidenceProvenance } from "./evidence-authority";
 
 export type ClaimEventType = "accident" | "diagnosis" | "hospitalisation" | "death" | "disability" | "other";
 
@@ -212,6 +213,21 @@ export type ClaimAssessmentItem = {
   monetaryDecision?:
     | { status: "allowed" }
     | { status: "blocked"; reasonCode: string; message: string };
+  /** Checkpoint (Wave 2, D4/D8/D9): the model-execution provenance behind
+   * whatever AI-derived evidence (a CauseDefinitionMatch, CIDefinitionMatch,
+   * DisabilityDefinitionMatch, or VerifiedMedicalBillFacts entry) this
+   * item's calculatedAmount was actually built from, when it was built
+   * from one -- see lib/claims/evidence-authority.ts. The calculator that
+   * produced this item is the PRIMARY, synchronous enforcement point (it
+   * already refuses to set calculatedAmount at all when this evidence is
+   * unauthorized); this field lets lib/claims/monetary-gate.ts's
+   * evaluateMonetaryEligibility() re-check the same evidence as a second,
+   * independent, defense-in-depth layer at the one universal chokepoint
+   * every calculator's output passes through, so a future calculator that
+   * forgets its own internal check is still caught here. Absent for any
+   * item not built from governed AI-derived evidence at all (e.g. a plain
+   * death benefit's policy-wording-only rule evidence). */
+  evidenceProvenance?: EvidenceProvenance[];
 };
 
 export type ClaimDecisionPacket = {
