@@ -9,7 +9,7 @@
  * the deterministic engine in ./engine.ts from evidenced wording citations.
  * As with lib/claims/calculators/evidence.ts, every value here may have
  * round-tripped through JSON storage (the audit snapshot, the claim
- * session's decision packet) or arrived from a caller, so every runtime
+ * session's own decision packet) or arrived from a caller, so every runtime
  * validator below independently re-checks structure rather than trusting
  * TypeScript's compile-time types.
  */
@@ -56,7 +56,7 @@ export type ComposedBenefitBlockReasonCode =
   | "CI_COMPOSITION_NOT_EVIDENCED"
   /** More than one policy's independently-INCLUDED benefit is a
    * reimbursement-type medical-claim benefit (`aggregation ===
-   * "reimbursement"") for the SAME claim event -- e.g. a base plan and a
+   * "reimbursement"`) for the SAME claim event -- e.g. a base plan and a
    * rider, an integrated plan and an employer plan, or two genuinely
    * separate reimbursement policies. Two reimbursement benefits can both
    * legitimately respond to the SAME underlying bill, which is exactly the
@@ -84,12 +84,29 @@ export type ComposedBenefitBlockReasonCode =
 /** A reference to an aggregate cap that was evaluated against this benefit,
  * whether or not it ended up binding. `scope` says what the cap applies
  * across; `evidenceRef` cites the wording (or, for a lifetime cap, the
- * user-supplied prior-paid-amount fact) that established the cap amount. */
+ * user-supplied prior-paid-amount fact) that established the cap amount.
+ *
+ * `evidenceRef.wordingDigest` and `evidenceRef.quote` (present whenever the
+ * cap came from wording, i.e. every case except the user-reported prior-
+ * paid-amount variant) are what let a stored audit snapshot (see
+ * lib/claims/composition/store.ts) reproduce the EXACT historical cap
+ * decision even if the source document is later re-uploaded, re-OCR'd,
+ * re-chunked, or re-paginated -- `chunkId`/`pageStart`/`pageEnd` alone are
+ * MUTABLE pointers into a document that can be reprocessed at any time, so
+ * they cannot, by themselves, prove what wording actually produced a
+ * historical `amount`/`applied`/`amountDeducted` decision. `quote` is the
+ * exact matched clause (already bounded to a single regex match, at most a
+ * couple hundred characters -- see relationships.ts's CAP_PATTERN) rather
+ * than the whole page, and `wordingDigest` is a one-way sha256 of that same
+ * bounded quote: together they are enough to verify/reproduce the decision
+ * without ever persisting an unbounded amount of the underlying policy
+ * document's raw text. Optional so a `ComposedBenefit` stored by an older
+ * engine version (before this field existed) still validates. */
 export type CapReference = {
   scope: "coverage" | "benefit_group" | "policy" | "event" | "lifetime";
   amount: number;
   currency: string;
-  evidenceRef: { policyId: string; chunkId: string; pageStart: number; pageEnd: number; label?: string } | { source: "user_reported_prior_paid"; recordedAt: string };
+  evidenceRef: { policyId: string; chunkId: string; pageStart: number; pageEnd: number; label?: string; wordingDigest?: string; quote?: string } | { source: "user_reported_prior_paid"; recordedAt: string };
   applied: boolean;
   amountDeducted: number;
 };
