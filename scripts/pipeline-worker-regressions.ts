@@ -1,31 +1,51 @@
 /**
- * Regression suite for Checkpoint 8's real-queue migration
- * (lib/jobs/pipeline-worker.ts) -- the shared "enqueue durably, then
- * process in this process, complete/fail through lib/jobs/queue.ts"
- * driver that lib/claims/evidence/queue.ts and
- * lib/rag/processing-queue.ts are now both built on, replacing their old
- * in-memory-only promise chains.
+ * Regression suite for lib/jobs/pipeline-worker.ts -- the shared
+ * "enqueue durably, then claim/complete/fail through lib/jobs/queue.ts"
+ * pipeline error-classification driver (classifyPipelineError()) plus
+ * runAsDurableJob() itself (still used directly by callers that want
+ * enqueue+claim+run in one call, e.g. a synchronous CLI/admin path -- no
+ * production HTTP call site uses it that way any more as of Checkpoint
+ * 14f, see below).
  *
  * Most cases exercise runAsDurableJob() directly with a fake `work()`
  * function against a disposable PGlite instance (sql/schema.sql +
  * sql/background-jobs.sql), the same pool-patching pattern as every other
- * suite in this checkpoint family. One case drives the REAL, migrated
- * lib/claims/evidence/queue.ts's enqueueClaimEvidenceProcessing() end to
- * end against a real (if minimal) claim-evidence fixture, reusing
- * lib/claims/evidence/store.ts's own functions -- not a reimplementation
- * -- to prove the actual production call site is wired onto the durable
- * job framework, not just the primitive underneath it in isolation.
+ * suite in this checkpoint family.
  *
- * lib/rag/processing-queue.ts's enqueuePolicyProcessing() is
- * structurally identical (same runAsDurableJob() wrapper, same shape) but
- * does not get its own dedicated live processPolicy() end-to-end case
- * here -- no existing suite in this codebase drives processPolicy() with
- * a full fixture yet, and building that fixture from scratch (quarantine
- * state, OCR/extraction stubbing) is a separate, larger effort honestly
- * left for a follow-up rather than rushed. Its wiring is proven by (a)
- * scoped typecheck, (b) code-identical structure to the proven claims
- * path, and (c) runAsDurableJob()'s own generic, pipeline-agnostic
- * coverage below.
+ * Checkpoint 14f (claude/v1-launch-hardening): lib/claims/evidence/queue.ts's
+ * enqueueClaimEvidenceProcessing() and lib/rag/processing-queue.ts's
+ * enqueuePolicyProcessing() no longer call runAsDurableJob() at all --
+ * Checkpoint 8 had them enqueue AND claim AND run the pipeline all inside
+ * the SAME process that received the upload request, which is exactly
+ * what scripts/launch-check.ts's background_job_reliability diagnosis
+ * flagged as never having a genuinely separate worker. They now call
+ * enqueueJob() only and return; the job is claimed and run by a
+ * DIFFERENT call -- lib/jobs/worker-runtime.ts's claimAndProcessOne()/
+ * runWorkerLoop(), the mechanism scripts/worker.ts's standalone process
+ * uses in production. The end-to-end case below now proves BOTH halves
+ * against the real, migrated claim-evidence call site: (1) the enqueue
+ * call returns before the pipeline has run at all, and (2) a SEPARATE,
+ * later claimAndProcessOne() call (reusing lib/jobs/processors.ts's real
+ * processClaimEvidenceProcessingJob decode+dispatch, not a
+ * reimplementation) is what actually claims it and runs the real
+ * processClaimEvidence() pipeline -- the same mechanism a genuinely
+ * separate worker process would use, exercised here as two sequential
+ * calls against the same database state rather than two literal
+ * concurrent OS processes (this sandbox cannot run two long-lived Node
+ * processes against each other to prove literal concurrency; sequential
+ * separate calls against the same claim/complete/fail primitives is what
+ * IS verified, and is the same code path a second process would run).
+ *
+ * lib/rag/processing-queue.ts's enqueuePolicyProcessing() is structurally
+ * identical (same enqueueJob()-only shape, same lib/jobs/processors.ts
+ * decode pattern) but does not get its own dedicated live processPolicy()
+ * end-to-end case here -- no existing suite in this codebase drives
+ * processPolicy() with a full fixture yet, and building that fixture from
+ * scratch (quarantine state, OCR/extraction stubbing) is a separate,
+ * larger effort honestly left for a follow-up rather than rushed. Its
+ * wiring is proven by (a) scoped typecheck, (b) code-identical structure
+ * to the proven claims path, and (c) the generic, pipeline-agnostic
+ * worker-loop coverage in scripts/worker-runtime-regressions.ts.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
@@ -39,6 +59,8 @@ import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { runAsDurableJob, classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { claimNextJob } from "@/lib/jobs/queue";
+import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
+import { processClaimEvidenceProcessingJob } from "@/lib/jobs/processors";
 
 const SQL_FILES = ["sql/schema.sql", "sql/background-jobs.sql"];
 
@@ -61,8 +83,8 @@ function test(name: string, fn: () => void) {
 }
 
 async function jobRow(jobType: string, idempotencyKey: string) {
-  const result = await pool.query<{ status: string; attempt_count: number; last_error_category: string | null }>(
-    `SELECT status, attempt_count, last_error_category FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`,
+  const result = await pool.query<{ status: string; attempt_count: number; last_error_category: string | null; lease_owner: string | null }>(
+    `SELECT status, attempt_count, last_error_category, lease_owner FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`,
     [jobType, idempotencyKey],
   );
   return result.rows[0] ?? null;
@@ -222,9 +244,11 @@ async function runDatabaseTests() {
     });
 
     // ============================================================
-    // Real end-to-end: the actual migrated claim-evidence queue
+    // Real end-to-end: the actual migrated claim-evidence queue, split
+    // across an enqueue call and a SEPARATE worker-pass call
+    // (Checkpoint 14f)
     // ============================================================
-    await testAsync("end-to-end: enqueueClaimEvidenceProcessing() (the real, migrated call site) persists both the pipeline's own effect and a background_jobs row", async () => {
+    await testAsync("end-to-end: enqueueClaimEvidenceProcessing() (the real, migrated call site) ONLY enqueues -- the pipeline has not run when it returns", async () => {
       const { ensureClaimEvidenceSchema } = await import("@/lib/claims/evidence/schema");
       await ensureClaimEvidenceSchema();
       // lifecycle_state (activePredicate()) is added by sql/lifecycle.sql, but
@@ -250,19 +274,40 @@ async function runDatabaseTests() {
       // fixture shape scripts/claim-evidence-regressions.ts's own "a
       // document whose scan is explicitly clean is allowed past
       // quarantine" case uses) -- storageKey does not point at a real
-      // file, so processClaimEvidence() is expected to fail once it tries
-      // to actually read it, which is the real, non-retryable failure this
-      // test proves gets durably recorded rather than silently lost.
+      // file, so processClaimEvidence() is expected to fail once it
+      // actually runs, which is what the SECOND test below (the separate
+      // worker pass) proves gets durably recorded.
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "clean" });
 
       await enqueueClaimEvidenceProcessing({ accountId: account, documentId: document.id });
 
-      const afterPipeline = await getEvidenceDocument(account, document.id);
-      assert.equal(afterPipeline?.status, "failed", "the real pipeline's own effect (writing status='failed' for an unreadable file) must still happen exactly as before this migration");
+      const afterEnqueue = await getEvidenceDocument(account, document.id);
+      assert.equal(afterEnqueue?.status, "quarantined", "enqueueClaimEvidenceProcessing() must not run the pipeline itself -- the document must be untouched until a worker claims the job");
 
       const row = await jobRow("claim_evidence_processing", document.id);
-      assert.ok(row, "the migrated call site must persist a background_jobs row -- this is the entire point of the migration");
-      assert.equal(row!.status, "dead_letter", "an ENOENT-shaped failure is non-retryable and must dead-letter immediately, not silently vanish or retry forever");
+      assert.ok(row, "the migrated call site must still persist a background_jobs row even though it no longer runs the pipeline itself");
+      assert.equal(row!.status, "queued", "the job must sit queued -- not processing, not succeeded, not dead_letter -- until a separate worker pass claims it");
+      assert.equal(row!.attempt_count, 0, "no claim has happened yet, so attempt_count must still be 0");
+
+      // A SEPARATE call -- standing in for scripts/worker.ts's standalone
+      // poll loop, running in what would in production be a different
+      // process than whatever just enqueued this job -- claims and runs
+      // it. Reuses lib/jobs/processors.ts's real decode+dispatch
+      // (processClaimEvidenceProcessingJob), not a reimplementation, so
+      // this proves the actual production worker wiring, not a stand-in.
+      const outcome = await claimAndProcessOne({
+        jobType: "claim_evidence_processing",
+        workerId: "e2e-separate-worker-pass",
+        process: processClaimEvidenceProcessingJob,
+      });
+      assert.equal(outcome, "failed", "processClaimEvidence() must fail against a storageKey that points at no real file");
+
+      const afterWorkerPass = await getEvidenceDocument(account, document.id);
+      assert.equal(afterWorkerPass?.status, "failed", "the real pipeline's own effect (writing status='failed' for an unreadable file) must happen once the SEPARATE worker pass runs it");
+
+      const rowAfter = await jobRow("claim_evidence_processing", document.id);
+      assert.equal(rowAfter!.status, "dead_letter", "an ENOENT-shaped failure is non-retryable and must dead-letter immediately, not silently vanish or retry forever");
+      assert.equal(rowAfter!.lease_owner, null, "a terminal job must not still hold its lease");
     });
   } finally {
     pool.query = originalQuery;
@@ -277,8 +322,8 @@ async function main() {
   console.log(
     `pipeline-worker regressions passed: ${cases} cases (error classification, successful/transient/non-retryable ` +
       `job outcomes, error re-throw, idempotent no-op on a finished job, no double-run against an already-claimed ` +
-      `lease, and a real end-to-end run through the migrated lib/claims/evidence/queue.ts proving both the ` +
-      `pipeline's own effect and the durable job row are persisted together).`,
+      `lease, and a real end-to-end run through the migrated lib/claims/evidence/queue.ts proving enqueueClaimEvidenceProcessing() ` +
+      `only enqueues while a SEPARATE claimAndProcessOne() call actually runs the pipeline and records the durable job outcome).`,
   );
 }
 

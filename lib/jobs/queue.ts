@@ -96,7 +96,7 @@ export class LeaseLostError extends Error {
 
 export class JobNotFoundError extends Error {}
 
-async function appendJobAudit(
+export async function appendJobAudit(
   db: DbClient,
   row: BackgroundJobRow,
   toStatus: JobStatus,
@@ -130,7 +130,7 @@ function toSafeErrorCategory(category: ErrorCategory | null | undefined): "job_r
   return null;
 }
 
-async function recordJobEvent(row: BackgroundJobRow, name: string, extra: Record<string, unknown> = {}) {
+export async function recordJobEvent(row: BackgroundJobRow, name: string, extra: Record<string, unknown> = {}) {
   await recordEvent({
     name,
     correlationId: resolveCorrelationId(row.correlation_id),

@@ -1,45 +1,61 @@
-import { processPolicy, type ProcessPolicyArgs } from "@/lib/rag/ingest";
-import { runAsDurableJob } from "@/lib/jobs/pipeline-worker";
+import type { ProcessPolicyArgs } from "@/lib/rag/ingest";
+import { enqueueJob } from "@/lib/jobs/queue";
+import { pool } from "@/lib/db/client";
 
-type QueueGlobal = typeof globalThis & { __dearpolicyPolicyQueue?: Promise<void> };
-
-const JOB_TYPE = "policy_processing";
+export const POLICY_PROCESSING_JOB_TYPE = "policy_processing";
 
 /**
- * Checkpoint 8 (claude/v1-launch-hardening): migrated onto
- * lib/jobs/pipeline-worker.ts's runAsDurableJob() -- every call now
- * persists a background_jobs row (idempotency-keyed on policyId, so a
- * retried/duplicate upload request can never double-process the same
- * policy document), claims a real lease, and classifies failure into
- * bounded retry vs. dead-letter through lib/jobs/queue.ts, rather than the
- * in-memory-only promise chain this used to be the entirety of.
+ * Checkpoint 14f (claude/v1-launch-hardening): enqueue-only, no inline
+ * processing.
  *
- * Per-process serialization (policy jobs run one at a time so a large
- * upload cannot collide with another Qwen/BGE job) is unchanged and still
- * comes from the chained promise below, exactly as before this migration.
+ * Checkpoint 8 wired this onto lib/jobs/pipeline-worker.ts's
+ * runAsDurableJob(), which enqueues a background_jobs row AND immediately
+ * claims AND runs processPolicy() -- all inside the SAME process that
+ * received the upload request. That made the job durable (survives a
+ * crash mid-run, safe against a duplicate/retried upload) but never
+ * actually separated "who accepts the request" from "who does the work":
+ * a distributed worker fleet pulling from the queue never existed, which
+ * is exactly the gap scripts/launch-check.ts's background_job_reliability
+ * check named.
+ *
+ * This now does exactly what a real producer in a producer/consumer
+ * queue does: persist an idempotency-keyed background_jobs row (via
+ * lib/jobs/queue.ts's enqueueJob() -- the same primitive
+ * runAsDurableJob() itself calls, reused directly here, not
+ * reimplemented) and return. Idempotent: a retried/duplicate call for the
+ * same policyId can never double-enqueue (enqueueJob()'s ON CONFLICT DO
+ * NOTHING + re-read), exactly as before.
+ *
+ * The job is claimed and actually run by scripts/worker.ts's standalone
+ * poll loop (lib/jobs/worker-runtime.ts's runWorkerLoop(), configured
+ * with lib/jobs/processors.ts's processPolicyProcessingJob) -- a process
+ * that may be, and in a real deployment must be, a genuinely separate
+ * process/instance from whichever one received the HTTP upload. Nothing
+ * about the args needed to actually run processPolicy() lives in this
+ * process's memory once this function returns; everything the worker
+ * needs is in the persisted payload below, decoded back into
+ * ProcessPolicyArgs by lib/jobs/processors.ts.
+ *
+ * The one field this cannot avoid persisting to get a fully-detached
+ * worker: pdfPassword, for a password-protected PDF. It goes into the
+ * SAME jsonb payload column policyId/storageKey/etc. already live in --
+ * no new exposure relative to the rest of this table, which already
+ * holds every other processing argument -- but it does mean a
+ * password-protected upload's password now sits in background_jobs until
+ * that row is pruned, which it was not exposed to before this change.
+ * Documented honestly in Checkpoint 14f rather than left implicit.
  */
-export function enqueuePolicyProcessing(args: ProcessPolicyArgs) {
-  const state = globalThis as QueueGlobal;
-  const previous = state.__dearpolicyPolicyQueue ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(async () => {
-      try {
-        await runAsDurableJob({
-          jobType: JOB_TYPE,
-          idempotencyKey: args.policyId,
-          accountId: args.accountId,
-          payload: { policyId: args.policyId },
-          work: () => processPolicy(args),
-        });
-      } catch (error) {
-        // processPolicy already writes the user-visible failure to the
-        // database, and runAsDurableJob() has already recorded the durable
-        // job failure above -- this is the same best-effort process-level
-        // log the old in-memory chain always had.
-        console.error("DearPolicy background processing failed:", error);
-      }
-    });
-  state.__dearpolicyPolicyQueue = next;
-  return next;
+export async function enqueuePolicyProcessing(args: ProcessPolicyArgs): Promise<void> {
+  await enqueueJob(pool, {
+    jobType: POLICY_PROCESSING_JOB_TYPE,
+    idempotencyKey: args.policyId,
+    accountId: args.accountId,
+    payload: {
+      policyId: args.policyId,
+      familyMemberId: args.familyMemberId,
+      storageKey: args.storageKey,
+      pdfPassword: args.pdfPassword ?? null,
+      linkUploadMember: Boolean(args.linkUploadMember),
+    },
+  });
 }

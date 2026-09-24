@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "lib/jobs/queue.ts",
+    "lib/jobs/pipeline-worker.ts",
+    "lib/jobs/worker-runtime.ts",
+    "lib/jobs/processors.ts",
+    "lib/jobs/dead-letter.ts",
+    "lib/rag/processing-queue.ts",
+    "lib/claims/evidence/queue.ts",
+    "scripts/worker.ts",
+    "scripts/dead-letter.ts",
+    "scripts/worker-runtime-regressions.ts",
+    "scripts/dead-letter-regressions.ts",
+    "scripts/pipeline-worker-regressions.ts"
+  ]
+}

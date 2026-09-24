@@ -1,47 +1,43 @@
-import { processClaimEvidence, type ProcessClaimEvidenceArgs } from "./pipeline";
-import { runAsDurableJob } from "@/lib/jobs/pipeline-worker";
+import type { ProcessClaimEvidenceArgs } from "./pipeline";
+import { enqueueJob } from "@/lib/jobs/queue";
+import { pool } from "@/lib/db/client";
 
-type QueueGlobal = typeof globalThis & { __dearpolicyClaimEvidenceQueue?: Promise<void> };
-
-const JOB_TYPE = "claim_evidence_processing";
+export const CLAIM_EVIDENCE_PROCESSING_JOB_TYPE = "claim_evidence_processing";
 
 /**
- * Checkpoint 8 (claude/v1-launch-hardening): migrated onto
- * lib/jobs/pipeline-worker.ts's runAsDurableJob() -- every call now
- * persists a background_jobs row (idempotency-keyed on documentId, so a
- * retried/duplicate upload request can never double-process the same
- * document), claims a real lease, and classifies failure into bounded
- * retry vs. dead-letter through lib/jobs/queue.ts, rather than the
- * in-memory-only promise chain this used to be the entirety of.
+ * Checkpoint 14f (claude/v1-launch-hardening): enqueue-only, no inline
+ * processing.
  *
- * Per-process serialization (jobs run one at a time so a burst of uploads
- * cannot collide) is unchanged and still comes from the chained promise
- * below, exactly as before this migration -- see pipeline-worker.ts's own
- * comment on why that stays the caller's responsibility for now.
+ * Checkpoint 8 wired this onto lib/jobs/pipeline-worker.ts's
+ * runAsDurableJob(), which enqueues a background_jobs row AND immediately
+ * claims AND runs processClaimEvidence() -- all inside the SAME process
+ * that received the upload request. That gave the job an idempotency key
+ * and a durable record of what happened, but never actually separated
+ * "who accepts the request" from "who does the work" -- see
+ * lib/rag/processing-queue.ts's enqueuePolicyProcessing() (this module's
+ * exact counterpart) for the full rationale, identical here.
+ *
+ * This now does exactly what a real producer in a producer/consumer
+ * queue does: persist an idempotency-keyed background_jobs row (via
+ * lib/jobs/queue.ts's enqueueJob(), reused directly, not reimplemented)
+ * and return. ProcessClaimEvidenceArgs is only { accountId, documentId }
+ * -- both already round-trip through the job row itself (accountId is
+ * the row's own account_id column; documentId is the idempotency key),
+ * so the payload below is redundant with the row's own columns by
+ * design, kept explicit so lib/jobs/processors.ts's decode step matches
+ * the policy-processing job's shape rather than being a special case.
+ *
+ * The job is claimed and actually run by scripts/worker.ts's standalone
+ * poll loop (lib/jobs/worker-runtime.ts's runWorkerLoop(), configured
+ * with lib/jobs/processors.ts's processClaimEvidenceProcessingJob) -- a
+ * process that may be, and in a real deployment must be, genuinely
+ * separate from whichever one received the HTTP upload.
  */
-export function enqueueClaimEvidenceProcessing(args: ProcessClaimEvidenceArgs) {
-  const state = globalThis as QueueGlobal;
-  const previous = state.__dearpolicyClaimEvidenceQueue ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(async () => {
-      try {
-        await runAsDurableJob({
-          jobType: JOB_TYPE,
-          idempotencyKey: args.documentId,
-          accountId: args.accountId,
-          payload: { documentId: args.documentId },
-          work: () => processClaimEvidence(args),
-        });
-      } catch (error) {
-        // processClaimEvidence() already writes the user-visible failure
-        // (status='failed' + processing_error/_code) to the database, and
-        // runAsDurableJob() has already recorded the durable job failure
-        // above -- this is just the same best-effort process-level log the
-        // old in-memory chain always had.
-        console.error("DearPolicy claim-evidence background processing failed:", error instanceof Error ? error.message : error);
-      }
-    });
-  state.__dearpolicyClaimEvidenceQueue = next;
-  return next;
+export async function enqueueClaimEvidenceProcessing(args: ProcessClaimEvidenceArgs): Promise<void> {
+  await enqueueJob(pool, {
+    jobType: CLAIM_EVIDENCE_PROCESSING_JOB_TYPE,
+    idempotencyKey: args.documentId,
+    accountId: args.accountId,
+    payload: { documentId: args.documentId },
+  });
 }
