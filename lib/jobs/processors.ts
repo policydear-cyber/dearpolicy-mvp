@@ -79,9 +79,19 @@ export const processPolicyProcessingJob: JobProcessor = async (job) => {
 
 export const processClaimEvidenceProcessingJob: JobProcessor = async (job) => {
   const payload = job.payload as Record<string, unknown> | null;
+  // D14 (background job durability): same requirement as
+  // processPolicyProcessingJob above -- processClaimEvidence() runs OCR and
+  // an LLM extraction call, either of which can run past
+  // DEFAULT_LEASE_DURATION_MS on a scanned or multi-page document, so this
+  // job type needs the same in-flight heartbeat.
+  const workerId = job.lease_owner;
+  if (!workerId) throw new Error(`background job ${job.id} has no lease_owner; cannot heartbeat`);
   const args: ProcessClaimEvidenceArgs = {
     accountId: requireAccountId(job),
     documentId: requireStringField(payload, "documentId"),
+    jobHeartbeat: async () => {
+      await heartbeatJob(pool, { jobId: job.id, workerId });
+    },
   };
   await processClaimEvidence(args);
 };

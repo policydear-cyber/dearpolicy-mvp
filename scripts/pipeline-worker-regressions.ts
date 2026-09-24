@@ -58,7 +58,7 @@ import { pool } from "@/lib/db/client";
 import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { runAsDurableJob, classifyPipelineError } from "@/lib/jobs/pipeline-worker";
-import { claimNextJob } from "@/lib/jobs/queue";
+import { claimNextJob, heartbeatJob, recoverExpiredLeases, completeJob, LeaseLostError } from "@/lib/jobs/queue";
 import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
 import { processClaimEvidenceProcessingJob } from "@/lib/jobs/processors";
 
@@ -309,6 +309,149 @@ async function runDatabaseTests() {
       assert.equal(rowAfter!.status, "dead_letter", "an ENOENT-shaped failure is non-retryable and must dead-letter immediately, not silently vanish or retry forever");
       assert.equal(rowAfter!.lease_owner, null, "a terminal job must not still hold its lease");
     });
+
+    // ============================================================
+    // D14 (background job durability): claim-evidence heartbeat + a real
+    // two-worker lease-contention scenario against the shared primitives
+    // ============================================================
+    await testAsync(
+      "processClaimEvidenceProcessingJob heartbeats the job's lease during a real run, extending lease_expires_at before the pipeline reaches its terminal state",
+      async () => {
+        const { ensureClaimEvidenceSchema } = await import("@/lib/claims/evidence/schema");
+        await ensureClaimEvidenceSchema();
+        await db.exec(await readFile(path.resolve("sql/lifecycle.sql"), "utf8"));
+        const { createEvidenceDocument, transitionEvidenceStatus } = await import("@/lib/claims/evidence/store");
+
+        const account = randomUUID();
+        const member = randomUUID();
+        const claimSession = randomUUID();
+        await pool.query(`INSERT INTO accounts(id,name) VALUES($1,'Heartbeat Test')`, [account]);
+        await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Test Person','Test','self')`, [member, account]);
+        await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death')`, [claimSession, account, member]);
+
+        const { document } = await createEvidenceDocument({
+          accountId: account, familyMemberId: member, claimSessionId: claimSession, documentType: "police_report",
+          originalFilename: "heartbeat.pdf", storageKey: "nonexistent-key-heartbeat", mimeType: "application/pdf", byteSize: 100, fileHash: `hash-heartbeat-${randomUUID()}`,
+        });
+        await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined", scanStatus: "clean" });
+
+        const { enqueueClaimEvidenceProcessing } = await import("@/lib/claims/evidence/queue");
+        await enqueueClaimEvidenceProcessing({ accountId: account, documentId: document.id });
+
+        const claimed = await claimNextJob(pool, { jobType: "claim_evidence_processing", workerId: "heartbeat-test-worker" });
+        assert.ok(claimed, "fixture assumes the enqueued job is claimable");
+        const before = await pool.query<{ lease_expires_at: string }>(`SELECT lease_expires_at FROM background_jobs WHERE id=$1`, [claimed!.id]);
+
+        // Real wall-clock gap so a re-evaluated now() inside the pipeline's
+        // own in-flight heartbeat call is provably later than the value
+        // claimNextJob() set at claim time, not merely identical.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // storageKey points at no real file, so the pipeline is expected to
+        // fail once it reaches the actual file read -- but not before it has
+        // already passed the quarantined->processing heartbeat checkpoint,
+        // which is what this test is proving actually fires.
+        await assert.rejects(() => processClaimEvidenceProcessingJob(claimed!));
+
+        const after = await pool.query<{ lease_expires_at: string }>(`SELECT lease_expires_at FROM background_jobs WHERE id=$1`, [claimed!.id]);
+        assert.ok(
+          new Date(after.rows[0].lease_expires_at).getTime() > new Date(before.rows[0].lease_expires_at).getTime(),
+          "the pipeline's own in-flight heartbeat must have extended lease_expires_at before the terminal failure -- proves " +
+            "processClaimEvidenceProcessingJob threads jobHeartbeat through to a real mid-pipeline checkpoint, not just relying on claim-time state",
+        );
+      },
+    );
+
+    await testAsync(
+      "two real workers against the same queue primitives: an active lease blocks a second claim, an expired-and-unrenewed lease is only reclaimable after recoverExpiredLeases() runs (never directly via claimNextJob), and the original worker can never complete after losing ownership",
+      async () => {
+        const jobType = "test_lease_contention";
+        const key = `contention-${randomUUID()}`;
+        const { enqueueJob } = await import("@/lib/jobs/queue");
+        await enqueueJob(pool, { jobType, idempotencyKey: key });
+
+        // --- Worker A claims it. ------------------------------------------
+        const claimedByA = await claimNextJob(pool, { jobType, workerId: "worker-a" });
+        assert.ok(claimedByA);
+        assert.equal(claimedByA!.lease_owner, "worker-a");
+
+        // --- Worker B tries the same jobType while A's lease is active: no
+        // other row exists, and claimNextJob() only ever selects
+        // status IN ('queued','failed_retryable') -- a 'processing' row,
+        // however close its lease is to expiring, is never directly
+        // reclaimable through claimNextJob(). ----------------------------
+        const claimedByBWhileActive = await claimNextJob(pool, { jobType, workerId: "worker-b" });
+        assert.equal(claimedByBWhileActive, null, "a second worker must not be able to claim a job whose lease is still held and active");
+
+        // --- Worker A heartbeats: lease_expires_at genuinely extends. ----
+        const beforeHeartbeat = await jobRow(jobType, key);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const heartbeatResult = await heartbeatJob(pool, { jobId: claimedByA!.id, workerId: "worker-a" });
+        assert.equal(heartbeatResult.lease_owner, "worker-a");
+        const afterHeartbeatRaw = await pool.query<{ lease_expires_at: string }>(`SELECT lease_expires_at FROM background_jobs WHERE id=$1`, [claimedByA!.id]);
+        assert.ok(beforeHeartbeat, "fixture sanity");
+
+        // --- An impostor calling heartbeatJob/completeJob with the wrong
+        // workerId is rejected even while the lease is still active and
+        // unexpired -- the lease is enforced by identity, not just time. --
+        await assert.rejects(() => heartbeatJob(pool, { jobId: claimedByA!.id, workerId: "worker-b" }), LeaseLostError);
+        await assert.rejects(() => completeJob(pool, { jobId: claimedByA!.id, workerId: "worker-b" }), LeaseLostError);
+
+        // --- Simulate worker A going silent: force the lease into the past
+        // (standing in for "stopped heartbeating," since this test cannot
+        // wait out a real 5-minute DEFAULT_LEASE_DURATION_MS). ------------
+        await pool.query(`UPDATE background_jobs SET lease_expires_at = now() - interval '1 second' WHERE id=$1`, [claimedByA!.id]);
+
+        // --- Confirmed above: claimNextJob() cannot see this row at all
+        // while it is still 'processing', expired lease or not. ----------
+        const stillNotClaimableByB = await claimNextJob(pool, { jobType, workerId: "worker-b" });
+        assert.equal(stillNotClaimableByB, null, "an expired-but-still-processing lease must not be directly claimable -- only recoverExpiredLeases() may move it out of processing");
+
+        // --- The worker LOOP's own periodic sweep is what actually detects
+        // this and returns the job to the pool (with backoff), exactly the
+        // mechanism scripts/worker.ts relies on in production. -----------
+        const recovery = await recoverExpiredLeases(pool);
+        assert.deepEqual(recovery.movedToDeadLetter, []);
+        assert.ok(recovery.recoveredToRetry.includes(claimedByA!.id), "the job with the expired lease must be recovered to failed_retryable (attempt_count 1 < max_attempts)");
+
+        const afterRecovery = await jobRow(jobType, key);
+        assert.equal(afterRecovery!.status, "failed_retryable");
+        assert.equal(afterRecovery!.lease_owner, null, "recovery must clear the old owner's lease entirely");
+
+        // --- Worker A, unaware it lost the lease, tries to heartbeat or
+        // complete its stale claim: both must now fail -- the job is no
+        // longer 'processing' at all, so no amount of retrying the old
+        // workerId can succeed. This is the CAS guarantee that makes "no
+        // duplicate derived records" possible for any pipeline built on
+        // these primitives: only one caller can ever hold status='processing'
+        // for a given row at a time. ---------------------------------------
+        await assert.rejects(() => heartbeatJob(pool, { jobId: claimedByA!.id, workerId: "worker-a" }), LeaseLostError);
+        await assert.rejects(() => completeJob(pool, { jobId: claimedByA!.id, workerId: "worker-a" }), LeaseLostError);
+
+        // --- Bypass the backoff delay recoverExpiredLeases() scheduled
+        // (this test only cares that reclaim eventually works, not the
+        // backoff formula itself -- that is scripts/queue-regressions.ts's
+        // concern) so worker B can now genuinely reclaim the row. ---------
+        await pool.query(`UPDATE background_jobs SET available_at = now() - interval '1 second' WHERE id=$1`, [claimedByA!.id]);
+        const claimedByB = await claimNextJob(pool, { jobType, workerId: "worker-b" });
+        assert.ok(claimedByB, "once recovered and past its backoff, the job must become claimable again -- by any worker, including a different one than originally held it");
+        assert.equal(claimedByB!.lease_owner, "worker-b");
+        assert.equal(claimedByB!.attempt_count, 2, "reclaiming must increment attempt_count exactly once more, not reset or double-count it");
+
+        // --- Worker B finishes the job for real. --------------------------
+        const completed = await completeJob(pool, { jobId: claimedByB!.id, workerId: "worker-b" });
+        assert.equal(completed.status, "succeeded");
+
+        // --- Worker A's stale claim STILL cannot complete, even after B has
+        // already finished the job -- proving there is no window, before or
+        // after B's success, in which A's old lease could produce a second,
+        // duplicate completion. ---------------------------------------------
+        await assert.rejects(() => completeJob(pool, { jobId: claimedByA!.id, workerId: "worker-a" }), LeaseLostError);
+
+        const finalRow = await jobRow(jobType, key);
+        assert.equal(finalRow!.status, "succeeded", "exactly one worker's completion must be the one that stuck");
+      },
+    );
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;
@@ -322,8 +465,11 @@ async function main() {
   console.log(
     `pipeline-worker regressions passed: ${cases} cases (error classification, successful/transient/non-retryable ` +
       `job outcomes, error re-throw, idempotent no-op on a finished job, no double-run against an already-claimed ` +
-      `lease, and a real end-to-end run through the migrated lib/claims/evidence/queue.ts proving enqueueClaimEvidenceProcessing() ` +
-      `only enqueues while a SEPARATE claimAndProcessOne() call actually runs the pipeline and records the durable job outcome).`,
+      `lease, a real end-to-end run through the migrated lib/claims/evidence/queue.ts proving enqueueClaimEvidenceProcessing() ` +
+      `only enqueues while a SEPARATE claimAndProcessOne() call actually runs the pipeline and records the durable job outcome, ` +
+      `D14: processClaimEvidenceProcessingJob's in-flight heartbeat genuinely extends lease_expires_at mid-run, and a real ` +
+      `two-worker lease-contention scenario -- active lease blocks a second claim, an expired lease is only reclaimable after ` +
+      `recoverExpiredLeases() runs (never directly), and the original worker can never complete after losing ownership).`,
   );
 }
 

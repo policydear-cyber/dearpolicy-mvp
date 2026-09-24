@@ -38,7 +38,36 @@ import type { ClaimEvidenceDocumentRow, ClaimEvidenceStatus } from "./types";
 import type { ClaimFacts } from "@/lib/claims/types";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 
-export type ProcessClaimEvidenceArgs = { accountId: string; documentId: string };
+export type ProcessClaimEvidenceArgs = {
+  accountId: string;
+  documentId: string;
+  // D14 (background job durability): extends the job's lease while this
+  // pipeline -- OCR plus an LLM structured-extraction call, either of which
+  // can run long on a scanned or multi-page document -- is still making
+  // progress, so a still-live worker is never reclaimed by
+  // recoverExpiredLeases() and double-processed by a second worker. Mirrors
+  // lib/rag/ingest.ts's ProcessPolicyArgs.jobHeartbeat: supplied by
+  // lib/jobs/processors.ts's processClaimEvidenceProcessingJob(), the only
+  // real caller with a jobId/workerId to heartbeat against; left undefined
+  // for any other caller (reprocessNeedsAttention()'s direct calls, a
+  // regression suite), which simply gets no heartbeat -- exactly today's
+  // (pre-fix) behavior.
+  jobHeartbeat?: () => Promise<void>;
+};
+
+// Best-effort, matching lib/rag/ingest.ts's identically-named pattern: a
+// heartbeat failure (including the job's lease already having been lost to
+// another worker, per lib/jobs/queue.ts's LeaseLostError) is logged, never
+// thrown, so it can never change this pipeline's own control flow or
+// terminal status. A worker that has genuinely lost its lease will instead
+// fail its own eventual completeJob()/failJob() CAS, which
+// lib/jobs/worker-runtime.ts's claimAndProcessOne() already surfaces.
+async function heartbeat(args: ProcessClaimEvidenceArgs) {
+  if (!args.jobHeartbeat) return;
+  await args.jobHeartbeat().catch((error) => {
+    console.warn(`processClaimEvidence heartbeat failed for document ${args.documentId}:`, error instanceof Error ? error.message : error);
+  });
+}
 
 const RESUMABLE: ClaimEvidenceStatus[] = ["uploaded", "quarantined", "processing", "failed"];
 
@@ -114,6 +143,7 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
         current = (await getEvidenceDocument(args.accountId, args.documentId)) ?? current;
       }
     }
+    await heartbeat(args);
     if (!RESUMABLE.includes(current.status)) return;
 
     // --- quarantined -> processing -------------------------------------
@@ -141,6 +171,7 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     }
     if (!RESUMABLE.includes(current.status)) return;
     if (current.status !== "processing") return;
+    await heartbeat(args);
 
     // --- processing: read, OCR, extract, verify identity ----------------
     const bytes = await readClaimEvidenceFile(current.storage_key);
@@ -155,6 +186,9 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
       throw Object.assign(new Error("Could not obtain enough readable text from this document."), { code: "UNREADABLE_DOCUMENT" });
     }
 
+    // Longest-running step (OCR already ran above; this is the LLM
+    // structured-extraction call) -- heartbeat right before it starts.
+    await heartbeat(args);
     const { fields, model, provider, version } = await extractClaimEvidence({
       pages: pages.map((p) => ({ pageNumber: p.pageNumber, text: p.text })),
       documentType: current.document_type,
@@ -188,6 +222,7 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     } else {
       current = (await getEvidenceDocument(args.accountId, args.documentId)) ?? current;
     }
+    await heartbeat(args);
     if (current.status !== "extracted") return;
 
     const reviewRow = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "extracted", to: "needs_review" });
