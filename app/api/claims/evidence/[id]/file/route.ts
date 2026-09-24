@@ -14,7 +14,32 @@ export const ROUTE_AUTH = "household-member" as const;
  * where there is no such thing, it streams the bytes itself after
  * re-checking the full account/family-member/claim ownership chain on
  * every single request -- there is no cached, reusable "you may fetch
- * this" token to leak or share. */
+ * this" token to leak or share.
+ *
+ * D34 (Wave 2 adversarial audit): getScopedEvidenceDocument() now also
+ * excludes a superseded document (superseded_at IS NULL -- see its own
+ * doc comment in lib/claims/evidence/store.ts), so this route 404s BEFORE
+ * ever calling createClaimEvidenceSignedUrl() for evidence that has been
+ * superseded (a corrected re-upload) or soft-deleted. That is this
+ * application's own access boundary, and it is enforced immediately, on
+ * every request -- there is no caching of "may this account fetch this
+ * document" anywhere.
+ *
+ * What this route CANNOT do anything about: a signed URL minted on an
+ * EARLIER request, before the document was superseded/deleted, is a
+ * capability the storage driver itself (Supabase Storage) has already
+ * handed out and will honor directly, with no further app-side check,
+ * until that URL's own TTL (SIGNED_URL_TTL_SECONDS = 300s, see
+ * lib/storage/supabase.ts) expires. That is an unavoidable property of
+ * using pre-signed direct-storage URLs at all, not something a Next.js
+ * route can revoke after the fact -- the only way to close that window
+ * completely would be to never redirect to a signed URL and instead
+ * always stream bytes through this authenticated route (paying the
+ * latency/throughput cost of proxying every download). This route
+ * already keeps that window as short as practical (300s, the shortest
+ * TTL Supabase's own createSignedUrl() meaningfully supports for a
+ * multi-page PDF fetch) and never mints a NEW one for superseded/deleted
+ * evidence -- it cannot retroactively invalidate one already issued. */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
