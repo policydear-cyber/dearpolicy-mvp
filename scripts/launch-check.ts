@@ -54,6 +54,7 @@ import {
   type CapabilityStatus,
 } from "@/lib/launch/capability-manifest";
 import { classifyRoutes } from "./route-inventory-regressions";
+import { REQUIRED_CI_SUITES } from "./ci-required-suites";
 import { checkRequestOrigin } from "@/lib/http/csrf";
 import { checkMalwareScannerConfigured } from "@/lib/claims/evidence/scan-adapter";
 
@@ -1057,37 +1058,7 @@ async function checkGithubCiStatus() {
     staticProblems.push(`${ciPath} does not exist`);
   } else {
     const ci = readFileSync(ciPath, "utf8");
-    const expectedSteps = [
-      "security:test",
-      "security:tls-test",
-      "security:launch-guard-test",
-      "security:rls-test",
-      "security:authz-client-test",
-      "security:household-test",
-      "security:route-inventory-test",
-      "security:import-boundary-test",
-      "security:authz-http-test",
-      "security:storage-rls-test",
-      "security:storage-orphans-test",
-      "security:db-rate-limit-test",
-      "security:csrf-test",
-      "security:launch-check-test",
-      "security:policy-quarantine-test",
-      "security:scan-callback-test",
-      "security:storage-cleanup-test",
-      "security:household-export-test",
-      "security:lifecycle-test",
-      "security:lifecycle-query-guard-test",
-      "security:active-read-scopes-test",
-      "security:policy-deletion-test",
-      "security:claim-evidence-deletion-test",
-      "security:family-member-deletion-test",
-      "security:household-membership-deletion-test",
-      "security:invitation-revocation-deletion-test",
-      "security:household-deletion-test",
-      "security:placeholder-content-test",
-    ];
-    const missingCiSteps = expectedSteps.filter((s) => !ci.includes(`npm run ${s}`));
+    const missingCiSteps = REQUIRED_CI_SUITES.filter((s) => !ci.includes(`npm run ${s}`));
     if (missingCiSteps.length > 0) {
       staticProblems.push(`CI does not run: ${missingCiSteps.map((s) => `npm run ${s}`).join(", ")}`);
     }

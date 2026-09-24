@@ -127,8 +127,26 @@ jobs:
       - name: Whole-policy deletion regression suite (version-chain resolution, shared reference-document protection & orphan cascade, open/completed claim invalidation, coverage-ledger exclusion -- real Postgres via PGlite, no live DB needed)
         run: npm run security:policy-deletion-test
 
+      - name: Claim-evidence deletion regression suite (evidence lifecycle exclusion on claim/household deletion -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:claim-evidence-deletion-test
+
+      - name: Family-member deletion regression suite (dependent-record cleanup and cross-reference invalidation on family-member removal -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:family-member-deletion-test
+
+      - name: Household-membership deletion regression suite (membership revocation, access-boundary cleanup on member removal -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-membership-deletion-test
+
+      - name: Invitation-revocation deletion regression suite (pending-invitation lifecycle on revocation/expiry -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:invitation-revocation-deletion-test
+
+      - name: Household deletion regression suite (whole-household teardown, member/policy/claim cascade -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-deletion-test
+
       - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
         run: npm run security:placeholder-content-test
+
+      - name: CI workflow-coverage regression suite (every required launch suite must have a corresponding CI step)
+        run: npm run security:ci-workflow-coverage-test
 
       - name: Build
         run: npm run build
