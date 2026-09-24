@@ -102,6 +102,36 @@ function includedBenefit(input: ComposedBenefitInput, payableAmount: number): Co
 }
 const OWNERSHIP_DOCUMENT_ROLES = new Set(["certificate", "schedule", "endorsement", "policy_document"]);
 
+/** Deterministic, content-derived tie-break for benefits whose `priority`
+ * is equal (today, EVERY benefit's `priority` is the same fixed value --
+ * see composeClaim()'s own comment on that field -- because relationships.ts
+ * has no evidenced per-benefit priority signal in this V1 slice; nothing in
+ * the uploaded wording ever tells DearPolicy that one benefit should be
+ * reduced by an aggregate cap before another). Before this tie-break
+ * existed (Defect D36), `Array.prototype.sort`'s stability meant an equal-
+ * priority tie resolved to whichever order the benefits happened to arrive
+ * in from the caller -- the assessments array (ultimately, database row
+ * order) -- so two functionally-identical claims could get different
+ * people's benefits reduced first purely because of an unrelated upstream
+ * iteration order, and reordering the SAME benefits could change who
+ * absorbs a cap shortfall. `calculationId` is a sha256 of every material
+ * input to that one benefit (benefit code, coverage, claim event, amount,
+ * currency -- see stableId() above and lib/claims/composition/types.ts's
+ * ComposedBenefit doc comment), so sorting by it is 100% deterministic and
+ * never depends on array position, database row order, or which order the
+ * caller happened to list benefits in. This is deliberately NOT a claim
+ * that lower-calculationId benefits are actuarially "lower priority" --
+ * it is only ever reached once every evidenced signal (alternative /
+ * accelerated / additional relationships, reimbursement coordination) has
+ * already been applied, and it exists solely so that the SAME set of
+ * benefits always resolves to the SAME allocation no matter how they were
+ * listed. See scripts/claim-composition-regressions.ts's
+ * runPriorityOrderIndependenceRegressions() for the order-invariance proof
+ * this exists to satisfy. */
+function orderedForCapAllocation(benefits: ComposedBenefit[]): ComposedBenefit[] {
+  return [...benefits].sort((a, b) => (a.priority - b.priority) || a.calculationId.localeCompare(b.calculationId));
+}
+
 /**
  * Deterministically selects, composes, caps and totals a family member's
  * calculated benefits for one claim event. This is the ONLY place in
@@ -120,7 +150,10 @@ const OWNERSHIP_DOCUMENT_ROLES = new Set(["certificate", "schedule", "endorsemen
  * reduces the lowest-priority benefit(s) first rather than a
  * per-benefit-tiered scheme a real claims adjuster might apply -- always
  * safe (never overstates a total) but not necessarily how an insurer would
- * split a shortfall between two benefits.
+ * split a shortfall between two benefits. `priority` itself has no
+ * evidenced source in V1 (see orderedForCapAllocation()'s own doc comment
+ * above for the deterministic, order-independent tie-break every benefit's
+ * shared, fixed `priority` value falls back to -- Defect D36).
  */
 export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
   const { claimEventId, familyMemberId, facts, coverages, assessments, wordingPages, now = new Date(), accountId, correlationId } = args;
@@ -138,7 +171,16 @@ export function composeClaim(args: ComposeClaimArgs): ClaimCompositionResult {
       policyId: coverage?.policyId ?? "unknown", contractId: coverage?.policyId ?? "unknown", coverageId: item.coverageId,
       familyMemberId, claimEventId, benefitCode: item.id, benefitCategory: benefitCategoryFor(item.id),
       calculationId: item.calculationId ?? stableId([item.id, item.coverageId, claimEventId, item.calculatedAmount, item.currency]),
-      currency: item.currency, rawAmount: item.calculatedAmount, compositionType: "independent_additive", compositionGroupId: null, priority: 0,
+      currency: item.currency, rawAmount: item.calculatedAmount,
+      compositionType: "independent_additive", compositionGroupId: null,
+      // No evidenced per-benefit priority signal exists in this V1 slice
+      // (relationships.ts has no priority-wording detector) -- every
+      // benefit shares this same fixed value. Cap allocation NEVER relies
+      // on this alone to break a tie: orderedForCapAllocation() always
+      // adds a deterministic, content-derived (calculationId) tie-break on
+      // top of it, specifically so array/DB-row order can never decide
+      // which benefit absorbs a shortfall (Defect D36).
+      priority: 0,
       evidenceReferences: item.ruleEvidence ? [{ policyId: item.ruleEvidence.policyId, chunkId: item.ruleEvidence.chunkId, pageStart: item.ruleEvidence.pageStart, pageEnd: item.ruleEvidence.pageEnd, label: item.ruleEvidence.evidenceLabel }] : [],
       ...(item.aggregation ? { aggregation: item.aggregation } : {}),
     };
@@ -367,7 +409,7 @@ function applyPolicyOrLifetimeCap(cap: AggregateCapSignal, policyId: string, com
   if (cap.scope === "event") return; // handled separately, across all policies
   const inPolicy = composed.filter((b) => b.policyId === policyId && b.status === "included" && b.currency === cap.currency);
   if (inPolicy.length === 0) return;
-  const evidenceRef = { policyId, chunkId: `page:${policyId}:${cap.page}`, pageStart: cap.page, pageEnd: cap.pageEnd, label: cap.scope === "lifetime" ? "Lifetime aggregate cap wording" : "Aggregate cap wording" };
+  const evidenceRef = { policyId, chunkId: `page:${policyId}:${cap.page}`, pageStart: cap.page, pageEnd: cap.pageEnd, label: cap.scope === "lifetime" ? "Lifetime aggregate cap wording" : "Aggregate cap wording", wordingDigest: wordingDigestOf(cap.quote), quote: cap.quote };
 
   let effectiveCapAmount = cap.amount;
   if (cap.scope === "lifetime") {
@@ -395,7 +437,7 @@ function applyPolicyOrLifetimeCap(cap: AggregateCapSignal, policyId: string, com
     return;
   }
   let excess = total - effectiveCapAmount;
-  const ordered = [...inPolicy].sort((a, b) => a.priority - b.priority);
+  const ordered = orderedForCapAllocation(inPolicy);
   for (const b of ordered) {
     if (excess <= 0) { b.capReferences.push({ scope: cap.scope, amount: effectiveCapAmount, currency: cap.currency, evidenceRef, applied: false, amountDeducted: 0 }); continue; }
     const deducted = Math.min(b.payableAmount, excess);
@@ -404,6 +446,22 @@ function applyPolicyOrLifetimeCap(cap: AggregateCapSignal, policyId: string, com
     b.capReferences.push({ scope: cap.scope, amount: effectiveCapAmount, currency: cap.currency, evidenceRef, applied: deducted > 0, amountDeducted: deducted });
     if (deducted > 0) b.deductionReferences.push({ reason: "aggregate_cap", amount: deducted, capReference: b.capReferences.at(-1) });
   }
+}
+
+/** A short, deterministic, content-derived digest of the exact wording
+ * clause a cap decision was read from -- never the raw page text (privacy/
+ * retention: a page can carry unrelated sensitive policy content well
+ * beyond the matched clause; `quote` itself is already bounded to what
+ * relationships.ts's CAP_PATTERN matched, at most a couple hundred
+ * characters, so storing `quote` verbatim alongside this digest is bounded
+ * too). This exists so an audit snapshot (claim_composition_snapshots, see
+ * lib/claims/composition/store.ts) can prove what wording a historical cap
+ * decision actually rested on even if the source document is later
+ * re-processed, re-chunked, or re-paginated -- a page/chunk pointer alone
+ * (`chunkId`/`pageStart`/`pageEnd`) is a MUTABLE reference that can drift
+ * out from under a stored decision; this digest is not. */
+function wordingDigestOf(quote: string): string {
+  return "sha256:" + createHash("sha256").update(quote).digest("hex");
 }
 
 function applyEventScopeCaps(wordingPages: WordingPages, byPolicy: Map<string, ComposedBenefit[]>, composed: ComposedBenefit[]) {
@@ -416,10 +474,10 @@ function applyEventScopeCaps(wordingPages: WordingPages, byPolicy: Map<string, C
     const included = composed.filter((b) => b.status === "included" && b.currency === cap.currency);
     if (included.length === 0) continue;
     const total = included.reduce((sum, b) => sum + b.payableAmount, 0);
-    const evidenceRef = { policyId, chunkId: `page:${policyId}:${cap.page}`, pageStart: cap.page, pageEnd: cap.pageEnd, label: "Shared event-cap wording" };
+    const evidenceRef = { policyId, chunkId: `page:${policyId}:${cap.page}`, pageStart: cap.page, pageEnd: cap.pageEnd, label: "Shared event-cap wording", wordingDigest: wordingDigestOf(cap.quote), quote: cap.quote };
     if (total <= cap.amount) { for (const b of included) b.capReferences.push({ scope: "event", amount: cap.amount, currency: cap.currency, evidenceRef, applied: false, amountDeducted: 0 }); continue; }
     let excess = total - cap.amount;
-    const ordered = [...included].sort((a, b) => a.priority - b.priority);
+    const ordered = orderedForCapAllocation(included);
     for (const b of ordered) {
       if (excess <= 0) { b.capReferences.push({ scope: "event", amount: cap.amount, currency: cap.currency, evidenceRef, applied: false, amountDeducted: 0 }); continue; }
       const deducted = Math.min(b.payableAmount, excess);
