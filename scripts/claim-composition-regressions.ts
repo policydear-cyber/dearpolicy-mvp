@@ -380,6 +380,60 @@ function runPureTests() {
     assert.equal(result.totalsByCurrency[0]?.includedAmount, 100000);
   });
 
+  test("findAggregateCapSignals resolves a 'per event' clause to POLICY scope by default -- only explicit cross-policy language resolves to EVENT scope (Defect D3 fix)", () => {
+    // Ordinary, single-policy wording: "per event" appears, but nothing says the cap applies across other policies.
+    const singlePolicyPages = wordingPages("P-A", "The aggregate maximum of S$50,000 per event shall be payable under this policy in respect of any one Event.");
+    const singlePolicySignals = findAggregateCapSignals(singlePolicyPages);
+    assert.equal(singlePolicySignals.length, 1);
+    assert.equal(singlePolicySignals[0].scope, "policy", "a 'per event' clause with no explicit cross-policy language must fail closed to the narrower 'policy' scope, never the broader 'event' scope");
+
+    // Genuinely cross-policy wording still resolves to "event" scope.
+    const crossPolicyPages = wordingPages("P-A", "The aggregate maximum of S$50,000 per event applies across all policies for this event.");
+    const crossPolicySignals = findAggregateCapSignals(crossPolicyPages);
+    assert.equal(crossPolicySignals.length, 1);
+    assert.equal(crossPolicySignals[0].scope, "event", "explicit 'across all policies' wording must still resolve to the broader 'event' scope");
+  });
+
+  test("a single-policy 'per event' cap must never reduce a completely different, uncapped policy (Agent C's reproduced underpayment fixture -- Defect D3)", () => {
+    const coverages = [
+      makeCoverage({ id: "cov-a", policyId: "P-A", insurer: "Insurer A", policyNumber: "POL-A" }),
+      makeCoverage({ id: "cov-b", policyId: "P-B", insurer: "Insurer B", policyNumber: "POL-B" }),
+    ];
+    const assessments = [
+      makeAssessment({ id: "gtl-death", coverageId: "cov-a", calculatedAmount: 500000, currency: "SGD" }),
+      makeAssessment({ id: "gtl-death", coverageId: "cov-b", calculatedAmount: 300000, currency: "SGD" }),
+    ];
+    const pages = [
+      // Policy A's own wording: "per event" appears, but says nothing about applying across other policies.
+      { policy_id: "P-A", page_number: 1, text: "The aggregate maximum of S$50,000 per event shall be payable under this policy in respect of any one Event." },
+      // Policy B has no cap wording on file at all.
+    ];
+    const result = compose({ coverages, assessments, wordingPages: pages });
+    const included = anyIncluded(result);
+    const benefitA = included.find((b) => b.policyId === "P-A");
+    const benefitB = included.find((b) => b.policyId === "P-B");
+    assert.equal(benefitA?.payableAmount, 50000, "policy A is capped by its own wording");
+    assert.equal(benefitB?.payableAmount, 300000, "policy B must NOT be reduced by policy A's own single-policy cap wording -- policy B has no cap wording of its own");
+    assert.equal(result.totalsByCurrency[0]?.includedAmount, 350000, "the combined total must reflect policy B's full, uncapped amount, not just policy A's own per-event cap");
+  });
+
+  test("control: genuinely cross-policy 'applies across all policies' wording still correctly caps the combined total across two independent policies (must not regress)", () => {
+    const coverages = [
+      makeCoverage({ id: "cov-a", policyId: "P-A", insurer: "Insurer A", policyNumber: "POL-A" }),
+      makeCoverage({ id: "cov-b", policyId: "P-B", insurer: "Insurer B", policyNumber: "POL-B" }),
+    ];
+    const assessments = [
+      makeAssessment({ id: "gtl-death", coverageId: "cov-a", calculatedAmount: 500000, currency: "SGD" }),
+      makeAssessment({ id: "gtl-death", coverageId: "cov-b", calculatedAmount: 300000, currency: "SGD" }),
+    ];
+    const pages = [
+      { policy_id: "P-A", page_number: 1, text: "The aggregate maximum of S$50,000 per event applies across all policies for this event." },
+      // Policy B has no cap wording of its own, but the shared event cap still reaches it because policy A's wording is explicit about cross-policy scope.
+    ];
+    const result = compose({ coverages, assessments, wordingPages: pages });
+    assert.equal(result.totalsByCurrency[0]?.includedAmount, 50000, "explicit cross-policy wording must still cap the combined total across both policies");
+  });
+
   test("a lifetime cap is deducted against an explicit, user-reported prior-paid amount, never assumed", () => {
     const coverages = [makeCoverage({ id: "cov-a", policyId: "P1" })];
     const assessments = [makeAssessment({ id: "gtl-death", coverageId: "cov-a", calculatedAmount: 90000, currency: "SGD" })];

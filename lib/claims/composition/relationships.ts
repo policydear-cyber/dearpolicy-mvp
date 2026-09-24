@@ -75,6 +75,13 @@ export type AggregateCapSignal = {
 
 const CAP_PATTERN = /\b(?:aggregate\s+lifetime|lifetime)\s+(?:maximum|limit|cap)(?:\s+benefit)?\s+(?:of|payable\s+(?:shall|will|is)\s+not\s+exceed)\s+((?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*[\d,]+(?:\.\d+)?)|\b(?:aggregate|overall|combined|total)\s+(?:maximum|limit|cap)\s+(?:of|payable\s+under\s+this\s+(?:policy|event)\s+(?:shall|will|is)\s+not\s+exceed)\s+((?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*[\d,]+(?:\.\d+)?)\s*(?:per\s+(?:event|policy\s+year|life))?/gis;
 const MONEY_PATTERN = /(?:S\$|SGD|USD|US\$|MYR|EUR|GBP)\s*([\d,]+(?:\.\d+)?)/i;
+// Explicit cross-policy language required before a "per event" clause is
+// ever classified as "event" scope (applied across every policy in the
+// claim by engine.ts's applyEventScopeCaps()) rather than the narrower,
+// safer "policy" scope. Deliberately conservative/whitelist-based --
+// "per event" alone is common, ordinary single-policy wording and must
+// never be enough on its own (Defect D3).
+const CROSS_POLICY_PATTERN = /\bacross\s+(?:all|every)\s+(?:the\s+)?(?:polic(?:y|ies)|covers?)\b|\ball\s+covers\b|\ball\s+policies\b/i;
 function currencyOf(text: string) {
   if (/\bUS\$|USD\b/i.test(text)) return "USD";
   if (/\bS\$|SGD\b/i.test(text)) return "SGD";
@@ -87,12 +94,26 @@ function currencyOf(text: string) {
 /** Evidence-backed aggregate-cap detection, same pattern as
  * findCompositionSignals(): only an explicit, quoted maximum is ever
  * returned, never a guessed or inferred ceiling. `scope` is "lifetime" for
- * an explicit "lifetime maximum of $X" statement, "event" when the quote
- * says "per event", otherwise "policy". A lifetime cap's AMOUNT can come
- * from wording like any other cap, but the composition engine only ever
- * DEDUCTS against it using an explicit, user-reported prior-paid-amount
- * fact -- never a guess -- and blocks the affected benefit closed when
- * wording establishes a lifetime cap but no prior-paid amount is on file. */
+ * an explicit "lifetime maximum of $X" statement, "event" ONLY when the
+ * quote says "per event" AND also contains explicit cross-policy language
+ * (e.g. "across all policies", "across every policy", "all covers") --
+ * otherwise "policy". This is a fail-closed default: ordinary, common
+ * single-policy wording like "The aggregate maximum of S$50,000 per event
+ * shall be payable under this policy in respect of any one Event" says
+ * nothing about applying across OTHER policies, so it must resolve to the
+ * narrower "policy" scope, never "event" -- the composition engine applies
+ * an "event" cap against every included benefit across every policy in the
+ * claim (see engine.ts's applyEventScopeCaps()), so misclassifying an
+ * ordinary single-policy cap as "event" scope would let one policy's own
+ * cap wrongly zero out or reduce a completely different, uncapped policy.
+ * (Defect D3, reported by an independent audit: this exact misclassification
+ * caused an 86% / ~S$300,000 underpayment on a reproduced two-policy
+ * fixture before this fail-closed check was added.) A lifetime cap's
+ * AMOUNT can come from wording like any other cap, but the composition
+ * engine only ever DEDUCTS against it using an explicit, user-reported
+ * prior-paid-amount fact -- never a guess -- and blocks the affected
+ * benefit closed when wording establishes a lifetime cap but no prior-paid
+ * amount is on file. */
 export function findAggregateCapSignals(pages: Page[]): AggregateCapSignal[] {
   if (pages.length === 0) return [];
   let joined = "";
@@ -112,7 +133,30 @@ export function findAggregateCapSignals(pages: Page[]): AggregateCapSignal[] {
     const quote = match[0].trim();
     const start = match.index!;
     const end = start + match[0].length;
-    const scope: AggregateCapSignal["scope"] = isLifetime ? "lifetime" : /per\s+event/i.test(quote) ? "event" : "policy";
+    // "event" scope is reserved for wording that BOTH says "per event" AND
+    // explicitly says the cap applies across other policies -- see the
+    // module doc comment above (Defect D3). Anything narrower (including
+    // ordinary "per event ... payable under this policy" wording, which
+    // says nothing about other policies) fails closed to "policy" scope.
+    // The cross-policy check reads a WIDER window than `quote` on purpose:
+    // CAP_PATTERN's own match ends right after "per event" (or the money
+    // amount), so genuinely cross-policy language like "...applies across
+    // all policies for this event" -- which comes AFTER that point in the
+    // sentence -- would never be seen if only the narrow `quote` were
+    // checked. This window never widens `quote` itself (the returned
+    // evidence citation stays exactly what CAP_PATTERN matched); it only
+    // widens what the scope check is allowed to look at, out to the end
+    // of the same sentence (or 200 chars, whichever is shorter).
+    const sentenceEnd = joined.indexOf(".", end);
+    const contextEnd = sentenceEnd === -1
+      ? Math.min(joined.length, end + 200)
+      : Math.min(sentenceEnd + 1, end + 200);
+    const scopeContext = joined.slice(start, contextEnd);
+    const scope: AggregateCapSignal["scope"] = isLifetime
+      ? "lifetime"
+      : /per\s+event/i.test(quote) && CROSS_POLICY_PATTERN.test(scopeContext)
+        ? "event"
+        : "policy";
     signals.push({ scope, amount, currency: currencyOf(moneyText!), quote, page: pageFor(pages, start, offsets), pageEnd: pageFor(pages, Math.max(start, end - 1), offsets) });
   }
   return signals;
