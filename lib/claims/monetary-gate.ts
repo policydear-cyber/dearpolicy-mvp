@@ -4,6 +4,7 @@ import type { ClaimAssessmentItem, ClaimFacts } from "./types";
 import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
+import { evaluateAggregateEvidenceAuthority, type EvidenceAuthorityReasonCode } from "./evidence-authority";
 
 export type MonetaryBlockReason =
   | "STATUS_NOT_ELIGIBLE"
@@ -11,7 +12,8 @@ export type MonetaryBlockReason =
   | "INVALID_CURRENCY"
   | "UNRESOLVED_COVERAGE_MAPPING"
   | "MISSING_RULE_EVIDENCE"
-  | "MISSING_EVENT_DATE";
+  | "MISSING_EVENT_DATE"
+  | EvidenceAuthorityReasonCode;
 
 export type MonetaryDecision =
   | { status: "allowed" }
@@ -96,6 +98,23 @@ export function evaluateMonetaryEligibility(args: {
       reasonCode: "MISSING_EVENT_DATE",
       message: "The event date must be confirmed before checking which policy version applies.",
     };
+  }
+
+  // Checkpoint (Wave 2, D4/D8/D9): defense-in-depth re-check of whatever
+  // AI-derived evidence produced this item's amount, independent of
+  // whatever check the calculator that built it already performed (see
+  // lib/claims/evidence-authority.ts and that field's own doc comment on
+  // ClaimAssessmentItem in lib/claims/types.ts). Absent evidenceProvenance
+  // is NOT itself a block here -- plenty of allowed items (e.g. a plain
+  // death benefit resting only on policy-wording rule evidence) never
+  // carry governed AI-derived evidence at all, and validateCompatibility()/
+  // checkStaleness() have nothing to say about them. When evidenceProvenance
+  // IS present, though, every entry must independently authorize.
+  if (item.evidenceProvenance && item.evidenceProvenance.length > 0) {
+    const authority = evaluateAggregateEvidenceAuthority(item.evidenceProvenance);
+    if (!authority.authorized) {
+      return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
+    }
   }
 
   return { status: "allowed" };
