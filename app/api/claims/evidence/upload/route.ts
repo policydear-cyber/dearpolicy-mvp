@@ -7,7 +7,7 @@ import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { getClaimSession } from "@/lib/claims/session";
 import { saveClaimEvidenceFile } from "@/lib/storage";
 import { validateEvidenceUpload, looksLikePdf } from "@/lib/claims/evidence/validation";
-import { createEvidenceDocument, supersedeEvidenceDocument } from "@/lib/claims/evidence/store";
+import { createEvidenceDocument, getScopedEvidenceDocument, supersedeEvidenceDocument, EvidenceAlreadySupersededError } from "@/lib/claims/evidence/store";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { enqueueClaimEvidenceProcessing } from "@/lib/claims/evidence/queue";
 import type { ClaimEvidenceDocumentType } from "@/lib/claims/evidence/types";
@@ -32,6 +32,28 @@ export async function POST(request: NextRequest) {
     const session = await getClaimSession(ctx.householdId, familyMemberId, claimSessionId);
     if (!session) return NextResponse.json({ error: "Claim session not found for this family member." }, { status: 404 });
 
+    // D7/D33 (Wave 2 adversarial audit): a corrected re-upload's
+    // `supersedesId` is now resolved through getScopedEvidenceDocument()
+    // -- the SAME full-ownership-chain check (account + family member +
+    // claim session) every other route uses -- BEFORE any file is saved
+    // or any document row is created. Previously supersedesId was handed
+    // straight to supersedeEvidenceDocument(), which only ever checked
+    // account_id, so a request naming a document id from a DIFFERENT
+    // family member's or claim's evidence (but the same household
+    // account) could silently supersede -- and invalidate every match
+    // built from -- evidence that had nothing to do with this upload.
+    // getScopedEvidenceDocument() also now excludes an already-superseded
+    // document (see its own doc comment in lib/claims/evidence/store.ts),
+    // so re-submitting the same correction twice fails here with a clear
+    // 400 instead of reaching supersedeEvidenceDocument()'s own
+    // defense-in-depth race check.
+    if (supersedesId) {
+      const oldDocument = await getScopedEvidenceDocument({ accountId: ctx.householdId, familyMemberId, claimSessionId, id: supersedesId });
+      if (!oldDocument) {
+        return NextResponse.json({ error: "The document you are correcting could not be found for this claim, or has already been replaced." }, { status: 400 });
+      }
+    }
+
     const bytes = new Uint8Array(await file.arrayBuffer());
     const validation = validateEvidenceUpload({ documentType, filename: file.name, mimeType: file.type, byteSize: bytes.byteLength });
     if (!validation.valid) return NextResponse.json({ error: validation.message, reasonCode: validation.reasonCode }, { status: 400 });
@@ -51,7 +73,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ documentId: document.id, status: document.status, duplicate: true }, { status: 200 });
     }
 
-    if (supersedesId) await supersedeEvidenceDocument({ accountId: ctx.householdId, oldId: supersedesId, newId: document.id, reason: "Replaced by a corrected re-upload." });
+    if (supersedesId) {
+      try {
+        await supersedeEvidenceDocument({ accountId: ctx.householdId, oldId: supersedesId, newId: document.id, reason: "Replaced by a corrected re-upload." });
+      } catch (error) {
+        // Race backstop only -- the scoped lookup above already rejects a
+        // foreign/superseded id before any file is saved. See
+        // EvidenceAlreadySupersededError's own doc comment.
+        if (error instanceof EvidenceAlreadySupersededError) {
+          return NextResponse.json({ error: "The document you are correcting has already been replaced by another upload." }, { status: 409 });
+        }
+        throw error;
+      }
+    }
 
     await appendClaimEvidenceAudit(ctx.householdId, {
       actor: "household", action: "uploaded", evidenceDocumentId: document.id, claimSessionId,
