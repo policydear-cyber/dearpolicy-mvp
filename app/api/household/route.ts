@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { requireCurrentUser, UnauthenticatedError, requireRecentAuthentication } from "@/lib/auth/session";
-import { listMemberships, renameHousehold, deleteHousehold } from "@/lib/household/repo";
+import { listMemberships, renameHousehold } from "@/lib/household/repo";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const runtime = "nodejs";
 // "authenticated" rather than "household-member": a brand-new user with no
@@ -70,8 +71,12 @@ export async function DELETE(request: NextRequest) {
     const confirmName = typeof body.confirmName === "string" ? body.confirmName.trim() : "";
     // Re-fetch the real household name to compare against, rather than
     // trusting anything client-supplied for the comparison itself.
+    // D2/D29 fix: this read must exclude a non-active household the same
+    // way every other ordinary accounts read does (lib/lifecycle/scopes.ts's
+    // activePredicate()) -- the lifecycle query-guard scanner previously
+    // missed this because it wrote its SQL in lowercase.
     const nameRows = await createUserSupabaseClient(ctx.userId, (client) =>
-      client.query<{ name: string }>(`select name from accounts where id = $1`, [ctx.householdId]),
+      client.query<{ name: string }>(`select name from accounts where id = $1 and ${activePredicate()}`, [ctx.householdId]),
     );
     const actualName = nameRows.rows[0]?.name ?? "";
     if (!confirmName || confirmName !== actualName) {

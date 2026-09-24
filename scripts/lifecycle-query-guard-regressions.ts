@@ -66,19 +66,45 @@ type GuardedTable = (typeof TABLES)[number];
  * into an unrelated later statement in practice for this codebase's
  * query style (short, single-purpose template strings). */
 function unguardedOccurrences(text: string, table: GuardedTable): number {
-  const re = new RegExp(`(?:FROM|JOIN)\\s+${table}\\b(?!_)`, "g");
+  // D2/D29 fix: case-insensitive. The previous "g"-only regex silently
+  // missed any lowercase-styled `from`/`join` -- confirmed live against
+  // two real call sites (lib/household/repo.ts's deleteHousehold(),
+  // app/api/household/route.ts's confirm-name read) that write lowercase
+  // SQL keywords. Both the keyword match and the guard-window check below
+  // are now case-insensitive, so an unusually cased predicate is still
+  // recognized too.
+  const re = new RegExp(`\\b(from|join)\\s+${table}\\b(?!_)`, "gi");
   let count = 0;
   for (const match of text.matchAll(re)) {
     const start = match.index ?? 0;
-    const window = text.slice(start, start + 600);
+    // A `DELETE FROM <table>` is a terminal deletion, not a read that
+    // needs to exclude non-active rows -- it removes the row regardless
+    // of lifecycle_state (see lib/lifecycle/coordinator.ts's
+    // requestHouseholdDeletion(), which wraps exactly this: deleteHousehold()'s
+    // real, sanctioned `DELETE FROM accounts`). Matching FROM/JOIN
+    // case-insensitively would otherwise immediately turn that legitimate
+    // statement into a false positive.
+    const before = text.slice(Math.max(0, start - 20), start).toLowerCase();
+    if (/\bdelete\s+$/.test(before)) continue;
+    const window = text.slice(start, start + 600).toLowerCase();
     // Guarded either by the literal predicate (an un-migrated file that
     // still spells it out inline) or by the shared helper
     // (lib/lifecycle/scopes.ts's activePredicate()) that migrated call
     // sites now use instead of repeating the literal string.
-    if (!window.includes("lifecycle_state") && !window.includes("activePredicate(")) count++;
+    if (!window.includes("lifecycle_state") && !window.includes("activepredicate(")) count++;
   }
   return count;
 }
+
+// D2/D29, disclosed limitation: this remains a text scan, not a SQL
+// parser. A query built through a shared helper that takes the table
+// name as a runtime string argument (rather than spelling `FROM
+// <table>` in a template literal at the call site) is invisible to this
+// scanner, exactly like it would be to any other regex-based static
+// check. No call site in this codebase currently does that (every
+// lifecycle-scoped read spells its table name directly), but a future
+// one could silently escape this guard the same way lowercase casing
+// used to -- worth remembering if that pattern is ever introduced.
 
 /** Files with at least one call to readIncludingDeletedForInternalUse()
  * (lib/lifecycle/scopes.ts) -- these are not migration debt, they are
