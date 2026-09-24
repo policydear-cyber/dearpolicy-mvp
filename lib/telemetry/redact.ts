@@ -65,6 +65,27 @@
  *    values (e.g. a UK NI number's AB123456C shape) that neither
  *    LONG_DIGIT_RUN_PATTERN (digits-only) nor LONG_TOKEN_PATTERN (20+
  *    chars) reliably catches at typical national-ID lengths.
+ *
+ * Checkpoint 9c (D18-D21 follow-up, Wave 2 coordinator reassessment): the
+ * two residual gaps Checkpoint 9b's doc comment above documents as
+ * deliberately left open -- a bare `{name: "..."}` field and a bare
+ * `{code: "..."}`/`{value: "..."}` field under a fully generic key --
+ * are now closed, WITHOUT adding a bare `name`/`code`/`value` key to
+ * DENIED_KEY_SUBSTRINGS (that would still be the wrong fix, for the same
+ * reasons 9b gave: it would either break the circular-structure
+ * regression's `{name: "root", ...}` shape, or drop this codebase's
+ * ordinary non-secret `reasonCode`/`statusValue`-style fields wholesale).
+ * Instead, a third, VALUE-shape layer is added: looksLikeHumanName() and
+ * looksLikeShortSecret() run against every string that survives the
+ * existing key- and pattern-based layers untouched, and catch a
+ * name-shaped or short-secret-shaped value by its OWN SHAPE, regardless
+ * of what key it happens to be sitting under -- see the doc comment
+ * directly above looksLikeHumanName() below for the exact patterns and
+ * their honest false-positive/false-negative trade-offs (this is a shape
+ * heuristic, not a classifier, and cannot be made perfect from a bare
+ * string alone). `{name: "root"}` still survives untouched: "root" is a
+ * single lowercase token, which matches neither new pattern, so the
+ * circular-structure regression is unaffected.
  */
 import { classifyError } from "./errors";
 
@@ -205,6 +226,61 @@ const LONG_DIGIT_RUN_PATTERN = /\b\d{9,}\b/g;
 // typical national-ID lengths.
 const NATIONAL_ID_PATTERN = /\b[A-Za-z]{1,2}\d{6,9}[A-Za-z]?\b/g;
 
+// D-new (Checkpoint 9c): VALUE-shape detection for a plain human name and
+// a short secret/code, independent of the key name they're found under --
+// see the Checkpoint 9c paragraph in the file's top doc comment for why
+// this exists instead of a bare `name`/`code`/`value` key-denylist entry.
+//
+// Neither pattern is, or can be, a perfect classifier from a bare string
+// alone -- both are documented, deliberate shape heuristics with known
+// trade-offs:
+//
+//  - HUMAN_NAME_SHAPE_PATTERN: 2-4 space-separated Title-Case tokens
+//    (each starting with one uppercase letter, the rest lowercase, with
+//    an optional internal hyphen/apostrophe -- "Mary-Jane O'Brien"
+//    shaped). FALSE POSITIVES: any other two/three-word Title-Case
+//    phrase also matches, even though it isn't a person's name -- a
+//    place name ("New York"), a company/product name ("Blue Cross Blue
+//    Shield"), or a Title-Case phrase a careless caller put in `extra`
+//    ("Payment Received"). FALSE NEGATIVES: a single-token name ("Cher"),
+//    an all-lowercase or ALL-CAPS name, or unusual capitalization this
+//    pattern doesn't anticipate.
+//  - SHORT_SECRET_LENGTH_PATTERN (+ a digit check): a 4-10 character run
+//    that is entirely alphanumeric (no separators) AND contains at least
+//    one digit -- covers a numeric OTP/PIN ("482913") and a mixed-case
+//    alphanumeric invite/redemption code ("A1B2C3D4") alike. Requiring a
+//    digit is deliberate: it is what keeps this from catching ordinary
+//    short words (this codebase's actual closed-enum values --
+//    errorCategory, status, etc. -- are lowercase/underscored words with
+//    no digit, so none of them collide with this pattern; see recordEvent()
+//    in index.ts for the existing carve-out pattern to extend if a future
+//    enum value ever does collide). FALSE POSITIVES: any other legitimate
+//    short alphanumeric-with-a-digit value that isn't a secret -- a
+//    product SKU, a short non-secret reference number, a version-like
+//    token with no separator ("v3build2"). FALSE NEGATIVES: a secret
+//    shorter than 4 chars, longer than 10 chars (11-19 char secrets with
+//    no digit fall in a gap between this pattern and LONG_TOKEN_PATTERN's
+//    20+ floor), or one written with a separator character (a fully
+//    generic key holding "invite-code-4821" still slips through both
+//    layers -- a known, narrower residual gap than the one this change
+//    closes).
+//  - Applied only to a value that survived every replacement pass above
+//    completely untouched (see the `out === value` guard in
+//    redactString()) -- a value already partially redacted is not
+//    re-evaluated for name/secret shape.
+const HUMAN_NAME_SHAPE_PATTERN = /^[A-Z][a-zA-Z'-]{1,20}(?:\s+[A-Z][a-zA-Z'-]{1,20}){1,3}$/;
+const SHORT_SECRET_LENGTH_PATTERN = /^[A-Za-z0-9]{4,10}$/;
+const HAS_DIGIT_PATTERN = /\d/;
+
+function looksLikeHumanName(value: string): boolean {
+  return HUMAN_NAME_SHAPE_PATTERN.test(value.trim());
+}
+
+function looksLikeShortSecret(value: string): boolean {
+  const trimmed = value.trim();
+  return SHORT_SECRET_LENGTH_PATTERN.test(trimmed) && HAS_DIGIT_PATTERN.test(trimmed);
+}
+
 function stripQueryString(value: string): string {
   // A signed URL's signature/expiry/token lives in the query string, so
   // stripping it outright (rather than denylisting parameter names, which
@@ -236,6 +312,17 @@ function redactString(value: string): string {
   // comment above) -- a UUID is exactly a 36-character run of hex digits
   // and hyphens, which this pattern's character class matches in full.
   out = out.replace(LONG_TOKEN_PATTERN, "[REDACTED:token]");
+  // D-new (Checkpoint 9c): whole-value shape checks, run last and only
+  // against a value that survived every pattern-replacement pass above
+  // completely untouched (out === value) -- a person's name or a short
+  // code is only meaningfully "name-shaped"/"secret-shaped" as a whole
+  // string, and gating on out === value keeps this pass from trying to
+  // shape-check a value that already contains an inline [REDACTED:...]
+  // marker from an earlier pass.
+  if (out === value) {
+    if (looksLikeHumanName(out)) return "[REDACTED:name]";
+    if (looksLikeShortSecret(out)) return "[REDACTED:short-code]";
+  }
   return out;
 }
 
