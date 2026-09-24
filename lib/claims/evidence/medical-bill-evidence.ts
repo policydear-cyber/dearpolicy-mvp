@@ -129,9 +129,23 @@ export async function confirmMedicalBillReview(args: {
  * document's own extraction -- the calculator layer (lib/claims/
  * medical-rules.ts) is responsible for any further duplicate-bill
  * detection, since only it has the full claim context to judge that. */
+/** Checkpoint (Wave 2, D4/D8/D9): a "matched" document whose OWN row has
+ * since been superseded (a corrected re-upload -- see ./store.ts's
+ * supersedeEvidenceDocument()) must never keep contributing its line
+ * items to the aggregate below. listEvidenceDocuments() itself does not
+ * filter on superseded_at (it is a general listing used for UI/audit
+ * history, where a superseded document must still be visible), so this
+ * module -- the ONE source a medical calculator may treat as verified --
+ * is responsible for excluding it here. Before this fix, an old document
+ * and its corrected replacement could both be "matched" at once and both
+ * contribute line items, double-counting the bill. */
+function isCurrentlyVerifiable(document: { status: string; superseded_at: string | null }): boolean {
+  return document.status === "matched" && document.superseded_at == null;
+}
+
 export async function loadVerifiedMedicalBillFacts(accountId: string, familyMemberId: string, claimSessionId: string): Promise<VerifiedMedicalBillFacts> {
   const documents = (await listEvidenceDocuments(accountId, claimSessionId))
-    .filter((d) => d.family_member_id === familyMemberId && d.status === "matched" && isMedicalClaimEligibleDocumentType(d.document_type))
+    .filter((d) => d.family_member_id === familyMemberId && isCurrentlyVerifiable(d) && isMedicalClaimEligibleDocumentType(d.document_type))
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 
   const lineItems: MedicalBillLineItem[] = [];
