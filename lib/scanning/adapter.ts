@@ -16,6 +16,7 @@
  * covers every document pipeline in the app at once.
  */
 import { isProduction, truthy } from "@/lib/launch/guards";
+import { virusTotalFileScanAdapter } from "./adapters/virustotal";
 
 /** "clean"/"infected" are only ever returned by a REAL adapter that
  * actually scanned the bytes. "scan_unavailable" is the null adapter's
@@ -44,6 +45,12 @@ export const nullFileScanAdapter: FileScanAdapter = {
  * with no separate wiring per pipeline. */
 const SCAN_ADAPTERS: Record<string, FileScanAdapter> = {
   null: nullFileScanAdapter,
+  // Checkpoint 14e: the first REAL entry. Selected via
+  // MALWARE_SCANNER_PROVIDER=virustotal + VIRUSTOTAL_API_KEY -- see
+  // lib/scanning/adapters/virustotal.ts's module doc comment for the full
+  // API contract, verdict mapping, and why the null adapter above remains
+  // the fail-closed default for every other/unset value of that env var.
+  virustotal: virusTotalFileScanAdapter,
 };
 
 /** Test-only seam: registers an adapter under a name so a regression suite
