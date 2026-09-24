@@ -38,6 +38,7 @@
 
 import { createHash } from "node:crypto";
 import { validateMedicalEvidence, validateOwnershipEvidence, validatePolicyEvidence, type CIDefinitionMatch, type ValidPolicyEvidenceRef } from "./evidence";
+import { evaluateEvidenceAuthority, type EvidenceAuthorityReasonCode } from "../evidence-authority";
 
 export { stableId } from "./death-benefit";
 
@@ -166,7 +167,8 @@ export type CIBlockReasonCode =
   | "DEFINITION_MATCH_ILLNESS_MISMATCH" | "DEFINITION_MATCH_DEFINITION_VERSION_MISMATCH" | "DEFINITION_MATCH_NOT_CONFIRMED"
   | "STAGE_NOT_EVIDENCED" | "STAGE_MISMATCH" | "WAITING_PERIOD_NOT_ESTABLISHED" | "WAITING_PERIOD_NOT_MET"
   | "SURVIVAL_PERIOD_NOT_ESTABLISHED" | "SURVIVAL_PERIOD_NOT_MET" | "MULTI_PAY_PRIOR_TRANCHE_UNVERIFIED"
-  | "INVALID_MULTI_PAY_TRANCHE" | "UNRESOLVED_EXCLUSION" | "INVALID_EXCLUSION_EVIDENCE";
+  | "INVALID_MULTI_PAY_TRANCHE" | "UNRESOLVED_EXCLUSION" | "INVALID_EXCLUSION_EVIDENCE"
+  | EvidenceAuthorityReasonCode;
 
 export type CIBlocked = { status: "blocked"; reasonCode: CIBlockReasonCode; message: string };
 export type CINotApplicable = { status: "not_applicable"; potentialAmount: null; reason: string };
@@ -284,6 +286,15 @@ export function calculateCriticalIllness(input: CIInput): CIResult {
   }
   if (match.result !== "matches") {
     return { status: "blocked", reasonCode: "DEFINITION_MATCH_NOT_CONFIRMED", message: "The reviewed medical evidence has not been explicitly confirmed to match this policy's own critical-illness definition -- it is currently: " + match.result.replace(/_/g, " ") + "." };
+  }
+
+  // Checkpoint (Wave 2, D4/D8/D9): see calculateAccidentalDeath()'s
+  // identical gate in accidental-death.ts and lib/claims/evidence-authority.ts
+  // for the full rationale. Runs after the match is confirmed structurally
+  // correct and scoped to this exact calculation, before any arithmetic.
+  const authority = evaluateEvidenceAuthority(match.provenance);
+  if (!authority.authorized) {
+    return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
   }
 
   // --- Stage formula: the evidenced stage must equal the formula's stage. ---
