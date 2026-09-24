@@ -158,6 +158,7 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     const { fields, model, provider, version } = await extractClaimEvidence({
       pages: pages.map((p) => ({ pageNumber: p.pageNumber, text: p.text })),
       documentType: current.document_type,
+      documentId: args.documentId,
     });
 
     const [member, deathDate, diagnosisDate, reused] = await Promise.all([

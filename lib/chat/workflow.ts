@@ -26,6 +26,9 @@ import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInte
 import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn,ChatConflict } from "./store";
 import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress } from "./types";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
@@ -324,7 +327,7 @@ function dedupeNegativeRestatements(observations:PolicyObservation[]){
   const best=restatements.reduce((a,b)=>b.text.length>a.text.length?b:a);
   return observations.filter(o=>!isRestatement(o.text)||o===best);
 }
-export async function runChatWorkflow(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
+async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
   const {request,conversation}=context;
   const report=options?.report??(async()=>undefined);
   const check=options?.check??(async()=>undefined);
@@ -1099,6 +1102,39 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
   await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
   return {answer,retrieved:[]};
 }
+
+// Checkpoint 14i: chat-turn-level observability call site
+// (scripts/launch-check.ts's privacy_safe_observability capability).
+// runChatWorkflow() is the ONE function every chat turn (API route and
+// worker-driven job alike) goes through to produce a ChatResult, so one
+// event at its real success/failure boundary covers every caller -- the
+// same "one call = one event" convention every other Checkpoint 14b/14i
+// call site uses. The heavy turn logic itself is left untouched in
+// runChatWorkflowInternal(); this wrapper only adds the telemetry
+// boundary around it.
+export async function runChatWorkflow(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
+  const correlationId = resolveCorrelationId(undefined);
+  try {
+    const result = await runChatWorkflowInternal(context, options);
+    void recordEvent({
+      name: "chat.turn.completed",
+      correlationId,
+      status: "success",
+      householdRef: pseudonymizeId(context.request.accountId),
+      extra: { claimItemCount: result.answer?.claimItems?.length ?? 0 },
+    });
+    return result;
+  } catch (error) {
+    void recordErrorEvent({
+      name: "chat.turn.failed",
+      correlationId,
+      householdRef: pseudonymizeId(context.request.accountId),
+      error,
+    });
+    throw error;
+  }
+}
+
 export async function askContextualDearPolicy(request:ChatRequest) {
   return runChatWorkflow(await prepareChat(request));
 }

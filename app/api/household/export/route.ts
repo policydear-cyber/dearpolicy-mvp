@@ -1,38 +1,43 @@
 /**
- * Household export (checkpoint 6). POST kicks off (or, idempotently,
- * re-fetches the state of) a household export; GET lists this
- * household's recent export requests. Both are owner-only (the spec's
- * "owner authorization where appropriate" -- exporting every record the
- * household holds is exactly that appropriate case) and require a
- * recently-authenticated session on the mutating path.
+ * Household export (checkpoint 6; enqueue-only since checkpoint 14i).
+ * POST kicks off (or, idempotently, re-fetches the state of) a household
+ * export; GET lists this household's recent export requests. Both are
+ * owner-only (the spec's "owner authorization where appropriate" --
+ * exporting every record the household holds is exactly that appropriate
+ * case) and require a recently-authenticated session on the mutating
+ * path.
  *
- * Generation is synchronous within this request today: there is no
- * durable job framework yet (checkpoint 8's scope) to hand this off to.
- * That is still honest against the spec's "do not embed unbounded binary
- * data in a synchronous API response" -- this response is JSON metadata
- * (id/status/size/timestamps) only, never the export's own content; the
- * content is fetched separately, once, from [id]/download/route.ts.
+ * Checkpoint 14i (claude/v1-launch-hardening): generation used to run
+ * synchronously inside this request -- the one real, honestly-documented
+ * gap Checkpoint 14f's enqueue-only migration of policy/claim-evidence
+ * processing left unmigrated (see scripts/launch-check.ts's
+ * background_job_reliability history). This route now does exactly what
+ * lib/rag/processing-queue.ts and lib/claims/evidence/queue.ts already
+ * do: transition the row to `running` (CAS-guarded, unchanged) and
+ * enqueue the real work via lib/household/export-queue.ts's
+ * enqueueHouseholdExport() -- never calling
+ * lib/household/export-generation.ts's generateAndStoreHouseholdExport()
+ * itself. A genuinely separate worker pass (scripts/worker.ts, via
+ * lib/jobs/processors.ts's processHouseholdExportJob) claims and runs
+ * it. This response is still JSON metadata (id/status/size/timestamps)
+ * only, never the export's own content -- unchanged from before; the
+ * content is fetched separately, once, from [id]/download/route.ts, and
+ * a caller polls GET/this same idempotent POST for `ready`.
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { createHash } from "node:crypto";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { requireRecentAuthentication } from "@/lib/auth/session";
 import { requireHouseholdOwner } from "@/lib/household/repo";
-import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { pool } from "@/lib/db/client";
-import { buildHouseholdExportSnapshot } from "@/lib/household/export";
 import {
   appendExportAudit,
   createOrGetExportRequest,
   getExportRow,
-  HOUSEHOLD_EXPORT_TTL_MS,
   listRecentExports,
-  markExportFailed,
-  markExportReady,
   markExportRunning,
   type HouseholdExportRow,
 } from "@/lib/household/export-store";
-import { saveHouseholdExportFile } from "@/lib/storage";
+import { enqueueHouseholdExport } from "@/lib/household/export-queue";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-owner" as const;
@@ -86,35 +91,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(toResponse(fresh ?? row));
     }
 
-    try {
-      const snapshot = await createUserSupabaseClient(ctx.userId, (client) => buildHouseholdExportSnapshot(client, ctx.householdId));
-      const json = JSON.stringify(snapshot, null, 2);
-      const bytes = new TextEncoder().encode(json);
-      const manifestHash = createHash("sha256").update(json).digest("hex");
-      const storageKey = await saveHouseholdExportFile({ householdId: ctx.householdId, exportId: row.id, bytes });
-      const expiresAt = new Date(Date.now() + HOUSEHOLD_EXPORT_TTL_MS);
-      const ready = await markExportReady(pool, row.id, { storageKey, byteSize: bytes.byteLength, manifestHash, expiresAt });
-      await appendExportAudit(pool, { householdId: ctx.householdId, exportId: row.id, actor: ctx.userId, action: "generated" });
-      return NextResponse.json(toResponse(ready ?? running));
-    } catch (error) {
-      // Never let a raw error (a driver message, a stack-trace-shaped
-      // string) become this row's stored `error` -- that field can be
-      // read back by the household on the status endpoint, and this
-      // codebase's own "no raw provider/database errors in a
-      // client-facing field" convention (see
-      // lib/auth/request-context.ts's routeErrorResponse() doc comment)
-      // applies here just as much as to any other response body.
-      const message = "Export generation failed. Please try again.";
-      const failed = await markExportFailed(pool, row.id, message);
-      await appendExportAudit(pool, {
-        householdId: ctx.householdId,
-        exportId: row.id,
-        actor: ctx.userId,
-        action: "generation_failed",
-        detail: error instanceof Error ? error.message : String(error),
-      });
-      return NextResponse.json(toResponse(failed ?? { ...running, status: "failed", error: message }), { status: 500 });
-    }
+    // Enqueue-only from here -- see this file's own doc comment. A
+    // genuinely separate worker pass claims and runs the real
+    // generation; this request never calls
+    // generateAndStoreHouseholdExport() itself, and returns `running`
+    // promptly rather than blocking on it.
+    await enqueueHouseholdExport({ exportId: row.id, householdId: ctx.householdId, requestedBy: ctx.userId });
+    return NextResponse.json(toResponse(running));
   } catch (error) {
     return routeErrorResponse(error);
   }

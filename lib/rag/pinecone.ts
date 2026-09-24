@@ -16,6 +16,9 @@
  * Every call here is best-effort. A missing key, an index still initialising or
  * a Pinecone outage must never fail an upload or an answer: the stored benefit
  * rules and full-text search still work, they just work less well. */
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 const CONTROL_PLANE = "https://api.pinecone.io";
 const API_VERSION = "2026-07";
@@ -149,24 +152,54 @@ export async function indexPolicyPassages(args: {
   if (!args.passages.length) return 0;
   const namespace = encodeURIComponent(namespaceFor(args.accountId));
   let indexed = 0;
-  for (let i = 0; i < args.passages.length; i += UPSERT_BATCH) {
-    const batch = args.passages.slice(i, i + UPSERT_BATCH);
-    const ndjson = batch
-      .map((passage) => JSON.stringify({
-        _id: recordId(args.policyId, passage.chunkId),
-        [TEXT_FIELD]: passage.text,
-        chunk_id: passage.chunkId,
-        policy_id: passage.policyId,
-        page_start: passage.pageStart,
-        page_end: passage.pageEnd,
-        ...(passage.heading ? { heading: passage.heading } : {}),
-      }))
-      .join("\n");
-    await dataPlane(`/records/namespaces/${namespace}/upsert`, { body: ndjson, contentType: "application/x-ndjson", timeoutMs: 120_000 });
-    indexed += batch.length;
-    await args.report?.(indexed, args.passages.length);
+  // Checkpoint 14i: "Embeddings" was named as a required telemetry call
+  // site (scripts/launch-check.ts's privacy_safe_observability
+  // capability) -- this is the real, one chokepoint every embedding
+  // request goes through (Pinecone generates the embeddings server-side
+  // on upsert; nothing in this codebase ever handles a vector directly --
+  // see this file's own doc comment), so one event per document indexed
+  // genuinely covers it, the same "one call = one event" convention every
+  // other Checkpoint 14b/14i call site uses.
+  const correlationId = resolveCorrelationId(undefined);
+  const householdRef = pseudonymizeId(args.accountId);
+  try {
+    for (let i = 0; i < args.passages.length; i += UPSERT_BATCH) {
+      const batch = args.passages.slice(i, i + UPSERT_BATCH);
+      const ndjson = batch
+        .map((passage) => JSON.stringify({
+          _id: recordId(args.policyId, passage.chunkId),
+          [TEXT_FIELD]: passage.text,
+          chunk_id: passage.chunkId,
+          policy_id: passage.policyId,
+          page_start: passage.pageStart,
+          page_end: passage.pageEnd,
+          ...(passage.heading ? { heading: passage.heading } : {}),
+        }))
+        .join("\n");
+      await dataPlane(`/records/namespaces/${namespace}/upsert`, { body: ndjson, contentType: "application/x-ndjson", timeoutMs: 120_000 });
+      indexed += batch.length;
+      await args.report?.(indexed, args.passages.length);
+    }
+    void recordEvent({
+      name: "rag.embeddings.indexed",
+      correlationId,
+      status: "success",
+      householdRef,
+      resourceRef: pseudonymizeId(args.policyId),
+      extra: { passages: indexed },
+    });
+    return indexed;
+  } catch (error) {
+    void recordErrorEvent({
+      name: "rag.embeddings.index_failed",
+      correlationId,
+      householdRef,
+      resourceRef: pseudonymizeId(args.policyId),
+      error,
+      extra: { passagesAttempted: args.passages.length, passagesIndexed: indexed },
+    });
+    throw error;
   }
-  return indexed;
 }
 
 /** The semantic half of retrieval: which stored passages read like an answer to

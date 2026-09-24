@@ -18,6 +18,9 @@ import { modelFor } from "@/lib/ai/providers";
 import { ClaimEvidenceExtractionSchema } from "./extraction-schema";
 import { isMedicalClaimEligibleDocumentType, isMedicalEvidenceDocumentType } from "./types";
 import type { ClaimEvidenceDocumentType, ClaimEvidenceExtractedFields, ClaimEvidencePageCitation } from "./types";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export const CLAIM_EVIDENCE_EXTRACTION_VERSION = "claim-evidence-extract-v1";
 
@@ -83,6 +86,7 @@ function verifyCitations(citations: ClaimEvidencePageCitation[], pages: { pageNu
 export async function extractClaimEvidence(args: {
   pages: { pageNumber: number; text: string }[];
   documentType: ClaimEvidenceDocumentType;
+  documentId?: string;
 }): Promise<{ fields: ClaimEvidenceExtractedFields; model: string; provider: string; version: string }> {
   const choice = modelFor("reading");
   const system = isMedicalClaimEligibleDocumentType(args.documentType) && !isMedicalEvidenceDocumentType(args.documentType)
@@ -90,22 +94,53 @@ export async function extractClaimEvidence(args: {
     : isMedicalEvidenceDocumentType(args.documentType) ? MEDICAL_EVIDENCE_SYSTEM : CAUSE_OF_DEATH_SYSTEM;
   const user = `Document type declared at upload: ${args.documentType}.\n\n`
     + args.pages.map((p) => `--- Page ${p.pageNumber} ---\n${p.text}`).join("\n\n");
-  const raw = await structuredCompletion({
-    system,
-    user,
-    schema: ClaimEvidenceExtractionSchema,
-    role: "reading",
-    operation: "claim_evidence_extraction",
-    schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
-    temperature: 0,
-  });
-  // structuredCompletion() already validated `raw` against
-  // ClaimEvidenceExtractionSchema (throwing TruncatedModelOutput on a
-  // mismatch), so this only needs to re-check what that schema cannot: that
-  // each page citation's excerpt is genuinely found on the page it claims.
-  const fields: ClaimEvidenceExtractedFields = {
-    ...raw,
-    pageCitations: verifyCitations(raw.pageCitations, args.pages),
-  };
-  return { fields, model: choice.model, provider: choice.provider, version: CLAIM_EVIDENCE_EXTRACTION_VERSION };
+  // Checkpoint 14i: "Claim-evidence extraction" was named as a required
+  // telemetry call site (scripts/launch-check.ts's privacy_safe_
+  // observability capability) -- this function is the ONE chokepoint
+  // every claim-evidence extraction goes through (lib/claims/evidence/
+  // pipeline.ts's processClaimEvidence() is its only real caller), the
+  // same "one call = one event" convention lib/claims/composition/
+  // engine.ts's composeClaim() already uses. Fire-and-forget, never
+  // awaited -- telemetry must never slow down or fail extraction itself.
+  const correlationId = resolveCorrelationId(undefined);
+  try {
+    const raw = await structuredCompletion({
+      system,
+      user,
+      schema: ClaimEvidenceExtractionSchema,
+      role: "reading",
+      operation: "claim_evidence_extraction",
+      schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
+      temperature: 0,
+    });
+    // structuredCompletion() already validated `raw` against
+    // ClaimEvidenceExtractionSchema (throwing TruncatedModelOutput on a
+    // mismatch), so this only needs to re-check what that schema cannot: that
+    // each page citation's excerpt is genuinely found on the page it claims.
+    const fields: ClaimEvidenceExtractedFields = {
+      ...raw,
+      pageCitations: verifyCitations(raw.pageCitations, args.pages),
+    };
+    void recordEvent({
+      name: "claims.evidence.extraction.completed",
+      correlationId,
+      status: "success",
+      resourceRef: args.documentId ? pseudonymizeId(args.documentId) : null,
+      resolvedModel: choice.model,
+      schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
+      extra: { documentType: args.documentType, pageCitationsKept: fields.pageCitations.length, pageCitationsProposed: raw.pageCitations.length },
+    });
+    return { fields, model: choice.model, provider: choice.provider, version: CLAIM_EVIDENCE_EXTRACTION_VERSION };
+  } catch (error) {
+    void recordErrorEvent({
+      name: "claims.evidence.extraction.failed",
+      correlationId,
+      resourceRef: args.documentId ? pseudonymizeId(args.documentId) : null,
+      resolvedModel: choice.model,
+      schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
+      error,
+      extra: { documentType: args.documentType },
+    });
+    throw error;
+  }
 }

@@ -10,6 +10,9 @@ import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatch, linkRelatedReferenceDocuments, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -376,6 +379,22 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     } catch (error) {
       console.warn("Coverage ledger update failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
+    // Checkpoint 14i: "Policy ingest/extraction" was named as a required
+    // telemetry call site (scripts/launch-check.ts's privacy_safe_
+    // observability capability) -- processPolicy() is the SINGLE entry
+    // point for OCR, extraction AND embeddings/indexing on a policy
+    // document (see this function's own doc comment above), so one event
+    // at its real success/failure boundary genuinely covers all three,
+    // the same "one call = one event" convention every other Checkpoint
+    // 14b/14i call site uses. Fire-and-forget, never awaited.
+    void recordEvent({
+      name: "rag.policy_ingest.completed",
+      correlationId: resolveCorrelationId(undefined),
+      status: "success",
+      householdRef: pseudonymizeId(args.accountId),
+      resourceRef: pseudonymizeId(args.policyId),
+      extra: { pages: pages.length, chunks: chunks.length, needsReview, pineconeEnabled: pineconeEnabled() },
+    });
     return { pages: pages.length, chunks: chunks.length, extraction, detectedPeople: detected, needsReview };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown processing error";
@@ -384,6 +403,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,
       [message, args.policyId, args.accountId],
     ).catch(() => undefined);
+    void recordErrorEvent({
+      name: "rag.policy_ingest.failed",
+      correlationId: resolveCorrelationId(undefined),
+      householdRef: pseudonymizeId(args.accountId),
+      resourceRef: pseudonymizeId(args.policyId),
+      error,
+    });
     throw error;
   }
 }

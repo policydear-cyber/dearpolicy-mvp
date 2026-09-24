@@ -19,6 +19,8 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pool } from "@/lib/db/client";
 import { requireRecentAuthentication, StaleAuthenticationError, type SessionUser } from "@/lib/auth/session";
 import { buildHouseholdExportSnapshot } from "@/lib/household/export";
+import { setTelemetryAdapter, getTelemetryAdapter } from "@/lib/telemetry";
+import { CapturingTelemetryAdapter } from "@/lib/telemetry/adapters";
 import {
   appendExportAudit,
   createOrGetExportRequest,
@@ -206,6 +208,54 @@ async function runDatabaseTests() {
       assert.equal(snapshotA.members.length, 1);
       assert.equal(snapshotA.members[0].userId, ownerA);
       assert.equal(snapshotA.members[0].role, "owner");
+    });
+
+    // Checkpoint 14i: buildHouseholdExportSnapshot() is a required
+    // privacy_safe_observability call site (scripts/launch-check.ts) --
+    // proven here against a real CapturingTelemetryAdapter, not just by
+    // the launch-check probe's static grep, exactly like this branch's
+    // other telemetry-covered capabilities (see scripts/monetary-gate-
+    // regressions.ts's own CapturingTelemetryAdapter-based case).
+    await testAsync("buildHouseholdExportSnapshot records a household.export.snapshot_built event on success", async () => {
+      const previousAdapter = getTelemetryAdapter();
+      const capturing = new CapturingTelemetryAdapter();
+      setTelemetryAdapter(capturing);
+      try {
+        await buildHouseholdExportSnapshot(scopedClient, a.householdId);
+        const events = capturing.events.filter((e) => e.name === "household.export.snapshot_built");
+        assert.equal(events.length, 1);
+        assert.equal(events[0].status, "success");
+        // householdRef must be present and pseudonymized (and, per
+        // redactDeep()'s own LONG_TOKEN_PATTERN, a pseudonymized id is
+        // itself opaque enough to be further redacted to
+        // "[REDACTED:token]" -- exactly like scripts/monetary-gate-
+        // regressions.ts's own householdRef assertion, this checks
+        // presence and that the RAW household id never leaks, not an
+        // exact match against pseudonymizeId()'s output).
+        assert.ok(events[0].householdRef, "the household ref must be present");
+        assert.notEqual(events[0].householdRef, a.householdId, "must never emit the raw household id");
+        assert.equal(capturing.events.some((e) => e.name === "household.export.snapshot_build_failed"), false);
+      } finally {
+        setTelemetryAdapter(previousAdapter);
+      }
+    });
+
+    await testAsync("buildHouseholdExportSnapshot records a household.export.snapshot_build_failed event on failure, and never a success event", async () => {
+      const previousAdapter = getTelemetryAdapter();
+      const capturing = new CapturingTelemetryAdapter();
+      setTelemetryAdapter(capturing);
+      const missingHouseholdId = randomUUID();
+      try {
+        await assert.rejects(() => buildHouseholdExportSnapshot(scopedClient, missingHouseholdId));
+        const failures = capturing.events.filter((e) => e.name === "household.export.snapshot_build_failed");
+        assert.equal(failures.length, 1);
+        assert.equal(failures[0].status, "failure");
+        assert.ok(failures[0].householdRef, "the household ref must be present");
+        assert.notEqual(failures[0].householdRef, missingHouseholdId, "must never emit the raw household id");
+        assert.equal(capturing.events.some((e) => e.name === "household.export.snapshot_built"), false);
+      } finally {
+        setTelemetryAdapter(previousAdapter);
+      }
     });
 
     await testAsync("the snapshot includes policy/coverage/benefit/claim/evidence/calculation content", async () => {

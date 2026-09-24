@@ -89,6 +89,8 @@ import { NextRequest } from "next/server";
 import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { ACTIVE_HOUSEHOLD_COOKIE } from "@/lib/auth/request-context";
+import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
+import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 
 const SQL_FILES = [
   "sql/schema.sql",
@@ -394,15 +396,22 @@ async function main() {
     // 5. Household export -> download, through the real routes.
     // ------------------------------------------------------------
     let exportId = "";
-    await journeyStep("POST /api/household/export (owner-only, recent-auth-gated) generates a real export synchronously", async () => {
+    await journeyStep("POST /api/household/export (owner-only, recent-auth-gated) enqueues a real export and returns promptly (running), never generating it inline (Checkpoint 14i)", async () => {
       const request = requestFor("http://localhost/api/household/export", { household: householdId, method: "POST", body: {} });
       request.headers.set("Idempotency-Key", "e2e-export-1");
       const res = await postExport(request);
       assert.equal(res.status, 200);
       const body = await res.json();
-      assert.equal(body.status, "ready");
+      assert.equal(body.status, "running");
       exportId = body.id;
       assert.ok(exportId);
+    });
+
+    await journeyStep("a real, separately-invoked worker pass claims and runs the queued household_export job (Checkpoint 14i, same topology as policy/claim-evidence processing)", async () => {
+      const config = PRODUCTION_JOB_TYPES.find((t) => t.jobType === "household_export");
+      if (!config) throw new Error("no processor configured for job type \"household_export\"");
+      const outcome = await claimAndProcessOne({ jobType: "household_export", workerId: `full-e2e-${process.pid}`, process: config.process });
+      assert.equal(outcome, "succeeded");
     });
 
     await journeyStep("GET /api/household/export lists the export request", async () => {

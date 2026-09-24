@@ -20,8 +20,20 @@ import { processPolicy, type ProcessPolicyArgs } from "@/lib/rag/ingest";
 import { processClaimEvidence, type ProcessClaimEvidenceArgs } from "@/lib/claims/evidence/pipeline";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { CLAIM_EVIDENCE_PROCESSING_JOB_TYPE } from "@/lib/claims/evidence/queue";
+import { HOUSEHOLD_EXPORT_JOB_TYPE } from "@/lib/household/export-queue";
+import { processHouseholdExportJob } from "./household-export-processor";
+import { MODEL_EXECUTION_STALENESS_AUDIT_JOB_TYPE, processModelExecutionStalenessAuditJob } from "./model-execution-staleness-processor";
 import type { BackgroundJobRow } from "./queue";
 import type { JobProcessor, WorkerJobTypeConfig } from "./worker-runtime";
+
+// Checkpoint 14i: re-exported so existing importers of
+// lib/jobs/processors.ts (scripts/worker.ts, the e2e stages, this
+// module's own PRODUCTION_JOB_TYPES below) see no change at all -- see
+// lib/jobs/household-export-processor.ts's own doc comment for why the
+// household_export processor itself lives in a separate, lighter-weight
+// module instead of being defined inline here.
+export { processHouseholdExportJob };
+export { processModelExecutionStalenessAuditJob };
 
 function requireStringField(payload: unknown, key: string): string {
   const value = (payload as Record<string, unknown> | null | undefined)?.[key];
@@ -66,4 +78,6 @@ export const processClaimEvidenceProcessingJob: JobProcessor = async (job) => {
 export const PRODUCTION_JOB_TYPES: WorkerJobTypeConfig[] = [
   { jobType: POLICY_PROCESSING_JOB_TYPE, process: processPolicyProcessingJob },
   { jobType: CLAIM_EVIDENCE_PROCESSING_JOB_TYPE, process: processClaimEvidenceProcessingJob },
+  { jobType: HOUSEHOLD_EXPORT_JOB_TYPE, process: processHouseholdExportJob },
+  { jobType: MODEL_EXECUTION_STALENESS_AUDIT_JOB_TYPE, process: processModelExecutionStalenessAuditJob },
 ];

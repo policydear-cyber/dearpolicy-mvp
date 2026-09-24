@@ -38,6 +38,9 @@
  */
 import type { ScopedDbClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export const HOUSEHOLD_EXPORT_SCHEMA_VERSION = 1;
 
@@ -144,234 +147,262 @@ const EVIDENCE_AUDIT_ALLOWLIST = new Set([
 ]);
 
 export async function buildHouseholdExportSnapshot(client: ScopedDbClient, householdId: string): Promise<HouseholdExportSnapshot> {
-  const household = await client.query<{ id: string; name: string; created_at: string }>(
-    `SELECT id, name, created_at FROM accounts WHERE id=$1 AND ${activePredicate()}`,
-    [householdId],
-  );
-  if (household.rows.length === 0) {
-    throw new Error(`Household ${householdId} not found while building export.`);
-  }
+  // Checkpoint 14i: "Household export" was named as a required
+  // telemetry call site (scripts/launch-check.ts's privacy_safe_
+  // observability capability) -- buildHouseholdExportSnapshot() is
+  // the ONE function that ever builds export content (see this
+  // module's own doc comment), so one event at its real
+  // success/failure boundary covers every caller, the same "one
+  // call = one event" convention every other Checkpoint 14b/14i call
+  // site uses.
+  const correlationId = resolveCorrelationId(undefined);
+  try {
+    const household = await client.query<{ id: string; name: string; created_at: string }>(
+      `SELECT id, name, created_at FROM accounts WHERE id=$1 AND ${activePredicate()}`,
+      [householdId],
+    );
+    if (household.rows.length === 0) {
+      throw new Error(`Household ${householdId} not found while building export.`);
+    }
 
-  const members = await client.query<{ user_id: string; role: string; created_at: string }>(
-    `SELECT user_id, role, created_at FROM household_members WHERE household_id=$1 ORDER BY created_at ASC, user_id ASC`,
-    [householdId],
-  );
+    const members = await client.query<{ user_id: string; role: string; created_at: string }>(
+      `SELECT user_id, role, created_at FROM household_members WHERE household_id=$1 ORDER BY created_at ASC, user_id ASC`,
+      [householdId],
+    );
 
-  const familyMembers = await client.query<{
-    id: string;
-    display_name: string;
-    relationship: string;
-    date_of_birth: string | null;
-    preferred_name: string | null;
-    notes: string | null;
-    created_at: string;
-  }>(
-    `SELECT id, display_name, relationship, date_of_birth, preferred_name, notes, created_at
-       FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
-    [householdId],
-  );
+    const familyMembers = await client.query<{
+      id: string;
+      display_name: string;
+      relationship: string;
+      date_of_birth: string | null;
+      preferred_name: string | null;
+      notes: string | null;
+      created_at: string;
+    }>(
+      `SELECT id, display_name, relationship, date_of_birth, preferred_name, notes, created_at
+         FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const policies = await client.query<{
-    id: string;
-    family_member_id: string;
-    insurer: string | null;
-    product_name: string | null;
-    policy_number: string | null;
-    policy_type: string | null;
-    document_role: string | null;
-    status: string;
-    quarantine_status: string;
-    original_filename: string;
-    page_count: number | null;
-    created_at: string;
-  }>(
-    `SELECT id, family_member_id, insurer, product_name, policy_number, policy_type, document_role, status,
-            quarantine_status, original_filename, page_count, created_at
-       FROM policies WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
-    [householdId],
-  );
+    const policies = await client.query<{
+      id: string;
+      family_member_id: string;
+      insurer: string | null;
+      product_name: string | null;
+      policy_number: string | null;
+      policy_type: string | null;
+      document_role: string | null;
+      status: string;
+      quarantine_status: string;
+      original_filename: string;
+      page_count: number | null;
+      created_at: string;
+    }>(
+      `SELECT id, family_member_id, insurer, product_name, policy_number, policy_type, document_role, status,
+              quarantine_status, original_filename, page_count, created_at
+         FROM policies WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const coverages = await client.query<{
-    id: string;
-    policy_id: string;
-    family_member_id: string;
-    category: string;
-    amount: string | null;
-    currency: string | null;
-    notes: string | null;
-    confirmed: boolean;
-  }>(
-    `SELECT id, policy_id, family_member_id, category, amount, currency, notes, confirmed
-       FROM policy_coverages WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
-    [householdId],
-  );
+    const coverages = await client.query<{
+      id: string;
+      policy_id: string;
+      family_member_id: string;
+      category: string;
+      amount: string | null;
+      currency: string | null;
+      notes: string | null;
+      confirmed: boolean;
+    }>(
+      `SELECT id, policy_id, family_member_id, category, amount, currency, notes, confirmed
+         FROM policy_coverages WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const benefits = await client.query<{
-    id: string;
-    policy_id: string;
-    benefit_name: string;
-    product_name: string | null;
-    formula_kind: string;
-    formula_value: string | null;
-    currency: string | null;
-    quote: string;
-  }>(
-    `SELECT id, policy_id, benefit_name, product_name, formula_kind, formula_value, currency, quote
-       FROM policy_benefits WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
-    [householdId],
-  );
+    const benefits = await client.query<{
+      id: string;
+      policy_id: string;
+      benefit_name: string;
+      product_name: string | null;
+      formula_kind: string;
+      formula_value: string | null;
+      currency: string | null;
+      quote: string;
+    }>(
+      `SELECT id, policy_id, benefit_name, product_name, formula_kind, formula_value, currency, quote
+         FROM policy_benefits WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const claims = await client.query<{
-    id: string;
-    family_member_id: string;
-    status: string;
-    event_type: string | null;
-    event_summary: string | null;
-    facts: unknown;
-    decision_packet: unknown;
-    created_at: string;
-    completed_at: string | null;
-  }>(
-    `SELECT id, family_member_id, status, event_type, event_summary, facts, decision_packet, created_at, completed_at
-       FROM claim_sessions WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
-    [householdId],
-  );
+    const claims = await client.query<{
+      id: string;
+      family_member_id: string;
+      status: string;
+      event_type: string | null;
+      event_summary: string | null;
+      facts: unknown;
+      decision_packet: unknown;
+      created_at: string;
+      completed_at: string | null;
+    }>(
+      `SELECT id, family_member_id, status, event_type, event_summary, facts, decision_packet, created_at, completed_at
+         FROM claim_sessions WHERE account_id=$1 ORDER BY created_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const evidence = await client.query<{
-    id: string;
-    claim_session_id: string;
-    document_type: string;
-    original_filename: string;
-    mime_type: string;
-    byte_size: number;
-    status: string;
-    scan_status: string;
-    identity_status: string;
-    created_at: string;
-  }>(
-    `SELECT id, claim_session_id, document_type, original_filename, mime_type, byte_size, status, scan_status, identity_status, created_at
-       FROM claim_evidence_documents WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
-    [householdId],
-  );
+    const evidence = await client.query<{
+      id: string;
+      claim_session_id: string;
+      document_type: string;
+      original_filename: string;
+      mime_type: string;
+      byte_size: number;
+      status: string;
+      scan_status: string;
+      identity_status: string;
+      created_at: string;
+    }>(
+      `SELECT id, claim_session_id, document_type, original_filename, mime_type, byte_size, status, scan_status, identity_status, created_at
+         FROM claim_evidence_documents WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const calculationSnapshots = await client.query<{
-    id: string;
-    claim_session_id: string;
-    calculation_id: string;
-    engine_version: string;
-    facts_snapshot: unknown;
-    coverage_versions: unknown;
-    result: unknown;
-    calculated_at: string;
-  }>(
-    `SELECT id, claim_session_id, calculation_id, engine_version, facts_snapshot, coverage_versions, result, calculated_at
-       FROM claim_composition_snapshots WHERE account_id=$1 ORDER BY calculated_at ASC, id ASC`,
-    [householdId],
-  );
+    const calculationSnapshots = await client.query<{
+      id: string;
+      claim_session_id: string;
+      calculation_id: string;
+      engine_version: string;
+      facts_snapshot: unknown;
+      coverage_versions: unknown;
+      result: unknown;
+      calculated_at: string;
+    }>(
+      `SELECT id, claim_session_id, calculation_id, engine_version, facts_snapshot, coverage_versions, result, calculated_at
+         FROM claim_composition_snapshots WHERE account_id=$1 ORDER BY calculated_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const policyAudit = await client.query<{ policy_id: string | null; action: string; actor: string; occurred_at: string }>(
-    `SELECT policy_id, action, actor, occurred_at FROM policy_document_audit_log WHERE account_id=$1 ORDER BY occurred_at ASC, id ASC`,
-    [householdId],
-  );
-  const evidenceAudit = await client.query<{ evidence_document_id: string | null; action: string; actor: string; occurred_at: string }>(
-    `SELECT evidence_document_id, action, actor, occurred_at FROM claim_evidence_audit_log WHERE account_id=$1 ORDER BY occurred_at ASC, id ASC`,
-    [householdId],
-  );
+    const policyAudit = await client.query<{ policy_id: string | null; action: string; actor: string; occurred_at: string }>(
+      `SELECT policy_id, action, actor, occurred_at FROM policy_document_audit_log WHERE account_id=$1 ORDER BY occurred_at ASC, id ASC`,
+      [householdId],
+    );
+    const evidenceAudit = await client.query<{ evidence_document_id: string | null; action: string; actor: string; occurred_at: string }>(
+      `SELECT evidence_document_id, action, actor, occurred_at FROM claim_evidence_audit_log WHERE account_id=$1 ORDER BY occurred_at ASC, id ASC`,
+      [householdId],
+    );
 
-  const auditHistory = [
-    ...policyAudit.rows
-      .filter((r) => POLICY_AUDIT_ALLOWLIST.has(r.action) && r.policy_id)
-      .map((r) => ({ occurredAt: r.occurred_at, action: r.action, actor: r.actor, subject: { kind: "policy", id: r.policy_id as string } })),
-    ...evidenceAudit.rows
-      .filter((r) => EVIDENCE_AUDIT_ALLOWLIST.has(r.action) && r.evidence_document_id)
-      .map((r) => ({
-        occurredAt: r.occurred_at,
-        action: r.action,
-        actor: r.actor,
-        subject: { kind: "claim_evidence", id: r.evidence_document_id as string },
+    const auditHistory = [
+      ...policyAudit.rows
+        .filter((r) => POLICY_AUDIT_ALLOWLIST.has(r.action) && r.policy_id)
+        .map((r) => ({ occurredAt: r.occurred_at, action: r.action, actor: r.actor, subject: { kind: "policy", id: r.policy_id as string } })),
+      ...evidenceAudit.rows
+        .filter((r) => EVIDENCE_AUDIT_ALLOWLIST.has(r.action) && r.evidence_document_id)
+        .map((r) => ({
+          occurredAt: r.occurred_at,
+          action: r.action,
+          actor: r.actor,
+          subject: { kind: "claim_evidence", id: r.evidence_document_id as string },
+        })),
+    ].sort((a, b) => (a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : a.subject.id.localeCompare(b.subject.id)));
+
+    const snapshot: HouseholdExportSnapshot =
+  {
+      schemaVersion: HOUSEHOLD_EXPORT_SCHEMA_VERSION,
+      household: { id: household.rows[0].id, name: household.rows[0].name, createdAt: household.rows[0].created_at },
+      members: members.rows.map((r) => ({ userId: r.user_id, role: r.role, joinedAt: r.created_at })),
+      familyMembers: familyMembers.rows.map((r) => ({
+        id: r.id,
+        displayName: r.display_name,
+        relationship: r.relationship,
+        dateOfBirth: r.date_of_birth,
+        preferredName: r.preferred_name,
+        notes: r.notes,
+        createdAt: r.created_at,
       })),
-  ].sort((a, b) => (a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : a.subject.id.localeCompare(b.subject.id)));
-
-  return {
-    schemaVersion: HOUSEHOLD_EXPORT_SCHEMA_VERSION,
-    household: { id: household.rows[0].id, name: household.rows[0].name, createdAt: household.rows[0].created_at },
-    members: members.rows.map((r) => ({ userId: r.user_id, role: r.role, joinedAt: r.created_at })),
-    familyMembers: familyMembers.rows.map((r) => ({
-      id: r.id,
-      displayName: r.display_name,
-      relationship: r.relationship,
-      dateOfBirth: r.date_of_birth,
-      preferredName: r.preferred_name,
-      notes: r.notes,
-      createdAt: r.created_at,
-    })),
-    policies: policies.rows.map((r) => ({
-      id: r.id,
-      familyMemberId: r.family_member_id,
-      insurer: r.insurer,
-      productName: r.product_name,
-      policyNumber: r.policy_number,
-      policyType: r.policy_type,
-      documentRole: r.document_role,
-      status: r.status,
-      quarantineStatus: r.quarantine_status,
-      originalFilename: r.original_filename,
-      pageCount: r.page_count,
-      createdAt: r.created_at,
-    })),
-    coverages: coverages.rows.map((r) => ({
-      id: r.id,
-      policyId: r.policy_id,
-      familyMemberId: r.family_member_id,
-      category: r.category,
-      amount: r.amount,
-      currency: r.currency,
-      notes: r.notes,
-      confirmed: r.confirmed,
-    })),
-    benefits: benefits.rows.map((r) => ({
-      id: r.id,
-      policyId: r.policy_id,
-      benefitName: r.benefit_name,
-      productName: r.product_name,
-      formulaKind: r.formula_kind,
-      formulaValue: r.formula_value,
-      currency: r.currency,
-      quote: r.quote,
-    })),
-    claims: claims.rows.map((r) => ({
-      id: r.id,
-      familyMemberId: r.family_member_id,
-      status: r.status,
-      eventType: r.event_type,
-      eventSummary: r.event_summary,
-      facts: r.facts,
-      decisionPacket: r.decision_packet,
-      createdAt: r.created_at,
-      completedAt: r.completed_at,
-    })),
-    evidence: evidence.rows.map((r) => ({
-      id: r.id,
-      claimSessionId: r.claim_session_id,
-      documentType: r.document_type,
-      originalFilename: r.original_filename,
-      mimeType: r.mime_type,
-      byteSize: r.byte_size,
-      status: r.status,
-      scanStatus: r.scan_status,
-      identityStatus: r.identity_status,
-      createdAt: r.created_at,
-    })),
-    calculationSnapshots: calculationSnapshots.rows.map((r) => ({
-      id: r.id,
-      claimSessionId: r.claim_session_id,
-      calculationId: r.calculation_id,
-      engineVersion: r.engine_version,
-      factsSnapshot: r.facts_snapshot,
-      coverageVersions: r.coverage_versions,
-      result: r.result,
-      calculatedAt: r.calculated_at,
-    })),
-    auditHistory,
-  };
+      policies: policies.rows.map((r) => ({
+        id: r.id,
+        familyMemberId: r.family_member_id,
+        insurer: r.insurer,
+        productName: r.product_name,
+        policyNumber: r.policy_number,
+        policyType: r.policy_type,
+        documentRole: r.document_role,
+        status: r.status,
+        quarantineStatus: r.quarantine_status,
+        originalFilename: r.original_filename,
+        pageCount: r.page_count,
+        createdAt: r.created_at,
+      })),
+      coverages: coverages.rows.map((r) => ({
+        id: r.id,
+        policyId: r.policy_id,
+        familyMemberId: r.family_member_id,
+        category: r.category,
+        amount: r.amount,
+        currency: r.currency,
+        notes: r.notes,
+        confirmed: r.confirmed,
+      })),
+      benefits: benefits.rows.map((r) => ({
+        id: r.id,
+        policyId: r.policy_id,
+        benefitName: r.benefit_name,
+        productName: r.product_name,
+        formulaKind: r.formula_kind,
+        formulaValue: r.formula_value,
+        currency: r.currency,
+        quote: r.quote,
+      })),
+      claims: claims.rows.map((r) => ({
+        id: r.id,
+        familyMemberId: r.family_member_id,
+        status: r.status,
+        eventType: r.event_type,
+        eventSummary: r.event_summary,
+        facts: r.facts,
+        decisionPacket: r.decision_packet,
+        createdAt: r.created_at,
+        completedAt: r.completed_at,
+      })),
+      evidence: evidence.rows.map((r) => ({
+        id: r.id,
+        claimSessionId: r.claim_session_id,
+        documentType: r.document_type,
+        originalFilename: r.original_filename,
+        mimeType: r.mime_type,
+        byteSize: r.byte_size,
+        status: r.status,
+        scanStatus: r.scan_status,
+        identityStatus: r.identity_status,
+        createdAt: r.created_at,
+      })),
+      calculationSnapshots: calculationSnapshots.rows.map((r) => ({
+        id: r.id,
+        claimSessionId: r.claim_session_id,
+        calculationId: r.calculation_id,
+        engineVersion: r.engine_version,
+        factsSnapshot: r.facts_snapshot,
+        coverageVersions: r.coverage_versions,
+        result: r.result,
+        calculatedAt: r.calculated_at,
+      })),
+      auditHistory,
+    };
+    void recordEvent({
+      name: "household.export.snapshot_built",
+      correlationId,
+      status: "success",
+      householdRef: pseudonymizeId(householdId),
+      extra: { policyCount: snapshot.policies.length, familyMemberCount: snapshot.familyMembers.length },
+    });
+    return snapshot;
+  } catch (error) {
+    void recordErrorEvent({
+      name: "household.export.snapshot_build_failed",
+      correlationId,
+      householdRef: pseudonymizeId(householdId),
+      error,
+    });
+    throw error;
+  }
 }

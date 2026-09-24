@@ -4,6 +4,9 @@ import { hostedDocumentToText, modelFor } from "@/lib/ai/providers";
 import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse } from "@/lib/ai/provenance";
 import type { PdfPage } from "@/lib/documents/pdf";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 type BridgePage = { pageNumber: number; text: string };
 
@@ -102,25 +105,53 @@ export async function completePdfPagesWithHostedOcr(args: {
   pages: PdfPage[];
   pageNumbers: number[];
 }): Promise<PdfPage[]> {
-  let returned = await attemptHostedOcr({ accountId: args.accountId, bytes: args.bytes, pageNumbers: args.pageNumbers });
-  let missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
-  // A model dropping a page it was asked for is usually a one-off flake
-  // (a truncated reply, a page it briefly balked at) rather than something
-  // genuinely unreadable -- retrying just the dropped pages, alone in their
-  // own small request, recovers most of these without failing the entire
-  // document over it. The document-level "not enough readable text" check
-  // further up the pipeline still catches a document that is genuinely
-  // unreadable throughout.
-  if (missing.length) {
-    const retried = await attemptHostedOcr({ accountId: args.accountId, bytes: args.bytes, pageNumbers: missing });
-    returned = returned.concat(retried);
-    missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
-  }
-  if (missing.length) throw new Error(`The hosted document reader returned no usable text for page${missing.length === 1 ? "" : "s"} ${missing.join(", ")}.`);
+  // Checkpoint 14i: "Hosted OCR" was named as a required telemetry call
+  // site (scripts/launch-check.ts's privacy_safe_observability
+  // capability) -- deliberately DOCUMENT-level here (one event per
+  // completePdfPagesWithHostedOcr() call, i.e. per document that needed
+  // OCR at all), not per attemptHostedOcr() attempt: that per-attempt
+  // provenance is already Checkpoint 10's separate recordModelExecution()/
+  // assertVerifiedForMonetaryUse() governance concern, not telemetry.
+  const correlationId = resolveCorrelationId(undefined);
+  const householdRef = pseudonymizeId(args.accountId);
+  try {
+    let returned = await attemptHostedOcr({ accountId: args.accountId, bytes: args.bytes, pageNumbers: args.pageNumbers });
+    let missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
+    // A model dropping a page it was asked for is usually a one-off flake
+    // (a truncated reply, a page it briefly balked at) rather than something
+    // genuinely unreadable -- retrying just the dropped pages, alone in their
+    // own small request, recovers most of these without failing the entire
+    // document over it. The document-level "not enough readable text" check
+    // further up the pipeline still catches a document that is genuinely
+    // unreadable throughout.
+    if (missing.length) {
+      const retried = await attemptHostedOcr({ accountId: args.accountId, bytes: args.bytes, pageNumbers: missing });
+      returned = returned.concat(retried);
+      missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
+    }
+    if (missing.length) throw new Error(`The hosted document reader returned no usable text for page${missing.length === 1 ? "" : "s"} ${missing.join(", ")}.`);
 
-  const replacements = new Map(returned.map((p) => [p.pageNumber, p.text.trim()]));
-  return args.pages.map((page) => {
-    const replacement = replacements.get(page.pageNumber);
-    return replacement !== undefined ? { ...page, text: replacement, extractionMethod: "ocr" as const } : page;
-  });
+    const replacements = new Map(returned.map((p) => [p.pageNumber, p.text.trim()]));
+    const result = args.pages.map((page) => {
+      const replacement = replacements.get(page.pageNumber);
+      return replacement !== undefined ? { ...page, text: replacement, extractionMethod: "ocr" as const } : page;
+    });
+    void recordEvent({
+      name: "documents.ocr_hosted.completed",
+      correlationId,
+      status: "success",
+      householdRef,
+      extra: { pagesRequested: args.pageNumbers.length, pagesRetried: returned.length - args.pageNumbers.length > 0 ? 1 : 0 },
+    });
+    return result;
+  } catch (error) {
+    void recordErrorEvent({
+      name: "documents.ocr_hosted.failed",
+      correlationId,
+      householdRef,
+      error,
+      extra: { pagesRequested: args.pageNumbers.length },
+    });
+    throw error;
+  }
 }
