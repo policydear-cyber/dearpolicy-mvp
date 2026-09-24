@@ -40,6 +40,7 @@ import { NextResponse } from "next/server";
 import { requireCurrentUser, UnauthenticatedError, StaleAuthenticationError, type SessionUser } from "@/lib/auth/session";
 import { recordErrorEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { classifyError } from "@/lib/telemetry/errors";
 import { resolveActiveHouseholdId, ForbiddenError, NotFoundError, ConflictError, NotHouseholdOwnerError } from "@/lib/household/repo";
 
 /** The active-household cookie set by POST /api/household/switch. Plain
@@ -109,7 +110,29 @@ export async function requireHouseholdContext(request: NextRequest): Promise<Hou
  * telemetry, never a change to what a client receives. Recording is
  * fire-and-forget (never awaited): recordErrorEvent() is itself failure-
  * isolated and time-bounded (lib/telemetry/index.ts), so this can never
- * slow down or fail the actual HTTP response. */
+ * slow down or fail the actual HTTP response.
+ *
+ * D24 (Wave 2 adversarial audit): the NotHouseholdOwnerError and
+ * ConflictError branches below now return classifyError(error).safeMessage
+ * instead of the raw error.message. Every OTHER branch in this function
+ * already returns a fixed, hand-written string rather than whatever the
+ * thrown error's own .message happened to contain -- these two branches
+ * were the only ones still forwarding a class instance's own message text
+ * straight into the HTTP response body, which is exactly the "raw
+ * exceptions remain server-side" gap this checkpoint exists to close.
+ * classifyError()'s taxonomy already has fixed entries for both classes
+ * ("Only the household owner can do this." / "This request conflicts with
+ * the current state."), so this is a pure substitution: same status code,
+ * same shape of response, no behavior change for any caller that only
+ * checks the HTTP status.
+ *
+ * (Note: lib/telemetry/errors.ts's own doc comment describes this module
+ * as an *additive* classification that "does NOT replace any route's
+ * existing routeErrorResponse() switch" -- this fix is a narrow, deliberate
+ * exception to that framing for these two branches specifically, made
+ * because they were the last remaining raw-message leak in this function.
+ * That doc comment is not otherwise edited here; it is still accurate for
+ * every other route's own hand-written error mapping.) */
 export function routeErrorResponse(error: unknown, context: { request?: NextRequest; route?: string } = {}): NextResponse {
   const correlationId = resolveCorrelationId(context.request?.headers.get("x-correlation-id"));
   void recordErrorEvent({ name: "route.error", correlationId, route: context.route ?? context.request?.nextUrl?.pathname ?? null, error });
@@ -127,10 +150,10 @@ export function routeErrorResponse(error: unknown, context: { request?: NextRequ
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (error instanceof NotHouseholdOwnerError) {
-    return NextResponse.json({ error: error.message }, { status: 403 });
+    return NextResponse.json({ error: classifyError(error).safeMessage }, { status: 403 });
   }
   if (error instanceof ConflictError) {
-    return NextResponse.json({ error: error.message }, { status: 409 });
+    return NextResponse.json({ error: classifyError(error).safeMessage }, { status: 409 });
   }
   return NextResponse.json({ error: "Database error" }, { status: 500 });
 }

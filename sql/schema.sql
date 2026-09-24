@@ -528,3 +528,19 @@ CREATE TABLE IF NOT EXISTS household_export_audit_log (
 CREATE INDEX IF NOT EXISTS idx_household_export_audit_export ON household_export_audit_log(export_id);
 CREATE INDEX IF NOT EXISTS idx_household_export_audit_household ON household_export_audit_log(household_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_provider_events_received ON scan_provider_events(received_at);
+
+-- D14 (Wave-2 launch-hardening defect register, PR #16): premium_records had
+-- no natural unique key (unlike policy_pages' (policy_id,page_number)),
+-- so two workers concurrently processing the SAME background job -- one
+-- whose lease genuinely expired mid-run and was reclaimed by
+-- recoverExpiredLeases() while it was still alive -- could each run
+-- lib/rag/ingest.ts's DELETE-then-INSERT block for this table and leave
+-- duplicate premium/payment rows behind. dedupe_key is a deterministic
+-- hash of "the same extracted fact from the same processing pass"
+-- (see lib/rag/ingest.ts's premiumRecordDedupeKey()); the partial unique
+-- index (dedupe_key IS NOT NULL) lets older rows written before this
+-- column existed, and any future direct/manual insert that doesn't set
+-- it, coexist without colliding on NULL.
+ALTER TABLE premium_records ADD COLUMN IF NOT EXISTS dedupe_key text;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_premium_records_dedupe
+  ON premium_records(source_document_id, dedupe_key) WHERE dedupe_key IS NOT NULL;

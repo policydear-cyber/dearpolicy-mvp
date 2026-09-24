@@ -23,7 +23,8 @@ import { CLAIM_EVIDENCE_PROCESSING_JOB_TYPE } from "@/lib/claims/evidence/queue"
 import { HOUSEHOLD_EXPORT_JOB_TYPE } from "@/lib/household/export-queue";
 import { processHouseholdExportJob } from "./household-export-processor";
 import { MODEL_EXECUTION_STALENESS_AUDIT_JOB_TYPE, processModelExecutionStalenessAuditJob } from "./model-execution-staleness-processor";
-import type { BackgroundJobRow } from "./queue";
+import { pool } from "@/lib/db/client";
+import { heartbeatJob, type BackgroundJobRow } from "./queue";
 import type { JobProcessor, WorkerJobTypeConfig } from "./worker-runtime";
 
 // Checkpoint 14i: re-exported so existing importers of
@@ -48,8 +49,20 @@ function requireAccountId(job: BackgroundJobRow): string {
   throw new Error(`background job ${job.id} has no account_id`);
 }
 
+// D14 (background job durability): processPolicy() -- OCR + LLM structured
+// extraction over a potentially long PDF -- is the job type named in the
+// audit as most likely to run past DEFAULT_LEASE_DURATION_MS (5 minutes).
+// job.lease_owner IS this worker's workerId at this point: claimNextJob()
+// (lib/jobs/queue.ts) only ever hands a job to process() after CAS-setting
+// lease_owner=workerId for the claim that produced it, so this is never a
+// different worker's id. jobHeartbeat is threaded through into
+// processPolicy()'s existing progress() helper (see lib/rag/ingest.ts),
+// which is already called at every natural checkpoint through the
+// pipeline, so this reaches all of them without any new call sites there.
 export const processPolicyProcessingJob: JobProcessor = async (job) => {
   const payload = job.payload as Record<string, unknown> | null;
+  const workerId = job.lease_owner;
+  if (!workerId) throw new Error(`background job ${job.id} has no lease_owner; cannot heartbeat`);
   const args: ProcessPolicyArgs = {
     accountId: requireAccountId(job),
     familyMemberId: requireStringField(payload, "familyMemberId"),
@@ -57,6 +70,9 @@ export const processPolicyProcessingJob: JobProcessor = async (job) => {
     storageKey: requireStringField(payload, "storageKey"),
     pdfPassword: typeof payload?.pdfPassword === "string" ? payload.pdfPassword : undefined,
     linkUploadMember: Boolean(payload?.linkUploadMember),
+    jobHeartbeat: async () => {
+      await heartbeatJob(pool, { jobId: job.id, workerId });
+    },
   };
   await processPolicy(args);
 };

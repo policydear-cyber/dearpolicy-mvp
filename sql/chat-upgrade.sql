@@ -79,3 +79,16 @@ CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_conversation_id ON chat_analys
 CREATE INDEX IF NOT EXISTS idx_chat_analysis_jobs_family_member_id ON chat_analysis_jobs(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_chat_conversations_family_member_id ON chat_conversations(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_conversation_id ON chat_messages(conversation_id);
+
+
+-- D12 (Wave 2 adversarial audit): chat_analysis_jobs gains an idempotency
+-- key so a retried enqueueChat() call for the exact same question does not
+-- spin up a second, independent analysis run for a conversation that
+-- already has one queued/running. Existing rows get idempotency_key=NULL
+-- (multiple NULLs are distinct under a unique index, so this never blocks
+-- re-running this migration or conflicts with historical rows), and the
+-- partial index only applies while a row is queued/running -- a
+-- terminal-status row can never block a genuinely new request from
+-- inserting normally. See lib/chat/jobs.ts's chatIdempotencyKey().
+ALTER TABLE chat_analysis_jobs ADD COLUMN IF NOT EXISTS idempotency_key text;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_analysis_jobs_idempotency ON chat_analysis_jobs(account_id, idempotency_key) WHERE status IN ('queued','running');

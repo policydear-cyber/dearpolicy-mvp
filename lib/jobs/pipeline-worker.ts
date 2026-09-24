@@ -33,6 +33,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { pool } from "@/lib/db/client";
+import { classifyError } from "@/lib/telemetry/errors";
 import { enqueueJob, claimNextJob, completeJob, failJob, type ErrorCategory, type BackgroundJobRow } from "./queue";
 
 const TERMINAL_STATUSES: BackgroundJobRow["status"][] = ["succeeded", "dead_letter", "cancelled"];
@@ -87,9 +88,21 @@ export async function runAsDurableJob(params: {
     await params.work();
     await completeJob(pool, { jobId: claimed.id, workerId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    // D22 (Wave 2 adversarial audit): failJob() PERSISTS errorMessage into
+    // background_jobs / background_job_audit_log, which a durable-job
+    // debugging UI, an export, or a support tool could later surface --
+    // the raw error.message (previously used here) is exactly the kind of
+    // unredacted exception text this codebase's telemetry checkpoint
+    // (lib/telemetry/redact.ts, lib/telemetry/errors.ts) exists to keep
+    // out of anything that isn't purely server-side application logs.
+    // classifyError()'s safeMessage is the fixed, taxonomy-level text
+    // instead. classifyPipelineError(error) just below still runs against
+    // the REAL, unredacted error object for its retry-category decision
+    // (transient vs non_retryable) -- only what gets PERSISTED as
+    // errorMessage changes here, never the retry logic itself.
+    const safeMessage = classifyError(error).safeMessage;
     try {
-      await failJob(pool, { jobId: claimed.id, workerId, errorCategory: classifyPipelineError(error), errorMessage: message.slice(0, 2000) });
+      await failJob(pool, { jobId: claimed.id, workerId, errorCategory: classifyPipelineError(error), errorMessage: safeMessage.slice(0, 2000) });
     } catch (failError) {
       console.error(`runAsDurableJob(${params.jobType}): failed to record job failure for ${claimed.id}:`, failError instanceof Error ? failError.message : failError);
     }

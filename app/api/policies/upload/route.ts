@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { runAfterResponse } from "@/lib/http/background";
 import { createHash, randomUUID } from "node:crypto";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { recordEvent } from "@/lib/telemetry";
@@ -123,18 +122,25 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    // after() keeps this alive past the response (Vercel's waitUntil under the
-    // hood) instead of racing the serverless function being frozen the
-    // instant "queued" is returned to the browser, which is what a bare
-    // fire-and-forget promise would do.
-    runAfterResponse(() => enqueuePolicyProcessing({
+    // D13 (Wave 2 adversarial audit): enqueuePolicyProcessing() is now
+    // awaited directly instead of deferred via runAfterResponse()/after().
+    // The deferred version had no .catch() on this primary path, so a
+    // failed background_jobs insert was silently swallowed -- the client
+    // would see this route's 202 "queued" response (and the
+    // "upload.policy.queued" telemetry event just below) for a policy that
+    // was never actually enqueued for processing, and it would simply sit
+    // "queued" in the UI forever. The insert itself is a single fast
+    // INSERT, so awaiting it adds negligible latency to the response, and a
+    // real failure now surfaces through this route's own catch block below
+    // instead of disappearing.
+    await enqueuePolicyProcessing({
       accountId: ctx.householdId,
       familyMemberId: outcome.familyMemberId,
       policyId,
       storageKey,
       pdfPassword: pdfPassword || undefined,
       linkUploadMember: explicitFamilyMember,
-    }));
+    });
 
     // Checkpoint 14b: "uploads" was named as a required telemetry call
     // site -- a successful queue outcome and the custom, early-return

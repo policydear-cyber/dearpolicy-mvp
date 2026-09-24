@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
-import { runAfterResponse } from "@/lib/http/background";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { getClaimSession } from "@/lib/claims/session";
 import { saveClaimEvidenceFile } from "@/lib/storage";
 import { validateEvidenceUpload, looksLikePdf } from "@/lib/claims/evidence/validation";
@@ -57,14 +58,43 @@ export async function POST(request: NextRequest) {
       newValue: { documentType, originalFilename: file.name, supersedesId },
     });
 
-    runAfterResponse(() => enqueueClaimEvidenceProcessing({ accountId: ctx.householdId, documentId: document.id }));
+    // D13 (Wave 2 adversarial audit): enqueueClaimEvidenceProcessing() is
+    // now awaited directly instead of deferred via runAfterResponse()/
+    // after(). The deferred version had no .catch() on this primary path,
+    // so a failed background_jobs insert was silently swallowed -- the
+    // client would see a 202 "queued" response for evidence that was never
+    // actually enqueued for processing. The insert itself is a single fast
+    // INSERT, so awaiting it adds negligible latency and lets a real
+    // failure surface through this route's own catch block below instead
+    // of disappearing.
+    await enqueueClaimEvidenceProcessing({ accountId: ctx.householdId, documentId: document.id });
+
+    // D23 (Wave 2 adversarial audit): "uploads" is a required telemetry
+    // call site -- mirrors the exact recordEvent() shape
+    // app/api/policies/upload/route.ts already uses (Checkpoint 14b).
+    // Fire-and-forget (never awaited): recordEvent() is itself
+    // failure-isolated and time-bounded, so this can never slow down or
+    // fail the actual HTTP response.
+    void recordEvent({
+      name: "upload.evidence.queued",
+      correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")),
+      route: "/api/claims/evidence/upload",
+      status: "success",
+    });
 
     return NextResponse.json({ documentId: document.id, status: document.status }, { status: 202 });
   } catch (error) {
     if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505") {
+      void recordEvent({
+        name: "upload.evidence.rejected",
+        correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")),
+        route: "/api/claims/evidence/upload",
+        status: "failure",
+        errorCategory: "validation",
+      });
       return NextResponse.json({ error: "This exact document is already on file for this claim." }, { status: 409 });
     }
-    const authResponse = routeErrorResponse(error);
+    const authResponse = routeErrorResponse(error, { request, route: "/api/claims/evidence/upload" });
     if (authResponse.status === 500) return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     return authResponse;
   }
