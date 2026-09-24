@@ -68,6 +68,25 @@ export async function deletePolicyFile(storageKey: string) {
 // above, and never made public -- every read goes through a short-lived
 // signed URL (createClaimEvidenceSignedUrl) rather than a public object URL.
 const CLAIM_EVIDENCE_BUCKET = process.env.SUPABASE_CLAIM_EVIDENCE_BUCKET ?? "claim-evidence-files";
+// D34 (Wave 2 adversarial audit): 300s is a DELIBERATE, documented
+// trade-off, not an oversight -- kept here (rather than raised) because a
+// signed URL this application hands out is a capability the storage
+// provider will honor directly, with no further app-side check, for its
+// entire TTL, even if the underlying claim-evidence document is superseded
+// or deleted one second after the URL is minted. That exposure window is
+// unavoidable for ANY pre-signed direct-storage URL scheme (shrinking the
+// TTL only shrinks the window, it cannot close it), so the real access
+// boundary this application enforces IMMEDIATELY on supersession/deletion
+// is upstream of this: app/api/claims/evidence/[id]/file/route.ts resolves
+// the document through lib/claims/evidence/store.ts's
+// getScopedEvidenceDocument(), which now excludes a superseded/deleted
+// document, so this function is simply never called (no NEW signed URL is
+// ever minted) for evidence that is no longer active -- see that route's
+// own doc comment for the full picture. 300s is short enough to load a
+// multi-page PDF over a slow connection without the redirect racing the
+// URL's own expiry, and is not lowered further without a product decision
+// to accept more retry/redirect failures on slow connections in exchange
+// for a smaller (never zero) exposure window.
 const SIGNED_URL_TTL_SECONDS = 300;
 
 function claimEvidenceObjectKey(args: { accountId: string; familyMemberId: string; claimSessionId: string; documentId: string; filename: string }) {
@@ -117,7 +136,16 @@ export async function deleteClaimEvidenceFile(storageKey: string) {
  * UI to preview or download the document. The service-role key used by
  * client() bypasses bucket-level access rules, which is exactly why this
  * function, not a public bucket, is the only way this file is ever read
- * from the browser. */
+ * from the browser.
+ *
+ * D34: this function itself has no way to know whether the caller is about
+ * to serve this URL for currently-active evidence or not -- that check is
+ * the CALLER's job (see app/api/claims/evidence/[id]/file/route.ts, the
+ * only caller, which resolves the document through
+ * getScopedEvidenceDocument() first and never reaches this function at all
+ * for superseded/deleted evidence). Never call this directly against a
+ * storage_key without first re-confirming, through that same scoped
+ * lookup, that the document is still active. */
 export async function createClaimEvidenceSignedUrl(storageKey: string): Promise<string | null> {
   const { data, error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).createSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS);
   if (error) throw new Error(`Could not create a signed URL for the claim-evidence file: ${error.message}`);
