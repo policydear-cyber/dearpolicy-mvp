@@ -148,8 +148,44 @@ jobs:
       - name: CI workflow-coverage regression suite (every required launch suite must have a corresponding CI step)
         run: npm run security:ci-workflow-coverage-test
 
+      - name: Durable job framework regression suite (lib/jobs/queue.ts leases, heartbeat, bounded retry, dead-letter, cancellation)
+        run: npm run security:background-jobs-test
+
+      - name: Telemetry boundary regression suite (recursive redaction, correlation ids, pseudonymization, safe error taxonomy)
+        run: npm run security:telemetry-test
+
+      - name: Model execution provenance regression suite (requested-vs-resolved identity, verified/unverified monetary-use gate)
+        run: npm run security:model-provenance-test
+
+      - name: Controlled rollout and stale-data invalidation regression suite
+        run: npm run security:rollout-staleness-test
+
+      - name: Full authenticated household journey regression suite (real API route handlers, PGlite-backed, no live HTTP server)
+        run: npm run e2e:full-household-test
+
+      - name: VirusTotal malware-scanning adapter regression suite
+        run: npm run security:malware-scanning-virustotal-test
+
+      - name: Durable pipeline-worker regression suite (enqueue/claim/complete/fail error classification)
+        run: npm run security:pipeline-worker-test
+
+      - name: Standalone worker-runtime regression suite (job enqueued by one process, claimed and completed by a separate later process)
+        run: npm run security:worker-runtime-test
+
+      - name: Dead-letter queue retry/drain regression suite
+        run: npm run security:dead-letter-test
+
+      - name: 9-stage multi-process full household E2E journey orchestrator (shared PGlite fixture across process boundaries, including deletion flows)
+        run: npm run e2e:full-journey-test
+
+      - name: Launch-check verifier regression suite (proves the launch-check verifiers themselves are sensitive to real state, not static source-text checks)
+        run: npm run security:launch-check-verifier-test
+
+      - name: Model-execution staleness alert/processor regression suite
+        run: npm run ai:model-execution-staleness-test
+
       - name: Build
         run: npm run build
 
-      - name: Launch readiness report (non-blocking here: this environment has no real production secrets to check against)
+      - name: Launch readiness report (non-blocking here -- this environment has no real production secrets to check against)
         run: npm run launch:check

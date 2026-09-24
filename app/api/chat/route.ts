@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { askDearPolicy } from "@/lib/rag/chat";
 import { enqueueChat } from "@/lib/chat/jobs";
@@ -28,7 +29,7 @@ export async function POST(request:NextRequest){
     const body=BodySchema.parse(await request.json().catch(()=>({})));
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(body.familyMemberId){
-      const member=await query<{id:string}>("SELECT id FROM family_members WHERE id=$1 AND account_id=$2",[body.familyMemberId,accountId]);
+      const member=await query<{id:string}>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family member not found."},{status:404});
     }else if(body.scope!=="family")return NextResponse.json({error:"Tell DearPolicy who this concerns, or start in automatic family context."},{status:400});
     const args={...body,accountId};

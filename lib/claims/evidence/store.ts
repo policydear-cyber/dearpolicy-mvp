@@ -1,4 +1,5 @@
 import { pool, query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { ensureClaimEvidenceSchema } from "./schema";
 import { ensureCriticalIllnessSchema } from "./ci-schema";
 import { ensureDisabilitySchema } from "./disability-schema";
@@ -42,7 +43,7 @@ export async function createEvidenceDocument(args: {
   // Exact-duplicate upload for this same claim -- idempotent: hand back the
   // document that is already there instead of erroring or forking a row.
   const existing = await query<ClaimEvidenceDocumentRow>(
-    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE account_id=$1 AND claim_session_id=$2 AND file_hash=$3 AND superseded_at IS NULL`,
+    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE account_id=$1 AND claim_session_id=$2 AND file_hash=$3 AND superseded_at IS NULL AND ${activePredicate()}`,
     [args.accountId, args.claimSessionId, args.fileHash],
   );
   if (!existing.rows[0]) throw new Error("Duplicate claim-evidence upload conflict could not be resolved.");
@@ -51,7 +52,7 @@ export async function createEvidenceDocument(args: {
 
 export async function getEvidenceDocument(accountId: string, id: string): Promise<ClaimEvidenceDocumentRow | null> {
   await ensureClaimEvidenceSchema();
-  const result = await query<ClaimEvidenceDocumentRow>(`SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2`, [id, accountId]);
+  const result = await query<ClaimEvidenceDocumentRow>(`SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [id, accountId]);
   return result.rows[0] ?? null;
 }
 
@@ -61,7 +62,7 @@ export async function getEvidenceDocument(accountId: string, id: string): Promis
 export async function getScopedEvidenceDocument(args: { accountId: string; familyMemberId: string; claimSessionId: string; id: string }): Promise<ClaimEvidenceDocumentRow | null> {
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
-    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND family_member_id=$3 AND claim_session_id=$4`,
+    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND family_member_id=$3 AND claim_session_id=$4 AND ${activePredicate()}`,
     [args.id, args.accountId, args.familyMemberId, args.claimSessionId],
   );
   return result.rows[0] ?? null;
@@ -70,7 +71,7 @@ export async function getScopedEvidenceDocument(args: { accountId: string; famil
 export async function listEvidenceDocuments(accountId: string, claimSessionId: string): Promise<ClaimEvidenceDocumentRow[]> {
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
-    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE account_id=$1 AND claim_session_id=$2 ORDER BY created_at DESC`,
+    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE account_id=$1 AND claim_session_id=$2 AND ${activePredicate()} ORDER BY created_at DESC`,
     [accountId, claimSessionId],
   );
   return result.rows;
@@ -84,7 +85,7 @@ export async function findReusedEvidenceAcrossScopes(args: { accountId: string; 
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
     `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents
-      WHERE account_id=$1 AND file_hash=$2 AND superseded_at IS NULL AND NOT (family_member_id=$3 AND claim_session_id=$4)`,
+      WHERE account_id=$1 AND file_hash=$2 AND superseded_at IS NULL AND ${activePredicate()} AND NOT (family_member_id=$3 AND claim_session_id=$4)`,
     [args.accountId, args.fileHash, args.familyMemberId, args.claimSessionId],
   );
   return result.rows;

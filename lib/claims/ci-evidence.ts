@@ -15,6 +15,7 @@
  * coverage does.
  */
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimEvidence } from "./types";
 
@@ -288,7 +289,7 @@ export async function loadCIEvidence(accountId: string, familyMemberId: string, 
              p.insurer, p.product_name, p.original_filename, p.document_role, p.personal_coverage_confirmed,
              EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=$2) AS linked_to_member
         FROM policies p JOIN policy_pages pp ON pp.policy_id=p.id AND pp.account_id=p.account_id
-       WHERE p.account_id=$1 AND p.processing_status='ready'
+       WHERE p.account_id=$1 AND p.processing_status='ready' AND ${activePredicate("p")}
          AND (EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND pm.family_member_id=$2)
               OR (p.personal_coverage_confirmed=false AND p.document_role IN ('policy_wording','product_summary','benefit_guide','benefit_summary','rider')))
        ORDER BY p.document_authority DESC, p.created_at DESC, p.id, pp.page_number

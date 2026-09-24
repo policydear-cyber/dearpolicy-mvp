@@ -15,10 +15,17 @@
  * the real route, seeds a real claim_cause_definition_matches row
  * against THIS journey's real policy/claim session/evidence (a genuine
  * downstream-calculation artifact), and checks invalidation on TWO real
- * read paths -- one the coordinator's own comment claims is migrated but
- * is not (a known, already-reported gap from Checkpoint 14d, recorded
- * honestly here rather than silently asserted away), and one it
- * genuinely does invalidate.
+ * read paths -- both now genuinely invalidated as of this checkpoint.
+ * The first (GET /api/claims/evidence/[id]) was, until this checkpoint,
+ * a known, already-reported gap from Checkpoint 14d: the coordinator's
+ * own comment claimed lib/claims/evidence/store.ts's
+ * getScopedEvidenceDocument() already filtered lifecycle_state, but it
+ * did not -- closed here by migrating that function (and its four
+ * siblings in the same file) to filter through activePredicate(), the
+ * exact gap scripts/lifecycle-query-guard-regressions.ts's static scan
+ * independently caught. The second read path (the seeded
+ * claim_cause_definition_matches row) was already correctly invalidated
+ * before this checkpoint.
  */
 import assert from "node:assert/strict";
 import { runStage, asUser, requestFor, readHandoff, requireHandoff, writeHandoff, applyExtraSql } from "@/scripts/e2e/shared";
@@ -91,9 +98,9 @@ runStage("06-evidence-deletion-invalidation", async ({ pool, step }) => {
     assert.equal(state?.lifecycle_state, "pending_deletion");
   });
 
-  await step("INVALIDATION (known, already-reported gap -- Checkpoint 14d, scripts/claim-evidence-deletion-regressions.ts's own header comment): the real GET /api/claims/evidence/[id] route does NOT filter lifecycle_state (lib/claims/evidence/store.ts's getScopedEvidenceDocument() has no such filter) -- it still returns 200 for a pending_deletion document. Recorded honestly as the CURRENT real behaviour, not silently asserted away or skipped", async () => {
+  await step("INVALIDATION (Checkpoint 14d gap CLOSED this checkpoint): the real GET /api/claims/evidence/[id] route now filters lifecycle_state -- lib/claims/evidence/store.ts's getScopedEvidenceDocument() was migrated to filter through activePredicate() (see scripts/lifecycle-query-guard-regressions.ts, which this same change made pass with zero unguarded reads) -- so it now returns 404, not 200, for a pending_deletion document", async () => {
     const res = await getEvidence(requestFor(`http://localhost/api/claims/evidence/${evidenceDocumentId}?familyMemberId=${selfMemberId}&claimSessionId=${claimSessionId}`, { household: householdId }), { params: Promise.resolve({ id: evidenceDocumentId }) } as any);
-    assert.equal(res.status, 200, "if this ever starts returning 404, the Checkpoint 14d gap has been fixed -- update this assertion and its comment, do not just relax it");
+    assert.equal(res.status, 404, "getScopedEvidenceDocument() now filters through activePredicate(), so a pending_deletion document must 404, not 200 -- if this regresses back to 200, the Checkpoint 14d gap has reopened");
   });
 
   await step("INVALIDATION (the read path the coordinator DOES correctly invalidate, per Checkpoint 14d's own established finding): the real claim_cause_definition_matches row seeded above -- the actual downstream calculation input a claim assessment reads via loadActiveCauseDefinitionMatches() -- is now superseded and excluded", async () => {

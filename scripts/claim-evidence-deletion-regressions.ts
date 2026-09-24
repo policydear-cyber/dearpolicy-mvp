@@ -57,6 +57,22 @@
  * which invalidateClaimMatchesReferencing() explicitly supersedes
  * (superseded_at=now()) for every match citing the deleted evidence
  * document -- see the "downstream exclusion" case below.
+ *
+ * UPDATE, final verification checkpoint (claude/v1-launch-hardening):
+ * the gap named directly above IS now fixed. scripts/lifecycle-query-
+ * guard-regressions.ts's zero-tolerance static scan independently caught
+ * the exact same finding (getScopedEvidenceDocument() and its four
+ * siblings reading claim_evidence_documents/policies/family_members with
+ * no activePredicate() filter, across 7 files), which is what prompted
+ * fixing it for real this time rather than deferring it again: all 5
+ * queries in lib/claims/evidence/store.ts now filter through
+ * activePredicate(). scripts/e2e/stages/06-evidence-deletion-
+ * invalidation.ts's own sibling assertion (GET /api/claims/evidence/[id]
+ * against a pending_deletion document) has been updated from "still
+ * returns 200" to "now returns 404" and passes. This suite itself needed
+ * no change -- it was always lib-level and never asserted the old 200
+ * behavior -- so it is left as the historical record of how the gap was
+ * found, with this note as the record of when and how it closed.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

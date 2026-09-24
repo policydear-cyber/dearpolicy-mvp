@@ -169,23 +169,20 @@ function testRedactionVerificationIsSensitiveToTheRealRedactionEngine() {
 }
 
 function testModelPromptSchemaGovernanceIsSensitiveToTheRealChokepointWiring() {
-  // Checkpoint 14h: model_prompt_schema_governance is honestly
-  // blocked_by_code both before and after this sabotage (a separate, real,
-  // still-open gap -- staleExecutionSummary()'s worklist has no real
-  // caller -- keeps it there regardless), so this is NOT an enum-level
-  // ready<->blocked_by_code flip like the two tests above. What it DOES
-  // prove: the check's own evidence genuinely changes to name the
-  // sabotaged chokepoint specifically, rather than silently continuing to
-  // report the SAME reason for a completely different underlying cause --
-  // exactly the "not a superficial source-text check" property this test
-  // suite exists to prove, demonstrated a different way here since this
-  // capability has two independent real blockers rather than one.
+  // Checkpoint 14i closed the last honest gap this capability had (lib/ai/
+  // staleness-alert.ts is now a real caller of staleExecutionSummary()'s
+  // worklist), so the healthy baseline is genuinely "ready" -- both
+  // governed chokepoints call assertVerifiedForMonetaryUse() AND the
+  // staleness worklist has a real caller. This is now an enum-level
+  // ready<->blocked_by_code flip, the same shape as the two tests above:
+  // sabotage one governed chokepoint's own call to
+  // assertVerifiedForMonetaryUse() and the status must flip to
+  // blocked_by_code, naming that specific chokepoint (not a stale/generic
+  // reason); restoring the exact byte content must flip it back to ready.
   const beforeResults = runOnly("model_prompt_schema_governance");
   const beforeItem = beforeResults.find((r) => r.id === "model_prompt_schema_governance");
   assert.ok(beforeItem, "model_prompt_schema_governance must be present");
-  assert.equal(beforeItem.status, "blocked_by_code", `expected healthy baseline blocked_by_code (the honest, still-open staleExecutionSummary gap), got ${beforeItem.status}`);
-  assert.match(beforeItem.blockingReason, /staleExecutionSummary/, "the healthy baseline's blocking reason must name the real remaining gap (staleExecutionSummary), not the chokepoint");
-  assert.doesNotMatch(beforeItem.blockingReason, /does not call assertVerifiedForMonetaryUse/, "the healthy baseline must not claim the chokepoint is unwired -- it IS wired");
+  assert.equal(beforeItem.status, "ready", `expected healthy baseline ready (both chokepoints wired AND staleExecutionSummary() has a real caller as of Checkpoint 14i), got ${beforeItem.status}`);
 
   sabotageRunRestore(
     "lib/ai/llm.ts",
@@ -195,7 +192,7 @@ function testModelPromptSchemaGovernanceIsSensitiveToTheRealChokepointWiring() {
       const duringResults = runOnly("model_prompt_schema_governance");
       const duringItem = duringResults.find((r) => r.id === "model_prompt_schema_governance");
       assert.ok(duringItem, "model_prompt_schema_governance must be present");
-      assert.equal(duringItem.status, "blocked_by_code", "must remain blocked_by_code (now for the more severe reason)");
+      assert.equal(duringItem.status, "blocked_by_code", `sabotaging structuredCompletion()'s own call to assertVerifiedForMonetaryUse() must flip the status to blocked_by_code, got ${duringItem.status}`);
       assert.match(
         duringItem.blockingReason,
         /structuredCompletion\(\) in lib\/ai\/llm\.ts does not call assertVerifiedForMonetaryUse/,
@@ -206,12 +203,10 @@ function testModelPromptSchemaGovernanceIsSensitiveToTheRealChokepointWiring() {
 
   const afterResults = runOnly("model_prompt_schema_governance");
   const afterItem = afterResults.find((r) => r.id === "model_prompt_schema_governance");
-  assert.equal(afterItem.status, "blocked_by_code");
-  assert.match(afterItem.blockingReason, /staleExecutionSummary/, "after restore, the blocking reason must revert to naming the real remaining gap, not the chokepoint");
-  assert.doesNotMatch(afterItem.blockingReason, /does not call assertVerifiedForMonetaryUse/, "after restore, the chokepoint-specific reason must be gone");
+  assert.equal(afterItem.status, "ready", `status must flip back to ready after restore, got ${afterItem.status}`);
 
   cases++;
-  console.log("  [model_prompt_schema_governance] sabotage (remove structuredCompletion()'s own assertVerifiedForMonetaryUse() call) changes the REPORTED BLOCKING REASON from the real remaining staleness-worklist gap to the specific unwired chokepoint, and restore reverts it -- PROVEN sensitive to the real chokepoint wiring via region-scoped source inspection, not a whole-file guess (status stays honestly blocked_by_code throughout, since a second, independent, real gap keeps it there either way).");
+  console.log("  [model_prompt_schema_governance] sabotage (remove structuredCompletion()'s own assertVerifiedForMonetaryUse() call) flips ready -> blocked_by_code naming that specific chokepoint, restore flips it back to ready -- PROVEN sensitive to the real chokepoint wiring via region-scoped source inspection, not a whole-file guess or a stale hardcoded baseline.");
 }
 
 function testHardcodedVerifiersCanNoLongerExistUndetected() {
@@ -255,10 +250,10 @@ function main() {
 
   console.log(
     `\nlaunch-check verifier regressions passed: ${cases} cases (3 real sabotage-and-restore cycles against the VERIFIER ITSELF -- ` +
-      "malware_scanning_configuration and redaction_verification each proven to flip STATUS under a real production-file sabotage and flip " +
-      "back after an exact byte-restore, model_prompt_schema_governance proven to change its reported BLOCKING REASON to name the specific " +
-      "sabotaged chokepoint and revert after restore -- plus a structural guard confirming none of the 6 previously-hardcoded verifiers has " +
-      "silently regressed back to a static report() call).",
+      "malware_scanning_configuration, redaction_verification, and model_prompt_schema_governance each proven to flip STATUS under a real " +
+      "production-file sabotage (the last also proven to name the specific sabotaged chokepoint in its blocking reason) and flip back after " +
+      "an exact byte-restore -- plus a structural guard confirming none of the 6 previously-hardcoded verifiers has silently regressed back " +
+      "to a static report() call).",
   );
 }
 
