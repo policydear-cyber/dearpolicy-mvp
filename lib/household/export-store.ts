@@ -146,6 +146,62 @@ export async function listRecentExports(db: Db, householdId: string, limit = 20)
   return rows;
 }
 
+/** CAS: running -> failed, but only for a row whose background job is no
+ * longer actually working on it. Stage 6A / Defects D10-D11 follow-up:
+ * lib/jobs/queue.ts's recoverExpiredLeases() already reclaims a crashed
+ * worker's LEASE so a live retry can happen, and
+ * generateAndStoreHouseholdExport()'s own catch block already marks the
+ * row `failed` on every attempt that runs long enough to throw a
+ * catchable error -- but neither converges the row if every attempt
+ * dies before that catch block runs (a hard process crash, not a thrown
+ * JS error): the background job eventually reaches `dead_letter` while
+ * the row itself is never told. The same is true, with no retries at
+ * all, for the narrower race in app/api/household/export/route.ts's
+ * POST handler: markExportRunning()'s CAS can commit and then the very
+ * next call, enqueueHouseholdExport(), can throw -- leaving `running`
+ * with zero background_jobs row ever created for it.
+ *
+ * A row is only reaped once `requested_at` is older than `staleAfterMs`
+ * (comfortably longer than the brief window between that CAS and the
+ * following enqueue call actually committing, but far short of
+ * "forever") AND no background_jobs row for this export is in an
+ * actively-working state (`queued`/`processing`/`failed_retryable`) --
+ * so a legitimately in-progress or still-retrying export is never
+ * raced. The `error` recorded is the same safe, generic, non-internal
+ * message markExportFailed()'s own callers already use -- never a raw
+ * job status or error string. */
+export const DEFAULT_STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+export async function reapStaleRunningExports(
+  db: Db,
+  staleAfterMs: number = DEFAULT_STALE_RUNNING_THRESHOLD_MS,
+): Promise<HouseholdExportRow[]> {
+  const { rows } = await db.query<HouseholdExportRow>(
+    `UPDATE household_exports he
+     SET status='failed', error=$1, completed_at=now()
+     WHERE he.status='running'
+       AND he.requested_at < now() - ($2 || ' milliseconds')::interval
+       AND NOT EXISTS (
+         SELECT 1 FROM background_jobs bj
+         WHERE bj.job_type='household_export'
+           AND bj.idempotency_key = he.id::text
+           AND bj.status IN ('queued','processing','failed_retryable')
+       )
+     RETURNING ${EXPORT_COLUMNS}`,
+    ["Export generation did not complete. Please try again.", staleAfterMs],
+  );
+  for (const row of rows) {
+    await appendExportAudit(db, {
+      householdId: row.household_id,
+      exportId: row.id,
+      actor: null,
+      action: "generation_failed",
+      detail: "reaped: stuck running with no actively-working background job",
+    });
+  }
+  return rows;
+}
+
 export type ExportAuditAction = "requested" | "generated" | "generation_failed" | "downloaded" | "expired" | "deleted";
 
 export async function appendExportAudit(

@@ -51,6 +51,7 @@
     "ai:model-execution-staleness-check": "node --import tsx scripts/model-execution-staleness-check.ts",
     "ai:model-execution-staleness-test": "node --import tsx scripts/model-execution-staleness-regressions.ts",
     "security:household-export-test": "node --import tsx scripts/household-export-regressions.ts",
+    "security:household-export-worker-test": "node --import tsx scripts/household-export-worker-regressions.ts",
     "household-export:cleanup": "node --import tsx scripts/household-export-cleanup.ts",
     "security:lifecycle-test": "node --import tsx scripts/lifecycle-regressions.ts",
     "security:lifecycle-query-guard-test": "node --import tsx scripts/lifecycle-query-guard-regressions.ts",

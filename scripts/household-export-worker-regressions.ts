@@ -29,7 +29,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pool } from "@/lib/db/client";
-import { getExportRow, markExportRunning, createOrGetExportRequest } from "@/lib/household/export-store";
+import { getExportRow, markExportRunning, createOrGetExportRequest, reapStaleRunningExports } from "@/lib/household/export-store";
 import { enqueueHouseholdExport, HOUSEHOLD_EXPORT_JOB_TYPE } from "@/lib/household/export-queue";
 import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
 // Checkpoint 14i: imports lib/jobs/household-export-processor.ts
@@ -212,10 +212,78 @@ async function main() {
       },
     );
 
+    await testAsync(
+      "reapStaleRunningExports() marks a stuck 'running' export failed once its background job has permanently dead-lettered, but leaves an actively-retrying export alone",
+      async () => {
+        const { row: deadLettered } = await createOrGetExportRequest(pool, { householdId, requestedBy: ownerId, idempotencyKey: "reaper-test-dead-letter" });
+        await markExportRunning(pool, deadLettered.id);
+        await enqueueHouseholdExport({ exportId: deadLettered.id, householdId, requestedBy: ownerId });
+        await pool.query(`UPDATE background_jobs SET status='dead_letter' WHERE job_type=$1 AND idempotency_key=$2`, [
+          HOUSEHOLD_EXPORT_JOB_TYPE,
+          deadLettered.id,
+        ]);
+
+        const { row: stillRetrying } = await createOrGetExportRequest(pool, { householdId, requestedBy: ownerId, idempotencyKey: "reaper-test-still-retrying" });
+        await markExportRunning(pool, stillRetrying.id);
+        await enqueueHouseholdExport({ exportId: stillRetrying.id, householdId, requestedBy: ownerId });
+        await pool.query(`UPDATE background_jobs SET status='failed_retryable' WHERE job_type=$1 AND idempotency_key=$2`, [
+          HOUSEHOLD_EXPORT_JOB_TYPE,
+          stillRetrying.id,
+        ]);
+
+        const reaped = await reapStaleRunningExports(pool, 0);
+        const reapedIds = reaped.map((r) => r.id);
+        assert.ok(reapedIds.includes(deadLettered.id), "a running export whose background job has dead-lettered must be reaped to failed");
+        assert.ok(!reapedIds.includes(stillRetrying.id), "a running export whose background job is still queued/processing/failed_retryable must NOT be reaped");
+
+        const deadLetteredRow = await getExportRow(pool, householdId, deadLettered.id);
+        assert.equal(deadLetteredRow!.status, "failed");
+        assert.ok(
+          deadLetteredRow!.error && !deadLetteredRow!.error.includes("dead_letter"),
+          "the row's client-facing error must be a safe generic message, not a raw job-status/internal string",
+        );
+
+        const stillRetryingRow = await getExportRow(pool, householdId, stillRetrying.id);
+        assert.equal(stillRetryingRow!.status, "running", "an actively-retrying export must be left running, not raced by the reaper");
+
+        // Test isolation, same reasoning as the earlier "cancel the queued
+        // job" comment above: this job has served its purpose.
+        await pool.query(`UPDATE background_jobs SET status='cancelled' WHERE job_type=$1 AND idempotency_key=$2`, [
+          HOUSEHOLD_EXPORT_JOB_TYPE,
+          stillRetrying.id,
+        ]);
+      },
+    );
+
+    await testAsync(
+      "reapStaleRunningExports() reaps an orphaned 'running' export with no background_jobs row at all, but only once it is past the staleness threshold",
+      async () => {
+        const { row: orphan } = await createOrGetExportRequest(pool, { householdId, requestedBy: ownerId, idempotencyKey: "reaper-test-orphan" });
+        await markExportRunning(pool, orphan.id);
+        // Deliberately never enqueued -- reproduces
+        // app/api/household/export/route.ts's own markExportRunning()-
+        // succeeded-but-enqueueHouseholdExport()-threw failure window.
+
+        const tooSoon = await reapStaleRunningExports(pool, 24 * 60 * 60 * 1000);
+        assert.ok(
+          !tooSoon.some((r) => r.id === orphan.id),
+          "an orphaned export younger than the staleness threshold must not be reaped yet -- it may just be mid-enqueue",
+        );
+        const stillRunning = await getExportRow(pool, householdId, orphan.id);
+        assert.equal(stillRunning!.status, "running");
+
+        const reaped = await reapStaleRunningExports(pool, 0);
+        assert.ok(reaped.some((r) => r.id === orphan.id), "the same orphaned export, once past the staleness threshold, must be reaped to failed");
+        const failedRow = await getExportRow(pool, householdId, orphan.id);
+        assert.equal(failedRow!.status, "failed");
+      },
+    );
+
     console.log(
       `household-export-worker regressions passed: ${cases} cases (enqueueHouseholdExport() is genuinely enqueue-only with no inline ` +
         `generation, a separately-invoked worker pass claims and completes it through the real processHouseholdExportJob/` +
-        `generateAndStoreHouseholdExport()/createUserSupabaseClient() chain with real content, and the job is claimed exactly once).`,
+        `generateAndStoreHouseholdExport()/createUserSupabaseClient() chain with real content, the job is claimed exactly once, and ` +
+        `reapStaleRunningExports() recovers a stuck "running" export -- dead-lettered or orphaned -- without racing one still actively working).`,
     );
   } finally {
     pool.query = originalQuery;

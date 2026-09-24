@@ -115,6 +115,9 @@ jobs:
       - name: Household export regression suite (recent-auth guard, snapshot exclusions, idempotency, CAS lifecycle, race-safe expiry -- real Postgres via PGlite, no live DB needed)
         run: npm run security:household-export-test
 
+      - name: Household export WORKER regression suite (enqueue-only + separate-worker-claim topology, reaper for stuck/dead-lettered/orphaned running exports -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-export-worker-test
+
       - name: Deletion lifecycle regression suite (state-machine CAS, deletion-request idempotency, policy-document flow, chat-retrieval exclusion, storage-cleanup integration -- real Postgres via PGlite, no live DB needed)
         run: npm run security:lifecycle-test
 
