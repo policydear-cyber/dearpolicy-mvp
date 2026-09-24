@@ -118,6 +118,9 @@ jobs:
       - name: Household export WORKER regression suite (enqueue-only + separate-worker-claim topology, reaper for stuck/dead-lettered/orphaned running exports -- real Postgres via PGlite, no live DB needed)
         run: npm run security:household-export-worker-test
 
+      - name: Environment-contract regression suite (every process.env reference across app/+lib/+scripts/+root is documented in .env.example or explicitly allowlisted -- static scan, no DB needed)
+        run: npm run security:env-contract-test
+
       - name: Deletion lifecycle regression suite (state-machine CAS, deletion-request idempotency, policy-document flow, chat-retrieval exclusion, storage-cleanup integration -- real Postgres via PGlite, no live DB needed)
         run: npm run security:lifecycle-test
 
