@@ -39,6 +39,7 @@ import {
   type DeathBenefitCap, type DeathBenefitEvidenceRef, type DeathBenefitFormula, type DeathBenefitOwnershipRef,
 } from "./death-benefit";
 import { validateCauseEvidence, validatePolicyEvidence, type CauseDefinitionMatch } from "./evidence";
+import { evaluateEvidenceAuthority, type EvidenceAuthorityReasonCode } from "../evidence-authority";
 
 export type { DeathBenefitEvidenceRef, DeathBenefitOwnershipRef, DeathBenefitFormula, DeathBenefitCap };
 export type { CauseDefinitionMatch, CauseDefinitionMatchResult, ValidCauseEvidenceRef, ValidPolicyEvidenceRef } from "./evidence";
@@ -126,7 +127,8 @@ export type AccidentalDeathBlockReasonCode =
   | "CAUSE_MATCH_DEFINITION_MISMATCH"
   | "CAUSE_MATCH_NOT_CONFIRMED"
   | "UNRESOLVED_EXCLUSION"
-  | "INVALID_EXCLUSION_EVIDENCE";
+  | "INVALID_EXCLUSION_EVIDENCE"
+  | EvidenceAuthorityReasonCode;
 
 export type AccidentalDeathBlocked = {
   status: "blocked";
@@ -247,6 +249,21 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
       reasonCode: "CAUSE_MATCH_NOT_CONFIRMED",
       message: "The reviewed cause-of-death evidence has not been explicitly confirmed to match this policy's own accidental-death definition.",
     };
+  }
+
+  // Checkpoint (Wave 2, D4/D8/D9): even a structurally valid, confirmed
+  // "matches" record can rest on an AI extraction that was never verified,
+  // was produced under an incompatible/outdated prompt-schema-validator
+  // combination, has since been superseded by a re-extraction, or has gone
+  // stale relative to the current schema version -- see
+  // lib/claims/evidence-authority.ts. This runs AFTER the match is
+  // confirmed structurally correct and scoped to this exact calculation
+  // (so a malformed-evidence problem is still reported as such), and
+  // BEFORE any arithmetic, so an unauthorized match can never unlock an
+  // amount even transiently.
+  const authority = evaluateEvidenceAuthority(match.provenance);
+  if (!authority.authorized) {
+    return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
   }
 
   for (const exclusion of input.exclusions ?? []) {

@@ -13,6 +13,8 @@
  * fails closed rather than being silently accepted.
  */
 
+import type { EvidenceProvenance } from "../evidence-authority";
+
 export type EvidenceBlockReasonCode =
   | "MALFORMED_RULE_EVIDENCE"
   | "MALFORMED_OWNERSHIP_EVIDENCE"
@@ -99,6 +101,13 @@ export type CauseDefinitionMatch = {
   definitionEvidence: unknown;
   result: CauseDefinitionMatchResult;
   reviewedAt: string;
+  /** Model-execution provenance for the AI extraction this match's
+   * reviewed causeEvidence rests on -- see lib/claims/evidence-authority.ts's
+   * EvidenceProvenance and evaluateEvidenceAuthority(). Optional only
+   * because every existing writer of this type predates this field;
+   * absent is treated as EVIDENCE_PROVENANCE_MISSING (fail closed) by any
+   * calculator that checks it, never as "no check needed". */
+  provenance?: EvidenceProvenance;
 };
 
 function nonEmptyString(value: unknown): value is string {
@@ -296,6 +305,12 @@ export type CIDefinitionMatch = {
   definitionEvidence: unknown;
   result: CIDefinitionMatchResult;
   reviewedAt: string;
+  /** Model-execution provenance for the AI extraction this match's
+   * reviewed medicalEvidence rests on -- see
+   * lib/claims/evidence-authority.ts's EvidenceProvenance. Optional only
+   * because every existing writer of this type predates this field;
+   * absent is treated as EVIDENCE_PROVENANCE_MISSING (fail closed). */
+  provenance?: EvidenceProvenance;
 };
 
 /**
@@ -411,6 +426,15 @@ export type VerifiedMedicalBillFacts = {
   admissionType: string | null;
   wardType: string | null;
   sourceDocumentIds: string[];
+  /** Model-execution provenance for every source document's extraction
+   * that fed this aggregate, one entry per sourceDocumentIds entry -- see
+   * lib/claims/evidence-authority.ts's EvidenceProvenance and
+   * evaluateAggregateEvidenceAuthority(). Optional only because every
+   * existing writer of this type (lib/claims/evidence/medical-bill-
+   * evidence.ts's loadVerifiedMedicalBillFacts()) predates this field;
+   * absent/empty is treated as EVIDENCE_PROVENANCE_MISSING (fail closed)
+   * by any calculator-consuming rules module that checks it. */
+  provenance?: EvidenceProvenance[];
 };
 
 
@@ -460,4 +484,10 @@ export type DisabilityDefinitionMatch = {
   definitionEvidence: unknown;
   result: DisabilityDefinitionMatchResult;
   reviewedAt: string;
+  /** Model-execution provenance for the AI extraction this match's
+   * reviewed medicalEvidence rests on -- see
+   * lib/claims/evidence-authority.ts's EvidenceProvenance. Optional only
+   * because every existing writer of this type predates this field;
+   * absent is treated as EVIDENCE_PROVENANCE_MISSING (fail closed). */
+  provenance?: EvidenceProvenance;
 };
