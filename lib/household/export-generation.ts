@@ -74,8 +74,14 @@ export async function generateAndStoreHouseholdExport(
   args: GenerateHouseholdExportArgs,
 ): Promise<HouseholdExportRow | null> {
   try {
-    const snapshot = await createUserSupabaseClient(args.requestedBy, (client) =>
-      buildHouseholdExportSnapshot(client, args.householdId),
+    // D35 (Wave 2 adversarial audit): REPEATABLE READ so this transaction's
+    // several sequential SELECTs (buildHouseholdExportSnapshot) see one
+    // consistent snapshot, even if a deletion is racing this export.
+    const snapshot = await createUserSupabaseClient(
+      args.requestedBy,
+      (client) => buildHouseholdExportSnapshot(client, args.householdId),
+      pool,
+      { isolationLevel: "REPEATABLE READ" },
     );
     const json = JSON.stringify(snapshot, null, 2);
     const bytes = new TextEncoder().encode(json);

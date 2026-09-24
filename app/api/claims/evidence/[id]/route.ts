@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { getClaimSession } from "@/lib/claims/session";
 import { getScopedEvidenceDocument, getLatestExtraction, correctExtraction } from "@/lib/claims/evidence/store";
 import { listClaimEvidenceAudit, appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import type { ClaimEvidenceExtractedFields } from "@/lib/claims/evidence/types";
+import {
+  DeletionValidationError,
+  finishClaimEvidenceDeletion,
+  requestClaimEvidenceDeletion,
+} from "@/lib/lifecycle/coordinator";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -20,7 +26,11 @@ async function scopedDocument(request: NextRequest, id: string) {
   if (!session) return { error: "Claim session not found for this family member." as const, status: 404 as const };
   const document = await getScopedEvidenceDocument({ accountId: ctx.householdId, familyMemberId, claimSessionId, id });
   if (!document) return { error: "Claim evidence document not found." as const, status: 404 as const };
-  return { accountId: ctx.householdId, familyMemberId, claimSessionId, document };
+  // userId is threaded through alongside accountId so DELETE (below) can
+  // open its own RLS-scoped transaction via createUserSupabaseClient()
+  // without re-resolving requireHouseholdContext() a second time -- GET/
+  // PATCH simply ignore this extra field, unaffected by its addition.
+  return { accountId: ctx.householdId, userId: ctx.userId, familyMemberId, claimSessionId, document };
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -65,6 +75,56 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   } catch (error) {
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Could not save the correction." }, { status: 500 });
+    return authResponse;
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const scoped = await scopedDocument(request, id);
+    if ("error" in scoped) return NextResponse.json({ error: scoped.error }, { status: scoped.status });
+
+    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${scoped.document.id}`;
+
+    const outcome = await createUserSupabaseClient(scoped.userId, async (client) => {
+      try {
+        return await requestClaimEvidenceDeletion({
+          client,
+          accountId: scoped.accountId,
+          actorUserId: scoped.userId,
+          evidenceDocumentId: scoped.document.id,
+          reasonCategory: "user_requested",
+          idempotencyKey,
+        });
+      } catch (error) {
+        if (error instanceof DeletionValidationError) return null;
+        throw error;
+      }
+    });
+
+    if (!outcome) return NextResponse.json({ error: "Claim evidence document not found." }, { status: 404 });
+
+    if (outcome.status === "accepted") {
+      await finishClaimEvidenceDeletion({
+        accountId: scoped.accountId,
+        actorUserId: scoped.userId,
+        evidenceDocumentId: scoped.document.id,
+        deletionRequestId: outcome.deletionRequestId,
+      });
+    }
+
+    return NextResponse.json({
+      deleted: true,
+      id: scoped.document.id,
+      filename: outcome.filename,
+      affectedOpenClaimSessionIds: outcome.affectedOpenClaimSessionIds,
+      deletionRequestId: outcome.deletionRequestId,
+      status: outcome.status === "accepted" ? "completed" : outcome.status,
+    });
+  } catch (error) {
+    const authResponse = routeErrorResponse(error);
+    if (authResponse.status === 500) return NextResponse.json({ error: "Could not delete the claim-evidence document." }, { status: 500 });
     return authResponse;
   }
 }

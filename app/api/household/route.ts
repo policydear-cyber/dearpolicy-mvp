@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { requireCurrentUser, UnauthenticatedError } from "@/lib/auth/session";
+import { requireCurrentUser, UnauthenticatedError, requireRecentAuthentication } from "@/lib/auth/session";
 import { listMemberships, renameHousehold, deleteHousehold } from "@/lib/household/repo";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { requestHouseholdDeletion } from "@/lib/lifecycle/coordinator";
 
 export const runtime = "nodejs";
 // "authenticated" rather than "household-member": a brand-new user with no
@@ -56,13 +57,15 @@ export async function PATCH(request: NextRequest) {
 /** Owner-only, destructive: permanently deletes the active household and
  * (via ON DELETE CASCADE) every policy, claim, family member, and document
  * record it owns. Requires the caller to type the household's current name
- * as `confirmName` in the request body -- an explicit, deliberate
- * confirmation step for an irreversible action, in place of a full
- * re-authentication flow (tracked as a possible future hardening in the PR
- * description's data-lifecycle section). */
+ * as `confirmName` in the request body, AND (D35, Wave 2 adversarial
+ * audit) a recently-verified session (requireRecentAuthentication()) --
+ * an explicit, deliberate confirmation step for an irreversible action,
+ * now with both a re-authentication guard and idempotency/deletion-audit
+ * recording via the shared lifecycle coordinator. */
 export async function DELETE(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    requireRecentAuthentication(ctx.user);
     const body = await request.json().catch(() => ({}));
     const confirmName = typeof body.confirmName === "string" ? body.confirmName.trim() : "";
     // Re-fetch the real household name to compare against, rather than
@@ -77,8 +80,9 @@ export async function DELETE(request: NextRequest) {
         { status: 400 },
       );
     }
-    await deleteHousehold(ctx.userId, ctx.householdId);
-    return NextResponse.json({ ok: true });
+    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${ctx.householdId}`;
+    const outcome = await requestHouseholdDeletion({ actorUserId: ctx.userId, householdId: ctx.householdId, idempotencyKey });
+    return NextResponse.json({ ok: true, deletionRequestId: outcome.deletionRequestId, status: outcome.status });
   } catch (error) {
     return routeErrorResponse(error);
   }

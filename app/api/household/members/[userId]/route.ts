@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { removeMember, setMemberRole, type Role } from "@/lib/household/repo";
+import { requestHouseholdLeave, requestHouseholdMemberRemoval } from "@/lib/lifecycle/coordinator";
 import { isUuid } from "@/lib/db/client";
 
 export const runtime = "nodejs";
@@ -35,18 +36,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 /** Removes a member from the household -- either the owner removing
- * someone else, or a member removing themselves ("leave"). Both cases are
- * the same operation from the database's point of view (a DELETE), and
- * RLS/removeMember() distinguish who's allowed to do which; the route
- * doesn't need to know which case it is. Refuses to remove the household's
- * last remaining owner (see removeMember()'s ConflictError). */
+ * someone else, or a member removing themselves ("leave"). D15 (Wave 2
+ * adversarial audit): both now go through the shared lifecycle
+ * coordinator (idempotency + deletion-audit-log recording), which still
+ * calls removeMember() (lib/household/repo.ts) underneath, so the
+ * existing RLS/last-owner protections are unchanged. */
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   try {
     const ctx = await requireHouseholdContext(request);
     const { userId: targetUserId } = await params;
     if (!isUuid(targetUserId)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    await removeMember(ctx.userId, ctx.householdId, targetUserId);
-    return NextResponse.json({ ok: true });
+    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${targetUserId}`;
+    const outcome =
+      ctx.userId === targetUserId
+        ? await requestHouseholdLeave({ accountId: ctx.householdId, callerUserId: ctx.userId, targetUserId, idempotencyKey })
+        : await requestHouseholdMemberRemoval({ accountId: ctx.householdId, callerUserId: ctx.userId, targetUserId, idempotencyKey });
+    return NextResponse.json({ ok: true, deletionRequestId: outcome.deletionRequestId, status: outcome.status });
   } catch (error) {
     return routeErrorResponse(error);
   }

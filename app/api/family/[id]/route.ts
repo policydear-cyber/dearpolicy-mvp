@@ -3,6 +3,12 @@ import { isUuid, isValidDateString } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
+import {
+  DeletionValidationError,
+  HasLinkedActivityError,
+  finishFamilyMemberDeletion,
+  requestFamilyMemberDeletion,
+} from "@/lib/lifecycle/coordinator";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -52,48 +58,32 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 }
 
-// There is no UI or API path to undo an accidental "+ Add person" (a typo, a
-// duplicate, a one-off test profile) once it's on the household list -- this
-// closes that gap. Deletion is refused, rather than cascaded, whenever the
-// profile has any real activity attached (an uploaded policy, chat history,
-// a claim, a coverage rule, a premium record): silently cascading a delete
-// through a family member's policy documents and claim history in a family
-// insurance app is exactly the kind of data loss that must never be a single
-// click, so those profiles are left for the person to explicitly clear out
-// (remove the documents/history) before the profile itself can go.
-class HasLinkedActivity extends Error {}
-
+/** D15 (Wave 2 adversarial audit): family-member deletion now goes through
+ * the shared lifecycle coordinator (lib/lifecycle/coordinator.ts) instead
+ * of an inline hard DELETE -- idempotency, deletion-audit-log recording,
+ * and the "reject when linked activity exists" check are all centralized
+ * there (HasLinkedActivityError), rather than duplicated per route. */
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await requireHouseholdContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-
-    const deleted = await createUserSupabaseClient(ctx.userId, async (client) => {
-      const owned = await client.query<{ id: string }>(
-        `SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
-        [id, ctx.householdId],
-      );
-      if (!owned.rows.length) return false;
-      const usage = await client.query<{ n: number }>(
-        `SELECT (
-            (SELECT count(*) FROM policies WHERE family_member_id=$1 AND ${activePredicate()})
-          + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
-          + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
-          + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
-          + (SELECT count(*) FROM coverage_rules WHERE family_member_id=$1)
-          + (SELECT count(*) FROM premium_records WHERE family_member_id=$1)
-         )::int AS n`,
-        [id],
-      );
-      if ((usage.rows[0]?.n ?? 0) > 0) throw new HasLinkedActivity();
-      await client.query(`DELETE FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [id, ctx.householdId]);
-      return true;
+    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${id}`;
+    const outcome = await createUserSupabaseClient(ctx.userId, async (client) => {
+      try {
+        return await requestFamilyMemberDeletion({ client, accountId: ctx.householdId, actorUserId: ctx.userId, familyMemberId: id, reasonCategory: "user_requested", idempotencyKey });
+      } catch (error) {
+        if (error instanceof DeletionValidationError) return null;
+        throw error;
+      }
     });
-    if (!deleted) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    return NextResponse.json({ ok: true });
+    if (!outcome) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    if (outcome.status === "accepted") {
+      await finishFamilyMemberDeletion({ accountId: ctx.householdId, actorUserId: ctx.userId, familyMemberId: id, deletionRequestId: outcome.deletionRequestId });
+    }
+    return NextResponse.json({ ok: true, deletionRequestId: outcome.deletionRequestId, status: outcome.status === "accepted" ? "completed" : outcome.status });
   } catch (error) {
-    if (error instanceof HasLinkedActivity) {
+    if (error instanceof HasLinkedActivityError) {
       return NextResponse.json(
         { error: "This profile has linked documents or activity, so it can't be deleted. Remove those first." },
         { status: 409 },

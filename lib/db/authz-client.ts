@@ -65,6 +65,19 @@ export type ScopedDbClient = {
  * see the raw pg client and can't forget to release it or leave the
  * transaction open. This is the function almost every authenticated route
  * handler should call. */
+export type UserSupabaseClientOptions = {
+  /** D35 (Wave 2 adversarial audit): opts this transaction into a stronger
+   * isolation level than Postgres's default READ COMMITTED. Used by
+   * lib/household/export-generation.ts, whose snapshot build runs several
+   * sequential SELECTs inside one transaction -- under READ COMMITTED each
+   * statement independently re-reads latest-committed state, so a deletion
+   * racing the export could land between two of those statements and
+   * produce a self-inconsistent snapshot. REPEATABLE READ pins one
+   * snapshot for the whole transaction. Omitted (the default) keeps the
+   * existing READ COMMITTED behavior for every other call site. */
+  isolationLevel?: "REPEATABLE READ" | "SERIALIZABLE";
+};
+
 export async function createUserSupabaseClient<T>(
   userId: string,
   fn: (client: ScopedDbClient) => Promise<T>,
@@ -77,6 +90,7 @@ export async function createUserSupabaseClient<T>(
   // request.jwt.claim.sub) is proven separately, against a real Postgres
   // engine, by scripts/rls-regressions.ts.
   poolOverride: Pick<Pool, "connect"> = pool,
+  options?: UserSupabaseClientOptions,
 ): Promise<T> {
   if (!userId || !isUuid(userId)) {
     // Failing loudly (rather than, say, treating a missing id as "no
@@ -90,7 +104,7 @@ export async function createUserSupabaseClient<T>(
   }
   const client = (await poolOverride.connect()) as PoolClient;
   try {
-    await client.query("BEGIN");
+    await client.query(options?.isolationLevel ? `BEGIN ISOLATION LEVEL ${options.isolationLevel}` : "BEGIN");
     await client.query("SET LOCAL ROLE authenticated");
     await client.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]);
     const scoped: ScopedDbClient = {
