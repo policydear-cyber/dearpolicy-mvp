@@ -7,3 +7,4 @@ data
 .DS_Store
 paddleocr-service/.venv
 paddleocr-service/output
+.e2e-fixtures
