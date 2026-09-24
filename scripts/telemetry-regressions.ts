@@ -120,6 +120,18 @@ async function main() {
     assert.ok(!json.includes("pre-existing conditions"), "policy wording text must never survive redaction");
   });
 
+  test("redactDeep catches free text under a singular 'note' key, not just the plural 'notes'", () => {
+    // Regression: GENERIC_TEXT_KEY_SUBSTRINGS previously listed "notes" but not "note", so a
+    // key literally named "note" (a plausible real field on a claim/evidence review object) never
+    // matched isGenericLongTextKey(), and free text placed under it survived redaction unredacted.
+    const out = redactDeep({
+      claim: { assessment: { details: { note: MEDICAL_TEXT } } },
+    });
+    const json = serialized(out);
+    assert.ok(!json.includes("chest pain"), "medical narrative under a singular 'note' key must never survive redaction");
+    assert.ok(!json.includes("diabetes"), "a diagnosis mentioned in a 'note' field must never survive redaction");
+  });
+
   test("redactDeep scrubs emails, provider API keys, and long digit runs wherever they appear, regardless of key name", () => {
     const out = redactDeep({ metadata: { contact: EMAIL, config: { key: PROVIDER_API_KEY }, note: "id 987654321" } });
     const json = serialized(out);

@@ -170,7 +170,7 @@ const DENIED_KEY_SUBSTRINGS = [
 // D-new (Checkpoint 9b): generic free-text key names that are only denied
 // when the value is long enough to plausibly be prose carrying embedded
 // PII -- see isGenericLongTextKey() and the doc comment above.
-const GENERIC_TEXT_KEY_SUBSTRINGS = ["body", "content", "notes", "text", "summary", "description", "message"];
+const GENERIC_TEXT_KEY_SUBSTRINGS = ["body", "content", "note", "notes", "text", "summary", "description", "message"];
 const GENERIC_TEXT_MIN_LENGTH = 40;
 
 // Header/cookie *bags* dropped wholesale by exact key name (case-insensitive)
