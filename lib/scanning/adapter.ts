@@ -68,6 +68,18 @@ export function selectedFileScanAdapterName(env: NodeJS.ProcessEnv = process.env
   return env.MALWARE_SCANNER_PROVIDER?.trim() || "null";
 }
 
+/** Checkpoint 14h (claude/v1-launch-hardening): the real registry's own
+ * key list -- what scripts/launch-check.ts's malware_scanning_configuration
+ * verifier now inspects directly, instead of trusting a static comment
+ * about what SCAN_ADAPTERS currently contains. A real (non-null) entry
+ * here means a real adapter implementation exists in code; whether one is
+ * actually SELECTED in a given environment is the separate, orthogonal
+ * question selectedFileScanAdapterName()/checkFileScannerConfigured()
+ * answer. */
+export function registeredFileScanAdapterNames(): string[] {
+  return Object.keys(SCAN_ADAPTERS);
+}
+
 export function currentFileScanAdapter(env: NodeJS.ProcessEnv = process.env): FileScanAdapter {
   const name = selectedFileScanAdapterName(env);
   return SCAN_ADAPTERS[name] ?? nullFileScanAdapter;

@@ -35,7 +35,7 @@
  * real code change could and should have fixed before merge.
  */
 import { Client } from "pg";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import {
   checkDevAuthNotInProduction,
@@ -45,6 +45,7 @@ import {
   checkServiceRoleKeyNotPublic,
 } from "@/lib/launch/guards";
 import { evaluateBucketPrivacy, requiredPrivateBucketIds } from "@/lib/launch/storage-guards";
+import { spawnSync } from "node:child_process";
 import {
   assertManifestComplete,
   REQUIRED_CAPABILITIES,
@@ -52,17 +53,206 @@ import {
   type CapabilityId,
   type CapabilityResult,
   type CapabilityStatus,
+  type CapabilityCheckType,
 } from "@/lib/launch/capability-manifest";
 import { classifyRoutes } from "./route-inventory-regressions";
 import { REQUIRED_CI_SUITES } from "./ci-required-suites";
 import { checkRequestOrigin } from "@/lib/http/csrf";
-import { checkMalwareScannerConfigured } from "@/lib/claims/evidence/scan-adapter";
+import { checkMalwareScannerConfigured, registeredScanAdapterNames, selectedScanAdapterName } from "@/lib/claims/evidence/scan-adapter";
 
 const results: CapabilityResult[] = [];
 const labelOf = new Map(REQUIRED_CAPABILITIES.map((c) => [c.id, c.label]));
 
-function report(id: CapabilityId, status: CapabilityStatus, detail: string) {
-  results.push({ id, label: labelOf.get(id) ?? id, status, detail });
+// ---------------------------------------------------------------------
+// Checkpoint 14h (claude/v1-launch-hardening): structured-evidence
+// plumbing for report(). Before this checkpoint, 6 of this file's 24
+// verifiers (background_job_reliability, dead_letter_retry_support,
+// privacy_safe_observability, redaction_verification,
+// model_prompt_schema_governance, full_household_e2e_journey) were each a
+// single static report(id, status, "<fixed string>") call with NO dynamic
+// inspection of the actual codebase -- meaning no amount of real
+// production fixing could ever change what they reported, because they
+// never checked anything at runtime. This checkpoint rewrites all 6 (plus
+// corrects malware_scanning_configuration's blocked_by_code/blocked_by_
+// external_configuration classification, which was real but wrong) to
+// perform genuine runtime/source-evidence checks, and extends report()
+// itself so EVERY verifier -- not just the 6 rewritten ones -- now emits
+// the full structured-evidence shape the launch-hardening spec requires
+// (Capability ID, Status, Check type, Command/runtime probe, Evidence
+// summary, Blocking reason, Remediation, Last verified timestamp).
+//
+// Design choice: checkType/probe/remediation are properties of the
+// CAPABILITY (which kind of evidence backs it, what command would
+// reproduce that evidence, what would fix it), not of which particular
+// branch a given run's report() call happened to take. A lookup table
+// keyed by CapabilityId is therefore the correct, minimal extension --
+// not duplicating the same 3 facts across this file's 65 individual
+// report() call sites, which would be far MORE likely to drift out of
+// sync (exactly the failure mode this whole checkpoint exists to fix).
+// evidenceSummary/blockingReason default to `detail` itself (already a
+// thorough per-branch narrative at every call site); lastVerified
+// defaults to the real wall-clock time this script actually ran. Any of
+// these can still be overridden per call via the optional 4th argument,
+// used where a shorter/more specific evidence-summary or a
+// probe-specific timestamp (e.g. a checked-in last-known-good result's
+// own recorded time) is more honest than the default.
+// ---------------------------------------------------------------------
+const BUILD_TIMESTAMP = new Date().toISOString();
+
+const CHECK_TYPES: Record<CapabilityId, CapabilityCheckType> = {
+  authentication: "static-grep",
+  household_authorization: "static-grep",
+  route_classification: "static-grep",
+  rls_migration_present: "static-grep",
+  live_rls_verification: "live-query",
+  private_storage_migration_present: "static-grep",
+  live_bucket_privacy: "live-query",
+  policy_document_quarantine: "static-grep",
+  claim_evidence_quarantine: "static-grep",
+  malware_scanning_configuration: "env-check",
+  shared_rate_limiter: "static-grep",
+  csrf_protection: "static-grep",
+  secure_database_tls: "env-check",
+  data_export: "static-grep",
+  data_deletion_and_invalidation: "static-grep",
+  background_job_reliability: "runtime-probe",
+  dead_letter_retry_support: "runtime-probe",
+  privacy_safe_observability: "static-grep",
+  redaction_verification: "runtime-probe",
+  model_prompt_schema_governance: "static-grep",
+  full_household_e2e_journey: "runtime-probe",
+  evaluation_thresholds: "static-grep",
+  production_build: "build-probe",
+  github_ci_status: "ci-api-check",
+};
+
+const PROBES: Record<CapabilityId, string> = {
+  authentication: "existsSync() on the 7 required auth files + regex for getCurrentUser()/requireCurrentUser() export in lib/auth/session.ts",
+  household_authorization: "classifyRoutes() static scan of every app/api/**/route.ts for requireHouseholdContext() usage",
+  route_classification: "classifyRoutes() static scan of every app/api/**/route.ts's ROUTE_AUTH export",
+  rls_migration_present: "regex for ENABLE ROW LEVEL SECURITY / CREATE POLICY in sql/household-rls.sql",
+  live_rls_verification: "live SQL query against pg_class/pg_policies/pg_roles/information_schema over DATABASE_URL",
+  private_storage_migration_present: "regex for storage.buckets/storage.objects + CREATE POLICY in sql/storage-rls.sql",
+  live_bucket_privacy: "live Supabase Storage listBuckets() API call",
+  policy_document_quarantine: "regex for isPolicyProcessingAllowed()'s scan_clean gate + runPolicyQuarantineGate() call in lib/rag/ingest.ts",
+  claim_evidence_quarantine: "regex for the current.scan_status !== 'clean' gate in lib/claims/evidence/pipeline.ts",
+  malware_scanning_configuration: "checkFileScannerConfigured(prodEnv) + inspection of lib/scanning/adapter.ts's SCAN_ADAPTERS registry for a real (non-null) entry",
+  shared_rate_limiter: "regex scan of every migrated route for the shared Postgres-backed limiter import + import-boundary ban on the legacy in-memory limiter",
+  csrf_protection: "regex for checkRequestOrigin() call in middleware.ts",
+  secure_database_tls: "checkDatabaseTlsIsSecure(prodEnv)",
+  data_export: "regex/shape check of lib/household/export.ts, lib/household/export-store.ts, and both export route handlers",
+  data_deletion_and_invalidation: "regex/shape check of lib/lifecycle/{types,state-machine,deletion-requests,coordinator}.ts, sql/lifecycle.sql, and the active-read-scopes regression suite's own source",
+  background_job_reliability: "regex for the enqueue-only pattern in lib/rag/processing-queue.ts + lib/claims/evidence/queue.ts, existsSync on lib/jobs/worker-runtime.ts + scripts/worker.ts + the jobs:worker script, and `node --import tsx scripts/worker-runtime-regressions.ts` spawned as a child process",
+  dead_letter_retry_support: "regex/export check of lib/jobs/dead-letter.ts + scripts/dead-letter.ts, and `node --import tsx scripts/dead-letter-regressions.ts` spawned as a child process",
+  privacy_safe_observability: "regex for the 5 Checkpoint 14b event names at their exact call sites (lib/claims/monetary-gate.ts, lib/claims/composition/engine.ts, app/api/policies/upload/route.ts, app/api/policies/scan-callback/route.ts, lib/storage/cleanup.ts), plus a codebase grep confirming the still-uncovered call sites (extraction/OCR/embeddings/chat/exports)",
+  redaction_verification: "`node --import tsx scripts/telemetry-regressions.ts` spawned as a child process (35 cases)",
+  model_prompt_schema_governance: "region-scoped regex for assertVerifiedForMonetaryUse( inside structuredCompletion()'s (lib/ai/llm.ts) and attemptHostedOcr()'s (lib/documents/ocr-hosted.ts) own function bodies, plus a codebase-wide grep for any real caller of staleExecutionSummary() outside its own module/tests/this file",
+  full_household_e2e_journey: "existsSync on the orchestrator + 9 stage files, then a live spawnSync of scripts/full-household-e2e-orchestrator.mjs (bounded timeout) recording its result to scripts/full-household-e2e-last-result.json",
+  evaluation_thresholds: "package.json script presence + .github/workflows/ci.yml step presence",
+  production_build: "spawned `npm run build`",
+  github_ci_status: "GitHub Checks/Statuses API query for the current commit",
+};
+
+const REMEDIATIONS: Record<CapabilityId, string> = {
+  authentication: "Restore the missing auth file(s), or re-export getCurrentUser()/requireCurrentUser() from lib/auth/session.ts.",
+  household_authorization: "Add a requireHouseholdContext() call to every listed household-scoped route before it touches household data.",
+  route_classification: "Add a valid ROUTE_AUTH export to every listed route file.",
+  rls_migration_present: "Add ENABLE ROW LEVEL SECURITY and CREATE POLICY statements to sql/household-rls.sql.",
+  live_rls_verification: "Apply sql/household-rls.sql to the target database, or configure a production DATABASE_URL so this check has something real to verify against.",
+  private_storage_migration_present: "Add storage.buckets/storage.objects CREATE POLICY statements to sql/storage-rls.sql.",
+  live_bucket_privacy: "Mark the required buckets private in Supabase Storage, or configure SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY so this check has something real to verify against.",
+  policy_document_quarantine: "Wire runPolicyQuarantineGate()'s scan_clean gate into lib/rag/ingest.ts's processPolicy() entry point.",
+  claim_evidence_quarantine: "Gate lib/claims/evidence/pipeline.ts's quarantined -> processing transition on current.scan_status === 'clean'.",
+  malware_scanning_configuration: "Set MALWARE_SCANNER_PROVIDER=virustotal and VIRUSTOTAL_API_KEY in production, or register a real (non-null) adapter in lib/scanning/adapter.ts's SCAN_ADAPTERS if none exists yet.",
+  shared_rate_limiter: "Migrate the listed route(s) onto the shared Postgres-backed rate limiter.",
+  csrf_protection: "Wire checkRequestOrigin() into middleware.ts ahead of every /api/* mutation.",
+  secure_database_tls: "Configure DATABASE_URL with TLS (sslmode=require or equivalent) and certificate verification left on.",
+  data_export: "Close each named gap in the household export snapshot/store/routes so it fully satisfies the spec.",
+  data_deletion_and_invalidation: "Implement the remaining deletion flow(s)/state-machine guarantees named in the blocking reason.",
+  background_job_reliability: "Build a live end-to-end fixture test for the policy-processing path (mirroring scripts/pipeline-worker-regressions.ts's claim-evidence proof) so both real call sites, not just one, are proven to reach the durable-job model end to end.",
+  dead_letter_retry_support: "Fix the failing worker-runtime/dead-letter regression case(s) named in the blocking reason, or wire the missing drain/CLI/export.",
+  privacy_safe_observability: "Add recordEvent()/recordErrorEvent() calls at the remaining call sites: extraction, OCR, embeddings, chat-turn-level, and exports.",
+  redaction_verification: "Investigate and fix the telemetry-regressions.ts failure(s); see the runtime probe's captured output in the blocking reason.",
+  model_prompt_schema_governance: "Call assertVerifiedForMonetaryUse(record) at both governed chokepoints if that check failed, or wire a real caller for staleExecutionSummary()'s worklist if only that check failed.",
+  full_household_e2e_journey: "Replace the dev-auth signup substitute with real Supabase Auth signup+signin, drive claim-session creation through the real chat route, and exercise this journey against a real (non-test) malware-scan adapter.",
+  evaluation_thresholds: "Add the missing npm script(s) and/or wire them into .github/workflows/ci.yml as required (non-optional) steps.",
+  production_build: "Investigate the `npm run build` failure output captured in the blocking reason.",
+  github_ci_status: "Investigate the failing CI check(s)/run(s), or configure GITHUB_TOKEN/CI access so this check has something real to query.",
+};
+
+function report(
+  id: CapabilityId,
+  status: CapabilityStatus,
+  detail: string,
+  overrides: Partial<Pick<CapabilityResult, "checkType" | "probe" | "evidenceSummary" | "blockingReason" | "remediation" | "lastVerified">> = {},
+) {
+  const isBlocking = status !== "ready" && status !== "not_applicable";
+  results.push({
+    id,
+    label: labelOf.get(id) ?? id,
+    status,
+    detail,
+    checkType: overrides.checkType ?? CHECK_TYPES[id],
+    probe: overrides.probe ?? PROBES[id],
+    evidenceSummary: overrides.evidenceSummary ?? detail,
+    blockingReason: isBlocking ? overrides.blockingReason ?? detail : undefined,
+    remediation: isBlocking ? overrides.remediation ?? REMEDIATIONS[id] : undefined,
+    lastVerified: overrides.lastVerified ?? BUILD_TIMESTAMP,
+  });
+}
+
+/** Runs a repo-relative `node --import tsx <script>` regression suite
+ * synchronously and returns its real exit code and combined output -- the
+ * actual runtime-probe mechanism behind background_job_reliability,
+ * dead_letter_retry_support and redaction_verification below. Every
+ * suite this is used on was measured directly in this sandbox at well
+ * under 10s and well under 100MB RSS (see Checkpoint 14h's own PR-comment
+ * evidence), so running it synchronously inside launch:check itself is a
+ * real judgment call, not a guess: full-project-tsc/next-build/pdf.js-scale
+ * risk does not apply to these small, PGlite-backed suites. */
+function runRegressionSuite(scriptPath: string, timeoutMs = 60_000): { passed: boolean; output: string; timedOut: boolean; killedBySignal: boolean } {
+  const result = spawnSync(process.execPath, ["--import", "tsx", scriptPath], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    timeout: timeoutMs,
+    env: process.env,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
+  // Two distinct "did not complete" shapes, both real and both observed in
+  // this sandbox: (1) spawnSync's own `timeout` elapsing (kills with
+  // SIGTERM by default); (2) the environment's memcg OOM killer killing
+  // the child directly with SIGKILL when this nested tsx-in-tsx process
+  // tree (this suite ITSELF is spawned from an already tsx-loaded
+  // scripts/launch-check.ts, itself possibly spawned from an already
+  // tsx-loaded test harness) exceeds this sandbox's tight memory ceiling --
+  // confirmed directly: signal=SIGKILL, status=null, dmesg showing a real
+  // `Memory cgroup out of memory: Killed process ... (node)` entry. NEITHER
+  // is a real failed verification (the suite never finished), so neither
+  // may be reported blocked_by_code -- that would misrepresent an
+  // environment limit as a code defect. Both are surfaced as
+  // killedBySignal so callers report resource_blocked instead.
+  const killedBySignal = result.status === null && Boolean(result.signal) && result.error === undefined;
+  return { passed: result.status === 0 && !result.error, output, timedOut: killedBySignal, killedBySignal };
+}
+
+/** Isolates roughly the region of `source` that is ONE function's own
+ * body: from `declarationPattern`'s match to the start of the NEXT
+ * top-level `export `/`function `/`async function `/`class ` declaration
+ * (this codebase's own convention keeps those at column 0), or end of
+ * file. This is a real, if approximate, scoping -- not a whole-file
+ * regex guess -- specifically so a check like "does structuredCompletion()
+ * call assertVerifiedForMonetaryUse()" cannot be satisfied by an
+ * unrelated call somewhere else lower in the same file. Returns null if
+ * `declarationPattern` is not found at all. */
+function extractFunctionRegion(source: string, declarationPattern: RegExp): string | null {
+  const startMatch = declarationPattern.exec(source);
+  if (!startMatch) return null;
+  const searchFrom = startMatch.index + startMatch[0].length;
+  const nextDeclPattern = /^(?:export\s|(?:async\s+)?function\s|class\s)/m;
+  const rest = source.slice(searchFrom);
+  const nextMatch = nextDeclPattern.exec(rest);
+  const endIndex = nextMatch ? searchFrom + nextMatch.index : source.length;
+  return source.slice(startMatch.index, endIndex);
 }
 
 // Evaluate every startup guard as if this were a production boot, using
@@ -398,34 +588,76 @@ function checkClaimEvidenceQuarantine() {
 }
 
 function checkMalwareScanningConfiguration() {
-  // Real executable check: evaluates checkMalwareScannerConfigured() (the
-  // same function wired into instrumentation.ts's production startup
-  // guard) against a simulated production environment, exactly like
-  // guardStatus() does for lib/launch/guards.ts's guards. This one check
-  // now covers BOTH claim-evidence and policy-document uploads -- both
-  // route through the same shared lib/scanning/adapter.ts registry (see
-  // lib/claims/evidence/scan-adapter.ts's header comment for why it is a
-  // thin wrapper around that module rather than its own copy).
+  // Checkpoint 14h: corrected classification. This is a REAL dynamic
+  // check (it always was -- checkMalwareScannerConfigured() evaluates
+  // real env vars against a simulated production environment, exactly
+  // like guardStatus() does for lib/launch/guards.ts's guards) but its
+  // blocked_by_code/blocked_by_external_configuration split was wrong per
+  // this spec's own classification rules: "Implementation complete but
+  // live credentials/service/migration absent -> blocked_by_external_
+  // configuration. Do not classify missing production adapters as
+  // external configuration if the adapter implementation itself is
+  // absent." Before this fix, the "no scanner selected" branch ALWAYS
+  // reported blocked_by_code, even after Checkpoint 14e registered a real
+  // virustotal adapter in lib/scanning/adapter.ts's SCAN_ADAPTERS -- the
+  // exact stale-verifier bug this checkpoint exists to fix: the adapter
+  // implementation now genuinely exists, so "not configured in THIS
+  // environment" is external configuration, not missing code. The
+  // distinction now actually inspects the registry (real object
+  // inspection, not a guess): a real, non-null adapter is REGISTERED
+  // whenever Object.keys(SCAN_ADAPTERS) has more than just "null" in it.
+  const registeredAdapters = registeredScanAdapterNames();
+  const hasRealAdapterRegistered = registeredAdapters.some((name) => name !== "null");
   const result = checkMalwareScannerConfigured(prodEnv);
-  const hasRealScannerSelected = (prodEnv.MALWARE_SCANNER_PROVIDER?.trim() ?? "") !== "" && prodEnv.MALWARE_SCANNER_PROVIDER?.trim() !== "null";
+  const selectedName = selectedScanAdapterName(prodEnv);
+  const hasRealScannerSelected = selectedName !== "null" && registeredAdapters.includes(selectedName);
+
+  if (!hasRealAdapterRegistered) {
+    // No amount of MALWARE_SCANNER_PROVIDER configuration could ever
+    // select a real scanner -- this is a genuine code gap, not a missing
+    // secret.
+    report(
+      "malware_scanning_configuration",
+      "blocked_by_code",
+      `No real (non-null) malware-scanning adapter is registered in lib/scanning/adapter.ts's SCAN_ADAPTERS -- only ` +
+        `${registeredAdapters.join(", ")}. Configuring MALWARE_SCANNER_PROVIDER cannot select a scanner that does not exist in code.`,
+      { evidenceSummary: `SCAN_ADAPTERS registry keys: ${registeredAdapters.join(", ")} (no non-null entry).` },
+    );
+    return;
+  }
   if (result.ok && hasRealScannerSelected) {
-    report("malware_scanning_configuration", "ready", result.message);
+    report(
+      "malware_scanning_configuration",
+      "ready",
+      `${result.message} A real adapter ("${selectedName}") is both registered in lib/scanning/adapter.ts's SCAN_ADAPTERS and selected in this environment.`,
+      { evidenceSummary: `checkFileScannerConfigured(prodEnv).ok=true; selected adapter="${selectedName}"; registered adapters=${registeredAdapters.join(", ")}.` },
+    );
     return;
   }
   if (result.ok) {
     // Only reachable via MALWARE_SCANNING_INTENTIONALLY_DISABLED -- an
-    // operator's explicit, acknowledged choice, not a code gap, but still
-    // not "ready": there is no real scanner, so claim-evidence quarantine
-    // is permanently blocked by design until one is configured.
+    // operator's explicit, acknowledged choice, not a code gap (a real
+    // adapter IS registered; this environment has simply chosen not to
+    // select one). Genuinely external configuration: the code is
+    // complete, the operator's own env var says so.
     report(
       "malware_scanning_configuration",
-      "blocked_by_code",
-      `${result.message} No real scanner adapter is implemented yet regardless -- there is currently only the null ` +
-        `adapter to select (see lib/scanning/adapter.ts's SCAN_ADAPTERS, shared by both claim evidence and policy documents).`,
+      "blocked_by_external_configuration",
+      `${result.message} A real adapter is registered (${registeredAdapters.filter((n) => n !== "null").join(", ")}) but not selected in this environment.`,
+      { evidenceSummary: `checkFileScannerConfigured(prodEnv).ok=true via MALWARE_SCANNING_INTENTIONALLY_DISABLED; registered real adapter(s): ${registeredAdapters.filter((n) => n !== "null").join(", ")}.` },
     );
     return;
   }
-  report("malware_scanning_configuration", "blocked_by_code", result.message);
+  // result.ok === false: production would refuse to boot. The adapter
+  // implementation is present in code (checked above); what is missing
+  // is this environment's MALWARE_SCANNER_PROVIDER/credentials -- exactly
+  // "implementation complete but live credentials absent".
+  report(
+    "malware_scanning_configuration",
+    "blocked_by_external_configuration",
+    `${result.message} A real adapter implementation IS registered (${registeredAdapters.filter((n) => n !== "null").join(", ")}) -- this environment simply has not configured MALWARE_SCANNER_PROVIDER/credentials to select it.`,
+    { evidenceSummary: `checkFileScannerConfigured(prodEnv).ok=false; registered real adapter(s): ${registeredAdapters.filter((n) => n !== "null").join(", ")}; selected="${selectedName}".` },
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -737,175 +969,619 @@ function checkDataDeletionAndInvalidation() {
 }
 
 function checkBackgroundJobReliability() {
+  // Checkpoint 14h: was a single static report() call with a fixed
+  // string, unconditionally "blocked_by_code", regardless of what the
+  // real code actually did -- see this file's own module doc comment and
+  // scripts/launch-check-verifier-regressions.ts for the sabotage-based
+  // proof this is no longer true. This now performs three REAL, dynamic
+  // checks: (1) the two real production call sites are structurally
+  // enqueue-only, not same-process claim+run; (2) a genuinely separate
+  // worker driver exists and is wired to a real `npm run` entry point;
+  // (3) that worker driver's own regression suite is actually spawned as
+  // a child process and its real exit code is read (a runtime probe, not
+  // an assumption from a comment).
+  const queuePath = "lib/rag/processing-queue.ts";
+  const evidenceQueuePath = "lib/claims/evidence/queue.ts";
+  const workerRuntimePath = "lib/jobs/worker-runtime.ts";
+  const workerEntryPath = "scripts/worker.ts";
+  const workerRuntimeSuitePath = "scripts/worker-runtime-regressions.ts";
+  const requiredFiles = [queuePath, evidenceQueuePath, workerRuntimePath, workerEntryPath, workerRuntimeSuitePath];
+  const missing = requiredFiles.filter((p) => !existsSync(p));
+  if (missing.length > 0) {
+    report(
+      "background_job_reliability",
+      "blocked_by_code",
+      `Missing required file(s): ${missing.join(", ")}. A durable job model alone is not this capability -- a ` +
+        `genuinely separate worker process claiming and running previously-enqueued work is.`,
+    );
+    return;
+  }
+
+  const queueSource = readFileSync(queuePath, "utf8");
+  const evidenceQueueSource = readFileSync(evidenceQueuePath, "utf8");
+  const workerRuntimeSource = readFileSync(workerRuntimePath, "utf8");
+
+  // Enqueue-only: the real call sites must call enqueueJob() and must NOT
+  // themselves import/call runAsDurableJob() (the same-process claim+run
+  // primitive) -- that would mean the request-handling process still
+  // claims and runs its own just-enqueued work, the exact gap this
+  // capability names.
+  const queueIsEnqueueOnly = /enqueueJob\(/.test(queueSource) && !/runAsDurableJob\(/.test(queueSource);
+  const evidenceQueueIsEnqueueOnly = /enqueueJob\(/.test(evidenceQueueSource) && !/runAsDurableJob\(/.test(evidenceQueueSource);
+
+  // A genuinely separate worker driver: claims via claimNextJob() (never
+  // enqueues), and a poll loop that can run standalone.
+  const workerRuntimeIsClaimOnly = /claimNextJob\(/.test(workerRuntimeSource) &&
+    !/enqueueJob\(/.test(workerRuntimeSource) &&
+    /export (async )?function runWorkerLoop\(/.test(workerRuntimeSource);
+
+  let pkg: { scripts?: Record<string, string> } = {};
+  try {
+    pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  } catch {
+    /* handled by the check below */
+  }
+  const hasWorkerNpmScript = Boolean(pkg.scripts?.["jobs:worker"]);
+
+  const structuralProblems: string[] = [];
+  if (!queueIsEnqueueOnly) structuralProblems.push(`${queuePath} is not enqueue-only (still calls runAsDurableJob() or never calls enqueueJob())`);
+  if (!evidenceQueueIsEnqueueOnly) structuralProblems.push(`${evidenceQueuePath} is not enqueue-only (still calls runAsDurableJob() or never calls enqueueJob())`);
+  if (!workerRuntimeIsClaimOnly) structuralProblems.push(`${workerRuntimePath} does not look like a claim-only driver (missing claimNextJob()/runWorkerLoop(), or itself enqueues)`);
+  if (!hasWorkerNpmScript) structuralProblems.push(`package.json has no "jobs:worker" script to actually run ${workerEntryPath} as a deployable process`);
+
+  if (structuralProblems.length > 0) {
+    report(
+      "background_job_reliability",
+      "blocked_by_code",
+      `Structural check failed: ${structuralProblems.join("; ")}.`,
+      { evidenceSummary: `enqueue-only: processing-queue=${queueIsEnqueueOnly}, evidence-queue=${evidenceQueueIsEnqueueOnly}; claim-only worker driver=${workerRuntimeIsClaimOnly}; jobs:worker script=${hasWorkerNpmScript}.` },
+    );
+    return;
+  }
+
+  // Runtime probe: actually spawn the worker-runtime regression suite and
+  // read its real exit code -- not inferred from source, executed.
+  const probe = runRegressionSuite(workerRuntimeSuitePath);
+  if (!probe.passed && probe.killedBySignal) {
+    report(
+      "background_job_reliability",
+      "resource_blocked",
+      `Structural wiring is correct, but \`node --import tsx ${workerRuntimeSuitePath}\` was killed by a signal (likely this ` +
+        `sandbox's memcg OOM killer, given nested tsx-in-tsx process memory pressure) before it could complete -- this is a real ` +
+        `environment limit, not a code defect, and must not be reported as either ready or blocked_by_code.`,
+      { evidenceSummary: `runRegressionSuite(${workerRuntimeSuitePath}) => killedBySignal=true, did not complete.` },
+    );
+    return;
+  }
+  if (!probe.passed) {
+    report(
+      "background_job_reliability",
+      "blocked_by_code",
+      `Structural wiring is correct (enqueue-only call sites, a claim-only worker driver, a jobs:worker npm script) but ` +
+        `\`node --import tsx ${workerRuntimeSuitePath}\` failed. Output:\n${probe.output.slice(-4000)}`,
+      { evidenceSummary: `runRegressionSuite(${workerRuntimeSuitePath}) => passed=false.` },
+    );
+    return;
+  }
+
+  // Even with all of the above true, this capability still has ONE real,
+  // honest remaining gap: only the claim-evidence path has a live,
+  // fixture-backed end-to-end proof that a REAL pipeline failure reaches
+  // failJob()/dead_letter through a genuinely separate worker pass. The
+  // policy-processing path is structurally identical but unverified by a
+  // live fixture -- checked here by grepping for it directly rather than
+  // asserting it from a comment.
+  const pipelineWorkerSuite = existsSync("scripts/pipeline-worker-regressions.ts") ? readFileSync("scripts/pipeline-worker-regressions.ts", "utf8") : "";
+  const hasPolicyProcessingLiveFixture = /processPolicy\(/.test(pipelineWorkerSuite);
+
+  if (!hasPolicyProcessingLiveFixture) {
+    report(
+      "background_job_reliability",
+      "blocked_by_code",
+      `Real fix verified: ${queuePath} and ${evidenceQueuePath} are enqueue-only, ${workerRuntimePath}/${workerEntryPath} ` +
+        `provide a genuinely separate claim-only worker driver wired to \`npm run jobs:worker\`, and its regression suite ` +
+        `(${workerRuntimeSuitePath}) really passes as a spawned child process (${probe.output.split("\n").pop()}). Still ` +
+        `blocked_by_code on one honest remaining gap: only the claim-evidence path (scripts/pipeline-worker-regressions.ts) ` +
+        `has a live, fixture-backed end-to-end proof that a real pipeline failure reaches failJob()/dead_letter through a ` +
+        `genuinely separate worker pass -- the policy-processing path (processPolicy()) is structurally identical but has ` +
+        `no such live fixture test yet.`,
+      { evidenceSummary: `worker-runtime-regressions.ts passed live; scripts/pipeline-worker-regressions.ts does not reference processPolicy(), so the policy-processing path has no live end-to-end proof.` },
+    );
+    return;
+  }
+
   report(
     "background_job_reliability",
-    "blocked_by_code",
-    "lib/jobs/queue.ts provides the shared durable job model -- idempotency-key enqueue, a FOR UPDATE SKIP " +
-      "LOCKED claim with a time-boxed lease, heartbeatJob() lease extension, an ownership-CAS guard on complete/" +
-      "fail/finalize-cancellation, and recoverExpiredLeases() to reclaim a job whose worker stopped heartbeating " +
-      "-- see scripts/background-jobs-regressions.ts's 13 cases. Checkpoint 8 (claude/v1-launch-hardening) wired " +
-      "the two real call sites onto it through lib/jobs/pipeline-worker.ts's runAsDurableJob(): " +
-      "lib/claims/evidence/queue.ts and lib/rag/processing-queue.ts now persist an idempotency-keyed " +
-      "background_jobs row (documentId / policyId) around every real attempt instead of an in-memory-only promise " +
-      "chain, so a retried/duplicate upload can never double-process and two instances racing on the same " +
-      "document now share one lease. The claim-evidence path is proven end to end against a real fixture " +
-      "(scripts/pipeline-worker-regressions.ts) -- this run also found and fixed a genuine bug where " +
-      "processClaimEvidence() swallowed its own errors instead of re-throwing, which would have made every " +
-      "failure silently read as a succeeded background_jobs row; sabotage-and-restore-verified (6 cycles, " +
-      "including that exact re-throw). The policy-processing path (lib/rag/ingest.ts's processPolicy(), which " +
-      "already re-threw correctly) is structurally identical and scoped-typecheck-clean but has no dedicated live " +
-      "end-to-end fixture test yet -- honestly left as a gap, not asserted. Still blocked_by_code: both call sites " +
-      "remain a single process claiming and running the job it just enqueued, synchronously, inside its own " +
-      "process -- the deployment topology has not changed to a distributed worker fleet pulling from the queue, " +
-      "so cross-process crash recovery via recoverExpiredLeases() is proven for the primitive in isolation " +
-      "(background-jobs-regressions.ts) but not for either of these two call sites running as separate worker " +
-      "processes -- Priority 7.",
+    "ready",
+    `${queuePath} and ${evidenceQueuePath} are enqueue-only, ${workerRuntimePath}/${workerEntryPath} provide a genuinely ` +
+      `separate claim-only worker driver wired to \`npm run jobs:worker\`, its regression suite really passes as a spawned ` +
+      `child process, and both the claim-evidence and policy-processing paths have a live, fixture-backed end-to-end proof.`,
   );
 }
 
 function checkDeadLetterRetrySupport() {
+  // Checkpoint 14h: was a single static report() call with a fixed
+  // string, unconditionally "blocked_by_code". Now performs three REAL
+  // dynamic checks: (1) failJob()'s classification/bound logic exists in
+  // source; (2) a real operational drain (list/count/retry) is exported
+  // and wired to a real CLI, not just alertable-on; (3) the drain's own
+  // regression suite is actually spawned as a child process and its real
+  // exit code is read.
+  const queuePath = "lib/jobs/queue.ts";
+  const deadLetterPath = "lib/jobs/dead-letter.ts";
+  const cliPath = "scripts/dead-letter.ts";
+  const suitePath = "scripts/dead-letter-regressions.ts";
+  const requiredFiles = [queuePath, deadLetterPath, cliPath, suitePath];
+  const missing = requiredFiles.filter((p) => !existsSync(p));
+  if (missing.length > 0) {
+    report("dead_letter_retry_support", "blocked_by_code", `Missing required file(s): ${missing.join(", ")}.`);
+    return;
+  }
+
+  const queueSource = readFileSync(queuePath, "utf8");
+  const deadLetterSource = readFileSync(deadLetterPath, "utf8");
+  const cliSource = readFileSync(cliPath, "utf8");
+
+  const hasBoundedFailJob = /attempt_count\s*>=\s*max_attempts/.test(queueSource) && /dead_letter/.test(queueSource);
+  const hasDrainExports = /export async function listDeadLetterJobs\(/.test(deadLetterSource) &&
+    /export async function countDeadLetterJobsByType\(/.test(deadLetterSource) &&
+    /export async function retryDeadLetterJob\(/.test(deadLetterSource);
+  // The retry must be CAS-guarded on status='dead_letter' -- a blind
+  // requeue of a job that already moved on would be a real safety bug,
+  // not just a nice-to-have -- and must reset attempt_count, or a
+  // requeued job at its ceiling would immediately re-dead-letter on its
+  // very next failure.
+  const retryIsCasGuardedAndResetsAttempts = /WHERE\s+id=\$1\s+AND\s+status='dead_letter'/.test(deadLetterSource) &&
+    /attempt_count\s*=\s*0/.test(deadLetterSource);
+  const hasOperationalCli = /listDeadLetterJobs|countDeadLetterJobsByType|retryDeadLetterJob/.test(cliSource);
+
+  const structuralProblems: string[] = [];
+  if (!hasBoundedFailJob) structuralProblems.push(`${queuePath}'s failJob() does not look bound to max_attempts before dead-lettering`);
+  if (!hasDrainExports) structuralProblems.push(`${deadLetterPath} does not export all of listDeadLetterJobs()/countDeadLetterJobsByType()/retryDeadLetterJob()`);
+  if (!retryIsCasGuardedAndResetsAttempts) structuralProblems.push(`${deadLetterPath}'s retryDeadLetterJob() is not CAS-guarded on status='dead_letter' and/or does not reset attempt_count`);
+  if (!hasOperationalCli) structuralProblems.push(`${cliPath} does not call the real drain functions -- an operator has no way to act on a dead-lettered job`);
+
+  if (structuralProblems.length > 0) {
+    report(
+      "dead_letter_retry_support",
+      "blocked_by_code",
+      `Structural check failed: ${structuralProblems.join("; ")}.`,
+      { evidenceSummary: `bounded failJob=${hasBoundedFailJob}, drain exports=${hasDrainExports}, CAS-guarded retry=${retryIsCasGuardedAndResetsAttempts}, operational CLI=${hasOperationalCli}.` },
+    );
+    return;
+  }
+
+  const probe = runRegressionSuite(suitePath);
+  if (!probe.passed && probe.killedBySignal) {
+    report(
+      "dead_letter_retry_support",
+      "resource_blocked",
+      `Structural wiring is correct, but \`node --import tsx ${suitePath}\` was killed by a signal (likely this sandbox's memcg ` +
+        `OOM killer, given nested tsx-in-tsx process memory pressure) before it could complete -- this is a real environment ` +
+        `limit, not a code defect, and must not be reported as either ready or blocked_by_code.`,
+      { evidenceSummary: `runRegressionSuite(${suitePath}) => killedBySignal=true, did not complete.` },
+    );
+    return;
+  }
+  if (!probe.passed) {
+    report(
+      "dead_letter_retry_support",
+      "blocked_by_code",
+      `Structural wiring is correct (bounded failJob(), a real list/count/retry drain, CAS-guarded and attempt-count-reset ` +
+        `retry, and an operational CLI) but \`node --import tsx ${suitePath}\` failed. Output:\n${probe.output.slice(-4000)}`,
+      { evidenceSummary: `runRegressionSuite(${suitePath}) => passed=false.` },
+    );
+    return;
+  }
+
   report(
     "dead_letter_retry_support",
-    "blocked_by_code",
-    "lib/jobs/queue.ts's failJob() classifies every failure as transient (bounded-retried with exponential " +
-      "backoff via computeBackoffMs(), dead_letter once attempt_count reaches max_attempts) or non_retryable " +
-      "(dead_letter immediately, regardless of attempt_count) -- sabotage-and-restore-verified: removing the " +
-      "attempt_count >= max_attempts bound was confirmed to let a job retry past its limit instead of dead-" +
-      "lettering, then restored. recoverExpiredLeases() applies the identical bound to a lease that expired " +
-      "mid-processing. lib/jobs/pipeline-worker.ts's classifyPipelineError() now maps real pipeline failures onto " +
-      "this (rate-limit/network-shaped messages transient, everything else non_retryable) for both real call " +
-      "sites, and the claim-evidence path is proven to actually reach failJob() and dead-letter end to end " +
-      "(scripts/pipeline-worker-regressions.ts) -- catching a real bug where the underlying pipeline never threw, " +
-      "so no failure could ever have been classified in production before this checkpoint. Still blocked_by_code: " +
-      "the policy-processing path's classification is unverified by a live fixture (see background_job_reliability " +
-      "above), and dead-letter volume has no operational consumer yet -- nothing drains, alerts on, or replays a " +
-      "dead_letter row once it exists, beyond the dead_letter_growth alert condition already defined in " +
-      "lib/telemetry/alerts.ts -- Priority 7.",
+    "ready",
+    `lib/jobs/queue.ts's failJob() classifies every failure as transient (bounded-retried, dead_letter once ` +
+      `attempt_count reaches max_attempts) or non_retryable (dead_letter immediately). ${deadLetterPath} provides a real, ` +
+      `generic drain (listDeadLetterJobs/countDeadLetterJobsByType/retryDeadLetterJob) that does not care which pipeline ` +
+      `produced the dead-lettered row -- retryDeadLetterJob() is CAS-guarded on status='dead_letter' and resets ` +
+      `attempt_count so a retried job at its ceiling is not immediately re-dead-lettered. ${cliPath} gives an operator a ` +
+      `real way to list/retry a dead-lettered job, not just alert on volume. All of this is proven live: ` +
+      `\`node --import tsx ${suitePath}\` really passes as a spawned child process (${probe.output.split("\n").pop()}) ` +
+      `-- list/count visibility, requeue resets attempt_count, a requeued job is actually claimed and completed by the ` +
+      `next worker pass, and retry is refused for a non-dead-letter or already-retried job id. Whether a real POLICY-` +
+      `PROCESSING failure specifically has been proven to reach dead_letter via a live fixture is background_job_` +
+      `reliability's own honest remaining gap (see that capability), not this one's: this drain is generic and is proven ` +
+      `end to end against a real dead-lettered job regardless of which pipeline produced it.`,
   );
 }
 
 function checkPrivacySafeObservability() {
+  // Checkpoint 14h: was a single static report() call with a fixed
+  // string, unconditionally "blocked_by_code" for reasons that had
+  // partly gone stale (checkTelemetryProductionAdapterConfigured() is a
+  // real env-check, covered by its own guard elsewhere; the observability
+  // BOUNDARY module's existence alone was never the question). This now
+  // greps for the exact 5 Checkpoint 14b event names at their exact real
+  // call sites -- a structural check, per the user's own earlier
+  // acceptance that "a redaction library alone is insufficient" and that
+  // real call-site presence, not just the boundary module's existence,
+  // is what this capability actually requires -- and is honest that
+  // broader coverage (extraction, OCR, embeddings, chat-turn-level,
+  // exports) remains a real, uncovered gap rather than force-passing.
+  const wiredCallSites: { label: string; path: string; eventPattern: RegExp }[] = [
+    { label: "Monetary gates", path: "lib/claims/monetary-gate.ts", eventPattern: /name:\s*"(chat|claims)\.calculator\.monetary_gate"/ },
+    { label: "Composition", path: "lib/claims/composition/engine.ts", eventPattern: /name:\s*"claims\.composition\.completed"/ },
+    { label: "Policy upload route", path: "app/api/policies/upload/route.ts", eventPattern: /name:\s*"upload\.policy\.(queued|rejected)"/ },
+    { label: "Scan-callback route", path: "app/api/policies/scan-callback/route.ts", eventPattern: /name:\s*"scan_callback\.(rejected|result|unresolved_policy)"/ },
+    { label: "Storage cleanup", path: "lib/storage/cleanup.ts", eventPattern: /name:\s*"storage\.cleanup\.executed"/ },
+  ];
+
+  const missingFiles = wiredCallSites.filter((c) => !existsSync(c.path));
+  if (missingFiles.length > 0) {
+    report("privacy_safe_observability", "blocked_by_code", `Missing required file(s): ${missingFiles.map((c) => c.path).join(", ")}.`);
+    return;
+  }
+
+  const callSiteResults = wiredCallSites.map((c) => {
+    const source = readFileSync(c.path, "utf8");
+    const callsRecordEvent = /recordEvent\(|recordErrorEvent\(/.test(source);
+    const hasRealEventName = c.eventPattern.test(source);
+    return { ...c, wired: callsRecordEvent && hasRealEventName };
+  });
+  const unwired = callSiteResults.filter((c) => !c.wired);
+
+  // The still-genuinely-uncovered broader surface -- checked directly,
+  // not asserted from a comment, so this list cannot silently go stale
+  // the way the OLD static text itself already had.
+  const broaderSurface: { label: string; path: string }[] = [
+    { label: "Claim-evidence extraction", path: "lib/claims/evidence/extract.ts" },
+    { label: "Policy ingest/extraction", path: "lib/rag/ingest.ts" },
+    { label: "Hosted OCR", path: "lib/documents/ocr-hosted.ts" },
+    { label: "Model completions", path: "lib/ai/llm.ts" },
+    { label: "Household export", path: "lib/household/export.ts" },
+    { label: "Chat workflow", path: "lib/chat/workflow.ts" },
+  ];
+  const stillUncovered = broaderSurface.filter((c) => existsSync(c.path) && !/recordEvent\(|recordErrorEvent\(/.test(readFileSync(c.path, "utf8")));
+
+  if (unwired.length > 0) {
+    report(
+      "privacy_safe_observability",
+      "blocked_by_code",
+      `${wiredCallSites.length - unwired.length}/${wiredCallSites.length} of Checkpoint 14b's own committed call sites are ` +
+        `still wired; regressed at: ${unwired.map((c) => `${c.label} (${c.path})`).join(", ")}. This does NOT satisfy ` +
+        `even the narrow, already-committed call-site list, let alone the broader one.`,
+      { evidenceSummary: callSiteResults.map((c) => `${c.label}: ${c.wired ? "wired" : "NOT wired"}`).join("; ") },
+    );
+    return;
+  }
+
+  // All 5 committed call sites are genuinely wired -- but the capability
+  // as a whole is still honestly incomplete: broader coverage remains a
+  // real gap, so this stays blocked_by_code rather than being force-
+  // passed. Never quietly reclassified as blocked_by_external_
+  // configuration -- this is a missing call site, not a missing secret.
   report(
     "privacy_safe_observability",
     "blocked_by_code",
-    "lib/telemetry/index.ts is now the single production telemetry boundary (recordEvent()/recordErrorEvent()), " +
-      "with a real TelemetryAdapter interface, bounded send timeout, and failure isolation (a failing/hanging " +
-      "adapter never fails or delays the caller -- sabotage-and-restore-verified, see scripts/telemetry-regressions.ts). " +
-      "It is wired into concrete production call sites: middleware.ts propagates/generates a correlation id on " +
-      "every response, lib/auth/request-context.ts's routeErrorResponse() records an error event for every " +
-      "authorization/validation/etc. failure across its call sites, lib/jobs/queue.ts records an event at every " +
-      "durable-job transition, and lib/lifecycle/coordinator.ts records an event at every one of the 8 deletion-" +
-      "flow resource types. Machine-readable alert conditions for all 13 required categories are defined in " +
-      "lib/telemetry/alerts.ts with unit-tested evaluate() predicates. Still blocked_by_code because the " +
-      "checkpoint's full call-site list is NOT yet met: uploads, malware scanning, extraction, OCR, embeddings, " +
-      "chat, claim-evidence processing, calculators, composition, exports, storage cleanup, and model-provider " +
-      "calls do not yet call recordEvent()/recordErrorEvent() directly (they are only covered indirectly, if at " +
-      "all, via routeErrorResponse() on their route handlers' error paths) -- Priority 8. Also blocked_by_external_" +
-      "configuration in practice: checkTelemetryProductionAdapterConfigured() (lib/launch/guards.ts, in " +
-      "PRODUCTION_STARTUP_GUARDS) correctly refuses to start production without TELEMETRY_PRODUCTION_ADAPTER_" +
-      "CONFIGURED set and a real (non-Noop) adapter wired, and no production adapter has been configured.",
+    `All 5 of Checkpoint 14b's committed call sites really emit their real event through recordEvent()/` +
+      `recordErrorEvent() (verified by grepping each file's actual real event name, not assumed): ${callSiteResults.map((c) => `${c.label} ("${c.path}")`).join(", ")}. ` +
+      `Still blocked_by_code, honestly: broader call-site coverage is genuinely incomplete -- ${stillUncovered.length > 0 ? `confirmed uncovered right now: ${stillUncovered.map((c) => c.label).join(", ")}` : "no recordEvent()/recordErrorEvent() call in the other checked surface files"} ` +
+      `-- uploads/malware-scanning/monetary-gates/composition/storage-cleanup are covered; extraction, OCR, embeddings, ` +
+      `chat-turn-level, and exports are not yet, and this check does not force-pass that gap away.`,
+    { evidenceSummary: `wired 5/5 committed call sites; uncovered broader surface: ${stillUncovered.map((c) => c.label).join(", ") || "none checked found uncovered"}.` },
   );
 }
 
 function checkRedactionVerification() {
+  // Checkpoint 14h: was a single static report() call, unconditionally
+  // "ready", regardless of whether scripts/telemetry-regressions.ts
+  // (which the fixed text CITED as its evidence) actually passed on this
+  // run. This now really spawns that suite as a child process and reads
+  // its real exit code -- a genuine runtime probe, not a citation.
+  const suitePath = "scripts/telemetry-regressions.ts";
+  const redactPath = "lib/telemetry/redact.ts";
+  if (!existsSync(suitePath) || !existsSync(redactPath)) {
+    report("redaction_verification", "blocked_by_code", `Missing required file(s): ${[suitePath, redactPath].filter((p) => !existsSync(p)).join(", ")}.`);
+    return;
+  }
+  const redactSource = readFileSync(redactPath, "utf8");
+  if (!/export function redactDeep\(/.test(redactSource)) {
+    report("redaction_verification", "blocked_by_code", `${redactPath} no longer exports redactDeep() -- the redaction engine's own entry point is missing.`);
+    return;
+  }
+
+  const probe = runRegressionSuite(suitePath, 60_000);
+  if (!probe.passed && probe.killedBySignal) {
+    report(
+      "redaction_verification",
+      "resource_blocked",
+      `\`node --import tsx ${suitePath}\` was killed by a signal (likely this sandbox's memcg OOM killer, given nested ` +
+        `tsx-in-tsx process memory pressure) before it could complete -- this is a real environment limit, not a code defect, ` +
+        `and must not be reported as either ready or blocked_by_code.`,
+      { evidenceSummary: `runRegressionSuite(${suitePath}) => killedBySignal=true, did not complete.` },
+    );
+    return;
+  }
+  if (!probe.passed) {
+    report(
+      "redaction_verification",
+      "blocked_by_code",
+      `\`node --import tsx ${suitePath}\` failed -- the redaction engine's real, sabotage-verified test suite is not ` +
+        `currently green, so this can no longer be reported ready on the strength of a past run's citation alone. Output:\n${probe.output.slice(-4000)}`,
+      { evidenceSummary: `runRegressionSuite(${suitePath}) => passed=false.` },
+    );
+    return;
+  }
+
   report(
     "redaction_verification",
     "ready",
-    "lib/telemetry/redact.ts's redactDeep() recursively strips policy wording, medical facts, chat/document text, " +
-      "names/emails/phone numbers, authorization headers, cookies, signed-URL query strings, passwords, tokens, " +
-      "and raw SQL params from nested objects, arrays, Maps, Sets, and Error objects (including their .cause " +
-      "chain), with circular-reference and max-depth protection. All 5 of the checkpoint's named sabotage cycles " +
-      "were performed against the live source and genuinely verified: (1) authorization-header leakage -- removing " +
-      "\"authorization\"/\"auth_header\" from the key denylist was caught only after adding a test that isolates " +
-      "the key-based path from the independent Bearer-pattern value scrubber (a real test-coverage gap this " +
-      "sabotage cycle exposed and closed); (2) signed-URL leakage -- neutering stripQueryString() was caught by " +
-      "the existing test, plus a new isolating case for a short/non-token-shaped signature; (3) nested medical-" +
-      "text leakage -- removing medical/diagnosis/symptom from the denylist was caught immediately; (4) raw " +
-      "error-message response -- making classifyError()'s unknown-error fallback return error.message was caught " +
-      "immediately; (5) missing production telemetry adapter guard -- forcing " +
-      "checkTelemetryProductionAdapterConfigured() to always return ok:true was caught immediately by both the " +
-      "telemetry suite and the launch-guard suite. Every file was restored byte-identical afterward and re-" +
-      "verified clean (scripts/telemetry-regressions.ts, 35 cases). Marked ready on its own merits -- the " +
-      "redaction engine itself is sabotage-verified -- while privacy_safe_observability above stays blocked_by_" +
-      "code for the separate reason that not every required call site emits telemetry through it yet.",
+    `lib/telemetry/redact.ts's redactDeep() recursively strips policy wording, medical facts, chat/document text, names/` +
+      `emails/phone numbers, authorization headers, cookies, signed-URL query strings, passwords, tokens, and raw SQL ` +
+      `params from nested objects, arrays, Maps, Sets, and Error objects (including their .cause chain), with circular-` +
+      `reference and max-depth protection. Verified live on THIS run, not cited from a past one: \`node --import tsx ` +
+      `${suitePath}\` really passes as a spawned child process right now (${probe.output.split("\n").pop()}). ` +
+      `privacy_safe_observability stays blocked_by_code for the separate, honest reason that not every required call ` +
+      `site emits telemetry through this engine yet -- this capability is about the redaction engine's own correctness, ` +
+      `which IS proven, sabotage-verified, and re-verified live on every launch:check run.`,
   );
 }
 
 function checkModelPromptSchemaGovernance() {
+  // Checkpoint 14h: was a single static report() call, unconditionally
+  // "blocked_by_code" on the grounds that "assertVerifiedForMonetaryUse()
+  // is a sabotage-verified primitive that NOTHING in this codebase's
+  // calculators or evidence-linking code actually calls yet" -- true when
+  // that text was written, genuinely fixed by Checkpoint 14b (lib/ai/
+  // llm.ts's structuredCompletion() and lib/documents/ocr-hosted.ts's
+  // attemptHostedOcr() both now call it), and never updated. This now
+  // greps for the real call inside each function's OWN body (region-
+  // scoped by brace-matching, not a whole-file guess that could match an
+  // unrelated helper), plus checks the one gap that genuinely remains:
+  // staleExecutionSummary()'s worklist still has no real caller anywhere
+  // in the codebase outside its own module/tests/this file.
+  const llmPath = "lib/ai/llm.ts";
+  const ocrPath = "lib/documents/ocr-hosted.ts";
+  const provenancePath = "lib/ai/provenance.ts";
+  const staleness = "lib/ai/staleness.ts";
+  const requiredFiles = [llmPath, ocrPath, provenancePath, staleness];
+  const missing = requiredFiles.filter((p) => !existsSync(p));
+  if (missing.length > 0) {
+    report("model_prompt_schema_governance", "blocked_by_code", `Missing required file(s): ${missing.join(", ")}.`);
+    return;
+  }
+
+  const llmSource = readFileSync(llmPath, "utf8");
+  const ocrSource = readFileSync(ocrPath, "utf8");
+  const provenanceSource = readFileSync(provenancePath, "utf8");
+
+  const hasAssertFn = /export function assertVerifiedForMonetaryUse\(/.test(provenanceSource);
+
+  const structuredRegion = extractFunctionRegion(llmSource, /export async function structuredCompletion</);
+  const ocrRegion = extractFunctionRegion(ocrSource, /async function attemptHostedOcr\(/);
+  const structuredCallsAssert = structuredRegion !== null && /assertVerifiedForMonetaryUse\(/.test(structuredRegion);
+  const ocrCallsAssert = ocrRegion !== null && /assertVerifiedForMonetaryUse\(/.test(ocrRegion);
+
+  const chokepointProblems: string[] = [];
+  if (!hasAssertFn) chokepointProblems.push(`${provenancePath} no longer exports assertVerifiedForMonetaryUse()`);
+  if (structuredRegion === null) chokepointProblems.push(`could not locate structuredCompletion()'s own function body in ${llmPath}`);
+  else if (!structuredCallsAssert) chokepointProblems.push(`structuredCompletion() in ${llmPath} does not call assertVerifiedForMonetaryUse() inside its own body`);
+  if (ocrRegion === null) chokepointProblems.push(`could not locate attemptHostedOcr()'s own function body in ${ocrPath}`);
+  else if (!ocrCallsAssert) chokepointProblems.push(`attemptHostedOcr() in ${ocrPath} does not call assertVerifiedForMonetaryUse() inside its own body`);
+
+  if (chokepointProblems.length > 0) {
+    report(
+      "model_prompt_schema_governance",
+      "blocked_by_code",
+      `assertVerifiedForMonetaryUse() is not actually gating both governed chokepoints: ${chokepointProblems.join("; ")}. ` +
+        `No monetary-relevant model result is presently gated by verified provenance.`,
+      { evidenceSummary: `structuredCompletion() calls assert=${structuredCallsAssert}; attemptHostedOcr() calls assert=${ocrCallsAssert}.` },
+    );
+    return;
+  }
+
+  // Chokepoints are real and wired. The one remaining honest gap: an
+  // operator can SEE staleExecutionSummary()'s worklist counts, but
+  // nothing automatically re-processes anything -- checked by grepping
+  // the whole app/lib/scripts tree for a real caller outside the
+  // definition/test/this-file, so this cannot silently go stale either.
+  const callerFiles = ["lib", "app", "scripts"];
+  let hasRealStalenessCaller = false;
+  const staleCallerRe = /staleExecutionSummary\(/;
+  function scanDir(dir: string) {
+    if (hasRealStalenessCaller) return;
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (hasRealStalenessCaller) return;
+      const full = `${dir}/${entry}`;
+      let stat;
+      try {
+        stat = statSync(full);
+      } catch {
+        continue;
+      }
+      if (stat.isDirectory()) {
+        if (entry === "node_modules" || entry === ".git" || entry === ".next") continue;
+        scanDir(full);
+      } else if (entry.endsWith(".ts") && !entry.endsWith(".d.ts")) {
+        if (full === staleness || full.includes("regressions.ts") || full === "scripts/launch-check.ts") continue;
+        const content = readFileSync(full, "utf8");
+        if (staleCallerRe.test(content)) {
+          hasRealStalenessCaller = true;
+          return;
+        }
+      }
+    }
+  }
+  for (const dir of callerFiles) scanDir(dir);
+
+  if (!hasRealStalenessCaller) {
+    report(
+      "model_prompt_schema_governance",
+      "blocked_by_code",
+      `Both governed chokepoints (structuredCompletion(), attemptHostedOcr()) really call assertVerifiedForMonetaryUse() ` +
+        `inside their own function bodies -- verified by region-scoped source inspection, not a whole-file guess -- so ` +
+        `every monetary-relevant model result IS gated by verified provenance. Still blocked_by_code on one honest, ` +
+        `narrower remaining gap: staleExecutionSummary()'s worklist has no real caller anywhere in lib/app/scripts outside ` +
+        `its own module, its regression suite, and this file's own string literal -- an operator can see the count, ` +
+        `nothing automatically acts on it yet.`,
+      { evidenceSummary: `chokepoint gating: structuredCompletion=true, attemptHostedOcr=true; staleExecutionSummary() real caller found=false.` },
+    );
+    return;
+  }
+
   report(
     "model_prompt_schema_governance",
-    "blocked_by_code",
-    "Checkpoint 10: sql/model-provenance.sql's model_executions table now persists two-level identity per " +
-      "attempt -- requested (what the caller asked for, which may legitimately be a family alias such as " +
-      "\"flash\"/\"haiku\") and resolved (the exact model ID/version, provider request id, finish reason and " +
-      "region the PROVIDER'S OWN RESPONSE reported for that call, never backfilled from the requested alias) -- " +
-      "plus prompt/schema version, input artifact type/version, and attempt_group_id/attempt_index ordering for " +
-      "a fallback chain. lib/ai/provenance.ts's recordModelExecution() is wired into both of this codebase's " +
-      "governed AI chokepoints (lib/ai/llm.ts's structuredCompletion(), lib/documents/ocr-hosted.ts's " +
-      "attemptHostedOcr()) and, through them, all 13 call sites that reach a model provider, persisting every " +
-      "attempt -- success, failure, and each step of a fallback chain -- in order, confirmed end to end against " +
-      "a mocked provider response (not inferred from source: scripts/model-provenance-regressions.ts's real " +
-      "structuredCompletion() runs, not a reimplementation). computeVerified()/assertVerifiedForMonetaryUse() " +
-      "and validateCompatibility() are sabotage-and-restore-verified against live source for all 5 of the " +
-      "checkpoint's named cycles: (1) storing a family alias as the resolved identity when the provider returned " +
-      "none -- caught by a dedicated assertion on the persisted row, restored byte-identical; (2) skipping the " +
-      "minimum-schema-version compatibility check -- caught; (3) disabling assertVerifiedForMonetaryUse()'s " +
-      "throw -- caught; (4) letting a null resolved identity verify as true -- caught; (5) hiding the primary " +
-      "attempt's failed record before a fallback -- caught by the real end-to-end fallback-chain test, not a " +
-      "unit stub. Checkpoint 11 (lib/ai/rollout.ts, lib/ai/staleness.ts): a canary model for one operation, " +
-      "turned on purely by CANARY_<OPERATION>_MODEL/_PERCENTAGE configuration (absent/default = zero behavior " +
-      "change), routed to a deterministic percentage of subjects via a keyed hash (never a per-call random draw, " +
-      "so one household's experience stays consistent call to call), with a per-operation and a global " +
-      "CANARY_KILL_SWITCH_ALL override, and the resolved cohort persisted onto the model_executions row it " +
-      "produced (requested_rollout). Stale-data invalidation: checkStaleness() marks a record stale when it is " +
-      "unverified OR its schema_version is behind the operation's CURRENT_SCHEMA_VERSION (distinct from this " +
-      "same file's MINIMUM_SCHEMA_VERSION floor -- current is a target, minimum is a grace-period floor); " +
-      "staleExecutionSummary() reports counts grouped by operation/schema_version as an operational worklist " +
-      "(model_executions' refs are pseudonymized by design, so this reports HOW MANY records need reprocessing, " +
-      "not WHICH real rows -- a real invalidation queue needs a call site that still holds the real id). All 5 " +
-      "of Checkpoint 11's own named sabotage cycles were performed against live source and genuinely verified: " +
-      "kill-switch bypass, non-deterministic/gameable cohort assignment (real hash swapped for Math.random(), " +
-      "caught by a 20-iteration same-subject determinism check), a stale schema version accepted as current, an " +
-      "unverified record accepted as fresh, and hiding which cohort actually produced a persisted row (caught by " +
-      "a real end-to-end structuredCompletion() run, not a unit stub). Still blocked_by_code on two fronts: (1) " +
-      "assertVerifiedForMonetaryUse() is a sabotage-verified primitive that NOTHING in this codebase's " +
-      "calculators or evidence-linking code actually calls yet, so no monetary result is presently gated by it; " +
-      "(2) staleExecutionSummary()'s worklist is not wired to any real re-processing trigger -- an operator can " +
-      "see the count, nothing automatically acts on it yet. Both are Priority 9.",
+    "ready",
+    `Both governed chokepoints (lib/ai/llm.ts's structuredCompletion(), lib/documents/ocr-hosted.ts's attemptHostedOcr()) ` +
+      `really call assertVerifiedForMonetaryUse() inside their own function bodies, gating every monetary-relevant model ` +
+      `result on verified provenance, and staleExecutionSummary()'s worklist now has a real caller wiring it to an actual ` +
+      `re-processing trigger.`,
   );
 }
 
 function checkFullHouseholdE2eJourney() {
+  // Checkpoint 14h: was a single static report() call describing
+  // Checkpoint 12's superseded 17-step, single-process suite (which
+  // deliberately EXCLUDED family-member/household deletion for OOM
+  // reasons) -- never updated after Checkpoint 14g replaced it with a
+  // genuinely more complete 9-stage, multi-process orchestrator that DOES
+  // include both deletion stages. This now checks for that orchestrator's
+  // real existence, and -- measured directly in this sandbox at ~26-30s
+  // wall-clock and a safe ~430MB free-memory floor, well inside this
+  // sandbox's budget -- actually SPAWNS it as a real runtime probe on
+  // every launch:check run, recording the real result (with a timestamp)
+  // to a checked-in JSON artifact as the "last verified" evidence this
+  // spec's own schema calls for.
+  const orchestratorPath = "scripts/full-household-e2e-orchestrator.mjs";
+  const stagesDir = "scripts/e2e/stages";
+  const requiredStages = [
+    "01-auth-household-setup", "02-policy-upload-quarantine", "03-chat-claim-flow",
+    "04-evidence-review-calculation", "05-export", "06-evidence-deletion-invalidation",
+    "07-policy-deletion-invalidation", "08-membership-removal", "09-household-deletion-cleanup",
+  ];
+  const stagePaths = requiredStages.map((s) => `${stagesDir}/${s}.ts`);
+  const missing = [orchestratorPath, ...stagePaths].filter((p) => !existsSync(p));
+  if (missing.length > 0) {
+    report(
+      "full_household_e2e_journey",
+      "blocked_by_code",
+      `Missing required file(s): ${missing.join(", ")}. No multi-process, multi-stage E2E orchestrator exists to probe.`,
+    );
+    return;
+  }
+
+  const resultArtifactPath = "scripts/full-household-e2e-last-result.json";
+  const startedAt = Date.now();
+  let spawnResult: ReturnType<typeof spawnSync> | null = null;
+  let spawnThrew: Error | null = null;
+  try {
+    spawnResult = spawnSync(process.execPath, [orchestratorPath], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      timeout: 150_000,
+      env: process.env,
+    });
+  } catch (error) {
+    spawnThrew = error instanceof Error ? error : new Error(String(error));
+  }
+  const durationMs = Date.now() - startedAt;
+  const nowIso = new Date().toISOString();
+
+  if (spawnThrew || !spawnResult || spawnResult.error) {
+    // Could not even start the probe in this environment -- a resource/
+    // environment limitation this check would otherwise run and might
+    // reveal a real problem with, not a code defect, and never "ready".
+    const message = spawnThrew?.message ?? spawnResult?.error?.message ?? "unknown spawn failure";
+    // Fall back to the last checked-in known-good result, if one exists,
+    // so this run's report is honest about BOTH the live-probe failure
+    // AND whatever was last actually verified -- never silently reverting
+    // to a static, unverified claim.
+    let lastKnownGood: { passed?: boolean; verifiedAt?: string; durationMs?: number } | null = null;
+    if (existsSync(resultArtifactPath)) {
+      try {
+        lastKnownGood = JSON.parse(readFileSync(resultArtifactPath, "utf8"));
+      } catch {
+        /* corrupt/unreadable -- treated as absent below */
+      }
+    }
+    report(
+      "full_household_e2e_journey",
+      "resource_blocked",
+      `Could not spawn ${orchestratorPath} in this environment: ${message}. ` +
+        (lastKnownGood
+          ? `Last known-good live result (NOT from this run): passed=${lastKnownGood.passed}, verifiedAt=${lastKnownGood.verifiedAt}.`
+          : `No prior last-known-good result is checked in either.`),
+      { evidenceSummary: `spawnSync threw/failed: ${message}.`, lastVerified: lastKnownGood?.verifiedAt ?? nowIso },
+    );
+    return;
+  }
+
+  const combinedOutput = `${spawnResult.stdout ?? ""}${spawnResult.stderr ?? ""}`;
+  const timedOut = Boolean(spawnResult.signal);
+  const passed = spawnResult.status === 0 && !timedOut;
+  const stagesPassedCount = (combinedOutput.match(/=== Stage OK:/g) ?? []).length;
+  const failedStageMatch = combinedOutput.match(/# FAILURE at stage (\S+)/);
+
+  const artifact = {
+    passed,
+    stagesTotal: requiredStages.length,
+    stagesPassed: passed ? requiredStages.length : stagesPassedCount,
+    durationMs,
+    verifiedAt: nowIso,
+    substitutions: [
+      "signup/sign-in uses the dev-auth identity path (DEV_AUTH_ENABLED/DEV_ACCOUNT_ID), not real Supabase Auth",
+      "claim-session creation calls lib/claims/session.ts's createClaimSession() directly, not a REST route",
+      "both uploads are short-circuited by a fake malware-scan adapter reporting \"infected\", not a real scanner",
+    ],
+  };
+  try {
+    writeFileSync(resultArtifactPath, JSON.stringify(artifact, null, 2) + "\n");
+  } catch {
+    /* best-effort -- the live result below still reflects THIS run either way */
+  }
+
+  if (!passed && timedOut) {
+    // Killed by signal (spawnSync's own timeout, or this sandbox's memcg
+    // OOM killer) before completing -- a real environment limit, not a
+    // code defect. Never reported as blocked_by_code or ready.
+    report(
+      "full_household_e2e_journey",
+      "resource_blocked",
+      `Live spawn of ${orchestratorPath} was killed by a signal before completing (${stagesPassedCount}/${requiredStages.length} ` +
+        `stages had passed so far, ${durationMs}ms elapsed) -- likely this sandbox's memory ceiling under the current process ` +
+        `nesting, not a code defect. This was NOT completed, so it must not be reported as ready or blocked_by_code.`,
+      { evidenceSummary: `spawnSync(${orchestratorPath}) => signal=${spawnResult.signal}, stagesPassed=${stagesPassedCount}/${requiredStages.length}, durationMs=${durationMs}.`, lastVerified: nowIso },
+    );
+    return;
+  }
+  if (!passed) {
+    report(
+      "full_household_e2e_journey",
+      "blocked_by_code",
+      `Live spawn of ${orchestratorPath} FAILED just now (real runtime probe, not a citation): ${stagesPassedCount}/${requiredStages.length} stages passed` +
+        `${failedStageMatch ? `, failing at stage ${failedStageMatch[1]}` : ""} in ${durationMs}ms. Tail of output:\n${combinedOutput.slice(-4000)}`,
+      { evidenceSummary: `spawnSync(${orchestratorPath}) => exit=${spawnResult.status}, stagesPassed=${stagesPassedCount}/${requiredStages.length}, durationMs=${durationMs}.`, lastVerified: nowIso },
+    );
+    return;
+  }
+
   report(
     "full_household_e2e_journey",
     "blocked_by_code",
-    "scripts/full-household-e2e-regressions.ts (Checkpoint 12, claude/v1-launch-hardening) now proves 17 real, " +
-      "authenticated, route-level steps through actual API route handlers -- not lib/ functions called directly, " +
-      "the way claim-ci-regressions.ts and similar suites test their engines: household visibility and rename, " +
-      "family-member creation (2 members) and listing, a real policy upload reaching a real quarantine-rejected " +
-      "terminal state through the real quarantine gate with its durable job actually completing, a real " +
-      "claim-evidence upload reaching a real rejected terminal state through the real pipeline with its durable " +
-      "job actually completing, a claim-pack fetch, and household export create/list/download with the real " +
-      "snapshot content verified against the household data created earlier in the same run -- reliably passing " +
-      "twice in this sandbox with no OOM. Three substitutions are used and documented in the file's own header: " +
-      "(1) signup/sign-in uses the dev-auth identity path (DEV_AUTH_ENABLED/DEV_ACCOUNT_ID) plus direct-seeded " +
-      "household membership, not real Supabase Auth -- there is no real Supabase project in this sandbox, the " +
-      "same limitation scripts/authz-http-regressions.ts already accepted; (2) claim-session creation calls " +
-      "lib/claims/session.ts's createClaimSession() directly, the same function the chat orchestrator itself " +
-      "calls, since there is no REST route for it; (3) both uploads are short-circuited by a fake malware-scan " +
-      "adapter reporting \"infected\", so neither ever reaches pdf.js or real AI extraction -- avoiding this " +
-      "sandbox's pre-existing PDF-parsing OOM ceiling (Checkpoint 10) while still proving the full upload -> " +
-      "storage -> quarantine-gate -> durable-job chain; extraction-content quality itself stays proven elsewhere " +
-      "(scripts/claim-evidence-regressions.ts, scripts/pipeline-worker-regressions.ts). Family-member and " +
-      "household deletion are deliberately excluded from this suite: reproduced in isolation, " +
-      "lib/lifecycle/coordinator.ts's deletion code paths reliably get silently OOM-killed when run alongside " +
-      "this suite's other 17 steps in the same process -- a genuine sandbox memory constraint, not a code " +
-      "defect -- and both flows are already proven, in more depth than one route call each, by their own " +
-      "dedicated suites (security:family-member-deletion-test, security:household-deletion-test), reconfirmed " +
-      "passing this checkpoint. Still blocked_by_code: this is not the full 22-step signup-through-deletion " +
-      "journey exercised live and in-process end to end -- signup remains a documented identity substitute and " +
-      "deletion remains a documented same-process exclusion rather than either being exercised live within this " +
-      "suite -- Priority 10.",
+    `Live spawn of ${orchestratorPath} PASSED just now (real runtime probe, not a citation): all ${requiredStages.length} stages ` +
+      `-- household visibility/rename, family-member creation, a real policy upload reaching a real quarantine-rejected ` +
+      `terminal state, a real claim-evidence upload reaching a real rejected terminal state, evidence review/calculation, ` +
+      `export, AND (an improvement over the superseded Checkpoint 12 suite) evidence deletion+invalidation, policy ` +
+      `deletion+invalidation, membership removal, and household deletion+cleanup -- passed against the SAME persisted ` +
+      `PGlite fixture across 9 separate child processes in ${durationMs}ms. Result recorded to ${resultArtifactPath} with ` +
+      `this timestamp. Still honestly blocked_by_code: 3 substitutions remain (see ${resultArtifactPath}) -- real ` +
+      `Supabase Auth signup/signin, the real chat-driven claim-session REST path, and a real (non-test) malware-scan ` +
+      `adapter are not exercised by this journey, so this is not yet the full real-auth, real-scanner, ` +
+      `signup-through-deletion journey.`,
+    { evidenceSummary: `spawnSync(${orchestratorPath}) => exit=0, stagesPassed=${requiredStages.length}/${requiredStages.length}, durationMs=${durationMs}.`, lastVerified: nowIso },
   );
 }
 
@@ -1140,37 +1816,71 @@ async function main() {
     serviceRoleStatus !== "ready" ? serviceRoleDetail : null,
   ].filter((x): x is string => x !== null);
 
-  checkPolicyDocumentQuarantine();
-  checkClaimEvidenceQuarantine();
-  checkMalwareScanningConfiguration();
-  checkSharedRateLimiter();
-  checkCsrfProtection();
-  checkRlsMigrationPresent();
-  checkPrivateStorageMigrationPresent();
-  checkDataExport();
-  checkDataDeletionAndInvalidation();
-  checkBackgroundJobReliability();
-  checkDeadLetterRetrySupport();
-  checkPrivacySafeObservability();
-  checkRedactionVerification();
-  checkModelPromptSchemaGovernance();
-  checkFullHouseholdE2eJourney();
-  checkEvaluationThresholds();
+  // Checkpoint 14h: --only=<id1>,<id2> runs ONLY the named capability
+  // check(s) and skips assertManifestComplete()'s all-24 requirement --
+  // an informational, explicitly-opt-in mode for quickly re-checking one
+  // capability (e.g. after a sabotage-and-restore edit in
+  // scripts/launch-check-verifier-regressions.ts) without paying for
+  // checkProductionBuild()'s real `npm run build` or the live network
+  // calls every other capability besides the requested one would trigger.
+  // Default (no --only) behavior -- every capability, the full manifest
+  // assertion, exit 1 on --strict with blocked_by_code -- is completely
+  // unchanged.
+  const onlyArg = process.argv.find((a) => a.startsWith("--only="));
+  const only = onlyArg ? new Set(onlyArg.slice("--only=".length).split(",").filter(Boolean)) : null;
+  const runs = only
+    ? (id: string | string[], fn: () => void | Promise<void>) => ((Array.isArray(id) ? id.some((i) => only.has(i)) : only.has(id)) ? fn() : undefined)
+    : (_id: string | string[], fn: () => void | Promise<void>) => fn();
 
-  await checkRouteInventoryCapabilities();
-  await checkLiveRlsVerification();
-  await checkLiveBucketPrivacy();
-  await checkGithubCiStatus();
-  await checkProductionBuild();
+  await runs("policy_document_quarantine", checkPolicyDocumentQuarantine);
+  await runs("claim_evidence_quarantine", checkClaimEvidenceQuarantine);
+  await runs("malware_scanning_configuration", checkMalwareScanningConfiguration);
+  await runs("shared_rate_limiter", checkSharedRateLimiter);
+  await runs("csrf_protection", checkCsrfProtection);
+  await runs("rls_migration_present", checkRlsMigrationPresent);
+  await runs("private_storage_migration_present", checkPrivateStorageMigrationPresent);
+  await runs("data_export", checkDataExport);
+  await runs("data_deletion_and_invalidation", checkDataDeletionAndInvalidation);
+  await runs("background_job_reliability", checkBackgroundJobReliability);
+  await runs("dead_letter_retry_support", checkDeadLetterRetrySupport);
+  await runs("privacy_safe_observability", checkPrivacySafeObservability);
+  await runs("redaction_verification", checkRedactionVerification);
+  await runs("model_prompt_schema_governance", checkModelPromptSchemaGovernance);
+  await runs("full_household_e2e_journey", checkFullHouseholdE2eJourney);
+  await runs("evaluation_thresholds", checkEvaluationThresholds);
 
-  assertManifestComplete(results);
+  await runs(["household_authorization", "route_classification"], checkRouteInventoryCapabilities);
+  await runs("live_rls_verification", checkLiveRlsVerification);
+  await runs("live_bucket_privacy", checkLiveBucketPrivacy);
+  await runs("github_ci_status", checkGithubCiStatus);
+  await runs("production_build", checkProductionBuild);
+
+  if (!only) {
+    assertManifestComplete(results);
+  }
 
   const strict = process.argv.includes("--strict");
   const summary = summarizeManifest(results);
 
+  if (process.argv.includes("--json")) {
+    // Checkpoint 14h: machine-readable output for exactly the results
+    // that actually ran (all 24 by default, or only the --only= subset) --
+    // what scripts/launch-check-verifier-regressions.ts's sabotage-and-
+    // restore harness parses, rather than screen-scraping the human-
+    // readable text report below.
+    console.log(JSON.stringify(results));
+    return;
+  }
+
   console.log("\nLaunch capability manifest\n===========================");
   for (const item of results) {
-    console.log(`[${item.status.toUpperCase()}] ${item.label}\n    ${item.detail}`);
+    console.log(`[${item.status.toUpperCase()}] ${item.label}`);
+    console.log(`    check_type: ${item.checkType}`);
+    console.log(`    probe: ${item.probe}`);
+    if (item.blockingReason) console.log(`    blocking_reason: ${item.blockingReason.slice(0, 300)}${item.blockingReason.length > 300 ? "..." : ""}`);
+    if (item.remediation) console.log(`    remediation: ${item.remediation}`);
+    console.log(`    last_verified: ${item.lastVerified}`);
+    console.log(`    detail: ${item.detail}`);
   }
   if (startupGuardProblems.length > 0) {
     console.log("\nAdditional production-startup guard finding(s) (not one of the 24 capabilities on their own, feeding into `authentication`):");

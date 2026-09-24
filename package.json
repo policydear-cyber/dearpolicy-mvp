@@ -42,6 +42,7 @@
     "security:db-rate-limit-test": "node --import tsx scripts/db-rate-limit-regressions.ts",
     "security:csrf-test": "node --import tsx scripts/csrf-regressions.ts",
     "security:launch-check-test": "node --import tsx scripts/launch-check-regressions.ts",
+    "security:launch-check-verifier-test": "node scripts/launch-check-verifier-regressions.mjs",
     "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts",
     "security:scan-callback-test": "node --import tsx scripts/scan-callback-regressions.ts",
     "security:malware-scanning-virustotal-test": "node --import tsx scripts/malware-scanning-virustotal-regressions.ts",

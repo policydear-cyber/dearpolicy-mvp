@@ -13,7 +13,7 @@
 import type { ClaimEvidenceScanStatus } from "./types";
 import {
   currentFileScanAdapter, selectedFileScanAdapterName, checkFileScannerConfigured,
-  nullFileScanAdapter, type FileScanAdapter, type FileScanResult,
+  nullFileScanAdapter, registeredFileScanAdapterNames, type FileScanAdapter, type FileScanResult,
 } from "@/lib/scanning/adapter";
 
 export type ScanResult = { status: ClaimEvidenceScanStatus; detail?: string };
@@ -61,4 +61,12 @@ export function currentScanAdapter(env: NodeJS.ProcessEnv = process.env): Eviden
 
 export function checkMalwareScannerConfigured(env: NodeJS.ProcessEnv = process.env): { ok: boolean; message: string } {
   return checkFileScannerConfigured(env);
+}
+
+/** Checkpoint 14h: re-exported so scripts/launch-check.ts's
+ * malware_scanning_configuration verifier can inspect the real shared
+ * registry through this same thin wrapper it already imports from,
+ * rather than reaching past it into lib/scanning/adapter.ts directly. */
+export function registeredScanAdapterNames(): string[] {
+  return registeredFileScanAdapterNames();
 }

@@ -1,0 +1,12 @@
+{
+  "passed": false,
+  "stagesTotal": 9,
+  "stagesPassed": 3,
+  "durationMs": 70300,
+  "verifiedAt": "2026-09-24T05:29:16.481Z",
+  "substitutions": [
+    "signup/sign-in uses the dev-auth identity path (DEV_AUTH_ENABLED/DEV_ACCOUNT_ID), not real Supabase Auth",
+    "claim-session creation calls lib/claims/session.ts's createClaimSession() directly, not a REST route",
+    "both uploads are short-circuited by a fake malware-scan adapter reporting \"infected\", not a real scanner"
+  ]
+}

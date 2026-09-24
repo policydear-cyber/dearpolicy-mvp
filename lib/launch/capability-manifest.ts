@@ -58,6 +58,31 @@ export const CAPABILITY_STATUSES: readonly CapabilityStatus[] = [
   "resource_blocked",
 ];
 
+/**
+ * Checkpoint 14h (claude/v1-launch-hardening): what KIND of evidence a
+ * capability's status is based on. Added alongside the other structured-
+ * evidence fields below specifically so a verifier can no longer report a
+ * status without also saying HOW it knows -- "hardcoded" is a legitimate,
+ * honest value for a verifier that genuinely has no dynamic check yet, but
+ * it must never be the value actually used once a capability's real
+ * production wiring exists and can be inspected or executed. Before this
+ * checkpoint, background_job_reliability, dead_letter_retry_support,
+ * privacy_safe_observability, redaction_verification,
+ * model_prompt_schema_governance and full_household_e2e_journey were all,
+ * in effect, "hardcoded": a single static report() call with a fixed
+ * string, regardless of the real state of the code they described. This
+ * type exists so that regression is now something a test can assert
+ * against directly (see scripts/launch-check-verifier-regressions.ts).
+ */
+export type CapabilityCheckType =
+  | "static-grep"    // source-text inspection of real files (existsSync/readFileSync + regex), not a whole-file guess
+  | "runtime-probe"   // a real script/regression-suite/child-process is spawned and its actual exit code/output is read
+  | "env-check"       // a real guard function is evaluated against a simulated/real production environment
+  | "live-query"      // a real network/DB/API call is made against a live external system
+  | "build-probe"     // a real production build is attempted
+  | "ci-api-check"    // a real call to an external CI provider's API
+  | "hardcoded";      // no dynamic check exists yet for this capability -- must not be used once one does
+
 /** Verbatim (kebab->snake mapped) ids for the 24 capabilities the launch
  * gate is required to cover, at minimum, per the launch-hardening spec. */
 export type CapabilityId =
@@ -118,11 +143,47 @@ export const REQUIRED_CAPABILITIES: readonly CapabilityDefinition[] = [
 
 const REQUIRED_IDS = new Set<CapabilityId>(REQUIRED_CAPABILITIES.map((c) => c.id));
 
+/**
+ * Checkpoint 14h: the full structured-evidence shape every CapabilityResult
+ * must carry, per the launch-hardening spec's own requirement ("Each
+ * capability verifier must report structured evidence: Capability ID,
+ * Status, Check type, Command or runtime probe, Evidence summary, Blocking
+ * reason, Remediation, Last verified timestamp or build identity where
+ * appropriate"). `detail` is kept as the primary human-readable narrative
+ * (every existing verifier's prose already lives there and is NOT
+ * duplicated); the fields below are the machine-checkable structured
+ * complement scripts/launch-check.ts's report() now always populates,
+ * either explicitly per call site or via its per-capability CHECK_TYPES/
+ * PROBES/REMEDIATIONS lookup tables -- see that file's own comment on
+ * report() for why a lookup table rather than 65 duplicated call-site
+ * literals is the correct place for a property (which KIND of check this
+ * is, what command/probe it runs, what fixes it) that is a property of the
+ * CAPABILITY, not of which branch a particular run happened to take.
+ */
 export type CapabilityResult = {
   id: CapabilityId;
   label: string;
   status: CapabilityStatus;
   detail: string;
+  /** What kind of evidence backs `status` -- never "hardcoded" once a real
+   * dynamic check exists for this capability (see CapabilityCheckType). */
+  checkType: CapabilityCheckType;
+  /** The actual command, function call, or runtime probe this result is
+   * based on -- specific enough that a reader could re-run it themselves. */
+  probe: string;
+  /** A short, structured summary of what was actually found -- distinct
+   * from `detail`'s full narrative prose. */
+  evidenceSummary: string;
+  /** Present exactly when `status` is not "ready" (or "not_applicable"):
+   * why this capability is blocked, independent of the full `detail` text. */
+  blockingReason?: string;
+  /** Present exactly when `status` is not "ready" (or "not_applicable"):
+   * the concrete next step that would move this capability toward ready. */
+  remediation?: string;
+  /** ISO timestamp of when THIS check actually ran, or a build/commit
+   * identity when that is the more meaningful "as of" marker (e.g. a
+   * checked-in last-known-good result file's own recorded timestamp). */
+  lastVerified: string;
 };
 
 /**

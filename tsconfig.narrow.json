@@ -15,6 +15,10 @@
     "scripts/dead-letter.ts",
     "scripts/worker-runtime-regressions.ts",
     "scripts/dead-letter-regressions.ts",
-    "scripts/pipeline-worker-regressions.ts"
+    "scripts/pipeline-worker-regressions.ts",
+    "scripts/launch-check.ts",
+    "lib/launch/capability-manifest.ts",
+    "lib/scanning/adapter.ts",
+    "lib/claims/evidence/scan-adapter.ts"
   ]
 }
