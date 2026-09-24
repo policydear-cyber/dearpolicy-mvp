@@ -227,6 +227,30 @@ BEGIN
   END IF;
 END $$;
 
+-- policy_document_audit_log is an append-only audit trail for the
+-- policy-document quarantine gate, mirroring claim_evidence_audit_log
+-- exactly (see sql/schema.sql's own comment on this table): members may
+-- read and insert (the app writes an entry on their behalf, e.g.
+-- lib/policies/quarantine/audit.ts), but never update or delete a past
+-- entry -- only a service_role job (which bypasses RLS entirely) may do
+-- that. Without this block, the `authenticated` role has no grant at all
+-- on this table (it is not in member_tables above, since that loop's
+-- generic CRUD grant would incorrectly allow UPDATE/DELETE on an
+-- append-only audit trail), which is exactly the gap that made
+-- lib/household/export.ts's household-export query against this table
+-- fail with a bare 42501 permission-denied error in production.
+DO $$
+BEGIN
+  IF to_regclass('public.policy_document_audit_log') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.policy_document_audit_log ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_select ON public.policy_document_audit_log';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.policy_document_audit_log';
+    EXECUTE $f$CREATE POLICY household_member_select ON public.policy_document_audit_log FOR SELECT TO authenticated USING (is_household_member(account_id))$f$;
+    EXECUTE $f$CREATE POLICY household_member_insert ON public.policy_document_audit_log FOR INSERT TO authenticated WITH CHECK (is_household_member(account_id))$f$;
+    EXECUTE 'GRANT SELECT, INSERT ON public.policy_document_audit_log TO authenticated';
+  END IF;
+END $$;
+
 -- No table in this schema is meant to be readable anonymously; the app has
 -- no public/unauthenticated pages that read household data.
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;

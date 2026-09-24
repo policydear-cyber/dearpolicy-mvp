@@ -54,10 +54,21 @@ export interface GenerateHouseholdExportArgs {
  * request row (the caller -- the route on the synchronous idempotent
  * fast path, or a worker pass on the durable path -- owns the
  * pending/failed -> running CAS transition; this function starts from
- * there). Returns the row's final state either way (`ready` or
- * `failed`), never throws for a generation-time failure (that failure is
- * recorded on the row itself, exactly as the route used to do it
- * inline).
+ * there). On success, returns the row now in its `ready` state.
+ *
+ * On a generation-time failure, this function ALWAYS records the
+ * failure on the household_exports row itself first (status `failed`,
+ * with only a safe, generic `error` message -- never a raw
+ * provider/database error string, unchanged from the route's own prior
+ * inline behavior), then RE-THROWS the original error (Defect D11 fix;
+ * see the catch block below for why). Callers on the synchronous route
+ * path already wrap this in their own try/catch and read the row back
+ * regardless of outcome; the worker path
+ * (lib/jobs/household-export-processor.ts's processHouseholdExportJob)
+ * deliberately does not catch it, so the throw reaches
+ * lib/jobs/worker-runtime.ts's claimAndProcessOne(), which classifies
+ * and retries/dead-letters the background_jobs row the same way every
+ * other job processor's failure does.
  */
 export async function generateAndStoreHouseholdExport(
   args: GenerateHouseholdExportArgs,
@@ -76,7 +87,7 @@ export async function generateAndStoreHouseholdExport(
     return ready ?? (await getExportRow(pool, args.householdId, args.exportId));
   } catch (error) {
     const message = "Export generation failed. Please try again.";
-    const failed = await markExportFailed(pool, args.exportId, message);
+    await markExportFailed(pool, args.exportId, message);
     await appendExportAudit(pool, {
       householdId: args.householdId,
       exportId: args.exportId,
@@ -84,6 +95,26 @@ export async function generateAndStoreHouseholdExport(
       action: "generation_failed",
       detail: error instanceof Error ? error.message : String(error),
     });
-    return failed ?? (await getExportRow(pool, args.householdId, args.exportId));
+    // Defect D11 fix: re-throw after recording the row-level failure
+    // above. This function used to swallow every generation-time error --
+    // recording it on the household_exports row and returning normally --
+    // which left the CALLER (lib/jobs/household-export-processor.ts's
+    // processHouseholdExportJob, invoked by lib/jobs/worker-runtime.ts's
+    // claimAndProcessOne()) with no way to know generation failed: with
+    // nothing thrown, claimAndProcessOne() always ran completeJob(),
+    // marking the background_jobs row "succeeded" even when the export
+    // itself was left permanently stuck (e.g. if markExportFailed() above
+    // could not run either, or -- the actually-observed production case --
+    // could never reach `ready` because of a lower-level bug like a missing
+    // RLS grant, see Defect D10). Re-throwing lets claimAndProcessOne()'s
+    // existing generic catch block (classifyPipelineError() + failJob())
+    // classify and retry/dead-letter this job exactly like every other
+    // pipeline processor (lib/rag/ingest.ts's processPolicy(),
+    // lib/claims/evidence/pipeline.ts's processClaimEvidence()) already
+    // does, so a stuck/failed export becomes visible to job-level
+    // monitoring instead of silently masquerading as a success. The
+    // household_exports row itself still carries only the safe, generic
+    // `message` above -- never the raw `error` -- unchanged from before.
+    throw error;
   }
 }

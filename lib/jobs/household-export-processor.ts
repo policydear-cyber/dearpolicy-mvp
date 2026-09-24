@@ -25,15 +25,31 @@ function requireStringField(payload: unknown, key: string): string {
   return value;
 }
 
-/** Checkpoint 14i: unlike the policy/claim-evidence processors, a failed
- * export generation is NOT a job-level failure that should retry/dead-
- * letter -- generateAndStoreHouseholdExport() already owns its own
- * success/failure outcome on the household_exports ROW
- * (markExportReady/markExportFailed), exactly as it did when the route
- * called it inline. Re-throwing here would make lib/jobs/queue.ts's
- * failJob() ALSO retry/dead-letter the background_jobs row for a
- * household_exports row that is already terminally `failed` -- a
- * confusing double bookkeeping this job type does not need. */
+/** Defect D11 fix: this processor does NOT catch -- a failed export
+ * generation now IS a job-level failure that retries/dead-letters,
+ * exactly like every other processor in this codebase
+ * (lib/rag/ingest.ts's processPolicy(),
+ * lib/claims/evidence/pipeline.ts's processClaimEvidence()).
+ *
+ * (Historical note, corrected: an earlier version of this comment argued
+ * the opposite -- that generateAndStoreHouseholdExport() already owns
+ * success/failure on the household_exports ROW, so re-throwing here
+ * would be "confusing double bookkeeping". That reasoning assumed
+ * markExportFailed() recording the row as `failed` was equivalent to the
+ * background_jobs row being handled. It is not: with nothing thrown,
+ * lib/jobs/worker-runtime.ts's claimAndProcessOne() always called
+ * completeJob(), marking the background_jobs row "succeeded" even when
+ * generation genuinely failed -- silently masking the failure from every
+ * job-level monitoring/alerting/retry path, with no reaper for the
+ * household_exports row either if it also never reached `failed` (e.g.
+ * because the same failure that broke generation also broke the recovery
+ * write -- see Defect D10). generateAndStoreHouseholdExport() now
+ * re-throws after recording the row-level failure, so this processor's
+ * own throw -- propagating, uncaught, exactly like it always has for a
+ * genuinely unexpected error -- lets claimAndProcessOne()'s existing
+ * classifyPipelineError()+failJob() do the same retry/dead-letter
+ * bookkeeping this job type gets for free, no different from any other
+ * job type.) */
 export const processHouseholdExportJob: JobProcessor = async (job) => {
   const payload = job.payload as Record<string, unknown> | null;
   const args: GenerateHouseholdExportArgs = {

@@ -148,6 +148,21 @@ async function main() {
         );
         assert.equal(jobRows.rows.length, 1, "enqueueHouseholdExport() must persist exactly one background_jobs row");
         assert.equal(jobRows.rows[0].status, "queued");
+
+        // Test isolation (test-integrity fix, alongside Defect D10/D11):
+        // this job has now served its purpose (proving enqueue-only, no
+        // inline processing). Left "queued", it would sit ahead of a later
+        // test's own job in claimNextJob()'s FIFO ordering (both share
+        // job_type=HOUSEHOLD_EXPORT_JOB_TYPE) and get claimed by a later
+        // test's single claimAndProcessOne() call instead of that test's
+        // own job -- silently breaking that test's assertions about its OWN
+        // export/job, not a production code bug. Cancel it here so each
+        // later test's single claim call observes exactly the one job it
+        // itself enqueued.
+        await pool.query(`UPDATE background_jobs SET status='cancelled' WHERE job_type=$1 AND idempotency_key=$2`, [
+          HOUSEHOLD_EXPORT_JOB_TYPE,
+          row.id,
+        ]);
       },
     );
 
