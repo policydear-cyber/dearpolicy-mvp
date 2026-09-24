@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { validateMedicalEvidence, validateOwnershipEvidence, validatePolicyEvidence, type DisabilityDefinitionMatch, type ValidPolicyEvidenceRef } from "./evidence";
+import { evaluateEvidenceAuthority, type EvidenceAuthorityReasonCode } from "../evidence-authority";
 
 /**
  * Pure, deterministic Total & Permanent Disability (TPD) and permanent
@@ -158,7 +159,8 @@ export type DisabilityBlockReasonCode =
   | "DEFINITION_MATCH_MISSING" | "DEFINITION_MATCH_FAMILY_MEMBER_MISMATCH" | "DEFINITION_MATCH_CLAIM_EVENT_MISMATCH"
   | "DEFINITION_MATCH_CONTRACT_MISMATCH" | "DEFINITION_MATCH_COVERAGE_MISMATCH" | "DEFINITION_MATCH_BENEFIT_MISMATCH"
   | "DEFINITION_MATCH_KEY_MISMATCH" | "DEFINITION_MATCH_DEFINITION_VERSION_MISMATCH" | "DEFINITION_MATCH_NOT_CONFIRMED"
-  | "WAITING_PERIOD_NOT_ESTABLISHED" | "WAITING_PERIOD_NOT_MET" | "UNRESOLVED_EXCLUSION" | "INVALID_EXCLUSION_EVIDENCE";
+  | "WAITING_PERIOD_NOT_ESTABLISHED" | "WAITING_PERIOD_NOT_MET" | "UNRESOLVED_EXCLUSION" | "INVALID_EXCLUSION_EVIDENCE"
+  | EvidenceAuthorityReasonCode;
 
 export type DisabilityBlocked = { status: "blocked"; reasonCode: DisabilityBlockReasonCode; message: string };
 export type DisabilityNotApplicable = { status: "not_applicable"; potentialAmount: null; reason: string };
@@ -316,6 +318,15 @@ export function calculateDisabilityBenefit(input: DisabilityBenefitInput): Disab
   }
   if (match.result !== "matches") {
     return { status: "blocked", reasonCode: "DEFINITION_MATCH_NOT_CONFIRMED", message: "The reviewed medical evidence has not been explicitly confirmed to match this policy's own definition -- it is currently: " + match.result.replace(/_/g, " ") + "." };
+  }
+
+  // Checkpoint (Wave 2, D4/D8/D9): see calculateAccidentalDeath()'s
+  // identical gate in accidental-death.ts and lib/claims/evidence-authority.ts
+  // for the full rationale. Runs after the match is confirmed structurally
+  // correct and scoped to this exact calculation, before any arithmetic.
+  const authority = evaluateEvidenceAuthority(match.provenance);
+  if (!authority.authorized) {
+    return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
   }
 
   if (input.unresolvedConditions?.length) {
