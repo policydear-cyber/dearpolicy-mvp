@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { validateMedicalEvidence, validateOwnershipEvidence, validatePolicyEvidence, type DisabilityDefinitionMatch } from "./evidence";
+import { evaluateEvidenceAuthority, type EvidenceAuthorityReasonCode } from "../evidence-authority";
 
 /**
  * Pure, deterministic disability-income (periodic monthly replacement
@@ -76,7 +77,8 @@ export type DisabilityIncomeBlockReasonCode =
   | "DEFINITION_MATCH_MISSING" | "DEFINITION_MATCH_FAMILY_MEMBER_MISMATCH" | "DEFINITION_MATCH_CLAIM_EVENT_MISMATCH"
   | "DEFINITION_MATCH_CONTRACT_MISMATCH" | "DEFINITION_MATCH_COVERAGE_MISMATCH" | "DEFINITION_MATCH_BENEFIT_MISMATCH"
   | "DEFINITION_MATCH_KEY_MISMATCH" | "DEFINITION_MATCH_DEFINITION_VERSION_MISMATCH" | "DEFINITION_MATCH_NOT_CONFIRMED"
-  | "BENEFIT_PERIOD_EXHAUSTED";
+  | "BENEFIT_PERIOD_EXHAUSTED"
+  | EvidenceAuthorityReasonCode;
 
 export type DisabilityIncomeBlocked = { status: "blocked"; reasonCode: DisabilityIncomeBlockReasonCode; message: string };
 
@@ -203,6 +205,15 @@ export function calculateDisabilityIncome(input: DisabilityIncomeInput): Disabil
   }
   if (match.result !== "matches") {
     return { status: "blocked", reasonCode: "DEFINITION_MATCH_NOT_CONFIRMED", message: "The reviewed medical evidence has not been explicitly confirmed to match this policy's own disability-income definition -- it is currently: " + match.result.replace(/_/g, " ") + "." };
+  }
+
+  // Checkpoint (Wave 2, D4/D8/D9): see calculateAccidentalDeath()'s
+  // identical gate in accidental-death.ts and lib/claims/evidence-authority.ts
+  // for the full rationale. Runs after the match is confirmed structurally
+  // correct and scoped to this exact calculation, before any arithmetic.
+  const authority = evaluateEvidenceAuthority(match.provenance);
+  if (!authority.authorized) {
+    return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
   }
 
   if (input.unresolvedConditions?.length) {
