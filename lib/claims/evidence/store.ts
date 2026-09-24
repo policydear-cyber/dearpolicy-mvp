@@ -50,28 +50,73 @@ export async function createEvidenceDocument(args: {
   return { document: existing.rows[0], created: false };
 }
 
+/** Wave 2 fix (D33/D34): now also excludes a superseded document
+ * (`superseded_at IS NULL`), same as listEvidenceDocuments()/
+ * getScopedEvidenceDocument() below. Previously this returned a
+ * superseded row exactly like an active one, which let:
+ *   - a retried/duplicated background job (lib/claims/evidence/pipeline.ts's
+ *     processClaimEvidence()) keep "processing" a document whose evidence
+ *     had already been replaced (pipeline.ts's own `if (!initial) return`
+ *     no-op only ever fired for a truly deleted/foreign id, never for a
+ *     superseded one);
+ *   - a retried match-confirmation call (lib/claims/evidence/matches.ts,
+ *     ci-matches.ts, disability-matches.ts, travel-matches.ts, and
+ *     medical-bill-evidence.ts's confirmMedicalBillReview(), which all
+ *     resolve the document through getScopedEvidenceDocument()) re-promote
+ *     the OLD, superseded evidence into a brand new active match, silently
+ *     undoing the supersession.
+ * A superseded row is never actually deleted (see supersedeEvidenceDocument()
+ * below) -- it still exists for audit/history purposes, just not through
+ * this "the document a caller may currently act on" read path. */
 export async function getEvidenceDocument(accountId: string, id: string): Promise<ClaimEvidenceDocumentRow | null> {
   await ensureClaimEvidenceSchema();
-  const result = await query<ClaimEvidenceDocumentRow>(`SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [id, accountId]);
+  const result = await query<ClaimEvidenceDocumentRow>(
+    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL AND ${activePredicate()}`,
+    [id, accountId],
+  );
   return result.rows[0] ?? null;
 }
 
 /** Used by every API route that acts on a specific document on behalf of a
  * specific family member/claim -- proves the FULL ownership chain, not just
- * that the document id belongs to this account. */
+ * that the document id belongs to this account.
+ *
+ * Wave 2 fix (D33/D34): now also excludes a superseded document
+ * (`superseded_at IS NULL`) -- see getEvidenceDocument()'s doc comment
+ * above for the full rationale. This is also what makes
+ * app/api/claims/evidence/[id]/file/route.ts's signed-download route deny
+ * access to superseded/deleted evidence IMMEDIATELY: that route resolves
+ * the document through this function before ever calling
+ * createClaimEvidenceSignedUrl(), so a superseded document now 404s here
+ * before a new signed URL is ever minted for it (see that route's own
+ * comment; the storage driver's own signed-URL TTL is a separate,
+ * unavoidable exposure window documented in lib/storage/supabase.ts). */
 export async function getScopedEvidenceDocument(args: { accountId: string; familyMemberId: string; claimSessionId: string; id: string }): Promise<ClaimEvidenceDocumentRow | null> {
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
-    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND family_member_id=$3 AND claim_session_id=$4 AND ${activePredicate()}`,
+    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE id=$1 AND account_id=$2 AND family_member_id=$3 AND claim_session_id=$4 AND superseded_at IS NULL AND ${activePredicate()}`,
     [args.id, args.accountId, args.familyMemberId, args.claimSessionId],
   );
   return result.rows[0] ?? null;
 }
 
+/** Wave 2 fix (D33/D34): now also excludes a superseded document
+ * (`superseded_at IS NULL`). This is the single function
+ * app/api/claims/evidence/route.ts (the document list the review UI
+ * renders) and lib/claims/evidence/medical-bill-evidence.ts's
+ * loadVerifiedMedicalBillFacts() (the ONLY function a medical calculator
+ * may read a verified bill figure from) both build on -- medical-claim
+ * bill evidence has no separate per-document match table to supersede
+ * (see that module's own doc comment), so THIS filter is what actually
+ * stops a superseded, still-`status='matched'` bill document from going
+ * on contributing to a hospitalisation claim's verified figures forever.
+ * See also getEvidenceDocument()'s doc comment for the pipeline/retry
+ * rationale, which applies here identically via
+ * lib/claims/evidence/pipeline.ts's reprocessNeedsAttention(). */
 export async function listEvidenceDocuments(accountId: string, claimSessionId: string): Promise<ClaimEvidenceDocumentRow[]> {
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceDocumentRow>(
-    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE account_id=$1 AND claim_session_id=$2 AND ${activePredicate()} ORDER BY created_at DESC`,
+    `SELECT ${DOCUMENT_COLUMNS} FROM claim_evidence_documents WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND ${activePredicate()} ORDER BY created_at DESC`,
     [accountId, claimSessionId],
   );
   return result.rows;
@@ -129,39 +174,116 @@ export async function incrementProcessingAttempts(accountId: string, id: string)
   return result.rows[0]?.processing_attempts ?? 0;
 }
 
+/** Thrown by supersedeEvidenceDocument() when `oldId` does not resolve, for
+ * this account, to a currently-active (not already superseded) document.
+ * Callers (see app/api/claims/evidence/upload/route.ts) should already
+ * have resolved and scope-checked the old document via
+ * getScopedEvidenceDocument() before ever calling this function -- since
+ * that lookup now also excludes an already-superseded document (see its
+ * own doc comment), this error path is mainly a defense-in-depth backstop
+ * against a race (two concurrent requests both trying to supersede the
+ * same document) rather than the expected way callers discover a bad id. */
+export class EvidenceAlreadySupersededError extends Error {
+  constructor(public readonly oldId: string) {
+    super("This evidence document was not found for this account, or has already been superseded.");
+  }
+}
+
 /** A corrected re-upload for the same claim/document-type slot: the OLD
  * document row is marked superseded (kept, never deleted -- the audit log
- * and anything reviewed against it stay valid history) and any cause
- * match built from it is superseded too, so it can never keep unlocking an
- * amount once the evidence behind it has been replaced. */
-export async function supersedeEvidenceDocument(args: { accountId: string; oldId: string; newId: string; reason: string }): Promise<void> {
-  // ensureCriticalIllnessSchema() (which also applies ensureClaimEvidenceSchema())
-  // guarantees claim_ci_definition_matches exists before the UPDATE against
-  // it below runs, for a death-evidence re-upload exactly the same as a
-  // medical-evidence one.
+ * and anything reviewed against it stay valid history) and every match
+ * table that can cite it is superseded too, so none of them can keep
+ * unlocking an amount once the evidence behind it has been replaced.
+ *
+ * Wave 2 fix (D33): this previously superseded only
+ * claim_cause_definition_matches and claim_ci_definition_matches --
+ * claim_disability_definition_matches was missing entirely, so a
+ * corrected re-upload of disability/TPD medical evidence left the OLD
+ * disability match active and able to keep unlocking a disability
+ * calculation indefinitely (lib/claims/evidence/disability-session-matches.ts
+ * reloads disability matches fresh every chat turn, so it WOULD have
+ * picked up an invalidation -- it just never received one). MATCH_TABLES
+ * below is now kept deliberately identical to
+ * lib/lifecycle/coordinator.ts's invalidateClaimMatchesReferencing(),
+ * which already superseded all three tables correctly for the (separate,
+ * currently unreachable-by-any-route) evidence-deletion flow -- this fix
+ * brings the re-upload/correction path up to that same standard rather
+ * than inventing a new one.
+ *
+ * Wave 2 fix (D7/D33): also now resets any OPEN (status<>'complete')
+ * claim_sessions.decision_packet/pending_question/status affected by the
+ * supersession, exactly like invalidateClaimMatchesReferencing() already
+ * does for a deletion. app/api/claims/[id]/pack/route.ts reads
+ * claim_sessions.decision_packet directly with NO recomputation, so
+ * without this reset a stale dollar amount computed against now-dead
+ * evidence would still be downloadable as a "claim pack" PDF even after
+ * the evidence behind it was corrected -- lib/claims/orchestrator.ts only
+ * ever recomputes and re-saves decision_packet on the NEXT chat turn, and
+ * a household that goes straight from "correct this document" to
+ * "download my claim pack" would otherwise see the pre-correction figure.
+ * This reset also covers evidence that has NO match-table row at all
+ * (medical-claim bill evidence -- see
+ * lib/claims/evidence/medical-bill-evidence.ts's own doc comment on why
+ * it has no per-benefit match table) by always including the superseded
+ * document's own claim_session_id, not only sessions discovered via a
+ * match-table RETURNING clause. A 'complete' session is left alone,
+ * exactly like the deletion flow: reopening an already-completed claim is
+ * a separate, explicit product decision this function does not make.
+ *
+ * Idempotent/retry-safe: the very first UPDATE only matches a row that is
+ * still account-scoped and NOT ALREADY superseded, so a retried call for
+ * the same oldId throws EvidenceAlreadySupersededError instead of
+ * silently re-running (harmlessly, but meaninglessly) the match/session
+ * invalidation a second time. */
+export async function supersedeEvidenceDocument(args: { accountId: string; oldId: string; newId: string; reason: string }): Promise<{ affectedOpenClaimSessionIds: string[] }> {
+  // ensureCriticalIllnessSchema()/ensureDisabilitySchema() (each of which
+  // also applies ensureClaimEvidenceSchema()) guarantee all three match
+  // tables exist before the UPDATEs against them below run, for a
+  // death-evidence re-upload exactly the same as a medical-evidence or
+  // disability one.
   await ensureCriticalIllnessSchema();
+  await ensureDisabilitySchema();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const supersededDoc = await client.query<{ claim_session_id: string }>(
+      `UPDATE claim_evidence_documents SET superseded_at=now(), updated_at=now()
+        WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL
+        RETURNING claim_session_id`,
+      [args.oldId, args.accountId],
+    );
+    if (!supersededDoc.rows[0]) throw new EvidenceAlreadySupersededError(args.oldId);
     await client.query(
       `UPDATE claim_evidence_documents SET supersedes_id=$1, updated_at=now() WHERE id=$2 AND account_id=$3`,
       [args.oldId, args.newId, args.accountId],
     );
-    await client.query(
-      `UPDATE claim_evidence_documents SET superseded_at=now(), updated_at=now() WHERE id=$1 AND account_id=$2`,
-      [args.oldId, args.accountId],
+
+    const affectedSessions = new Set<string>([supersededDoc.rows[0].claim_session_id]);
+    // Kept identical to lib/lifecycle/coordinator.ts's
+    // invalidateClaimMatchesReferencing() MATCH_TABLES list -- see this
+    // function's own doc comment (D33) for why.
+    const MATCH_TABLES = ["claim_cause_definition_matches", "claim_ci_definition_matches", "claim_disability_definition_matches"] as const;
+    for (const table of MATCH_TABLES) {
+      const { rows } = await client.query<{ claim_session_id: string }>(
+        `UPDATE ${table} SET superseded_at=now(), superseded_reason=$1
+          WHERE account_id=$2 AND evidence_document_id=$3 AND superseded_at IS NULL
+         RETURNING claim_session_id`,
+        [args.reason, args.accountId, args.oldId],
+      );
+      for (const row of rows) affectedSessions.add(row.claim_session_id);
+    }
+
+    // Same non-terminal-status reset invalidateClaimMatchesReferencing()
+    // performs for a deletion -- see this function's own doc comment (D7).
+    const { rows: reset } = await client.query<{ id: string }>(
+      `UPDATE claim_sessions SET status='fact_finding', pending_question=NULL, decision_packet=NULL, updated_at=now()
+        WHERE account_id=$1 AND id=ANY($2::uuid[]) AND status<>'complete'
+       RETURNING id`,
+      [args.accountId, [...affectedSessions]],
     );
-    await client.query(
-      `UPDATE claim_cause_definition_matches SET superseded_at=now(), superseded_reason=$1
-        WHERE account_id=$2 AND evidence_document_id=$3 AND superseded_at IS NULL`,
-      [args.reason, args.accountId, args.oldId],
-    );
-    await client.query(
-      `UPDATE claim_ci_definition_matches SET superseded_at=now(), superseded_reason=$1
-        WHERE account_id=$2 AND evidence_document_id=$3 AND superseded_at IS NULL`,
-      [args.reason, args.accountId, args.oldId],
-    );
+
     await client.query("COMMIT");
+    return { affectedOpenClaimSessionIds: reset.map((r) => r.id) };
   } catch (error) { await client.query("ROLLBACK"); throw error; }
   finally { client.release(); }
 }
