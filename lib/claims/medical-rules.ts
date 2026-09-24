@@ -31,6 +31,7 @@ import { computeHospitalDays, type DayCountInput } from "./day-count";
 import { calculateHospitalCash, type HospitalCashEvidenceRef } from "./calculators/hospital-cash";
 import { calculateMedicalReimbursement, type BilledExpenseItem, type CategoryLimit, type DeductionStep, type MedicalReimbursementEvidenceRef } from "./calculators/medical-reimbursement";
 import type { VerifiedMedicalBillFacts } from "./calculators/evidence";
+import { evaluateAggregateEvidenceAuthority } from "./evidence-authority";
 
 export type MedicalRuleEvidence = {
   cashRules: MedicalCashRule[];
@@ -98,6 +99,23 @@ function assessCashBenefit(
     };
   }
   const { admissionISO, dischargeISO, verifiedSource } = resolveAdmissionDischarge(facts, verified);
+  // Checkpoint (Wave 2, D4/D8/D9): only the VERIFIED branch is gated here
+  // -- a chat-reported (unverified, already lower-confidence
+  // "potentially_applicable") day count involves no AI-derived evidence at
+  // all, so there is no provenance to check. Once verified matched-document
+  // data is what this calculation actually rests on, its provenance must
+  // authorize it synchronously, right here, before any day-count or
+  // calculator arithmetic runs -- see lib/claims/evidence-authority.ts.
+  if (verifiedSource) {
+    const authority = evaluateAggregateEvidenceAuthority(verified?.provenance);
+    if (!authority.authorized) {
+      return {
+        ...base, status: "needs_document", amountText: null,
+        reason: `${benefitTitle(rule.benefitCode)} may apply. DearPolicy has not included an amount: ${authority.message}`,
+        conditions: [authority.message],
+      };
+    }
+  }
   const dayCountInput: DayCountInput = {
     admissionISO, dischargeISO, rule: provisions.dayCountRule, edgeInclusion: provisions.edgeInclusion,
     icuPeriods: [], icuMode: null, waitingDays: provisions.waitingDays,
@@ -164,6 +182,19 @@ function assessReimbursementBenefit(
       ...base, status: "needs_document", amountText: null,
       reason: `${benefitTitle(rule.benefitCode)} may apply, but DearPolicy has not yet reviewed an itemised bill for this claim.`,
       conditions: ["Upload the itemised hospital bill so DearPolicy can check it against this benefit's evidenced eligible expense categories."],
+    };
+  }
+  // Checkpoint (Wave 2, D4/D8/D9): a reimbursement benefit ALWAYS rests on
+  // verified, AI-extracted bill evidence -- unlike hospital-cash above,
+  // there is no unverified chat-reported fallback path for it, so this
+  // gate applies unconditionally once `verified` has usable line items.
+  // See lib/claims/evidence-authority.ts.
+  const reimbursementAuthority = evaluateAggregateEvidenceAuthority(verified.provenance);
+  if (!reimbursementAuthority.authorized) {
+    return {
+      ...base, status: "needs_document", amountText: null,
+      reason: `${benefitTitle(rule.benefitCode)} may apply. DearPolicy has not included an amount: ${reimbursementAuthority.message}`,
+      conditions: [reimbursementAuthority.message],
     };
   }
   const claimCurrency = /^[A-Z]{3}$/.test(coverage.currency ?? "") ? (coverage.currency as string) : (verified.lineItems[0]?.currency ?? null);
