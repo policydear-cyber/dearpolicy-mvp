@@ -160,8 +160,8 @@ async function main() {
     );
     assert.deepEqual(
       own.rows.map((r) => r.bucket_id),
-      ["claim-evidence-files", "policy-files"],
-      "household A's owner must see both of household A's own objects, in both app buckets, and nothing from the unrelated bucket",
+      ["policy-files"],
+      "household A's owner must see household A's own policy object, never a claim-evidence object (served only through the authenticated file route), and nothing from the unrelated bucket",
     );
 
     const other = await db.query("SELECT id FROM storage.objects WHERE name LIKE $1 || '/%'", [householdB]);
@@ -202,6 +202,28 @@ async function main() {
       "inserting into a bucket outside the two allowed app buckets must be rejected even under the caller's own household path",
     );
   });
+
+  // --- claim-evidence-files: no direct household access at all, even to
+  // the household's own evidence objects -- read, sign, overwrite, delete
+  // or upload. Evidence downloads go only through the file route. ---------
+  await asUser(db, { userId: ownerA, role: "authenticated" }, async () => {
+    const evidence = await db.query("SELECT id FROM storage.objects WHERE bucket_id='claim-evidence-files'");
+    assert.equal(evidence.rows.length, 0, "household A's owner must not see its own claim-evidence object directly");
+    const updated = await db.query("UPDATE storage.objects SET name=name WHERE bucket_id='claim-evidence-files'");
+    assert.equal(updated.affectedRows ?? 0, 0, "household A's owner must not be able to overwrite its own claim-evidence object");
+    const deleted = await db.query("DELETE FROM storage.objects WHERE bucket_id='claim-evidence-files'");
+    assert.equal(deleted.affectedRows ?? 0, 0, "household A's owner must not be able to delete its own claim-evidence object directly");
+  });
+  await asUser(db, { userId: ownerA, role: "authenticated" }, async () => {
+    await expectRejected(
+      db,
+      () => db.query("INSERT INTO storage.objects(bucket_id, name) VALUES ($1, $2)", ["claim-evidence-files", `${householdA}/fam1/claim1/doc9/evidence.pdf`]),
+      /row-level security/i,
+      "uploading a claim-evidence object directly, even under the caller's own household path, must be rejected",
+    );
+  });
+  const evidenceObjects = await db.query("SELECT id FROM storage.objects WHERE bucket_id='claim-evidence-files'");
+  assert.equal(evidenceObjects.rows.length, 1, "control: the service role still sees the claim-evidence object");
 
   // --- Delete: filtered to zero rows for a foreign household's object ------
   await asUser(db, { userId: ownerA, role: "authenticated" }, async () => {

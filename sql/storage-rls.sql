@@ -92,22 +92,32 @@ DROP POLICY IF EXISTS household_storage_objects_insert ON storage.objects;
 DROP POLICY IF EXISTS household_storage_objects_update ON storage.objects;
 DROP POLICY IF EXISTS household_storage_objects_delete ON storage.objects;
 
+-- Household sessions reach ONLY the policy-files bucket directly.
+-- claim-evidence-files is deliberately absent from every object policy (so,
+-- with RLS on, a browser session can neither list, read, sign, overwrite nor
+-- delete an evidence object): evidence is served only through
+-- app/api/claims/evidence/[id]/file/route.ts, which re-checks ownership,
+-- active lifecycle, supersession and the malware-scan result on every
+-- request and mints a 300-second URL with the service role. A direct
+-- household grant here would bypass all of that -- e.g. signing an infected
+-- or deleted file for any lifetime, or replacing scanned bytes behind a
+-- recorded checksum.
 CREATE POLICY household_storage_objects_select ON storage.objects
   FOR SELECT TO authenticated
-  USING (bucket_id IN ('policy-files', 'claim-evidence-files') AND is_household_storage_object(name));
+  USING (bucket_id = 'policy-files' AND is_household_storage_object(name));
 
 CREATE POLICY household_storage_objects_insert ON storage.objects
   FOR INSERT TO authenticated
-  WITH CHECK (bucket_id IN ('policy-files', 'claim-evidence-files') AND is_household_storage_object(name));
+  WITH CHECK (bucket_id = 'policy-files' AND is_household_storage_object(name));
 
 CREATE POLICY household_storage_objects_update ON storage.objects
   FOR UPDATE TO authenticated
-  USING (bucket_id IN ('policy-files', 'claim-evidence-files') AND is_household_storage_object(name))
-  WITH CHECK (bucket_id IN ('policy-files', 'claim-evidence-files') AND is_household_storage_object(name));
+  USING (bucket_id = 'policy-files' AND is_household_storage_object(name))
+  WITH CHECK (bucket_id = 'policy-files' AND is_household_storage_object(name));
 
 CREATE POLICY household_storage_objects_delete ON storage.objects
   FOR DELETE TO authenticated
-  USING (bucket_id IN ('policy-files', 'claim-evidence-files') AND is_household_storage_object(name));
+  USING (bucket_id = 'policy-files' AND is_household_storage_object(name));
 
 -- Letting `authenticated` see the bucket ROW (id/name/public flag) for just
 -- these two buckets is harmless and lets a future direct-upload client

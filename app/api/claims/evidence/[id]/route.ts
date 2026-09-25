@@ -7,6 +7,7 @@ import { getClaimSession } from "@/lib/claims/session";
 import { getScopedEvidenceDocument, getLatestExtraction, correctExtraction } from "@/lib/claims/evidence/store";
 import { listClaimEvidenceAudit, appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import type { ClaimEvidenceExtractedFields } from "@/lib/claims/evidence/types";
+import { householdEvidenceDocument } from "@/lib/claims/evidence/household-view";
 import {
   DeletionValidationError,
   finishClaimEvidenceDeletion,
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       listClaimEvidenceAudit(scoped.accountId, scoped.claimSessionId),
     ]);
     return NextResponse.json({
-      document: scoped.document,
+      document: householdEvidenceDocument(scoped.document),
       extraction,
       audit: audit.filter((entry) => entry.evidence_document_id === scoped.document.id),
     });

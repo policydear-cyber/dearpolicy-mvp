@@ -5,6 +5,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 import { getClaimSession } from "@/lib/claims/session";
 import { getScopedEvidenceDocument } from "@/lib/claims/evidence/store";
 import { readClaimEvidenceFile, createClaimEvidenceSignedUrl } from "@/lib/storage";
+import { isEvidenceDownloadable, PRIVATE_NO_STORE } from "@/lib/claims/evidence/household-view";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -40,6 +41,20 @@ export const ROUTE_AUTH = "household-member" as const;
  * TTL Supabase's own createSignedUrl() meaningfully supports for a
  * multi-page PDF fetch) and never mints a NEW one for superseded/deleted
  * evidence -- it cannot retroactively invalidate one already issued. */
+/** Every response from this route -- redirect, bytes or error -- is
+ * private and never stored by a browser or shared cache. */
+function noStore<T extends Response>(response: T): T {
+  response.headers.set("Cache-Control", PRIVATE_NO_STORE);
+  response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
+}
+const json = (body: Record<string, unknown>, status: number) => noStore(NextResponse.json(body, { status }));
+
+/** Ownership, active lifecycle and not-superseded are enforced by
+ * getScopedEvidenceDocument(); a NEW link or byte stream is additionally
+ * issued only for a file the malware scan has cleared and that is not
+ * uploaded/quarantined/rejected (isEvidenceDownloadable()). All of it is
+ * re-checked on every request. */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -47,27 +62,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const url = new URL(request.url);
     const familyMemberId = url.searchParams.get("familyMemberId") ?? "";
     const claimSessionId = url.searchParams.get("claimSessionId") ?? "";
-    if (!familyMemberId || !claimSessionId || !isUuid(id)) return NextResponse.json({ error: "familyMemberId and claimSessionId are required." }, { status: 400 });
+    if (!familyMemberId || !claimSessionId || !isUuid(id)) return json({ error: "familyMemberId and claimSessionId are required." }, 400);
 
     const session = await getClaimSession(ctx.householdId, familyMemberId, claimSessionId);
-    if (!session) return NextResponse.json({ error: "Claim session not found for this family member." }, { status: 404 });
+    if (!session) return json({ error: "Claim session not found for this family member." }, 404);
     const document = await getScopedEvidenceDocument({ accountId: ctx.householdId, familyMemberId, claimSessionId, id });
-    if (!document) return NextResponse.json({ error: "Claim evidence document not found." }, { status: 404 });
+    if (!document) return json({ error: "Claim evidence document not found." }, 404);
+    if (!isEvidenceDownloadable(document)) {
+      return json({ error: "This document can't be opened until its security check has cleared it.", reasonCode: "EVIDENCE_NOT_DOWNLOADABLE" }, 409);
+    }
 
     const signedUrl = await createClaimEvidenceSignedUrl(document.storage_key);
-    if (signedUrl) return NextResponse.redirect(signedUrl);
+    if (signedUrl) return noStore(NextResponse.redirect(signedUrl));
 
     const bytes = await readClaimEvidenceFile(document.storage_key);
-    return new NextResponse(new Uint8Array(bytes), {
+    return noStore(new NextResponse(new Uint8Array(bytes), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${document.original_filename.replace(/["\r\n]/g, "_")}"`,
-        "Cache-Control": "private, no-store",
       },
-    });
+    }));
   } catch (error) {
     const authResponse = routeErrorResponse(error);
-    if (authResponse.status === 500) return NextResponse.json({ error: "Could not read the claim-evidence file." }, { status: 500 });
-    return authResponse;
+    if (authResponse.status === 500) return json({ error: "Could not read the claim-evidence file." }, 500);
+    return noStore(authResponse);
   }
 }

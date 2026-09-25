@@ -5,6 +5,7 @@ import { getClaimSession } from "@/lib/claims/session";
 import { listEvidenceDocuments, getLatestExtraction } from "@/lib/claims/evidence/store";
 import { documentTypeGroup } from "@/lib/claims/evidence/document-catalogue";
 import { loadHouseholdReviewStatuses } from "@/lib/claims/reviewers/status";
+import { householdEvidenceDocument } from "@/lib/claims/evidence/household-view";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     const definitionDocumentIds = documents.filter((doc) => documentTypeGroup(doc.document_type) !== "bills_and_settlements").map((doc) => doc.id);
     const reviewStatuses = await loadHouseholdReviewStatuses(ctx.householdId, claimSessionId, definitionDocumentIds);
     const withExtractions = await Promise.all(documents.map(async (doc) => ({
-      ...doc,
+      ...householdEvidenceDocument(doc),
       extraction: await getLatestExtraction(ctx.householdId, doc.id),
       reviewStatus: reviewStatuses.get(doc.id) ?? null,
     })));

@@ -73,6 +73,9 @@ jobs:
       - name: Evidence-table browser-write restrictions (household/reviewer sessions vs RLS and grants; real routes; PGlite)
         run: npm run claims:evidence-browser-write-test
 
+      - name: Household evidence download authorization (signed-URL gate, cache headers, no storage keys; PGlite)
+        run: npm run claims:evidence-download-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 
