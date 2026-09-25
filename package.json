@@ -22,6 +22,7 @@
     "claims:evidence-test": "node --import tsx scripts/claim-evidence-regressions.ts",
     "claims:evidence-provenance-test": "node --import tsx scripts/evidence-provenance-regressions.ts",
     "claims:evidence-document-type-test": "node --import tsx scripts/claim-evidence-document-type-regressions.ts",
+    "claims:evidence-picker-test": "node --import tsx scripts/claim-evidence-document-picker-regressions.ts",
     "claims:composition-test": "node --import tsx scripts/claim-composition-regressions.ts",
     "claims:ci-test": "node --import tsx scripts/claim-ci-regressions.ts",
     "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts",

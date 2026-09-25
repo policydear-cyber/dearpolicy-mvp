@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useCallback, useState } from "react";
 import { useParams } from "next/navigation";
+import {
+  DOCUMENT_TYPE_GROUPS, DOCUMENT_TYPE_OPTIONS, buildEvidenceUploadForm, defaultDocumentTypeFor, documentTypeGroup, documentTypeLabel, evidenceStatusDisplay,
+} from "@/lib/claims/evidence/document-catalogue";
 
 type Claim = { id: string; family_member_id: string; status: string; event_summary: string | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
 type ExtractedFields = {
@@ -10,16 +13,9 @@ type ExtractedFields = {
   confidence: Record<string, number>;
 };
 type Extraction = { id: string; extracted_fields: ExtractedFields; reviewed_fields: Partial<ExtractedFields> | null; identity_conflicts: { code: string; message: string }[] };
-type EvidenceDoc = { id: string; document_type: string; original_filename: string; status: string; scan_status: string; identity_status: string; processing_error: string | null; created_at: string; extraction: Extraction | null };
+type EvidenceDoc = { id: string; document_type: string; original_filename: string; status: string; scan_status: string; identity_status: string; processing_error_code: string | null; created_at: string; extraction: Extraction | null };
 type CoverageOption = { id: string; policy_id: string; insurer: string | null; product_name: string | null; policy_number: string | null };
 
-const DOC_TYPES = [
-  { value: "death_certificate", label: "Death certificate" },
-  { value: "police_report", label: "Police report" },
-  { value: "coroners_report", label: "Coroner's report" },
-  { value: "medical_examiner_report", label: "Medical examiner's report" },
-  { value: "other_official_document", label: "Other official document" },
-];
 const NON_TERMINAL = new Set(["uploaded", "quarantined", "processing", "extracted"]);
 
 /** Reviewer corrections win over the model's raw proposal -- mirrors
@@ -38,13 +34,17 @@ export default function ClaimEvidencePage() {
   const [documents, setDocuments] = useState<EvidenceDoc[]>([]);
   const [coverages, setCoverages] = useState<CoverageOption[]>([]);
   const [error, setError] = useState("");
-  const [docType, setDocType] = useState("death_certificate");
+  // Starts empty: only a death claim gets a default (see
+  // defaultDocumentTypeFor); anything else must be chosen explicitly.
+  const [docType, setDocType] = useState("");
+  const [uploadError, setUploadError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     const claimRes = await fetch(`/api/claims/${claimSessionId}`).then((r) => r.json());
     if (claimRes.error) { setError(claimRes.error); return; }
     setClaim(claimRes.claim);
+    setDocType((current) => current || defaultDocumentTypeFor(claimRes.claim.facts?.eventType));
     const familyMemberId = claimRes.claim.family_member_id;
     const [docsRes, coverageRes] = await Promise.all([
       fetch(`/api/claims/evidence?familyMemberId=${familyMemberId}&claimSessionId=${claimSessionId}`).then((r) => r.json()),
@@ -66,16 +66,14 @@ export default function ClaimEvidencePage() {
     const form = e.currentTarget;
     const fileInput = form.elements.namedItem("file") as HTMLInputElement;
     const file = fileInput.files?.[0];
-    if (!file || !claim) return;
+    if (!claim) return;
+    const built = buildEvidenceUploadForm({ file, fileName: file?.name, familyMemberId: claim.family_member_id, claimSessionId, documentType: docType });
+    if (!built.ok) { setUploadError(built.message); return; }
+    setUploadError("");
     setBusy(true);
-    const body = new FormData();
-    body.set("file", file);
-    body.set("familyMemberId", claim.family_member_id);
-    body.set("claimSessionId", claimSessionId);
-    body.set("documentType", docType);
-    const res = await fetch("/api/claims/evidence/upload", { method: "POST", body }).then((r) => r.json());
+    const res = await fetch("/api/claims/evidence/upload", { method: "POST", body: built.form }).then((r) => r.json());
     setBusy(false);
-    if (res.error) { setError(res.error); return; }
+    if (res.error) { setUploadError(res.error); return; }
     fileInput.value = "";
     await load();
   }
@@ -101,18 +99,31 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload official cause-of-death documents, review what DearPolicy read from them, and confirm whether each matches a specific policy&apos;s own accidental-death definition. Nothing here is used to calculate an amount until a reviewer confirms it below.</p></div></header>
+      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload the documents for this claim -- death records, medical evidence, or bills and receipts -- and review what DearPolicy read from them. Nothing here is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div></header>
 
       <section className="section">
         <h2>Upload a document</h2>
         <form onSubmit={handleUpload} className="field" style={{ display: "grid", gap: 10, maxWidth: 480 }}>
           <label>Document type
-            <select value={docType} onChange={(e) => setDocType(e.target.value)}>
-              {DOC_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            <select value={docType} onChange={(e) => setDocType(e.target.value)} required>
+              <option value="" disabled>Choose what this document is…</option>
+              {DOCUMENT_TYPE_GROUPS.map((group) => (
+                <optgroup key={group.id} label={group.label}>
+                  {group.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </optgroup>
+              ))}
             </select>
           </label>
+          {(() => {
+            const option = DOCUMENT_TYPE_OPTIONS.find((o) => o.value === docType);
+            const group = DOCUMENT_TYPE_GROUPS.find((g) => g.id === option?.group);
+            return option && group
+              ? <p className="muted"><b>{group.label}:</b> {group.guidance} {option.description}</p>
+              : <p className="muted">Pick the closest match. Death records, medical evidence and bills are each read differently.</p>;
+          })()}
           <label>PDF file<input type="file" name="file" accept="application/pdf" required /></label>
-          <button className="button primary" type="submit" disabled={busy}>{busy ? "Uploading…" : "Upload"}</button>
+          {uploadError && <div className="alert error" role="alert">{uploadError}</div>}
+          <button className="button primary" type="submit" disabled={busy || !docType}>{busy ? "Uploading…" : "Upload"}</button>
         </form>
       </section>
 
@@ -121,19 +132,17 @@ export default function ClaimEvidencePage() {
         {documents.length === 0 ? <div className="empty-card">No claim-evidence documents uploaded yet.</div> : documents.map((doc) => (
           <div key={doc.id} className="action-card" style={{ gridTemplateColumns: "1fr", marginBottom: 12 }}>
             <div>
-              <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{doc.status.replace(/_/g, " ")}</span>{" "}
-              <span className="status">{doc.document_type.replace(/_/g, " ")}</span>{" "}
-              <span className="status">identity: {doc.identity_status.replace(/_/g, " ")}</span>
-              {doc.processing_error && <p><em>{doc.processing_error}</em></p>}
-              {doc.status === "quarantined" && doc.scan_status !== "clean" && (
-                <p><em>
-                  {doc.scan_status === "scan_unavailable"
-                    ? "This document is on hold: malware scanning is not configured in this environment, so it cannot be processed until it is."
-                    : "This document is waiting for a malware scan to complete before it can be processed."}
-                </em></p>
-              )}
+              {(() => {
+                const display = evidenceStatusDisplay(doc);
+                return (<>
+                  <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
+                  <span className="status">{documentTypeLabel(doc.document_type)}</span>{" "}
+                  <span className="status">identity: {doc.identity_status.replace(/_/g, " ")}</span>
+                  <p><em>{display.detail}</em></p>
+                </>);
+              })()}
 
-              {doc.extraction && (
+              {doc.extraction && documentTypeGroup(doc.document_type) === "cause_of_death" && (
                 <div style={{ marginTop: 8 }}>
                   <p>Deceased name: <b>{String(reviewedValue(doc, "deceasedName") ?? "—")}</b></p>
                   <p>Date of death: <b>{String(reviewedValue(doc, "dateOfDeath") ?? "—")}</b></p>
@@ -146,7 +155,7 @@ export default function ClaimEvidencePage() {
                 </div>
               )}
 
-              {doc.status === "needs_review" && doc.identity_status === "confirmed" && coverages.length > 0 && (
+              {doc.status === "needs_review" && doc.identity_status === "confirmed" && coverages.length > 0 && documentTypeGroup(doc.document_type) === "cause_of_death" && (
                 <div style={{ marginTop: 8 }}>
                   <p>Confirm against a specific policy&apos;s accidental-death definition:</p>
                   {coverages.map((c) => (
