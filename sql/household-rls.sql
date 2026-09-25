@@ -275,10 +275,11 @@ BEGIN
   END IF;
 END $$;
 
--- claim_evidence_audit_log is an append-only audit trail: members may read
--- and insert (the app writes an entry on their behalf), but never update or
--- delete a past entry -- only a service_role job (which bypasses RLS
--- entirely) may do that, e.g. as part of an explicit retention policy.
+-- claim_evidence_audit_log is an append-only audit trail with exactly one
+-- writer, the trusted server (lib/claims/evidence/audit.ts's
+-- appendClaimEvidenceAudit, on the service connection). Members may read
+-- their household's entries but never write one: a browser-inserted row
+-- could otherwise forge scan, processing, correction or review history.
 DO $$
 BEGIN
   IF to_regclass('public.claim_evidence_audit_log') IS NOT NULL THEN
@@ -286,8 +287,64 @@ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS household_member_select ON public.claim_evidence_audit_log';
     EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.claim_evidence_audit_log';
     EXECUTE $f$CREATE POLICY household_member_select ON public.claim_evidence_audit_log FOR SELECT TO authenticated USING (is_household_member(account_id))$f$;
-    EXECUTE $f$CREATE POLICY household_member_insert ON public.claim_evidence_audit_log FOR INSERT TO authenticated WITH CHECK (is_household_member(account_id))$f$;
-    EXECUTE 'GRANT SELECT, INSERT ON public.claim_evidence_audit_log TO authenticated';
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.claim_evidence_audit_log FROM authenticated, anon';
+    EXECUTE 'GRANT SELECT ON public.claim_evidence_audit_log TO authenticated';
+  END IF;
+END $$;
+
+-- Claim-evidence documents: every column that carries scan, quarantine,
+-- processing, extraction, checksum/storage identity, provenance, review,
+-- supersession, failure or ownership state is written only by the trusted
+-- server (upload route, scan callback, evidence pipeline, reviewer
+-- boundary -- all on the service connection). A household session may read
+-- its own rows and may do exactly one thing to them: move an ACTIVE
+-- document to pending_deletion inside the lifecycle deletion route
+-- (lib/lifecycle/coordinator.ts's requestClaimEvidenceDeletion, which runs
+-- in the caller's own RLS-scoped transaction). It cannot insert or delete a
+-- row, revive a deleted one, skip lifecycle states or touch any other
+-- column. The trusted server connection is not affected.
+CREATE OR REPLACE FUNCTION public.guard_household_evidence_update() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.lifecycle_state IS DISTINCT FROM 'active'
+     OR NEW.lifecycle_state IS DISTINCT FROM 'pending_deletion'
+     OR NEW.lifecycle_version IS DISTINCT FROM OLD.lifecycle_version + 1 THEN
+    RAISE EXCEPTION 'a household session may only move an active evidence document to pending deletion'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.claim_evidence_documents') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.claim_evidence_documents';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_delete ON public.claim_evidence_documents';
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.claim_evidence_documents FROM authenticated, anon';
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'claim_evidence_documents' AND column_name = 'lifecycle_state') THEN
+      EXECUTE 'GRANT UPDATE (lifecycle_state, lifecycle_version, updated_at) ON public.claim_evidence_documents TO authenticated';
+      EXECUTE 'DROP TRIGGER IF EXISTS guard_household_evidence_update ON public.claim_evidence_documents';
+      EXECUTE 'CREATE TRIGGER guard_household_evidence_update BEFORE UPDATE ON public.claim_evidence_documents FOR EACH ROW EXECUTE FUNCTION public.guard_household_evidence_update()';
+    END IF;
+  END IF;
+  -- Extractions: no browser write at all (extends the block above to the
+  -- anon role and TRUNCATE).
+  IF to_regclass('public.claim_evidence_extractions') IS NOT NULL THEN
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.claim_evidence_extractions FROM authenticated, anon';
+  END IF;
+  -- Scan-callback replay ledger: account-agnostic, written only by the
+  -- verified scan callback (lib/scanning/callback-auth.ts). A browser
+  -- session must never read it or pre-insert an event id, which would make
+  -- the genuine callback look like a replay and leave evidence unscanned.
+  IF to_regclass('public.scan_provider_events') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.scan_provider_events ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'DROP POLICY IF EXISTS scan_provider_events_no_client_access ON public.scan_provider_events';
+    EXECUTE 'CREATE POLICY scan_provider_events_no_client_access ON public.scan_provider_events FOR ALL TO PUBLIC USING (false) WITH CHECK (false)';
+    EXECUTE 'REVOKE ALL ON public.scan_provider_events FROM authenticated, anon';
   END IF;
 END $$;
 

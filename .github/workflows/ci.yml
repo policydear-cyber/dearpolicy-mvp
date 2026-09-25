@@ -70,6 +70,9 @@ jobs:
       - name: Legacy reviewer-decision fail-closed regression suite (PGlite, no live DB needed)
         run: npm run claims:legacy-decision-test
 
+      - name: Evidence-table browser-write restrictions (household/reviewer sessions vs RLS and grants; real routes; PGlite)
+        run: npm run claims:evidence-browser-write-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 
