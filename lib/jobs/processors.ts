@@ -26,6 +26,7 @@ import { MODEL_EXECUTION_STALENESS_AUDIT_JOB_TYPE, processModelExecutionStalenes
 import { pool } from "@/lib/db/client";
 import { heartbeatJob, type BackgroundJobRow } from "./queue";
 import type { JobProcessor, WorkerJobTypeConfig } from "./worker-runtime";
+import { CHAT_ANALYSIS_JOB_TYPE, processChatAnalysisJob } from "@/lib/chat/jobs";
 
 // Checkpoint 14i: re-exported so existing importers of
 // lib/jobs/processors.ts (scripts/worker.ts, the e2e stages, this
@@ -106,4 +107,5 @@ export const PRODUCTION_JOB_TYPES: WorkerJobTypeConfig[] = [
   { jobType: CLAIM_EVIDENCE_PROCESSING_JOB_TYPE, process: processClaimEvidenceProcessingJob },
   { jobType: HOUSEHOLD_EXPORT_JOB_TYPE, process: processHouseholdExportJob },
   { jobType: MODEL_EXECUTION_STALENESS_AUDIT_JOB_TYPE, process: processModelExecutionStalenessAuditJob },
+  { jobType: CHAT_ANALYSIS_JOB_TYPE, process: processChatAnalysisJob },
 ];

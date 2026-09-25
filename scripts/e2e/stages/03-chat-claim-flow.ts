@@ -62,6 +62,8 @@
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { runStage, asUser, requestFor, waitFor, readHandoff, requireHandoff, writeHandoff } from "@/scripts/e2e/shared";
+import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
+import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 
 function mockAnthropicFetch() {
   return (async (_url: unknown, init?: { body?: unknown }) => {
@@ -244,7 +246,11 @@ runStage("03-chat-claim-flow", async ({ pool, step }) => {
       assert.ok(jobId);
     });
 
-    await step("the real chat job dispatch machinery (runAfterResponse()'s fire-and-forget chain) really runs the job to a real terminal state, visible through the real GET /api/chat/jobs/[id] route -- genuinely new coverage of app/api/chat/** the superseded single-process suite never exercised", async () => {
+    await step("a separately-invoked durable worker claims the chat job and it reaches a real terminal state visible through GET /api/chat/jobs/[id]", async () => {
+      const config = PRODUCTION_JOB_TYPES.find((candidate) => candidate.jobType === "chat_analysis");
+      if (!config) throw new Error('no processor configured for job type "chat_analysis"');
+      const outcome = await claimAndProcessOne({ jobType: "chat_analysis", workerId: `e2e-chat-${process.pid}`, process: config.process });
+      assert.equal(outcome, "succeeded");
       const job = await waitFor(async () => {
         const res = await getChatJob(requestFor(`http://localhost/api/chat/jobs/${jobId}`, { household: householdId }), { params: Promise.resolve({ id: jobId }) } as any);
         if (res.status !== 200) return undefined;
@@ -252,6 +258,29 @@ runStage("03-chat-claim-flow", async ({ pool, step }) => {
         return body.job?.status === "queued" || body.job?.status === "running" ? undefined : body.job;
       }, 60000); // 60s: after the mockAnthropicFetch() 400-vs-500 fix above, a real orchestrated run measured 33s for this step (down from the 150-170s+ the old 500-status mock cost by triggering full provider retry/backoff) -- 60s keeps a real margin over that measurement for this sandbox's own variable shared load without going back to the multi-minute timeouts that were fixing the wrong problem
       assert.ok(["complete", "failed", "cancelled"].includes(job.status), `chat job reached an unexpected terminal status: ${job.status}`);
+    });
+
+    await step("a retry after chat commit but before generic-job acknowledgement cannot insert a duplicate reply", async () => {
+      const before = await pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM chat_messages WHERE conversation_id=(SELECT conversation_id FROM chat_analysis_jobs WHERE id=$1)`,
+        [jobId],
+      );
+      assert.equal(before.rows[0].count, "2", "the first worker run must save exactly one user/assistant pair");
+      // Recreate the observable durable-queue state left by a worker crash
+      // immediately after saveTurn() committed but before completeJob().
+      await pool.query(
+        `UPDATE background_jobs SET status='failed_retryable',lease_owner=NULL,lease_expires_at=NULL,available_at=now() WHERE job_type='chat_analysis' AND idempotency_key=$1`,
+        [jobId],
+      );
+      const config = PRODUCTION_JOB_TYPES.find((candidate) => candidate.jobType === "chat_analysis");
+      if (!config) throw new Error('no processor configured for job type "chat_analysis"');
+      const outcome = await claimAndProcessOne({ jobType: "chat_analysis", workerId: `e2e-chat-retry-${process.pid}`, process: config.process });
+      assert.equal(outcome, "succeeded");
+      const after = await pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM chat_messages WHERE conversation_id=(SELECT conversation_id FROM chat_analysis_jobs WHERE id=$1)`,
+        [jobId],
+      );
+      assert.equal(after.rows[0].count, "2", "the retry must observe atomic chat completion and perform no second insert");
     });
 
     await step("POST /api/chat (synchronous) with a real reported illness event reaches the REAL lib/claims/record.ts recordClaim() -> lib/claims/session.ts createClaimSession() through the real route (Checkpoint 16: closes the last documented E2E substitution -- no direct store call here any more)", async () => {

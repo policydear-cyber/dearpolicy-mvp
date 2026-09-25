@@ -44,12 +44,13 @@ runStage("01-auth-household-setup", async ({ step }) => {
     assert.equal(body.activeHouseholdId, householdId);
   });
 
-  await step("PATCH /api/household renames the household -- verified against the real persisted accounts row, since neither PATCH's own {ok:true} response nor GET /api/household's {memberships,activeHouseholdId} body actually returns the household's display name (a real, previously-undetected gap in scripts/full-household-e2e-regressions.ts's own step 4 assertion -- body.activeHouseholdName -- discovered while building this stage from it; see this checkpoint's PR comment)", async () => {
+  await step("PATCH /api/household renames the household and GET /api/household returns the updated active household name", async () => {
     const res = await patchHousehold(requestFor("http://localhost/api/household", { household: householdId, method: "PATCH", body: { name: HOUSEHOLD_NAME } }));
     assert.equal(res.status, 200);
     const check = await getHousehold(requestFor("http://localhost/api/household", { household: householdId }));
     const body = await check.json();
     assert.equal(body.activeHouseholdId, householdId);
+    assert.equal(body.activeHouseholdName, HOUSEHOLD_NAME);
     const row = await pool.query<{ name: string }>(`SELECT name FROM accounts WHERE id=$1`, [householdId]);
     assert.equal(row.rows[0]?.name, HOUSEHOLD_NAME, "the rename must really be persisted, not just accepted");
   });
