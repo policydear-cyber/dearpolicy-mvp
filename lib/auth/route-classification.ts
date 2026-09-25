@@ -18,7 +18,12 @@
  *    runner or webhook, authorized by its own mechanism (a signed
  *    webhook secret, an internal-only network boundary), never a user
  *    session or household membership check.
+ *  - "internal-reviewer": signed-in AND an active DearPolicy claim reviewer
+ *    (a staff role, never a household role), acting only inside an active,
+ *    unexpired assignment -- always through lib/claims/reviewers/boundary.ts
+ *    (requireActiveClaimReviewer() / requireAssignedClaimReviewer()), never
+ *    through household membership.
  */
-export const ROUTE_AUTH_VALUES = ["public", "authenticated", "household-member", "household-owner", "internal"] as const;
+export const ROUTE_AUTH_VALUES = ["public", "authenticated", "household-member", "household-owner", "internal", "internal-reviewer"] as const;
 
 export type RouteAuthValue = (typeof ROUTE_AUTH_VALUES)[number];

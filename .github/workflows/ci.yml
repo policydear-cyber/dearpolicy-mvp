@@ -55,6 +55,9 @@ jobs:
       - name: Claim-evidence review workflow suite (bill fact review vs policy-definition decisions; real routes, PGlite)
         run: npm run claims:evidence-review-workflow-test
 
+      - name: Claim-reviewer authorization suite (internal reviewer role, assignments, match routes; real routes, PGlite)
+        run: npm run claims:reviewer-authorization-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

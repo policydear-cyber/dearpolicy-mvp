@@ -390,6 +390,9 @@ async function checkRouteInventoryCapabilities() {
   if (result.publicRouteViolations.length > 0) {
     classificationProblems.push(result.publicRouteViolations.map((v) => `${v.file} (${v.reason})`).join("; "));
   }
+  if (result.reviewerRouteViolations.length > 0) {
+    classificationProblems.push(result.reviewerRouteViolations.map((v) => `${v.file} (${v.reason})`).join("; "));
+  }
   if (classificationProblems.length > 0) {
     report("route_classification", "blocked_by_code", classificationProblems.join("; "));
   } else {

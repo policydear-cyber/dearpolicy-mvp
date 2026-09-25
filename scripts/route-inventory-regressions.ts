@@ -43,6 +43,16 @@
  *     household), and nothing else -- this check locks that specific,
  *     narrow exception in by name rather than allowing "public route
  *     touches household data" in general.
+ *
+ *  3. Internal-reviewer routes. Every "internal-reviewer" route must call
+ *     the central reviewer boundary (requireAssignedClaimReviewer() or
+ *     requireActiveClaimReviewer() from lib/claims/reviewers/boundary.ts)
+ *     and must never call requireHouseholdContext() -- reviewer access
+ *     comes from an assignment, never household membership. Conversely,
+ *     every route under app/api/reviewer/ and every route that records a
+ *     policy-definition decision (confirm*Match / recordReviewerDefinition
+ *     Decision) must be classified "internal-reviewer", so no household
+ *     route can quietly regain the ability to record one.
  */
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -73,6 +83,7 @@ export interface RouteInventoryResult {
   byClass: Record<string, number>;
   missingHouseholdContext: string[];
   publicRouteViolations: { file: string; reason: string }[];
+  reviewerRouteViolations: { file: string; reason: string }[];
 }
 
 /** The classification scan itself, with no assertions and no console
@@ -90,6 +101,7 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
   const byClass: Record<string, number> = {};
   const missingHouseholdContext: string[] = [];
   const publicRouteViolations: { file: string; reason: string }[] = [];
+  const reviewerRouteViolations: { file: string; reason: string }[] = [];
 
   for (const file of routeFiles) {
     const text = await readFile(file, "utf8");
@@ -107,6 +119,16 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
     byClass[value] = (byClass[value] ?? 0) + 1;
 
     const callsRequireHouseholdContext = /requireHouseholdContext\s*\(/.test(text);
+    const callsReviewerBoundary = /\b(requireAssignedClaimReviewer|requireActiveClaimReviewer)\s*\(/.test(text);
+    const recordsDefinitionDecision = /\b(confirmCauseDefinitionMatch|confirmCIDefinitionMatch|confirmDisabilityDefinitionMatch|confirmTravelDeathMatch|recordReviewerDefinitionDecision)\s*\(/.test(text);
+
+    if (value === "internal-reviewer") {
+      if (!callsReviewerBoundary) reviewerRouteViolations.push({ file: relative, reason: "is internal-reviewer but never calls requireAssignedClaimReviewer()/requireActiveClaimReviewer()" });
+      if (callsRequireHouseholdContext) reviewerRouteViolations.push({ file: relative, reason: "is internal-reviewer but calls requireHouseholdContext() -- reviewer access must never come from household membership" });
+    } else {
+      if (/^app\/api\/reviewer\//.test(relative.split(path.sep).join("/"))) reviewerRouteViolations.push({ file: relative, reason: `is under app/api/reviewer/ but classified "${value}" instead of "internal-reviewer"` });
+      if (recordsDefinitionDecision) reviewerRouteViolations.push({ file: relative, reason: `records a policy-definition decision but is classified "${value}" instead of "internal-reviewer"` });
+    }
 
     if (value === "household-member" || value === "household-owner") {
       if (!callsRequireHouseholdContext) missingHouseholdContext.push(relative);
@@ -132,11 +154,11 @@ export async function classifyRoutes(): Promise<RouteInventoryResult> {
     }
   }
 
-  return { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations };
+  return { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations, reviewerRouteViolations };
 }
 
 async function main() {
-  const { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations } = await classifyRoutes();
+  const { routeFiles, unclassified, invalid, byClass, missingHouseholdContext, publicRouteViolations, reviewerRouteViolations } = await classifyRoutes();
   assert.ok(routeFiles.length > 0, "sanity check: at least one app/api/**/route.ts must exist");
 
   assert.equal(
@@ -156,12 +178,20 @@ async function main() {
     `Public route(s) reaching for household-scoped authorization: ${publicRouteViolations.map((v) => `${v.file} (${v.reason})`).join("; ")}`,
   );
 
+  assert.equal(
+    reviewerRouteViolations.length,
+    0,
+    `Internal-reviewer route rule violated: ${reviewerRouteViolations.map((v) => `${v.file} (${v.reason})`).join("; ")}`,
+  );
+  assert.ok((byClass["internal-reviewer"] ?? 0) >= 7, "sanity check: the four definition-match routes and three reviewer routes are all internal-reviewer");
+
   console.log(
     `route-inventory regressions passed: all ${routeFiles.length} app/api/**/route.ts files carry a valid ROUTE_AUTH classification ` +
       `(${Object.entries(byClass)
         .map(([k, v]) => `${k}=${v}`)
         .join(", ")}); every household-member/household-owner route calls requireHouseholdContext(); no public route reaches for ` +
-      `household-scoped authorization beyond the one allowed ensureDefaultHousehold() exception.`,
+      `household-scoped authorization beyond the one allowed ensureDefaultHousehold() exception; every internal-reviewer route goes through ` +
+      `the central reviewer boundary and never household membership.`,
   );
 }
 
