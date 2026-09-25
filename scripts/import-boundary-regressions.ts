@@ -162,6 +162,32 @@ async function main() {
     }
   }
 
+  // Ban 4: the reviewer provisioning/assignment module
+  // (lib/claims/reviewers/admin.ts) is an operator-only procedure, reachable
+  // only from scripts/claim-reviewer-admin.ts. No route, page, component,
+  // middleware or other lib/ module may import it -- that is what guarantees
+  // no HTTP request (household or reviewer) can create a reviewer or an
+  // assignment.
+  const reviewerAdminFile = path.resolve("lib/claims/reviewers/admin.ts");
+  const reviewerAdminImport = /(?:from\s*|import\s*\(\s*|import\s+)["'](?:[^"']*\/reviewers\/admin|\.\/admin)["']/;
+  const reviewerAdminViolations: string[] = [];
+  for (const file of devAccountIdFiles) {
+    if (file === reviewerAdminFile) continue;
+    let text: string;
+    try {
+      text = await readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+    if (reviewerAdminImport.test(text)) reviewerAdminViolations.push(path.relative(process.cwd(), file));
+  }
+  assert.ok(reviewerAdminImport.test('const admin = await import("../lib/claims/reviewers/admin");'), "sanity check: the reviewer-admin import pattern must match a real import");
+  assert.equal(
+    reviewerAdminViolations.length,
+    0,
+    `lib/claims/reviewers/admin.ts (operator-only reviewer provisioning) must not be imported by app/, lib/, components/ or middleware.ts. Found in: ${reviewerAdminViolations.join(", ")}`,
+  );
+
   assert.equal(
     devAccountIdViolations.length,
     0,
@@ -186,7 +212,8 @@ async function main() {
     `import-boundary regressions passed: scanned ${devAccountIdFiles.length} files under app/, lib/, components/ and middleware.ts for devAccountId() -- ` +
       `none found outside lib/db/client.ts's own definition; scanned ${serviceClientFiles.length} files under app/, components/ and middleware.ts for ` +
       `createServiceSupabaseClient()/withServiceTransaction() -- none found; scanned ${rateLimiterFiles.length} files under app/ for the in-memory ` +
-      `createRateLimiter() -- none found (every route uses the shared Postgres-backed createDbRateLimiter() instead).`,
+      `createRateLimiter() -- none found (every route uses the shared Postgres-backed createDbRateLimiter() instead); ` +
+      `no production module imports the operator-only reviewer provisioning module.`,
   );
 }
 

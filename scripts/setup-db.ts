@@ -24,6 +24,7 @@ const MIGRATIONS = [
   "sql/chat-upgrade.sql",
   "sql/coverage-ledger.sql",
   "sql/lifecycle.sql",
+  "sql/claim-reviewers.sql",
   "sql/household-rls.sql",
 ];
 

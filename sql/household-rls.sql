@@ -211,6 +211,36 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Policy-definition decisions (the three *_definition_matches tables) and
+-- model-read extractions are written only by the trusted server: a decision
+-- by an assigned DearPolicy reviewer (lib/claims/reviewers/boundary.ts), an
+-- extraction by the evidence pipeline. A household member's own session may
+-- read them, and may retire a decision (superseded_at/superseded_reason
+-- only, used when evidence or a policy is deleted), which can only ever
+-- remove what an estimate rests on. It can never create, rewrite or delete
+-- one -- otherwise a household could record its own "matches" decision, or
+-- its own model provenance, directly through the database API.
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['claim_cause_definition_matches', 'claim_ci_definition_matches', 'claim_disability_definition_matches'] LOOP
+    IF to_regclass('public.' || t) IS NULL THEN
+      CONTINUE;
+    END IF;
+    EXECUTE format('DROP POLICY IF EXISTS household_member_insert ON public.%I', t);
+    EXECUTE format('DROP POLICY IF EXISTS household_member_delete ON public.%I', t);
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE ON public.%I FROM authenticated', t);
+    EXECUTE format('GRANT UPDATE (superseded_at, superseded_reason) ON public.%I TO authenticated', t);
+  END LOOP;
+  IF to_regclass('public.claim_evidence_extractions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.claim_evidence_extractions';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_update ON public.claim_evidence_extractions';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_delete ON public.claim_evidence_extractions';
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON public.claim_evidence_extractions FROM authenticated';
+  END IF;
+END $$;
+
 -- claim_evidence_audit_log is an append-only audit trail: members may read
 -- and insert (the app writes an entry on their behalf), but never update or
 -- delete a past entry -- only a service_role job (which bypasses RLS
