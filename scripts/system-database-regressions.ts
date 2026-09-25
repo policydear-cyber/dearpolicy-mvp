@@ -113,7 +113,7 @@ async function main(){
   // one the app speaks. REPLAY_URL is how the provider-specific tests below
   // reuse these same answers without re-implementing the decision table.
   const REPLAY_URL="http://model.test/replay";
-  const googleReply=(text:string)=>Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
+  const googleReply=(text:string)=>Response.json({modelVersion:"gemini-3.6-flash",responseId:"fixture-response",candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
   globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input);
     if(/googleapis\.com\/v1beta\/models\?/.test(url))
@@ -127,7 +127,7 @@ async function main(){
     const user=JSON.parse(userText);
     maxModelUserCharacters=Math.max(maxModelUserCharacters,userText.length);
     const reply=(text:string)=>google
-      ?Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}})
+      ?Response.json({modelVersion:"gemini-3.6-flash",responseId:"fixture-response",candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}})
       :Response.json({content:text});
     let result:unknown;
     if(system.startsWith("Interpret this")){
