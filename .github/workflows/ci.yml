@@ -181,19 +181,19 @@ jobs:
       - name: Household deletion regression suite (whole-household teardown, member/policy/claim cascade -- real Postgres via PGlite, no live DB needed)
         run: npm run security:household-deletion-test
 
-      - name: claim-evidence-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly: refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+      - name: claim-evidence-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
         run: npm run security:claim-evidence-deletion-coordinator-test
 
-      - name: family-member-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly: refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+      - name: family-member-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
         run: npm run security:family-member-deletion-coordinator-test
 
-      - name: household-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly: refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+      - name: household-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
         run: npm run security:household-deletion-coordinator-test
 
-      - name: household-membership-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly: refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+      - name: household-membership-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
         run: npm run security:household-membership-deletion-coordinator-test
 
-      - name: invitation-revocation-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly: refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+      - name: invitation-revocation-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
         run: npm run security:invitation-revocation-deletion-coordinator-test
 
       - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
