@@ -271,6 +271,7 @@ async function main() {
       // Every connection handed out during this request is lock-free (the
       // test is sequential); only the one that switches to the household
       // role runs its statements as `authenticated`.
+      const beforeDelete = await row("claim_evidence_documents", doc);
       const harnessConnect = pool.connect;
       const asHousehold: string[] = [];
       pool.connect = (async () => {
@@ -306,7 +307,7 @@ async function main() {
       } finally { pool.connect = harnessConnect; }
       const after = await row("claim_evidence_documents", doc);
       assert.equal(after.lifecycle_state, "pending_deletion");
-      for (const column of protectedColumns) assert.deepEqual(after[column], docBefore[column], `deletion changed only lifecycle columns (${column})`);
+      for (const column of protectedColumns) assert.deepEqual(after[column], beforeDelete[column], `deletion changed only lifecycle columns (${column})`);
       const decision = (await pool.query<{ superseded_reason: string | null }>(`SELECT superseded_reason FROM claim_cause_definition_matches WHERE evidence_document_id=$1`, [doc])).rows[0];
       assert.equal(decision.superseded_reason, "evidence_deleted");
       assert.equal((await pool.query(`SELECT 1 FROM claim_evidence_audit_log WHERE evidence_document_id=$1 AND action='deleted'`, [doc])).rows.length, 1, "the server wrote the audit entry");
