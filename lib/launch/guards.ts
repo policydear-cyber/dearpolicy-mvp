@@ -103,20 +103,49 @@ export function checkServiceRoleKeyNotPublic(env: NodeJS.ProcessEnv = process.en
  * there is no live vendor configured in this environment to build one
  * against, so this guard is EXPECTED to fail in a from-scratch
  * production environment (an external-configuration blocker, not a code
- * gap) until that adapter and this flag are both provided. */
+ * gap) until that adapter and this flag are both provided. For a prototype or
+ * internal test, TELEMETRY_INTENTIONALLY_DISABLED=true is the explicit,
+ * acknowledged alternative: exactly one of the two must be set. */
 export function checkTelemetryProductionAdapterConfigured(env: NodeJS.ProcessEnv = process.env): GuardResult {
   if (!isProduction(env)) return { ok: true, message: "Not production; telemetry-adapter check skipped." };
-  if (!truthy(env.TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED)) {
+  const configured = truthy(env.TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED);
+  const disabled = truthy(env.TELEMETRY_INTENTIONALLY_DISABLED);
+  if (configured && disabled) {
+    return {
+      ok: false,
+      message:
+        "Both TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED and TELEMETRY_INTENTIONALLY_DISABLED are set. They contradict each " +
+        "other; set exactly one.",
+    };
+  }
+  if (disabled) {
+    return { ok: true, message: TELEMETRY_INTENTIONALLY_DISABLED_WARNING };
+  }
+  if (!configured) {
     return {
       ok: false,
       message:
         "No production telemetry adapter is configured (TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED is not set). " +
         "lib/telemetry/index.ts is silently using NoopTelemetryAdapter -- every recordEvent() call succeeds but " +
         "nothing is actually emitted anywhere. Wire a real TelemetryAdapter (lib/telemetry/adapters.ts) for the " +
-        "production destination and set this flag once it is verified working.",
+        "production destination and set this flag once it is verified working, or -- for a prototype or internal " +
+        "test only -- set TELEMETRY_INTENTIONALLY_DISABLED=true to knowingly run without operational telemetry.",
     };
   }
   return { ok: true, message: "A production telemetry adapter has been confirmed configured." };
+}
+
+/** Privacy-safe by construction: a fixed string, no environment values. */
+export const TELEMETRY_INTENTIONALLY_DISABLED_WARNING =
+  "TELEMETRY_INTENTIONALLY_DISABLED=true: this deployment is running WITHOUT operational telemetry. recordEvent() " +
+  "calls are still redacted and still reach the NoopTelemetryAdapter, which emits nothing, so no alert (scan " +
+  "failures, stuck quarantine, dead letters, failed exports or deletions, rejected calculations, authorization " +
+  "failures) can fire. Acceptable only for a prototype or internal testing, never for real users.";
+
+/** True when production is knowingly running without telemetry (exactly the
+ * acknowledged state checkTelemetryProductionAdapterConfigured() accepts). */
+export function telemetryIntentionallyDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isProduction(env) && truthy(env.TELEMETRY_INTENTIONALLY_DISABLED) && !truthy(env.TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED);
 }
 
 export const PRODUCTION_STARTUP_GUARDS: Guard[] = [
