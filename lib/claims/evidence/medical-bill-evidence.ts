@@ -114,7 +114,10 @@ export async function confirmMedicalBillReview(args: {
   await appendClaimEvidenceAudit(args.accountId, {
     actor: args.reviewerName, action: "medical_bill_review_confirmed", evidenceDocumentId: document.id,
     claimSessionId: args.claimSessionId, reason: args.reason ?? undefined,
-    newValue: { extractionId, documentType: document.document_type },
+    // Append-only history: the audit row keeps what the review replaced, so
+    // a later correction never silently erases an earlier one.
+    previousValue: { status: document.status, reviewedFields: extraction.reviewed_fields ?? null },
+    newValue: { extractionId, documentType: document.document_type, reviewedFields: args.reviewedFields ?? extraction.reviewed_fields ?? null },
   });
   return { documentId: document.id, extractionId };
 }

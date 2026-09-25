@@ -2,45 +2,35 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { confirmTravelDeathMatch, ClaimEvidenceMatchError } from "@/lib/claims/evidence/travel-matches";
-import type { CauseDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
+import { POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE } from "@/lib/claims/evidence/document-catalogue";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
-const RESULTS: CauseDefinitionMatchResult[] = ["matches", "does_not_match", "needs_review"];
-
-/** The single, explicit reviewer action that can finalise a travel
- * accidental-death CauseDefinitionMatch -- mirrors
- * app/api/claims/evidence/[id]/match/route.ts exactly (see
- * lib/claims/evidence/travel-matches.ts's module doc comment for why --
- * never chat text, never model output -- is the only path that can). */
+/** Travel accidental-death policy-definition match (lib/claims/evidence/travel-matches.ts).
+ *
+ * Deciding that evidence satisfies (or does not satisfy) a policy's own
+ * definition is a policy-definition decision, and a "matches" record is
+ * exactly what lets a calculator unlock an amount. This route previously
+ * let ANY household member record that decision for their own claim -- with
+ * a free-text reviewerName they supplied themselves -- so a user's own
+ * statement could unlock money. DearPolicy has no authorized-reviewer role,
+ * so no household request may record ANY definition result here (a
+ * "does not match" or "needs review" record would also supersede an
+ * existing reviewed decision for the same scope). The route stays
+ * authenticated and household-scoped and always refuses with
+ * POLICY_DEFINITION_REVIEW_REQUIRED. The underlying confirmTravelDeathMatch() function is
+ * unchanged and remains available to a future authorized-reviewer path. */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     if (!isUuid(id)) return NextResponse.json({ error: "Invalid claim-evidence document id." }, { status: 400 });
-    const ctx = await requireHouseholdContext(request);
-    const body = (await request.json()) as {
-      familyMemberId?: string; claimSessionId?: string; contractId?: string; coverageId?: string | null;
-      result?: string; reason?: string; reviewerName?: string;
-      causeEvidence?: { pageStart?: number; pageEnd?: number; sourceLocation?: string };
-    };
-    if (!body.familyMemberId || !body.claimSessionId || !body.contractId) {
-      return NextResponse.json({ error: "familyMemberId, claimSessionId and contractId are required." }, { status: 400 });
-    }
-    if (!body.result || !RESULTS.includes(body.result as CauseDefinitionMatchResult)) {
-      return NextResponse.json({ error: "result must be one of matches, does_not_match, needs_review." }, { status: 400 });
-    }
-
-    const reviewerName = (body.reviewerName ?? "Household reviewer").trim() || "Household reviewer";
-    const match = await confirmTravelDeathMatch({
-      accountId: ctx.householdId, reviewerName, familyMemberId: body.familyMemberId, claimSessionId: body.claimSessionId,
-      evidenceDocumentId: id, contractId: body.contractId, coverageId: body.coverageId ?? null,
-      result: body.result as CauseDefinitionMatchResult, reason: body.reason ?? null, causeEvidenceOverride: body.causeEvidence,
-    });
-    return NextResponse.json({ match });
+    await requireHouseholdContext(request);
+    return NextResponse.json(
+      { error: POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE, reasonCode: "POLICY_DEFINITION_REVIEW_REQUIRED" },
+      { status: 403 },
+    );
   } catch (error) {
-    if (error instanceof ClaimEvidenceMatchError) return NextResponse.json({ error: error.message, reasonCode: error.code }, { status: 409 });
     const authResponse = routeErrorResponse(error);
     if (authResponse.status === 500) return NextResponse.json({ error: "Could not record the match decision." }, { status: 500 });
     return authResponse;

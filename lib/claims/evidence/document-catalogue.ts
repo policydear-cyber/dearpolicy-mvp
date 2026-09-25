@@ -16,6 +16,13 @@ import {
   type ClaimEvidenceDocumentType,
 } from "./types";
 
+/** Shown wherever a policy-definition decision (does this diagnosis,
+ * disability, cause of death or event satisfy a policy's own definition?)
+ * would be needed. DearPolicy has no authorized-reviewer role yet, so a
+ * household member can never make that decision -- see the four
+ * *-match routes under app/api/claims/evidence/[id]/. */
+export const POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE = "Evidence received — policy-definition review required.";
+
 export type DocumentTypeGroupId = "cause_of_death" | "medical_evidence" | "bills_and_settlements";
 
 export type DocumentTypeOption = {

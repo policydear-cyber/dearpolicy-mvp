@@ -52,6 +52,9 @@ jobs:
       - name: Claim-evidence document picker suite (shared catalogue, grouping, upload request, fail-closed status, no promise language)
         run: npm run claims:evidence-picker-test
 
+      - name: Claim-evidence review workflow suite (bill fact review vs policy-definition decisions; real routes, PGlite)
+        run: npm run claims:evidence-review-workflow-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 
