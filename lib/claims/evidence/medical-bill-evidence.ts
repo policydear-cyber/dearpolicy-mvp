@@ -95,18 +95,30 @@ export async function confirmMedicalBillReview(args: {
   const extraction = await getLatestExtraction(args.accountId, document.id);
   if (!extraction) throw new MedicalBillEvidenceError("EXTRACTION_NOT_FOUND", "This document has not been read yet.");
 
+  // The evidence reference must point somewhere in the document. Previously
+  // it carried neither a page nor a source location, so
+  // validateMedicalClaimEvidence() rejected EVERY bill and no medical-claim
+  // document could ever be confirmed. The page now comes from the
+  // extraction's own citation-verified page references (bill facts first);
+  // when the model cited nothing, the reference names the whole document,
+  // which the reviewer has just checked against the original. Validated
+  // BEFORE any correction is written, so a refused review changes nothing.
+  const citations = extraction.extracted_fields.pageCitations ?? [];
+  const BILL_FIELDS = ["billLineItems", "thirdPartyPayments", "hospitalName", "admissionDate", "dischargeDate"];
+  const citation = citations.find((c) => BILL_FIELDS.includes(c.field)) ?? citations[0];
+  const evidenceRef = {
+    documentId: document.id, documentType: document.document_type,
+    familyMemberId: args.familyMemberId, claimEventId: args.claimSessionId,
+    ...(citation ? { pageStart: citation.pageStart, pageEnd: citation.pageEnd } : { sourceLocation: "Entire document, checked against the original by the reviewer" }),
+  };
+  const check = validateMedicalClaimEvidence(evidenceRef);
+  if (!check.valid) throw new MedicalBillEvidenceError(check.reasonCode, check.message);
+
   let extractionId = extraction.id;
   if (args.reviewedFields) {
     const corrected = await correctExtraction({ accountId: args.accountId, extractionId: extraction.id, reviewedFields: args.reviewedFields, reviewedBy: args.reviewerName });
     if (corrected) extractionId = corrected.id;
   }
-
-  const evidenceRef = {
-    documentId: document.id, documentType: document.document_type,
-    familyMemberId: args.familyMemberId, claimEventId: args.claimSessionId,
-  };
-  const check = validateMedicalClaimEvidence(evidenceRef);
-  if (!check.valid) throw new MedicalBillEvidenceError(check.reasonCode, check.message);
 
   if (document.status === "needs_review") {
     await transitionEvidenceStatus({ accountId: args.accountId, id: document.id, from: "needs_review", to: "matched" });
