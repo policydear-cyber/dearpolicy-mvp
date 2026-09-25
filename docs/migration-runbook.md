@@ -353,3 +353,19 @@ npm run reviewer:admin -- suspend    --user <AUTH_USER_UUID> --reason "<why>" --
 ## 11. Why infrastructure RLS is not FORCEd
 
 `infrastructure-rls.sql` enables RLS but does not `FORCE` it. The application's server connection (`DATABASE_URL`) is the table owner, and it relies on owner bypass, exactly as every other server-only table in this schema already does. Forcing RLS would make those tables inaccessible to the server unless the production role also has `BYPASSRLS`, which is not a documented property of this deployment. Browser roles are excluded twice: they hold no privileges at all on these tables, and the only policy on each is always-false.
+
+## 12. Production telemetry: configured or intentionally disabled
+
+Production refuses to start unless **exactly one** of these is set (`lib/launch/guards.ts`, `checkTelemetryProductionAdapterConfigured`):
+
+| Setting | Meaning | Startup | `launch:check` `operational_telemetry` |
+|---|---|---|---|
+| `TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true` | A real `TelemetryAdapter` is wired in and verified | starts | ready |
+| `TELEMETRY_INTENTIONALLY_DISABLED=true` | Prototype / internal testing only: knowingly running without operational telemetry | starts, with a prominent warning in the server log | blocked by external configuration (acknowledged limitation, never ready) |
+| neither, or both | Misconfiguration | refuses to start | blocked by external configuration |
+
+While telemetry is intentionally disabled:
+- redaction is unchanged, and every `recordEvent()` call still goes through the same boundary; the events simply reach the `NoopTelemetryAdapter`, which emits nothing;
+- **no operational alert can fire**: scan failures, stuck quarantine, dead-letter jobs, failed exports or deletions, rejected monetary calculations, reviewer-assignment expiry, model/provenance staleness and authorization failures all go unobserved;
+- label every internal test session as running without operational telemetry, and check job, quarantine and dead-letter state manually (`npm run jobs:dead-letter -- list`, and the section 5 queries) at least daily;
+- never use this setting with real users. Before any wider rollout, wire a real adapter, set `TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true` and remove `TELEMETRY_INTENTIONALLY_DISABLED`.

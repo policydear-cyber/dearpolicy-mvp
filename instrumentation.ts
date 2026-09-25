@@ -4,8 +4,13 @@
 // configuration a hard startup failure instead of a silent, exploitable
 // default: see lib/launch/guards.ts for what "unsafe" means here.
 export async function register() {
-  const { assertProductionSafe, isProduction } = await import("./lib/launch/guards");
+  const { assertProductionSafe, isProduction, telemetryIntentionallyDisabled, TELEMETRY_INTENTIONALLY_DISABLED_WARNING } = await import("./lib/launch/guards");
   assertProductionSafe();
+  if (telemetryIntentionallyDisabled()) {
+    // Deliberately loud and deliberately content-free: a fixed string, no
+    // environment values, identifiers or request data.
+    console.warn(`\n${"=".repeat(78)}\n[dearpolicy] WARNING: ${TELEMETRY_INTENTIONALLY_DISABLED_WARNING}\n${"=".repeat(78)}\n`);
+  }
 
   // Not folded into assertProductionSafe()/PRODUCTION_STARTUP_GUARDS
   // itself -- lib/claims/evidence/scan-adapter.ts imports lib/launch/guards
