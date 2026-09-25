@@ -302,12 +302,11 @@ END $$;
 CREATE OR REPLACE FUNCTION public.guard_household_policy_update() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  IF current_user NOT IN ('authenticated', 'anon') THEN
-    RETURN NEW;
-  END IF;
-  IF OLD.lifecycle_state IS DISTINCT FROM 'active'
-     OR NEW.lifecycle_state IS DISTINCT FROM 'pending_deletion'
-     OR NEW.lifecycle_version IS DISTINCT FROM OLD.lifecycle_version + 1 THEN
+  -- Browser roles only; the trusted server connection (table owner) is not constrained.
+  IF current_user IN ('authenticated', 'anon') AND (
+       OLD.lifecycle_state IS DISTINCT FROM 'active'
+       OR NEW.lifecycle_state IS DISTINCT FROM 'pending_deletion'
+       OR NEW.lifecycle_version IS DISTINCT FROM OLD.lifecycle_version + 1) THEN
     RAISE EXCEPTION 'a household session may only move an active policy to pending deletion'
       USING ERRCODE = '42501';
   END IF;
