@@ -76,6 +76,9 @@ jobs:
       - name: Household evidence download authorization (signed-URL gate, cache headers, no storage keys; PGlite)
         run: npm run claims:evidence-download-test
 
+      - name: Infrastructure-table permissions (every migrated table classified; anon/household/owner/reviewer/other-household refused on service- and operator-only tables; Supabase default privileges simulated; PGlite)
+        run: npm run security:infrastructure-tables-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

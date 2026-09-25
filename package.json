@@ -31,6 +31,7 @@
     "claims:legacy-decision-test": "node --import tsx scripts/claim-legacy-decision-regressions.ts",
     "claims:evidence-browser-write-test": "node --import tsx scripts/evidence-browser-write-regressions.ts",
     "claims:evidence-download-test": "node --import tsx scripts/evidence-download-regressions.ts",
+    "security:infrastructure-tables-test": "node --import tsx scripts/infrastructure-table-permissions-regressions.ts",
     "claims:composition-test": "node --import tsx scripts/claim-composition-regressions.ts",
     "claims:ci-test": "node --import tsx scripts/claim-ci-regressions.ts",
     "claims:medical-test": "node --import tsx scripts/claim-medical-regressions.ts",
