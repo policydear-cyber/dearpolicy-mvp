@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { userFacingScanResultDetail } from "@/lib/policies/quarantine/ui";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -45,7 +46,9 @@ export async function GET(request: NextRequest) {
       );
       return result.rows;
     });
-    return NextResponse.json({ policies });
+    // scan_result_detail is operator-facing (it can hold a scanner's analysis
+    // id and engine counts); only a fixed, category-level string is returned.
+    return NextResponse.json({ policies: policies.map((p) => ({ ...p, scan_result_detail: userFacingScanResultDetail(p) })) });
   } catch (error) {
     return routeErrorResponse(error);
   }

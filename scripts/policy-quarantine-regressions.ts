@@ -78,7 +78,7 @@ async function runDatabaseTests() {
       supersedePolicyDocument,
     } = await import("@/lib/policies/quarantine/store");
     const { listPolicyDocumentAudit } = await import("@/lib/policies/quarantine/audit");
-    const { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } = await import("@/lib/policies/quarantine/ui");
+    const { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel, userFacingScanResultDetail, NO_SCANNER_CONFIGURED_DETAIL, SCAN_DID_NOT_COMPLETE_DETAIL, SCAN_REJECTED_DETAIL } = await import("@/lib/policies/quarantine/ui");
 
     __registerFileScanAdapterForTests({ name: "test-clean", async scanFile() { return { status: "clean" as const }; } });
     __registerFileScanAdapterForTests({ name: "test-infected", async scanFile() { return { status: "infected" as const }; } });
@@ -322,6 +322,31 @@ async function runDatabaseTests() {
       );
       assert.equal(policyQuarantineLabel({ quarantine_status: "scan_pending", scan_result_detail: null }), "Waiting for malware scan");
       assert.equal(policyQuarantineLabel({ quarantine_status: "uploaded", scan_result_detail: null }), "Waiting to start malware scan");
+    });
+
+    // 19b. Raw scanner detail never reaches a household member.
+    await testAsync("the policy list API never returns raw scanner detail (analysis ids, engine counts, retry diagnostics) -- only fixed category strings", async () => {
+      const vtClean = "VirusTotal analysis NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA==: malicious=0 suspicious=0 harmless=0 undetected=64 timeout=0.";
+      const vtInfected = "VirusTotal analysis NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA==: malicious=3 suspicious=1 harmless=0 undetected=60 timeout=0.";
+      const vtPoll = "VirusTotal analysis NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA== did not complete within the 60000ms poll budget (still \"queued\").";
+      const vtQuota = "VirusTotal file submission did not succeed after retrying transient failures.";
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_clean", scan_result_detail: vtClean }), null);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_rejected", scan_result_detail: vtInfected }), SCAN_REJECTED_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: vtPoll }), SCAN_DID_NOT_COMPLETE_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: vtQuota }), SCAN_DID_NOT_COMPLETE_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: null }), null);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: "No malware-scanning adapter is configured in this environment." }), NO_SCANNER_CONFIGURED_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "deleted", scan_result_detail: vtClean }), null);
+      for (const out of [vtClean, vtInfected, vtPoll, vtQuota].flatMap((raw) => ["scan_clean", "scan_rejected", "scan_pending", "quarantined", "deleted"].map((status) => userFacingScanResultDetail({ quarantine_status: status, scan_result_detail: raw })))) {
+        assert.ok(out === null || !/virustotal|analysis|malicious=|NjY0/i.test(out), `leaked scanner detail: ${out}`);
+      }
+      // A scan that did not complete (quota, poll budget) is labelled as on hold, never as clean or as still actively scanning.
+      assert.equal(policyQuarantineLabel({ quarantine_status: "scan_pending", scan_result_detail: userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: vtQuota }) }), "On hold: malware scan did not complete");
+      // The label is computed from the sanitized value the API returns, and the null-adapter label still works through it.
+      assert.equal(policyQuarantineLabel({ quarantine_status: "scan_pending", scan_result_detail: userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: "No malware-scanning adapter is configured in this environment." }) }), "On hold: malware scanning unavailable");
+      // The route itself must apply the mapping -- a raw pass-through of the column would reintroduce the leak.
+      const routeSource = await readFile(path.join(process.cwd(), "app/api/policies/route.ts"), "utf8");
+      assert.match(routeSource, /scan_result_detail:\s*userFacingScanResultDetail\(p\)/);
     });
 
     // Audit-event creation -- exercised throughout every test above; one
