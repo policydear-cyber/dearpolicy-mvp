@@ -594,7 +594,9 @@ async function runDatabaseTests() {
       assert.equal(matchedDoc?.status, "matched");
 
       const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimA);
-      const forPolicyA = facts.find((m) => m.contractId === policyA);
+      // Decisions are identified per evidence document: earlier cases in this
+      // suite left their own (still active) decisions on other documents.
+      const forPolicyA = facts.find((m) => m.contractId === policyA && (m.causeEvidence as { documentId?: string }).documentId === document.id);
       assert.ok(forPolicyA);
 
       const definitionA = { policyId: policyA, chunkId: `page:${policyA}:5`, pageStart: 5, pageEnd: 5 };

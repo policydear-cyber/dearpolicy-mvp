@@ -217,7 +217,7 @@ async function main() {
       assert.equal(legacyExtraction!.model_execution ?? null, null);
       assert.equal(provenanceSnapshotForExtraction(legacyExtraction!, legacyDoc), null);
       const facts = await loadCauseDefinitionMatchesForFacts(account, desmond, claimB);
-      const legacy = facts.find((m) => m.contractId === policyA);
+      const legacy = facts.find((m) => m.contractId === policyA && (m.causeEvidence as { documentId?: string }).documentId === legacyDoc);
       assert.ok(legacy, "the historical match must still load");
       assert.equal(legacy!.provenance, undefined, "extraction_model on a historical row is never promoted into provenance");
       const result = calculateAccidentalDeath(accidentalInput(legacy!, policyA, coverageA, claimB));
@@ -347,7 +347,7 @@ async function main() {
         evidenceProvenance: provenanceSnapshotForExtraction((await getLatestExtraction(account, document.id))!, document.id),
       });
       assert.equal(recorded.evidence_provenance ?? null, null);
-      const loaded = (await loadCauseDefinitionMatchesForFacts(account, desmond, claimB)).find((m) => m.contractId === policyB)!;
+      const loaded = (await loadCauseDefinitionMatchesForFacts(account, desmond, claimB)).find((m) => m.contractId === policyB && (m.causeEvidence as { documentId?: string }).documentId === document.id)!;
       assert.equal(loaded.provenance, undefined);
       const result = calculateAccidentalDeath(accidentalInput(loaded, policyB, coverageB, claimB));
       assert.equal(result.status, "blocked");
@@ -371,8 +371,8 @@ async function main() {
         benefitCode: "tpd-lump-sum", matchKey: "total_permanent_disability", medicalEvidence, definitionEvidence, result: "matches", reviewedBy: "R", reason: null,
         evidenceProvenance: provenanceSnapshotForExtraction(extraction, document.id),
       });
-      const ci = (await loadCIDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "ci-major")!;
-      const tpd = (await loadDisabilityDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum")!;
+      const ci = (await loadCIDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "ci-major" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
+      const tpd = (await loadDisabilityDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
       for (const match of [ci, tpd]) {
         assert.ok(match.provenance, "a reviewed CI/disability match must carry its extraction's provenance");
         assert.deepEqual(evaluateEvidenceAuthority(match.provenance, { expectedSourceDocumentId: document.id }), { authorized: true });
@@ -383,8 +383,8 @@ async function main() {
       // A later re-extraction of the same document version replaces the
       // execution behind it; the reviewed snapshot is now superseded.
       await extractAndStore(document, "msg_prov_ci_rerun");
-      const ciAfter = (await loadCIDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "ci-major")!;
-      const tpdAfter = (await loadDisabilityDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum")!;
+      const ciAfter = (await loadCIDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "ci-major" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
+      const tpdAfter = (await loadDisabilityDefinitionMatchesForFacts(account, desmond, claimA)).find((m) => m.benefitCode === "tpd-lump-sum" && (m.medicalEvidence as { documentId?: string }).documentId === document.id)!;
       for (const match of [ciAfter, tpdAfter]) {
         const r = evaluateEvidenceAuthority(match.provenance, { expectedSourceDocumentId: document.id });
         assert.equal(r.authorized, false);
