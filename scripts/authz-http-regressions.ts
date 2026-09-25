@@ -190,6 +190,8 @@ async function main() {
 
   const { GET: getLedger, PATCH: patchLedger } = await import("@/app/api/ledger/route");
   const { GET: getInvitations } = await import("@/app/api/household/invitations/route");
+  const { DELETE: deleteInvitation } = await import("@/app/api/household/invitations/[id]/route");
+  const { GET: getHousehold, DELETE: deleteHousehold } = await import("@/app/api/household/route");
 
   scenario("1. valid household member sees their own household's data", async () => {
     asUser(memberA);
@@ -308,6 +310,63 @@ async function main() {
       const unexpectedBody = await unexpected.json();
       assert.equal(unexpectedBody.error, "Database error");
       assert.ok(!JSON.stringify(unexpectedBody).includes("10.0.4.12"), "the real driver error text must never reach the response body");
+    },
+  );
+
+  scenario(
+    "9. revoking a well-formed but nonexistent invitation id returns a safe 404, never a 500 (Flow 8 follow-up fix to Flow 7's route)",
+    async () => {
+      asUser(ownerA);
+      const res = await deleteInvitation(
+        requestFor("http://localhost/api/household/invitations/00000000-0000-4000-8000-0000000000ff", {
+          household: accountA,
+          method: "DELETE",
+        }),
+        { params: Promise.resolve({ id: "00000000-0000-4000-8000-0000000000ff" }) },
+      );
+      assert.equal(res.status, 404, "requestInvitationRevocation()'s DeletionValidationError must map to 404, not fall through to routeErrorResponse()'s generic 500");
+      const body = await res.json();
+      assert.equal(body.error, "Not found");
+      assertNoInternalLeak(JSON.stringify(body), "missing-invitation response");
+    },
+  );
+
+  scenario(
+    "10. GET /api/household returns the caller's real active household name (UI wiring for the household settings page), never another household's",
+    async () => {
+      asUser(ownerA);
+      const res = await getHousehold(requestFor("http://localhost/api/household", { household: accountA }));
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.activeHouseholdId, accountA);
+      assert.equal(body.activeHouseholdName, "Household A");
+      assert.ok(!JSON.stringify(body).includes("Household B"), "must never leak a different household's name");
+    },
+  );
+
+  scenario(
+    "11. a stale/expired session is refused for household deletion, even with a correct confirmName (recent-auth guard, Flow 8 sabotage-verified)",
+    async () => {
+      asUser(ownerA);
+      process.env.DEV_LAST_SIGN_IN_AT = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+      try {
+        const res = await deleteHousehold(
+          requestFor("http://localhost/api/household", {
+            household: accountA,
+            method: "DELETE",
+            body: { confirmName: "Household A" },
+          }),
+        );
+        assert.equal(res.status, 401, "a session that signed in 20 minutes ago must be refused before any deletion logic runs");
+        const body = await res.json();
+        assert.equal(body.error, "Please sign in again to confirm it's you before continuing.");
+        assertNoInternalLeak(JSON.stringify(body), "stale-session household-deletion response");
+      } finally {
+        delete process.env.DEV_LAST_SIGN_IN_AT;
+      }
+
+      const stillThere = await db.query("select id from accounts where id = $1", [accountA]);
+      assert.equal(stillThere.rows.length, 1, "the household must still exist -- a blocked deletion must never partially apply");
     },
   );
 

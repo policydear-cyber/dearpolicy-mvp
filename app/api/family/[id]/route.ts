@@ -58,6 +58,17 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 }
 
+// There is no UI or API path to undo an accidental "+ Add person" (a typo, a
+// duplicate, a one-off test profile) once it's on the household list -- this
+// closes that gap. Deletion is refused, rather than cascaded, whenever the
+// profile has any real activity attached (an uploaded policy, chat history,
+// a claim, a coverage rule, a premium record): silently cascading a delete
+// through a family member's policy documents and claim history in a family
+// insurance app is exactly the kind of data loss that must never be a single
+// click, so those profiles are left for the person to explicitly clear out
+// (remove the documents/history) before the profile itself can go. An
+// accepted deletion is a recoverable pending_deletion transition (CAS state
+// machine, idempotent, audited), not an immediate row delete.
 /** D15 (Wave 2 adversarial audit): family-member deletion now goes through
  * the shared lifecycle coordinator (lib/lifecycle/coordinator.ts) instead
  * of an inline hard DELETE -- idempotency, deletion-audit-log recording,
