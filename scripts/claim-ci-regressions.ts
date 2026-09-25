@@ -44,6 +44,7 @@ import type { CIEvidenceGap, CIRuleEvidence } from "@/lib/claims/ci-evidence";
 import { composeClaim } from "@/lib/claims/composition/engine";
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimFacts } from "@/lib/claims/types";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -78,6 +79,7 @@ function ciMatch(overrides: Partial<CIDefinitionMatch> = {}): CIDefinitionMatch 
     benefitCode: "ci-major", illnessName: "Major Cancer",
     medicalEvidence: medicalEvidence(), definitionEvidence: citation(),
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z",
+    provenance: verifiedEvidenceProvenance("doc-1"),
     ...overrides,
   };
 }

@@ -43,6 +43,7 @@ import { composeClaim } from "@/lib/claims/composition/engine";
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimEvidence, type ClaimFacts } from "@/lib/claims/types";
 import type { CauseDefinitionMatch, VerifiedMedicalBillFacts } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "@/scripts/fixtures/verified-evidence-provenance";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -190,7 +191,7 @@ function verifiedBill(overrides: Partial<VerifiedMedicalBillFacts> = {}): Verifi
   return {
     lineItems: [{ category: "hospitalisation", description: "Ward charges", amountMinor: 500_000, currency: CCY, documentId: "doc-1", documentType: "hospital_bill" }],
     thirdPartyPayments: [], admissionISO: "2024-06-05", dischargeISO: "2024-06-08", hospitalName: "Bangkok Hospital", hospitalCountry: "TH", admissionType: "inpatient", wardType: "standard",
-    sourceDocumentIds: ["doc-1"], ...overrides,
+    sourceDocumentIds: ["doc-1"], provenance: [verifiedEvidenceProvenance("doc-1")], ...overrides,
   };
 }
 function matchingCauseMatch(overrides: Partial<CauseDefinitionMatch> = {}): CauseDefinitionMatch {
@@ -198,6 +199,7 @@ function matchingCauseMatch(overrides: Partial<CauseDefinitionMatch> = {}): Caus
     familyMemberId: FM, claimEventId: CLAIM, contractId: POLICY, coverageId: COVERAGE,
     causeEvidence: { documentId: "doc-death", documentType: "death_certificate", pageStart: 1, pageEnd: 1, familyMemberId: FM, claimEventId: CLAIM },
     definitionEvidence: { policyId: deathCitation().policyId, chunkId: deathCitation().chunkId, pageStart: deathCitation().pageStart, pageEnd: deathCitation().pageEnd },
+    provenance: verifiedEvidenceProvenance("doc-death"),
     result: "matches", reviewedAt: "2024-06-10T00:00:00Z", ...overrides,
   };
 }

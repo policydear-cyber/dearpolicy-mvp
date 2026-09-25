@@ -52,6 +52,7 @@ import type { DisabilityRuleSet } from "@/lib/claims/disability-rules";
 import { TOTAL_PERMANENT_DISABILITY_MATCH_KEY } from "@/lib/claims/calculators/disability-benefit";
 import type { TravelRuleSet } from "@/lib/claims/travel-rules";
 import type { CauseDefinitionMatch, CIDefinitionMatch, DisabilityDefinitionMatch, VerifiedMedicalBillFacts } from "@/lib/claims/calculators/evidence";
+import { verifiedEvidenceProvenance } from "@/scripts/fixtures/verified-evidence-provenance";
 
 // ---------------------------------------------------------------------
 // The household: one family member owning six covers across five
@@ -130,7 +131,7 @@ function bill(overrides: Partial<VerifiedMedicalBillFacts> = {}): VerifiedMedica
     lineItems: [{ category: "surgical_fees", description: "Appendectomy", amountMinor: 800_000, currency: CCY, documentId: "doc-bill-1", documentType: "hospital_bill" }],
     thirdPartyPayments: [], admissionISO: "2024-06-03T08:00:00+08:00", dischargeISO: "2024-06-06T10:00:00+08:00",
     hospitalName: "Test Hospital", hospitalCountry: "SG", admissionType: "inpatient", wardType: "standard",
-    sourceDocumentIds: ["doc-bill-1"], ...overrides,
+    sourceDocumentIds: ["doc-bill-1"], provenance: [verifiedEvidenceProvenance("doc-bill-1")], ...overrides,
   };
 }
 function causeMatch(overrides: Partial<CauseDefinitionMatch> = {}): CauseDefinitionMatch {
@@ -138,6 +139,7 @@ function causeMatch(overrides: Partial<CauseDefinitionMatch> = {}): CauseDefinit
     familyMemberId: FM, claimEventId: CLAIM, contractId: LIFE_POLICY, coverageId: gpa.id,
     causeEvidence: { documentId: "doc-death", documentType: "death_certificate", pageStart: 1, pageEnd: 1, familyMemberId: FM, claimEventId: CLAIM },
     definitionEvidence: { policyId: LIFE_POLICY, chunkId: citation(LIFE_POLICY, 9, "x").chunkId, pageStart: 9, pageEnd: 9 },
+    provenance: verifiedEvidenceProvenance("doc-death"),
     result: "matches", reviewedAt: "2024-06-10T00:00:00Z", ...overrides,
   };
 }
@@ -149,6 +151,7 @@ function ciMatch(overrides: Partial<CIDefinitionMatch> = {}): CIDefinitionMatch 
     familyMemberId: FM, claimEventId: CLAIM, contractId: CI_POLICY, coverageId: ci.id, benefitCode: "ci-major", illnessName: ILLNESS,
     medicalEvidence: { documentId: "doc-medical", documentType: "medical_report", familyMemberId: FM, claimEventId: CLAIM, pageStart: 2, pageEnd: 2 },
     definitionEvidence: { policyId: CI_POLICY, chunkId: citation(CI_POLICY, 19, "x").chunkId, pageStart: 19, pageEnd: 19 },
+    provenance: verifiedEvidenceProvenance("doc-medical"),
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z", ...overrides,
   };
 }
@@ -157,6 +160,7 @@ function tpdMatch(overrides: Partial<DisabilityDefinitionMatch> = {}): Disabilit
     familyMemberId: FM, claimEventId: CLAIM, contractId: LIFE_POLICY, coverageId: gpa.id, benefitCode: "tpd-lump-sum", matchKey: TOTAL_PERMANENT_DISABILITY_MATCH_KEY,
     medicalEvidence: { documentId: "doc-tpd", documentType: "specialist_memo", familyMemberId: FM, claimEventId: CLAIM, pageStart: 3, pageEnd: 3 },
     definitionEvidence: { policyId: LIFE_POLICY, chunkId: citation(LIFE_POLICY, 11, "x").chunkId, pageStart: 11, pageEnd: 11 },
+    provenance: verifiedEvidenceProvenance("doc-tpd"),
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z", ...overrides,
   };
 }

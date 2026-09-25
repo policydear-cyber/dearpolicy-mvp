@@ -55,6 +55,7 @@ import { composeClaim } from "@/lib/claims/composition/engine";
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimEvidence, type ClaimFacts } from "@/lib/claims/types";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { VerifiedMedicalBillFacts } from "@/lib/claims/calculators/evidence";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -110,11 +111,12 @@ function planProvisions(overrides: Partial<MedicalPlanProvisions> = {}): Medical
 }
 
 function verifiedBillFacts(overrides: Partial<VerifiedMedicalBillFacts> = {}): VerifiedMedicalBillFacts {
-  return {
+  const facts: VerifiedMedicalBillFacts = {
     lineItems: [], thirdPartyPayments: [], admissionISO: null, dischargeISO: null,
-    hospitalName: null, hospitalCountry: null, admissionType: null, wardType: null, sourceDocumentIds: [],
+    hospitalName: null, hospitalCountry: null, admissionType: null, wardType: null, sourceDocumentIds: ["doc-1"],
     ...overrides,
   };
+  return { ...facts, provenance: overrides.provenance ?? facts.sourceDocumentIds.map(verifiedEvidenceProvenance) };
 }
 
 function baseFacts(overrides: Partial<ClaimFacts> = {}): ClaimFacts {
