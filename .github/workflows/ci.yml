@@ -61,6 +61,9 @@ jobs:
       - name: Reviewer decision identity suite (per-document supersession, fail-closed selection, per-document status; real routes, PGlite)
         run: npm run claims:decision-identity-test
 
+      - name: Reviewer-backed benefits end to end (accidental death, critical illness, disability, travel; wording -> evidence -> reviewer -> calculator -> composition, with negative cases)
+        run: npm run claims:reviewer-benefit-e2e-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

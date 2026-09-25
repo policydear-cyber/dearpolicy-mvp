@@ -54,7 +54,7 @@ export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [
     category: "accidental-death", route: "match", claimEventType: "death", itemId: "gpa-accidental-death",
     facts: { eventType: "death", death: true, deathDate: "2026-09-14", eventDate: "2026-09-14" },
     policy: { insurer: "Singlife", productName: "Group Personal Accident", groupPolicyNumber: "G007500", category: "Personal Accident", amount: 600000, currency: "SGD", pages: singlifeDeathWording.benefitSummary.pages },
-    otherCurrencyPages: singlifeDeathWording.benefitSummary.pages,
+    otherCurrencyPages: [{ pageNumber: 3, text: "Group Personal Accident benefit summary. Accidental Death Benefit: a fixed benefit of US$100,000 will be paid on death caused by an accident." }],
     decisionScope: {}, evidence: policeReport, expectedAmount: 600000, expectedCurrency: "SGD",
   },
   {
