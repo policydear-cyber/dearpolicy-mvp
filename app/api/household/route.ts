@@ -23,12 +23,20 @@ export async function GET(request: NextRequest) {
     const user = await requireCurrentUser();
     const memberships = await listMemberships(user.id);
     let activeHouseholdId: string | null = null;
+    let activeHouseholdName: string | null = null;
     try {
       activeHouseholdId = (await requireHouseholdContext(request)).householdId;
+      const active = await createUserSupabaseClient(user.id, (client) =>
+        client.query<{ name: string }>(
+          `select name from accounts where id = $1 and ${activePredicate()}`,
+          [activeHouseholdId],
+        ),
+      );
+      activeHouseholdName = active.rows[0]?.name ?? null;
     } catch {
       // No household yet -- memberships is simply [] in that case.
     }
-    return NextResponse.json({ memberships, activeHouseholdId });
+    return NextResponse.json({ memberships, activeHouseholdId, activeHouseholdName });
   } catch (error) {
     if (error instanceof UnauthenticatedError) return routeErrorResponse(error);
     return NextResponse.json({ error: "Database error" }, { status: 500 });

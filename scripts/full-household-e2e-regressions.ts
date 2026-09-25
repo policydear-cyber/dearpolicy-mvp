@@ -315,6 +315,10 @@ async function main() {
     });
 
     await journeyStep("the queued policy is scanned and quarantine-rejected through the real quarantine gate, and its durable job completes (not stuck 'queued' forever)", async () => {
+      const config = PRODUCTION_JOB_TYPES.find((t) => t.jobType === "policy_processing");
+      if (!config) throw new Error('no processor configured for job type "policy_processing"');
+      const outcome = await claimAndProcessOne({ jobType: "policy_processing", workerId: `full-e2e-policy-${process.pid}`, process: config.process });
+      assert.equal(outcome, "succeeded");
       const row = await waitFor(async () => {
         const res = await listPolicies(requestFor("http://localhost/api/policies", { household: householdId }));
         const body = await res.json();
@@ -369,6 +373,10 @@ async function main() {
     });
 
     await journeyStep("the queued evidence document is scanned and rejected through the real pipeline, and its durable job completes (not stuck 'uploaded' forever)", async () => {
+      const config = PRODUCTION_JOB_TYPES.find((t) => t.jobType === "claim_evidence_processing");
+      if (!config) throw new Error('no processor configured for job type "claim_evidence_processing"');
+      const outcome = await claimAndProcessOne({ jobType: "claim_evidence_processing", workerId: `full-e2e-evidence-${process.pid}`, process: config.process });
+      assert.equal(outcome, "succeeded");
       const row = await waitFor(async () => {
         const res = await getEvidence(requestFor(`http://localhost/api/claims/evidence/${evidenceDocumentId}?familyMemberId=${selfMemberId}&claimSessionId=${claimSessionId}`, { household: householdId }), { params: Promise.resolve({ id: evidenceDocumentId }) } as any);
         const body = await res.json();

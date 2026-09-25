@@ -189,7 +189,7 @@ async function main() {
       assert.equal(row.rows[0].revoked_at, null);
     });
 
-    await testAsync("DELETE /api/household/invitations/[id]: revoking an ALREADY-revoked invitation returns 404, not a false success", async () => {
+    await testAsync("DELETE /api/household/invitations/[id]: retrying the same revocation is idempotent and returns the original deletion request", async () => {
       const owner = "d0000000-0000-4000-8000-000000000006";
       const householdId = await seedHousehold("Household Double Revoke", owner);
       const { id } = await seedInvitation(householdId, "invitee3@example.com", owner);
@@ -197,8 +197,16 @@ async function main() {
       asUser(owner);
       const first = await revokeRoute(requestFor(`http://localhost/api/household/invitations/${id}`, { household: householdId, method: "DELETE" }), { params: Promise.resolve({ id }) } as any);
       assert.equal(first.status, 200);
+      const firstBody = await first.json();
       const second = await revokeRoute(requestFor(`http://localhost/api/household/invitations/${id}`, { household: householdId, method: "DELETE" }), { params: Promise.resolve({ id }) } as any);
-      assert.equal(second.status, 404);
+      assert.equal(second.status, 200);
+      const secondBody = await second.json();
+      assert.equal(secondBody.deletionRequestId, firstBody.deletionRequestId);
+      const requests = await pool.query<{ count: string }>(
+        `SELECT count(*)::text AS count FROM deletion_requests WHERE resource_type='invitation' AND resource_id=$1`,
+        [id],
+      );
+      assert.equal(requests.rows[0].count, "1", "an idempotent retry must not create a second deletion request");
     });
 
     await testAsync("a revoked invitation is excluded from GET /api/household/invitations (the real downstream list-read path) immediately", async () => {

@@ -97,7 +97,11 @@ async function main() {
   }
 
   const roots = ["app", "lib", "scripts"].map((d) => path.resolve(d));
-  const files = (await Promise.all(roots.map(findSourceFiles))).flat();
+  // Exclude this harness itself: its self-test and explanatory comments
+  // intentionally contain fake env references that must not be treated as
+  // application configuration. Every other script remains in scope.
+  const thisFile = path.resolve("scripts/env-contract-regressions.ts");
+  const files = (await Promise.all(roots.map(findSourceFiles))).flat().filter((file) => file !== thisFile);
   for (const rootFile of ROOT_FILES) files.push(path.resolve(rootFile));
   assert.ok(files.length > 300, "sanity check: expected the whole app/+lib/+scripts/ tree plus root config files");
 
