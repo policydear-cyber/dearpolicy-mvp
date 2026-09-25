@@ -268,11 +268,12 @@ async function main() {
       // The route opens its own RLS-scoped transaction (createUserSupabaseClient):
       // statements on that client run as `authenticated`; the coordinator's
       // bookkeeping and audit writes use the service pool, as in production.
+      // Every connection handed out during this request is lock-free (the
+      // test is sequential); only the one that switches to the household
+      // role runs its statements as `authenticated`.
       const harnessConnect = pool.connect;
-      let armed = true;
+      let userSessions = 0;
       pool.connect = (async () => {
-        if (!armed) return (harnessConnect as unknown as () => Promise<unknown>)();
-        armed = false;
         let userRole = false;
         const run = async (text: string, params: unknown[] = []) => {
           if (params.length === 0) {
@@ -285,7 +286,7 @@ async function main() {
         return {
           query: async (text: string, params: unknown[] = []) => {
             const sql = text.trim();
-            if (/^SET LOCAL ROLE authenticated$/i.test(sql)) { userRole = true; return { rows: [], rowCount: 0 }; }
+            if (/^SET LOCAL ROLE authenticated$/i.test(sql)) { userRole = true; userSessions++; return { rows: [], rowCount: 0 }; }
             if (!userRole || /^(BEGIN|COMMIT|ROLLBACK)/i.test(sql)) return run(text, params);
             await db.query("SET ROLE authenticated");
             try { return await run(text, params); } finally { await db.query("RESET ROLE"); }
@@ -300,7 +301,7 @@ async function main() {
           method: "DELETE", headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${householdA}` },
         }), { params: Promise.resolve({ id: doc }) });
         assert.equal(res.status, 200, await res.clone().text());
-        assert.equal(armed, false, "the route really used an RLS-scoped connection");
+        assert.equal(userSessions, 1, "the route really used one RLS-scoped connection");
       } finally { pool.connect = harnessConnect; }
       const after = await row("claim_evidence_documents", doc);
       assert.equal(after.lifecycle_state, "pending_deletion");
