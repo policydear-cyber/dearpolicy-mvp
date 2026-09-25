@@ -91,7 +91,7 @@ export function sanitizeAnswerClaimItems(items: z.infer<typeof ClaimItemSchema>[
       ...(amountText != null
         ? {
             amountLabel: "Amount printed in the policy document — not yet confirmed against your own schedule" as const,
-            estimateBasis: "illustrative" as const,
+            estimateBasis: "indicative" as const,
           }
         : {}),
       reason: item.reason,

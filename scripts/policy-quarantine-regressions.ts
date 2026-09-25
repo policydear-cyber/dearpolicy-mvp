@@ -34,6 +34,7 @@ async function testAsync(name: string, fn: () => Promise<void>) {
 }
 
 async function runDatabaseTests() {
+  const mutableEnv = process.env as Record<string, string | undefined>;
   const db = new PGlite({ extensions: { vector, pgcrypto } });
   await db.waitReady;
   await db.exec(await readFile(path.resolve("sql/schema.sql"), "utf8"));
@@ -293,7 +294,7 @@ async function runDatabaseTests() {
     // independently-driftable copies).
     await testAsync("production null-scanner guard blocks boot, and is identical for claim-evidence and policy uploads", async () => {
       delete process.env.MALWARE_SCANNER_PROVIDER;
-      process.env.NODE_ENV = "production";
+      mutableEnv.NODE_ENV = "production";
       delete process.env.MALWARE_SCANNING_INTENTIONALLY_DISABLED;
       const shared = checkFileScannerConfigured();
       const viaClaimEvidenceWrapper = checkMalwareScannerConfigured();
@@ -336,7 +337,7 @@ async function runDatabaseTests() {
   } finally {
     pool.query = originalQuery; pool.connect = originalConnect;
     if (originalScannerProvider === undefined) delete process.env.MALWARE_SCANNER_PROVIDER; else process.env.MALWARE_SCANNER_PROVIDER = originalScannerProvider;
-    if (originalNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = originalNodeEnv;
+    if (originalNodeEnv === undefined) delete mutableEnv.NODE_ENV; else mutableEnv.NODE_ENV = originalNodeEnv;
     if (originalScanDisabledAck === undefined) delete process.env.MALWARE_SCANNING_INTENTIONALLY_DISABLED; else process.env.MALWARE_SCANNING_INTENTIONALLY_DISABLED = originalScanDisabledAck;
     await db.close();
   }

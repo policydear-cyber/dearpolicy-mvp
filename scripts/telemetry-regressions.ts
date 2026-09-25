@@ -234,7 +234,7 @@ async function main() {
 
   test("pseudonymizeId is stable for the same id and secret, and never returns the raw id", () => {
     const rawId = randomUUID();
-    const env = { TELEMETRY_PSEUDONYM_SECRET: "test-secret-one" } as NodeJS.ProcessEnv;
+    const env = { ...process.env, TELEMETRY_PSEUDONYM_SECRET: "test-secret-one" };
     const first = pseudonymizeId(rawId, env);
     const second = pseudonymizeId(rawId, env);
     assert.equal(first, second, "the same id must pseudonymize to the same value within one environment/secret");
@@ -244,14 +244,14 @@ async function main() {
 
   test("pseudonymizeId produces different pseudonyms for the same id under different secrets", () => {
     const rawId = randomUUID();
-    const a = pseudonymizeId(rawId, { TELEMETRY_PSEUDONYM_SECRET: "secret-a" } as NodeJS.ProcessEnv);
-    const b = pseudonymizeId(rawId, { TELEMETRY_PSEUDONYM_SECRET: "secret-b" } as NodeJS.ProcessEnv);
+    const a = pseudonymizeId(rawId, { ...process.env, TELEMETRY_PSEUDONYM_SECRET: "secret-a" });
+    const b = pseudonymizeId(rawId, { ...process.env, TELEMETRY_PSEUDONYM_SECRET: "secret-b" });
     assert.notEqual(a, b, "two different secrets must never produce the same pseudonym for the same underlying id");
   });
 
   test("isUsingInsecurePseudonymSecret reports true only when unconfigured", () => {
-    assert.equal(isUsingInsecurePseudonymSecret({} as NodeJS.ProcessEnv), true);
-    assert.equal(isUsingInsecurePseudonymSecret({ TELEMETRY_PSEUDONYM_SECRET: "real-secret" } as NodeJS.ProcessEnv), false);
+    assert.equal(isUsingInsecurePseudonymSecret({ ...process.env, TELEMETRY_PSEUDONYM_SECRET: undefined }), true);
+    assert.equal(isUsingInsecurePseudonymSecret({ ...process.env, TELEMETRY_PSEUDONYM_SECRET: "real-secret" }), false);
   });
 
   // ============================================================

@@ -112,17 +112,17 @@ function runPureTests() {
   });
 
   test("canaryConfigFor returns null when no CANARY_<OP>_MODEL is set", () => {
-    const config = canaryConfigFor("policy_extraction", {});
+    const config = canaryConfigFor("policy_extraction", { ...process.env, CANARY_POLICY_EXTRACTION_MODEL: undefined });
     assert.equal(config, null);
   });
 
   test("canaryConfigFor returns null for a malformed model setting (no provider:model split)", () => {
-    const config = canaryConfigFor("policy_extraction", { CANARY_POLICY_EXTRACTION_MODEL: "not-a-valid-setting" });
+    const config = canaryConfigFor("policy_extraction", { ...process.env, CANARY_POLICY_EXTRACTION_MODEL: "not-a-valid-setting" });
     assert.equal(config, null);
   });
 
   test("canaryConfigFor parses a valid setting, defaulting percentage to 0 (configured but off)", () => {
-    const config = canaryConfigFor("policy_extraction", { CANARY_POLICY_EXTRACTION_MODEL: "anthropic:claude-haiku-4-5" });
+    const config = canaryConfigFor("policy_extraction", { ...process.env, CANARY_POLICY_EXTRACTION_MODEL: "anthropic:claude-haiku-4-5" });
     assert.ok(config);
     assert.deepEqual(config!.canary, { provider: "anthropic", model: "claude-haiku-4-5" });
     assert.equal(config!.percentage, 0);
@@ -131,6 +131,7 @@ function runPureTests() {
 
   test("canaryConfigFor's per-operation kill switch works independently of the global one", () => {
     const config = canaryConfigFor("policy_extraction", {
+      ...process.env,
       CANARY_POLICY_EXTRACTION_MODEL: "anthropic:claude-haiku-4-5",
       CANARY_POLICY_EXTRACTION_PERCENTAGE: "100",
       CANARY_POLICY_EXTRACTION_KILL_SWITCH: "true",
@@ -143,6 +144,7 @@ function runPureTests() {
 
   test("canaryConfigFor's global kill switch overrides every operation at once", () => {
     const config = canaryConfigFor("coverage_extraction", {
+      ...process.env,
       CANARY_COVERAGE_EXTRACTION_MODEL: "anthropic:claude-haiku-4-5",
       CANARY_COVERAGE_EXTRACTION_PERCENTAGE: "100",
       CANARY_KILL_SWITCH_ALL: "true",

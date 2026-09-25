@@ -19,6 +19,10 @@ function fixtureResults(overrideStatus?: Partial<Record<string, CapabilityResult
     label: c.label,
     status: overrideStatus?.[c.id] ?? "ready",
     detail: "fixture",
+    checkType: "runtime-probe",
+    probe: "fixture probe",
+    evidenceSummary: "fixture evidence",
+    lastVerified: "2026-01-01T00:00:00.000Z",
   }));
 }
 
@@ -38,7 +42,7 @@ function testCapabilityManifest() {
 
   // An unknown capability id that isn't part of the required 24.
   const withUnknown = fixtureResults();
-  withUnknown.push({ id: "not_a_real_capability" as CapabilityResult["id"], label: "bogus", status: "ready", detail: "x" });
+  withUnknown.push({ ...withUnknown[0], id: "not_a_real_capability" as CapabilityResult["id"], label: "bogus" });
   assert.throws(() => assertManifestComplete(withUnknown), /unknown id/, "an unrecognized capability id must throw, not be silently accepted");
 
   // summarizeManifest() counts every status bucket, including zero-count ones.
@@ -139,10 +143,10 @@ function main() {
   assert.equal(noneExist.length, 2, "with zero buckets present, both required buckets must be reported missing");
 
   // requiredPrivateBucketIds() reads env vars with the documented defaults.
-  const defaults = requiredPrivateBucketIds({});
+  const defaults = requiredPrivateBucketIds({ ...process.env, SUPABASE_STORAGE_BUCKET: undefined, SUPABASE_CLAIM_EVIDENCE_BUCKET: undefined });
   assert.deepEqual(defaults, ["policy-files", "claim-evidence-files"], "with no env vars set, the documented defaults must be used");
 
-  const customEnv = requiredPrivateBucketIds({ SUPABASE_STORAGE_BUCKET: "my-policies", SUPABASE_CLAIM_EVIDENCE_BUCKET: "my-evidence" } as NodeJS.ProcessEnv);
+  const customEnv = requiredPrivateBucketIds({ ...process.env, SUPABASE_STORAGE_BUCKET: "my-policies", SUPABASE_CLAIM_EVIDENCE_BUCKET: "my-evidence" });
   assert.deepEqual(customEnv, ["my-policies", "my-evidence"], "a configured env var must override the default bucket id");
 
   console.log(
