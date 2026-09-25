@@ -272,7 +272,7 @@ async function main() {
       // test is sequential); only the one that switches to the household
       // role runs its statements as `authenticated`.
       const harnessConnect = pool.connect;
-      let userSessions = 0;
+      const asHousehold: string[] = [];
       pool.connect = (async () => {
         let userRole = false;
         const run = async (text: string, params: unknown[] = []) => {
@@ -286,8 +286,9 @@ async function main() {
         return {
           query: async (text: string, params: unknown[] = []) => {
             const sql = text.trim();
-            if (/^SET LOCAL ROLE authenticated$/i.test(sql)) { userRole = true; userSessions++; return { rows: [], rowCount: 0 }; }
+            if (/^SET LOCAL ROLE authenticated$/i.test(sql)) { userRole = true; return { rows: [], rowCount: 0 }; }
             if (!userRole || /^(BEGIN|COMMIT|ROLLBACK)/i.test(sql)) return run(text, params);
+            asHousehold.push(sql);
             await db.query("SET ROLE authenticated");
             try { return await run(text, params); } finally { await db.query("RESET ROLE"); }
           },
@@ -301,7 +302,7 @@ async function main() {
           method: "DELETE", headers: { cookie: `${ACTIVE_HOUSEHOLD_COOKIE}=${householdA}` },
         }), { params: Promise.resolve({ id: doc }) });
         assert.equal(res.status, 200, await res.clone().text());
-        assert.equal(userSessions, 1, "the route really used one RLS-scoped connection");
+        assert.ok(asHousehold.some((q) => /^UPDATE claim_evidence_documents\s+SET lifecycle_state/.test(q)), "the lifecycle transition really ran as the household (authenticated) session");
       } finally { pool.connect = harnessConnect; }
       const after = await row("claim_evidence_documents", doc);
       assert.equal(after.lifecycle_state, "pending_deletion");
