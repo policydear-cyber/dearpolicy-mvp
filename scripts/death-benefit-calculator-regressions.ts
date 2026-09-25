@@ -213,6 +213,17 @@ const causeEvidence = { documentId: "doc-1", documentType: "police_report", page
 const validMatch: CauseDefinitionMatch = {
   familyMemberId: "member-1", claimEventId: "claim-1", contractId: "contract-2", coverageId: "coverage-2",
   causeEvidence, definitionEvidence: accidentDefinitionEvidence, result: "matches", reviewedAt: "2026-06-02",
+  provenance: {
+    modelExecutionId: "model-execution-1",
+    operation: "claim_evidence_extraction",
+    verified: true,
+    resolvedModel: "gemini-3.6-flash",
+    promptVersion: "claim-evidence-extract-v1",
+    schemaVersion: "claim-evidence-extract-v1",
+    validatorVersion: "claim-evidence-extract-v1",
+    sourceDocumentId: "doc-1",
+    sourceDocumentVersion: "sha256:fixture-v1",
+  },
 };
 
 const accidentalBase: AccidentalDeathInput = {

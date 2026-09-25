@@ -7,6 +7,7 @@ import { assessClaim, nextClaimQuestion, relevantOwnedProducts } from "@/lib/cla
 import { EMPTY_CLAIM_FACTS, type ClaimQuestion } from "@/lib/claims/types";
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 export async function runClaimRegressions() {
   let cases = 0;
@@ -30,6 +31,7 @@ export async function runClaimRegressions() {
     causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
     definitionEvidence: { policyId: citation.policyId, chunkId: citation.chunkId, pageStart: citation.pageStart, pageEnd: citation.pageEnd },
     result: "matches", reviewedAt: "2026-09-14",
+    provenance: verifiedEvidenceProvenance("police-report-1"),
   });
   const death = await extractClaimFacts({ text: "charmaine died from an accident yesterday. what can i claim for?", ...context });
   test("Accidental death outranks accident and retains cause/date", () => {

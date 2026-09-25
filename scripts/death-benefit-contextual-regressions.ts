@@ -4,6 +4,7 @@ import { assessClaim, nextClaimQuestion } from "@/lib/claims/rules";
 import type { DeathRuleEvidence } from "@/lib/claims/death-evidence";
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 /** Contextual regressions for the V1 death-benefit and accidental-death
  * calculators, covering the scenarios the task explicitly asked for. These
@@ -37,6 +38,7 @@ export async function runDeathBenefitContextualRegressions() {
       causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
       definitionEvidence: { policyId: rule.citation.policyId, chunkId: rule.citation.chunkId, pageStart: rule.citation.pageStart, pageEnd: rule.citation.pageEnd },
       result: "matches", reviewedAt: "2026-09-14",
+      provenance: verifiedEvidenceProvenance("police-report-1"),
     };
   };
   const fullyConfirmed = () => ({ causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [confirmedMatch()] });

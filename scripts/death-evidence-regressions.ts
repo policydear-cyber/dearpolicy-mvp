@@ -5,6 +5,7 @@ import { extractClaimFacts } from "@/lib/claims/facts";
 import { assessClaim, nextClaimQuestion } from "@/lib/claims/rules";
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 export async function runDeathEvidenceRegressions() {
   let cases=0;
@@ -26,7 +27,7 @@ export async function runDeathEvidenceRegressions() {
     return {familyMemberId:"desmond",claimEventId:SESSION_ID,contractId:"personal",coverageId:"gpa",
       causeEvidence:{documentId:"police-report-1",documentType:"police_report",pageStart:1,pageEnd:1,familyMemberId:"desmond",claimEventId:SESSION_ID},
       definitionEvidence:{policyId:rule.citation.policyId,chunkId:rule.citation.chunkId,pageStart:rule.citation.pageStart,pageEnd:rule.citation.pageEnd},
-      result:"matches",reviewedAt:"2026-09-14"};
+      result:"matches",reviewedAt:"2026-09-14",provenance:verifiedEvidenceProvenance("police-report-1")};
   };
   test("Actual Certificate Part 2 promises pay the full Sum Insured without 100%",()=>{
     assert.equal(findDeathRule(pages,"Group Term Life")?.page,3);
