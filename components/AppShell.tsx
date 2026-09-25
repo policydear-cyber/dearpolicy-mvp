@@ -85,6 +85,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
   const down = services.filter((s) => !s.ok);
+  // The internal reviewer area is a DearPolicy staff tool, not part of any
+  // household: it gets its own single-item navigation, never the household's.
+  const reviewerArea = pathname.startsWith("/reviewer");
+  const items = reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : nav;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -92,7 +96,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
         </Link>
         <nav className="nav">
-          {nav.map((item) => {
+          {reviewerArea && <div className="eyebrow">Reviewer area</div>}
+          {items.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link className={`nav-item ${active ? "active" : ""}`} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>

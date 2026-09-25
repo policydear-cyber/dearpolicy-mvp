@@ -7,6 +7,7 @@ import {
 } from "@/lib/claims/evidence/document-catalogue";
 import { BILL_REVIEW_NOTICE, billReviewDraftFrom, buildBillReviewRequest, type BillReviewDraft } from "@/lib/claims/evidence/bill-review";
 import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceDocumentType } from "@/lib/claims/evidence/types";
+import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE, type HouseholdReviewStatus } from "@/lib/claims/reviewers/copy";
 
 type Claim = { id: string; family_member_id: string; status: string; event_summary: string | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
 type ExtractedFields = {
@@ -21,7 +22,9 @@ type ExtractedFields = {
   thirdPartyPayments?: { source: string; amountText: string; currency: string | null }[];
 };
 type Extraction = { id: string; extracted_fields: ExtractedFields; reviewed_fields: Partial<ExtractedFields> | null; identity_conflicts: { code: string; message: string }[] };
-type EvidenceDoc = { id: string; document_type: string; original_filename: string; status: string; scan_status: string; identity_status: string; processing_error_code: string | null; created_at: string; extraction: Extraction | null };
+type EvidenceDoc = { id: string; document_type: string; original_filename: string; status: string; scan_status: string; identity_status: string; processing_error_code: string | null; created_at: string; extraction: Extraction | null;
+  /** Server-computed policy-definition review status; never who reviewed or why. */
+  reviewStatus?: HouseholdReviewStatus | null };
 
 const NON_TERMINAL = new Set(["uploaded", "quarantined", "processing", "extracted"]);
 
@@ -60,6 +63,13 @@ export default function ClaimEvidencePage() {
   useEffect(() => {
     if (!documents.some((d) => NON_TERMINAL.has(d.status))) return;
     const timer = setInterval(load, 4000);
+    return () => clearInterval(timer);
+  }, [documents, load]);
+  // A DearPolicy reviewer works on their own schedule: check back now and
+  // then while a review is pending, so a finished review shows up.
+  useEffect(() => {
+    if (!documents.some((d) => d.reviewStatus === "in_review" || d.reviewStatus === "awaiting_assignment")) return;
+    const timer = setInterval(load, 30_000);
     return () => clearInterval(timer);
   }, [documents, load]);
 
@@ -119,6 +129,16 @@ export default function ClaimEvidencePage() {
         </form>
       </section>
 
+      {documents.some((d) => d.reviewStatus === "reviewed") && (
+        <section className="section">
+          <h2>Claim assessment</h2>
+          <p className="muted">{INDICATIVE_ESTIMATE_NOTICE}</p>
+          {claim.decision_packet?.assessments?.length
+            ? <ul>{claim.decision_packet.assessments.map((a) => <li key={a.id}>{a.title}</li>)}</ul>
+            : <p>Ask DearPolicy about this claim to refresh the assessment with the review.</p>}
+        </section>
+      )}
+
       <section className="section">
         <h2>Documents</h2>
         {documents.length === 0 ? <div className="empty-card">No claim-evidence documents uploaded yet.</div> : documents.map((doc) => (
@@ -160,7 +180,12 @@ export default function ClaimEvidencePage() {
                   death, critical illness, disability, travel) is never a
                   household decision -- see the *-match routes. */}
               {["needs_review", "matched"].includes(doc.status) && documentTypeGroup(doc.document_type) !== "bills_and_settlements" && (
-                <p className="muted"><b>{POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE}</b></p>
+                <div>
+                  {doc.reviewStatus !== "reviewed" && <p className="muted"><b>{POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE}</b></p>}
+                  {doc.reviewStatus && (
+                    <p><span className="status">{HOUSEHOLD_REVIEW_STATUS_COPY[doc.reviewStatus].label}</span> {HOUSEHOLD_REVIEW_STATUS_COPY[doc.reviewStatus].detail}</p>
+                  )}
+                </div>
               )}
 
               {doc.extraction && ["needs_review", "matched"].includes(doc.status) && isMedicalClaimEligibleDocumentType(doc.document_type as ClaimEvidenceDocumentType) && (

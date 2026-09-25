@@ -24,6 +24,7 @@ import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { ACTIVE_HOUSEHOLD_COOKIE } from "@/lib/auth/request-context";
 import { POLICY_DEFINITION_REVIEW_REQUIRED_MESSAGE } from "@/lib/claims/evidence/document-catalogue";
 import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE } from "@/lib/claims/reviewers/copy";
+import { REVIEWER_DECISION_CHOICES, buildReviewerDecisionRequest, resultForChoice } from "@/lib/claims/reviewers/decision-request";
 import fixture from "./fixtures/singlife-death-wording.json";
 
 const SQL_FILES = ["sql/schema.sql", "sql/claim-evidence.sql", "sql/household-rls.sql", "sql/background-jobs.sql", "sql/lifecycle.sql", "sql/model-provenance.sql"];
@@ -49,6 +50,38 @@ const EXTRACTION = {
 };
 
 async function main() {
+  await testAsync("the reviewer UI offers exactly three decisions, requires a reason, and never sends identity or scope", () => {
+    assert.deepEqual(REVIEWER_DECISION_CHOICES.map((c) => c.value), ["matches", "does_not_match", "needs_further_review"]);
+    assert.equal(resultForChoice("match", "needs_further_review"), "needs_review");
+    assert.equal(resultForChoice("travel-match", "needs_further_review"), "needs_review");
+    assert.equal(resultForChoice("ci-match", "needs_further_review"), "insufficient_evidence");
+    assert.equal(resultForChoice("disability-match", "matches"), "matches");
+    const target = { route: "ci-match" as const, contractId: "c", coverageId: "v", benefitCode: "ci-major", illnessName: "Major Cancer" };
+    assert.equal(buildReviewerDecisionRequest({ assignmentId: "a", evidenceDocumentId: "d", target, choice: "matches", reason: " " }).ok, false);
+    assert.equal(buildReviewerDecisionRequest({ assignmentId: "a", evidenceDocumentId: "d", target, choice: "", reason: "Because." }).ok, false);
+    const built = buildReviewerDecisionRequest({ assignmentId: "a", evidenceDocumentId: "d", target, choice: "matches", reason: "Diagnosis meets the wording." });
+    assert.ok(built.ok);
+    if (!built.ok) return;
+    assert.equal(built.url, "/api/claims/evidence/d/ci-match");
+    assert.deepEqual(Object.keys(built.body).sort(), ["assignmentId", "benefitCode", "contractId", "coverageId", "illnessName", "reason", "result"]);
+  });
+
+  await testAsync("the reviewer area sits outside household navigation and the household page shows only the four statuses", async () => {
+    const shell = await readFile(path.resolve("components/AppShell.tsx"), "utf8");
+    assert.match(shell, /pathname\.startsWith\("\/reviewer"\)/);
+    const nav = shell.slice(shell.indexOf("const nav"), shell.indexOf("];", shell.indexOf("const nav")));
+    assert.ok(!nav.includes("/reviewer"), "the household navigation never links to the reviewer area");
+    for (const file of ["app/reviewer/page.tsx", "app/reviewer/assignments/[id]/page.tsx"]) {
+      const source = await readFile(path.resolve(file), "utf8");
+      assert.ok(!/\/api\/(family|policies|household|ledger|claims\/evidence\?)/.test(source), `${file} must read only reviewer endpoints`);
+      assert.ok(!/(sumInsured|formula|amount|model_execution|modelExecution)\s*[:=]\s*/.test(source.replace(/amountText/g, "")), `${file} must not edit amounts, formulas or provenance`);
+    }
+    const household = await readFile(path.resolve("app/claims/[id]/page.tsx"), "utf8");
+    assert.match(household, /HOUSEHOLD_REVIEW_STATUS_COPY/);
+    assert.match(household, /INDICATIVE_ESTIMATE_NOTICE/);
+    assert.ok(!/reviewedBy|reviewed_by|\.reason\b/.test(household), "the household page never shows who reviewed or why");
+  });
+
   setTelemetryAdapter(new NoopTelemetryAdapter());
   process.env.ANTHROPIC_API_KEY = "test-key-not-real";
   process.env.READING_MODEL = "anthropic:claude-haiku-4-5";
