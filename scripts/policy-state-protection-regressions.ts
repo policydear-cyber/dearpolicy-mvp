@@ -52,7 +52,14 @@ const DENIED = /permission denied|may only move an active/i;
 async function main() {
   const h = await startReviewerHarness();
   const db = h.db;
-  if (existsSync(path.resolve("sql/infrastructure-rls.sql"))) await db.exec(await readFile(path.resolve("sql/infrastructure-rls.sql"), "utf8"));
+  // The harness applies only the migrations the reviewer suites need. The
+  // policies table's production shape also carries columns from
+  // cover-conditions.sql (runbook step 3) and coverage-ledger.sql (step 4), so
+  // apply those, then re-run household-rls.sql and infrastructure-rls.sql in
+  // runbook order (16, 17) exactly as a production migration would.
+  for (const file of ["sql/cover-conditions.sql", "sql/coverage-ledger.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql"]) {
+    if (existsSync(path.resolve(file))) await db.exec(await readFile(path.resolve(file), "utf8"));
+  }
 
   // Lock-free pool on the same database: service statements run as the
   // owner; a client that switches to `authenticated` (createUserSupabaseClient)
@@ -140,7 +147,7 @@ async function main() {
     const snapshot = async () => {
       const out = await h.assess(householdA, member, claim, f.facts);
       const coverages = await confirmedOwnedCoverages(householdA, member);
-      const chunks = await retrieveRelevantChunks({ accountId: householdA, familyMemberId: member, question: "death due to accident benefit" });
+      const chunks = await retrieveRelevantChunks({ accountId: householdA, familyMemberId: member, question: "death benefit payable" });
       return {
         amount: out.assessments.find((a) => a.id === f.itemId && a.coverageId === coverageId)?.calculatedAmount,
         forgedItems: out.assessments.filter((a) => a.coverageId === unscannedCoverage && a.calculatedAmount !== undefined).length,
