@@ -262,7 +262,7 @@ function runCalculatorTests() {
 
   test("calculationId changes when the reviewed medical evidence document changes -- a material evidence change always invalidates the prior identity", () => {
     const r1 = calculateCriticalIllness(baseCIInput());
-    const r2 = calculateCriticalIllness(baseCIInput({ definitionMatch: ciMatch({ medicalEvidence: medicalEvidence({ documentId: "doc-2" }) }) }));
+    const r2 = calculateCriticalIllness(baseCIInput({ definitionMatch: ciMatch({ medicalEvidence: medicalEvidence({ documentId: "doc-2" }), provenance: verifiedEvidenceProvenance("doc-2") }) }));
     assert.equal(r1.status, "calculated"); assert.equal(r2.status, "calculated");
     if (r1.status === "calculated" && r2.status === "calculated") assert.notEqual(r1.calculationId, r2.calculationId);
   });

@@ -21,6 +21,8 @@ import type { ClaimEvidenceDocumentType, ClaimEvidenceExtractedFields, ClaimEvid
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
+import type { ModelExecutionRecord } from "@/lib/ai/provenance";
+import { storedExecutionFromRecord, type StoredExtractionExecution } from "./extraction-provenance";
 
 export const CLAIM_EVIDENCE_EXTRACTION_VERSION = "claim-evidence-extract-v1";
 
@@ -87,7 +89,7 @@ export async function extractClaimEvidence(args: {
   pages: { pageNumber: number; text: string }[];
   documentType: ClaimEvidenceDocumentType;
   documentId?: string;
-}): Promise<{ fields: ClaimEvidenceExtractedFields; model: string; provider: string; version: string }> {
+}): Promise<{ fields: ClaimEvidenceExtractedFields; model: string; provider: string; version: string; execution: StoredExtractionExecution | null }> {
   const choice = modelFor("reading");
   const system = isMedicalClaimEligibleDocumentType(args.documentType) && !isMedicalEvidenceDocumentType(args.documentType)
     ? MEDICAL_BILL_SYSTEM
@@ -103,6 +105,11 @@ export async function extractClaimEvidence(args: {
   // engine.ts's composeClaim() already uses. Fire-and-forget, never
   // awaited -- telemetry must never slow down or fail extraction itself.
   const correlationId = resolveCorrelationId(undefined);
+  // The exact persisted model_executions record for the attempt whose
+  // output this extraction is built from -- handed over by
+  // structuredCompletion() itself, never looked up afterwards and never
+  // inferred from `choice` (a requested identity, possibly an alias).
+  const captured: { record: ModelExecutionRecord | null } = { record: null };
   try {
     const raw = await structuredCompletion({
       system,
@@ -110,8 +117,10 @@ export async function extractClaimEvidence(args: {
       schema: ClaimEvidenceExtractionSchema,
       role: "reading",
       operation: "claim_evidence_extraction",
+      promptVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
       schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
       temperature: 0,
+      onExecutionRecord: (record) => { captured.record = record; },
     });
     // structuredCompletion() already validated `raw` against
     // ClaimEvidenceExtractionSchema (throwing TruncatedModelOutput on a
@@ -130,7 +139,8 @@ export async function extractClaimEvidence(args: {
       schemaVersion: CLAIM_EVIDENCE_EXTRACTION_VERSION,
       extra: { documentType: args.documentType, pageCitationsKept: fields.pageCitations.length, pageCitationsProposed: raw.pageCitations.length },
     });
-    return { fields, model: choice.model, provider: choice.provider, version: CLAIM_EVIDENCE_EXTRACTION_VERSION };
+    const execution = captured.record ? storedExecutionFromRecord(captured.record) : null;
+    return { fields, model: choice.model, provider: choice.provider, version: CLAIM_EVIDENCE_EXTRACTION_VERSION, execution };
   } catch (error) {
     void recordErrorEvent({
       name: "claims.evidence.extraction.failed",

@@ -150,3 +150,12 @@ CREATE INDEX IF NOT EXISTS idx_claim_evidence_audit_claim
   ON claim_evidence_audit_log(account_id, claim_session_id);
 CREATE INDEX IF NOT EXISTS idx_claim_evidence_audit_occurred
   ON claim_evidence_audit_log(account_id, occurred_at DESC);
+
+-- Evidence model-execution provenance, additive and idempotent. The
+-- extraction row records the exact model_executions identity behind its
+-- extracted_fields; a definition-match row snapshots the provenance the
+-- reviewer's decision rested on. Rows written before these columns existed
+-- keep NULL, which every monetary gate treats as missing provenance and
+-- therefore fails closed.
+ALTER TABLE claim_evidence_extractions ADD COLUMN IF NOT EXISTS model_execution jsonb;
+ALTER TABLE claim_cause_definition_matches ADD COLUMN IF NOT EXISTS evidence_provenance jsonb;

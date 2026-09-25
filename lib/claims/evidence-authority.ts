@@ -138,6 +138,13 @@ export type EvidenceAuthorityOptions = {
    * loadVerifiedMedicalBillFacts() is the primary defense against a
    * superseded document's evidence resurfacing at all. */
   expectedSourceDocumentVersion?: string | null;
+  /** The evidence document this calculation's OWN reviewed evidence
+   * reference names (e.g. a CauseDefinitionMatch's causeEvidence.documentId).
+   * When supplied, a provenance record produced from any other document is
+   * rejected -- provenance is bound to the exact document it was extracted
+   * from and can never be carried over to unlock a match that rests on a
+   * different document, claim, member or policy scope. */
+  expectedSourceDocumentId?: string | null;
   /** Overrides provenance.validatorVersion as the "outputValidatorVersion"
    * side of the compatibility check, for a caller that knows the exact
    * validator version IT is built against (rather than trusting whatever
@@ -221,6 +228,16 @@ export function evaluateEvidenceAuthority(
       authorized: false,
       reasonCode: "EVIDENCE_REPROCESSING_REQUIRED",
       message: "This evidence has been flagged for mandatory re-processing and cannot unlock a monetary result until that completes.",
+    };
+  }
+  if (
+    options.expectedSourceDocumentId != null &&
+    provenance.sourceDocumentId !== options.expectedSourceDocumentId
+  ) {
+    return {
+      authorized: false,
+      reasonCode: "EVIDENCE_SOURCE_DOCUMENT_CHANGED",
+      message: "This evidence's recorded extraction came from a different document than the one this reviewed match rests on, so it cannot unlock a monetary result.",
     };
   }
   if (

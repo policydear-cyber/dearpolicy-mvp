@@ -194,6 +194,10 @@ export type ClaimEvidenceExtractionRow = {
   extraction_version: string;
   processing_timestamp: string;
   identity_conflicts: ClaimEvidenceIdentityConflict[];
+  /** Untrusted jsonb until re-validated by ./extraction-provenance.ts's
+   * parseStoredExecution(); NULL/absent for rows written before provenance
+   * was persisted (fail closed). */
+  model_execution?: unknown;
   created_at: string;
   updated_at: string;
 };
@@ -218,6 +222,10 @@ export type ClaimCauseDefinitionMatchRow = {
   reason: string | null;
   superseded_at: string | null;
   superseded_reason: string | null;
+  /** Untrusted jsonb snapshot until re-validated by
+   * ./extraction-provenance.ts's resolveMatchProvenance(); NULL/absent for
+   * rows recorded before provenance was persisted (fail closed). */
+  evidence_provenance?: unknown;
   created_at: string;
 };
 
@@ -243,6 +251,10 @@ export type ClaimCIDefinitionMatchRow = {
   reason: string | null;
   superseded_at: string | null;
   superseded_reason: string | null;
+  /** Untrusted jsonb snapshot until re-validated by
+   * ./extraction-provenance.ts's resolveMatchProvenance(); NULL/absent for
+   * rows recorded before provenance was persisted (fail closed). */
+  evidence_provenance?: unknown;
   created_at: string;
 };
 
@@ -272,6 +284,10 @@ export type ClaimDisabilityDefinitionMatchRow = {
   reason: string | null;
   superseded_at: string | null;
   superseded_reason: string | null;
+  /** Untrusted jsonb snapshot until re-validated by
+   * ./extraction-provenance.ts's resolveMatchProvenance(); NULL/absent for
+   * rows recorded before provenance was persisted (fail closed). */
+  evidence_provenance?: unknown;
   created_at: string;
 };
 

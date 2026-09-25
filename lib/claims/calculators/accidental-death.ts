@@ -261,7 +261,7 @@ export function calculateAccidentalDeath(input: AccidentalDeathInput): Accidenta
   // (so a malformed-evidence problem is still reported as such), and
   // BEFORE any arithmetic, so an unauthorized match can never unlock an
   // amount even transiently.
-  const authority = evaluateEvidenceAuthority(match.provenance);
+  const authority = evaluateEvidenceAuthority(match.provenance, { expectedSourceDocumentId: causeEvidence.documentId });
   if (!authority.authorized) {
     return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
   }

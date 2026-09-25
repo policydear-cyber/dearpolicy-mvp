@@ -59,3 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_ci_matches_document
   ON claim_ci_definition_matches(evidence_document_id);
 CREATE INDEX IF NOT EXISTS idx_ci_matches_coverage
   ON claim_ci_definition_matches(coverage_id);
+
+-- Evidence model-execution provenance snapshot for a reviewed match; see
+-- sql/claim-evidence.sql. NULL on older rows, which fails closed.
+ALTER TABLE claim_ci_definition_matches ADD COLUMN IF NOT EXISTS evidence_provenance jsonb;

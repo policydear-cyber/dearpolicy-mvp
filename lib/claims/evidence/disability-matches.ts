@@ -41,6 +41,7 @@ import { confirmedOwnedCoverages } from "@/lib/coverage/facts";
 import { loadDisabilityEvidence } from "@/lib/claims/disability-evidence";
 import { validateMedicalEvidence, validatePolicyEvidence, type DisabilityDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 import { appendClaimEvidenceAudit } from "./audit";
+import { provenanceSnapshotForExtraction } from "./extraction-provenance";
 import { getScopedEvidenceDocument, getLatestExtraction, recordDisabilityDefinitionMatch, transitionEvidenceStatus } from "./store";
 import { isMedicalEvidenceDocumentType, type ClaimEvidenceExtractedFields } from "./types";
 
@@ -133,6 +134,9 @@ export async function confirmDisabilityDefinitionMatch(args: {
     benefitCode: args.benefitCode, matchKey: rule.matchKey,
     medicalEvidence: medicalCheck.evidence, definitionEvidence: definitionCheck.evidence,
     result: args.result, reviewedBy: args.reviewerName, reason: args.reason ?? null,
+    // Server-side, from the stored extraction this review read -- never
+    // from the request. Null (no persisted provenance) keeps amounts blocked.
+    evidenceProvenance: provenanceSnapshotForExtraction(extraction, document.id),
   });
 
   await appendClaimEvidenceAudit(args.accountId, {

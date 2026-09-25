@@ -292,7 +292,7 @@ export function calculateCriticalIllness(input: CIInput): CIResult {
   // identical gate in accidental-death.ts and lib/claims/evidence-authority.ts
   // for the full rationale. Runs after the match is confirmed structurally
   // correct and scoped to this exact calculation, before any arithmetic.
-  const authority = evaluateEvidenceAuthority(match.provenance);
+  const authority = evaluateEvidenceAuthority(match.provenance, { expectedSourceDocumentId: medicalEvidence.documentId });
   if (!authority.authorized) {
     return { status: "blocked", reasonCode: authority.reasonCode, message: authority.message };
   }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
-import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation } from "./provenance";
+import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -80,6 +80,14 @@ export async function structuredCompletion<T>(args: {
   correlationId?: string;
   householdId?: string;
   resourceId?: string;
+  /** Receives the exact persisted model_executions record for the attempt
+   * whose output this call returns -- only after that output has parsed
+   * and validated against `schema`, and only when the record was actually
+   * persisted (a provenance-persistence failure yields no callback, so a
+   * caller that needs provenance simply has none and must fail closed).
+   * Never invoked for a failed attempt or for the failed primary of a
+   * fallback pair. Optional: existing callers are unaffected. */
+  onExecutionRecord?: (record: ModelExecutionRecord) => void;
 } & CompletionRuntimeOptions): Promise<T> {
   // Checkpoint 14i: "Model completions" was named as a required
   // telemetry call site (scripts/launch-check.ts's privacy_safe_
@@ -158,12 +166,13 @@ export async function structuredCompletion<T>(args: {
         if (record && MONETARY_GATED_OPERATIONS.has(operation)) {
           assertVerifiedForMonetaryUse(record);
         }
-        return reply;
+        return { reply, record };
       };
       let usedChoice = choice;
-      let reply;
+      let reply: Awaited<ReturnType<typeof hostedStructuredCompletion>>;
+      let usedRecord: ModelExecutionRecord | null;
       try {
-        reply = await call(choice, 0);
+        ({ reply, record: usedRecord } = await call(choice, 0));
       } catch (error) {
         // A rate limit is specific to the model, not to the household's
         // question -- when a cheaper tier of the same provider exists for this
@@ -172,7 +181,7 @@ export async function structuredCompletion<T>(args: {
         const fallback = /\(429\)|busy|rate limit|quota/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
         if (!fallback) throw error;
         usedChoice = fallback;
-        reply = await call(fallback, 1);
+        ({ reply, record: usedRecord } = await call(fallback, 1));
       }
       let json: unknown;
       try { json = JSON.parse(reply.content); }
@@ -188,6 +197,9 @@ export async function structuredCompletion<T>(args: {
         throw new TruncatedModelOutput(reply.truncated ? "The " + describeChoice(usedChoice) + " model stopped part-way through its structured output."
           : "The " + describeChoice(usedChoice) + " model's reply did not match the expected structure.", reply.content, reply.truncated, error instanceof Error ? error : undefined);
       }
+      // Handed over only once the reply has parsed and validated, and only
+      // for the attempt that produced it -- see onExecutionRecord's doc.
+      if (usedRecord && args.onExecutionRecord) args.onExecutionRecord(usedRecord);
       void recordEvent({
         name: "ai.structured_completion.completed",
         correlationId: telemetryCorrelationId,

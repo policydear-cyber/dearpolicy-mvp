@@ -233,7 +233,7 @@ function runPureTests() {
   test("calculator: changing the cause-evidence document changes the calculation ID; identical inputs reproduce it", () => {
     const r1 = calculateAccidentalDeath({ ...baseInput, causeDefinitionMatch: matchFor(definitionEvidenceA) });
     const r2 = calculateAccidentalDeath({ ...baseInput, causeDefinitionMatch: matchFor(definitionEvidenceA) });
-    const differentDoc = calculateAccidentalDeath({ ...baseInput, causeDefinitionMatch: { ...matchFor(definitionEvidenceA), causeEvidence: { documentId: "doc-2", documentType: "death_certificate", familyMemberId: "m1", claimEventId: "claim-1", pageStart: 1, pageEnd: 1 } } });
+    const differentDoc = calculateAccidentalDeath({ ...baseInput, causeDefinitionMatch: { ...matchFor(definitionEvidenceA), causeEvidence: { documentId: "doc-2", documentType: "death_certificate", familyMemberId: "m1", claimEventId: "claim-1", pageStart: 1, pageEnd: 1 }, provenance: verifiedEvidenceProvenance("doc-2") } });
     assert.equal(r1.status, "calculated"); assert.equal(r2.status, "calculated"); assert.equal(differentDoc.status, "calculated");
     if (r1.status === "calculated" && r2.status === "calculated" && differentDoc.status === "calculated") {
       assert.equal(r1.calculationId, r2.calculationId);

@@ -13,18 +13,29 @@
  * cache-busting step anywhere.
  */
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
-import { loadActiveCauseDefinitionMatches } from "./store";
+import { loadActiveCauseDefinitionMatches, loadEvidenceProvenanceContext } from "./store";
+import { resolveMatchProvenance } from "./extraction-provenance";
 
 export async function loadCauseDefinitionMatchesForFacts(accountId: string, familyMemberId: string, claimSessionId: string): Promise<CauseDefinitionMatch[]> {
   const rows = await loadActiveCauseDefinitionMatches(accountId, familyMemberId, claimSessionId);
-  return rows.map((row) => ({
-    familyMemberId: row.family_member_id,
-    claimEventId: row.claim_session_id,
-    contractId: row.contract_id,
-    coverageId: row.coverage_id ?? undefined,
-    causeEvidence: row.cause_evidence,
-    definitionEvidence: row.definition_evidence,
-    result: row.result,
-    reviewedAt: row.reviewed_at,
-  }));
+  // Provenance is re-bound to the CURRENT document state on every read --
+  // see resolveMatchProvenance(). No rows means no extra query.
+  const contexts = await loadEvidenceProvenanceContext(accountId, rows.map((row) => row.evidence_document_id));
+  return rows.map((row) => {
+    const provenance = resolveMatchProvenance(row.evidence_provenance, contexts.get(row.evidence_document_id), {
+      documentId: row.evidence_document_id, familyMemberId: row.family_member_id, claimSessionId: row.claim_session_id,
+    });
+    const match: CauseDefinitionMatch = {
+      familyMemberId: row.family_member_id,
+      claimEventId: row.claim_session_id,
+      contractId: row.contract_id,
+      coverageId: row.coverage_id ?? undefined,
+      causeEvidence: row.cause_evidence,
+      definitionEvidence: row.definition_evidence,
+      result: row.result,
+      reviewedAt: row.reviewed_at,
+    };
+    if (provenance) match.provenance = provenance;
+    return match;
+  });
 }

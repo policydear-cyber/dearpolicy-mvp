@@ -189,7 +189,7 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     // Longest-running step (OCR already ran above; this is the LLM
     // structured-extraction call) -- heartbeat right before it starts.
     await heartbeat(args);
-    const { fields, model, provider, version } = await extractClaimEvidence({
+    const { fields, model, provider, version, execution } = await extractClaimEvidence({
       pages: pages.map((p) => ({ pageNumber: p.pageNumber, text: p.text })),
       documentType: current.document_type,
       documentId: args.documentId,
@@ -213,6 +213,10 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
       accountId: args.accountId, evidenceDocumentId: current.id, sourceDocumentVersion: current.file_hash,
       extractedFields: fields, extractionModel: model, extractionProvider: provider, extractionVersion: version,
       identityConflicts: identity.conflicts,
+      // The real model_executions identity behind this extraction, or null
+      // when provenance could not be persisted -- never fabricated from
+      // extractionModel. Null keeps every downstream amount fail-closed.
+      modelExecution: execution,
     });
 
     const extractedRow = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "processing", to: "extracted", identityStatus: identity.status });

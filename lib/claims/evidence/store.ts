@@ -4,6 +4,8 @@ import { ensureClaimEvidenceSchema } from "./schema";
 import { ensureCriticalIllnessSchema } from "./ci-schema";
 import { ensureDisabilitySchema } from "./disability-schema";
 import { assertValidEvidenceTransition } from "./state-machine";
+import type { EvidenceProvenance } from "@/lib/claims/evidence-authority";
+import type { EvidenceDocumentProvenanceContext, StoredExtractionExecution } from "./extraction-provenance";
 import type {
   ClaimCauseDefinitionMatchRow, ClaimCIDefinitionMatchRow, ClaimDisabilityDefinitionMatchRow, ClaimEvidenceDocumentRow, ClaimEvidenceDocumentType,
   ClaimEvidenceExtractedFields, ClaimEvidenceExtractionRow, ClaimEvidenceIdentityConflict,
@@ -292,7 +294,7 @@ export async function supersedeEvidenceDocument(args: { accountId: string; oldId
 
 const EXTRACTION_COLUMNS = `id::text,account_id,evidence_document_id,source_document_version,extracted_fields,reviewed_fields,
   reviewed_at::text,reviewed_by,extraction_model,extraction_provider,extraction_version,processing_timestamp::text,
-  identity_conflicts,created_at::text,updated_at::text`;
+  identity_conflicts,model_execution,created_at::text,updated_at::text`;
 
 /** Idempotent: retrying extraction for the same document VERSION (same
  * evidence_document_id + source_document_version, i.e. the document's
@@ -302,17 +304,25 @@ const EXTRACTION_COLUMNS = `id::text,account_id,evidence_document_id,source_docu
 export async function recordExtraction(args: {
   accountId: string; evidenceDocumentId: string; sourceDocumentVersion: string; extractedFields: ClaimEvidenceExtractedFields;
   extractionModel: string; extractionProvider: string; extractionVersion: string; identityConflicts: ClaimEvidenceIdentityConflict[];
+  /** The real model_executions identity behind this extraction (see
+   * ./extraction-provenance.ts). Omitted/null stores NULL -- and a retried
+   * extraction that could not persist provenance overwrites any earlier
+   * value with NULL, so fields and provenance always describe the same
+   * attempt and an old execution can never vouch for new output. */
+  modelExecution?: StoredExtractionExecution | null;
 }): Promise<ClaimEvidenceExtractionRow> {
   await ensureClaimEvidenceSchema();
   const result = await query<ClaimEvidenceExtractionRow>(
-    `INSERT INTO claim_evidence_extractions(account_id,evidence_document_id,source_document_version,extracted_fields,extraction_model,extraction_provider,extraction_version,identity_conflicts)
-     VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8::jsonb)
+    `INSERT INTO claim_evidence_extractions(account_id,evidence_document_id,source_document_version,extracted_fields,extraction_model,extraction_provider,extraction_version,identity_conflicts,model_execution)
+     VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8::jsonb,$9::jsonb)
      ON CONFLICT (evidence_document_id,source_document_version) DO UPDATE
        SET extracted_fields=EXCLUDED.extracted_fields, extraction_model=EXCLUDED.extraction_model,
            extraction_provider=EXCLUDED.extraction_provider, extraction_version=EXCLUDED.extraction_version,
-           identity_conflicts=EXCLUDED.identity_conflicts, processing_timestamp=now(), updated_at=now()
+           identity_conflicts=EXCLUDED.identity_conflicts, model_execution=EXCLUDED.model_execution,
+           processing_timestamp=now(), updated_at=now()
      RETURNING ${EXTRACTION_COLUMNS}`,
-    [args.accountId, args.evidenceDocumentId, args.sourceDocumentVersion, JSON.stringify(args.extractedFields), args.extractionModel, args.extractionProvider, args.extractionVersion, JSON.stringify(args.identityConflicts)],
+    [args.accountId, args.evidenceDocumentId, args.sourceDocumentVersion, JSON.stringify(args.extractedFields), args.extractionModel, args.extractionProvider, args.extractionVersion, JSON.stringify(args.identityConflicts),
+      args.modelExecution ? JSON.stringify(args.modelExecution) : null],
   );
   return result.rows[0];
 }
@@ -344,7 +354,7 @@ export async function correctExtraction(args: { accountId: string; extractionId:
 // --- Cause-definition matches ------------------------------------------
 
 const MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,
-  cause_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,created_at::text`;
+  cause_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,evidence_provenance,created_at::text`;
 
 /** Records a reviewer's (or a deterministic rule's) finalised decision.
  * Never called from chat text or model output -- see
@@ -357,6 +367,12 @@ export async function recordCauseDefinitionMatch(args: {
   accountId: string; familyMemberId: string; claimSessionId: string; contractId: string; coverageId: string | null;
   evidenceDocumentId: string; causeEvidence: unknown; definitionEvidence: unknown; result: CauseDefinitionMatchResultValue;
   reviewedBy: string; reason: string | null;
+  /** Snapshot of the extraction provenance the reviewer's decision rests
+   * on, bound to evidenceDocumentId -- derived server-side from the stored
+   * extraction (see ./extraction-provenance.ts), never from a request body.
+   * Null when that extraction has no persisted provenance; every amount
+   * then stays fail-closed. */
+  evidenceProvenance?: EvidenceProvenance | null;
 }): Promise<ClaimCauseDefinitionMatchRow> {
   await ensureClaimEvidenceSchema();
   const client = await pool.connect();
@@ -368,10 +384,11 @@ export async function recordCauseDefinitionMatch(args: {
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId],
     );
     const inserted = await client.query<ClaimCauseDefinitionMatchRow>(
-      `INSERT INTO claim_cause_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,cause_evidence,definition_evidence,result,reviewed_by,reason)
-       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11)
+      `INSERT INTO claim_cause_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,cause_evidence,definition_evidence,result,reviewed_by,reason,evidence_provenance)
+       VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12::jsonb)
        RETURNING ${MATCH_COLUMNS}`,
-      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId, JSON.stringify(args.causeEvidence), JSON.stringify(args.definitionEvidence), args.result, args.reviewedBy, args.reason],
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId, JSON.stringify(args.causeEvidence), JSON.stringify(args.definitionEvidence), args.result, args.reviewedBy, args.reason,
+        args.evidenceProvenance ? JSON.stringify(args.evidenceProvenance) : null],
     );
     await client.query("COMMIT");
     return inserted.rows[0];
@@ -398,7 +415,7 @@ export async function loadActiveCauseDefinitionMatches(accountId: string, family
 // --- Critical-illness definition matches --------------------------------
 
 const CI_MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,
-  benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,created_at::text`;
+  benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,evidence_provenance,created_at::text`;
 
 /** Records a reviewer's (or a deterministic rule's) finalised decision that
  * reviewed medical evidence does or does not match ONE policy's own
@@ -416,6 +433,12 @@ export async function recordCIDefinitionMatch(args: {
   accountId: string; familyMemberId: string; claimSessionId: string; contractId: string; coverageId: string | null;
   evidenceDocumentId: string; benefitCode: string; illnessName: string; medicalEvidence: unknown; definitionEvidence: unknown;
   result: CIDefinitionMatchResultValue; reviewedBy: string; reason: string | null;
+  /** Snapshot of the extraction provenance the reviewer's decision rests
+   * on, bound to evidenceDocumentId -- derived server-side from the stored
+   * extraction (see ./extraction-provenance.ts), never from a request body.
+   * Null when that extraction has no persisted provenance; every amount
+   * then stays fail-closed. */
+  evidenceProvenance?: EvidenceProvenance | null;
 }): Promise<ClaimCIDefinitionMatchRow> {
   await ensureCriticalIllnessSchema();
   const client = await pool.connect();
@@ -428,12 +451,12 @@ export async function recordCIDefinitionMatch(args: {
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.illnessName],
     );
     const inserted = await client.query<ClaimCIDefinitionMatchRow>(
-      `INSERT INTO claim_ci_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_by,reason)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13)
+      `INSERT INTO claim_ci_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_by,reason,evidence_provenance)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13,$14::jsonb)
        RETURNING ${CI_MATCH_COLUMNS}`,
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId,
         args.benefitCode, args.illnessName, JSON.stringify(args.medicalEvidence), JSON.stringify(args.definitionEvidence),
-        args.result, args.reviewedBy, args.reason],
+        args.result, args.reviewedBy, args.reason, args.evidenceProvenance ? JSON.stringify(args.evidenceProvenance) : null],
     );
     await client.query("COMMIT");
     return inserted.rows[0];
@@ -458,7 +481,7 @@ export async function loadActiveCIDefinitionMatches(accountId: string, familyMem
 // --- Disability definition matches --------------------------------------
 
 const DISABILITY_MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,
-  benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,created_at::text`;
+  benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,evidence_provenance,created_at::text`;
 
 /** Records a reviewer's (or a deterministic rule's) finalised decision that
  * reviewed medical evidence does or does not match ONE policy's own
@@ -474,6 +497,12 @@ export async function recordDisabilityDefinitionMatch(args: {
   accountId: string; familyMemberId: string; claimSessionId: string; contractId: string; coverageId: string | null;
   evidenceDocumentId: string; benefitCode: string; matchKey: string; medicalEvidence: unknown; definitionEvidence: unknown;
   result: DisabilityDefinitionMatchResultValue; reviewedBy: string; reason: string | null;
+  /** Snapshot of the extraction provenance the reviewer's decision rests
+   * on, bound to evidenceDocumentId -- derived server-side from the stored
+   * extraction (see ./extraction-provenance.ts), never from a request body.
+   * Null when that extraction has no persisted provenance; every amount
+   * then stays fail-closed. */
+  evidenceProvenance?: EvidenceProvenance | null;
 }): Promise<ClaimDisabilityDefinitionMatchRow> {
   await ensureDisabilitySchema();
   const client = await pool.connect();
@@ -486,12 +515,12 @@ export async function recordDisabilityDefinitionMatch(args: {
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.matchKey],
     );
     const inserted = await client.query<ClaimDisabilityDefinitionMatchRow>(
-      `INSERT INTO claim_disability_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_by,reason)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13)
+      `INSERT INTO claim_disability_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_by,reason,evidence_provenance)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12,$13,$14::jsonb)
        RETURNING ${DISABILITY_MATCH_COLUMNS}`,
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId,
         args.benefitCode, args.matchKey, JSON.stringify(args.medicalEvidence), JSON.stringify(args.definitionEvidence),
-        args.result, args.reviewedBy, args.reason],
+        args.result, args.reviewedBy, args.reason, args.evidenceProvenance ? JSON.stringify(args.evidenceProvenance) : null],
     );
     await client.query("COMMIT");
     return inserted.rows[0];
@@ -512,4 +541,36 @@ export async function loadActiveDisabilityDefinitionMatches(accountId: string, f
     [accountId, familyMemberId, claimSessionId],
   );
   return result.rows;
+}
+
+// --- Evidence provenance context --------------------------------------
+
+/** The CURRENT state of each named evidence document -- account-scoped,
+ * active documents only -- plus the model_execution of its latest
+ * extraction for its CURRENT file hash, so a stored match's provenance
+ * snapshot can be re-checked against live state on every read (see
+ * ./extraction-provenance.ts's resolveMatchProvenance()). A document that
+ * is missing, in another account, or no longer active is simply absent
+ * from the result, which fails closed. */
+export async function loadEvidenceProvenanceContext(accountId: string, documentIds: string[]): Promise<Map<string, EvidenceDocumentProvenanceContext>> {
+  const contexts = new Map<string, EvidenceDocumentProvenanceContext>();
+  const ids = [...new Set(documentIds)];
+  if (!ids.length) return contexts;
+  await ensureClaimEvidenceSchema();
+  const result = await query<{ id: string; family_member_id: string; claim_session_id: string; file_hash: string; superseded_at: string | null; model_execution: unknown }>(
+    `SELECT d.id::text, d.family_member_id::text, d.claim_session_id::text, d.file_hash, d.superseded_at::text,
+            (SELECT e.model_execution FROM claim_evidence_extractions e
+              WHERE e.account_id=d.account_id AND e.evidence_document_id=d.id AND e.source_document_version=d.file_hash
+              ORDER BY e.created_at DESC LIMIT 1) AS model_execution
+       FROM claim_evidence_documents d
+      WHERE d.account_id=$1 AND d.id=ANY($2::uuid[]) AND ${activePredicate("d")}`,
+    [accountId, ids],
+  );
+  for (const row of result.rows) {
+    contexts.set(row.id, {
+      documentId: row.id, familyMemberId: row.family_member_id, claimSessionId: row.claim_session_id,
+      fileHash: row.file_hash, supersededAt: row.superseded_at, currentExecution: row.model_execution,
+    });
+  }
+  return contexts;
 }

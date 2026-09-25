@@ -25,6 +25,8 @@ import { validateMedicalClaimEvidence, type MedicalBillLineItem, type MedicalBil
 import { appendClaimEvidenceAudit } from "./audit";
 import { correctExtraction, getLatestExtraction, getScopedEvidenceDocument, listEvidenceDocuments, transitionEvidenceStatus } from "./store";
 import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceExtractedFields } from "./types";
+import { provenanceSnapshotForExtraction } from "./extraction-provenance";
+import type { EvidenceProvenance } from "@/lib/claims/evidence-authority";
 
 export class MedicalBillEvidenceError extends Error {
   constructor(public readonly code: string, message: string) { super(message); }
@@ -154,12 +156,21 @@ export async function loadVerifiedMedicalBillFacts(accountId: string, familyMemb
   let hospitalName: string | null = null, hospitalCountry: string | null = null;
   let admissionType: string | null = null, wardType: string | null = null;
   const sourceDocumentIds: string[] = [];
+  const provenance: EvidenceProvenance[] = [];
+  let everySourceHasProvenance = true;
 
   for (const document of documents) {
     const extraction = await getLatestExtraction(accountId, document.id);
     if (!extraction) continue;
     const fields = effectiveFields(extraction.extracted_fields, extraction.reviewed_fields);
     sourceDocumentIds.push(document.id);
+    // One provenance entry per contributing document, bound to that exact
+    // document and the content hash its extraction read. An extraction of a
+    // different version than the document's current file_hash is flagged
+    // for reprocessing (fails closed at evaluateAggregateEvidenceAuthority()).
+    const snapshot = provenanceSnapshotForExtraction(extraction, document.id);
+    if (!snapshot) everySourceHasProvenance = false;
+    else provenance.push(snapshot.sourceDocumentVersion === document.file_hash ? snapshot : { ...snapshot, reprocessingRequired: true });
 
     for (const row of fields.billLineItems ?? []) {
       const amountMinor = parseAmountMinor(row.amountText);
@@ -182,5 +193,13 @@ export async function loadVerifiedMedicalBillFacts(accountId: string, familyMemb
     if (fields.wardType) wardType = fields.wardType;
   }
 
-  return { lineItems, thirdPartyPayments, admissionISO, dischargeISO, hospitalName, hospitalCountry, admissionType, wardType, sourceDocumentIds };
+  // The aggregate gate only checks the entries it is given, so a partial list
+  // would let one provenance-less bill ride along with a verified one. Any
+  // contributing document without provenance therefore empties the list,
+  // which evaluateAggregateEvidenceAuthority() reports as
+  // EVIDENCE_PROVENANCE_MISSING for the whole aggregate.
+  return {
+    lineItems, thirdPartyPayments, admissionISO, dischargeISO, hospitalName, hospitalCountry, admissionType, wardType, sourceDocumentIds,
+    provenance: everySourceHasProvenance ? provenance : [],
+  };
 }

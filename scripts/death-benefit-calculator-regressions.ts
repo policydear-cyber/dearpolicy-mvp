@@ -358,7 +358,9 @@ export function runAccidentalDeathCalculatorRegressions() {
   // Changing the cause evidence reference alone changes the calculation ID.
   {
     const r1 = calculateAccidentalDeath(accidentalBase);
-    const r2 = calculateAccidentalDeath({ ...accidentalBase, causeDefinitionMatch: { ...validMatch, causeEvidence: { ...causeEvidence, documentId: "doc-2" } } });
+    // A different reviewed document carries its own extraction provenance --
+    // provenance is bound to the document it was extracted from.
+    const r2 = calculateAccidentalDeath({ ...accidentalBase, causeDefinitionMatch: { ...validMatch, causeEvidence: { ...causeEvidence, documentId: "doc-2" }, provenance: { ...validMatch.provenance!, modelExecutionId: "model-execution-2", sourceDocumentId: "doc-2" } } });
     assert.equal(r1.status, "calculated"); assert.equal(r2.status, "calculated");
     if (r1.status === "calculated" && r2.status === "calculated") assert.notEqual(r1.calculationId, r2.calculationId);
   }
