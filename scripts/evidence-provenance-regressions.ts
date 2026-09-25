@@ -111,8 +111,8 @@ async function main() {
     const pages = fixture.benefitSummary.pages.map((p) => ({ page_number: p.pageNumber, text: p.text }));
     for (const policyId of [policyA, policyB]) {
       await pool.query(
-        `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority)
-         VALUES($1,$2,$3,'Singlife','Group Personal Accident','G007500','certificate',true,'ready','cert.pdf','k',90)`,
+        `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)
+         VALUES($1,$2,$3,'Singlife','Group Personal Accident','G007500','certificate',true,'ready','cert.pdf','k',90,'scan_clean')`,
         [policyId, account, desmond],
       );
       for (const p of pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [account, policyId, p.page_number, p.text]);

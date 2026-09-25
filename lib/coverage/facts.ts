@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 
@@ -63,7 +64,7 @@ export async function confirmedOwnedCoverages(accountId: string, familyMemberId:
             pc.source_page,pc.evidence_text,p.insurer,p.product_name AS policy_name,p.policy_number,p.group_policy_number,p.document_role,
             p.effective_date::text,p.renewal_or_expiry_date::text,p.file_hash AS policy_document_version
        FROM policy_coverages pc
-       JOIN policies p ON p.id=pc.policy_id AND p.account_id=pc.account_id AND ${activePredicate("p")}
+       JOIN policies p ON p.id=pc.policy_id AND p.account_id=pc.account_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
       WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true
       ORDER BY p.document_authority DESC,p.effective_date DESC NULLS LAST,p.created_at DESC`,
     [accountId, familyMemberId],

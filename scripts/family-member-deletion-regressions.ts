@@ -163,8 +163,8 @@ async function main() {
       const created = await postFamily(requestFor("http://localhost/api/family", { household: householdA, method: "POST", body: { displayName: "Has Policy", relationship: "spouse" } }));
       const memberId = (await created.json()).member.id as string;
       await pool.query(
-        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,personal_coverage_confirmed)
-         VALUES (gen_random_uuid(),$1,$2,'p.pdf',$3,'ready','active',true)`,
+        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,personal_coverage_confirmed,quarantine_status)
+         VALUES (gen_random_uuid(),$1,$2,'p.pdf',$3,'ready','active',true,'scan_clean')`,
         [householdA, memberId, `acct/policy/${randomUUID()}/p.pdf`],
       );
 

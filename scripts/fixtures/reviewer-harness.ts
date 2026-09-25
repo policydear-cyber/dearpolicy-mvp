@@ -114,8 +114,8 @@ export async function startReviewerHarness() {
     coverageCurrency?: string | null; sourcePage?: number | null; fileHash?: string | null;
   }) {
     await pool.query(
-      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash)
-       VALUES($1,$2,$3,$4,$5,$6,'certificate',true,'ready',$7,'k',90,$8,$9)`,
+      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash,quarantine_status)
+       VALUES($1,$2,$3,$4,$5,$6,'certificate',true,'ready',$7,'k',90,$8,$9,'scan_clean')`,
       [args.policyId, args.accountId, args.memberId, args.insurer, args.productName, args.groupPolicyNumber ?? null, `${args.productName}.pdf`, args.effectiveDate ?? "2020-01-01",
         args.fileHash === undefined ? `sha256:policy-${args.policyId}` : args.fileHash]);
     for (const p of args.pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [args.accountId, args.policyId, p.pageNumber, p.text]);

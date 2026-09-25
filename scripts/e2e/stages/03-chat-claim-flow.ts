@@ -169,7 +169,7 @@ runStage("03-chat-claim-flow", async ({ pool, step }) => {
       { id: referenceDocId, text: wording, personal: false, role: "policy_wording", authority: 60 },
     ]) {
       await pool.query(
-        `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'E2E Fixture Insurer',$4,'E2E-CLEAN-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb)`,
+        `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'E2E Fixture Insurer',$4,'E2E-CLEAN-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb,'scan_clean')`,
         [doc.id, householdId, selfMemberId, productName, doc.role, doc.personal, doc.authority, doc.id + ".pdf", JSON.stringify({ productsMentioned: [productName] })],
       );
       await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)`, [doc.id, selfMemberId, householdId]);

@@ -60,8 +60,8 @@ async function seedFamilyMember(db: typeof pool, accountId: string): Promise<str
 async function seedPolicy(db: typeof pool, accountId: string, familyMemberId: string, opts?: { lifecycleState?: string }): Promise<string> {
   const id = randomUUID();
   await db.query(
-    `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state)
-     VALUES ($1,$2,$3,'test.pdf',$5,'ready',$4)`,
+    `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,quarantine_status)
+     VALUES ($1,$2,$3,'test.pdf',$5,'ready',$4,'scan_clean')`,
     [id, accountId, familyMemberId, opts?.lifecycleState ?? "active", `acct/policy/${id}/test.pdf`],
   );
   return id;

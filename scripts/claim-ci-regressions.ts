@@ -493,8 +493,8 @@ async function runDatabaseTests() {
     await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,'Tan Yi Chuen Desmond','Desmond','self')`, [desmond, account]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','diagnosis'),($4,$2,$3,'fact_finding','diagnosis')`, [claimA, account, desmond, claimB]);
     await pool.query(
-      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority)
-       VALUES($1,$2,$3,'Singlife','Living Care','G007500','certificate',true,'ready','cert.pdf','k',90)`,
+      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,quarantine_status)
+       VALUES($1,$2,$3,'Singlife','Living Care','G007500','certificate',true,'ready','cert.pdf','k',90,'scan_clean')`,
       [policyA, account, desmond],
     );
 

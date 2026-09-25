@@ -356,7 +356,7 @@ async function main(){
         type==="Home"?"We reimburse replacement cost for stolen household contents up to S$100,000.":
         "This plan is assessed from its own terms and schedule.");
       for(const item of [{id,text:schedule,personal:true},{id:ref,text:wording,personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb)",
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb,'scan_clean')",
           [item.id,account,p.id,name,"POLICY-"+i,type,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
         await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,p.id,account]);
         await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)",[account,item.id,item.text]);
@@ -583,7 +583,7 @@ async function main(){
       const person=people[0],id=uuid(700100),ref=uuid(700200),name="Review Fixture Critical Illness";
       const schedule=person.display_name+" owns "+name+". Sum Insured SGD 350000.";
       for(const item of [{id,text:schedule,personal:true},{id:ref,text:"placeholder",personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb)",
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb,'scan_clean')",
           [item.id,account,person.id,name,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
         await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,person.id,account]);
       }
@@ -1023,7 +1023,7 @@ async function main(){
     await test("The benefit schedule never shows or changes another account's rules",async()=>{
       await seedReviewFixture(1);
       const foreignPolicy=uuid(700900);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Plan','OTHER-1','Critical Illness','policy_wording',60,'ready','other.pdf','other.pdf')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Other Insurer','Other Plan','OTHER-1','Critical Illness','policy_wording',60,'ready','other.pdf','other.pdf','scan_clean')",
         [foreignPolicy,foreign,foreignPerson]);
       await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[foreignPolicy,foreignPerson,foreign]);
       const inserted=await db.query<{id:string}>("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,'Other Plan','Other Benefit',ARRAY['illness']::text[],'fixed',1000,'SGD',1,'Other wording','[]'::jsonb,'[]'::jsonb,true) RETURNING id",
@@ -1084,7 +1084,7 @@ async function main(){
     await test("A document nobody has claimed is surfaced with one question, and answering it is one click",async()=>{
       const fixture=await seedReviewFixture(1);
       const orphan=uuid(701400);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Example Insurer','Household Shield Plan','ORPHAN-1','Personal Accident','policy_wording',60,'ready','shield-booklet.pdf','shield-booklet.pdf')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Household Shield Plan','ORPHAN-1','Personal Accident','policy_wording',60,'ready','shield-booklet.pdf','shield-booklet.pdf','scan_clean')",
         [orphan,account,people[0].id]);
       const before=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       const listed=before.unclaimed.find((doc:{id:string})=>doc.id===orphan);
@@ -1105,7 +1105,7 @@ async function main(){
     await test("Another account's unclaimed documents are never asked about here",async()=>{
       await seedReviewFixture(1);
       const foreignOrphan=uuid(701500);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Booklet','OTHER-2','Personal Accident','policy_wording',60,'ready','other-booklet.pdf','other-booklet.pdf')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Other Insurer','Other Booklet','OTHER-2','Personal Accident','policy_wording',60,'ready','other-booklet.pdf','other-booklet.pdf','scan_clean')",
         [foreignOrphan,foreign,foreignPerson]);
       const data=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       assert.equal(data.unclaimed.some((doc:{id:string})=>doc.id===foreignOrphan),false);

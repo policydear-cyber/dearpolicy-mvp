@@ -137,8 +137,8 @@ async function main() {
       const memberRow = await pool.query<{ id: string }>(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES (gen_random_uuid(),$1,'Jordan','self') RETURNING id`, [householdId]);
       const familyMemberId = memberRow.rows[0].id;
       const policyRow = await pool.query<{ id: string }>(
-        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,personal_coverage_confirmed)
-         VALUES (gen_random_uuid(),$1,$2,'p.pdf',$3,'ready','active',true) RETURNING id`,
+        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,personal_coverage_confirmed,quarantine_status)
+         VALUES (gen_random_uuid(),$1,$2,'p.pdf',$3,'ready','active',true,'scan_clean') RETURNING id`,
         [householdId, familyMemberId, `acct/policy/${randomUUID()}/p.pdf`],
       );
       const policyId = policyRow.rows[0].id;

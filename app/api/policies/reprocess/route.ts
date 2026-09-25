@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
@@ -44,16 +45,22 @@ export async function POST(request: NextRequest) {
       const quarantine = await getPolicyQuarantineRow(ctx.householdId, body.policyId);
       if (!quarantine || quarantine.quarantine_status !== "scan_clean") throw new NotClearedForProcessing();
 
-      await client.query(
-        `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
-         processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
-         WHERE id=$1 AND account_id=$2`,
-        [body.policyId, ctx.householdId],
-      );
       return row;
     });
 
     if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
+
+    // Processing state is server-owned: written on the trusted connection
+    // (browser sessions cannot update it -- sql/household-rls.sql), only
+    // after the RLS-scoped authorization and clean-scan check above, and
+    // only if the document is still not in flight.
+    const requeued = await query(
+      `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
+       processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
+       WHERE id=$1 AND account_id=$2 AND processing_status NOT IN ('queued','extracting','indexing') AND quarantine_status='scan_clean'`,
+      [body.policyId, ctx.householdId],
+    );
+    if (!requeued.rowCount) throw new AlreadyProcessing();
 
     // after() keeps this alive past the response instead of racing the
     // serverless instance being frozen the instant "queued" is returned.

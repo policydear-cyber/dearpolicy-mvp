@@ -56,8 +56,8 @@ async function seedPolicy(
 ): Promise<string> {
   const id = randomUUID();
   await db.query(
-    `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,supersedes_id,personal_coverage_confirmed,group_policy_number)
-     VALUES ($1,$2,$3,'test.pdf',$4,'ready',$5,$6,$7,$8)`,
+    `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,processing_status,lifecycle_state,supersedes_id,personal_coverage_confirmed,group_policy_number,quarantine_status)
+     VALUES ($1,$2,$3,'test.pdf',$4,'ready',$5,$6,$7,$8,'scan_clean')`,
     [
       id,
       accountId,

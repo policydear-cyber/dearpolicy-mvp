@@ -46,6 +46,9 @@ const SQL_FILES = [
   "sql/model-usage.sql",
   "sql/chat-upgrade.sql",
   "sql/coverage-ledger.sql",
+  // Runbook step 14 runs before household-rls.sql (step 16); its lifecycle
+  // columns are what household-rls.sql grants the deletion route on policies.
+  "sql/lifecycle.sql",
   "sql/household-rls.sql",
 ];
 
@@ -145,9 +148,12 @@ async function main() {
     const guessed = await db.query("SELECT id FROM policies WHERE account_id = $1", [strangerUuid]);
     assert.equal(guessed.rows.length, 0, "a guessed/unrelated household id must return zero rows, not an error");
 
-    // INSERT into household B is rejected by the WITH CHECK clause. Isolated
-    // in its own savepoint so the aborted-transaction state it leaves behind
-    // doesn't poison the UPDATE/DELETE assertions that follow.
+    // INSERT into household B is rejected. Browser sessions no longer hold
+    // INSERT on policies at all (policy rows are created only by the server
+    // upload route -- see sql/household-rls.sql's policy-state block), so the
+    // rejection now comes from the privilege check, which runs before RLS.
+    // Isolated in its own savepoint so the aborted-transaction state it
+    // leaves behind doesn't poison the UPDATE/DELETE assertions that follow.
     await expectRejected(
       db,
       () =>
@@ -155,19 +161,45 @@ async function main() {
           "INSERT INTO policies(id, account_id, family_member_id, insurer, original_filename, storage_key) VALUES ($1,$2,$3,'x','policy.pdf','k')",
           [uuid(40), householdB, familyA],
         ),
-      /row-level security/i,
+      /permission denied|row-level security/i,
       "inserting a row into household B as a household A member must be rejected",
+    );
+    await expectRejected(
+      db,
+      () =>
+        db.query(
+          "INSERT INTO policies(id, account_id, family_member_id, insurer, original_filename, storage_key) VALUES ($1,$2,$3,'x','policy.pdf','k')",
+          [uuid(41), householdA, familyA],
+        ),
+      /permission denied/i,
+      "a household session must not be able to insert a policy row even into its own household",
+    );
+    await expectRejected(
+      db,
+      () => db.query("UPDATE policies SET insurer = 'changed' WHERE account_id = $1", [householdB]),
+      /permission denied/i,
+      "a household session must not hold UPDATE on extracted policy columns at all",
     );
 
     // UPDATE targeting household B's policy id is filtered to zero rows by USING.
     // NOTE: PGlite's query() result is { rows, fields, affectedRows, blob } --
     // "affectedRows" is PGlite's own field name, not node-postgres's "rowCount".
-    const updated = await db.query("UPDATE policies SET insurer = 'changed' WHERE account_id = $1", [householdB]);
+    // updated_at is one of the three lifecycle columns a household session may
+    // still UPDATE (for the deletion route), so this probes RLS USING itself.
+    const updated = await db.query("UPDATE policies SET updated_at = now() WHERE account_id = $1", [householdB]);
     assert.equal(updated.affectedRows ?? 0, 0, "updating household B's row as a household A member must affect zero rows");
 
     // DELETE targeting household B's row is likewise filtered to zero rows.
-    const deleted = await db.query("DELETE FROM policies WHERE account_id = $1", [householdB]);
-    assert.equal(deleted.affectedRows ?? 0, 0, "deleting household B's row as a household A member must affect zero rows");
+    // DELETE is no longer granted to browser sessions at all (deletion goes
+    // through the lifecycle coordinator), so the attempt is rejected outright.
+    await expectRejected(
+      db,
+      () => db.query("DELETE FROM policies WHERE account_id = $1", [householdB]),
+      /permission denied/i,
+      "deleting household B's row as a household A member must be rejected",
+    );
+    const survived = await db.query("SELECT 1 FROM policies WHERE account_id = $1", [householdB]);
+    assert.equal(survived.rows.length, 0, "household B's row stays invisible to household A after the rejected delete");
   });
 
   // --- A household member cannot perform owner-only actions --------------

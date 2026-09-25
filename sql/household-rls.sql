@@ -185,8 +185,12 @@ DO $$
 DECLARE
   t text;
   member_tables text[] := ARRAY[
-    'family_members', 'policies', 'policy_members', 'policy_detected_people',
-    'policy_pages', 'policy_chunks', 'policy_coverages', 'premium_records',
+    'family_members', 'policy_members', 'policy_detected_people',
+    'policy_pages', 'policy_chunks', 'premium_records',
+    -- policies and policy_coverages are NOT here: their scan, processing,
+    -- extraction and verification columns are server-owned (see the
+    -- dedicated block below and lib/db/table-inventory.ts's
+    -- POLICY_STATE_COLUMNS).
     'chat_messages', 'policy_corrections', 'policy_reference_coverages',
     'claim_sessions', 'policy_benefits', 'coverage_rules', 'chat_conversations',
     'policy_cover_conditions',
@@ -276,6 +280,68 @@ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS household_member_update ON public.claim_evidence_extractions';
     EXECUTE 'DROP POLICY IF EXISTS household_member_delete ON public.claim_evidence_extractions';
     EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON public.claim_evidence_extractions FROM authenticated';
+  END IF;
+END $$;
+
+-- Policy documents and coverages: households own the rows, the server owns
+-- the state. Every column that carries malware-scan/quarantine state,
+-- processing/indexing state, storage/version identity, supersession,
+-- extraction results or verification flags (policies.quarantine_status,
+-- processing_status, file_hash, storage_key, personal_coverage_confirmed;
+-- policy_coverages.confirmed, evidence_verified, amount, currency, ...) is
+-- written only by the trusted server connection (upload route, quarantine
+-- gate and scan callback, ingest pipeline, linking). A household session may
+-- read its own rows and do exactly one thing: move an ACTIVE policy to
+-- pending_deletion inside the lifecycle deletion route
+-- (lib/lifecycle/coordinator.ts, RLS-scoped). It can never insert a policy
+-- or coverage (so no row can arrive with trusted flags pre-set), update any
+-- other column, delete a row, revive a deleted one or skip lifecycle states.
+-- lib/db/table-inventory.ts's POLICY_STATE_COLUMNS / BROWSER_WRITABLE_COLUMNS
+-- is the authoritative classification; scripts/policy-state-protection-
+-- regressions.ts and launch:check enforce it.
+CREATE OR REPLACE FUNCTION public.guard_household_policy_update() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.lifecycle_state IS DISTINCT FROM 'active'
+     OR NEW.lifecycle_state IS DISTINCT FROM 'pending_deletion'
+     OR NEW.lifecycle_version IS DISTINCT FROM OLD.lifecycle_version + 1 THEN
+    RAISE EXCEPTION 'a household session may only move an active policy to pending deletion'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.policies') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.policies ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_select ON public.policies';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.policies';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_update ON public.policies';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_delete ON public.policies';
+    EXECUTE $f$CREATE POLICY household_member_select ON public.policies FOR SELECT TO authenticated USING (is_household_member(account_id))$f$;
+    EXECUTE $f$CREATE POLICY household_member_update ON public.policies FOR UPDATE TO authenticated USING (is_household_member(account_id)) WITH CHECK (is_household_member(account_id))$f$;
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.policies FROM authenticated, anon';
+    EXECUTE 'GRANT SELECT ON public.policies TO authenticated';
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'policies' AND column_name = 'lifecycle_state') THEN
+      EXECUTE 'GRANT UPDATE (lifecycle_state, lifecycle_version, updated_at) ON public.policies TO authenticated';
+      EXECUTE 'DROP TRIGGER IF EXISTS guard_household_policy_update ON public.policies';
+      EXECUTE 'CREATE TRIGGER guard_household_policy_update BEFORE UPDATE ON public.policies FOR EACH ROW EXECUTE FUNCTION public.guard_household_policy_update()';
+    END IF;
+  END IF;
+  IF to_regclass('public.policy_coverages') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.policy_coverages ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_select ON public.policy_coverages';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.policy_coverages';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_update ON public.policy_coverages';
+    EXECUTE 'DROP POLICY IF EXISTS household_member_delete ON public.policy_coverages';
+    EXECUTE $f$CREATE POLICY household_member_select ON public.policy_coverages FOR SELECT TO authenticated USING (is_household_member(account_id))$f$;
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.policy_coverages FROM authenticated, anon';
+    EXECUTE 'GRANT SELECT ON public.policy_coverages TO authenticated';
   END IF;
 END $$;
 

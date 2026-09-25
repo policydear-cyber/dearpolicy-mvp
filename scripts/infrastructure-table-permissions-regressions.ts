@@ -134,8 +134,8 @@ async function main() {
     await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$3,'Person A','Person A','self'),($2,$3,'Typo profile','Typo profile','other')`, [personA, removable, householdA]);
     await pool.query(`INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_type) VALUES($1,$2,$3,'fact_finding','death')`, [claimA, householdA, personA]);
     await pool.query(
-      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash)
-       VALUES($1,$2,$3,'Insurer','Policy','certificate',true,'ready','policy.pdf','k',90,'2020-01-01','sha256:p')`, [policyA, householdA, personA]);
+      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash,quarantine_status)
+       VALUES($1,$2,$3,'Insurer','Policy','certificate',true,'ready','policy.pdf','k',90,'2020-01-01','sha256:p','scan_clean')`, [policyA, householdA, personA]);
 
     // === 1. inventory ====================================================
     const discovered = discoverMigrationTables();

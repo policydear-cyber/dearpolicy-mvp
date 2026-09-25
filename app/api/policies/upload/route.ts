@@ -8,7 +8,7 @@ import { savePolicyFile } from "@/lib/storage";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
 import { looksLikePdf } from "@/lib/claims/evidence/validation";
 import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
-import { isUuid } from "@/lib/db/client";
+import { isUuid, pool } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const runtime = "nodejs";
@@ -101,13 +101,17 @@ export async function POST(request: NextRequest) {
     const storageKey = await savePolicyFile({ accountId: ctx.householdId, familyMemberId: outcome.familyMemberId, policyId, filename: file.name, bytes });
 
     try {
-      await createUserSupabaseClient(ctx.userId, async (client) => {
-        await client.query(
-          `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,supersedes_id)
-           VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting to be analysed…',$7)`,
-          [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash, outcome.verifiedSupersedesId],
-        );
-      });
+      // Written on the trusted server connection: every value here is
+      // server-derived (ids authorized in the RLS-scoped transaction above,
+      // the server-generated storage key and checksum, initial processing
+      // state). Browser sessions hold no INSERT privilege on policies
+      // (sql/household-rls.sql), so quarantine/processing state can never be
+      // pre-set by a client.
+      await pool.query(
+        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,supersedes_id)
+         VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting to be analysed…',$7)`,
+        [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash, outcome.verifiedSupersedesId],
+      );
       if (outcome.verifiedSupersedesId) {
         await supersedePolicyDocument({ accountId: ctx.householdId, oldPolicyId: outcome.verifiedSupersedesId, newPolicyId: policyId });
       }
