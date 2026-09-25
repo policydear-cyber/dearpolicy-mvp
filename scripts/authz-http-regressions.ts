@@ -297,7 +297,7 @@ async function main() {
 
       const conflict = routeErrorResponse(new ConflictError("You already sent this household's last owner an exit door."));
       assert.equal(conflict.status, 409);
-      assert.equal((await conflict.json()).error, "You already sent this household's last owner an exit door.");
+      assert.equal((await conflict.json()).error, "This request conflicts with the current state.");
 
       // An unrecognized error (a DB driver failure, a bug, anything not in
       // the list above) must NEVER leak its real message to the client --
