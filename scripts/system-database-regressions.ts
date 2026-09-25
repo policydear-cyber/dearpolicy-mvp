@@ -18,9 +18,12 @@ import { GET as getClaimPack } from "@/app/api/claims/[id]/pack/route";
 import { GET as getDashboard } from "@/app/api/dashboard/route";
 import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
 import { POST as linkPerson } from "@/app/api/policies/link-person/route";
+import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
 import type { Interpretation } from "@/lib/chat/facts";
 import type { PolicyAnalysis } from "@/lib/chat/types";
+import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
+import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 
 /** Runs real PostgreSQL/pgvector SQL in a disposable WASM database.
  * Only Ollama responses are simulated; no user database, GPU or policies are modified.
@@ -32,13 +35,53 @@ async function main(){
   await db.exec(await readFile(path.resolve("sql/benefit-catalog.sql"),"utf8"));
   await db.exec(await readFile(path.resolve("sql/model-usage.sql"),"utf8"));
   await db.exec(await readFile(path.resolve("sql/coverage-ledger.sql"),"utf8"));
+  // Async chat is a real producer of the shared durable queue; its route
+  // regression must therefore install the same background_jobs schema the
+  // standalone worker uses in production.
+  await db.exec(await readFile(path.resolve("sql/background-jobs.sql"),"utf8"));
+  // Household-scoped routes now resolve identity through
+  // requireHouseholdContext()/createUserSupabaseClient(), which needs the
+  // authenticated/anon/service_role shim roles and the household_members
+  // RLS policies this file defines (see sql/household-rls.sql's own doc
+  // comment -- a real Supabase project already has the authenticated role
+  // and its default table grants; this file recreates just enough of that
+  // for a non-Supabase Postgres, including this PGlite instance, to behave
+  // the same way).
+  await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
+  // Checkpoint 7: lib/policies/inventory.ts's loadPolicyInventory() now filters
+  // on policies.lifecycle_state via activePredicate() -- exec sql/lifecycle.sql
+  // so that column exists here too.
+  await db.exec(await readFile(path.resolve("sql/lifecycle.sql"),"utf8"));
+  // No domain table outside accounts/household_members/household_invitations
+  // has its own RLS policy file yet (see the Checkpoint 1/2 commit messages'
+  // disclosed gap: the claims/policies repository layer is authorized at the
+  // application layer -- explicit account_id filters -- not via Postgres
+  // RLS). A real Supabase project grants `authenticated` broad table access
+  // by default as part of its own bootstrapping; this mirrors that default
+  // for every table so createUserSupabaseClient()'s `SET LOCAL ROLE
+  // authenticated` can still reach them here, exactly as it can in production.
+  await db.exec("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;");
   const account="00000000-0000-0000-0000-000000000001",foreign="00000000-0000-0000-0000-000000000099";
+  // requireCurrentUser() resolves through the dev-only session fallback
+  // (lib/auth/session.ts's devSessionUser(), gated behind DEV_AUTH_ENABLED
+  // and unconditionally unavailable in production) rather than a real
+  // Supabase session cookie -- there is no browser here, only a route
+  // handler invoked directly. DEV_ACCOUNT_ID is pinned to this fixture's
+  // own `account` id so every already-migrated route under test resolves
+  // to the same household its seeded rows belong to.
+  process.env.DEV_AUTH_ENABLED="1";
+  process.env.DEV_ACCOUNT_ID=account;
   const uuid=(n:number)=>"10000000-0000-4000-8000-"+String(n).padStart(12,"0");
   const people=Array.from({length:9},(_,i)=>({
     id:uuid(i+1),display_name:i===0?"Tan Yi Chuen Desmond":i===1?"Ong Pei Lin Charmaine":"Family Member "+i,
     preferred_name:i===0?"Desmond":i===1?"Charmaine":"Member "+i,relationship:i===0?"self":i===1?"spouse":i<5?"child":"parent",
   }));
   await db.query("INSERT INTO accounts(id,name) VALUES($1,'Test Family'),($2,'Other Account')",[account,foreign]);
+  // The dev-fallback session user (id == DEV_ACCOUNT_ID == account, see
+  // above) needs a genuine household_members row of their own --
+  // resolveActiveHouseholdId() re-verifies real membership on every call,
+  // so a route under test can't reach `account`'s data without one.
+  await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')",[account]);
   for(const p of people)await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)",[p.id,account,p.display_name,p.preferred_name,p.relationship]);
   const foreignPerson=uuid(9999);
   await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Other Account Person','self')",[foreignPerson,foreign]);
@@ -76,7 +119,7 @@ async function main(){
   // one the app speaks. REPLAY_URL is how the provider-specific tests below
   // reuse these same answers without re-implementing the decision table.
   const REPLAY_URL="http://model.test/replay";
-  const googleReply=(text:string)=>Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
+  const googleReply=(text:string)=>Response.json({modelVersion:"gemini-3.6-flash",responseId:"fixture-response",candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
   globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input);
     if(/googleapis\.com\/v1beta\/models\?/.test(url))
@@ -90,7 +133,7 @@ async function main(){
     const user=JSON.parse(userText);
     maxModelUserCharacters=Math.max(maxModelUserCharacters,userText.length);
     const reply=(text:string)=>google
-      ?Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}})
+      ?Response.json({modelVersion:"gemini-3.6-flash",responseId:"fixture-response",candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}})
       :Response.json({content:text});
     let result:unknown;
     if(system.startsWith("Interpret this")){
@@ -281,13 +324,13 @@ async function main(){
   const blank:ChatAnswer={mode:"answer",summary:"Saved answer",details:[],claimItems:[],nextSteps:[],confidence:null,citations:[],disclaimer:"",
     claimSessionId:null,questions:[],knownFacts:[],missingFacts:[]};
   const send=async(message:string,member:string|null=people[0].id,conversationId?:string,revision?:number,asynchronous=false)=>{
-    const response=await POST(new Request("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
+    const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({familyMemberId:member,scope:member?"member":"family",question:message,conversationId,conversationRevision:revision,asynchronous,timeZone:"Asia/Singapore"})}));
     return {response,data:await response.json()};
   };
   const awaitJob=async(id:string)=>{
     for(let i=0;i<3000;i++){
-      const response=await getJob(new Request("http://localhost/api/chat/jobs/"+id),{params:Promise.resolve({id})});
+      const response=await getJob(new NextRequest("http://localhost/api/chat/jobs/"+id),{params:Promise.resolve({id})});
       const data=await response.json();
       if(data.job?.status==="complete")return data.result.answer as ChatAnswer;
       if(["failed","cancelled"].includes(data.job?.status))throw new Error(data.job.error);
@@ -313,7 +356,7 @@ async function main(){
         type==="Home"?"We reimburse replacement cost for stolen household contents up to S$100,000.":
         "This plan is assessed from its own terms and schedule.");
       for(const item of [{id,text:schedule,personal:true},{id:ref,text:wording,personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb)",
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb,'scan_clean')",
           [item.id,account,p.id,name,"POLICY-"+i,type,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
         await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,p.id,account]);
         await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)",[account,item.id,item.text]);
@@ -355,7 +398,7 @@ async function main(){
       assert.equal(first.response.status,200,JSON.stringify(first.data));
       const prompt=first.data.answer as ChatAnswer;
       assert.equal(prompt.mode,"fact_finding");assert.ok((prompt.personCandidates?.length??0)>1);
-      const response=await POST(new Request("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
+      const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:people[0].id,scope:"member",question:people[5].display_name,
           conversationId:prompt.conversationId,conversationRevision:prompt.conversationRevision,personChoiceId:people[5].id,
           personContextMessage:prompt.personContextMessage,personContextRecordedAt:prompt.personContextRecordedAt,
@@ -366,25 +409,39 @@ async function main(){
       const messages=await db.query<{family_member_id:string}>("SELECT family_member_id FROM chat_messages WHERE account_id=$1 AND conversation_id=$2",[account,prompt.conversationId]);
       assert.ok(messages.rows.length>=4);assert.equal(messages.rows.every(m=>m.family_member_id===people[5].id),true);
     });
-    await test("A homicide is classified broadly and both evidence-supported death amounts remain visible",async()=>{
+    await test("A homicide keeps verified death cover visible and withholds inferred accidental death cover",async()=>{
       const result=await send("Desmond was murdered in Thailand");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;
-      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\$1,600,000/);
-      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
+      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\$1,000,000/);
+      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
       assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText==="S$1,000,000"),answer.claimItems.map(i=>i.title).join(" | "));
-      assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText==="S$600,000"),answer.claimItems.map(i=>i.title).join(" | "));
+      assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText===null&&item.status==="needs_document"),answer.claimItems.map(i=>i.title).join(" | "));
       assert.ok(answer.scenarioClassifications?.some(item=>item.traits.includes("violent")&&item.traits.includes("external")));
       assert.equal(new Set(answer.details).size,answer.details.length);
       const saved=(await getConversation(account,answer.conversationId!))!.state,state=saved.subjects[people[0].id];
       assert.equal(state.death.value,true);assert.equal(state.causeOfDeath.value,"murdered");assert.equal(state.eventLocation.value,"Thailand");
       assert.equal(state.accidentalDeath,undefined);assert.ok(saved.scenarios?.[people[0].id]?.length);
     });
-    await test("A travel delay is assessed from its own clause and reported duration",async()=>{
+    // Reading a travel rule into the ledger checks it twice before trusting
+    // it: the quote and every number must be on the cited page (deterministic,
+    // code-checked), and a second, independent read of the same page must
+    // agree it is what the document says. That double-check is the
+    // confirmation this benefit needs -- "the person never has to confirm
+    // anything; they can look" (lib/ledger/extract.ts) -- so once both checks
+    // pass, the figure is shown with confidence, not held back a third time
+    // for a human to re-approve what two independent reads already verified.
+    await test("A travel rule confirmed by a second, independent read is shown with a figure",async()=>{
       const result=await send("Desmond's flight was delayed for eight hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Flight delay")&&item.amountText==="S$300.00"&&/applicable/.test(item.status)),JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(answer.potentialPayoutTotals?.[0]?.amount,300);
+      const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
+      assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.equal(flight!.amountText,"S$300.00");
+      assert.equal(flight!.status,"likely_applicable");
+      assert.equal(flight!.estimateBasis,"confirmed");
+      assert.match(flight!.reason,/verified against the page by a second read/i);
+      assert.equal(answer.potentialPayoutTotals?.length,1);
+      assert.equal(answer.potentialPayoutTotals?.[0].amount,300);
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
       const result=await send("Desmond's flight was delayed for three hours.");
@@ -392,17 +449,27 @@ async function main(){
       const item=answer.claimItems.find(value=>value.title.includes("Flight delay"));assert.equal(item?.status,"not_applicable");assert.equal(item?.amountText,null);
       assert.equal(answer.potentialPayoutTotals?.length,0);
     });
-    await test("A motor repair estimate is calculated but excluded from freely additive lump-sum totals",async()=>{
+    // Same double-check as the travel rule above: the motor reimbursement
+    // clause was confirmed by an independent second read, so the reported
+    // repair bill is priced against it. A reimbursement is still never
+    // summed into a lump-sum household total, which is the separate
+    // invariant this test also protects.
+    await test("A motor reimbursement confirmed by a second, independent read is priced, but never summed into a lump-sum total",async()=>{
       const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));assert.equal(item?.amountText,"S$4,000");
-      assert.equal(item?.amountLabel,"Potential reimbursement");assert.equal(answer.potentialPayoutTotals?.length,0);
+      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
+      assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.equal(item?.amountText,"S$4,000");
+      assert.equal(item?.status,"likely_applicable");
+      assert.equal(item?.amountLabel,"Potential reimbursement");
+      assert.equal(item?.aggregation,"reimbursement");
+      assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });
     await test("The active API resolves Charmaine before loading personal policies",async()=>{
       const result=await send("Charmaine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;assert.equal(answer.resolvedFamilyMemberId,people[1].id);
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText?.includes("350,000")));
+      assert.ok(answer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
       assert.equal(answer.policyReview?.length,10);
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.family_member_id,people[1].id);
       assert.equal(row?.state.subjects[people[1].id].hospitalBill.state,"pending");
@@ -414,7 +481,7 @@ async function main(){
       const prior=history.rows[0].last_answer;
       const reply=await send("still not sure how many nights she needs to be warded for",people[1].id,history.rows[0].id,prior.conversationRevision);
       assert.equal(reply.response.status,200,JSON.stringify(reply.data));ongoingAnswer=reply.data.answer;
-      assert.equal(ongoingAnswer.questions.length,0);assert.ok(ongoingAnswer.claimItems.some(item=>item.amountText?.includes("350,000")));
+      assert.equal(ongoingAnswer.questions.length,0);assert.ok(ongoingAnswer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
       const next=await send("i still don't know how many nights",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
       assert.equal(next.response.status,200,JSON.stringify(next.data));ongoingAnswer=next.data.answer;assert.equal(ongoingAnswer.questions.length,0);
       const state=(await getConversation(account,ongoingAnswer.conversationId!))!.state;
@@ -424,7 +491,7 @@ async function main(){
     await test("A completed stay updates memory and permits the independent daily calculation",async()=>{
       const result=await send("She was discharged after twelve nights.",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText==="S$60.00"));
+      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText==="S$60.00"&&/applicable/.test(item.status)));
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.state.subjects[people[1].id].hospitalNights.value,12);
     });
     await test("Automatic context retains a named reported condition when model facts are empty",async()=>{
@@ -450,8 +517,11 @@ async function main(){
     await test("Async analysis returns actual progress and a saved final answer",async()=>{
       const result=await send("What policies does my family have?",null,undefined,undefined,true);
       assert.equal(result.response.status,202,JSON.stringify(result.data));assert.ok(result.data.jobId);
+      const config=PRODUCTION_JOB_TYPES.find(candidate=>candidate.jobType==="chat_analysis");
+      assert.ok(config,"chat_analysis must be registered with the standalone worker");
+      assert.equal(await claimAndProcessOne({jobType:"chat_analysis",workerId:`system-chat-${process.pid}`,process:config!.process}),"succeeded");
       const answer=await awaitJob(result.data.jobId);assert.equal(answer.portfolioItems?.length,90);
-      const saved=await getSavedChat(new Request("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
+      const saved=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
       const payload=await saved.json();assert.equal(saved.status,200);assert.equal(payload.messages.length,2);assert.equal(payload.messages[1].answer_json.portfolioItems.length,90);
     });
     await test("A malformed model response is saved as an incomplete analysis",async()=>{
@@ -462,9 +532,9 @@ async function main(){
     await test("Saved chats and API requests cannot access another account",async()=>{
       const c=await openConversation({accountId:foreign,memberId:foreignPerson,title:"Other account secret"});
       assert.equal(await getConversation(account,c.id),null);
-      const response=await getSavedChat(new Request("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})});assert.equal(response.status,404);
+      const response=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})});assert.equal(response.status,404);
       const result=await send("What policies are there?",foreignPerson);assert.equal(result.response.status,404);
-      const removal=await removeHistory(new Request("http://localhost/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:c.id})}));
+      const removal=await removeHistory(new NextRequest("http://localhost/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:c.id})}));
       assert.equal(removal.status,404);assert.ok(await getConversation(foreign,c.id));
     });
     await test("Concurrent replies cannot overwrite an already-saved revision",async()=>{
@@ -501,9 +571,9 @@ async function main(){
     });
     await test("History is paginated, with no fixed limit on retained conversations",async()=>{
       for(let i=0;i<61;i++)await openConversation({accountId:account,memberId:people[0].id,title:"History "+i});
-      const response=await getHistory(new Request("http://localhost/api/chat/history?scope="+people[0].id)),data=await response.json();
+      const response=await getHistory(new NextRequest("http://localhost/api/chat/history?scope="+people[0].id)),data=await response.json();
       assert.equal(response.status,200);assert.equal(data.conversations.length,50);assert.ok(data.nextCursor);
-      const next=await getHistory(new Request("http://localhost/api/chat/history?scope="+people[0].id+"&cursor="+data.nextCursor)),page=await next.json();
+      const next=await getHistory(new NextRequest("http://localhost/api/chat/history?scope="+people[0].id+"&cursor="+data.nextCursor)),page=await next.json();
       assert.equal(page.conversations.length,11);
     });
     const seedReviewFixture=async(wordingPages:number)=>{
@@ -513,7 +583,7 @@ async function main(){
       const person=people[0],id=uuid(700100),ref=uuid(700200),name="Review Fixture Critical Illness";
       const schedule=person.display_name+" owns "+name+". Sum Insured SGD 350000.";
       for(const item of [{id,text:schedule,personal:true},{id:ref,text:"placeholder",personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb)",
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb,'scan_clean')",
           [item.id,account,person.id,name,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
         await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,person.id,account]);
       }
@@ -551,7 +621,17 @@ async function main(){
       const normalised=answer.details.map(d=>d.toLowerCase().replace(/[^a-z0-9]+/g," ").trim());
       assert.equal(new Set(normalised).size,normalised.length,"No detail may appear twice");
       assert.equal(negativeCoverageClaim(answer.summary),false);
-      assert.equal(answer.claimItems[0]?.amountText,"S$350,000");
+      // The wording section (13 pages) was never fully retrieved, so the
+      // payout rule is not fully verified. The gate must withhold the
+      // amount -- but the benefit itself, being potentially relevant, must
+      // stay visible rather than disappearing or reading as "not covered".
+      const item=answer.claimItems[0];
+      assert.ok(item,"The potentially relevant critical-illness benefit must remain visible");
+      assert.match(item!.title,/[Cc]ritical [Ii]llness/);
+      assert.equal(item!.status,"needs_document");
+      assert.equal(item!.amountText,null);
+      assert.match(item!.reason,/withheld/i,"The reason must explain the amount was withheld, not just state a fact");
+      assert.ok(item!.conditions.some(c=>/partial policy review/i.test(c)),"A condition must name the incomplete review as the cause");
     });
     await test("A fully read contract is reported as a complete review",async()=>{
       await seedReviewFixture(1);
@@ -572,9 +652,20 @@ async function main(){
       assert.equal(staleItem?.currentness?.state,"unknown");
       assert.equal(staleItem?.currentness?.label,"Active status not recently verified");
       assert.ok(stale.nextSteps.some(step=>/premium receipt or renewal notice/i.test(step)));
+      // The medical-definition match for a critical-illness diagnosis is a
+      // document-confirmation requirement the mock evidence never resolves
+      // (see the shared CI benefit fixture above), so this claim is withheld
+      // on that ground regardless of premium evidence. That withholding is
+      // separate from ownership/currentness -- the point under test here is
+      // that a missing premium receipt only ever adds its own qualifier and
+      // never substitutes for, or erases, the other reasons already present.
       const claim=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      assert.equal(claim.claimItems[0]?.amountText,"S$350,000","A missing receipt must not erase a supported amount");
-      assert.ok(claim.claimItems[0]?.conditions.some(c=>c.startsWith("Active status not recently verified")));
+      const claimItem=claim.claimItems[0];
+      assert.ok(claimItem,"The critical-illness benefit must remain visible");
+      assert.equal(claimItem!.status,"needs_document");
+      assert.equal(claimItem!.amountText,null,"A missing receipt must not manufacture an amount that was never confirmed");
+      assert.ok(claimItem!.conditions.some(c=>c.startsWith("Active status not recently verified")),"The currentness qualifier must still be present alongside the medical-definition qualifier");
+      assert.ok(claimItem!.conditions.some(c=>c.startsWith("The diagnosis must satisfy")),"The medical-definition qualifier that actually withholds the amount must also be present");
       await db.query("INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,policy_number,amount,currency,payment_date) VALUES($1,$2,$3,'Example Insurer','REVIEW-1',1200,'SGD',current_date - 30)",
         [account,fixture.policyId,fixture.person.id]);
       const fresh=(await send("What policies do we have?",people[0].id)).data.answer as ChatAnswer;
@@ -600,19 +691,34 @@ async function main(){
       assert.equal(answer.reviewCoverage?.pagesTotal,41);
       assert.ok((answer.reviewCoverage?.pagesRead??0)>=8,"A 40-passage booklet must not be read six passages at a time, got "+answer.reviewCoverage?.pagesRead);
       assert.equal(answer.reviewCoverage?.complete,false,"and what the call budget left unread is still reported");
-      assert.equal(answer.claimItems[0]?.amountText,"S$350,000");
+      // The critical-illness benefit's medical-definition match is a
+      // document-confirmation requirement (see the shared CI mock above),
+      // which the safety gate withholds regardless of how deep the read
+      // went -- the depth assertions above are what this test is actually
+      // about.
+      assert.equal(answer.claimItems[0]?.status,"needs_document");
+      assert.equal(answer.claimItems[0]?.amountText,null);
     });
     await test("A claim amount states the specific reasons it could settle differently",async()=>{
       await seedReviewFixture(1);
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
       const answer=data.answer as ChatAnswer;
-      assert.equal(answer.potentialPayoutTotals?.[0].amountText,"S$350,000");
-      assert.ok(answer.payoutQualifiers?.length,"A calculated amount must say what could change it");
-      assert.ok(answer.payoutQualifiers!.some(q=>/defined illness|definition/i.test(q)),"The outstanding definition is the real reason here: "+JSON.stringify(answer.payoutQualifiers));
-      assert.ok(answer.payoutQualifiers!.some(q=>/premium or renewal evidence/i.test(q)));
-      assert.match(answer.summary,/S\$350,000/);
-      assert.match(answer.summary,/final settled amount can differ because/i);
-      assert.ok(answer.payoutQualifiers!.every(q=>!/^\s*$/.test(q)));
+      // The medical-definition match is a document-confirmation requirement
+      // (see the shared CI mock above), so the monetary gate withholds the
+      // amount outright rather than showing it with a qualifier -- a
+      // qualifier next to a figure that is not displayed is its own defect
+      // (fixed in lib/chat/workflow.ts alongside this test). The specific
+      // reasons this test is about must still be visible, on the benefit's
+      // own conditions, exactly as strongly as before.
+      const item=answer.claimItems[0];
+      assert.ok(item,"The potentially relevant benefit must remain visible");
+      assert.equal(item!.status,"needs_document");
+      assert.equal(item!.amountText,null);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No total may be shown when its only item was withheld");
+      assert.ok(!answer.payoutQualifiers?.length,"A qualifier with no displayed total to qualify is a dangling caveat");
+      assert.ok(item!.conditions.some(c=>/defined illness|definition/i.test(c)),"The outstanding definition is the real reason here: "+JSON.stringify(item!.conditions));
+      assert.ok(item!.conditions.some(c=>/active status not recently verified/i.test(c)),"The missing premium/renewal evidence must also be named");
+      assert.doesNotMatch(answer.summary,/S\$350,000/,"An unconfirmed amount must never reach the summary text either");
     });
     await test("A failed evidence batch is never counted as text that was read",async()=>{
       await seedReviewFixture(1);
@@ -648,7 +754,8 @@ async function main(){
       const answer=data.answer as ChatAnswer;
       assert.doesNotMatch(answer.summary,/invalid structured JSON/i,"A raw JSON dump must never reach the user");
       assert.ok(!answer.details.some(d=>d.includes("subjectId")),"The raw model output must not be shown");
-      assert.equal(answer.claimItems[0]?.amountText,"S$350,000","A salvaged or retried interpretation still produces the assessment");
+      assert.ok(answer.claimItems[0],"A salvaged or retried interpretation still produces the assessment");
+      assert.equal(answer.claimItems[0]?.status,"needs_document");
     });
     await test("Short subject handles are mapped back to the real family member",async()=>{
       await seedReviewFixture(1);
@@ -793,7 +900,7 @@ async function main(){
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(data.summary.total,2);
       assert.equal(data.summary.needsYou,0,"A daily rule that states its own rate, waiting period and cap needs nothing from anyone");
       assert.equal(data.summary.usable,2);
@@ -805,16 +912,16 @@ async function main(){
       assert.match(hospital.quote,/S\$30 per day/);
       const illness=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Major Critical Illness");
       assert.equal(illness.pays,"100% of the sum insured on your schedule");
-      const mine=await (await getBenefits(new Request("http://localhost/api/benefits?familyMemberId="+people[0].id))).json();
+      const mine=await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+people[0].id))).json();
       assert.equal(mine.summary.total,2);
-      const other=await (await getBenefits(new Request("http://localhost/api/benefits?familyMemberId="+people[2].id))).json();
+      const other=await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+people[2].id))).json();
       assert.equal(other.summary.total,0,"A person sees only the documents that are linked to them");
     });
     await test("A rule with no readable amount says so rather than showing a figure",async()=>{
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Dental',ARRAY['other']::text[],'none',NULL,NULL,12,'Dental treatment is covered as charged.','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const dental=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Dental");
       assert.equal(dental.pays,"Not yet readable — tell DearPolicy what this pays");
       assert.equal(data.summary.unreadable,1);
@@ -825,12 +932,12 @@ async function main(){
       const wording="We pay 100% of the Sum Insured for a qualifying critical illness.";
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,$4,'[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness",wording]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const target=listed.benefits[0];
-      const saved=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+      const saved=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:target.id,formula:{kind:"sum_insured",value:0.5,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null}})}));
       assert.equal(saved.status,200);
-      const after=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const after=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(after.benefits[0].pays,"50% of the sum insured on your schedule");
       assert.equal(after.summary.needsYou,0,"Correcting a rule is itself the answer");
       assert.ok(after.benefits[0].reviewedAt,"The correction is recorded as human review");
@@ -853,10 +960,10 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Hospital Cash',ARRAY['hospitalisation']::text[],'none',NULL,NULL,4,'A daily amount is payable while confined.','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const id=listed.benefits[0].id;
       const attempt=async(formula:Record<string,unknown>)=>{
-        const response=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+        const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
           body:JSON.stringify({id,formula})}));
         return {status:response.status,error:(await response.json()).error as string};
       };
@@ -871,7 +978,7 @@ async function main(){
       for(const message of [uncapped.error,unbound.error,negative.error])
         for(const leak of ["invalid_type","ZodError","{\"","received","formulaKind"])
           assert.equal(message.includes(leak),false,"Raw validation output leaked to the user: "+leak);
-      const unchanged=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const unchanged=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(unchanged.benefits[0].formulaKind,"none","A refused correction changes nothing");
       assert.equal(unchanged.benefits[0].needsReview,true);
     });
@@ -879,11 +986,11 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
-      const response=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
+      const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:listed.benefits[0].id,needsReview:false})}));
       assert.equal(response.status,200);
-      const after=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const after=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(after.benefits[0].formulaValue,1,"Confirming a rule must not alter it");
       assert.equal(after.benefits[0].needsReview,false);
       assert.ok(after.benefits[0].reviewedAt);
@@ -892,13 +999,13 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Table of Contents',ARRAY['other']::text[],'none',NULL,NULL,2,'Contents','[]'::jsonb,'[]'::jsonb,true)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const pagesBefore=(await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length;
       const coveragesBefore=(await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length;
-      const response=await deleteBenefit(new Request("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
+      const response=await deleteBenefit(new NextRequest("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:listed.benefits[0].id})}));
       assert.equal(response.status,200);
-      assert.equal((await (await getBenefits(new Request("http://localhost/api/benefits"))).json()).summary.total,0);
+      assert.equal((await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json()).summary.total,0);
       assert.equal((await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length,pagesBefore);
       assert.equal((await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length,coveragesBefore);
     });
@@ -908,7 +1015,7 @@ async function main(){
       await db.query("ALTER TABLE policy_benefits DROP COLUMN reviewed_at");
       await db.query("ALTER TABLE policy_benefits DROP COLUMN basis_inferred");
       delete (globalThis as {__dearpolicyBenefitSchema?:unknown}).__dearpolicyBenefitSchema;
-      const response=await getBenefits(new Request("http://localhost/api/benefits"));
+      const response=await getBenefits(new NextRequest("http://localhost/api/benefits"));
       assert.equal(response.status,200,"A missing column must never reach the user as an error");
       const columns=await db.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_name='policy_benefits' AND column_name IN ('reviewed_at','basis_inferred')");
       assert.equal(columns.rows.length,2,"Every column the catalogue needs is added on first use");
@@ -916,18 +1023,18 @@ async function main(){
     await test("The benefit schedule never shows or changes another account's rules",async()=>{
       await seedReviewFixture(1);
       const foreignPolicy=uuid(700900);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Plan','OTHER-1','Critical Illness','policy_wording',60,'ready','other.pdf','other.pdf')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Other Insurer','Other Plan','OTHER-1','Critical Illness','policy_wording',60,'ready','other.pdf','other.pdf','scan_clean')",
         [foreignPolicy,foreign,foreignPerson]);
       await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[foreignPolicy,foreignPerson,foreign]);
       const inserted=await db.query<{id:string}>("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,'Other Plan','Other Benefit',ARRAY['illness']::text[],'fixed',1000,'SGD',1,'Other wording','[]'::jsonb,'[]'::jsonb,true) RETURNING id",
         [foreign,foreignPolicy]);
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.equal(data.benefits.some((b:{benefitName:string})=>b.benefitName==="Other Benefit"),false);
-      const response=await patchBenefit(new Request("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
+      const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:inserted.rows[0].id,needsReview:false})}));
       assert.equal(response.status,404);
       assert.equal((await db.query<{needs_review:boolean}>("SELECT needs_review FROM policy_benefits WHERE id=$1",[inserted.rows[0].id])).rows[0].needs_review,true);
-      const removal=await deleteBenefit(new Request("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
+      const removal=await deleteBenefit(new NextRequest("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
         body:JSON.stringify({id:inserted.rows[0].id})}));
       assert.equal(removal.status,404);
       assert.equal((await db.query("SELECT id FROM policy_benefits WHERE id=$1",[inserted.rows[0].id])).rows.length,1);
@@ -948,7 +1055,7 @@ async function main(){
         [assessed,account,people[0].id,JSON.stringify(packet.facts),JSON.stringify(packet)]);
       await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts) VALUES($1,$2,$3,'fact_finding','Still answering questions','{}'::jsonb)",
         [unassessed,account,people[0].id]);
-      const pack=await getClaimPack(new Request("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
+      const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
       assert.equal(pack.status,200);
       assert.equal(pack.headers.get("content-type"),"application/pdf");
       assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Yi Chuen Desmond\.pdf"/);
@@ -960,7 +1067,7 @@ async function main(){
       assert.match(printed,/S\$1,250/);
       assert.match(printed,/page 14/,"The insurer can check the figure against the wording");
       assert.match(printed,/Hospital discharge summary/,"The checklist follows the reported event");
-      const pending=await getClaimPack(new Request("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
+      const pending=await getClaimPack(new NextRequest("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
       assert.equal(pending.status,409);
       assert.match((await pending.json()).error,/has not been assessed yet/);
       await db.query("DELETE FROM claim_sessions WHERE id=ANY($1::uuid[])",[[assessed,unassessed]]);
@@ -969,7 +1076,7 @@ async function main(){
       const foreignClaim=uuid(701300);
       await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts,decision_packet) VALUES($1,$2,$3,'complete','Other event','{}'::jsonb,$4::jsonb)",
         [foreignClaim,foreign,foreignPerson,JSON.stringify({sessionId:foreignClaim,eventSummary:"Other event",facts:{},knownFacts:[],missingFacts:[],relevantOwnedProducts:[],assessments:[],nextSteps:[],ready:true})]);
-      const response=await getClaimPack(new Request("http://localhost/api/claims/"+foreignClaim+"/pack"),{params:Promise.resolve({id:foreignClaim})});
+      const response=await getClaimPack(new NextRequest("http://localhost/api/claims/"+foreignClaim+"/pack"),{params:Promise.resolve({id:foreignClaim})});
       assert.equal(response.status,404);
       assert.equal(response.headers.get("content-type")?.includes("pdf"),false);
       await db.query("DELETE FROM claim_sessions WHERE id=$1",[foreignClaim]);
@@ -977,19 +1084,19 @@ async function main(){
     await test("A document nobody has claimed is surfaced with one question, and answering it is one click",async()=>{
       const fixture=await seedReviewFixture(1);
       const orphan=uuid(701400);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Example Insurer','Household Shield Plan','ORPHAN-1','Personal Accident','policy_wording',60,'ready','shield-booklet.pdf','shield-booklet.pdf')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Example Insurer','Household Shield Plan','ORPHAN-1','Personal Accident','policy_wording',60,'ready','shield-booklet.pdf','shield-booklet.pdf','scan_clean')",
         [orphan,account,people[0].id]);
-      const before=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
+      const before=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       const listed=before.unclaimed.find((doc:{id:string})=>doc.id===orphan);
       assert.ok(listed,"An uploaded document with no owner is invisible everywhere else");
       assert.equal(listed.product_name,"Household Shield Plan");
       assert.ok(before.reminders.some((r:{title:string})=>/whose/i.test(r.title)),"It is on the to-do list, not only in a list of documents");
       assert.equal(before.unclaimed.some((doc:{id:string})=>doc.id===fixture.referenceId),false,"A document that already has an owner is not asked about again");
       // The person says whose it is. That is the whole interaction.
-      const linked=await linkPerson(new Request("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
+      const linked=await linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:orphan,familyMemberId:people[1].id,declared:true})}));
       assert.equal(linked.status,200);
-      const after=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
+      const after=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       assert.equal(after.unclaimed.some((doc:{id:string})=>doc.id===orphan),false);
       assert.equal(after.reminders.some((r:{title:string})=>/whose/i.test(r.title)),false,"Answered questions leave the to-do list");
       assert.equal((await db.query("SELECT source FROM policy_members WHERE policy_id=$1",[orphan])).rows.length,1);
@@ -998,9 +1105,9 @@ async function main(){
     await test("Another account's unclaimed documents are never asked about here",async()=>{
       await seedReviewFixture(1);
       const foreignOrphan=uuid(701500);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Booklet','OTHER-2','Personal Accident','policy_wording',60,'ready','other-booklet.pdf','other-booklet.pdf')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key,quarantine_status) VALUES($1,$2,$3,'Other Insurer','Other Booklet','OTHER-2','Personal Accident','policy_wording',60,'ready','other-booklet.pdf','other-booklet.pdf','scan_clean')",
         [foreignOrphan,foreign,foreignPerson]);
-      const data=await (await getDashboard(new Request("http://localhost/api/dashboard"))).json();
+      const data=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
       assert.equal(data.unclaimed.some((doc:{id:string})=>doc.id===foreignOrphan),false);
       await db.query("DELETE FROM policies WHERE id=$1",[foreignOrphan]);
     });
@@ -1008,19 +1115,19 @@ async function main(){
       const fixture=await seedReviewFixture(1);
       // What an install upgraded from an older version actually looks like.
       await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1",[account]);
-      const listed=await (await getIndexStatus(new Request("http://localhost/api/benefits/index"))).json();
+      const listed=await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json();
       assert.ok(listed.unread.length>=1,"A ready document with stored pages that has never been read is offered for reading");
       assert.ok(listed.unread.every((doc:{pages:number})=>doc.pages>0),"Only documents whose pages are already stored: reading them needs no PDF and no OCR");
-      const first=await (await indexBenefits(new Request("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json();
+      const first=await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json();
       assert.ok(first.stored>=0);
       assert.equal(typeof first.name,"string");
       // Reading is one document per request so the screen can show progress.
       let guard=0,remaining=first.remaining;
       while(remaining>0&&guard++<10)
-        remaining=(await (await indexBenefits(new Request("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json()).remaining;
+        remaining=(await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json()).remaining;
       assert.equal(remaining,0,"Every document is read in the end");
-      assert.equal((await (await getIndexStatus(new Request("http://localhost/api/benefits/index"))).json()).unread.length,0,"Nothing is left asking to be read");
-      const catalog=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      assert.equal((await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json()).unread.length,0,"Nothing is left asking to be read");
+      const catalog=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       assert.ok(catalog.summary.total>0,"Reading them is what puts amounts on the Benefits page");
       assert.ok(catalog.benefits.some((b:{policyId:string})=>b.policyId===fixture.referenceId));
       // A document that stated no rules has still been read, and must not keep asking.
@@ -1034,7 +1141,7 @@ async function main(){
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,reviewed_at) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',0.5,'SGD',1,'We pay 100% of Sum Insured for qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false,now())",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
       await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1 AND id=$2",[account,fixture.referenceId]);
-      const response=await indexBenefits(new Request("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
+      const response=await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({policyId:fixture.referenceId})}));
       assert.equal(response.status,200);
       const kept=await db.query<{formula_value:string}>("SELECT formula_value::text FROM policy_benefits WHERE account_id=$1 AND policy_id=$2 AND benefit_name='Major Critical Illness'",[account,fixture.referenceId]);
@@ -1054,7 +1161,7 @@ async function main(){
       await insert("Daily Hospital Cash",",fact_key,offset_days,maximum_days","'daily',30,'SGD',9,'S$30 per day.','[]'::jsonb,'[]'::jsonb,true,'hospitalNights',0,NULL");
       // 4. No amount could be read at all: an admission, not a task.
       await insert("Dental","","'none',NULL,NULL,12,'Dental treatment as charged.','[]'::jsonb,'[]'::jsonb,true");
-      const data=await (await getBenefits(new Request("http://localhost/api/benefits"))).json();
+      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
       const by=(name:string)=>data.benefits.find((b:{benefitName:string})=>b.benefitName===name);
       assert.equal(by("Accidental Hospital Recuperation").attention,null);
       assert.equal(by("Loss of speech").attention,"confirm");
@@ -1154,7 +1261,7 @@ async function main(){
               // A quote that is not on the page must be refused wherever it came from.
               {name:"Invented Benefit",quote:"We pay S$999,999 on request.",formulaKind:"fixed",formulaValue:999999,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,conditions:[]}]
             :[];
-          return Response.json({choices:[{message:{content:JSON.stringify({benefits})},finish_reason:"stop"}]});
+          return Response.json({id:"fixture-groq-response",model:"llama-3.3-70b-versatile",choices:[{message:{content:JSON.stringify({benefits})},finish_reason:"stop"}]});
         }
         return inner(input,init);
       }) as typeof fetch;
@@ -1267,7 +1374,11 @@ async function main(){
       assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
       assert.ok(answer.details.some(d=>/Coverage Ledger/.test(d)),"…because the sentence was read into the ledger: "+answer.details.join(" / "));
     });
-    await test("A certificate's schedule lines answer a death on their own when no rule on file responds",async()=>{
+    // A certificate's schedule lines (no benefit table read yet) name a plan
+    // as potentially responding to a death, but only assume the standard
+    // rule for that kind of cover -- so the figure stays withheld, for a
+    // what-if and for a reported death alike, until the wording is read.
+    await test("A certificate's schedule lines name a death cover on their own, but withhold the figure until the wording is read",async()=>{
       const fixture=await seedReviewFixture(1);
       const cover=async(id:number,category:string,amount:number)=>db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,$5,$6,'SGD','MINDEF Group Insurance',2,$7,true,true)",
         [uuid(id),account,fixture.policyId,people[0].id,category,amount,category+" S$"+amount]);
@@ -1278,12 +1389,17 @@ async function main(){
       const whatIf=(await send("If Desmond dies in an accident, how much would the payout be across his policies?",people[0].id)).data.answer as ChatAnswer;
       assert.equal(whatIf.mode,"claim_assessment","A payout what-if is not answered with the inventory table: "+whatIf.summary);
       assert.equal(whatIf.portfolioItems,undefined);
-      const titles=whatIf.claimItems.map(item=>item.title+" "+item.amountText);
-      assert.ok(titles.some(t=>/Group Term Life.*S\$1,000,000/.test(t)),"The life sum assured responds to a death: "+titles.join(" | "));
-      assert.ok(titles.some(t=>/Group Personal Accident.*S\$600,000/.test(t)),"…and the PA sum insured to an accidental death: "+titles.join(" | "));
+      const titles=whatIf.claimItems.map(item=>item.title);
+      assert.ok(titles.some(t=>/Group Term Life/.test(t)),"The life sum assured is named as potentially responding to a death: "+titles.join(" | "));
+      assert.ok(titles.some(t=>/Group Personal Accident/.test(t)),"…and the PA cover to an accidental death: "+titles.join(" | "));
       assert.ok(!titles.some(t=>/Living Care/.test(t)),"A critical illness plan does not respond to a death: "+titles.join(" | "));
-      assert.equal(whatIf.potentialPayoutTotals?.[0]?.amountText,"S$1,600,000");
-      assert.ok(whatIf.claimItems.every(item=>item.estimateBasis==="estimated"&&/standard rule/.test(item.reason)),"Each figure says it assumes the standard rule until the wording is read");
+      // Neither plan's benefit table has been read yet, so the schedule can
+      // only assume the standard rule for this kind of cover -- named, but
+      // without a bare figure, until the wording confirms it.
+      assert.ok(whatIf.claimItems.every(item=>item.amountText===null&&item.status==="needs_document"),
+        "Each figure is withheld until the wording is read: "+JSON.stringify(whatIf.claimItems.map(i=>[i.title,i.amountText,i.status])));
+      assert.ok(whatIf.claimItems.every(item=>item.conditions.some(c=>/Assumes the standard rule/.test(c))),"Each card says it assumes the standard rule until the wording is read");
+      assert.equal(whatIf.potentialPayoutTotals?.length??0,0,"No total may be shown when every item's amount is withheld");
       // The same schedule answers a reported death whose cause is not yet known.
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
         [account,fixture.referenceId,"Review Fixture Critical Illness"]);
@@ -1291,12 +1407,16 @@ async function main(){
       assert.equal(reported.mode,"claim_assessment",reported.summary);
       const life=reported.claimItems.find(item=>/Group Term Life/.test(item.title));
       const pa=reported.claimItems.find(item=>/Group Personal Accident/.test(item.title));
-      assert.equal(life?.amountText,"S$1,000,000");
-      assert.equal(pa?.amountText,"S$600,000");
-      // A homicide is sudden, external and violent — what a PA plan means by an accident — so it is not asked.
-      console.log("DEBUG",JSON.stringify({life,summary:reported.summary,details:reported.details}).slice(0,2500));
+      assert.ok(life,"The life cover is still named for a reported death: "+reported.claimItems.map(i=>i.title).join(" | "));
+      assert.ok(pa,"…and the PA cover for an accidental death");
+      // Neither plan's own wording has been read, so a reported death gets
+      // the same treatment as the what-if above: the cover is named, but no
+      // figure is shown until the schedule's assumed rule is confirmed by
+      // the actual clause.
+      assert.equal(life?.amountText,null);assert.equal(life?.status,"needs_document");
+      assert.equal(pa?.amountText,null);assert.equal(pa?.status,"needs_document");
       assert.ok(life?.conditions.some(c=>/Assumes the standard rule/.test(c)),"An assumed ledger row says so: "+life?.conditions.join(" / "));
-      assert.match(reported.summary,/S\$1,600,000/);
+      assert.equal(negativeCoverageClaim(reported.summary),false,"A withheld figure must never read as \"not covered\"");
       assert.ok(reported.claimSessionId,"…and the claim is on record with a pack to print");
     });
     await test("The Coverage Ledger: confirming a row makes the answer exact, rejecting removes it, and a row you add counts",async()=>{
@@ -1304,7 +1424,7 @@ async function main(){
       await db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,'Group Term Life',1000000,'SGD','MINDEF Group Insurance',2,'Group Term Life S$1,000,000',true,true)",
         [uuid(700520),account,fixture.policyId,people[0].id]);
       // The page lists what was read, marked as proposed.
-      const listed=await (await getLedger(new Request("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
+      const listed=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       type LRow={id:string;eventType:string;status:string;pays:string;planName:string;origin:string};
       const life=(listed.rows as LRow[]).find(r=>r.eventType==="death"&&/Group Term Life/.test(r.planName));
       assert.ok(life,"The certificate's life cover is a ledger row: "+JSON.stringify(listed.rows.map((r:LRow)=>r.planName+"/"+r.eventType)));
@@ -1314,13 +1434,16 @@ async function main(){
       // Before confirmation the answer is an estimate; after, it is confirmed.
       const before=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const beforeItem=before.claimItems.find(i=>/Group Term Life/.test(i.title));
-      assert.equal(beforeItem?.estimateBasis,"estimated");assert.equal(beforeItem?.status,"potentially_applicable");
-      const confirmed=await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:life!.id,status:"confirmed"})}));
+      // A proposed, unconfirmed row only assumes the standard rule, so the
+      // gate withholds the figure -- the same treatment the schedule-only
+      // death cover gets above -- until the person confirms it below.
+      assert.equal(beforeItem?.amountText,null);assert.equal(beforeItem?.status,"needs_document");
+      const confirmed=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:life!.id,status:"confirmed"})}));
       assert.equal(confirmed.status,200);
       // The person says the plan has no TPD cover; the row is gone from answers.
-      await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:tpd!.id,status:"rejected"})}));
+      await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:tpd!.id,status:"rejected"})}));
       // And DPS, which no document states, is entered by hand.
-      const added=await (await postLedger(new Request("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
+      const added=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:people[0].id,planName:"DPS",eventType:"death",paysKind:"lump_sum",amount:70000})}))).json();
       assert.equal(added.row.status,"confirmed");
       const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
@@ -1328,16 +1451,16 @@ async function main(){
       assert.equal(afterItem?.estimateBasis,"confirmed");assert.equal(afterItem?.status,"likely_applicable");
       assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText==="S$70,000"),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
       assert.equal(after.potentialPayoutTotals?.[0]?.amountText,"S$1,070,000");
-      const again=await (await getLedger(new Request("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
+      const again=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       assert.equal((again.rows as LRow[]).some(r=>r.id===tpd!.id),false,"A rejected row is not shown");
       // Re-seeding after a new upload adds nothing twice and never touches a confirmed row.
-      const rebuilt=await (await postLedger(new Request("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"rebuild"})}))).json();
+      const rebuilt=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"rebuild"})}))).json();
       assert.equal(rebuilt.added,0);
-      const still=await (await getLedger(new Request("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
+      const still=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       assert.equal((still.rows as LRow[]).find(r=>r.id===life!.id)?.status,"confirmed");
       // Another account's rows are never visible or editable.
       const foreignRow=await db.query<{id:string}>("INSERT INTO coverage_rules(account_id,family_member_id,plan_name,event_type,pays_kind,amount,origin) VALUES($1,$2,'Other Plan','death','lump_sum',5,'person') RETURNING id",[foreign,foreignPerson]);
-      const denied=await patchLedger(new Request("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
+      const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
       assert.equal(denied.status,404);
       assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
     });
@@ -1350,7 +1473,7 @@ async function main(){
       assert.ok(answer.claimSessionId,"The claim is on record");
       assert.ok(answer.nextSteps.some(step=>/claim pack/i.test(step)),"The last thing said is what to do next: "+answer.nextSteps.join(" / "));
       assert.ok(answer.nextSteps.some(step=>/Gather:/.test(step)&&/medical report/i.test(step)),"…and what to gather follows the event: "+answer.nextSteps.join(" / "));
-      const pack=await getClaimPack(new Request("http://localhost/api/claims/"+answer.claimSessionId+"/pack"),{params:Promise.resolve({id:answer.claimSessionId!})});
+      const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+answer.claimSessionId+"/pack"),{params:Promise.resolve({id:answer.claimSessionId!})});
       assert.equal(pack.status,200,"The pack can be printed straight from a chat answer");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(new Uint8Array(await pack.arrayBuffer()))).map(page=>page.text).join(" ").replace(/\s+/g," ");
@@ -1450,7 +1573,7 @@ async function main(){
           // Reuse the simulated model's answers by replaying the request through it.
           const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
           const content=(await replay.json()).content;
-          return Response.json({content:[{type:"text",text:content}],stop_reason:"end_turn",usage:{input_tokens:1200,output_tokens:90,cache_read_input_tokens:800}});
+          return Response.json({id:"fixture-anthropic-response",model:body.model,content:[{type:"text",text:content}],stop_reason:"end_turn",usage:{input_tokens:1200,output_tokens:90,cache_read_input_tokens:800}});
         }
         return inner(input,init);
       }) as typeof fetch;
@@ -1496,7 +1619,7 @@ async function main(){
           const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
           const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
           const content=(await replay.json()).content;
-          return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
+          return Response.json({modelVersion:url.match(/models\/(.*):generateContent/)?.[1]??"gemini-3.6-flash",responseId:"fixture-gemini-response",candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
         }
         return inner(input,init);
       }) as typeof fetch;
@@ -1558,7 +1681,7 @@ async function main(){
           const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
           const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
           const content=(await replay.json()).content;
-          return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
+          return Response.json({modelVersion:url.match(/models\/(.*):generateContent/)?.[1]??"gemini-3.6-flash",responseId:"fixture-gemini-response",candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
         }
         return inner(input,init);
       }) as typeof fetch;
@@ -1656,8 +1779,15 @@ async function main(){
       const answer=data.answer as ChatAnswer;
       const cards=answer.claimItems.map(item=>item.title+"="+item.amountText);
       assert.equal(answer.claimItems.length,1,"One fracture benefit, not two versions of it: "+cards.join(" | "));
-      assert.equal(answer.claimItems[0].amountText,"S$1,250","The printed S$5,000 limit wins over a percentage of the whole sum insured");
+      assert.match(answer.claimItems[0].title,/Arm.*Elbow.*Wrist/,"The printed S$5,000 clause outranks the heading-inferred percentage, even while both stay unpriced: "+cards.join(" | "));
+      // Both rates were read from a heading above their row, not the row
+      // itself, so neither is trusted for a bare figure until a person
+      // confirms it on the Benefits page -- which also means the wrong
+      // S$70,000 percentage-of-whole-sum reading can never leak through.
+      assert.equal(answer.claimItems[0].amountText,null);
+      assert.equal(answer.claimItems[0].status,"needs_document");
       assert.equal(answer.claimItems[0].estimateBasis,"indicative","…and it is still marked as read from a heading");
+      assert.ok(answer.claimItems[0].conditions.some(c=>/heading above the row/.test(c)),"The condition names the actual cause: a heading-read rate, not the row itself");
       assert.equal(/S\$70,000/.test(JSON.stringify(answer)),false,"S$70,000 for a forearm never appears anywhere");
     });
     await seedPlans(900);

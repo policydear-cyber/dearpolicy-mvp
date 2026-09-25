@@ -50,7 +50,7 @@ function unjudged(candidate:RelevanceCandidate){
 async function judgeBatch(args:{event:string;facts:string[]},candidates:RelevanceCandidate[]):Promise<RelevanceVerdict|null>{
   try{
     const result=await structuredCompletion({
-      role:"judgement",schema:VerdictSchema,temperature:0,maxOutputTokens:1200,timeoutMs:90_000,attempts:1,
+      role:"judgement",operation:"relevance_judging",schema:VerdictSchema,temperature:0,maxOutputTokens:1200,timeoutMs:90_000,attempts:1,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         const list=(value:unknown)=>(Array.isArray(value)?value:[]).map(entry=>{
           const item=(entry&&typeof entry==="object"?entry:{}) as Record<string,unknown>;

@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { devAccountId,query } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { getConversation } from "@/lib/chat/store";
 
 export const runtime="nodejs";
-export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
+export const ROUTE_AUTH = "household-member" as const;
+export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
   try{
     const {id}=await params;z.string().uuid().parse(id);
-    const accountId=devAccountId(),conversation=await getConversation(accountId,id);
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    const conversation=await getConversation(accountId,id);
     if(!conversation)return NextResponse.json({error:"Chat not found."},{status:404});
     const cursor=new URL(request.url).searchParams.get("cursor");if(cursor)z.string().uuid().parse(cursor);
     const r=await query<{id:string;role:string;content:string;answer_json:unknown;created_at:string}>(
@@ -17,5 +21,10 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
       "SELECT id,request_json FROM chat_analysis_jobs WHERE account_id=$1 AND conversation_id=$2 AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",[accountId,id]);
     return NextResponse.json({conversation,messages,nextCursor:hasMore?messages[0]?.id:null,
       pendingJob:jobs.rows[0]?{id:jobs.rows[0].id,message:jobs.rows[0].request_json.question??"Previous policy question"}:null});
-  }catch(error){return NextResponse.json({error:"Chat lookup failed"},{status:error instanceof z.ZodError?400:500});}
+  }catch(error){
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Chat lookup failed"},{status:400});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Chat lookup failed"},{status:500});
+    return authResponse;
+  }
 }

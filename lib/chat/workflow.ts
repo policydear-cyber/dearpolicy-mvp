@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 import { readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
+import { enforceChatMonetarySafety, evaluateChatMonetaryEligibility } from "@/lib/claims/monetary-gate";
 import { analysisSources,loadPolicyInventory,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
 import { contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { contractReviewCoverage,emptyReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
@@ -24,6 +26,9 @@ import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInte
 import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn,ChatConflict } from "./store";
 import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress } from "./types";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
@@ -132,7 +137,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 }
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
-  const family=(await query<ClaimPerson>("SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at",[request.accountId])).rows;
+  const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
   if(!family.length)throw new Error("Add a family profile before starting a chat.");
   if(request.familyMemberId&&!family.some(p=>p.id===request.familyMemberId))throw new Error("Family profile not found.");
   const previousId=request.conversationId??request.claimSessionId;
@@ -192,6 +197,7 @@ async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknow
   try{
     const explanation=await structuredCompletion({
       role:"narration",
+      operation:"chat_reply",
       schema:ExplanationSchema,temperature:0.3,maxOutputTokens:450,timeoutMs:60_000,attempts:1,
       system:NARRATION_SYSTEM,user:JSON.stringify(packet),
     });
@@ -321,7 +327,7 @@ function dedupeNegativeRestatements(observations:PolicyObservation[]){
   const best=restatements.reduce((a,b)=>b.text.length>a.text.length?b:a);
   return observations.filter(o=>!isRestatement(o.text)||o===best);
 }
-export async function runChatWorkflow(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
+async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
   const {request,conversation}=context;
   const report=options?.report??(async()=>undefined);
   const check=options?.check??(async()=>undefined);
@@ -509,6 +515,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
               if(whatIf&&looked.question)answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:"It is what turns the rule above into an actual amount."}];
               await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
               warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
           answer.potentialPayoutTotals=settleOverlaps(answer);
               const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
               const count=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
@@ -579,6 +586,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           answer.mode="claim_assessment";
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
           answer.potentialPayoutTotals=settleOverlaps(answer);
           const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
           answer.summary=answer.claimItems.length
@@ -797,6 +805,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
           answer.mode="claim_assessment";
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
           answer.potentialPayoutTotals=settleOverlaps(answer);
           // Put the claim on record so the pack can be printed and the Claims
           // page shows it, and say what to do next — the last thing a person
@@ -969,7 +978,14 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
             if(status&&status.state!=="verified_recent")assessed.item.conditions=[...new Set([...assessed.item.conditions,status.label+": "+status.detail])];
             answer.claimItems.push(assessed.item);addCitations(answer.citations,assessed.citations);
             for(const missing of assessed.checks.filter(c=>["missing","deferred","document","review"].includes(c.result)))answer.missingFacts.push(contract.ownerName+": "+missing.r.why);
-            if(assessed.item.calculatedAmount!=null){
+            // A qualifier that says "the amount could settle differently" only
+            // makes sense next to an amount that is actually shown. The
+            // monetary gate runs later and may withhold this item's amount
+            // entirely (e.g. a definitional fact that needs the insurer's own
+            // confirmation) -- when it will, these qualifiers must not be
+            // raised at all, or the user sees caveats about a figure that
+            // was never displayed.
+            if(assessed.item.calculatedAmount!=null&&evaluateChatMonetaryEligibility(assessed.item).status==="allowed"){
               for(const check of assessed.checks){
                 if(check.result==="document")payoutQualifiers.push("the insurer must confirm "+check.r.why.replace(/\.$/,"").toLowerCase());
                 else if(check.result==="deferred")payoutQualifiers.push("a fact you have not confirmed yet still applies: "+check.r.why.replace(/\.$/,"").toLowerCase());
@@ -1022,6 +1038,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
         const eventLead=claimEventLead(context.people,state);
         await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
         warnAboutInconsistentSchedules(answer,contracts);
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
           answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
@@ -1085,6 +1102,39 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
   await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
   return {answer,retrieved:[]};
 }
+
+// Checkpoint 14i: chat-turn-level observability call site
+// (scripts/launch-check.ts's privacy_safe_observability capability).
+// runChatWorkflow() is the ONE function every chat turn (API route and
+// worker-driven job alike) goes through to produce a ChatResult, so one
+// event at its real success/failure boundary covers every caller -- the
+// same "one call = one event" convention every other Checkpoint 14b/14i
+// call site uses. The heavy turn logic itself is left untouched in
+// runChatWorkflowInternal(); this wrapper only adds the telemetry
+// boundary around it.
+export async function runChatWorkflow(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
+  const correlationId = resolveCorrelationId(undefined);
+  try {
+    const result = await runChatWorkflowInternal(context, options);
+    void recordEvent({
+      name: "chat.turn.completed",
+      correlationId,
+      status: "success",
+      householdRef: pseudonymizeId(context.request.accountId),
+      extra: { claimItemCount: result.answer?.claimItems?.length ?? 0 },
+    });
+    return result;
+  } catch (error) {
+    void recordErrorEvent({
+      name: "chat.turn.failed",
+      correlationId,
+      householdRef: pseudonymizeId(context.request.accountId),
+      error,
+    });
+    throw error;
+  }
+}
+
 export async function askContextualDearPolicy(request:ChatRequest) {
   return runChatWorkflow(await prepareChat(request));
 }

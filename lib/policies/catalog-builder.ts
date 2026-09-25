@@ -72,7 +72,7 @@ async function categoriseRows(rows:{index:number;label:string;value:string}[]){
   // safety net either way.
   try{
     const result=await structuredCompletion({
-      role:"reading",schema:RowCategoriesSchema,temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
+      role:"reading",operation:"catalog_building",schema:RowCategoriesSchema,temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         return {rows:(Array.isArray(source.rows)?source.rows:[]).filter(row=>RowCategoriesSchema.shape.rows.element.safeParse(row).success)};},
       system:CATEGORISE_SYSTEM,
@@ -134,6 +134,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     try{
       extraction=await structuredCompletion({
         role:"reading",
+        operation:"catalog_building",
         schema:CatalogExtractionSchema,coerce:coerceExtraction,
         temperature:0,maxOutputTokens:700,timeoutMs:120_000,attempts:2,
         system:SYSTEM,

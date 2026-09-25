@@ -8,6 +8,7 @@ import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ChatCitation,ClaimItem,PotentialPayoutTotal } from "@/types";
 import { hasQuote,knownValue,normalText } from "./facts";
+import { calculateHospitalCash } from "@/lib/claims/calculators/hospital-cash";
 import type { PolicyAnalysis,PolicyBenefit,PolicyFormula,PolicyObservation,PolicyRequirement,PolicySource,ScenarioClassification,ScenarioTrait,SourceQuote,SubjectFacts } from "./types";
 
 /** Output volume is the whole cost of a reading call.
@@ -175,6 +176,8 @@ export async function analyzePolicyWindow(args:{accountId:string;contract:Policy
   if(cache.rows[0])return validateAnalysis(PolicyAnalysisSchema.parse(cache.rows[0].analysis_json),args.sources,args.contract);
   const raw=await structuredCompletion({
     role:"reading",
+    operation:"coverage_extraction",
+    schemaVersion:"policy-analysis-v3",
     schema:PolicyAnalysisSchema,coerce:coercePolicyAnalysis,
     // 150 seconds was set when sections were read one after another, where a
     // retry cost the whole remaining budget. Read together, a section that has
@@ -279,7 +282,18 @@ export function calculatePolicyFormula(args:{benefit:PolicyBenefit;contract:Poli
     if(knownValue(args.facts,"hospitalStayOngoing")===true)return null;
     const days=knownValue(args.facts,formula.factKey);
     if(typeof days!=="number"||days<0||!Number.isInteger(days))return null;
-    return {amount:Math.max(0,Math.min(formula.maximumDays,days-formula.offsetDays))*value,currency,basis:"Reported completed duration, less the quoted unpaid days, within the day limit"};
+    // Ownership and rule evidence for this benefit are verified by the
+    // caller (contract confirmation, formula evidence, requirement checks in
+    // assessmentFromBenefit); this call exists to share the same bounded,
+    // integer-minor-unit arithmetic as every other hospital-cash-shaped
+    // calculation, not to re-run those checks here.
+    const calc=calculateHospitalCash({
+      dailyRate:value,currency,hospitalStayOngoing:false,hospitalNights:days,
+      offsetDays:formula.offsetDays,maximumDays:formula.maximumDays,
+      ownership:{contractId:"verified-by-caller"},ruleEvidence:{label:"verified-by-caller"},ownershipEvidence:{label:"verified-by-caller"},
+    });
+    if(calc.status==="blocked")return null;
+    return {amount:calc.potentialAmount??0,currency,basis:"Reported completed duration, less the quoted unpaid days, within the day limit"};
   }
   return null;
 }
@@ -392,6 +406,15 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
   if(wrongEvent)conditions.push("This benefit "+wrongEvent+".");
   const confirmedAmount=coverage?.amount!=null?formatMoney(coverage.amount,coverage.currency):null;
   const canShowCalculation=!!calculation&&!review&&!notMet&&!wrongEvent&&args.contract.confirmed;
+  const personalEvidence=coverage?.documentRole==="personal_schedule"||coverage?.documentRole==="certificate";
+  const formulaEvidence=args.benefit.formula.evidence
+    ?args.sources.find(source=>source.id===args.benefit.formula.evidence?.sourceId)
+    :null;
+  const requirementsResolved=checks.every(check=>check.result==="met");
+  const boundedDaily=args.benefit.formula.kind!=="daily"||args.benefit.formula.maximumDays!=null;
+  const usesVerifiedPersonalAmount=args.benefit.formula.kind!=="sum_insured"||personalEvidence;
+  const confirmedCalculation=canShowCalculation&&requirementsResolved&&boundedDaily&&usesVerifiedPersonalAmount
+    &&!!formulaEvidence&&hasRuleLanguage;
   const item:ClaimItem={
     title:args.contract.ownerName+" · "+args.benefit.title,
     contractId:args.contract.id,
@@ -405,7 +428,8 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
     amountText:canShowCalculation?formatMoney(calculation.amount,calculation.currency):wrongEvent?null:ownershipOnly?confirmedAmount:null,
     amountLabel:canShowCalculation?(args.benefit.formula.kind==="expense_cap"?"Potential reimbursement":"Potential payout"):
       ownershipOnly&&confirmedAmount?"Confirmed cover amount — payout rule not yet verified":undefined,
-    ...(canShowCalculation?{calculatedAmount:calculation.amount,currency:calculation.currency,
+    ...(canShowCalculation?{estimateBasis:confirmedCalculation?"confirmed" as const:"indicative" as const,
+      calculatedAmount:calculation.amount,currency:calculation.currency,
       calculationKind:args.benefit.formula.kind as Exclude<PolicyFormula["kind"],"none">,
       aggregation:args.benefit.formula.kind==="expense_cap"?"reimbursement" as const:"additive" as const,
       calculationId:createHash("sha256").update(JSON.stringify([args.contract.id,args.benefit.coverageId,args.benefit.formula.kind,args.benefit.formula.value,

@@ -1,61 +1,111 @@
-import { query } from "@/lib/db/client";
-import { runAfterResponse } from "@/lib/http/background";
+import { createHash } from "node:crypto";
+import { pool,query } from "@/lib/db/client";
+import { classifyError } from "@/lib/telemetry/errors";
+import { enqueueJob, heartbeatJob, type BackgroundJobRow } from "@/lib/jobs/queue";
+import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { ensureChatSchema,getConversation,ChatConflict } from "./store";
 import { prepareChat,runChatWorkflow,type ChatContext,type ChatRequest } from "./workflow";
 import type { Progress } from "./types";
 
-type QueueGlobal=typeof globalThis&{__dearpolicyChatTail?:Promise<void>;__dearpolicyChatRecovery?:Promise<void>};
 async function initializeQueue(){
   await ensureChatSchema();
-  const state=globalThis as QueueGlobal;
-  // Serverless means the POST that dispatches a job, and the GET that polls
-  // it, can land on different instances -- a per-instance "ran once" flag
-  // does not stop a fresh instance from treating a job another instance is
-  // actively running as orphaned. Scoping the sweep to jobs stale well past
-  // the route's own 300s maxDuration keeps it able to clean up a real crash
-  // without ever touching a job that is still legitimately in flight.
-  state.__dearpolicyChatRecovery??=query(
-    "UPDATE chat_analysis_jobs SET status='failed',error='The app restarted before this analysis finished. Please resend the message.',updated_at=now() WHERE status IN ('queued','running') AND updated_at<now()-interval '10 minutes'",
-  ).then(()=>undefined);
-  await state.__dearpolicyChatRecovery;
 }
-async function runJob(id:string,context:ChatContext){
-  const accountId=context.request.accountId;
-  const started=await query("UPDATE chat_analysis_jobs SET status='running',updated_at=now() WHERE id=$1 AND account_id=$2 AND status='queued' RETURNING id",[id,accountId]);
-  if(!started.rows.length)return;
+export const CHAT_ANALYSIS_JOB_TYPE="chat_analysis";
+// D12 (Wave 2 adversarial audit, minimal scope): a retried enqueueChat()
+// call for the exact same question -- a client resend after a dropped 202
+// response, a double-submit -- must not spin up a second, independent
+// analysis run for a conversation that already has one queued/running. The
+// key is derived only from values that fully determine what the analysis
+// run would do (which conversation/revision it reads, what was actually
+// asked, and the scope/claim/person selectors that change how it's
+// answered), never from anything time-varying, so two calls describing the
+// identical request hash to the identical key.
+function chatIdempotencyKey(context:ChatContext):string{
+  const r=context.request;
+  const parts=[context.conversation.id,String(context.conversation.revision),r.question,r.familyMemberId??"",r.scope??"",r.claimSessionId??"",r.personChoiceId??""];
+  return createHash("sha256").update(parts.join("\u0000")).digest("hex");
+}
+export async function processChatAnalysisJob(job:BackgroundJobRow){
+  const id=typeof (job.payload as Record<string,unknown>|null)?.chatJobId==="string"?(job.payload as Record<string,string>).chatJobId:"";
+  if(!id||!job.account_id)throw new Error("background chat job payload is incomplete");
+  const accountId=job.account_id;
+  const stored=await query<{status:string;request_json:ChatRequest}>("SELECT status,request_json FROM chat_analysis_jobs WHERE id=$1 AND account_id=$2",[id,accountId]);
+  if(!stored.rows.length)throw new ChatConflict("This chat was deleted or the analysis was cancelled.");
+  if(stored.rows[0].status==="complete"||stored.rows[0].status==="cancelled")return;
+  const started=await query("UPDATE chat_analysis_jobs SET status='running',error=NULL,updated_at=now() WHERE id=$1 AND account_id=$2 AND status IN ('queued','running') RETURNING id",[id,accountId]);
+  if(!started.rows.length)throw new ChatConflict("This chat analysis is no longer runnable.");
+  const context=await prepareChat(stored.rows[0].request_json);
   const check=async()=>{
-    const job=await query("SELECT id FROM chat_analysis_jobs WHERE id=$1 AND account_id=$2 AND status='running'",[id,accountId]);
-    if(!job.rows.length||!await getConversation(accountId,context.conversation.id))throw new ChatConflict("This chat was deleted or the analysis was cancelled.");
+    if(job.lease_owner){
+      const lease=await heartbeatJob(pool,{jobId:job.id,workerId:job.lease_owner});
+      if(lease.cancel_requested)throw new ChatConflict("This chat was deleted or the analysis was cancelled.");
+    }
+    const chatJob=await query("SELECT id FROM chat_analysis_jobs WHERE id=$1 AND account_id=$2 AND status='running'",[id,accountId]);
+    if(!chatJob.rows.length||!await getConversation(accountId,context.conversation.id))throw new ChatConflict("This chat was deleted or the analysis was cancelled.");
   };
   const report=async(progress:Progress)=>{
     await check();
     await query("UPDATE chat_analysis_jobs SET progress=$1::jsonb,updated_at=now() WHERE id=$2 AND account_id=$3 AND status='running'",[JSON.stringify(progress),id,accountId]);
   };
   try{
-    const result=await runChatWorkflow(context,{jobId:id,check,report});
-    await query("UPDATE chat_analysis_jobs SET status='complete',result_json=$1::jsonb,updated_at=now() WHERE id=$2 AND account_id=$3 AND status='running'",[JSON.stringify(result),id,accountId]);
+    await runChatWorkflow(context,{jobId:id,check,report});
   }catch(error){
+    // D17 (Wave 2 adversarial audit): persist classifyError()'s safe,
+    // taxonomy-level message instead of the raw error.message -- this
+    // column is read straight back by getChatJob() and returned to the
+    // client as-is (see app/api/chat/jobs/[id]/route.ts), so a raw
+    // exception message stored here was reaching the browser directly.
+    // classifyError() already has a ChatConflict entry ("This changed
+    // underneath the request -- please retry."), so the cancelled-vs-failed
+    // status split below is unaffected by this change.
+    const safeMessage=classifyError(error).safeMessage;
+    const category=classifyPipelineError(error);
+    const terminal=error instanceof ChatConflict||category==="non_retryable"||job.attempt_count>=job.max_attempts;
     await query("UPDATE chat_analysis_jobs SET status=$1,error=$2,updated_at=now() WHERE id=$3 AND account_id=$4 AND status='running'",
-      [error instanceof ChatConflict?"cancelled":"failed",error instanceof Error?error.message:"Analysis failed",id,accountId]);
+      [error instanceof ChatConflict?"cancelled":terminal?"failed":"queued",safeMessage,id,accountId]);
+    throw error;
   }
 }
 export async function enqueueChat(request:ChatRequest){
   await initializeQueue();
   const context=await prepareChat(request);
-  const job=await query<{id:string}>(
-    "INSERT INTO chat_analysis_jobs(account_id,family_member_id,conversation_id,request_json) VALUES($1,$2,$3,$4::jsonb) RETURNING id",
-    [request.accountId,context.conversation.family_member_id,context.conversation.id,JSON.stringify(request)]);
-  const id=job.rows[0].id;
-  const state=globalThis as QueueGlobal;
-  // after() keeps the function alive past the response (Vercel's waitUntil
-  // under the hood) instead of racing the serverless instance being frozen
-  // the instant the 202 is returned, which is what a bare fire-and-forget
-  // promise would do -- the chat UI would then spin on "Reading..." forever
-  // for a job that never actually ran.
-  runAfterResponse(()=>{
-    state.__dearpolicyChatTail=(state.__dearpolicyChatTail??Promise.resolve()).catch(()=>undefined).then(()=>runJob(id,context)).catch(()=>undefined);
-    return state.__dearpolicyChatTail;
-  });
+  const idempotencyKey=chatIdempotencyKey(context);
+  // D12: ON CONFLICT targets the partial unique index on
+  // (account_id,idempotency_key) WHERE status IN ('queued','running')
+  // (sql/chat-upgrade.sql) -- a genuinely new request, or a retry of one
+  // whose prior run already reached a terminal status, always inserts
+  // normally, since a terminal-status row no longer satisfies that
+  // predicate and so can never conflict with a fresh insert.
+  const persistedRequest={...request,conversationId:context.conversation.id,conversationRevision:context.conversation.revision};
+  const inserted=await query<{id:string}>(
+    `INSERT INTO chat_analysis_jobs(account_id,family_member_id,conversation_id,request_json,idempotency_key)
+     VALUES($1,$2,$3,$4::jsonb,$5)
+     ON CONFLICT (account_id,idempotency_key) WHERE status IN ('queued','running') DO NOTHING
+     RETURNING id`,
+    [request.accountId,context.conversation.family_member_id,context.conversation.id,JSON.stringify(persistedRequest),idempotencyKey]);
+  let id:string;
+  if(inserted.rows.length){
+    id=inserted.rows[0].id;
+  }else{
+    // A conflicting queued/running job with the same idempotency key
+    // already exists -- re-read and return it instead of enqueueing a
+    // duplicate analysis run for the exact same request.
+    const existing=await query<{id:string}>(
+      "SELECT id FROM chat_analysis_jobs WHERE account_id=$1 AND idempotency_key=$2 AND status IN ('queued','running') ORDER BY created_at DESC LIMIT 1",
+      [request.accountId,idempotencyKey]);
+    if(existing.rows.length){
+      id=existing.rows[0].id;
+    }else{
+      // Extremely unlikely race: the conflicting row reached a terminal
+      // status between the failed INSERT above and this SELECT. Fall back
+      // to a plain insert rather than looping.
+      const fallback=await query<{id:string}>(
+        "INSERT INTO chat_analysis_jobs(account_id,family_member_id,conversation_id,request_json,idempotency_key) VALUES($1,$2,$3,$4::jsonb,$5) RETURNING id",
+        [request.accountId,context.conversation.family_member_id,context.conversation.id,JSON.stringify(persistedRequest),idempotencyKey]);
+      id=fallback.rows[0].id;
+    }
+  }
+  await enqueueJob(pool,{jobType:CHAT_ANALYSIS_JOB_TYPE,idempotencyKey:id,accountId:request.accountId,payload:{chatJobId:id}});
   return {jobId:id,conversationId:context.conversation.id,conversationRevision:context.conversation.revision,
     familyMemberId:context.conversation.family_member_id};
 }

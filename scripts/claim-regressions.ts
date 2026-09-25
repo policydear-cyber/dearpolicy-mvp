@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 import { extractClaimFacts } from "@/lib/claims/facts";
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { resolveClaimPerson, type ClaimPerson } from "@/lib/claims/person";
 import { findDeathRule, type DeathRuleEvidence } from "@/lib/claims/death-evidence";
 import { assessClaim, nextClaimQuestion, relevantOwnedProducts } from "@/lib/claims/rules";
 import { EMPTY_CLAIM_FACTS, type ClaimQuestion } from "@/lib/claims/types";
+import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 export async function runClaimRegressions() {
   let cases = 0;
@@ -18,12 +21,24 @@ export async function runClaimRegressions() {
   const coverage = (overrides: Partial<OwnedCoverage>): OwnedCoverage => ({ id: "gtl", policyId: "certificate", familyMemberId: "charmaine", category: "Death", amount: 1_000_000, currency: "SGD", productName: "Group Term Life", sourcePage: 1, evidenceText: "personal certificate", insurer: "Singlife", policyName: "MINDEF & MHA", policyNumber: "personal", groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2022-10-06", renewalOrExpiryDate: null, ...overrides });
   const coverages = [coverage({}), coverage({ id: "gpa", category: "Personal Accident", productName: "Group Personal Accident", amount: 600_000 }), coverage({ id: "lc", category: "Critical Illness", productName: "Living Care", amount: 350_000 })];
   const citation = { chunkId: "page:wording:2", policyId: "wording", policyName: "Benefit summary", pageStart: 2, pageEnd: 2, personalEvidence: false };
-  const deathRules: DeathRuleEvidence[] = [{ coverageId: "gtl", benefit: "gtl-death", quote: "Death 100% of Sum Insured", citation }, { coverageId: "gpa", benefit: "gpa-accidental-death", quote: "Death due to Accident 100% of Sum Insured", citation }];
+  const deathRules: DeathRuleEvidence[] = [{ coverageId: "gtl", benefit: "gtl-death", quote: "Death 100% of Sum Insured", citation, formula: { kind: "sum_insured_fraction", fraction: 1 } }, { coverageId: "gpa", benefit: "gpa-accidental-death", quote: "Death due to Accident 100% of Sum Insured", citation, formula: { kind: "sum_insured_fraction", fraction: 1 } }];
+  // The claim (assessment session) these tests act inside. Every reviewed
+  // cause-vs-definition match below is scoped to this exact session, this
+  // exact contract/coverage and this exact family member -- a policy-
+  // specific match, never a global flag.
+  const SESSION_ID = "session-claim-regressions";
+  const confirmedGpaMatch = (): CauseDefinitionMatch => ({
+    familyMemberId: "charmaine", claimEventId: SESSION_ID, contractId: "certificate", coverageId: "gpa",
+    causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
+    definitionEvidence: { policyId: citation.policyId, chunkId: citation.chunkId, pageStart: citation.pageStart, pageEnd: citation.pageEnd, wordingHash: definitionWordingHash(deathRules[1].quote) },
+    result: "matches", reviewedAt: "2026-09-14",
+    provenance: verifiedEvidenceProvenance("police-report-1"),
+  });
   const death = await extractClaimFacts({ text: "charmaine died from an accident yesterday. what can i claim for?", ...context });
   test("Accidental death outranks accident and retains cause/date", () => {
     assert.equal(death.eventType, "death"); assert.equal(death.death, true); assert.equal(death.accidentalDeath, true); assert.equal(death.deathDate, "2026-09-13");
     assert.equal(death.factSources?.deathDate?.source, "system-derived"); assert.equal(death.factSources?.deathDate?.timeZone, "Asia/Singapore");
-    assert.equal(nextClaimQuestion(death, coverages), null);
+    assert.equal(nextClaimQuestion(death, coverages)?.id, "cause_of_death_document");
   });
   test("Named member overrides selected profile", () => {
     const result = resolveClaimPerson("charmaine died from an accident yesterday", family, "desmond"); assert.equal(result.status, "resolved"); if (result.status === "resolved") assert.equal(result.person.id, "charmaine");
@@ -51,16 +66,16 @@ export async function runClaimRegressions() {
     assert.equal(resolveClaimDate("2026-02-30", context), null); assert.equal(resolveClaimDate("last week", context), null);
   });
   const upgraded = await extractClaimFacts({ text: "She died from the accident yesterday", current: { ...EMPTY_CLAIM_FACTS, eventType: "accident", eventDate: "2026-09-08", accidentType: "motorcycle accident" }, pendingQuestion: { id: "injured", text: "What injuries?", type: "text", why: "test" }, ...context });
-  test("Death updates an existing accident session and cancels its injury question", () => { assert.equal(upgraded.eventType, "death"); assert.equal(upgraded.injured, null); assert.equal(upgraded.deathDate, "2026-09-13"); assert.equal(nextClaimQuestion(upgraded, coverages), null); });
+  test("Death updates an existing accident session and cancels its injury question", () => { assert.equal(upgraded.eventType, "death"); assert.equal(upgraded.injured, null); assert.equal(upgraded.deathDate, "2026-09-13"); assert.equal(nextClaimQuestion(upgraded, coverages)?.id, "cause_of_death_document"); });
   const dates = await extractClaimFacts({ text: "Charmaine had a crash last Tuesday and died yesterday", ...context });
   test("Accident and death dates remain separate; temporal sequence does not prove cause", () => { assert.equal(dates.accidentDate, "2026-09-08"); assert.equal(dates.deathDate, "2026-09-13"); assert.equal(dates.accidentalDeath, null); assert.equal(nextClaimQuestion(dates, coverages)?.id, "cause_of_death"); });
   const reverseDates = await extractClaimFacts({ text: "Charmaine died yesterday after an accident on 2026-09-08", ...context });
   test("An explicit date for an earlier accident cannot overwrite yesterday's death date", () => { assert.equal(reverseDates.deathDate, "2026-09-13"); assert.equal(reverseDates.accidentDate, "2026-09-08"); assert.equal(reverseDates.accidentalDeath, null); });
   test("A cause of death alone does not establish the accident date", () => { assert.equal(death.accidentDate, null); });
   const prefixedDeathDate = await extractClaimFacts({ text: "Yesterday, Charmaine died from an accident", ...context });
-  test("A date before the death statement is already answered", () => { assert.equal(prefixedDeathDate.deathDate, "2026-09-13"); assert.equal(nextClaimQuestion(prefixedDeathDate, coverages), null); });
+  test("A date before the death statement is already answered", () => { assert.equal(prefixedDeathDate.deathDate, "2026-09-13"); assert.equal(nextClaimQuestion(prefixedDeathDate, coverages)?.id, "cause_of_death_document"); });
   const natural = await extractClaimFacts({ text: "Charmaine died from cancer yesterday after a previous accident", ...context });
-  test("Explicit illness death does not pay the accidental death benefit", () => { assert.equal(natural.accidentalDeath, false); assert.deepEqual(relevantOwnedProducts(natural, coverages), ["group term life"]); assert.equal(assessClaim(natural, coverages, deathRules).some(i => i.id === "gpa-accidental-death"), false); });
+  test("Explicit illness death does not pay the accidental death benefit", () => { assert.equal(natural.accidentalDeath, false); assert.deepEqual(relevantOwnedProducts(natural, coverages), ["group term life"]); assert.equal(assessClaim(natural, coverages, deathRules, [], SESSION_ID).some(i => i.id === "gpa-accidental-death"), false); });
   const negated = await extractClaimFacts({ text: "Charmaine almost died in an accident yesterday but she is alive", ...context });
   test("Almost died is not a death claim", () => { assert.notEqual(negated.eventType, "death"); assert.notEqual(negated.death, true); });
   const killed = await extractClaimFacts({ text: "Charmaine was killed in a motorbike accident yesterday", ...context });
@@ -69,7 +84,7 @@ export async function runClaimRegressions() {
   test("Cancer site, stage and diagnosis date are retained before question planning", () => { assert.equal(cancer.diagnosis, "stage 3 colon cancer"); assert.equal(cancer.diagnosisStage, "3"); assert.equal(cancer.diagnosisSite, "colon"); assert.equal(cancer.diagnosisDate, "2026-09-13"); assert.notEqual(nextClaimQuestion(cancer, coverages)?.id, "diagnosis"); assert.notEqual(nextClaimQuestion(cancer, coverages)?.id, "diagnosis_date"); });
   const causeQuestion: ClaimQuestion = { id: "cause_of_death", text: "Cause?", type: "choice", why: "test" };
   const uncertain = await extractClaimFacts({ text: "Not sure", current: { ...death, accidentalDeath: null }, pendingQuestion: causeQuestion, ...context });
-  test("Unknown cause is deferred to evidence without asking again or assuming accident", () => { assert.equal(nextClaimQuestion(uncertain, coverages), null); assert.equal(assessClaim(uncertain, coverages, deathRules).find(i => i.id === "gpa-accidental-death")?.amountText, null); });
+  test("Unknown cause is deferred to evidence without asking again or assuming accident", () => { assert.equal(nextClaimQuestion(uncertain, coverages), null); assert.equal(assessClaim(uncertain, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death")?.amountText, null); });
   const bill = await extractClaimFacts({ text: "I don't know", current: EMPTY_CLAIM_FACTS, pendingQuestion: { id: "ambulance_bill", text: "Bill?", type: "money", why: "test" }, ...context });
   test("Unknown bill never becomes zero", () => { assert.equal(bill.ambulanceBill, null); });
   const irrelevantBillNumber = await extractClaimFacts({ text: "Not sure, it happened 3 days ago", current: EMPTY_CLAIM_FACTS, pendingQuestion: { id: "ambulance_bill", text: "Bill?", type: "money", why: "test" }, ...context });
@@ -78,22 +93,49 @@ export async function runClaimRegressions() {
   test("A hospital bill alone does not prove inpatient admission", () => { assert.equal(hospitalBillOnly.hospitalised, null); });
   const accidentalDisability = await extractClaimFacts({ text: "The motorcycle accident caused permanent disability yesterday", ...context });
   test("Permanent accident disability retains the established 150% rule", () => { assert.equal(accidentalDisability.eventType, "disability"); assert.equal(assessClaim(accidentalDisability, coverages).find(i => i.id === "gpa-tpd")?.amountText, "Up to S$900,000"); });
+  const documentedDeath = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [confirmedGpaMatch()] };
   test("Death benefits are deterministic and limited to confirmed products", () => {
-    const result = assessClaim(death, coverages, deathRules); assert.equal(result.length, 2); assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000); assert.equal(result.find(i => i.id === "gpa-accidental-death")?.calculatedAmount, 600_000);
+    const result = assessClaim(documentedDeath, coverages, deathRules, [], SESSION_ID); assert.equal(result.length, 2); assert.equal(result.find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000); assert.equal(result.find(i => i.id === "gpa-accidental-death")?.calculatedAmount, 600_000);
     assert.equal(result.reduce((sum, i) => sum + (i.calculatedAmount ?? 0), 0), 1_600_000);
-    assert.equal(assessClaim(death, [coverages[0]], deathRules).length, 1); assert.deepEqual(assessClaim(death, [], deathRules), []);
+    assert.equal(assessClaim(documentedDeath, [coverages[0]], deathRules, [], SESSION_ID).length, 1); assert.deepEqual(assessClaim(documentedDeath, [], deathRules, [], SESSION_ID), []);
+  });
+  test("A reported accident alone never authorises the accidental death amount", () => {
+    const reported = assessClaim(death, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
+    assert.equal(reported?.status, "needs_document"); assert.equal(reported?.amountText, null); assert.equal(reported?.calculatedAmount, undefined);
+    assert.match(reported?.reason ?? "", /official cause-of-death document/i);
+    // The ordinary death benefit is unaffected by the accidental-death gap.
+    assert.equal(assessClaim(death, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gtl-death")?.calculatedAmount, 1_000_000);
+  });
+  test("Answering “Yes” to document availability alone never authorises the accidental-death amount", () => {
+    const available = { ...death, causeOfDeathDocumentAvailable: true };
+    const reported = assessClaim(available, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
+    assert.equal(reported?.status, "needs_document"); assert.equal(reported?.amountText, null); assert.equal(reported?.calculatedAmount, undefined);
+    assert.equal(nextClaimQuestion(available, coverages)?.id, "cause_of_death_document_upload");
+  });
+  test("A reviewed document without a confirmed match to the policy's own definition never authorises an amount", () => {
+    const reviewedOnly = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true };
+    const reviewedButUnmatched = assessClaim(reviewedOnly, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
+    assert.equal(reviewedButUnmatched?.status, "needs_document"); assert.equal(reviewedButUnmatched?.amountText, null);
+    const matchNotConfirmed = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [{ ...confirmedGpaMatch(), result: "needs_review" as const }] };
+    const notConfirmed = assessClaim(matchNotConfirmed, coverages, deathRules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death");
+    assert.equal(notConfirmed?.status, "needs_document"); assert.equal(notConfirmed?.amountText, null);
+  });
+  test("A match for a different claim session never authorises this claim's amount", () => {
+    const wrongSession = { ...death, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true, causeDefinitionMatches: [confirmedGpaMatch()] };
+    const result = assessClaim(wrongSession, coverages, deathRules, [], "a-different-session").find(i => i.id === "gpa-accidental-death");
+    assert.equal(result?.status, "needs_document"); assert.equal(result?.amountText, null);
   });
   test("Wording missing, wrong policy group or missing personal amount cannot produce a payout", () => {
     assert.equal(assessClaim(death, coverages).some(i => i.amountText != null), false);
-    assert.equal(assessClaim(death, coverages.map(c => ({ ...c, groupPolicyNumber: "OTHER" })), deathRules).some(i => i.amountText != null), false);
-    assert.equal(assessClaim(death, coverages.map(c => ({ ...c, amount: null })), deathRules).some(i => i.amountText != null), false);
+    assert.equal(assessClaim(death, coverages.map(c => ({ ...c, groupPolicyNumber: "OTHER" })), deathRules, [], SESSION_ID).some(i => i.amountText != null), false);
+    assert.equal(assessClaim(death, coverages.map(c => ({ ...c, amount: null })), deathRules, [], SESSION_ID).some(i => i.amountText != null), false);
   });
-  test("Death before cover began is not payable under that cover", () => { assert.equal(assessClaim({ ...death, deathDate: "2021-01-01" }, coverages, deathRules).every(i => i.status === "not_applicable"), true); });
+  test("Death before cover began is not payable under that cover", () => { assert.equal(assessClaim({ ...death, deathDate: "2021-01-01" }, coverages, deathRules, [], SESSION_ID).every(i => i.status === "not_applicable"), true); });
   test("A verified racing exclusion changes the death pathway without routine injury questions", () => {
     const rules = deathRules.map(r => r.benefit === "gpa-accidental-death" ? { ...r, racingExclusion: { quote: "Participation in competitive racing on wheels", page: 2 } } : r);
     const facts = { ...death, accidentType: "motorcycle accident" };
     assert.equal(nextClaimQuestion(facts, coverages, rules)?.id, "competitive_racing");
-    assert.equal(assessClaim({ ...facts, competitiveRacing: true }, coverages, rules).find(i => i.id === "gpa-accidental-death")?.status, "not_applicable");
+    assert.equal(assessClaim({ ...facts, competitiveRacing: true }, coverages, rules, [], SESSION_ID).find(i => i.id === "gpa-accidental-death")?.status, "not_applicable");
   });
   test("Wording formula must belong to the correct product and benefit", () => {
     const pages = [{ page_number: 2, text: "Group Term Life\nDeath\n100% of Sum Insured\nGroup Personal Accident\nDeath due to Accident\n100% of Sum Insured\nTotal and Permanent Disablement\n150% of Sum Insured" }];

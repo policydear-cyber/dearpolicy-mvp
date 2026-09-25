@@ -4,6 +4,30 @@ import { setTimeout as wait } from "node:timers/promises";
 
 try { process.loadEnvFile(path.resolve(".env.local")); } catch { /* .env.local is optional outside local dev */ }
 
+// Every table-creating migration, in dependency order, plus the household
+// membership schema and RLS policies last (household-rls.sql references
+// every table above it, and is written to be a no-op for any table that
+// doesn't exist yet -- see its own header comment). Previously this script
+// only applied schema.sql + chat-upgrade.sql, silently leaving the claim-
+// evidence/composition/critical-illness/disability/cover-conditions/model-
+// usage/coverage-ledger tables (and all RLS) missing from a fresh local
+// database.
+const MIGRATIONS = [
+  "sql/schema.sql",
+  "sql/benefit-catalog.sql",
+  "sql/claim-evidence.sql",
+  "sql/claim-composition.sql",
+  "sql/critical-illness.sql",
+  "sql/disability.sql",
+  "sql/cover-conditions.sql",
+  "sql/model-usage.sql",
+  "sql/chat-upgrade.sql",
+  "sql/coverage-ledger.sql",
+  "sql/lifecycle.sql",
+  "sql/claim-reviewers.sql",
+  "sql/household-rls.sql",
+];
+
 async function main() {
   const { pool } = await import("../lib/db/client");
   let connected = false;
@@ -32,10 +56,11 @@ async function main() {
     }
   }
   if (!connected) throw new Error("PostgreSQL did not become ready.");
-  const sql = await readFile(path.resolve("sql/schema.sql"), "utf8");
-  await pool.query(sql);
-  await pool.query(await readFile(path.resolve("sql/chat-upgrade.sql"),"utf8"));
-  console.log("DearPolicy database schema is ready.");
+  for (const file of MIGRATIONS) {
+    const sql = await readFile(path.resolve(file), "utf8");
+    await pool.query(sql);
+  }
+  console.log("DearPolicy database schema is ready (including household membership + RLS).");
   await pool.end();
 }
 

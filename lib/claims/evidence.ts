@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimAssessmentItem, ClaimEvidence } from "./types";
 
@@ -29,7 +30,7 @@ export async function evidenceForAssessment(args:{accountId:string;familyMemberI
     }>(
       `SELECT pp.policy_id,pp.page_number,p.insurer,p.product_name,p.document_role,p.original_filename
          FROM policy_pages pp
-         JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id
+         JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id AND ${activePredicate("p")}
          JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
         WHERE pp.account_id=$1 AND pm.family_member_id=$2 AND p.processing_status='ready'
           AND pp.text ILIKE '%' || $3 || '%'

@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { pineconeEnabled, searchPolicyPassages } from "@/lib/rag/pinecone";
 import type { RetrievedChunk } from "@/types";
 
@@ -27,7 +28,8 @@ async function semanticCandidates(args:{accountId:string;familyMemberId:string;s
     const owned=await query<{policy_id:string}>(
       `SELECT DISTINCT c.policy_id FROM policy_chunks c
          JOIN policy_members pm ON pm.policy_id=c.policy_id AND pm.account_id=c.account_id
-        WHERE c.account_id=$1 AND pm.family_member_id=$2`,
+         JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id
+        WHERE c.account_id=$1 AND pm.family_member_id=$2 AND p.lifecycle_state='active' AND ${trustedPolicyStatePredicate("p")}`,
       [args.accountId,args.familyMemberId]);
     const policyIds=owned.rows.map(r=>r.policy_id);
     if(!policyIds.length)return {ids:[] as string[],distances:[] as number[]};
@@ -62,7 +64,10 @@ export async function retrieveRelevantChunks(args:{accountId:string;familyMember
             COALESCE(k.keyword_rank,0)::float AS keyword_rank
      FROM candidates x JOIN policy_chunks c ON c.id=x.id JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id
      LEFT JOIN vec v ON v.id=c.id LEFT JOIN kw k ON k.id=c.id
-     WHERE p.processing_status='ready'`,
+     -- Checkpoint 7: a policy that has entered pending_deletion or beyond
+     -- must never keep supplying chat context/citations -- this is the
+     -- literal "deleted policy removed from chat" regression requirement.
+     WHERE p.processing_status='ready' AND p.lifecycle_state='active' AND ${trustedPolicyStatePredicate("p")}`,
     [args.accountId,args.familyMemberId,searchText,semantic.ids,semantic.distances],
   );
   const wantsOwnership=ownershipQuestion(args.question);

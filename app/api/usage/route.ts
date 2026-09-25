@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { devAccountId } from "@/lib/db/client";
+import type { NextRequest } from "next/server";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { usageThisMonth } from "@/lib/ai/ledger";
 import { describeChoice,modelFor,priceFor } from "@/lib/ai/providers";
 
 export const runtime="nodejs";
-export async function GET(){
+export const ROUTE_AUTH = "household-member" as const;
+export async function GET(request:NextRequest){
   try{
-    const usage=await usageThisMonth(devAccountId());
+    const ctx=await requireHouseholdContext(request);
+    const usage=await usageThisMonth(ctx.householdId);
     const routing=(["reading","judgement","narration"] as const).map(role=>{
       const choice=modelFor(role);const price=priceFor(choice);
       return {role,model:describeChoice(choice),hosted:true,
@@ -14,6 +17,8 @@ export async function GET(){
     });
     return NextResponse.json({usage,routing});
   }catch(error){
-    return NextResponse.json({error:"Could not load usage"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Could not load usage"},{status:500});
+    return authResponse;
   }
 }

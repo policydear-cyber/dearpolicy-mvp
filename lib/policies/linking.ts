@@ -1,10 +1,11 @@
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCoverageCategory, normalizePersonName } from "@/lib/insurance";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 
 export async function familyMembersForAccount(accountId: string) {
-  const result = await query<{ id: string; display_name: string }>(`SELECT id,display_name FROM family_members WHERE account_id=$1 ORDER BY created_at`,[accountId]);
+  const result = await query<{ id: string; display_name: string }>(`SELECT id,display_name FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
   return result.rows;
 }
 
@@ -16,7 +17,7 @@ export function findFamilyMatch(name: string, family: { id: string; display_name
 async function resolveTargetPolicyId(accountId: string, sourcePolicyId: string, policyNumber?: string | null) {
   if (!policyNumber) return sourcePolicyId;
   const result = await query<{ id: string }>(
-    `SELECT id FROM policies WHERE account_id=$1 AND policy_number=$2 AND id<>$3
+    `SELECT id FROM policies WHERE account_id=$1 AND policy_number=$2 AND id<>$3 AND ${activePredicate()}
        AND document_role IN ('personal_schedule','certificate','endorsement','policy_wording','rider','renewal_statement','annual_statement')
      ORDER BY personal_coverage_confirmed DESC,document_authority DESC,created_at DESC LIMIT 1`,
     [accountId, policyNumber, sourcePolicyId],
@@ -32,8 +33,8 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
             CASE WHEN current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number THEN 0.95 ELSE 0.82 END
        FROM policies current
        JOIN policy_members pm ON pm.policy_id=current.id AND pm.account_id=current.account_id
-       JOIN policies ref ON ref.account_id=current.account_id AND ref.id<>current.id
-      WHERE current.account_id=$1 AND current.id=$2 AND ref.personal_coverage_confirmed=false
+       JOIN policies ref ON ref.account_id=current.account_id AND ref.id<>current.id AND ${activePredicate("ref")}
+      WHERE current.account_id=$1 AND current.id=$2 AND ${activePredicate("current")} AND ref.personal_coverage_confirmed=false
         AND (
           (current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number) OR
           (current.insurer IS NOT NULL AND ref.insurer IS NOT NULL AND lower(current.insurer)=lower(ref.insurer)
@@ -47,9 +48,9 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
      SELECT current.id,pm.family_member_id,$1,'scheme_reference_match',
             CASE WHEN current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number THEN 0.95 ELSE 0.82 END
        FROM policies current
-       JOIN policies personal ON personal.account_id=current.account_id AND personal.id<>current.id AND personal.personal_coverage_confirmed=true
+       JOIN policies personal ON personal.account_id=current.account_id AND personal.id<>current.id AND personal.personal_coverage_confirmed=true AND ${activePredicate("personal")}
        JOIN policy_members pm ON pm.policy_id=personal.id AND pm.account_id=personal.account_id
-      WHERE current.account_id=$1 AND current.id=$2 AND current.personal_coverage_confirmed=false
+      WHERE current.account_id=$1 AND current.id=$2 AND ${activePredicate("current")} AND current.personal_coverage_confirmed=false
         AND (
           (current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number) OR
           (current.insurer IS NOT NULL AND personal.insurer IS NOT NULL AND lower(current.insurer)=lower(personal.insurer)

@@ -63,3 +63,123 @@ export async function deletePolicyFile(storageKey: string) {
   const { error } = await client().storage.from(BUCKET).remove(paths);
   if (error) throw new Error(`Could not delete the stored PDF: ${error.message}`);
 }
+
+// --- Claim evidence: its own private bucket, never the policy-files bucket
+// above, and never made public -- every read goes through a short-lived
+// signed URL (createClaimEvidenceSignedUrl) rather than a public object URL.
+const CLAIM_EVIDENCE_BUCKET = process.env.SUPABASE_CLAIM_EVIDENCE_BUCKET ?? "claim-evidence-files";
+// D34 (Wave 2 adversarial audit): 300s is a DELIBERATE, documented
+// trade-off, not an oversight -- kept here (rather than raised) because a
+// signed URL this application hands out is a capability the storage
+// provider will honor directly, with no further app-side check, for its
+// entire TTL, even if the underlying claim-evidence document is superseded
+// or deleted one second after the URL is minted. That exposure window is
+// unavoidable for ANY pre-signed direct-storage URL scheme (shrinking the
+// TTL only shrinks the window, it cannot close it), so the real access
+// boundary this application enforces IMMEDIATELY on supersession/deletion
+// is upstream of this: app/api/claims/evidence/[id]/file/route.ts resolves
+// the document through lib/claims/evidence/store.ts's
+// getScopedEvidenceDocument(), which now excludes a superseded/deleted
+// document, so this function is simply never called (no NEW signed URL is
+// ever minted) for evidence that is no longer active -- see that route's
+// own doc comment for the full picture. 300s is short enough to load a
+// multi-page PDF over a slow connection without the redirect racing the
+// URL's own expiry, and is not lowered further without a product decision
+// to accept more retry/redirect failures on slow connections in exchange
+// for a smaller (never zero) exposure window.
+const SIGNED_URL_TTL_SECONDS = 300;
+
+function claimEvidenceObjectKey(args: { accountId: string; familyMemberId: string; claimSessionId: string; documentId: string; filename: string }) {
+  const filename = safeSegment(args.filename || "evidence.pdf");
+  return [safeSegment(args.accountId), safeSegment(args.familyMemberId), safeSegment(args.claimSessionId), safeSegment(args.documentId), filename].join("/");
+}
+
+export async function saveClaimEvidenceFile(args: {
+  accountId: string;
+  familyMemberId: string;
+  claimSessionId: string;
+  documentId: string;
+  filename: string;
+  bytes: Uint8Array;
+}) {
+  const key = claimEvidenceObjectKey(args);
+  const { error } = await client()
+    .storage.from(CLAIM_EVIDENCE_BUCKET)
+    // upsert:false -- a claim-evidence object key already includes the
+    // document's own id, so a second write to the same key would only ever
+    // happen from a genuine retry of the same upload, and overwriting
+    // silently there is fine; a real collision (two different documents
+    // somehow computing the same key) should fail loudly instead of one
+    // silently clobbering the other.
+    .upload(key, args.bytes, { contentType: "application/pdf", upsert: true });
+  if (error) throw new Error(`Could not save the claim-evidence file to storage: ${error.message}`);
+  return key;
+}
+
+export async function readClaimEvidenceFile(storageKey: string) {
+  const { data, error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).download(storageKey);
+  if (error) throw new Error(`Could not read the stored claim-evidence file: ${error.message}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function deleteClaimEvidenceFile(storageKey: string) {
+  const folder = storageKey.split("/").slice(0, -1).join("/");
+  const { data: entries, error: listError } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).list(folder);
+  if (listError) throw new Error(`Could not list stored claim-evidence files to delete: ${listError.message}`);
+  const paths = (entries ?? []).map((entry) => `${folder}/${entry.name}`);
+  if (!paths.length) return;
+  const { error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).remove(paths);
+  if (error) throw new Error(`Could not delete the stored claim-evidence file: ${error.message}`);
+}
+
+/** A short-lived signed URL -- never a public object URL -- for the review
+ * UI to preview or download the document. The service-role key used by
+ * client() bypasses bucket-level access rules, which is exactly why this
+ * function, not a public bucket, is the only way this file is ever read
+ * from the browser.
+ *
+ * D34: this function itself has no way to know whether the caller is about
+ * to serve this URL for currently-active evidence or not -- that check is
+ * the CALLER's job (see app/api/claims/evidence/[id]/file/route.ts, the
+ * only caller, which resolves the document through
+ * getScopedEvidenceDocument() first and never reaches this function at all
+ * for superseded/deleted evidence). Never call this directly against a
+ * storage_key without first re-confirming, through that same scoped
+ * lookup, that the document is still active. */
+export async function createClaimEvidenceSignedUrl(storageKey: string): Promise<string | null> {
+  const { data, error } = await client().storage.from(CLAIM_EVIDENCE_BUCKET).createSignedUrl(storageKey, SIGNED_URL_TTL_SECONDS);
+  if (error) throw new Error(`Could not create a signed URL for the claim-evidence file: ${error.message}`);
+  return data.signedUrl;
+}
+
+// --- Household export (checkpoint 6): see lib/storage/local.ts's own
+// comment on this domain. Its own private bucket -- never public, never a
+// long-lived signed URL; app/api/household/export/[id]/download/route.ts
+// streams the bytes itself through an authenticated route, exactly like
+// claim evidence does on the local driver, rather than redirecting to a
+// signed URL, so this file never needs to mint or track one.
+const HOUSEHOLD_EXPORT_BUCKET = process.env.SUPABASE_HOUSEHOLD_EXPORT_BUCKET ?? "household-exports";
+
+function householdExportObjectKey(args: { householdId: string; exportId: string }) {
+  return [safeSegment(args.householdId), `${safeSegment(args.exportId)}.json`].join("/");
+}
+
+export async function saveHouseholdExportFile(args: { householdId: string; exportId: string; bytes: Uint8Array }) {
+  const key = householdExportObjectKey(args);
+  const { error } = await client()
+    .storage.from(HOUSEHOLD_EXPORT_BUCKET)
+    .upload(key, args.bytes, { contentType: "application/json", upsert: true });
+  if (error) throw new Error(`Could not save the household export to storage: ${error.message}`);
+  return key;
+}
+
+export async function readHouseholdExportFile(storageKey: string) {
+  const { data, error } = await client().storage.from(HOUSEHOLD_EXPORT_BUCKET).download(storageKey);
+  if (error) throw new Error(`Could not read the stored household export: ${error.message}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function deleteHouseholdExportFile(storageKey: string) {
+  const { error } = await client().storage.from(HOUSEHOLD_EXPORT_BUCKET).remove([storageKey]);
+  if (error) throw new Error(`Could not delete the stored household export: ${error.message}`);
+}

@@ -1,9 +1,12 @@
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 import assert from "node:assert/strict";
 import fixture from "./fixtures/singlife-death-wording.json";
-import { canonicalDeathInsurer, findDeathRule, resolveDeathEvidence, type DeathWordingPage } from "@/lib/claims/death-evidence";
+import { canonicalDeathInsurer, findDeathRule, resolveDeathEvidence, type DeathRuleEvidence, type DeathWordingPage } from "@/lib/claims/death-evidence";
 import { extractClaimFacts } from "@/lib/claims/facts";
 import { assessClaim, nextClaimQuestion } from "@/lib/claims/rules";
+import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 
 export async function runDeathEvidenceRegressions() {
   let cases=0;
@@ -15,6 +18,18 @@ export async function runDeathEvidenceRegressions() {
   const context={now:new Date("2026-09-14T12:00:00Z"),timeZone:"Asia/Singapore",allowAi:false};
   const facts=await extractClaimFacts({text:"desmond died in a motorbike accident yesterday",...context});
   const result=resolveDeathEvidence(covers,rows);
+  const SESSION_ID="session-death-evidence-regressions";
+  // Builds the one applicable, policy-specific match for the gpa-accidental-
+  // death rule actually resolved from the real wording fixture -- the
+  // definitionEvidence must reference the exact clause rules.ts will quote,
+  // never a hand-picked page number.
+  const confirmedMatch=(rules:DeathRuleEvidence[]):CauseDefinitionMatch=>{
+    const rule=rules.find(r=>r.benefit==="gpa-accidental-death")!;
+    return {familyMemberId:"desmond",claimEventId:SESSION_ID,contractId:"personal",coverageId:"gpa",
+      causeEvidence:{documentId:"police-report-1",documentType:"police_report",pageStart:1,pageEnd:1,familyMemberId:"desmond",claimEventId:SESSION_ID},
+      definitionEvidence:{policyId:rule.citation.policyId,chunkId:rule.citation.chunkId,pageStart:rule.citation.pageStart,pageEnd:rule.citation.pageEnd,wordingHash:definitionWordingHash(rule.quote)},
+      result:"matches",reviewedAt:"2026-09-14",provenance:verifiedEvidenceProvenance("police-report-1")};
+  };
   test("Actual Certificate Part 2 promises pay the full Sum Insured without 100%",()=>{
     assert.equal(findDeathRule(pages,"Group Term Life")?.page,3);
     assert.equal(findDeathRule(pages,"Group Personal Accident")?.page,5);
@@ -52,17 +67,17 @@ export async function runDeathEvidenceRegressions() {
   test("Payout uses personalised sums rather than available-product maximums",()=>{
     const owned=covers.map(c=>({...c,amount:c.id==="gtl"?250_000:100_000}));
     const evidence=resolveDeathEvidence(owned,rows);
-    assert.equal(assessClaim({...facts,competitiveRacing:false},owned,evidence.rules).reduce((sum,i)=>sum+(i.calculatedAmount??0),0),350_000);
+    assert.equal(assessClaim({...facts,competitiveRacing:false,causeOfDeathDocumentAvailable:true,causeOfDeathEvidenceReviewed:true,causeDefinitionMatches:[confirmedMatch(evidence.rules)]},owned,evidence.rules,[],SESSION_ID).reduce((sum,i)=>sum+(i.calculatedAmount??0),0),350_000);
   });
   test("Actual racing exclusion keeps its Authority-sanctioned exception",()=>{
     const exclusion=result.rules.find(r=>r.benefit==="gpa-accidental-death")?.racingExclusion;
     assert.equal(exclusion?.page,10);assert.equal(exclusion?.authorityException,true);assert.match(exclusion?.quote??"",/except for those sanctioned by the Authority/i);
     assert.equal(nextClaimQuestion(facts,covers,result.rules)?.id,"competitive_racing");
     assert.equal(nextClaimQuestion({...facts,competitiveRacing:true},covers,result.rules)?.id,"racing_authority_sanctioned");
-    const unknown=assessClaim({...facts,competitiveRacing:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
+    const unknown=assessClaim({...facts,competitiveRacing:true},covers,result.rules,[],SESSION_ID).find(i=>i.id==="gpa-accidental-death");
     assert.equal(unknown?.status,"needs_document");assert.equal(unknown?.amountText,null);
-    assert.equal(assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:false},covers,result.rules).find(i=>i.id==="gpa-accidental-death")?.status,"not_applicable");
-    const sanctioned=assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:true},covers,result.rules).find(i=>i.id==="gpa-accidental-death");
+    assert.equal(assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:false},covers,result.rules,[],SESSION_ID).find(i=>i.id==="gpa-accidental-death")?.status,"not_applicable");
+    const sanctioned=assessClaim({...facts,competitiveRacing:true,racingAuthoritySanctioned:true,causeOfDeathDocumentAvailable:true,causeOfDeathEvidenceReviewed:true,causeDefinitionMatches:[confirmedMatch(result.rules)]},covers,result.rules,[],SESSION_ID).find(i=>i.id==="gpa-accidental-death");
     assert.equal(sanctioned?.calculatedAmount,600_000);assert.ok(sanctioned?.conditions.some(c=>/proof.*sanctioned/i.test(c)));
   });
   test("Partial or discretionary promises cannot be treated as the full death sum",()=>{
@@ -84,13 +99,13 @@ export async function runDeathEvidenceRegressions() {
   const sanctioned=await extractClaimFacts({text:"Yes, racing sanctioned by MINDEF",current:facts,...context});
   const notSanctioned=await extractClaimFacts({text:"The racing was not sanctioned by the Authority",current:facts,...context});
   test("Explicit racing and sanction facts are retained without repeated questions",()=>{
-    assert.equal(noRacing.competitiveRacing,false);assert.equal(nextClaimQuestion(noRacing,covers,result.rules),null);
-    assert.equal(sanctioned.competitiveRacing,true);assert.equal(sanctioned.racingAuthoritySanctioned,true);assert.equal(nextClaimQuestion(sanctioned,covers,result.rules),null);
+    assert.equal(noRacing.competitiveRacing,false);assert.equal(nextClaimQuestion(noRacing,covers,result.rules)?.id,"cause_of_death_document");
+    assert.equal(sanctioned.competitiveRacing,true);assert.equal(sanctioned.racingAuthoritySanctioned,true);assert.equal(nextClaimQuestion(sanctioned,covers,result.rules)?.id,"cause_of_death_document");
     assert.equal(notSanctioned.racingAuthoritySanctioned,false);
   });
   const unknown=await extractClaimFacts({text:"Not sure whether there was racing",current:facts,pendingQuestion:{id:"competitive_racing",text:"Racing?",type:"yes_no",why:"test"},...context});
   test("Unknown racing is deferred without being turned into a reported race",()=>{
-    assert.equal(unknown.competitiveRacing,null);assert.equal(nextClaimQuestion(unknown,covers,result.rules),null);
+    assert.equal(unknown.competitiveRacing,null);assert.equal(nextClaimQuestion(unknown,covers,result.rules)?.id,"cause_of_death_document");
   });
   console.log(`DearPolicy real-PDF death-wording regressions passed (${cases} scenarios).`);
 }

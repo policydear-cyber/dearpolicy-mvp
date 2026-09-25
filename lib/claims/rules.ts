@@ -1,7 +1,46 @@
 import { formatMoney } from "@/lib/format/currency";
 import { canonicalProduct, coverageByProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
-import type { ClaimAssessmentItem, ClaimFacts, ClaimQuestion } from "./types";
+import type { ClaimAssessmentItem, ClaimEvidence, ClaimFacts, ClaimQuestion } from "./types";
 import type { DeathEvidenceGap, DeathRuleEvidence } from "./death-evidence";
+import { calculateDeathBenefit, type DeathBenefitEvidenceRef, type DeathBenefitFormula } from "./calculators/death-benefit";
+import { calculateAccidentalDeath } from "./calculators/accidental-death";
+import type { CauseDefinitionMatch } from "./calculators/evidence";
+import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
+import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
+import { assessCriticalIllness, nextCIQuestion } from "./ci-rules";
+import { assessMedicalClaim, nextMedicalQuestion, type MedicalRuleEvidence } from "./medical-rules";
+import { assessDisabilityClaim, nextDisabilityQuestion, type DisabilityRuleSet } from "./disability-rules";
+import { assessTravelClaim, nextTravelQuestion, type TravelRuleSet } from "./travel-rules";
+
+function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
+  return { chunkId: c.chunkId, policyId: c.policyId, pageStart: c.pageStart, pageEnd: c.pageEnd, label: c.evidenceLabel };
+}
+/** The one applicable, already-reviewed match between the official
+ * cause-of-death evidence and THIS SPECIFIC policy's own accidental-death
+ * definition, or `null` when none has been reviewed for this exact family
+ * member/claim/contract/coverage yet. A cause can satisfy one policy's
+ * definition and not another's, so this is a per-policy lookup rather than
+ * a single global flag -- and `calculateAccidentalDeath()` independently
+ * re-validates every field of whatever this returns, so a bug here can
+ * never by itself unlock an amount for the wrong policy or person. None of
+ * the following, alone or together, can ever produce a match: the family
+ * saying they possess a document (`causeOfDeathDocumentAvailable`), a chat
+ * answer of "yes"/"uploaded"/any other free text, or DearPolicy having
+ * merely reviewed a document without an explicitly confirmed match --
+ * `causeDefinitionMatches` is never populated from chat text or AI output
+ * in this slice, since no document-review pipeline exists yet to do so. */
+function applicableCauseDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, sessionId: string | null, currentDefinition: unknown): CauseDefinitionMatch | null {
+  if (sessionId == null) return null;
+  // Every active decision for this exact scope, one per evidence document,
+  // reduced to a single one deterministically and fail-closed -- see
+  // lib/claims/evidence/decision-selection.ts.
+  return selectApplicableDecision(facts.causeDefinitionMatches.filter(m =>
+    m.contractId === coverage.policyId &&
+    m.familyMemberId === coverage.familyMemberId &&
+    m.claimEventId === sessionId &&
+    (m.coverageId == null || m.coverageId === coverage.id),
+  ), currentDefinition);
+}
 
 function hasProduct(coverages: OwnedCoverage[], product: string) {
   return coverageByProduct(coverages, product).length > 0;
@@ -63,7 +102,7 @@ export function relevantOwnedProducts(facts: ClaimFacts, coverages: OwnedCoverag
   return [...result];
 }
 
-export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = []): ClaimQuestion | null {
+export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], ciRules: CIRuleEvidence[] = [], medicalRules?: MedicalRuleEvidence, disabilityRules?: DisabilityRuleSet, travelRules?: TravelRuleSet): ClaimQuestion | null {
   if (!facts.eventType) return { id:"event_type", text:"Tell me what happened. Was this an accident, a diagnosis, a hospital admission, a disability, or a death claim?", type:"choice", options:["Accident","Diagnosis","Hospital admission","Disability","Death"], why:"DearPolicy needs the event type before it can choose the relevant owned policies." };
 
   const dateQuestion = eventDateQuestion(facts);
@@ -84,6 +123,8 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
 
   if (facts.eventType === "diagnosis") {
     if (!facts.diagnosis && !facts.uncertainFacts.includes("diagnosis")) return { id:"diagnosis", text:"What was the exact diagnosis? Include the cancer type/stage or medical condition if you know it.", type:"text", why:"Critical illness benefits depend on the specific diagnosis and policy definition." };
+    const ciQuestion = nextCIQuestion(facts, ciRules);
+    if (ciQuestion) return ciQuestion;
     if ((hasProduct(coverages,"group term life") || hasReimbursementMedicalCover(coverages)) && facts.hospitalised == null && !facts.uncertainFacts.includes("hospitalised")) return { id:"hospitalised", text:"Were you admitted to hospital because of this diagnosis? If yes, how many nights?", type:"yes_no", options:["Yes","No"], why:"Your other owned policies may contain hospital cash or medical reimbursement benefits in addition to a diagnosis benefit." };
     if (facts.hospitalised === true && facts.hospitalNights == null && !facts.uncertainFacts.includes("hospital_nights")) return { id:"hospital_nights", text:"How many nights were you admitted?", type:"text", why:"Hospital cash depends on the length of stay." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalised === true && facts.hospitalBill == null && !facts.uncertainFacts.includes("hospital_bill")) return { id:"hospital_bill", text:"What was the total hospital or treatment bill?", type:"money", why:"Medical reimbursement benefits depend on actual eligible expenses." };
@@ -92,6 +133,14 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
 
   if (facts.eventType === "hospitalisation") {
     if (!facts.diagnosis && !facts.injuries.length && !facts.uncertainFacts.includes("diagnosis")) return { id:"diagnosis", text:"What were you admitted for? Tell me the diagnosis or injury.", type:"text", why:"The reason for admission determines which owned benefits may respond." };
+    const medicalQuestion = nextMedicalQuestion(facts, medicalRules);
+    if (medicalQuestion) return medicalQuestion;
+    // Additive: the travel trip-date safety gate (lib/claims/travel-rules.ts's
+    // own doc comment) -- only asked when this family member's Travel cover
+    // actually has an evidenced Overseas Medical Expenses/Accidental Death
+    // clause to check it against.
+    const travelQuestionForMedical = nextTravelQuestion(facts, travelRules);
+    if (travelQuestionForMedical) return travelQuestionForMedical;
     if (facts.hospitalNights == null && !facts.uncertainFacts.includes("hospital_nights")) return { id:"hospital_nights", text:"How many nights were you admitted?", type:"text", why:"Hospital cash and some inpatient benefits depend on the length of stay." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalBill == null && !facts.uncertainFacts.includes("hospital_bill")) return { id:"hospital_bill", text:"What was the total hospital bill?", type:"money", why:"Reimbursement benefits depend on the actual eligible expense." };
     if (hasReimbursementMedicalCover(coverages) && facts.hospitalBill != null && facts.outOfPocket == null && !facts.uncertainFacts.includes("out_of_pocket")) return { id:"out_of_pocket", text:"How much did you personally pay after subsidies, MediSave and other insurance?", type:"money", why:"DearPolicy uses the actual financial exposure when assessing reimbursement benefits." };
@@ -102,11 +151,24 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
     const racingRule = deathRules.find(r => r.benefit === "gpa-accidental-death" && r.coverageId === bestCoverage(coverages,"group personal accident","Personal Accident")?.id);
     if (facts.accidentalDeath === true && /motorcycle|motorbike/i.test(facts.accidentType ?? "") && racingRule?.racingExclusion && facts.competitiveRacing == null && !facts.uncertainFacts.includes("competitive_racing")) return { id:"competitive_racing", text:"Was the accident during competitive racing on wheels?", type:"yes_no", options:["Yes", "No", "Not sure"], why:racingRule.racingExclusion.authorityException ? "The Personal Accident wording excludes competitive racing on wheels, with an exception for racing sanctioned by MINDEF/MHA. This can change its death benefit." : "The matching Personal Accident wording excludes competitive racing on wheels, so this can change its death benefit." };
     if (facts.accidentalDeath === true && facts.competitiveRacing === true && racingRule?.racingExclusion?.authorityException && facts.racingAuthoritySanctioned == null && !facts.uncertainFacts.includes("racing_authority_sanctioned")) return { id:"racing_authority_sanctioned", text:"Was the racing sanctioned by MINDEF/MHA?", type:"yes_no", options:["Yes", "No", "Not sure"], why:"Your uploaded wording has an exception for racing sanctioned by the Authority. The insurer will need evidence of that sanction." };
+    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumentAvailable == null && !facts.uncertainFacts.includes("cause_of_death_document")) return { id:"cause_of_death_document", text:"Do you have an official cause-of-death document -- a death certificate, police report, or coroner's report -- confirming the accident? You can say \u201cnot sure\u201d if you have not checked yet.", type:"yes_no", options:["Yes", "No", "Not sure"], why:"The accidental death benefit needs the reported cause checked against the policy's own accident definition before DearPolicy can show an amount. A reported circumstance alone is not enough." };
+    // Saying the document exists is only ever availability -- it never
+    // authorises an amount by itself. Once available, DearPolicy asks for
+    // the document itself; only DearPolicy actually reviewing it and
+    // matching its cause against the policy's own definition (never a chat
+    // answer) can move this benefit past needs_document.
+    if (hasProduct(coverages, "group personal accident") && facts.accidentalDeath === true && facts.causeOfDeathDocumentAvailable === true && facts.causeOfDeathEvidenceReviewed !== true && !facts.uncertainFacts.includes("cause_of_death_document_upload")) return { id:"cause_of_death_document_upload", text:"Please upload the death certificate, police report or coroner's report. DearPolicy will check its stated cause against the policy's own accidental-death definition before showing an amount.", type:"text", why:"Saying the document exists is not the same as DearPolicy having read it. Only the reviewed document, checked against the policy's own definition, can confirm this benefit." };
+    // Additive: the travel trip-date safety gate -- see the identical
+    // comment in the "hospitalisation" branch above.
+    const travelQuestionForDeath = nextTravelQuestion(facts, travelRules);
+    if (travelQuestionForDeath) return travelQuestionForDeath;
   }
 
   if (facts.eventType === "disability") {
     if (facts.permanentImpairment == null && !facts.uncertainFacts.includes("permanent_impairment")) return { id:"permanent_impairment", text:"Has the disability been medically assessed as permanent, or is that still uncertain?", type:"yes_no", options:["Permanent","Not permanent","Not sure"], why:"TPD and accident disability benefits depend on permanence and the policy definition." };
     if (!facts.diagnosis && !facts.injuries.length && !facts.uncertainFacts.includes("diagnosis")) return { id:"diagnosis", text:"What caused the disability—an illness or an injury?", type:"text", why:"Different owned policies respond depending on the cause." };
+    const disabilityQuestion = nextDisabilityQuestion(facts, disabilityRules);
+    if (disabilityQuestion) return disabilityQuestion;
   }
 
   return null;
@@ -118,9 +180,18 @@ function g007500(coverages: OwnedCoverage[]) {
   return coverages.some((c) => c.groupPolicyNumber === "G007500");
 }
 
-export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = []): ClaimAssessmentItem[] {
+export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], deathRules: DeathRuleEvidence[] = [], deathGaps: DeathEvidenceGap[] = [], sessionId: string | null = null, ciRules: CIRuleEvidence[] = [], ciGaps: CIEvidenceGap[] = [], medicalRules?: MedicalRuleEvidence, disabilityRules?: DisabilityRuleSet, travelRules?: TravelRuleSet): ClaimAssessmentItem[] {
   const items: ClaimAssessmentItem[] = [];
   const isG007500 = g007500(coverages);
+  // Additive: new evidence-gated disability items from
+  // lib/claims/disability-rules.ts alongside the legacy hardcoded
+  // "gpa-tpd" item below -- when disability-rules.ts has produced a real,
+  // wording-evidenced TPD assessment for the SAME Group Personal Accident
+  // coverage, the legacy hardcoded item is suppressed so the family is
+  // never shown two competing TPD estimates for one coverage. See
+  // lib/claims/medical-rules.ts's identical suppression pattern for
+  // "gtl-hospital-cash".
+  const disabilityTPDCoverageIds = new Set((disabilityRules?.rules ?? []).filter((r) => r.benefitCode === "tpd-lump-sum").map((r) => r.coverageId));
 
   if (facts.eventType === "death") {
     const deathDate = facts.deathDate ?? facts.eventDate;
@@ -158,18 +229,74 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The wording confirms 100% of Sum Insured, but this person's sum insured is missing from verified personal evidence.", conditions: ["Upload the certificate or schedule showing the person's insured amount."] });
         continue;
       }
-      if (product === "group personal accident" && facts.accidentalDeath !== true) {
-        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The cause of death is still unknown; I cannot calculate an accidental death claim from an earlier accident alone.", conditions: ["Check the death certificate and accident or medical report to establish the cause."] });
-        continue;
-      }
       const conditions = ["The cover must have been in force on the date of death, and the policy's conditions and exclusions must be met."];
       if (!deathDate || !coverage.effectiveDate) conditions.push("The date of death and this cover's effective date still need documentary confirmation.");
       if (product === "group personal accident") conditions.push("The death certificate and accident/medical report must establish death directly caused by the accident; accident exclusions and any time limits still need checking.");
       if (product === "group personal accident" && facts.competitiveRacing === true && rule.racingExclusion?.authorityException) conditions.push("Provide proof that the racing was sanctioned by MINDEF/MHA; the insurer must accept the exception.");
-      items.push({ ...base, ruleEvidence: rule.citation, status: "potentially_applicable", amountText: amountText(coverage.amount, coverage.currency),
-        calculatedAmount: coverage.amount, currency: coverage.currency,
-        reason: `The personal certificate confirms ${amountText(coverage.amount, coverage.currency)} of cover. The matching death-benefit clause pays the full Sum Insured: 100% × ${amountText(coverage.amount, coverage.currency)}.`, conditions });
+
+      const formulaCurrencyOk = rule.formula.kind !== "fixed" || rule.formula.currency === coverage.currency;
+      const capCurrencyOk = !rule.cap || rule.cap.currency === coverage.currency;
+      if (!formulaCurrencyOk || !capCurrencyOk) {
+        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The matching wording quotes an amount in a different currency than this person's verified sum insured, so DearPolicy cannot compute a figure from it.", conditions: ["Confirm the currency of the quoted benefit against the personal certificate."] });
+        continue;
+      }
+      const evidenceRef = toEvidenceRef(rule.citation);
+      const formula: DeathBenefitFormula = rule.formula.kind === "sum_insured_fraction"
+        ? { kind: "sum_insured_fraction", fraction: rule.formula.fraction, evidence: evidenceRef }
+        : { kind: "fixed", amount: rule.formula.amount, evidence: evidenceRef };
+      const ownershipEvidence: DeathBenefitEvidenceRef & { coverageId?: string; familyMemberId?: string } = { chunkId: `coverage:${coverage.id}`, policyId: coverage.policyId, coverageId: coverage.id, familyMemberId: coverage.familyMemberId, label: coverage.productName ?? undefined };
+      const sharedInput = {
+        ownership: { contractId: coverage.policyId, coverageId: coverage.id, label: coverage.productName ?? undefined },
+        familyMember: { id: coverage.familyMemberId, confirmed: true },
+        claimEventId: sessionId,
+        deathConfirmed: facts.death === true,
+        dateOfDeath: deathDate,
+        policyEffectiveDate: coverage.effectiveDate,
+        sumInsured: coverage.amount,
+        currency: coverage.currency,
+        formula,
+        ...(rule.cap ? { cap: { amount: rule.cap.amount, evidence: evidenceRef } } : {}),
+        ruleEvidence: evidenceRef,
+        ownershipEvidence,
+      };
+      const calc = product === "group personal accident"
+        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, currentDefinition(rule.citation, rule.quote)) })
+        : calculateDeathBenefit(sharedInput);
+
+      if (calc.status === "blocked") {
+        const isCauseGap = product === "group personal accident" && (
+          calc.reasonCode === "MALFORMED_POLICY_DEFINITION_EVIDENCE" ||
+          calc.reasonCode === "MALFORMED_CAUSE_EVIDENCE" ||
+          (typeof calc.reasonCode === "string" && calc.reasonCode.startsWith("CAUSE_MATCH_"))
+        );
+        // The reason distinguishes the three unresolved states DearPolicy can
+        // actually be in, so the family knows what still needs to happen --
+        // never just "unconfirmed" once a document has genuinely been read.
+        const causeGapReason = facts.causeOfDeathEvidenceReviewed === true
+          ? "An accidental death benefit may apply. DearPolicy has reviewed the cause-of-death document, but it does not yet match this policy's own accidental-death definition, so no amount is included."
+          : facts.causeOfDeathDocumentAvailable === true
+            ? "An accidental death benefit may apply, but DearPolicy has not included an amount because the cause-of-death document has not yet been reviewed against this policy's own accidental-death definition."
+            : "An accidental death benefit may apply, but DearPolicy has not included an amount because the policy's accident definition still needs to be checked against an official cause-of-death document, police report or coroner's report.";
+        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null,
+          reason: isCauseGap ? causeGapReason : `The personal certificate confirms ownership of this cover. DearPolicy has not included an amount: ${calc.message}`,
+          conditions: isCauseGap ? ["Check the death certificate, police report or coroner's report against the policy's accidental-death definition."] : [calc.message] });
+        continue;
+      }
+      if (calc.status === "not_applicable") {
+        items.push({ ...base, ruleEvidence: rule.citation, status: "not_applicable", amountText: null, reason: calc.reason, conditions: [] });
+        continue;
+      }
+      items.push({ ...base, ruleEvidence: rule.citation, status: "potentially_applicable", amountText: amountText(calc.potentialAmount, calc.currency),
+        calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId,
+        reason: `The personal certificate confirms ${amountText(coverage.amount, coverage.currency)} of cover. The matching death-benefit clause pays ${calc.formulaBasis}.`, conditions });
     }
+    // Additive: a Travel cover's own Accidental Death benefit alongside
+    // gtl-death/gpa-accidental-death above -- never a parallel claim
+    // system. See lib/claims/travel-rules.ts for the trip-date safety
+    // boundary this benefit is gated behind. Filtered to the death item
+    // only -- this branch never surfaces a travel-medical-expenses item,
+    // which is additive in the "hospitalisation" branch instead.
+    if (travelRules) items.push(...assessTravelClaim(facts, coverages, travelRules, sessionId).filter((i) => i.id === "travel-accidental-death"));
   }
 
   if (facts.eventType === "accident" || (facts.eventType === "disability" && facts.accidentType != null)) {
@@ -191,7 +318,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       if (facts.hospitalised === true) {
         items.push({id:"gpa-hospital-recovery",title:"Accidental hospital recuperation",status:"likely_applicable",amountText:"S$250",reason:"The uploaded Personal Accident summary lists a S$250 accidental hospital recuperation benefit.",conditions:["The hospital admission must satisfy the policy's accident-related admission conditions."],evidenceTerms:["Accidental Hospital Recuperation Benefit","S$250"],productName:"Group Personal Accident"});
       }
-      if ((facts.permanentImpairment === true || facts.uncertainFacts.includes("permanent_impairment")) && gpa.amount != null) {
+      if ((facts.permanentImpairment === true || facts.uncertainFacts.includes("permanent_impairment")) && gpa.amount != null && !disabilityTPDCoverageIds.has(gpa.id)) {
         const amount = gpa.amount * 1.5;
         items.push({id:"gpa-tpd",title:"Accidental Total & Permanent Disability",status:"needs_document",amountText:`Up to ${amountText(amount,gpa.currency)}`,reason:facts.permanentImpairment===true?"Your Personal Accident cover is confirmed and the wording pays 150% of Sum Insured for qualifying accidental TPD.":"Permanent impairment is still uncertain, but this high-value benefit should be checked if doctors suspect lasting loss of function.",conditions:["A medical assessment must satisfy the policy's Total & Permanent Disability definition.","The disability must result from the accident."],evidenceTerms:["Total and Permanent Disablement","150% of Sum Insured"],productName:"Group Personal Accident"});
       }
@@ -230,13 +357,46 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
     }
   }
 
+  // Additive: new evidence-gated ci-* items alongside the legacy
+  // "living-care"/"living-care-plus" informational items above. See
+  // lib/claims/ci-rules.ts's own module doc comment for why these are
+  // additive rather than a replacement.
+  if (facts.eventType === "diagnosis") {
+    items.push(...assessCriticalIllness(facts, coverages, ciRules, ciGaps, sessionId));
+  }
+
+  // Additive: the same deterministic pipeline, reused for a "disability"
+  // event's TPD/permanent-partial-disability/schedule-of-injuries/
+  // disability-income benefits -- never a parallel claim system. See
+  // lib/claims/disability-rules.ts for why this never touches the
+  // death/CI/medical path.
+  if (facts.eventType === "disability") {
+    items.push(...assessDisabilityClaim(facts, coverages, disabilityRules, sessionId));
+  }
+
   if (facts.eventType === "hospitalisation") {
     const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
-    if (gtl && isG007500 && facts.hospitalNights != null) {
+    // Additive: new evidence-gated med-* items from lib/claims/medical-rules.ts
+    // alongside the legacy hardcoded "gtl-hospital-cash"/"medical-reimbursement-review"
+    // items in this function. When medical-rules.ts has produced a real
+    // assessment for the SAME coverage (an evidenced cash or reimbursement rule
+    // matched to it), the corresponding legacy hardcoded item is suppressed so
+    // the family is never shown two competing estimates for one coverage.
+    const medicalAssessments = assessMedicalClaim(facts, coverages, medicalRules);
+    const medicalAssessedCoverageIds = new Set(medicalAssessments.map((i) => i.coverageId));
+    if (gtl && isG007500 && facts.hospitalNights != null && !medicalAssessedCoverageIds.has(gtl.id)) {
       const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
       if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30),reason:`The policy pays S$30 per day from day 11, for up to 30 payable days.`,conditions:["The reason for admission must not be excluded."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
       else items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"not_applicable",amountText:null,reason:`The reported ${facts.hospitalNights}-night stay does not pass the 10-day waiting period for this hospital cash benefit.`,conditions:[],evidenceTerms:["after the 10th day"],productName:"Group Term Life"});
     }
+    items.push(...medicalAssessments);
+    // Additive: a Travel cover's own Overseas Medical Expenses benefit
+    // alongside the medical-rules.ts items above -- never a parallel claim
+    // system. See lib/claims/travel-rules.ts for the trip-date safety
+    // boundary this benefit is gated behind. Filtered to the medical item
+    // only -- the travel-accidental-death item is additive in the "death"
+    // branch instead.
+    if (travelRules) items.push(...assessTravelClaim(facts, coverages, travelRules, sessionId).filter((i) => i.id === "travel-medical-expenses"));
   }
 
   // Safe fallback for owned reimbursement-style medical cover that DearPolicy has

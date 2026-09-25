@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
 
 type Member = { id: string; display_name: string; relationship: string; policy_count: number };
 type LinkedPerson = { id: string; name: string; relationship: string; source: string };
@@ -22,6 +23,8 @@ type Policy = {
   processing_stage: string;
   processing_progress: number;
   processing_message: string | null;
+  quarantine_status: string;
+  scan_result_detail: string | null;
   original_filename: string;
   page_count: number | null;
   processing_error: string | null;
@@ -32,6 +35,9 @@ type Filter = "all" | "personal" | "reference" | "review";
 
 const ACTIVE_STATUSES = new Set(["queued", "uploaded", "extracting", "indexing"]);
 function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.processing_status); }
+const isQuarantineHeld = isPolicyQuarantineHeld;
+const isScanRejected = isPolicyScanRejected;
+const quarantineLabel = policyQuarantineLabel;
 function roleLabel(role: string | null) { return (role ?? "document").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase()); }
 function stageLabel(stage: string | null, status: string) {
   if (status === "failed") return "Analysis stopped";
@@ -171,7 +177,11 @@ export default function PoliciesPage() {
   }
 
   async function deleteDocument(policy: Policy) {
-    if (isProcessing(policy)) return;
+    // A document held in quarantine (or rejected by scanning) must still be
+    // deletable -- it will otherwise sit at processing_status='queued'
+    // (isProcessing()'s raw check) indefinitely, with no other way for the
+    // person to remove it. See isQuarantineHeld()/isScanRejected() above.
+    if (isProcessing(policy) && !isQuarantineHeld(policy) && !isScanRejected(policy)) return;
     const label = policy.product_name ?? policy.original_filename;
     // A native confirm() blocks the tab's whole event loop until dismissed --
     // an inline arm-then-confirm click (see the Delete button below) avoids
@@ -253,7 +263,16 @@ export default function PoliciesPage() {
       <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{policies.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button><button className={filter === "review" ? "active" : ""} onClick={() => setFilter("review")}>Needs review <b>{counts.review}</b></button></div>
 
       <div className="document-list">{shown.map((policy) => {
-        const processing = isProcessing(policy);
+        const quarantineHeld = isQuarantineHeld(policy);
+        const scanRejected = isScanRejected(policy);
+        // A document held in quarantine (or rejected outright) still sits at
+        // processing_status='queued' the entire time -- lib/rag/ingest.ts's
+        // processPolicy() gate returns before ever touching that column --
+        // so it is deliberately excluded from "processing" here. Otherwise
+        // the existing "Analysis in progress" bar below and the new
+        // quarantine banner would render at the same time and contradict
+        // each other.
+        const processing = isProcessing(policy) && !quarantineHeld && !scanRejected;
         const unmatched = policy.detected_people.filter((p) => !p.matchedFamilyMemberId);
         const referenceLinks = policy.linked_people.filter((p) => p.source === "scheme_reference_match");
         const personalLinks = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
@@ -265,7 +284,12 @@ export default function PoliciesPage() {
             <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? `${pct}%` : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
           </div>
 
-          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" disabled={processing || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" disabled={processing || quarantineHeld || scanRejected || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+
+          {(quarantineHeld || scanRejected) && <div className={`accuracy-warning ${scanRejected ? "danger" : ""}`}>
+            <b>{scanRejected ? "Rejected" : "Scanning"}</b>
+            <span>{quarantineLabel(policy)}{scanRejected ? " — this file will not be analysed or used to answer questions. Delete it and upload the document again." : "."}</span>
+          </div>}
 
           {processing && <div className="document-progress" aria-live="polite">
             <div className="document-progress-copy"><strong>{policy.processing_message ?? "Analysis in progress…"}</strong><span>{pct}%</span></div>

@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { devAccountId,query } from "@/lib/db/client";
+import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { askDearPolicy } from "@/lib/rag/chat";
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 
 export const runtime="nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=300;
 const BodySchema=z.object({
   familyMemberId:z.string().uuid().nullable(),
@@ -20,11 +24,12 @@ const BodySchema=z.object({
   personContextRecordedAt:z.string().datetime().optional(),
   personChoiceId:z.string().uuid().optional(),
 });
-export async function POST(request:Request){
+export async function POST(request:NextRequest){
   try{
-    const body=BodySchema.parse(await request.json().catch(()=>({}))),accountId=devAccountId();
+    const body=BodySchema.parse(await request.json().catch(()=>({})));
+    const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     if(body.familyMemberId){
-      const member=await query<{id:string}>("SELECT id FROM family_members WHERE id=$1 AND account_id=$2",[body.familyMemberId,accountId]);
+      const member=await query<{id:string}>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family member not found."},{status:404});
     }else if(body.scope!=="family")return NextResponse.json({error:"Tell DearPolicy who this concerns, or start in automatic family context."},{status:400});
     const args={...body,accountId};
@@ -33,6 +38,8 @@ export async function POST(request:Request){
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Invalid request",issues:error.issues},{status:400});
     if(error instanceof ChatConflict)return NextResponse.json({error:error.message},{status:409});
-    return NextResponse.json({error:"Chat failed"},{status:500});
+    const authResponse=routeErrorResponse(error);
+    if(authResponse.status===500)return NextResponse.json({error:"Chat failed"},{status:500});
+    return authResponse;
   }
 }

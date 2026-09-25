@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { readPolicyFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
@@ -9,6 +10,10 @@ import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/int
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatch, linkRelatedReferenceDocuments, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
 export type ProcessPolicyArgs = {
   accountId: string;
@@ -17,9 +22,34 @@ export type ProcessPolicyArgs = {
   storageKey: string;
   pdfPassword?: string;
   linkUploadMember?: boolean;
+  // D14 (background job durability): extends the job's lease while this
+  // (potentially multi-minute) run is still making progress, so a
+  // still-live worker is never reclaimed by recoverExpiredLeases() and
+  // double-processed by a second worker. Supplied by
+  // lib/jobs/processors.ts's processPolicyProcessingJob(), which is the
+  // only real caller that has a jobId/workerId to heartbeat against;
+  // left undefined for any other caller (e.g. scripts/reprocess-policy.ts
+  // or a direct call from a regression suite), which simply gets no
+  // heartbeat -- exactly today's (pre-fix) behavior.
+  jobHeartbeat?: () => Promise<void>;
 };
 
 function normalizeEvidence(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
+
+// D14 (background job durability): premium_records has no natural unique
+// key today (unlike policy_pages' (policy_id,page_number)), so two workers
+// concurrently processing the SAME job -- e.g. one whose lease genuinely
+// expired mid-run and was reclaimed while it was still alive -- could each
+// run the DELETE-then-INSERT block below and leave duplicate rows behind.
+// This computes a stable, deterministic identity for "the same extracted
+// fact from the same processing pass" so a second worker's insert of the
+// identical row collapses onto the first's instead of duplicating it. Two
+// genuinely different processing passes over the SAME document (e.g. a
+// corrected re-upload, which gets its own new policyId/source_document_id)
+// never share a dedupe key, so this only ever collapses true duplicates.
+function premiumRecordDedupeKey(parts: unknown[]): string {
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+}
 function evidenceMatches(hay: string, needle: string) {
   const tokens = normalizeEvidence(needle).split(" ").filter((t) => t.length > 1);
   if (!tokens.length) return false;
@@ -56,9 +86,37 @@ async function progress(args: ProcessPolicyArgs, stage: string, percent: number,
       WHERE id=$5 AND account_id=$6`,
     [stage, Math.max(0, Math.min(100, Math.round(percent))), message, status ?? null, args.policyId, args.accountId],
   );
+  // Best-effort: a heartbeat failure (including the job's lease already
+  // having been lost to another worker, per lib/jobs/queue.ts's
+  // LeaseLostError) is logged, never thrown -- this keeps the fix
+  // additive rather than changing processPolicy()'s control flow. A
+  // worker that has genuinely lost its lease will instead fail to CAS its
+  // eventual completeJob()/failJob() call at the end of the run, which
+  // lib/jobs/worker-runtime.ts's claimAndProcessOne() already surfaces.
+  if (args.jobHeartbeat) {
+    await args.jobHeartbeat().catch((error) => {
+      console.warn(`processPolicy heartbeat failed for policy ${args.policyId}:`, error instanceof Error ? error.message : error);
+    });
+  }
 }
 
 export async function processPolicy(args: ProcessPolicyArgs) {
+  // Quarantine gate (checkpoint 3, claude/v1-launch-hardening): this is the
+  // SINGLE entry point for OCR, parsing, structured extraction, embeddings
+  // and indexing on a policy document (see lib/rag/processing-queue.ts --
+  // it is the only real caller), so gating here covers every route,
+  // background job and UI action that can trigger processing, with no
+  // separate copy of this check needed anywhere else. Always re-reads the
+  // persisted quarantine_status from the database (never trusts anything
+  // the caller assumed), so a reprocess or a resumed/retried background
+  // job re-checks real state every time rather than an in-memory guess.
+  const gate = await runPolicyQuarantineGate({
+    accountId: args.accountId,
+    policyId: args.policyId,
+    readBytes: async () => new Uint8Array(await readPolicyFile(args.storageKey)),
+  });
+  if (!gate.cleared) return; // Still quarantined/scan_pending, rejected, deleted, or superseded -- the gate itself already recorded why.
+
   try {
     await query(
       `UPDATE policies SET processing_status='extracting',processing_stage='opening',processing_progress=3,
@@ -185,25 +243,45 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const matchedIds = [...new Set(detected.map((d) => d.matchedMemberId).filter((id): id is string => Boolean(id)))];
     const unnamedPaymentTarget = matchedIds.length === 1 ? matchedIds[0] : (args.linkUploadMember && isPaymentDocument ? args.familyMemberId : null);
-    for (const payment of extraction.paymentRecords.filter((p) => p.amount != null && !p.insuredPersonName)) {
+    for (const [paymentIndex, payment] of extraction.paymentRecords.filter((p) => p.amount != null && !p.insuredPersonName).entries()) {
       if (!extraction.personalCoverageConfirmed && !["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "")) continue;
+      const dedupeKey = premiumRecordDedupeKey([
+        "payment", paymentIndex, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
+        payment.policyNumber ?? extraction.policyNumber, payment.amount, normalizeCurrencyCode(payment.currency, "SGD"), payment.frequency,
+        payment.paymentDate || null, payment.periodStart || null, payment.periodEnd || null, payment.sourcePage,
+      ]);
       await query(
-        `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_document_id,source_page,notes)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_document_id,source_page,notes,dedupe_key)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         ON CONFLICT (source_document_id,dedupe_key) DO UPDATE SET
+           family_member_id=EXCLUDED.family_member_id, insurer=EXCLUDED.insurer, product_name=EXCLUDED.product_name,
+           policy_number=EXCLUDED.policy_number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, frequency=EXCLUDED.frequency,
+           payment_date=EXCLUDED.payment_date, period_start=EXCLUDED.period_start, period_end=EXCLUDED.period_end,
+           source_page=EXCLUDED.source_page, notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
           payment.policyNumber ?? extraction.policyNumber, payment.amount, normalizeCurrencyCode(payment.currency,"SGD"), payment.frequency, payment.paymentDate || null,
           payment.periodStart || null, payment.periodEnd || null, args.policyId, payment.sourcePage,
-          [payment.notes, matchedIds.length > 1 ? "Shared/aggregate payment across linked insured people" : null].filter(Boolean).join(" · ") || null],
+          [payment.notes, matchedIds.length > 1 ? "Shared/aggregate payment across linked insured people" : null].filter(Boolean).join(" · ") || null,
+          dedupeKey],
       );
     }
     if (extraction.premium.amount != null && extraction.personalCoverageConfirmed && extraction.paymentRecords.length === 0) {
       const target = matchedIds.length === 1 ? matchedIds[0] : null;
+      const dedupeKey = premiumRecordDedupeKey([
+        "current_premium", target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
+        normalizeCurrencyCode(extraction.premium.currency, "SGD"), extraction.premium.frequency,
+      ]);
       await query(
-        `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,source_document_id,notes)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,source_document_id,notes,dedupe_key)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ON CONFLICT (source_document_id,dedupe_key) DO UPDATE SET
+           family_member_id=EXCLUDED.family_member_id, insurer=EXCLUDED.insurer, product_name=EXCLUDED.product_name,
+           policy_number=EXCLUDED.policy_number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, frequency=EXCLUDED.frequency,
+           notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
           normalizeCurrencyCode(extraction.premium.currency,"SGD"), extraction.premium.frequency, args.policyId,
-          target ? "Extracted current premium from personalised policy document" : "Shared/aggregate premium across linked insured people"],
+          target ? "Extracted current premium from personalised policy document" : "Shared/aggregate premium across linked insured people",
+          dedupeKey],
       );
     }
 
@@ -359,6 +437,22 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     } catch (error) {
       console.warn("Coverage ledger update failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
+    // Checkpoint 14i: "Policy ingest/extraction" was named as a required
+    // telemetry call site (scripts/launch-check.ts's privacy_safe_
+    // observability capability) -- processPolicy() is the SINGLE entry
+    // point for OCR, extraction AND embeddings/indexing on a policy
+    // document (see this function's own doc comment above), so one event
+    // at its real success/failure boundary genuinely covers all three,
+    // the same "one call = one event" convention every other Checkpoint
+    // 14b/14i call site uses. Fire-and-forget, never awaited.
+    void recordEvent({
+      name: "rag.policy_ingest.completed",
+      correlationId: resolveCorrelationId(undefined),
+      status: "success",
+      householdRef: pseudonymizeId(args.accountId),
+      resourceRef: pseudonymizeId(args.policyId),
+      extra: { pages: pages.length, chunks: chunks.length, needsReview, pineconeEnabled: pineconeEnabled() },
+    });
     return { pages: pages.length, chunks: chunks.length, extraction, detectedPeople: detected, needsReview };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown processing error";
@@ -367,6 +461,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,
       [message, args.policyId, args.accountId],
     ).catch(() => undefined);
+    void recordErrorEvent({
+      name: "rag.policy_ingest.failed",
+      correlationId: resolveCorrelationId(undefined),
+      householdRef: pseudonymizeId(args.accountId),
+      resourceRef: pseudonymizeId(args.policyId),
+      error,
+    });
     throw error;
   }
 }

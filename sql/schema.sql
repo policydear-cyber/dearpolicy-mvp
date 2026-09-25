@@ -335,3 +335,212 @@ CREATE INDEX IF NOT EXISTS idx_model_usage_month ON model_usage(account_id, at);
 CREATE INDEX IF NOT EXISTS idx_claim_sessions_family_member_id ON claim_sessions(family_member_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_claim_session_id ON chat_messages(claim_session_id);
 CREATE INDEX IF NOT EXISTS idx_policy_reference_coverages_policy_id ON policy_reference_coverages(policy_id);
+
+-- Policy-document quarantine gate (checkpoint 3, claude/v1-launch-hardening).
+-- A separate, dedicated state machine layered IN FRONT OF the existing
+-- processing_status column above (uploaded -> extracting -> indexing ->
+-- ready|failed, see lib/rag/ingest.ts's processPolicy()): nothing may move
+-- processing_status past 'uploaded'/'queued' until quarantine_status is
+-- 'scan_clean' (see lib/policies/quarantine/store.ts's
+-- runPolicyQuarantineGate(), the single choke point processPolicy() calls
+-- at its own entry point). This deliberately reuses the EXISTING
+-- processing_status values for "processing"/"processed"/"failed" (the
+-- checkpoint's naming-convention instruction) rather than inventing a
+-- second copy of them here -- this column's job is only the gate itself:
+--   uploaded -> quarantined -> scan_pending -> scan_clean | scan_rejected
+-- scan_pending is a stable resting state (mirrors claim_evidence_documents'
+-- "quarantined" -- see sql/claim-evidence.sql): a scan_unavailable, still-
+-- pending, timed-out, missing or malformed verdict leaves a document here
+-- indefinitely, never silently promoted to scan_clean. `deleted` is
+-- reachable from every other state and is terminal.
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS quarantine_status text;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_provider text;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_result_detail text;
+-- Reserved for a future real async scan-provider callback (checkpoint 4)
+-- to key its idempotency/replay checks on; unused by the synchronous null
+-- adapter today, exactly like claim_evidence_documents has no equivalent
+-- column yet either.
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_event_id text;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS scanned_at timestamptz;
+-- A re-upload of a corrected/updated document creates a NEW policies row
+-- and points back at the one it replaces, mirroring
+-- claim_evidence_documents' supersedes_id/superseded_at exactly (see that
+-- table's own comment in sql/claim-evidence.sql) -- the old row's audit
+-- history, coverages and any downstream evidence match stay inspectable
+-- rather than being mutated in place.
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS supersedes_id uuid REFERENCES policies(id) ON DELETE SET NULL;
+ALTER TABLE policies ADD COLUMN IF NOT EXISTS superseded_at timestamptz;
+
+-- Backfill: a document already at processing_status='ready' predates this
+-- gate and was already fully processed and served before it existed --
+-- grandfathered as scan_clean rather than stranding it in permanent
+-- quarantine on migration (there is no real bytes-on-disk retroactive scan
+-- to run here). Everything else defaults to 'uploaded', the true starting
+-- point of the gate for a document that has not been through it yet. This
+-- UPDATE is idempotent: it only ever touches rows where quarantine_status
+-- is still NULL, so re-running this file is a no-op on a database that has
+-- already been migrated once.
+UPDATE policies SET quarantine_status = 'scan_clean' WHERE quarantine_status IS NULL AND processing_status = 'ready';
+UPDATE policies SET quarantine_status = 'uploaded' WHERE quarantine_status IS NULL;
+ALTER TABLE policies ALTER COLUMN quarantine_status SET DEFAULT 'uploaded';
+ALTER TABLE policies ALTER COLUMN quarantine_status SET NOT NULL;
+
+ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_quarantine_status_check;
+ALTER TABLE policies ADD CONSTRAINT policies_quarantine_status_check
+  CHECK (quarantine_status IN ('uploaded','quarantined','scan_pending','scan_clean','scan_rejected','deleted'));
+
+-- Re-scoped to exclude superseded rows so a re-upload of byte-identical
+-- content as a new VERSION (supersedes_id pointing at the old row,
+-- marked superseded_at once the new row is inserted) is never blocked by
+-- the old row's own hash -- mirrors claim_evidence_documents' own dedupe
+-- index exactly (idx_claim_evidence_documents_dedupe in
+-- sql/claim-evidence.sql).
+DROP INDEX IF EXISTS idx_policies_account_file_hash;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_policies_account_file_hash ON policies(account_id,file_hash) WHERE file_hash IS NOT NULL AND superseded_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_policies_quarantine_status ON policies(account_id, quarantine_status);
+CREATE INDEX IF NOT EXISTS idx_policies_supersedes ON policies(supersedes_id);
+
+-- Append-only audit trail for the policy-document quarantine gate, mirroring
+-- claim_evidence_audit_log exactly (see sql/claim-evidence.sql's own
+-- comment). Application code only ever INSERTs here -- see
+-- lib/policies/quarantine/audit.ts, the one place allowed to write to this
+-- table -- and never UPDATEs or DELETEs a row.
+CREATE TABLE IF NOT EXISTS policy_document_audit_log (
+  id bigserial PRIMARY KEY,
+  account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  actor text NOT NULL,
+  action text NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  previous_value jsonb,
+  new_value jsonb,
+  policy_id uuid REFERENCES policies(id) ON DELETE SET NULL,
+  reason text,
+  reason_code text
+);
+CREATE INDEX IF NOT EXISTS idx_policy_document_audit_policy ON policy_document_audit_log(policy_id);
+CREATE INDEX IF NOT EXISTS idx_policy_document_audit_account ON policy_document_audit_log(account_id, occurred_at DESC);
+
+-- Scan-provider callback replay protection (checkpoint 4,
+-- claude/v1-launch-hardening). Insert-only: a provider's (provider,
+-- event_id) pair may be recorded exactly once, ever, regardless of which
+-- document it was for or what verdict it carried -- lib/scanning/
+-- callback-auth.ts inserts a row here BEFORE looking up or mutating any
+-- document, so a replayed or duplicated callback (a MITM replay, a
+-- provider's own at-least-once retry) is rejected at this layer even
+-- before the document-level CAS in lib/policies/quarantine/store.ts's
+-- recordPolicyScanResult() gets a chance to run. Deliberately holds no
+-- document/account reference and no payload -- only enough to detect a
+-- repeat, so it carries none of the privacy weight a full callback log
+-- would.
+CREATE TABLE IF NOT EXISTS scan_provider_events (
+  provider text NOT NULL,
+  event_id text NOT NULL,
+  received_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (provider, event_id)
+);
+
+-- Storage cleanup (checkpoint 5, claude/v1-launch-hardening) --
+-- lib/storage/cleanup.ts. Two tables:
+--  storage_cleanup_locks -- a row-based mutual-exclusion lock so two
+--    concurrent cleanup runs targeting the same (driver,domain) pair
+--    cannot race each other's in-flight deletions. Not a Postgres
+--    advisory lock, deliberately -- see lib/storage/cleanup.ts's
+--    withCleanupLock() doc comment for why. A stale (crashed-holder) row
+--    is reclaimed by the next run rather than blocking forever.
+--  storage_cleanup_audit_log -- one row per actual deletion attempt
+--    (success, failure, or skip), mirroring policy_document_audit_log /
+--    claim_evidence_audit_log's own append-only shape. Deliberately never
+--    stores a raw storage_key -- only display_key, the redacted form
+--    (lib/storage/cleanup.ts's redactStorageKey()) -- so the audit trail
+--    itself can never leak an original filename, not just this tool's
+--    console output.
+CREATE TABLE IF NOT EXISTS storage_cleanup_locks (
+  lock_key text PRIMARY KEY,
+  holder text NOT NULL,
+  acquired_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS storage_cleanup_audit_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver text NOT NULL,
+  domain text NOT NULL,
+  action text NOT NULL,
+  display_key text NOT NULL,
+  size_bytes integer,
+  manifest_hash text NOT NULL,
+  actor text NOT NULL,
+  detail text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT storage_cleanup_audit_log_driver_check CHECK (driver IN ('local','supabase')),
+  CONSTRAINT storage_cleanup_audit_log_domain_check CHECK (domain IN ('policy','claim-evidence')),
+  CONSTRAINT storage_cleanup_audit_log_action_check
+    CHECK (action IN ('object_deleted','object_delete_failed','object_skipped_referenced','object_skipped_already_gone'))
+);
+CREATE INDEX IF NOT EXISTS idx_storage_cleanup_audit_log_created ON storage_cleanup_audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_storage_cleanup_audit_log_manifest ON storage_cleanup_audit_log(manifest_hash);
+
+-- Household export (checkpoint 6, claude/v1-launch-hardening) --
+-- lib/household/export.ts (snapshot content), lib/household/export-store.ts
+-- (this lifecycle), lib/storage/{local,supabase}.ts's household-export
+-- domain (where the generated JSON actually lives).
+--  household_exports -- one row per requested export. `idempotency_key`
+--    plus the unique index below makes a repeated POST with the same key
+--    return the SAME row rather than generating a duplicate export;
+--    `storage_key` is NULL until generation succeeds (see
+--    lib/storage/cleanup.ts's household-export domain, which already
+--    accounts for that). `expires_at` is set once the export becomes
+--    'ready' -- a short-lived artifact by design, not a permanent copy of
+--    the household's data sitting in storage indefinitely.
+--  household_export_audit_log -- append-only, mirrors
+--    policy_document_audit_log/claim_evidence_audit_log/
+--    storage_cleanup_audit_log's own shape.
+CREATE TABLE IF NOT EXISTS household_exports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  requested_by uuid NOT NULL,
+  idempotency_key text NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  schema_version integer NOT NULL DEFAULT 1,
+  storage_key text,
+  byte_size integer,
+  manifest_hash text,
+  error text,
+  requested_at timestamptz NOT NULL DEFAULT now(),
+  completed_at timestamptz,
+  expires_at timestamptz,
+  CONSTRAINT household_exports_status_check CHECK (status IN ('pending','running','ready','failed','expired'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_household_exports_idempotency ON household_exports(household_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_household_exports_household ON household_exports(household_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_household_exports_expiry ON household_exports(expires_at) WHERE status = 'ready';
+
+CREATE TABLE IF NOT EXISTS household_export_audit_log (
+  id bigserial PRIMARY KEY,
+  household_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  export_id uuid REFERENCES household_exports(id) ON DELETE SET NULL,
+  actor uuid,
+  action text NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  detail text,
+  CONSTRAINT household_export_audit_log_action_check
+    CHECK (action IN ('requested','generated','generation_failed','downloaded','expired','deleted'))
+);
+CREATE INDEX IF NOT EXISTS idx_household_export_audit_export ON household_export_audit_log(export_id);
+CREATE INDEX IF NOT EXISTS idx_household_export_audit_household ON household_export_audit_log(household_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scan_provider_events_received ON scan_provider_events(received_at);
+
+-- D14 (Wave-2 launch-hardening defect register, PR #16): premium_records had
+-- no natural unique key (unlike policy_pages' (policy_id,page_number)),
+-- so two workers concurrently processing the SAME background job -- one
+-- whose lease genuinely expired mid-run and was reclaimed by
+-- recoverExpiredLeases() while it was still alive -- could each run
+-- lib/rag/ingest.ts's DELETE-then-INSERT block for this table and leave
+-- duplicate premium/payment rows behind. dedupe_key is a deterministic
+-- hash of "the same extracted fact from the same processing pass"
+-- (see lib/rag/ingest.ts's premiumRecordDedupeKey()); the partial unique
+-- index (dedupe_key IS NOT NULL) lets older rows written before this
+-- column existed, and any future direct/manual insert that doesn't set
+-- it, coexist without colliding on NULL.
+ALTER TABLE premium_records ADD COLUMN IF NOT EXISTS dedupe_key text;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_premium_records_dedupe
+  ON premium_records(source_document_id, dedupe_key) WHERE dedupe_key IS NOT NULL;

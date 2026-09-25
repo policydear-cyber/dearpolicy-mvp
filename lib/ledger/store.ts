@@ -14,6 +14,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
@@ -67,17 +68,26 @@ function toRow(r:Row):LedgerRow{
     inferred:r.inferred,status:r.status as LedgerRow["status"],updatedAt:r.updated_at};
 }
 const SELECT="SELECT id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,minimum_fact,minimum_value::text,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,updated_at::text FROM coverage_rules";
+// A row whose policy_id points at a policy that is no longer active must
+// stop appearing on the Coverage Ledger and out of chat answers the moment
+// that policy is deleted (Checkpoint 7's "policy totals are invalidated
+// immediately" requirement) -- this table has no lifecycle_state column of
+// its own (it is derived data keyed by policy_id), so the guard has to be a
+// subquery back to policies rather than an activePredicate() on this table
+// directly. A NULL policy_id (a standard-rule default not tied to any one
+// document, or a manually-added row) is never filtered out by this.
+const ACTIVE_POLICY_GUARD="(policy_id IS NULL OR EXISTS(SELECT 1 FROM policies p WHERE p.id=coverage_rules.policy_id AND "+activePredicate("p")+"))";
 
 export async function loadLedger(accountId:string,memberIds?:string[]):Promise<LedgerRow[]>{
   await ensureLedgerSchema();
   const r=memberIds
-    ?await query<Row>(SELECT+" WHERE account_id=$1 AND family_member_id=ANY($2::uuid[]) AND status<>'rejected' ORDER BY plan_name,event_type,detail",[accountId,memberIds])
-    :await query<Row>(SELECT+" WHERE account_id=$1 ORDER BY family_member_id,plan_name,event_type,detail",[accountId]);
+    ?await query<Row>(SELECT+" WHERE account_id=$1 AND family_member_id=ANY($2::uuid[]) AND status<>'rejected' AND "+ACTIVE_POLICY_GUARD+" ORDER BY plan_name,event_type,detail",[accountId,memberIds])
+    :await query<Row>(SELECT+" WHERE account_id=$1 AND "+ACTIVE_POLICY_GUARD+" ORDER BY family_member_id,plan_name,event_type,detail",[accountId]);
   return r.rows.map(toRow);
 }
 export async function loadLedgerRow(accountId:string,id:string){
   await ensureLedgerSchema();
-  const r=await query<Row>(SELECT+" WHERE account_id=$1 AND id=$2",[accountId,id]);
+  const r=await query<Row>(SELECT+" WHERE account_id=$1 AND id=$2 AND "+ACTIVE_POLICY_GUARD,[accountId,id]);
   return r.rows[0]?toRow(r.rows[0]):null;
 }
 export async function updateLedgerRow(accountId:string,id:string,patch:Partial<Pick<LedgerRow,"status"|"amount"|"paysKind"|"eventType"|"sumBasis"|"detail"|"planName">>){
@@ -125,7 +135,14 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
       offsetDays:benefit.offsetDays,maximumDays:benefit.maximumDays,
       conditions:[...benefit.conditions,...benefit.requirements.map(r=>r.why)].filter(Boolean).slice(0,6),
       note:benefit.benefitName,sourcePage:benefit.sourcePage,quote:benefit.quote,origin:"wording",inferred:!!benefit.basisInferred,
-      status:benefit.reviewedAt?"confirmed":"proposed",seedKey:"benefit:"+benefit.id});
+      // The same trust rule the benefit catalogue itself uses: a rule needs a
+      // person's confirmation only when its basis was inferred (read from a
+      // heading, not the row) and nobody has reviewed it since -- not simply
+      // whichever rule happened to be read first. Requiring a literal
+      // reviewed_at here regardless of that, as this used to, disagreed with
+      // the catalogue's own answer for the identical benefit and withheld a
+      // figure the catalogue already trusts.
+      status:benefit.needsConfirmation?"proposed":"confirmed",seedKey:"benefit:"+benefit.id});
   }
   return out;
 }
@@ -151,7 +168,7 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
 /** Adds ledger rows for everything read so far that is not in the ledger yet. */
 export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise<{added:number}>{
   await ensureLedgerSchema();
-  const family=people??(await query<ClaimPerson>("SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 ORDER BY created_at",[accountId])).rows;
+  const family=people??(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId])).rows;
   if(!family.length)return {added:0};
   const inventory=await loadPolicyInventory(accountId,family);
   const contracts=inventory.contracts;

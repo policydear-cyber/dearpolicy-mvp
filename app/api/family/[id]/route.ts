@@ -1,10 +1,23 @@
-import { NextResponse } from "next/server";
-import { devAccountId, isUuid, isValidDateString, query } from "@/lib/db/client";
+import { NextResponse, type NextRequest } from "next/server";
+import { isUuid, isValidDateString } from "@/lib/db/client";
+import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
+import {
+  DeletionValidationError,
+  HasLinkedActivityError,
+  finishFamilyMemberDeletion,
+  requestFamilyMemberDeletion,
+} from "@/lib/lifecycle/coordinator";
 
 export const runtime = "nodejs";
+export const ROUTE_AUTH = "household-member" as const;
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+class SelfProfileConflict extends Error {}
+
+export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const ctx = await requireHouseholdContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { displayName?: string; relationship?: string; dateOfBirth?: string | null; preferredName?: string | null; notes?: string | null };
@@ -14,22 +27,34 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (body.preferredName && body.preferredName.trim().length > 100) return NextResponse.json({ error: "That preferred name is too long." }, { status: 400 });
     if (body.notes && body.notes.trim().length > 2000) return NextResponse.json({ error: "That note is too long." }, { status: 400 });
     if (body.dateOfBirth && !isValidDateString(body.dateOfBirth)) return NextResponse.json({ error: "That date of birth isn't valid." }, { status: 400 });
-    const accountId = devAccountId();
-    if (body.relationship.trim().toLowerCase() === "self") {
-      const existingSelf = await query<{ id: string }>(`SELECT id FROM family_members WHERE account_id=$1 AND relationship='self' AND id<>$2`, [accountId, id]);
-      if (existingSelf.rows.length) return NextResponse.json({ error: "This household already has a profile marked \"self\". Use a different relationship for this person." }, { status: 409 });
-    }
-    const result = await query(
-      `UPDATE family_members
-          SET display_name=$1,relationship=$2,date_of_birth=$3,preferred_name=$4,notes=$5,updated_at=now()
-        WHERE id=$6 AND account_id=$7
-        RETURNING id,display_name,relationship,date_of_birth::text,preferred_name,notes`,
-      [body.displayName.trim(),body.relationship.trim(),body.dateOfBirth || null,body.preferredName?.trim() || null,body.notes?.trim() || null,id,accountId],
-    );
-    if (!result.rows[0]) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    return NextResponse.json({ member: result.rows[0] });
+
+    const member = await createUserSupabaseClient(ctx.userId, async (client) => {
+      if (body.relationship!.trim().toLowerCase() === "self") {
+        const existingSelf = await client.query<{ id: string }>(
+          `SELECT id FROM family_members WHERE account_id=$1 AND relationship='self' AND id<>$2 AND ${activePredicate()}`,
+          [ctx.householdId, id],
+        );
+        if (existingSelf.rows.length) throw new SelfProfileConflict();
+      }
+      const result = await client.query(
+        `UPDATE family_members
+            SET display_name=$1,relationship=$2,date_of_birth=$3,preferred_name=$4,notes=$5,updated_at=now()
+          WHERE id=$6 AND account_id=$7
+          RETURNING id,display_name,relationship,date_of_birth::text,preferred_name,notes`,
+        [body.displayName!.trim(), body.relationship!.trim(), body.dateOfBirth || null, body.preferredName?.trim() || null, body.notes?.trim() || null, id, ctx.householdId],
+      );
+      return result.rows[0] ?? null;
+    });
+    if (!member) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    return NextResponse.json({ member });
   } catch (error) {
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    if (error instanceof SelfProfileConflict) {
+      return NextResponse.json(
+        { error: "This household already has a profile marked \"self\". Use a different relationship for this person." },
+        { status: 409 },
+      );
+    }
+    return routeErrorResponse(error);
   }
 }
 
@@ -41,31 +66,40 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 // through a family member's policy documents and claim history in a family
 // insurance app is exactly the kind of data loss that must never be a single
 // click, so those profiles are left for the person to explicitly clear out
-// (remove the documents/history) before the profile itself can go.
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+// (remove the documents/history) before the profile itself can go. An
+// accepted deletion is a recoverable pending_deletion transition (CAS state
+// machine, idempotent, audited), not an immediate row delete.
+/** D15 (Wave 2 adversarial audit): family-member deletion now goes through
+ * the shared lifecycle coordinator (lib/lifecycle/coordinator.ts) instead
+ * of an inline hard DELETE -- idempotency, deletion-audit-log recording,
+ * and the "reject when linked activity exists" check are all centralized
+ * there (HasLinkedActivityError), rather than duplicated per route. */
+export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
+    const ctx = await requireHouseholdContext(request);
     const { id } = await context.params;
     if (!isUuid(id)) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    const accountId = devAccountId();
-    const owned = await query<{ id: string }>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2`, [id, accountId]);
-    if (!owned.rows.length) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
-    const usage = await query<{ n: number }>(
-      `SELECT (
-          (SELECT count(*) FROM policies WHERE family_member_id=$1)
-        + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
-        + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
-        + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
-        + (SELECT count(*) FROM coverage_rules WHERE family_member_id=$1)
-        + (SELECT count(*) FROM premium_records WHERE family_member_id=$1)
-       )::int AS n`,
-      [id],
-    );
-    if ((usage.rows[0]?.n ?? 0) > 0) {
-      return NextResponse.json({ error: "This profile has linked documents or activity, so it can't be deleted. Remove those first." }, { status: 409 });
+    const idempotencyKey = request.headers.get("idempotency-key") || `delete:${id}`;
+    const outcome = await createUserSupabaseClient(ctx.userId, async (client) => {
+      try {
+        return await requestFamilyMemberDeletion({ client, accountId: ctx.householdId, actorUserId: ctx.userId, familyMemberId: id, reasonCategory: "user_requested", idempotencyKey });
+      } catch (error) {
+        if (error instanceof DeletionValidationError) return null;
+        throw error;
+      }
+    });
+    if (!outcome) return NextResponse.json({ error: "Family member not found" }, { status: 404 });
+    if (outcome.status === "accepted") {
+      await finishFamilyMemberDeletion({ accountId: ctx.householdId, actorUserId: ctx.userId, familyMemberId: id, deletionRequestId: outcome.deletionRequestId });
     }
-    await query(`DELETE FROM family_members WHERE id=$1 AND account_id=$2`, [id, accountId]);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, deletionRequestId: outcome.deletionRequestId, status: outcome.status === "accepted" ? "completed" : outcome.status });
   } catch (error) {
-    return NextResponse.json({ error: "Database error" }, { status: 500 });
+    if (error instanceof HasLinkedActivityError) {
+      return NextResponse.json(
+        { error: "This profile has linked documents or activity, so it can't be deleted. Remove those first." },
+        { status: 409 },
+      );
+    }
+    return routeErrorResponse(error);
   }
 }

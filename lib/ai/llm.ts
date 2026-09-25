@@ -1,6 +1,12 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
+import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
+import { canaryConfigFor, resolveRollout } from "./rollout";
+import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
+import { resolveCorrelationId } from "@/lib/telemetry/correlation";
+import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 function ledgerAccountId() { return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001"; }
 
 type CompletionRuntimeOptions = {
@@ -62,53 +68,161 @@ export async function structuredCompletion<T>(args: {
    * is acceptable; this only stops one malformed field discarding a whole
    * section of a reply that was otherwise correct. */
   coerce?: (value: unknown) => unknown;
+  /** Checkpoint 10: which governed operation this call is (see
+   * lib/ai/provenance.ts's KNOWN_OPERATIONS). Every call site SHOULD pass
+   * one; omitted defaults to "chat_reply" so existing callers keep working
+   * while they are migrated one at a time, but an execution recorded
+   * without an explicit operation is honestly a lower-fidelity provenance
+   * record, not a gap this default is meant to paper over. */
+  operation?: KnownOperation;
+  promptVersion?: string;
+  schemaVersion?: string;
+  correlationId?: string;
+  householdId?: string;
+  resourceId?: string;
+  /** Receives the exact persisted model_executions record for the attempt
+   * whose output this call returns -- only after that output has parsed
+   * and validated against `schema`, and only when the record was actually
+   * persisted (a provenance-persistence failure yields no callback, so a
+   * caller that needs provenance simply has none and must fail closed).
+   * Never invoked for a failed attempt or for the failed primary of a
+   * fallback pair. Optional: existing callers are unaffected. */
+  onExecutionRecord?: (record: ModelExecutionRecord) => void;
 } & CompletionRuntimeOptions): Promise<T> {
-  const jsonSchema = z.toJSONSchema(args.schema);
-  const budget = args.maxOutputTokens;
+  // Checkpoint 14i: "Model completions" was named as a required
+  // telemetry call site (scripts/launch-check.ts's privacy_safe_
+  // observability capability) -- structuredCompletion() is the ONE
+  // function every structured model call in this codebase goes
+  // through (see this module's own doc comment), so one event at its
+  // real success/failure boundary covers every caller, the same
+  // "one call = one event" convention every other Checkpoint 14b/14i
+  // call site uses. Deliberately separate from recordUsage()/
+  // recordModelExecution() above (the ledger/provenance boundary) --
+  // this is operational telemetry, not spend accounting or monetary-
+  // use governance.
+  const telemetryCorrelationId = args.correlationId ?? resolveCorrelationId(undefined);
+  try {
+    const jsonSchema = z.toJSONSchema(args.schema);
+    const budget = args.maxOutputTokens;
 
-  const role: ModelRole = args.role ?? "chat";
-  const choice = modelFor(role);
-  await assertUnderSpendCap(ledgerAccountId());
-    const call = async (target: typeof choice) => {
-      const started = Date.now();
+    const role: ModelRole = args.role ?? "chat";
+    const operation: KnownOperation = args.operation ?? "chat_reply";
+    // Checkpoint 11: a configured canary (CANARY_<OPERATION>_MODEL etc., see
+    // lib/ai/rollout.ts) can replace the primary target for a deterministic
+    // slice of subjects. Bucketing prefers householdId, falling back to
+    // resourceId, so the whole household/resource sees one consistent
+    // cohort; with no subject at all (or no canary configured, the default
+    // for every existing call site), this resolves to stable and `choice` is
+    // exactly modelFor(role) -- unchanged behavior.
+    const rollout = resolveRollout(canaryConfigFor(operation), args.householdId ?? args.resourceId ?? null);
+    const choice = rollout.target ?? modelFor(role);
+    const attemptGroupId = randomUUID();
+    await assertUnderSpendCap(ledgerAccountId());
+      const call = async (target: typeof choice, attemptIndex: number) => {
+        const started = Date.now();
+        const requestedAt = new Date();
+        let reply: Awaited<ReturnType<typeof hostedStructuredCompletion>>;
+        let record: Awaited<ReturnType<typeof recordModelExecution>>;
+        try {
+          reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
+            temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
+          const durationMs = Date.now() - started;
+          await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
+          record = await recordModelExecution({
+            correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
+            householdId: args.householdId, resourceId: args.resourceId,
+            requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
+            requestedAt, resolved: reply.resolved, status: "succeeded",
+            usage: reply.usage, latencyMs: durationMs,
+          });
+        } catch (error) {
+          const durationMs = Date.now() - started;
+          await recordUsage({ role, choice: target, input: 0, output: 0, durationMs, ok: false });
+          await recordModelExecution({
+            correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
+            householdId: args.householdId, resourceId: args.resourceId,
+            requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
+            requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
+          });
+          throw error;
+        }
+        // Checkpoint 14b: this is the ONE place every monetary-relevant AI
+        // operation's output becomes available to its caller -- gate here,
+        // not in each calculator/evidence-matching call site downstream,
+        // which never sees a ModelExecutionRecord to check in the first
+        // place. Deliberately OUTSIDE the try/catch above: assertVerified-
+        // ForMonetaryUse() rejecting a genuinely successful provider call
+        // must never be re-caught and re-recorded as a second, misleading
+        // "failed"/model_provider model_executions row for the same
+        // attemptIndex -- the call itself succeeded; only its trustworthiness
+        // for a monetary result did not. A record that failed to persist
+        // (record === null) is a provenance-INFRASTRUCTURE failure, not an
+        // identity problem, and deliberately does not block the caller
+        // either -- the same failure-isolation contract recordModelExecution()'s
+        // own doc comment describes. Throws UnverifiedModelProvenanceError,
+        // which does not match the rate-limit-shaped fallback trigger below,
+        // so an unverified primary attempt is rejected outright rather than
+        // silently retried on a fallback model.
+        if (record && MONETARY_GATED_OPERATIONS.has(operation)) {
+          assertVerifiedForMonetaryUse(record);
+        }
+        return { reply, record };
+      };
+      let usedChoice = choice;
+      let reply: Awaited<ReturnType<typeof hostedStructuredCompletion>>;
+      let usedRecord: ModelExecutionRecord | null;
       try {
-        const reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
-          temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
-        await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs: Date.now() - started, ok: true });
-        return reply;
+        ({ reply, record: usedRecord } = await call(choice, 0));
       } catch (error) {
-        await recordUsage({ role, choice: target, input: 0, output: 0, durationMs: Date.now() - started, ok: false });
-        throw error;
+        // A rate limit is specific to the model, not to the household's
+        // question -- when a cheaper tier of the same provider exists for this
+        // role, one attempt there beats surfacing "try again in a minute" for
+        // a quota the fallback tier does not share.
+        const fallback = /\(429\)|busy|rate limit|quota/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
+        if (!fallback) throw error;
+        usedChoice = fallback;
+        ({ reply, record: usedRecord } = await call(fallback, 1));
       }
-    };
-    let usedChoice = choice;
-    let reply;
-    try {
-      reply = await call(choice);
-    } catch (error) {
-      // A rate limit is specific to the model, not to the household's
-      // question -- when a cheaper tier of the same provider exists for this
-      // role, one attempt there beats surfacing "try again in a minute" for
-      // a quota the fallback tier does not share.
-      const fallback = /\(429\)|busy|rate limit|quota/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
-      if (!fallback) throw error;
-      usedChoice = fallback;
-      reply = await call(fallback);
-    }
-    let json: unknown;
-    try { json = JSON.parse(reply.content); }
-    catch {
-      const repaired = repairTruncatedJson(reply.content);
-      if (repaired === null) throw new Error(`Model returned invalid structured JSON: ${reply.content.slice(0, 200)}`);
-      try { json = JSON.parse(repaired); }
-      catch { throw new TruncatedModelOutput("The " + describeChoice(usedChoice) + " model stopped part-way through its structured output.", reply.content, true); }
-    }
-    try { return args.schema.parse(args.coerce ? args.coerce(json) : json); }
-    catch (error) {
-      throw new TruncatedModelOutput(reply.truncated ? "The " + describeChoice(usedChoice) + " model stopped part-way through its structured output."
-        : "The " + describeChoice(usedChoice) + " model's reply did not match the expected structure.", reply.content, reply.truncated, error instanceof Error ? error : undefined);
-    }
+      let json: unknown;
+      try { json = JSON.parse(reply.content); }
+      catch {
+        const repaired = repairTruncatedJson(reply.content);
+        if (repaired === null) throw new Error(`Model returned invalid structured JSON: ${reply.content.slice(0, 200)}`);
+        try { json = JSON.parse(repaired); }
+        catch { throw new TruncatedModelOutput("The " + describeChoice(usedChoice) + " model stopped part-way through its structured output.", reply.content, true); }
+      }
+      let parsed: T;
+      try { parsed = args.schema.parse(args.coerce ? args.coerce(json) : json); }
+      catch (error) {
+        throw new TruncatedModelOutput(reply.truncated ? "The " + describeChoice(usedChoice) + " model stopped part-way through its structured output."
+          : "The " + describeChoice(usedChoice) + " model's reply did not match the expected structure.", reply.content, reply.truncated, error instanceof Error ? error : undefined);
+      }
+      // Handed over only once the reply has parsed and validated, and only
+      // for the attempt that produced it -- see onExecutionRecord's doc.
+      if (usedRecord && args.onExecutionRecord) args.onExecutionRecord(usedRecord);
+      void recordEvent({
+        name: "ai.structured_completion.completed",
+        correlationId: telemetryCorrelationId,
+        status: "success",
+        householdRef: args.householdId ? pseudonymizeId(args.householdId) : null,
+        resourceRef: args.resourceId ? pseudonymizeId(args.resourceId) : null,
+        resolvedModel: usedChoice.model,
+        extra: { operation: args.operation ?? "chat_reply", role: args.role ?? "chat" },
+      });
+      return parsed;
+  } catch (error) {
+    void recordErrorEvent({
+      name: "ai.structured_completion.failed",
+      correlationId: telemetryCorrelationId,
+      householdRef: args.householdId ? pseudonymizeId(args.householdId) : null,
+      resourceRef: args.resourceId ? pseudonymizeId(args.resourceId) : null,
+      error,
+      extra: { operation: args.operation ?? "chat_reply", role: args.role ?? "chat" },
+    });
+    throw error;
   }
+}
+
 
 /** Raised when the model's structured output was cut short or malformed. */
 export class TruncatedModelOutput extends Error {

@@ -105,6 +105,15 @@ export async function saveTurn(args:{conversation:Conversation;token:HistoryToke
     await client.query(
       "INSERT INTO chat_messages(account_id,family_member_id,conversation_id,role,content,citations,answer_json) VALUES($1,$2,$3,'user',$4,NULL,NULL),($1,$2,$3,'assistant',$5,$6::jsonb,$7::jsonb)",
       [args.conversation.account_id,args.conversation.family_member_id,args.conversation.id,args.message,args.answer.summary,JSON.stringify(args.answer.citations),JSON.stringify(args.answer)]);
+    // The answer and the visible chat-job completion are one atomic unit.
+    // If a worker dies after COMMIT but before acknowledging its generic
+    // background job, the retry sees this terminal row and exits without
+    // inserting the same user/assistant pair a second time.
+    if(args.jobId) {
+      await client.query(
+        "UPDATE chat_analysis_jobs SET status='complete',result_json=$1::jsonb,error=NULL,updated_at=now() WHERE id=$2 AND account_id=$3 AND status='running'",
+        [JSON.stringify({answer:args.answer,retrieved:[]}),args.jobId,args.conversation.account_id]);
+    }
     await client.query("COMMIT");
   }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
 }

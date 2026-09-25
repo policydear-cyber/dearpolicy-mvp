@@ -40,5 +40,213 @@ jobs:
       - name: Extraction accuracy on stored document fixtures
         run: npm run eval:extraction
 
+      - name: Claim-evidence pipeline regression suite (PGlite, no live DB needed)
+        run: npm run claims:evidence-test
+
+      - name: Evidence model-execution provenance regression suite (extraction -> storage -> review -> facts -> calculator, PGlite)
+        run: npm run claims:evidence-provenance-test
+
+      - name: Claim-evidence document-type contract suite (TypeScript list == SQL CHECK; real upload route for every type, PGlite)
+        run: npm run claims:evidence-document-type-test
+
+      - name: Claim-evidence document picker suite (shared catalogue, grouping, upload request, fail-closed status, no promise language)
+        run: npm run claims:evidence-picker-test
+
+      - name: Claim-evidence review workflow suite (bill fact review vs policy-definition decisions; real routes, PGlite)
+        run: npm run claims:evidence-review-workflow-test
+
+      - name: Claim-reviewer authorization suite (internal reviewer role, assignments, match routes; real routes, PGlite)
+        run: npm run claims:reviewer-authorization-test
+
+      - name: Reviewer decision identity suite (per-document supersession, fail-closed selection, per-document status; real routes, PGlite)
+        run: npm run claims:decision-identity-test
+
+      - name: Reviewer-backed benefits end to end (accidental death, critical illness, disability, travel; wording -> evidence -> reviewer -> calculator -> composition, with negative cases)
+        run: npm run claims:reviewer-benefit-e2e-test
+
+      - name: Travel currency safety suite (fail closed on any currency ambiguity; travel calculator, monetary gate, composition; PGlite)
+        run: npm run claims:travel-currency-test
+
+      - name: Legacy reviewer-decision fail-closed regression suite (PGlite, no live DB needed)
+        run: npm run claims:legacy-decision-test
+
+      - name: Evidence-table browser-write restrictions (household/reviewer sessions vs RLS and grants; real routes; PGlite)
+        run: npm run claims:evidence-browser-write-test
+
+      - name: Household evidence download authorization (signed-URL gate, cache headers, no storage keys; PGlite)
+        run: npm run claims:evidence-download-test
+
+      - name: Policy-processing and coverage-verification state protection (browser INSERT/UPDATE matrix on policies and policy_coverages; trusted upload/scan/reprocess/link/delete paths; forged state never reaches chat or money; PGlite)
+        run: npm run security:policy-state-test
+
+      - name: Infrastructure-table permissions (every migrated table classified; anon/household/owner/reviewer/other-household refused on service- and operator-only tables; Supabase default privileges simulated; PGlite)
+        run: npm run security:infrastructure-tables-test
+
+
+      - name: Claim-composition engine regression suite (PGlite, no live DB needed)
+        run: npm run claims:composition-test
+
+      - name: Critical-illness engine regression suite (PGlite, no live DB needed)
+        run: npm run claims:ci-test
+
+      - name: Medical-claims engine regression suite
+        run: npm run claims:medical-test
+
+      - name: Disability/TPD engine regression suite
+        run: npm run claims:disability-test
+
+      - name: Travel-claims engine regression suite
+        run: npm run claims:travel-test
+
+      - name: Cross-product claim-quality golden dataset
+        run: npm run eval:claim-quality
+
+      - name: Launch-hardening security regression suite
+        run: npm run security:test
+
+      - name: Database TLS configuration regression suite (no live DB needed)
+        run: npm run security:tls-test
+
+      - name: Production launch-guard regression suite (gate.ts/devAccountId() production-disable, launch guards)
+        run: npm run security:launch-guard-test
+
+      - name: Row Level Security regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:rls-test
+
+      - name: Authorization-client regression suite (createUserSupabaseClient RLS boundary)
+        run: npm run security:authz-client-test
+
+      - name: Household repository regression suite
+        run: npm run security:household-test
+
+      - name: Route inventory regression suite (every app/api/**/route.ts classified and authorized)
+        run: npm run security:route-inventory-test
+
+      - name: Import-boundary regression suite (devAccountId/service-client/rate-limiter bans under app/)
+        run: npm run security:import-boundary-test
+
+      - name: Authorization HTTP regression suite (real route handlers, real auth boundary)
+        run: npm run security:authz-http-test
+
+      - name: Storage RLS regression suite
+        run: npm run security:storage-rls-test
+
+      - name: Storage orphan audit regression suite
+        run: npm run security:storage-orphans-test
+
+      - name: Shared Postgres-backed rate-limiter regression suite
+        run: npm run security:db-rate-limit-test
+
+      - name: CSRF protection regression suite
+        run: npm run security:csrf-test
+
+      - name: Launch capability manifest regression suite
+        run: npm run security:launch-check-test
+
+      - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:policy-quarantine-test
+
+      - name: Scan-provider callback authentication regression suite (real Postgres via PGlite, no live DB needed)
+        run: npm run security:scan-callback-test
+
+      - name: Storage cleanup regression suite (manifest/confirmation, protection rules, lock, audit trail -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:storage-cleanup-test
+
+      - name: Household export regression suite (recent-auth guard, snapshot exclusions, idempotency, CAS lifecycle, race-safe expiry -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-export-test
+
+      - name: Household export WORKER regression suite (enqueue-only + separate-worker-claim topology, reaper for stuck/dead-lettered/orphaned running exports -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-export-worker-test
+
+      - name: Environment-contract regression suite (every process.env reference across app/+lib/+scripts/+root is documented in .env.example or explicitly allowlisted -- static scan, no DB needed)
+        run: npm run security:env-contract-test
+
+      - name: Deletion lifecycle regression suite (state-machine CAS, deletion-request idempotency, policy-document flow, chat-retrieval exclusion, storage-cleanup integration -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:lifecycle-test
+
+      - name: Deletion lifecycle query-guard regression suite (static scan -- a normal active-record query must not omit the lifecycle predicate)
+        run: npm run security:lifecycle-query-guard-test
+
+      - name: Active-read scopes behavioral regression suite (seeded active+non-active rows through the real application functions, not static scanning -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:active-read-scopes-test
+
+      - name: Whole-policy deletion regression suite (version-chain resolution, shared reference-document protection & orphan cascade, open/completed claim invalidation, coverage-ledger exclusion -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:policy-deletion-test
+
+      - name: Claim-evidence deletion regression suite (evidence lifecycle exclusion on claim/household deletion -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:claim-evidence-deletion-test
+
+      - name: Family-member deletion regression suite (dependent-record cleanup and cross-reference invalidation on family-member removal -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:family-member-deletion-test
+
+      - name: Household-membership deletion regression suite (membership revocation, access-boundary cleanup on member removal -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-membership-deletion-test
+
+      - name: Invitation-revocation deletion regression suite (pending-invitation lifecycle on revocation/expiry -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:invitation-revocation-deletion-test
+
+      - name: Household deletion regression suite (whole-household teardown, member/policy/claim cascade -- real Postgres via PGlite, no live DB needed)
+        run: npm run security:household-deletion-test
+
+      - name: claim-evidence-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+        run: npm run security:claim-evidence-deletion-coordinator-test
+
+      - name: family-member-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+        run: npm run security:family-member-deletion-coordinator-test
+
+      - name: household-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+        run: npm run security:household-deletion-coordinator-test
+
+      - name: household-membership-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+        run: npm run security:household-membership-deletion-coordinator-test
+
+      - name: invitation-revocation-deletion coordinator-level regression suite (lib/lifecycle/coordinator.ts directly -- refusal, idempotency, audit and RLS cases -- real Postgres via PGlite)
+        run: npm run security:invitation-revocation-deletion-coordinator-test
+
+      - name: Placeholder-content regression suite (rejects placeholder markers, truncated/duplicated content in source and migration files)
+        run: npm run security:placeholder-content-test
+
+      - name: CI workflow-coverage regression suite (every required launch suite must have a corresponding CI step)
+        run: npm run security:ci-workflow-coverage-test
+
+      - name: Durable job framework regression suite (lib/jobs/queue.ts leases, heartbeat, bounded retry, dead-letter, cancellation)
+        run: npm run security:background-jobs-test
+
+      - name: Telemetry boundary regression suite (recursive redaction, correlation ids, pseudonymization, safe error taxonomy)
+        run: npm run security:telemetry-test
+
+      - name: Model execution provenance regression suite (requested-vs-resolved identity, verified/unverified monetary-use gate)
+        run: npm run security:model-provenance-test
+
+      - name: Controlled rollout and stale-data invalidation regression suite
+        run: npm run security:rollout-staleness-test
+
+      - name: Full authenticated household journey regression suite (real API route handlers, PGlite-backed, no live HTTP server)
+        run: npm run e2e:full-household-test
+
+      - name: VirusTotal malware-scanning adapter regression suite
+        run: npm run security:malware-scanning-virustotal-test
+
+      - name: Durable pipeline-worker regression suite (enqueue/claim/complete/fail error classification)
+        run: npm run security:pipeline-worker-test
+
+      - name: Standalone worker-runtime regression suite (job enqueued by one process, claimed and completed by a separate later process)
+        run: npm run security:worker-runtime-test
+
+      - name: Dead-letter queue retry/drain regression suite
+        run: npm run security:dead-letter-test
+
+      - name: 9-stage multi-process full household E2E journey orchestrator (shared PGlite fixture across process boundaries, including deletion flows)
+        run: npm run e2e:full-journey-test
+
+      - name: Launch-check verifier regression suite (proves the launch-check verifiers themselves are sensitive to real state, not static source-text checks)
+        run: npm run security:launch-check-verifier-test
+
+      - name: Model-execution staleness alert/processor regression suite
+        run: npm run ai:model-execution-staleness-test
+
       - name: Build
         run: npm run build
+
+      - name: Launch readiness report (non-blocking here -- this environment has no real production secrets to check against)
+        run: npm run launch:check

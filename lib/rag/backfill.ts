@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { countPolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 
 /** Indexing documents that were read before there was anywhere to put vectors.
@@ -24,12 +25,18 @@ export type SemanticIndexState = {
 
 type IndexableDocument = { id: string; label: string; chunks: number };
 
+// The processing_status='ready' filter already implies quarantine_status
+// ='scan_clean' transitively (lib/rag/ingest.ts's processPolicy() cannot
+// reach 'ready' without first passing lib/policies/quarantine/store.ts's
+// gate) -- the explicit AND below is defense in depth, not a workaround,
+// so reindexing re-checks persisted scan state directly rather than
+// relying solely on that invariant holding everywhere forever.
 async function indexableDocuments(accountId: string): Promise<IndexableDocument[]> {
   const result = await query<{ id: string; label: string; chunks: number }>(
     `SELECT p.id, COALESCE(p.product_name, p.original_filename) AS label,
             (SELECT count(*)::int FROM policy_chunks c WHERE c.account_id=p.account_id AND c.policy_id=p.id) AS chunks
        FROM policies p
-      WHERE p.account_id=$1 AND p.processing_status='ready'
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.quarantine_status='scan_clean' AND ${activePredicate("p")}
       ORDER BY p.created_at`,
     [accountId],
   );

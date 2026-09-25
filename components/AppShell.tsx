@@ -16,6 +16,7 @@ const icon = {
   claims: <><path d="M12 3 4 6.5v5.5c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6.5z" /><path d="M12 9v4" /><path d="M12 16.5h.01" /></>,
   ask: <><path d="M12 4c4.4 0 8 3 8 6.8s-3.6 6.8-8 6.8c-.9 0-1.8-.1-2.6-.4L5 19l.9-3.4C4.7 14.4 4 12.7 4 10.8 4 7 7.6 4 12 4z" /></>,
   usage: <><path d="M12 3a9 9 0 1 0 9 9h-9z" /><path d="M14 3.2A9 9 0 0 1 20.8 10H14z" /></>,
+  household: <><path d="M4 11 12 4l8 7" /><path d="M6 10v9h12v-9" /><path d="M10 19v-5h4v5" /></>,
 };
 type IconName = keyof typeof icon;
 function NavIcon({ name }: { name: IconName }) {
@@ -36,6 +37,7 @@ const nav: { href: string; label: string; icon: IconName }[] = [
   { href: "/claims", label: "Claims", icon: "claims" },
   { href: "/chat", label: "Ask DearPolicy", icon: "ask" },
   { href: "/usage", label: "Usage", icon: "usage" },
+  { href: "/household", label: "Household", icon: "household" },
 ];
 
 type Theme = "light" | "dark";
@@ -85,6 +87,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
   const down = services.filter((s) => !s.ok);
+  // The internal reviewer area is a DearPolicy staff tool, not part of any
+  // household: it gets its own single-item navigation, never the household's.
+  const reviewerArea = pathname.startsWith("/reviewer");
+  const items = reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : nav;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -92,7 +98,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
         </Link>
         <nav className="nav">
-          {nav.map((item) => {
+          {reviewerArea && <div className="eyebrow">Reviewer area</div>}
+          {items.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link className={`nav-item ${active ? "active" : ""}`} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>

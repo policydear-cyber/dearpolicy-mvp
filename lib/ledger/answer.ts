@@ -15,6 +15,8 @@ import { formatMoney } from "@/lib/format/currency";
 import type { ChatCitation,ChatQuestion,ClaimItem } from "@/types";
 import { EVENTS,GATES,QUANTITY_FACT,candidateEvents,eventsFromText,fractureRowMatches,type EventCandidate,type EventType } from "@/lib/ledger/events";
 import type { LedgerRow } from "@/lib/ledger/store";
+import { calculateHospitalCash } from "@/lib/claims/calculators/hospital-cash";
+import { coverKey } from "@/lib/insurance/claim-events";
 
 export type LedgerQuestion=ChatQuestion&{subjectId:string;factKey:string};
 export type LedgerAnswer={
@@ -158,9 +160,36 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
             break;
           case "per_day":{
             const nights=knownValue(facts,quantity?.factKey??"hospitalNights");
-            if(row.amount!=null&&typeof nights==="number"){
-              const payable=Math.max(0,Math.min(nights-(row.offsetDays??0),row.maximumDays??Number.POSITIVE_INFINITY));
-              amount=Math.round(row.amount*payable*100)/100;basisText=formatMoney(row.amount,row.currency)+" × "+payable+" payable night"+(payable===1?"":"s")+(row.offsetDays?" (after the first "+row.offsetDays+")":"");
+            const ongoing=!whatIf&&knownValue(facts,"hospitalStayOngoing")===true;
+            if(row.amount!=null&&ongoing){
+              // A completed length of stay is what turns this into a figure;
+              // asking the same quantity question with no context reads as
+              // DearPolicy ignoring what was just said, so the benefit is
+              // named as potentially applicable and the real blocker (the
+              // stay has not ended yet) is stated plainly instead.
+              missing.push("the completed length of stay — this benefit may still apply once the stay has ended");
+            }else if(row.amount!=null&&typeof nights==="number"){
+              // The calculator is the only place this arithmetic runs: it
+              // bounds payable days to the day cap (never an uncapped daily
+              // benefit) and returns not_applicable rather than a $0 payout
+              // when the waiting period was never cleared.
+              const calc=calculateHospitalCash({
+                dailyRate:row.amount,currency:row.currency,hospitalStayOngoing:false,hospitalNights:nights,
+                offsetDays:row.offsetDays??0,maximumDays:row.maximumDays,
+                ownership:{contractId:row.policyId??row.id,coverageId:row.id,label:row.planName},
+                ruleEvidence:{chunkId:"ledger:"+row.id,policyId:row.policyId??undefined,pageStart:row.sourcePage??undefined,pageEnd:row.sourcePage??undefined,label:row.planName},
+                ownershipEvidence:{chunkId:"ledger:"+row.id,policyId:row.policyId??undefined,pageStart:row.sourcePage??undefined,pageEnd:row.sourcePage??undefined,label:row.planName},
+              });
+              if(calc.status==="calculated"){
+                amount=calc.potentialAmount;
+                basisText=formatMoney(row.amount,row.currency)+" × "+calc.payableDays+" payable night"+(calc.payableDays===1?"":"s")+(calc.offsetDays?" (after the first "+calc.offsetDays+")":"");
+              }else if(calc.status==="not_applicable"){
+                missing.push("a completed stay long enough to clear the "+calc.offsetDays+"-day waiting period ("+calc.reportedHospitalNights+" night"+(calc.reportedHospitalNights===1?"":"s")+" reported)");
+              }else{
+                // A structural block (most commonly a missing day cap): never
+                // show an uncapped or otherwise unverified daily amount.
+                missing.push(calc.message);
+              }
             }else if(!whatIf&&row.amount!=null)missing.push("the number of nights");
             break;}
           case "reimbursement_cap":{
@@ -175,8 +204,18 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
         for(const m of missing)conditions.push("Still needed: "+m);
         if(row.status!=="confirmed")conditions.push(row.origin==="schedule"?"Assumes the standard rule for this kind of plan until the wording is read.":"Not yet verified against the policy wording.");
         conditions.push("Subject to the insurer's assessment and the plan's own terms and exclusions.");
+        // A figure a person cannot trace back to one of their own covers is a
+        // figure they cannot check, and the monetary gate blocks any
+        // calculated amount without this mapping. `row.policyId` is the
+        // document DearPolicy actually read this rule from -- already proved
+        // to belong to an owned contract before the row was ever seeded
+        // (wordingSeeds/scheduleSeeds only run over a person's own
+        // contracts) -- so it is the real, owned identifier, not a stand-in.
+        const rowContractId=row.policyId??("ledger:"+row.familyMemberId);
         const item:ClaimItem={
           title:rowTitle(person,row),
+          contractId:rowContractId,
+          coverKey:coverKey({insurer:row.insurer,productName:row.planName,contractId:rowContractId}),
           status:amount!=null?(missing.length||row.status!=="confirmed"||row.conditions.length?"potentially_applicable":"likely_applicable"):"needs_document",
           amountText:amount!=null?formatMoney(amount,row.currency):(row.paysKind==="stated"||whatIf||row.paysKind==="per_month")?describePays(row):null,
           amountLabel:amount!=null?(row.paysKind==="reimbursement_cap"?"Potential reimbursement":"Potential payout"):"What this benefit pays",
