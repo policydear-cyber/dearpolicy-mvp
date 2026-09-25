@@ -46,6 +46,9 @@ jobs:
       - name: Evidence model-execution provenance regression suite (extraction -> storage -> review -> facts -> calculator, PGlite)
         run: npm run claims:evidence-provenance-test
 
+      - name: Claim-evidence document-type contract suite (TypeScript list == SQL CHECK; real upload route for every type, PGlite)
+        run: npm run claims:evidence-document-type-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

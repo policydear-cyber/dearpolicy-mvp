@@ -46,6 +46,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "security:telemetry-test",
   "security:model-provenance-test",
   "claims:evidence-provenance-test",
+  "claims:evidence-document-type-test",
   "security:rollout-staleness-test",
   "e2e:full-household-test",
   "security:malware-scanning-virustotal-test",

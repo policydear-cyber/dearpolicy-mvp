@@ -15,10 +15,20 @@
 -- already exist by the time the ALTER TABLE below runs.
 
 ALTER TABLE claim_evidence_documents DROP CONSTRAINT IF EXISTS claim_evidence_documents_document_type_check;
+-- The accepted set is exactly lib/claims/evidence/types.ts's
+-- CLAIM_EVIDENCE_DOCUMENT_TYPES: the cause-of-death set, the clinical
+-- medical-evidence set, and the medical-CLAIM (bill/receipt/settlement) set
+-- that hospital-cash, medical-reimbursement and travel-medical claims are
+-- proved from. scripts/claim-evidence-document-type-regressions.ts fails CI
+-- if this list and that constant ever diverge. Dropping and re-adding the
+-- constraint is idempotent, and every previously accepted value is still
+-- accepted, so existing rows remain valid on upgrade.
 ALTER TABLE claim_evidence_documents ADD CONSTRAINT claim_evidence_documents_document_type_check
   CHECK (document_type IN (
     'death_certificate','police_report','coroners_report','medical_examiner_report','other_official_document',
-    'specialist_memo','medical_report','pathology_report','imaging_report','laboratory_report','discharge_summary','surgical_report','other_medical_evidence'
+    'specialist_memo','medical_report','pathology_report','imaging_report','laboratory_report','discharge_summary','surgical_report','other_medical_evidence',
+    'hospital_bill','itemised_bill','doctor_memo','referral','pre_authorisation','procedure_report','receipt_payment_proof',
+    'other_insurer_settlement_statement','medishield_integrated_shield_settlement_statement'
   ));
 
 -- Policy-specific matches between reviewed medical evidence and ONE
