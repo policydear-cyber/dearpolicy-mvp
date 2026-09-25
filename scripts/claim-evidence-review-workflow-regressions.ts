@@ -276,8 +276,13 @@ async function main() {
         const own = await review(bill, { ...body, familyMemberId: memberA, claimSessionId: claimA }, householdB);
         assert.equal(own.status, 409);
         assert.equal((await own.json()).reasonCode, "EVIDENCE_NOT_FOUND");
+        // A household cookie naming a household the caller does not belong to
+        // is ignored (lib/household/repo.ts's resolveActiveHouseholdId()
+        // falls back to the caller's OWN household), so the document is
+        // simply not found there.
         const forged = await review(bill, { ...body, familyMemberId: memberA, claimSessionId: claimA }, householdA);
-        assert.ok(forged.status === 403 || forged.status === 404, `forged household cookie must be refused (got ${forged.status})`);
+        assert.equal(forged.status, 409, `forged household cookie must be refused (got ${forged.status})`);
+        assert.equal((await forged.json()).reasonCode, "EVIDENCE_NOT_FOUND");
       } finally { asUser(ownerA); }
       for (const scope of [{ familyMemberId: memberA2, claimSessionId: claimOther }, { familyMemberId: memberA, claimSessionId: claimA2 }, { familyMemberId: memberA2, claimSessionId: claimA }]) {
         const res = await review(bill, { ...body, ...scope });
