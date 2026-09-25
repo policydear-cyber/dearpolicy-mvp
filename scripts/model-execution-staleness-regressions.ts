@@ -41,6 +41,13 @@ type FixtureRow = { operation: string; schema_version: string | null; verified: 
 function withFixtureRows(rows: FixtureRow[], capturedParams: { last?: unknown[] }) {
   const originalQuery = pool.query;
   (pool as unknown as { query: typeof pool.query }).query = (async (sql: string, params?: unknown[]) => {
+    // lib/db/client's query() runs ensureDevAccountRow() once per process
+    // whenever DATABASE_URL is set (CI sets it). That bootstrap INSERT is not
+    // part of the staleness audit under test, so it is acknowledged as a
+    // no-op here; every other unexpected statement still fails loudly.
+    if (/^INSERT INTO accounts\(id, name\) VALUES \(\$1, 'Household'\) ON CONFLICT \(id\) DO NOTHING$/.test(sql)) {
+      return { rows: [], rowCount: 0 };
+    }
     capturedParams.last = params;
     if (/FROM model_executions/.test(sql)) return { rows, rowCount: rows.length };
     throw new Error(`Unexpected fixture SQL in model-execution-staleness-regressions: ${sql}`);
