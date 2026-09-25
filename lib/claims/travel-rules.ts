@@ -45,6 +45,7 @@ import { calculateAccidentalDeath, type DeathBenefitEvidenceRef } from "./calcul
 import type { CauseDefinitionMatch } from "./calculators/evidence";
 import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
 import { evaluateAggregateEvidenceAuthority } from "./evidence-authority";
+import { CURRENCY_UNMATCHED_CONDITION, CURRENCY_UNMATCHED_REASON, matchBenefitCurrency } from "./currency-evidence";
 
 export type TravelRuleSet = { rules: TravelRuleEvidence[]; gaps: TravelEvidenceGap[] };
 const EMPTY_TRAVEL_RULES: TravelRuleSet = { rules: [], gaps: [] };
@@ -119,10 +120,14 @@ function assessTravelMedicalBenefit(rule: TravelMedicalRule, coverage: OwnedCove
   if (!travelReimbursementAuthority.authorized) {
     return { ...base, status: "needs_document", amountText: null, reason: `Overseas Medical Expenses may apply. DearPolicy has not included an amount: ${travelReimbursementAuthority.message}`, conditions: [travelReimbursementAuthority.message] };
   }
-  const claimCurrency = /^[A-Z]{3}$/.test(coverage.currency ?? "") ? (coverage.currency as string) : (verified.lineItems[0]?.currency ?? null);
-  if (!claimCurrency) {
-    return { ...base, status: "needs_document", amountText: null, reason: "Overseas Medical Expenses may apply, but this cover has no verified currency to calculate in.", conditions: ["Confirm the currency of this cover against the policy schedule."] };
+  // Never inferred from a bill line or a default: the cover's own currency
+  // must be stated on its personal document, and any amount the clause
+  // quotes must be in that same, cited currency (lib/claims/currency-evidence.ts).
+  const currencyMatch = matchBenefitCurrency({ coverage, benefitCurrency: rule.overallCap?.currency ?? null, benefitQuote: rule.quote, citation: rule.citation, requireBenefitCurrency: false });
+  if (!currencyMatch.ok) {
+    return { ...base, status: "needs_document", amountText: null, reason: `Overseas Medical Expenses may apply. ${CURRENCY_UNMATCHED_REASON}`, conditions: [CURRENCY_UNMATCHED_CONDITION] };
   }
+  const claimCurrency = currencyMatch.currency;
   const eligibleSet = new Set(rule.eligibleCategories);
   const mismatchedCurrency = verified.lineItems.filter((li) => eligibleSet.has(li.category) && li.currency !== claimCurrency);
   if (mismatchedCurrency.length > 0) {
@@ -161,7 +166,7 @@ function assessTravelMedicalBenefit(rule: TravelMedicalRule, coverage: OwnedCove
   }
   return {
     ...base, status: "potentially_applicable", amountText: amountText(calc.potentialAmount, calc.currency),
-    calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId,
+    calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId, currencyEvidence: currencyMatch.evidence,
     reason: `Overseas Medical Expenses: eligible reviewed expense ${amountText(calc.eligibleBilledExpense, claimCurrency)}, after this benefit's evidenced categories and cap, ${amountText(calc.potentialAmount, calc.currency)} is potentially payable.`,
     conditions: ["The treatment must satisfy this benefit's own conditions and exclusions, and must have occurred during the covered trip."],
   };
@@ -184,11 +189,18 @@ function assessTravelDeathBenefit(rule: TravelDeathRule, coverage: OwnedCoverage
     return { ...base, status: "needs_document", amountText: null, reason: "A travel accidental death benefit may apply, but DearPolicy has not verified the date of death against the confirmed trip dates.", conditions: ["Confirm the date of death, so DearPolicy can check it falls within the covered trip."] };
   }
 
+  // The fixed amount is quoted in the wording's own currency. It is used
+  // only when that cited currency is the cover's own verified currency --
+  // never relabelled, never converted (lib/claims/currency-evidence.ts).
+  const currencyMatch = matchBenefitCurrency({ coverage, benefitCurrency: rule.currency, benefitQuote: rule.quote, citation: rule.citation });
+  if (!currencyMatch.ok) {
+    return { ...base, status: "needs_document", amountText: null, reason: `A travel accidental death benefit may apply. ${CURRENCY_UNMATCHED_REASON}`, conditions: [CURRENCY_UNMATCHED_CONDITION] };
+  }
   const evidenceRef = toRef(rule.citation);
   const calc = calculateAccidentalDeath({
     ownership: ownershipRef(coverage), familyMember: { id: coverage.familyMemberId, confirmed: true }, claimEventId: sessionId,
     deathConfirmed: facts.death === true, dateOfDeath: deathDate, policyEffectiveDate: coverage.effectiveDate,
-    sumInsured: null, currency: rule.currency, formula: { kind: "fixed", amount: rule.amount, evidence: evidenceRef },
+    sumInsured: null, currency: currencyMatch.currency, formula: { kind: "fixed", amount: rule.amount, evidence: evidenceRef },
     ruleEvidence: evidenceRef, ownershipEvidence: ownershipEvidenceRef(coverage), accidentalDeathDefinitionEvidence: evidenceRef,
     causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, currentDefinition(rule.citation, rule.quote)),
   });
@@ -208,7 +220,7 @@ function assessTravelDeathBenefit(rule: TravelDeathRule, coverage: OwnedCoverage
   }
   return {
     ...base, status: "potentially_applicable", amountText: amountText(calc.potentialAmount, calc.currency),
-    calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId,
+    calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId, currencyEvidence: currencyMatch.evidence,
     reason: `The matching accidental-death clause pays ${calc.formulaBasis}.`,
     conditions: ["The cover must have been in force on the date of death, and the policy's conditions and exclusions must be met.", "The death certificate and accident/medical report must establish death directly caused by the accident, during the covered trip; accident exclusions and any time limits still need checking."],
   };

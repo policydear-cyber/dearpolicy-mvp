@@ -209,6 +209,10 @@ export type ClaimAssessmentItem = {
    * recomputing a weaker one from this already-flattened item. Absent for
    * any assessment item that isn't backed by one of those calculators. */
   calculationId?: string;
+  /** For a benefit quoted in the policy's own currency (travel): the exact
+   * policy, coverage, document version, pages and currencies its amount was
+   * matched on -- see lib/claims/currency-evidence.ts. */
+  currencyEvidence?: import("./currency-evidence").CurrencyEvidence;
   /** Result of the server-side fail-closed monetary eligibility gate. */
   monetaryDecision?:
     | { status: "allowed" }

@@ -72,6 +72,9 @@ function coverage(overrides: Partial<OwnedCoverage> = {}): OwnedCoverage {
     id: COVERAGE, policyId: POLICY, familyMemberId: FM, category: "Travel", amount: null, currency: CCY,
     productName: "Travel Protect360", sourcePage: 1, evidenceText: null, insurer: "Great Eastern", policyName: "Travel Protect360",
     policyNumber: "T-001", groupPolicyNumber: null, documentRole: "certificate", effectiveDate: "2024-01-01", renewalOrExpiryDate: null,
+    // The certificate states the cover's currency (page 1) -- see
+    // lib/claims/currency-evidence.ts.
+    currencyVerified: true, policyDocumentVersion: "sha256:travel-policy-v1",
     ...overrides,
   };
 }
@@ -283,6 +286,25 @@ test("assessTravelClaim: a bill line in a different currency than the cover bloc
   const item = assessTravelClaim(facts, [coverage()], travelRuleSet(), CLAIM).find((i) => i.id === "travel-medical-expenses");
   assert.equal(item?.status, "needs_document");
   assert.equal(item?.calculatedAmount, undefined);
+});
+
+test("assessTravelClaim: Overseas Medical Expenses never infers the cover's currency from a bill line or a default", () => {
+  const facts = baseFacts({ eventType: "hospitalisation", tripDepartureDate: "2024-06-01", tripReturnDate: "2024-06-10", verifiedMedicalBillFacts: verifiedBill() });
+  for (const cov of [coverage({ currencyVerified: false }), coverage({ currencyVerified: undefined }), coverage({ policyDocumentVersion: null }), coverage({ sourcePage: null })]) {
+    const item = assessTravelClaim(facts, [cov], travelRuleSet(), CLAIM).find((i) => i.id === "travel-medical-expenses");
+    assert.equal(item?.status, "needs_document");
+    assert.equal(item?.calculatedAmount, undefined);
+    assert.match(item!.reason, /benefit and coverage currencies could not be matched/);
+  }
+});
+
+test("assessTravelClaim: accidental death quoted in another currency than the cover's stated currency shows no amount", () => {
+  const facts = baseFacts({ eventType: "death", death: true, deathDate: "2024-06-05", tripDepartureDate: "2024-06-01", tripReturnDate: "2024-06-10", causeDefinitionMatches: [matchingCauseMatch()] });
+  const usd: TravelRuleSet = { rules: [{ coverageId: COVERAGE, benefitCode: "travel-accidental-death", amount: 150_000, currency: "USD", quote: "Accidental Death Benefit: we will pay US$150,000", citation: deathCitation() }], gaps: [] };
+  const item = assessTravelClaim(facts, [coverage()], usd, CLAIM).find((i) => i.id === "travel-accidental-death");
+  assert.equal(item?.status, "needs_document");
+  assert.equal(item?.calculatedAmount, undefined);
+  assert.equal(item?.amountText, null);
 });
 
 test("assessTravelClaim: a non-Travel coverage is never assessed for a travel benefit", () => {

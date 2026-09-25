@@ -109,15 +109,20 @@ export async function startReviewerHarness() {
     accountId: string; memberId: string; policyId: string; coverageId: string; insurer: string; productName: string;
     groupPolicyNumber?: string | null; category: string; amount: number | null; currency: string; pages: { pageNumber: number; text: string }[];
     effectiveDate?: string;
+    /** Defaults model a complete personal certificate: the coverage row
+     * states its currency on page 1 of a known document version. */
+    coverageCurrency?: string | null; sourcePage?: number | null; fileHash?: string | null;
   }) {
     await pool.query(
-      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date)
-       VALUES($1,$2,$3,$4,$5,$6,'certificate',true,'ready',$7,'k',90,$8)`,
-      [args.policyId, args.accountId, args.memberId, args.insurer, args.productName, args.groupPolicyNumber ?? null, `${args.productName}.pdf`, args.effectiveDate ?? "2020-01-01"]);
+      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash)
+       VALUES($1,$2,$3,$4,$5,$6,'certificate',true,'ready',$7,'k',90,$8,$9)`,
+      [args.policyId, args.accountId, args.memberId, args.insurer, args.productName, args.groupPolicyNumber ?? null, `${args.productName}.pdf`, args.effectiveDate ?? "2020-01-01",
+        args.fileHash === undefined ? `sha256:policy-${args.policyId}` : args.fileHash]);
     for (const p of args.pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [args.accountId, args.policyId, p.pageNumber, p.text]);
     await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [args.policyId, args.memberId, args.accountId]);
-    await pool.query(`INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name)
-       VALUES($1,$2,$3,$4,$5,$6,$7,true,true,$8)`, [args.coverageId, args.accountId, args.policyId, args.memberId, args.category, args.amount, args.currency, args.productName]);
+    await pool.query(`INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name,source_page)
+       VALUES($1,$2,$3,$4,$5,$6,$7,true,true,$8,$9)`, [args.coverageId, args.accountId, args.policyId, args.memberId, args.category, args.amount,
+        args.coverageCurrency === undefined ? args.currency : args.coverageCurrency, args.productName, args.sourcePage === undefined ? 1 : args.sourcePage]);
     return { policyId: args.policyId, coverageId: args.coverageId };
   }
 

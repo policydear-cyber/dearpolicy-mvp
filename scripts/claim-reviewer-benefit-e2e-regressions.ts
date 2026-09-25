@@ -192,13 +192,8 @@ async function main() {
       const a = await assign(reviewer, wc);
       const res = await hh.decide(f.route, reviewer, wc.document, body(f, a, wc));
       assert.equal(res.status, 200, await res.clone().text());
-      if (f.otherCurrencyBehaviour === "blocks") {
-        await assertNoAmount(f, wc, "currency differs from the verified cover");
-      } else {
-        const { out, item } = await itemOf(f, wc);
-        assert.notEqual(item?.currency, f.expectedCurrency, "never relabelled as the cover's currency");
-        assert.ok(!out.composition.totalsByCurrency.some((t) => t.currency === f.expectedCurrency && t.includedAmount > 0), "never added to the cover-currency total");
-      }
+      assert.equal(f.otherCurrencyBehaviour, "blocks");
+      await assertNoAmount(f, wc, "currency differs from the verified cover");
     });
 
     await testAsync(`${f.category}: reviewer without assignment, suspended, expired or revoked -- and non-"matches" results -- yield nothing`, async () => {

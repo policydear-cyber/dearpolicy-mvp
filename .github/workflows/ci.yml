@@ -64,6 +64,9 @@ jobs:
       - name: Reviewer-backed benefits end to end (accidental death, critical illness, disability, travel; wording -> evidence -> reviewer -> calculator -> composition, with negative cases)
         run: npm run claims:reviewer-benefit-e2e-test
 
+      - name: Travel currency safety suite (fail closed on any currency ambiguity; travel calculator, monetary gate, composition; PGlite)
+        run: npm run claims:travel-currency-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

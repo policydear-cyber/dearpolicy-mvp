@@ -84,7 +84,8 @@ const gpa = baseCoverage({ id: "cov-gpa", policyId: LIFE_POLICY, category: "Pers
 const ci = baseCoverage({ id: "cov-ci", policyId: CI_POLICY, category: "Critical Illness", productName: "Living Care", amount: 200_000, effectiveDate: "2019-01-01" });
 const hosp = baseCoverage({ id: "cov-hosp", policyId: HOSP_POLICY, category: "Hospitalisation", productName: "Hospitalisation Plan", amount: null, effectiveDate: "2019-01-01" });
 const di = baseCoverage({ id: "cov-di", policyId: DI_POLICY, category: "Disability Income", productName: "Disability Income Plan", amount: null, effectiveDate: "2019-01-01" });
-const travel = baseCoverage({ id: "cov-travel", policyId: TRAVEL_POLICY, category: "Travel", productName: "Travel Protect360", amount: null, effectiveDate: "2024-01-01" });
+// The travel certificate states its currency (see lib/claims/currency-evidence.ts).
+const travel = baseCoverage({ id: "cov-travel", policyId: TRAVEL_POLICY, category: "Travel", productName: "Travel Protect360", amount: null, effectiveDate: "2024-01-01", currencyVerified: true, policyDocumentVersion: "sha256:travel-protect360-v1" });
 const HOUSEHOLD: OwnedCoverage[] = [gtl, gpa, ci, hosp, di, travel];
 
 function citation(policyId: string, page: number, label: string): ClaimEvidence {

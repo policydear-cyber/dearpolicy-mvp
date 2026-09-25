@@ -17,13 +17,9 @@ export type BenefitCategoryFixture = {
   policy: { insurer: string; productName: string; groupPolicyNumber: string | null; category: string; amount: number | null; currency: string; pages: WordingPage[] };
   /** Wording with the benefit amount quoted in another currency. */
   otherCurrencyPages: WordingPage[];
-  /** What the production rules do with it today: "blocks" (no amount, as
-   * for accidental death, critical illness and disability, whose amounts
-   * are computed from the verified sum insured's currency) or
-   * "quoted-currency" (travel: a fixed amount stated in the wording's own
-   * currency is shown in that currency, never converted or merged into
-   * another currency's total -- an open product question, see the PR). */
-  otherCurrencyBehaviour: "blocks" | "quoted-currency";
+  /** Every category fails closed: no amount (see lib/claims/currency-evidence.ts
+   * for travel's rule). */
+  otherCurrencyBehaviour: "blocks";
   /** Assessment item id the calculator produces for this benefit. */
   itemId: string;
   /** Extra decision body fields naming the policy's own benefit row. */
@@ -94,6 +90,6 @@ export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [
       pages: [{ pageNumber: 2, text: "TravelSure Single Trip policy wording. Accidental Death Benefit: we will pay S$150,000 if you die as a result of an accident during your trip." }],
     },
     otherCurrencyPages: [{ pageNumber: 2, text: "TravelSure Single Trip policy wording. Accidental Death Benefit: we will pay US$150,000 if you die as a result of an accident during your trip." }],
-    otherCurrencyBehaviour: "quoted-currency", decisionScope: {}, evidence: policeReport, expectedAmount: 150000, expectedCurrency: "SGD",
+    otherCurrencyBehaviour: "blocks", decisionScope: {}, evidence: policeReport, expectedAmount: 150000, expectedCurrency: "SGD",
   },
 ];
