@@ -22,6 +22,8 @@ import { NextRequest } from "next/server";
 import type { ChatAnswer } from "@/types";
 import type { Interpretation } from "@/lib/chat/facts";
 import type { PolicyAnalysis } from "@/lib/chat/types";
+import { claimAndProcessOne } from "@/lib/jobs/worker-runtime";
+import { PRODUCTION_JOB_TYPES } from "@/lib/jobs/processors";
 
 /** Runs real PostgreSQL/pgvector SQL in a disposable WASM database.
  * Only Ollama responses are simulated; no user database, GPU or policies are modified.
@@ -33,6 +35,10 @@ async function main(){
   await db.exec(await readFile(path.resolve("sql/benefit-catalog.sql"),"utf8"));
   await db.exec(await readFile(path.resolve("sql/model-usage.sql"),"utf8"));
   await db.exec(await readFile(path.resolve("sql/coverage-ledger.sql"),"utf8"));
+  // Async chat is a real producer of the shared durable queue; its route
+  // regression must therefore install the same background_jobs schema the
+  // standalone worker uses in production.
+  await db.exec(await readFile(path.resolve("sql/background-jobs.sql"),"utf8"));
   // Household-scoped routes now resolve identity through
   // requireHouseholdContext()/createUserSupabaseClient(), which needs the
   // authenticated/anon/service_role shim roles and the household_members
@@ -511,6 +517,9 @@ async function main(){
     await test("Async analysis returns actual progress and a saved final answer",async()=>{
       const result=await send("What policies does my family have?",null,undefined,undefined,true);
       assert.equal(result.response.status,202,JSON.stringify(result.data));assert.ok(result.data.jobId);
+      const config=PRODUCTION_JOB_TYPES.find(candidate=>candidate.jobType==="chat_analysis");
+      assert.ok(config,"chat_analysis must be registered with the standalone worker");
+      assert.equal(await claimAndProcessOne({jobType:"chat_analysis",workerId:`system-chat-${process.pid}`,process:config!.process}),"succeeded");
       const answer=await awaitJob(result.data.jobId);assert.equal(answer.portfolioItems?.length,90);
       const saved=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
       const payload=await saved.json();assert.equal(saved.status,200);assert.equal(payload.messages.length,2);assert.equal(payload.messages[1].answer_json.portfolioItems.length,90);
