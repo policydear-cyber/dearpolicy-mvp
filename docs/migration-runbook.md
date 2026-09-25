@@ -7,7 +7,7 @@ Nothing here has been run against any live database. Placeholders look like `<LI
 
 - Apply to **staging first**, run every check in sections 5-7 there, and only then schedule production.
 - Apply migrations **before** deploying the application build that needs them. The app lazily re-applies `claim-evidence.sql`, `critical-illness.sql`, `disability.sql` and `claim-reviewers.sql` at runtime (`lib/claims/evidence/*schema.ts`, `lib/claims/reviewers/schema.ts`). If those tables were created that way *after* `household-rls.sql` ran, they would carry Supabase's default grants and none of the household guards.
-- Do **not** use `npm run db:setup` for staging or production. `scripts/setup-db.ts` is a local-development helper: it omits `model-provenance.sql`, `rate-limit.sql`, `background-jobs.sql` and `storage-rls.sql`.
+- Do **not** use `npm run db:setup` for staging or production. `scripts/setup-db.ts` is a local-development helper: it omits `model-provenance.sql`, `rate-limit.sql`, `background-jobs.sql`, `infrastructure-rls.sql` and `storage-rls.sql`.
 - Run each file with `psql -v ON_ERROR_STOP=1 --single-transaction -f <file>`, one file per invocation. None of the files contains its own `BEGIN`/`COMMIT`, `CREATE INDEX CONCURRENTLY` or `ALTER TYPE ... ADD VALUE`, so each file can be applied atomically: it either fully applies or rolls back.
 - Connect as the Supabase `postgres` role (the table owner). Do not apply migrations as `authenticated`, `anon` or `service_role`.
 
@@ -64,10 +64,11 @@ Each row lists what the file needs to exist first. It is verified against the `R
 | 13 | `background-jobs.sql` | 1 | Uses `accounts`. |
 | 14 | `lifecycle.sql` | 1, 8 | Adds lifecycle columns to `accounts`, `policies`, `family_members` and (only if it exists) `claim_evidence_documents`. **Must run after 8**, otherwise the evidence lifecycle columns are silently skipped. |
 | 15 | `claim-reviewers.sql` | 1, 8, roles | Uses `claim_evidence_documents` and `claim_sessions`. Revokes browser roles from the reviewer tables. |
-| 16 | `household-rls.sql` | **all of 1-15** | Enables RLS and policies on every household table. Narrows the evidence tables (a column grant plus a guard trigger that depend on 14's `lifecycle_state`), the three decision tables (8, 9, 10), `model_executions` (11), `scan_provider_events` and the audit logs (1, 8). Each optional block is `to_regclass`-guarded, so running it too early silently skips protections. **It must be the last public-schema migration.** |
-| 17 | `storage-rls.sql` | 16, Supabase Storage | Uses `is_household_member()` from 16 (it raises an exception if that is missing). The household object policies cover only `policy-files`; `claim-evidence-files` has no household access. Forces both app buckets private. |
+| 16 | `household-rls.sql` | **all of 1-15** | Enables RLS and policies on every household table. Narrows the evidence tables (a column grant plus a guard trigger that depend on 14's `lifecycle_state`), the three decision tables (8, 9, 10), `model_executions` (11), `scan_provider_events` and the audit logs (1, 8). Each optional block is `to_regclass`-guarded, so running it too early silently skips protections. |
+| 17 | `infrastructure-rls.sql` | **all of 1-16** | For each of the 18 service/operator-only tables in `lib/db/table-inventory.ts` (jobs, dead letters, deletion requests and audit, rate-limit buckets, exports and export audit, storage-cleanup locks and audit, model provenance, the `model_usage` spend ledger, chat job/cache/epoch state, the scan ledger, and the reviewer registry): enables RLS, drops every other policy, installs one always-false policy, and revokes all table and sequence privileges from PUBLIC, `anon` and `authenticated`. Removes `anon` EXECUTE on the SECURITY DEFINER helpers. **It must run after 16, and be re-run whenever 16 is re-run**, because 16's grants would otherwise stand. RLS is deliberately not FORCEd; see §11. |
+| 18 | `storage-rls.sql` | 16, Supabase Storage | Uses `is_household_member()` from 16 (it raises an exception if that is missing). The household object policies cover only `policy-files`; `claim-evidence-files` has no household access. Forces both app buckets private. |
 
-Any later change to 1-15 must be followed by re-running 16 (and then 17).
+Any later change to 1-15 must be followed by re-running 16, then 17 (and then 18).
 
 ## 4. Repeatability and locking
 
@@ -82,6 +83,7 @@ Any later change to 1-15 must be followed by re-running 16 (and then 17).
 | lifecycle.sql | Yes | `ADD COLUMN IF NOT EXISTS` with defaults; CHECK constraints are dropped and re-added. |
 | claim-reviewers.sql | Yes | Uses `DROP ... IF EXISTS` before `CREATE TRIGGER`/`CREATE POLICY`; REVOKEs are idempotent. |
 | household-rls.sql | Yes | Every policy and trigger is dropped and recreated. The shims create roles and `auth.uid()` only if missing. |
+| infrastructure-rls.sql | Yes | Drops and recreates the always-false policy, drops any other policy on those tables, and repeats the REVOKEs. It takes a brief `ACCESS EXCLUSIVE` lock per table for `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` and the policy changes. |
 | storage-rls.sql | Yes | Policies are dropped and recreated; the bucket `UPDATE` is idempotent. |
 
 Pre-flight checks for objects the files expect to replace (informational; a mismatch is not an error, because the files drop and recreate these objects):
@@ -141,13 +143,47 @@ SELECT tgrelid::regclass, tgname FROM pg_trigger WHERE NOT tgisinternal
 -- 5.5 Lifecycle columns exist on evidence.
 SELECT column_name FROM information_schema.columns WHERE table_name='claim_evidence_documents' AND column_name IN ('lifecycle_state','lifecycle_version');
 
--- 5.6 Tables a browser JWT could reach without RLS (review every row).
+-- 5.6 No infrastructure table is reachable by a browser role (expect 0 rows from each).
+WITH infra(t) AS (SELECT unnest(ARRAY['background_jobs','background_job_audit_log','chat_analysis_jobs','chat_history_epochs',
+  'policy_analysis_cache','deletion_requests','deletion_audit_log','rate_limit_buckets','household_exports','household_export_audit_log',
+  'storage_cleanup_locks','storage_cleanup_audit_log','model_executions','model_usage','scan_provider_events',
+  'claim_reviewers','claim_review_assignments','claim_reviewer_audit_log']))
+SELECT t, r FROM infra, unnest(ARRAY['anon','authenticated']) r
+ WHERE to_regclass('public.'||t) IS NOT NULL
+   AND (has_table_privilege(r, 'public.'||t, 'SELECT') OR has_table_privilege(r, 'public.'||t, 'INSERT')
+     OR has_table_privilege(r, 'public.'||t, 'UPDATE') OR has_table_privilege(r, 'public.'||t, 'DELETE')
+     OR has_table_privilege(r, 'public.'||t, 'TRUNCATE'));
+SELECT c.relname FROM pg_class c WHERE c.relnamespace='public'::regnamespace AND c.relname = ANY(ARRAY['background_jobs','deletion_requests',
+  'rate_limit_buckets','household_exports','storage_cleanup_locks','model_usage','claim_reviewers']) AND NOT c.relrowsecurity;
+SELECT tablename, policyname, qual, with_check FROM pg_policies
+ WHERE schemaname='public' AND tablename IN ('background_jobs','background_job_audit_log','chat_analysis_jobs','chat_history_epochs',
+  'policy_analysis_cache','deletion_requests','deletion_audit_log','rate_limit_buckets','household_exports','household_export_audit_log',
+  'storage_cleanup_locks','storage_cleanup_audit_log','model_executions','model_usage','scan_provider_events',
+  'claim_reviewers','claim_review_assignments','claim_reviewer_audit_log')
+   AND (coalesce(qual,'false') <> 'false' OR coalesce(with_check,'false') <> 'false');
+-- Sequences behind those tables:
+SELECT s.relname, r FROM pg_class s, unnest(ARRAY['anon','authenticated']) r
+ WHERE s.relkind='S' AND s.relnamespace='public'::regnamespace
+   AND s.relname IN ('background_job_audit_log_id_seq','deletion_audit_log_id_seq','household_export_audit_log_id_seq','claim_reviewer_audit_log_id_seq')
+   AND has_sequence_privilege(r, s.oid, 'USAGE,SELECT,UPDATE');
+-- SECURITY DEFINER helpers: fixed search_path, not executable by anon (expect 0 rows).
+SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace AND prosecdef
+   AND (NOT coalesce(proconfig::text,'') LIKE '%search_path=%' OR has_function_privilege('anon', oid, 'EXECUTE'));
+
+-- 5.7 Tables a browser JWT can still reach without RLS (review every row).
 SELECT c.relname FROM pg_class c
  WHERE c.relnamespace='public'::regnamespace AND c.relkind='r' AND NOT c.relrowsecurity
    AND has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE');
 ```
 
-Check 5.6 is expected to list some infrastructure tables (for example `background_jobs`, `deletion_requests`, `rate_limit_buckets`, the storage-cleanup and export tables). They carry no RLS in this release and, under Supabase's default grants, are reachable by any signed-in user through the Data API. **Before production**, either restrict the Data API's exposed schemas so `public` is not served, or revoke `authenticated` on those tables. Record which you did. See the abort conditions in section 10.
+Check 5.7 must return **0 rows**. Every household table has RLS from `household-rls.sql`, and every infrastructure table has RLS with no browser privilege from `infrastructure-rls.sql`. A row here means a table exists that is not classified in `lib/db/table-inventory.ts`: stop (§10).
+
+**Server workers still function.** The trusted server connection is the table owner, which non-forced RLS does not apply to, so the queue worker, deletion coordinator, rate limiter, export worker, storage cleanup, scan callback and reviewer CLI are unaffected. After applying, confirm on staging that:
+- `npm run jobs:worker` claims and completes a job;
+- sign-in rate limiting still refuses after its limit;
+- deleting a family member from the app succeeds;
+- a household export completes;
+- `npm run reviewer:admin -- assign ...` succeeds.
 
 ## 6. RLS tests with household, reviewer and service identities
 
@@ -204,6 +240,7 @@ Prefer forward fixes. Roll back only when the application cannot run safely on t
 | File | Rollback |
 |------|----------|
 | storage-rls.sql | Re-create the pre-migration storage policies from `pre_policies.csv`, or, to fail closed, `DROP POLICY household_storage_objects_{select,insert,update,delete} ON storage.objects` (the service role is unaffected). Never make a bucket public. |
+| infrastructure-rls.sql | Do not roll back. It only removes browser privileges and adds an always-false policy; no data is changed or destroyed, and the server connection is unaffected. If a server path unexpectedly fails, fix that path forward. Restoring browser access (re-granting from `pre_table_grants.csv`) reopens the unauthorized paths this migration closes. |
 | household-rls.sql | Re-apply the `household-rls.sql` from the previously deployed commit, then restore grants from `pre_table_grants.csv` and `pre_column_grants.csv`. Note: this re-opens the household write paths that this release closed. Prefer staying on the new file and fixing forward. |
 | claim-reviewers.sql | New tables only: `DROP TABLE claim_reviewer_audit_log, claim_review_assignments, claim_reviewers CASCADE;` is safe only before any reviewer or assignment is recorded. After that, restore from backup instead, because the audit log is append-only by design. |
 | lifecycle.sql | Additive columns and tables. Leave in place; older code ignores them. To remove, restore from backup; do not drop columns by hand while any row is non-`active`. |
@@ -234,8 +271,14 @@ npm run reviewer:admin -- suspend    --user <AUTH_USER_UUID> --reason "<why>" --
 - No confirmed backup or recovery point.
 - Any `psql` error while applying a file. The file's own transaction has rolled back; do not re-run later files.
 - `household-rls.sql` would run before any of files 1-15 has been applied, or any of those files is changed afterwards without re-running it.
+- `infrastructure-rls.sql` would run before `household-rls.sql`, or `household-rls.sql` has been re-applied without re-applying `infrastructure-rls.sql` afterwards.
 - Any check in section 5 differs from its expected result.
-- Check 5.6 lists a table holding household data, or the infrastructure tables it lists are still reachable through the Data API with no recorded mitigation (production only).
+- Check 5.6 returns any row: an authenticated or anonymous browser role still holds a privilege on an infrastructure table, a permissive policy exists on one, a sequence behind one is usable by a browser role, or a SECURITY DEFINER helper is executable by anon.
+- Check 5.7 returns any row (an unclassified table reachable by browser sessions).
 - Any RLS test in section 6 lets a household, another household or a reviewer read or change what it should not, or any service-path check fails.
 - Any bucket in section 7 is public, or a household session can reach `claim-evidence-files` directly.
 - The application was deployed against this database before the migrations finished.
+
+## 11. Why infrastructure RLS is not FORCEd
+
+`infrastructure-rls.sql` enables RLS but does not `FORCE` it. The application's server connection (`DATABASE_URL`) is the table owner, and it relies on owner bypass, exactly as every other server-only table in this schema already does. Forcing RLS would make those tables inaccessible to the server unless the production role also has `BYPASSRLS`, which is not a documented property of this deployment. Browser roles are excluded twice: they hold no privileges at all on these tables, and the only policy on each is always-false.

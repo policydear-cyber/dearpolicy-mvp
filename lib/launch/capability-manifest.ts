@@ -83,7 +83,7 @@ export type CapabilityCheckType =
   | "ci-api-check"    // a real call to an external CI provider's API
   | "hardcoded";      // no dynamic check exists yet for this capability -- must not be used once one does
 
-/** Verbatim (kebab->snake mapped) ids for the 24 capabilities the launch
+/** Verbatim (kebab->snake mapped) ids for the capabilities the launch
  * gate is required to cover, at minimum, per the launch-hardening spec. */
 export type CapabilityId =
   | "authentication"
@@ -109,7 +109,8 @@ export type CapabilityId =
   | "full_household_e2e_journey"
   | "evaluation_thresholds"
   | "production_build"
-  | "github_ci_status";
+  | "github_ci_status"
+  | "infrastructure_table_protection";
 
 export type CapabilityDefinition = { id: CapabilityId; label: string };
 
@@ -139,6 +140,7 @@ export const REQUIRED_CAPABILITIES: readonly CapabilityDefinition[] = [
   { id: "evaluation_thresholds", label: "Evaluation thresholds" },
   { id: "production_build", label: "Production build" },
   { id: "github_ci_status", label: "GitHub CI status/manual verification state" },
+  { id: "infrastructure_table_protection", label: "Infrastructure-table protection" },
 ];
 
 const REQUIRED_IDS = new Set<CapabilityId>(REQUIRED_CAPABILITIES.map((c) => c.id));
@@ -187,7 +189,7 @@ export type CapabilityResult = {
 };
 
 /**
- * Throws if `results` does not contain EXACTLY the 24 required capabilities,
+ * Throws if `results` does not contain EXACTLY the required capabilities,
  * each exactly once. This is what makes "a forgotten wiring" a hard failure
  * of launch:check itself (it throws and the script exits non-zero) instead
  * of a silently-missing line in the printed report -- the specific bug class

@@ -242,14 +242,41 @@ function testHardcodedVerifiersCanNoLongerExistUndetected() {
   console.log("  [structural guard] all 6 previously-hardcoded verifiers still contain a real dynamic-inspection call in their own source -- none has silently regressed back to a static report().");
 }
 
+function testInfrastructureTableProtectionIsSensitiveToTheRealMigrations() {
+  // Healthy baseline: every table classified, sql/infrastructure-rls.sql
+  // enforces the inventory, nothing opens an infrastructure table to a
+  // browser role, and the permissions suite is wired into CI.
+  const before = statusOf(runOnly("infrastructure_table_protection"), "infrastructure_table_protection");
+  assert.equal(before, "ready", `expected healthy baseline ready, got ${before}`);
+  const sabotages = [
+    ["a new, unclassified table", "sql/rate-limit.sql", "CREATE TABLE IF NOT EXISTS rate_limit_buckets (", "CREATE TABLE IF NOT EXISTS unclassified_probe (id int);\nCREATE TABLE IF NOT EXISTS rate_limit_buckets (", /unclassified table/],
+    ["RLS no longer enabled", "sql/infrastructure-rls.sql", "    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);\n", "", /enable RLS/],
+    ["the authenticated revoke removed", "sql/infrastructure-rls.sql", "      EXECUTE format('REVOKE ALL ON public.%I FROM authenticated', t);\n", "", /revoke table privileges from authenticated/],
+    ["a permissive authenticated policy added", "sql/background-jobs.sql", "CREATE TABLE IF NOT EXISTS background_jobs (", "CREATE POLICY probe_open ON public.background_jobs FOR SELECT TO authenticated USING (true);\nCREATE TABLE IF NOT EXISTS background_jobs (", /permissive policy probe_open/],
+    ["the CI step removed", ".github/workflows/ci.yml", "        run: npm run security:infrastructure-tables-test\n", "", /CI does not run npm run security:infrastructure-tables-test/],
+  ];
+  for (const [label, file, find, replaceWith, reason] of sabotages) {
+    sabotageRunRestore(file, find, replaceWith, () => {
+      const item = runOnly("infrastructure_table_protection").find((r) => r.id === "infrastructure_table_protection");
+      assert.equal(item.status, "blocked_by_code", `${label} must flip infrastructure_table_protection to blocked_by_code, got ${item.status}`);
+      assert.match(item.blockingReason, reason, `${label} must be named in the blocking reason, got: ${item.blockingReason}`);
+    });
+    console.log(`  [infrastructure_table_protection] sabotage (${label}) -> blocked_by_code naming it; restored.`);
+  }
+  const after = statusOf(runOnly("infrastructure_table_protection"), "infrastructure_table_protection");
+  assert.equal(after, "ready", `status must flip back to ready after every restore, got ${after}`);
+  cases++;
+}
+
 function main() {
   testMalwareScanningConfigurationIsSensitiveToTheRealRegistry();
   testRedactionVerificationIsSensitiveToTheRealRedactionEngine();
   testModelPromptSchemaGovernanceIsSensitiveToTheRealChokepointWiring();
+  testInfrastructureTableProtectionIsSensitiveToTheRealMigrations();
   testHardcodedVerifiersCanNoLongerExistUndetected();
 
   console.log(
-    `\nlaunch-check verifier regressions passed: ${cases} cases (3 real sabotage-and-restore cycles against the VERIFIER ITSELF -- ` +
+    `\nlaunch-check verifier regressions passed: ${cases} cases (real sabotage-and-restore cycles against the VERIFIER ITSELF -- infrastructure_table_protection (5 sabotages), ` +
       "malware_scanning_configuration, redaction_verification, and model_prompt_schema_governance each proven to flip STATUS under a real " +
       "production-file sabotage (the last also proven to name the specific sabotaged chokepoint in its blocking reason) and flip back after " +
       "an exact byte-restore -- plus a structural guard confirming none of the 6 previously-hardcoded verifiers has silently regressed back " +

@@ -27,7 +27,7 @@ function fixtureResults(overrideStatus?: Partial<Record<string, CapabilityResult
 }
 
 function testCapabilityManifest() {
-  // Exactly the 24 required capabilities, each once: must not throw.
+  // Exactly the required capabilities, each once: must not throw.
   assert.doesNotThrow(() => assertManifestComplete(fixtureResults()), "a complete, non-duplicated manifest must pass");
 
   // Missing one capability entirely.
@@ -40,7 +40,7 @@ function testCapabilityManifest() {
   duplicated.push({ ...duplicated[0] });
   assert.throws(() => assertManifestComplete(duplicated), /duplicated:/, "reporting the same capability twice must throw");
 
-  // An unknown capability id that isn't part of the required 24.
+  // An unknown capability id that isn't part of the required list.
   const withUnknown = fixtureResults();
   withUnknown.push({ ...withUnknown[0], id: "not_a_real_capability" as CapabilityResult["id"], label: "bogus" });
   assert.throws(() => assertManifestComplete(withUnknown), /unknown id/, "an unrecognized capability id must throw, not be silently accepted");
@@ -89,7 +89,7 @@ function testCapabilityManifest() {
 
   console.log(
     "capability-manifest regressions passed: assertManifestComplete() rejects a missing, duplicated, or unknown capability id and accepts " +
-      "exactly the required 24; summarizeManifest() counts every status bucket accurately, including a manifest honestly reporting Priority " +
+      "exactly the required list; summarizeManifest() counts every status bucket accurately, including a manifest honestly reporting Priority " +
       "4/6-10 gaps as blocked_by_code.",
   );
 }
