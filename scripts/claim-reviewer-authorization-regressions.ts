@@ -482,7 +482,7 @@ async function main() {
       assert.equal(res.status, 200);
       const after = await householdStatuses();
       assert.equal(after[docA1b], "more_evidence_required");
-      assert.equal(after[docA1], "in_review", "a newer decision for the same policy scope supersedes docA1's; the claim is still assigned");
+      assert.equal(after[docA1], "reviewed", "a decision on another document never changes this document's status");
       asUser(reviewer);
     });
 
@@ -500,7 +500,7 @@ async function main() {
       assert.equal((await assignmentGet(claimAssignment)).status, 404);
       const statuses = await householdStatuses(claimA1);
       assert.equal(statuses[docA1b], "more_evidence_required", "a past decision stays; revocation removes only access");
-      assert.equal(statuses[docA1], "awaiting_assignment");
+      assert.equal(statuses[docA1], "reviewed", "a completed decision survives revocation");
     });
 
     await testAsync("19. reviewer and household wording never promises approval or payment", async () => {

@@ -23,6 +23,7 @@ import type { ClaimAssessmentItem, ClaimEvidence, ClaimFacts, ClaimQuestion } fr
 import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { calculateCriticalIllness, type CIEvidenceRef, type CIFormula, type CIInput } from "./calculators/critical-illness";
 import type { CIDefinitionMatch } from "./calculators/evidence";
+import { selectApplicableDecision } from "./evidence/decision-selection";
 
 function amountText(amount: number | null, currency = "SGD") { return amount == null ? null : formatMoney(amount, currency); }
 
@@ -41,14 +42,14 @@ function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g,
  * independent re-check of every one of these same fields. */
 function applicableCIDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, rule: CIRuleEvidence, sessionId: string | null): CIDefinitionMatch | null {
   if (sessionId == null) return null;
-  return facts.ciDefinitionMatches.find((m) =>
+  return selectApplicableDecision(facts.ciDefinitionMatches.filter((m) =>
     m.contractId === coverage.policyId &&
     m.familyMemberId === coverage.familyMemberId &&
     m.claimEventId === sessionId &&
     (m.coverageId == null || m.coverageId === coverage.id) &&
     m.benefitCode === rule.benefitCode &&
     m.illnessName === rule.illnessName,
-  ) ?? null;
+  ), rule.citation);
 }
 
 const NEEDS_REVIEW_REASON: Record<string, string> = {

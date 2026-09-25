@@ -159,3 +159,10 @@ CREATE INDEX IF NOT EXISTS idx_claim_evidence_audit_occurred
 -- therefore fails closed.
 ALTER TABLE claim_evidence_extractions ADD COLUMN IF NOT EXISTS model_execution jsonb;
 ALTER TABLE claim_cause_definition_matches ADD COLUMN IF NOT EXISTS evidence_provenance jsonb;
+
+-- Reviewer decisions are identified per evidence document (see
+-- lib/claims/evidence/decision-selection.ts): additive lookup index for a
+-- document's active decisions. Never unique -- historical duplicates are
+-- left in place and ignored (fail-closed) when read, never rewritten.
+CREATE INDEX IF NOT EXISTS claim_cause_definition_matches_active_document
+  ON claim_cause_definition_matches(account_id, claim_session_id, evidence_document_id) WHERE superseded_at IS NULL;

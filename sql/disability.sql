@@ -51,3 +51,10 @@ CREATE INDEX IF NOT EXISTS idx_disability_matches_coverage
 -- Evidence model-execution provenance snapshot for a reviewed match; see
 -- sql/claim-evidence.sql. NULL on older rows, which fails closed.
 ALTER TABLE claim_disability_definition_matches ADD COLUMN IF NOT EXISTS evidence_provenance jsonb;
+
+-- Reviewer decisions are identified per evidence document (see
+-- lib/claims/evidence/decision-selection.ts): additive lookup index for a
+-- document's active decisions. Never unique -- historical duplicates are
+-- left in place and ignored (fail-closed) when read, never rewritten.
+CREATE INDEX IF NOT EXISTS claim_disability_definition_matches_active_document
+  ON claim_disability_definition_matches(account_id, claim_session_id, evidence_document_id) WHERE superseded_at IS NULL;

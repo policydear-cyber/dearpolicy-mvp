@@ -11,9 +11,12 @@
 import type { DisabilityDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import { loadActiveDisabilityDefinitionMatches, loadEvidenceProvenanceContext } from "./store";
 import { resolveMatchProvenance } from "./extraction-provenance";
+import { activeDecisionsWithoutAmbiguity } from "./decision-selection";
 
 export async function loadDisabilityDefinitionMatchesForFacts(accountId: string, familyMemberId: string, claimSessionId: string): Promise<DisabilityDefinitionMatch[]> {
-  const rows = await loadActiveDisabilityDefinitionMatches(accountId, familyMemberId, claimSessionId);
+  // Ambiguous historical duplicates for one review subject are dropped, never
+  // arbitrarily resolved -- see ./decision-selection.ts.
+  const rows = activeDecisionsWithoutAmbiguity(await loadActiveDisabilityDefinitionMatches(accountId, familyMemberId, claimSessionId));
   // Provenance is re-bound to the CURRENT document state on every read --
   // see resolveMatchProvenance(). No rows means no extra query.
   const contexts = await loadEvidenceProvenanceContext(accountId, rows.map((row) => row.evidence_document_id));

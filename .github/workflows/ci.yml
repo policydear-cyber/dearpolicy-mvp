@@ -58,6 +58,9 @@ jobs:
       - name: Claim-reviewer authorization suite (internal reviewer role, assignments, match routes; real routes, PGlite)
         run: npm run claims:reviewer-authorization-test
 
+      - name: Reviewer decision identity suite (per-document supersession, fail-closed selection, per-document status; real routes, PGlite)
+        run: npm run claims:decision-identity-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

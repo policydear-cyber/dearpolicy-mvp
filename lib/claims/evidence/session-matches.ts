@@ -15,9 +15,12 @@
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import { loadActiveCauseDefinitionMatches, loadEvidenceProvenanceContext } from "./store";
 import { resolveMatchProvenance } from "./extraction-provenance";
+import { activeDecisionsWithoutAmbiguity } from "./decision-selection";
 
 export async function loadCauseDefinitionMatchesForFacts(accountId: string, familyMemberId: string, claimSessionId: string): Promise<CauseDefinitionMatch[]> {
-  const rows = await loadActiveCauseDefinitionMatches(accountId, familyMemberId, claimSessionId);
+  // Ambiguous historical duplicates for one review subject are dropped, never
+  // arbitrarily resolved -- see ./decision-selection.ts.
+  const rows = activeDecisionsWithoutAmbiguity(await loadActiveCauseDefinitionMatches(accountId, familyMemberId, claimSessionId));
   // Provenance is re-bound to the CURRENT document state on every read --
   // see resolveMatchProvenance(). No rows means no extra query.
   const contexts = await loadEvidenceProvenanceContext(accountId, rows.map((row) => row.evidence_document_id));

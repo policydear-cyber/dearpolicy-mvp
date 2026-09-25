@@ -43,6 +43,7 @@ import type { TravelDeathRule, TravelEvidenceGap, TravelMedicalRule, TravelRuleE
 import { calculateMedicalReimbursement, type BilledExpenseItem, type MedicalReimbursementEvidenceRef } from "./calculators/medical-reimbursement";
 import { calculateAccidentalDeath, type DeathBenefitEvidenceRef } from "./calculators/accidental-death";
 import type { CauseDefinitionMatch } from "./calculators/evidence";
+import { selectApplicableDecision } from "./evidence/decision-selection";
 import { evaluateAggregateEvidenceAuthority } from "./evidence-authority";
 
 export type TravelRuleSet = { rules: TravelRuleEvidence[]; gaps: TravelEvidenceGap[] };
@@ -68,14 +69,14 @@ function ownershipEvidenceRef(coverage: OwnedCoverage) {
  * `claim_cause_definition_matches` table as a Group Personal Accident
  * accidental-death benefit, since `CauseDefinitionMatch` is scoped by
  * contractId/coverageId, never by product. */
-function applicableCauseDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, sessionId: string | null): CauseDefinitionMatch | null {
+function applicableCauseDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, sessionId: string | null, currentDefinition: unknown): CauseDefinitionMatch | null {
   if (sessionId == null) return null;
-  return facts.causeDefinitionMatches.find(m =>
+  return selectApplicableDecision(facts.causeDefinitionMatches.filter(m =>
     m.contractId === coverage.policyId &&
     m.familyMemberId === coverage.familyMemberId &&
     m.claimEventId === sessionId &&
     (m.coverageId == null || m.coverageId === coverage.id),
-  ) ?? null;
+  ), currentDefinition);
 }
 
 /** null = cannot yet tell (a date is missing/unparseable); true/false =
@@ -189,7 +190,7 @@ function assessTravelDeathBenefit(rule: TravelDeathRule, coverage: OwnedCoverage
     deathConfirmed: facts.death === true, dateOfDeath: deathDate, policyEffectiveDate: coverage.effectiveDate,
     sumInsured: null, currency: rule.currency, formula: { kind: "fixed", amount: rule.amount, evidence: evidenceRef },
     ruleEvidence: evidenceRef, ownershipEvidence: ownershipEvidenceRef(coverage), accidentalDeathDefinitionEvidence: evidenceRef,
-    causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId),
+    causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, evidenceRef),
   });
 
   if (calc.status === "blocked") {

@@ -5,6 +5,7 @@ import type { DeathEvidenceGap, DeathRuleEvidence } from "./death-evidence";
 import { calculateDeathBenefit, type DeathBenefitEvidenceRef, type DeathBenefitFormula } from "./calculators/death-benefit";
 import { calculateAccidentalDeath } from "./calculators/accidental-death";
 import type { CauseDefinitionMatch } from "./calculators/evidence";
+import { selectApplicableDecision } from "./evidence/decision-selection";
 import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { assessCriticalIllness, nextCIQuestion } from "./ci-rules";
 import { assessMedicalClaim, nextMedicalQuestion, type MedicalRuleEvidence } from "./medical-rules";
@@ -28,14 +29,17 @@ function toEvidenceRef(c: ClaimEvidence): DeathBenefitEvidenceRef {
  * merely reviewed a document without an explicitly confirmed match --
  * `causeDefinitionMatches` is never populated from chat text or AI output
  * in this slice, since no document-review pipeline exists yet to do so. */
-function applicableCauseDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, sessionId: string | null): CauseDefinitionMatch | null {
+function applicableCauseDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage, sessionId: string | null, currentDefinition: unknown): CauseDefinitionMatch | null {
   if (sessionId == null) return null;
-  return facts.causeDefinitionMatches.find(m =>
+  // Every active decision for this exact scope, one per evidence document,
+  // reduced to a single one deterministically and fail-closed -- see
+  // lib/claims/evidence/decision-selection.ts.
+  return selectApplicableDecision(facts.causeDefinitionMatches.filter(m =>
     m.contractId === coverage.policyId &&
     m.familyMemberId === coverage.familyMemberId &&
     m.claimEventId === sessionId &&
     (m.coverageId == null || m.coverageId === coverage.id),
-  ) ?? null;
+  ), currentDefinition);
 }
 
 function hasProduct(coverages: OwnedCoverage[], product: string) {
@@ -256,7 +260,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         ownershipEvidence,
       };
       const calc = product === "group personal accident"
-        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId) })
+        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, evidenceRef) })
         : calculateDeathBenefit(sharedInput);
 
       if (calc.status === "blocked") {

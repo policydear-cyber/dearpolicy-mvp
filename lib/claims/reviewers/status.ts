@@ -20,21 +20,26 @@ export async function loadHouseholdReviewStatuses(accountId: string, claimSessio
   await ensureCriticalIllnessSchema();
   await ensureDisabilitySchema();
 
-  // The most recent ACTIVE (not superseded) decision per document decides.
+  // Per document, from that document's OWN active decisions only -- a
+  // decision on another document never changes this one's status. Settled
+  // only when every active decision on it (one per policy/benefit it was
+  // reviewed against) is a settled result; any open one asks for more.
   const decisions = await query<{ evidence_document_id: string; result: string }>(
-    `SELECT DISTINCT ON (evidence_document_id) evidence_document_id, result FROM (
-        SELECT evidence_document_id::text AS evidence_document_id, result, reviewed_at FROM claim_cause_definition_matches
-         WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
-        UNION ALL
-        SELECT evidence_document_id::text, result, reviewed_at FROM claim_ci_definition_matches
-         WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
-        UNION ALL
-        SELECT evidence_document_id::text, result, reviewed_at FROM claim_disability_definition_matches
-         WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
-     ) decisions ORDER BY evidence_document_id, reviewed_at DESC`,
+    `SELECT evidence_document_id::text AS evidence_document_id, result FROM claim_cause_definition_matches
+      WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
+     UNION ALL
+     SELECT evidence_document_id::text, result FROM claim_ci_definition_matches
+      WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
+     UNION ALL
+     SELECT evidence_document_id::text, result FROM claim_disability_definition_matches
+      WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])`,
     [accountId, claimSessionId, documentIds],
   );
-  for (const d of decisions.rows) statuses.set(d.evidence_document_id, SETTLED_RESULTS.has(d.result) ? "reviewed" : "more_evidence_required");
+  for (const d of decisions.rows) {
+    const settled = SETTLED_RESULTS.has(d.result);
+    if (!settled) statuses.set(d.evidence_document_id, "more_evidence_required");
+    else if (!statuses.has(d.evidence_document_id)) statuses.set(d.evidence_document_id, "reviewed");
+  }
 
   const assignments = await query<{ evidence_document_id: string | null }>(
     `SELECT a.evidence_document_id::text AS evidence_document_id

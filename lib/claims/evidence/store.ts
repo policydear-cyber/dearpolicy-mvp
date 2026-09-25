@@ -356,10 +356,18 @@ export async function correctExtraction(args: { accountId: string; extractionId:
 const MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,
   cause_evidence,definition_evidence,result,reviewed_at::text,reviewed_by,reason,superseded_at::text,superseded_reason,evidence_provenance,created_at::text`;
 
+/** Serialises concurrent decisions on the same review subject so two
+ * reviewers can never both leave an active decision for it. A transaction-
+ * scoped advisory lock: released automatically at COMMIT/ROLLBACK. */
+async function lockReviewSubject(client: { query: (text: string, params?: unknown[]) => Promise<unknown> }, parts: (string | null)[]) {
+  await client.query("SELECT pg_advisory_xact_lock(73499209, hashtext($1))", [parts.map((p) => p ?? "").join("|")]);
+}
+
 /** Records a reviewer's (or a deterministic rule's) finalised decision.
  * Never called from chat text or model output -- see
  * lib/claims/evidence/matches.ts, the only caller. Any prior ACTIVE match
- * for the exact same (family member, claim, contract, coverage) scope is
+ * for the exact same review subject (family member, claim, contract,
+ * coverage, evidence document and definition citation) is
  * superseded first, in the same transaction, so there is never more than
  * one active match per scope and the old one cannot keep being read
  * alongside the new one. */
@@ -378,10 +386,15 @@ export async function recordCauseDefinitionMatch(args: {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await lockReviewSubject(client, ["cause", args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId]);
+    // Supersedes ONLY the identical review subject -- same document and same
+    // definition citation (see ./decision-selection.ts). A decision on
+    // another document, or against other wording, is never touched.
     await client.query(
       `UPDATE claim_cause_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
-        WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5 AND superseded_at IS NULL`,
-      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId],
+        WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
+          AND evidence_document_id=$6 AND definition_evidence=$7::jsonb AND superseded_at IS NULL`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId, JSON.stringify(args.definitionEvidence)],
     );
     const inserted = await client.query<ClaimCauseDefinitionMatchRow>(
       `INSERT INTO claim_cause_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,cause_evidence,definition_evidence,result,reviewed_by,reason,evidence_provenance)
@@ -423,6 +436,7 @@ const CI_MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_session_id,
  * called from chat text or model output -- see
  * lib/claims/evidence/ci-matches.ts, the only caller. Any prior ACTIVE
  * match for the exact same (family member, claim, contract, coverage,
+ * evidence document, definition citation,
  * benefit code, illness name) scope is superseded first, in the same
  * transaction, so a match for one illness/stage/benefit can never keep
  * being read alongside a corrected one for that exact same slot -- and,
@@ -444,11 +458,13 @@ export async function recordCIDefinitionMatch(args: {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await lockReviewSubject(client, ["ci", args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId, args.benefitCode, args.illnessName]);
     await client.query(
       `UPDATE claim_ci_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
         WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
-          AND benefit_code=$6 AND illness_name=$7 AND superseded_at IS NULL`,
-      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.illnessName],
+          AND benefit_code=$6 AND illness_name=$7 AND evidence_document_id=$8 AND definition_evidence=$9::jsonb AND superseded_at IS NULL`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.illnessName,
+        args.evidenceDocumentId, JSON.stringify(args.definitionEvidence)],
     );
     const inserted = await client.query<ClaimCIDefinitionMatchRow>(
       `INSERT INTO claim_ci_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,illness_name,medical_evidence,definition_evidence,result,reviewed_by,reason,evidence_provenance)
@@ -491,6 +507,7 @@ const DISABILITY_MATCH_COLUMNS = `id::text,account_id,family_member_id,claim_ses
  * comment). Never called from chat text or model output -- see
  * lib/claims/evidence/disability-matches.ts, the only caller. Any prior
  * ACTIVE match for the exact same (family member, claim, contract,
+ * evidence document, definition citation,
  * coverage, benefit code, match key) scope is superseded first, in the
  * same transaction, exactly mirroring recordCIDefinitionMatch() above. */
 export async function recordDisabilityDefinitionMatch(args: {
@@ -508,11 +525,13 @@ export async function recordDisabilityDefinitionMatch(args: {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await lockReviewSubject(client, ["disability", args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId, args.benefitCode, args.matchKey]);
     await client.query(
       `UPDATE claim_disability_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
         WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
-          AND benefit_code=$6 AND match_key=$7 AND superseded_at IS NULL`,
-      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.matchKey],
+          AND benefit_code=$6 AND match_key=$7 AND evidence_document_id=$8 AND definition_evidence=$9::jsonb AND superseded_at IS NULL`,
+      [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.matchKey,
+        args.evidenceDocumentId, JSON.stringify(args.definitionEvidence)],
     );
     const inserted = await client.query<ClaimDisabilityDefinitionMatchRow>(
       `INSERT INTO claim_disability_definition_matches(account_id,family_member_id,claim_session_id,contract_id,coverage_id,evidence_document_id,benefit_code,match_key,medical_evidence,definition_evidence,result,reviewed_by,reason,evidence_provenance)

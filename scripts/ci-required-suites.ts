@@ -50,6 +50,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "claims:evidence-picker-test",
   "claims:evidence-review-workflow-test",
   "claims:reviewer-authorization-test",
+  "claims:decision-identity-test",
   "security:rollout-staleness-test",
   "e2e:full-household-test",
   "security:malware-scanning-virustotal-test",
