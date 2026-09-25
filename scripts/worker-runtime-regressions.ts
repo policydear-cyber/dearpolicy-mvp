@@ -222,8 +222,8 @@ async function main() {
     await testAsync("authorizeJobRunner fails closed without a secret and rejects anything but the exact bearer token", async () => {
       const secret = "s".repeat(40);
       assert.deepEqual(authorizeJobRunner(`Bearer ${secret}`, {} as NodeJS.ProcessEnv), { ok: false, status: 503 }, "no CRON_SECRET -> refuse every call");
-      assert.deepEqual(authorizeJobRunner("Bearer short", { CRON_SECRET: "short" } as NodeJS.ProcessEnv), { ok: false, status: 503 }, "too-short secret -> treated as unconfigured");
-      const env = { CRON_SECRET: secret } as NodeJS.ProcessEnv;
+      assert.deepEqual(authorizeJobRunner("Bearer short", { NODE_ENV: "test", CRON_SECRET: "short" } as NodeJS.ProcessEnv), { ok: false, status: 503 }, "too-short secret -> treated as unconfigured");
+      const env = { NODE_ENV: "test", CRON_SECRET: secret } as NodeJS.ProcessEnv;
       assert.deepEqual(authorizeJobRunner(null, env), { ok: false, status: 401 });
       assert.deepEqual(authorizeJobRunner(secret, env), { ok: false, status: 401 }, "missing Bearer prefix");
       assert.deepEqual(authorizeJobRunner(`Bearer ${"t".repeat(40)}`, env), { ok: false, status: 401 }, "same length, wrong secret");
