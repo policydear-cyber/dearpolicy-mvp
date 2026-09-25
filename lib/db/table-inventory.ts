@@ -49,12 +49,12 @@ export const TABLE_INVENTORY: Record<string, TableInventoryEntry> = {
   household_members: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: ["household_members_select", "household_members_insert", "household_members_update", "household_members_delete"], browserGrantsRequired: true, codePath: "lib/household/repo.ts, lib/auth/request-context.ts" },
   household_invitations: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: ["household_invitations_select", "household_invitations_insert", "household_invitations_update", "household_invitations_delete"], browserGrantsRequired: true, codePath: "lib/household/repo.ts (owner-scoped; acceptance runs on the service connection)" },
   family_members: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "app/api/family/*, lib/lifecycle/coordinator.ts" },
-  policies: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "app/api/policies/*, lib/rag/ingest.ts" },
+  policies: { class: "household_writable", authenticated: ["select", "update"], policies: ["household_member_select", "household_member_update", "trigger guard_household_policy_update", "column grant lifecycle_state/lifecycle_version/updated_at"], browserGrantsRequired: true, codePath: "app/api/policies/* after RLS-scoped authorization, writes on the service connection; lib/rag/ingest.ts; lib/policies/quarantine/store.ts; lifecycle move via lib/lifecycle/coordinator.ts (see POLICY_STATE_COLUMNS)" },
   policy_members: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "app/api/policies/*, app/api/family/route.ts" },
   policy_detected_people: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "app/api/policies/*" },
   policy_pages: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "lib/rag/ingest.ts" },
   policy_chunks: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "lib/rag/ingest.ts, lib/chat" },
-  policy_coverages: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "app/api/coverage/route.ts, lib/coverage/facts.ts" },
+  policy_coverages: { class: "household_readable", authenticated: ["select"], policies: ["household_member_select"], browserGrantsRequired: true, codePath: "written only by lib/rag/ingest.ts and lib/policies/linking.ts (service); read by app/api/coverage/route.ts (RLS) and lib/coverage/facts.ts" },
   premium_records: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "app/api/premiums/route.ts" },
   chat_messages: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "lib/chat/store.ts" },
   chat_conversations: { class: "household_writable", authenticated: ["select", "insert", "update", "delete"], policies: MEMBER_CRUD, browserGrantsRequired: true, codePath: "lib/chat/store.ts" },
@@ -126,3 +126,56 @@ export function inventoryDrift(discovered: readonly string[]): { unclassified: s
     stale: [...known].filter((t) => !found.has(t)).sort(),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Column-level mutability for tables whose rows households own but whose
+// columns are mostly server-derived. "household_writable" on a table never
+// means every column is writable: BROWSER_WRITABLE_COLUMNS is the complete
+// list of columns a browser role may set directly (and only through the
+// named route); every other column is written only by the trusted server.
+// scripts/policy-state-protection-regressions.ts fails CI if a live column is
+// unclassified here; lib/launch/policy-state-protection.ts fails
+// launch:check if the migration source grants more than this.
+// ---------------------------------------------------------------------------
+export const COLUMN_CLASSES = [
+  "household_supplied_at_creation", // value comes from the household's upload request, written by the server
+  "household_editable", // the household may change it directly
+  "ownership_identity", // who/what the row belongs to; immutable after creation
+  "server_processing", // processing/indexing, storage/version identity, supersession, failures
+  "security_quarantine", // malware-scan / quarantine state
+  "extraction_provenance", // values read from the document by the extraction pipeline
+  "verification", // confirmation / verification / review flags that unlock trust
+  "lifecycle_route_only", // changed only by the lifecycle deletion route (guarded)
+] as const;
+export type ColumnClass = (typeof COLUMN_CLASSES)[number];
+
+export const POLICY_STATE_COLUMNS: Record<"policies" | "policy_coverages", Record<string, ColumnClass>> = {
+  policies: {
+    id: "ownership_identity", account_id: "ownership_identity", family_member_id: "ownership_identity", created_at: "ownership_identity",
+    original_filename: "household_supplied_at_creation",
+    quarantine_status: "security_quarantine", scan_provider: "security_quarantine", scan_result_detail: "security_quarantine", scan_event_id: "security_quarantine", scanned_at: "security_quarantine",
+    status: "server_processing", processing_status: "server_processing", processing_stage: "server_processing", processing_progress: "server_processing",
+    processing_message: "server_processing", processing_started_at: "server_processing", processing_completed_at: "server_processing", processing_error: "server_processing",
+    page_count: "server_processing", benefits_indexed_at: "server_processing", conditions_indexed_at: "server_processing", ledger_read_at: "server_processing",
+    storage_key: "server_processing", file_hash: "server_processing", supersedes_id: "server_processing", superseded_at: "server_processing",
+    insurer: "extraction_provenance", product_name: "extraction_provenance", policy_number: "extraction_provenance", policy_type: "extraction_provenance",
+    document_role: "extraction_provenance", group_policy_number: "extraction_provenance", document_authority: "extraction_provenance",
+    document_authority_label: "extraction_provenance", extracted_json: "extraction_provenance", effective_date: "extraction_provenance",
+    renewal_or_expiry_date: "extraction_provenance",
+    personal_coverage_confirmed: "verification", needs_review: "verification", review_reason: "verification",
+    lifecycle_state: "lifecycle_route_only", lifecycle_version: "lifecycle_route_only", updated_at: "lifecycle_route_only",
+  },
+  policy_coverages: {
+    id: "ownership_identity", account_id: "ownership_identity", policy_id: "ownership_identity", family_member_id: "ownership_identity", created_at: "ownership_identity",
+    category: "extraction_provenance", amount: "extraction_provenance", currency: "extraction_provenance", product_name: "extraction_provenance",
+    notes: "extraction_provenance", source_page: "extraction_provenance", authority: "extraction_provenance", evidence_text: "extraction_provenance",
+    confirmed: "verification", evidence_verified: "verification",
+  },
+};
+
+/** Complete list of columns a browser role may write directly, per table,
+ * with the only route that does it. Absent operations are server-only. */
+export const BROWSER_WRITABLE_COLUMNS: Record<"policies" | "policy_coverages", { insert: readonly string[]; update: readonly string[]; delete: boolean; route: string }> = {
+  policies: { insert: [], update: ["lifecycle_state", "lifecycle_version", "updated_at"], delete: false, route: "lib/lifecycle/coordinator.ts policy deletion (active -> pending_deletion only; trigger guard_household_policy_update)" },
+  policy_coverages: { insert: [], update: [], delete: false, route: "none: every write is server-side (lib/rag/ingest.ts, lib/policies/linking.ts)" },
+};
