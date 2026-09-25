@@ -1,3 +1,4 @@
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 import assert from "node:assert/strict";
 import fixture from "./fixtures/singlife-death-wording.json";
 import { canonicalDeathInsurer, findDeathRule, resolveDeathEvidence, type DeathRuleEvidence, type DeathWordingPage } from "@/lib/claims/death-evidence";
@@ -26,7 +27,7 @@ export async function runDeathEvidenceRegressions() {
     const rule=rules.find(r=>r.benefit==="gpa-accidental-death")!;
     return {familyMemberId:"desmond",claimEventId:SESSION_ID,contractId:"personal",coverageId:"gpa",
       causeEvidence:{documentId:"police-report-1",documentType:"police_report",pageStart:1,pageEnd:1,familyMemberId:"desmond",claimEventId:SESSION_ID},
-      definitionEvidence:{policyId:rule.citation.policyId,chunkId:rule.citation.chunkId,pageStart:rule.citation.pageStart,pageEnd:rule.citation.pageEnd},
+      definitionEvidence:{policyId:rule.citation.policyId,chunkId:rule.citation.chunkId,pageStart:rule.citation.pageStart,pageEnd:rule.citation.pageEnd,wordingHash:definitionWordingHash(rule.quote)},
       result:"matches",reviewedAt:"2026-09-14",provenance:verifiedEvidenceProvenance("police-report-1")};
   };
   test("Actual Certificate Part 2 promises pay the full Sum Insured without 100%",()=>{

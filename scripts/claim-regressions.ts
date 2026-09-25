@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 import { extractClaimFacts } from "@/lib/claims/facts";
 import { resolveClaimDate } from "@/lib/claims/dates";
 import { resolveClaimPerson, type ClaimPerson } from "@/lib/claims/person";
@@ -29,7 +30,7 @@ export async function runClaimRegressions() {
   const confirmedGpaMatch = (): CauseDefinitionMatch => ({
     familyMemberId: "charmaine", claimEventId: SESSION_ID, contractId: "certificate", coverageId: "gpa",
     causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
-    definitionEvidence: { policyId: citation.policyId, chunkId: citation.chunkId, pageStart: citation.pageStart, pageEnd: citation.pageEnd },
+    definitionEvidence: { policyId: citation.policyId, chunkId: citation.chunkId, pageStart: citation.pageStart, pageEnd: citation.pageEnd, wordingHash: definitionWordingHash(deathRules[1].quote) },
     result: "matches", reviewedAt: "2026-09-14",
     provenance: verifiedEvidenceProvenance("police-report-1"),
   });

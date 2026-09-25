@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 import { extractClaimFacts } from "@/lib/claims/facts";
 import { assessClaim, nextClaimQuestion } from "@/lib/claims/rules";
 import type { DeathRuleEvidence } from "@/lib/claims/death-evidence";
@@ -36,7 +37,7 @@ export async function runDeathBenefitContextualRegressions() {
     return {
       familyMemberId: "charmaine", claimEventId: SESSION_ID, contractId: "certificate", coverageId: "gpa",
       causeEvidence: { documentId: "police-report-1", documentType: "police_report", pageStart: 1, pageEnd: 1, familyMemberId: "charmaine", claimEventId: SESSION_ID },
-      definitionEvidence: { policyId: rule.citation.policyId, chunkId: rule.citation.chunkId, pageStart: rule.citation.pageStart, pageEnd: rule.citation.pageEnd },
+      definitionEvidence: { policyId: rule.citation.policyId, chunkId: rule.citation.chunkId, pageStart: rule.citation.pageStart, pageEnd: rule.citation.pageEnd, wordingHash: definitionWordingHash(rule.quote) },
       result: "matches", reviewedAt: "2026-09-14",
       provenance: verifiedEvidenceProvenance("police-report-1"),
     };
