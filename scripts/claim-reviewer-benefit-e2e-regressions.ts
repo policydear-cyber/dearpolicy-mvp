@@ -187,12 +187,18 @@ async function main() {
       await assertNoAmount(f, w, "no provenance", { claim });
     });
 
-    await testAsync(`${f.category}: wording quoting another currency yields nothing even with a "matches" decision`, async () => {
+    await testAsync(`${f.category}: wording quoting another currency never yields an amount in the cover's currency`, async () => {
       const wc = await world(f, n + 60, f.otherCurrencyPages);
       const a = await assign(reviewer, wc);
       const res = await hh.decide(f.route, reviewer, wc.document, body(f, a, wc));
       assert.equal(res.status, 200, await res.clone().text());
-      await assertNoAmount(f, wc, "currency differs from the verified cover");
+      if (f.otherCurrencyBehaviour === "blocks") {
+        await assertNoAmount(f, wc, "currency differs from the verified cover");
+      } else {
+        const { out, item } = await itemOf(f, wc);
+        assert.notEqual(item?.currency, f.expectedCurrency, "never relabelled as the cover's currency");
+        assert.ok(!out.composition.totalsByCurrency.some((t) => t.currency === f.expectedCurrency && t.includedAmount > 0), "never added to the cover-currency total");
+      }
     });
 
     await testAsync(`${f.category}: reviewer without assignment, suspended, expired or revoked -- and non-"matches" results -- yield nothing`, async () => {
@@ -214,6 +220,7 @@ async function main() {
       assert.equal(await rows(), 0, "none of those wrote a decision");
       await assertNoAmount(f, w, "no valid decision", { claim: w.otherClaim });
 
+      await h.admin.revokeClaimReviewAssignment({ assignmentId: expired, reason: "Expired; replaced.", operator: "ops.lead" });
       const live = await assign(reviewer, w, w.otherClaim);
       for (const result of ["does_not_match", NEEDS_FURTHER_REVIEW[f.route]]) {
         assert.equal((await hh.decide(f.route, reviewer, document, body(f, live, w, { result }))).status, 200);

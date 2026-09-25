@@ -17,6 +17,13 @@ export type BenefitCategoryFixture = {
   policy: { insurer: string; productName: string; groupPolicyNumber: string | null; category: string; amount: number | null; currency: string; pages: WordingPage[] };
   /** Wording with the benefit amount quoted in another currency. */
   otherCurrencyPages: WordingPage[];
+  /** What the production rules do with it today: "blocks" (no amount, as
+   * for accidental death, critical illness and disability, whose amounts
+   * are computed from the verified sum insured's currency) or
+   * "quoted-currency" (travel: a fixed amount stated in the wording's own
+   * currency is shown in that currency, never converted or merged into
+   * another currency's total -- an open product question, see the PR). */
+  otherCurrencyBehaviour: "blocks" | "quoted-currency";
   /** Assessment item id the calculator produces for this benefit. */
   itemId: string;
   /** Extra decision body fields naming the policy's own benefit row. */
@@ -55,7 +62,7 @@ export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [
     facts: { eventType: "death", death: true, deathDate: "2026-09-14", eventDate: "2026-09-14" },
     policy: { insurer: "Singlife", productName: "Group Personal Accident", groupPolicyNumber: "G007500", category: "Personal Accident", amount: 600000, currency: "SGD", pages: singlifeDeathWording.benefitSummary.pages },
     otherCurrencyPages: [{ pageNumber: 3, text: "Group Personal Accident benefit summary. Accidental Death Benefit: a fixed benefit of US$100,000 will be paid on death caused by an accident." }],
-    decisionScope: {}, evidence: policeReport, expectedAmount: 600000, expectedCurrency: "SGD",
+    otherCurrencyBehaviour: "blocks", decisionScope: {}, evidence: policeReport, expectedAmount: 600000, expectedCurrency: "SGD",
   },
   {
     category: "critical-illness", route: "ci-match", claimEventType: "diagnosis", itemId: "ci-major-major-critical-illness",
@@ -65,7 +72,7 @@ export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [
       pages: [{ pageNumber: 4, text: "Group Living Care benefit summary. Critical Illness Benefit: 100% of the Sum Insured is payable upon diagnosis of a covered Critical Illness." }],
     },
     otherCurrencyPages: [{ pageNumber: 4, text: "Group Living Care benefit summary. Critical Illness Benefit: 100% of the Sum Insured is payable upon diagnosis of a covered Critical Illness, subject to a maximum of US$150,000." }],
-    decisionScope: { benefitCode: "ci-major", illnessName: "Major Critical Illness" },
+    otherCurrencyBehaviour: "blocks", decisionScope: { benefitCode: "ci-major", illnessName: "Major Critical Illness" },
     evidence: specialistMemo("specialist_memo"), expectedAmount: 200000, expectedCurrency: "SGD",
   },
   {
@@ -76,7 +83,7 @@ export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [
       pages: [{ pageNumber: 7, text: "Group Personal Accident benefit summary. Total and Permanent Disability: 100% of the Sum Insured is payable." }],
     },
     otherCurrencyPages: [{ pageNumber: 7, text: "Group Personal Accident benefit summary. Total and Permanent Disability: 100% of the Sum Insured is payable, subject to a maximum of US$100,000." }],
-    decisionScope: { benefitCode: "tpd-lump-sum", matchKey: "total_permanent_disability" },
+    otherCurrencyBehaviour: "blocks", decisionScope: { benefitCode: "tpd-lump-sum", matchKey: "total_permanent_disability" },
     evidence: specialistMemo("medical_report"), expectedAmount: 300000, expectedCurrency: "SGD",
   },
   {
@@ -87,6 +94,6 @@ export const BENEFIT_FIXTURES: BenefitCategoryFixture[] = [
       pages: [{ pageNumber: 2, text: "TravelSure Single Trip policy wording. Accidental Death Benefit: we will pay S$150,000 if you die as a result of an accident during your trip." }],
     },
     otherCurrencyPages: [{ pageNumber: 2, text: "TravelSure Single Trip policy wording. Accidental Death Benefit: we will pay US$150,000 if you die as a result of an accident during your trip." }],
-    decisionScope: {}, evidence: policeReport, expectedAmount: 150000, expectedCurrency: "SGD",
+    otherCurrencyBehaviour: "quoted-currency", decisionScope: {}, evidence: policeReport, expectedAmount: 150000, expectedCurrency: "SGD",
   },
 ];

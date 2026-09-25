@@ -211,6 +211,30 @@ BEGIN
   END LOOP;
 END $$;
 
+-- A household session may retire (supersede) a policy-definition decision
+-- only as part of deleting the evidence document or policy it rests on
+-- (lib/lifecycle/coordinator.ts moves that document or policy out of the
+-- active state first, in the same transaction). It can never revive a
+-- retired decision, and never retire one whose evidence and policy are
+-- both still live -- which would otherwise let it hide an unfavourable
+-- decision. The trusted server connection is not affected.
+CREATE OR REPLACE FUNCTION public.guard_household_decision_retirement() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_user NOT IN ('authenticated', 'anon') THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.superseded_at IS NOT NULL OR NEW.superseded_at IS NULL THEN
+    RAISE EXCEPTION 'a household session may only retire an active policy-definition decision';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.claim_evidence_documents d WHERE d.id = OLD.evidence_document_id AND d.lifecycle_state = 'active' AND d.superseded_at IS NULL)
+     AND EXISTS (SELECT 1 FROM public.policies p WHERE p.id = OLD.contract_id AND p.lifecycle_state = 'active') THEN
+    RAISE EXCEPTION 'a policy-definition decision can only be retired while its evidence document or policy is being deleted';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 -- Policy-definition decisions (the three *_definition_matches tables) and
 -- model-read extractions are written only by the trusted server: a decision
 -- by an assigned DearPolicy reviewer (lib/claims/reviewers/boundary.ts), an
@@ -232,7 +256,17 @@ BEGIN
     EXECUTE format('DROP POLICY IF EXISTS household_member_delete ON public.%I', t);
     EXECUTE format('REVOKE INSERT, UPDATE, DELETE ON public.%I FROM authenticated', t);
     EXECUTE format('GRANT UPDATE (superseded_at, superseded_reason) ON public.%I TO authenticated', t);
+    EXECUTE format('DROP TRIGGER IF EXISTS guard_household_decision_retirement ON public.%I', t);
+    EXECUTE format('CREATE TRIGGER guard_household_decision_retirement BEFORE UPDATE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.guard_household_decision_retirement()', t);
   END LOOP;
+  -- Model-execution provenance is written only by the server's model
+  -- boundary (lib/ai/provenance.ts); no browser session may read or write it.
+  IF to_regclass('public.model_executions') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.model_executions ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'DROP POLICY IF EXISTS model_executions_no_client_access ON public.model_executions';
+    EXECUTE 'CREATE POLICY model_executions_no_client_access ON public.model_executions FOR ALL TO PUBLIC USING (false) WITH CHECK (false)';
+    EXECUTE 'REVOKE ALL ON public.model_executions FROM authenticated, anon';
+  END IF;
   IF to_regclass('public.claim_evidence_extractions') IS NOT NULL THEN
     EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.claim_evidence_extractions';
     EXECUTE 'DROP POLICY IF EXISTS household_member_update ON public.claim_evidence_extractions';

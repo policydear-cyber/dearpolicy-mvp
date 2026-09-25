@@ -42,7 +42,7 @@ import type { DisabilityEvidenceGap, DisabilityRuleEvidence } from "./disability
 import { calculateDisabilityBenefit, TOTAL_PERMANENT_DISABILITY_MATCH_KEY, type DisabilityEvidenceRef, type DisabilityFormula as DisabilityBenefitFormula } from "./calculators/disability-benefit";
 import { calculateDisabilityIncome, DISABILITY_INCOME_MATCH_KEY, type DisabilityIncomeEvidenceRef } from "./calculators/disability-income";
 import type { DisabilityDefinitionMatch } from "./calculators/evidence";
-import { selectApplicableDecision } from "./evidence/decision-selection";
+import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
 
 export type DisabilityRuleSet = { rules: DisabilityRuleEvidence[]; gaps: DisabilityEvidenceGap[] };
 const EMPTY_DISABILITY_RULES: DisabilityRuleSet = { rules: [], gaps: [] };
@@ -79,7 +79,16 @@ function assessTPDBenefit(rule: DisabilityRuleEvidence, coverage: OwnedCoverage,
     id: "tpd-lump-sum", title: "Total & Permanent Disability", productName: coverage.productName, coverageId: coverage.id,
     evidenceTerms: [rule.quote], ruleEvidence: rule.citation, coverLabel: coverage.productName ?? undefined,
   };
-  const match = applicableDisabilityMatch(facts, coverage, sessionId, "tpd-lump-sum", TOTAL_PERMANENT_DISABILITY_MATCH_KEY, rule.citation);
+  const match = applicableDisabilityMatch(facts, coverage, sessionId, "tpd-lump-sum", TOTAL_PERMANENT_DISABILITY_MATCH_KEY, currentDefinition(rule.citation, rule.quote));
+  // Same currency guard as lib/claims/rules.ts and ci-rules.ts: a fixed
+  // amount or cap quoted in another currency than the verified sum insured
+  // is never applied to it (it would otherwise be treated as the same
+  // currency by the calculator).
+  const formulaCurrencyOk = rule.formula.kind !== "fixed" || rule.formula.currency === coverage.currency;
+  const capCurrencyOk = !rule.cap || rule.cap.currency === coverage.currency;
+  if (match?.result === "matches" && (!formulaCurrencyOk || !capCurrencyOk)) {
+    return { ...base, status: "needs_document", amountText: null, reason: "The matching wording quotes an amount in a different currency than this person's verified sum insured, so DearPolicy cannot compute a figure from it.", conditions: ["Confirm the currency of the quoted benefit against the personal certificate."] };
+  }
   const calc = calculateDisabilityBenefit({
     benefitKind: "tpd", ownership: ownershipRef(coverage), familyMember: { id: coverage.familyMemberId, confirmed: true },
     claimEventId: sessionId, benefitCode: "tpd-lump-sum", scheduleRowCode: null,
@@ -129,7 +138,7 @@ function assessScheduleBenefits(scheduleRules: DisabilityRuleEvidence[], coverag
   const items: ClaimAssessmentItem[] = [];
   let anyReviewed = false;
   for (const rule of scheduleRules) {
-    const match = applicableDisabilityMatch(facts, coverage, sessionId, "ppd-schedule", rule.matchKey, rule.citation);
+    const match = applicableDisabilityMatch(facts, coverage, sessionId, "ppd-schedule", rule.matchKey, currentDefinition(rule.citation, rule.quote));
     if (!match) continue;
     anyReviewed = true;
     const calc = calculateDisabilityBenefit({
@@ -177,7 +186,7 @@ function assessDisabilityIncomeBenefit(rule: DisabilityRuleEvidence, coverage: O
     id: "di-monthly", title: "Disability Income", productName: coverage.productName, coverageId: coverage.id,
     evidenceTerms: [rule.quote], ruleEvidence: rule.citation, coverLabel: coverage.productName ?? undefined,
   };
-  const match = applicableDisabilityMatch(facts, coverage, sessionId, "di-monthly", DISABILITY_INCOME_MATCH_KEY, rule.citation);
+  const match = applicableDisabilityMatch(facts, coverage, sessionId, "di-monthly", DISABILITY_INCOME_MATCH_KEY, currentDefinition(rule.citation, rule.quote));
   if (rule.formula.kind !== "fixed") {
     return { ...base, status: "needs_document", amountText: null, reason: "This plan's disability-income formula is not a flat monthly amount, so DearPolicy has not converted it into a deterministic calculator yet.", conditions: ["DearPolicy should check the plan's percentage-of-income formula before estimating this benefit."] };
   }
@@ -213,7 +222,7 @@ function assessDisabilityIncomeBenefit(rule: DisabilityRuleEvidence, coverage: O
  * see this module's own doc comment for the V1 scope this represents. */
 function assessPremiumWaiver(tpdRule: DisabilityRuleEvidence | null, coverage: OwnedCoverage, facts: ClaimFacts, sessionId: string | null): ClaimAssessmentItem | null {
   if (!tpdRule) return null;
-  const match = applicableDisabilityMatch(facts, coverage, sessionId, "tpd-lump-sum", TOTAL_PERMANENT_DISABILITY_MATCH_KEY, tpdRule.citation);
+  const match = applicableDisabilityMatch(facts, coverage, sessionId, "tpd-lump-sum", TOTAL_PERMANENT_DISABILITY_MATCH_KEY, currentDefinition(tpdRule.citation, tpdRule.quote));
   const base = { id: "premium-waiver", title: "Premium Waiver", productName: coverage.productName, coverageId: coverage.id, evidenceTerms: [], ruleEvidence: tpdRule.citation, coverLabel: coverage.productName ?? undefined };
   if (match?.result === "matches") {
     return { ...base, status: "likely_applicable", amountText: null, reason: "The reviewed medical assessment matches this policy's own Total & Permanent Disability definition, so future premiums for this cover may be waived.", conditions: ["The insurer's own premium-waiver administration still applies -- DearPolicy does not recalculate or apply this to your policy record."] };

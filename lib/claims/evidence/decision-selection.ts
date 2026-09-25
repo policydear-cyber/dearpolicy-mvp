@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * Identity and selection rules for reviewer policy-definition decisions
  * (the cause, critical-illness and disability *_definition_matches tables).
@@ -22,23 +23,52 @@
  *    deterministically by review time and then document id.
  */
 
-export type DefinitionIdentity = { policyId: string; chunkId: string; pageStart: number; pageEnd: number };
+export type DefinitionIdentity = { policyId: string; chunkId: string; pageStart: number; pageEnd: number; wordingHash?: string };
+
+/** Fingerprint of the exact definition clause text a decision was made
+ * against. A citation alone (policy + pages) is not a wording version: a
+ * re-read policy can say something different on the very same pages. */
+export function definitionWordingHash(quote: string): string {
+  return `sha256:${createHash("sha256").update(quote.replace(/\s+/g, " ").trim()).digest("hex")}`;
+}
+
+/** The current definition identity a decision must have been made against:
+ * the rule's citation plus the fingerprint of its quoted clause. */
+export function currentDefinition(citation: { policyId: string; chunkId: string; pageStart: number; pageEnd: number }, quote: string): DefinitionIdentity {
+  return { policyId: citation.policyId, chunkId: citation.chunkId, pageStart: citation.pageStart, pageEnd: citation.pageEnd, wordingHash: definitionWordingHash(quote) };
+}
 
 export function definitionIdentityOf(value: unknown): DefinitionIdentity | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
   if (typeof v.policyId !== "string" || typeof v.chunkId !== "string" || typeof v.pageStart !== "number" || typeof v.pageEnd !== "number") return null;
-  return { policyId: v.policyId, chunkId: v.chunkId, pageStart: v.pageStart, pageEnd: v.pageEnd };
+  return { policyId: v.policyId, chunkId: v.chunkId, pageStart: v.pageStart, pageEnd: v.pageEnd, ...(typeof v.wordingHash === "string" ? { wordingHash: v.wordingHash } : {}) };
 }
 
-export function sameDefinitionIdentity(a: unknown, b: unknown): boolean {
-  const x = definitionIdentityOf(a), y = definitionIdentityOf(b);
-  return !!x && !!y && x.policyId === y.policyId && x.chunkId === y.chunkId && x.pageStart === y.pageStart && x.pageEnd === y.pageEnd;
+function samePages(x: DefinitionIdentity, y: DefinitionIdentity) {
+  return x.policyId === y.policyId && x.chunkId === y.chunkId && x.pageStart === y.pageStart && x.pageEnd === y.pageEnd;
+}
+
+/** Same citation AND, when the decision recorded one, the same clause
+ * wording. Decisions recorded before wording fingerprints existed carry
+ * none and are compared by citation only. */
+export function sameDefinitionIdentity(decision: unknown, current: unknown): boolean {
+  const x = definitionIdentityOf(decision), y = definitionIdentityOf(current);
+  if (!x || !y || !samePages(x, y)) return false;
+  return !x.wordingHash || !y.wordingHash || x.wordingHash === y.wordingHash;
+}
+
+/** Same citation but a different recorded clause wording: a decision the
+ * calculator's own page check could not tell apart from a current one, so
+ * it must never be handed over at all. */
+function staleWordingOnSamePages(decision: unknown, current: unknown): boolean {
+  const x = definitionIdentityOf(decision), y = definitionIdentityOf(current);
+  return !!x && !!y && samePages(x, y) && !!x.wordingHash && !!y.wordingHash && x.wordingHash !== y.wordingHash;
 }
 
 function definitionKey(value: unknown): string {
   const d = definitionIdentityOf(value);
-  return d ? `${d.policyId}|${d.chunkId}|${d.pageStart}|${d.pageEnd}` : `malformed:${JSON.stringify(value ?? null)}`;
+  return d ? `${d.policyId}|${d.chunkId}|${d.pageStart}|${d.pageEnd}|${d.wordingHash ?? ""}` : `malformed:${JSON.stringify(value ?? null)}`;
 }
 
 type SubjectRow = {
@@ -77,7 +107,8 @@ export function decisionDocumentId(decision: Selectable): string {
 export function selectApplicableDecision<T extends Selectable>(candidates: T[], currentDefinition: unknown): T | null {
   if (candidates.length === 0) return null;
   const current = candidates.filter((c) => sameDefinitionIdentity(c.definitionEvidence, currentDefinition));
-  const pool = current.length ? current : candidates;
+  const pool = current.length ? current : candidates.filter((c) => !staleWordingOnSamePages(c.definitionEvidence, currentDefinition));
+  if (pool.length === 0) return null;
   const ordered = [...pool].sort((a, b) =>
     (a.reviewedAt < b.reviewedAt ? 1 : a.reviewedAt > b.reviewedAt ? -1 : 0)
     || decisionDocumentId(a).localeCompare(decisionDocumentId(b)));

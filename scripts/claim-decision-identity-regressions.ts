@@ -130,6 +130,50 @@ async function main() {
       assert.ok(!loaded.some((m) => (m.causeEvidence as { documentId: string }).documentId === docA));
     });
 
+    await testAsync("household and reviewer browser sessions cannot write reviewers, assignments, reviewer audit, decisions, or evidence/model provenance", async () => {
+      const asRole = async (userId: string, sql: string, params: unknown[] = []) => {
+        await h.db.query("BEGIN");
+        try {
+          await h.db.query("SET LOCAL ROLE authenticated");
+          await h.db.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]);
+          const r = await h.db.query(sql, params);
+          return { ok: true as const, rows: r.rows.length, affected: r.affectedRows ?? 0 };
+        } catch (error) {
+          return { ok: false as const, error: String(error) };
+        } finally { await h.db.query("ROLLBACK"); }
+      };
+      const refused = (r: Awaited<ReturnType<typeof asRole>>) => !r.ok || r.affected === 0;
+      const control = await asRole(owner, `SELECT 1 FROM claim_cause_definition_matches WHERE evidence_document_id=$1`, [docB]);
+      assert.ok(control.ok && control.rows > 0, "control: the household session itself works and can read its own decisions");
+      const activeB = (await active(docB))[0].id;
+      const retiredB = (await decisions(docB)).find((d) => d.superseded_at !== null)!.id;
+      const extraction = (await pool.query<{ id: string }>(`SELECT id::text FROM claim_evidence_extractions WHERE evidence_document_id=$1`, [docB])).rows[0].id;
+      for (const who of [owner, reviewer]) {
+        for (const [label, sql, params] of [
+          ["insert reviewer", `INSERT INTO claim_reviewers(user_id,display_label,provisioned_by) VALUES($1,'x','self')`, [who]],
+          ["update reviewer", `UPDATE claim_reviewers SET status='active'`, []],
+          ["insert assignment", `INSERT INTO claim_review_assignments(reviewer_user_id,account_id,family_member_id,claim_session_id,expires_at,assigned_by) VALUES($1,$2,$3,$4,now()+interval '1 day','self')`, [reviewer, household, member, claim]],
+          ["extend assignment", `UPDATE claim_review_assignments SET expires_at=now()+interval '1 year'`, []],
+          ["write reviewer audit", `INSERT INTO claim_reviewer_audit_log(actor,action) VALUES('self','definition_decision_recorded')`, []],
+          ["delete reviewer audit", `DELETE FROM claim_reviewer_audit_log`, []],
+          ["insert decision", `INSERT INTO claim_cause_definition_matches(account_id,family_member_id,claim_session_id,contract_id,evidence_document_id,cause_evidence,definition_evidence,result,reviewed_by) VALUES($1,$2,$3,$4,$5,'{}'::jsonb,'{}'::jsonb,'matches','self')`, [household, member, claim, policyId, docB]],
+          ["rewrite decision result", `UPDATE claim_cause_definition_matches SET result='matches' WHERE id=$1`, [activeB]],
+          ["revive a retired decision", `UPDATE claim_cause_definition_matches SET superseded_at=NULL WHERE id=$1`, [retiredB]],
+          ["retire a live decision to hide it", `UPDATE claim_cause_definition_matches SET superseded_at=now() WHERE id=$1`, [activeB]],
+          ["delete decision", `DELETE FROM claim_cause_definition_matches WHERE id=$1`, [activeB]],
+          ["rewrite decision provenance", `UPDATE claim_cause_definition_matches SET evidence_provenance='{}'::jsonb WHERE id=$1`, [activeB]],
+          ["rewrite extraction provenance", `UPDATE claim_evidence_extractions SET model_execution='{"verified":true}'::jsonb WHERE id=$1`, [extraction]],
+          ["insert extraction", `INSERT INTO claim_evidence_extractions(account_id,evidence_document_id,source_document_version,extracted_fields,extraction_model,extraction_provider,extraction_version) VALUES($1,$2,'x','{}'::jsonb,'m','p','v')`, [household, docB]],
+          ["read model executions", `SELECT 1 FROM model_executions`, []],
+          ["forge model execution", `UPDATE model_executions SET verified=true`, []],
+        ] as [string, string, unknown[]][]) {
+          const result = await asRole(who, sql, params);
+          assert.ok(refused(result) && !(label === "read model executions" && result.ok && result.rows > 0), `${who === owner ? "household" : "reviewer"} session: ${label} must be refused (${JSON.stringify(result)})`);
+        }
+      }
+      assert.equal((await active(docB)).length, 1, "nothing changed");
+    });
+
     await testAsync("revocation keeps completed decisions; an undecided document returns to awaiting review", async () => {
       assert.equal((await h.householdStatuses(household, owner, member, claim))[docC], "in_review");
       await h.admin.revokeClaimReviewAssignment({ assignmentId: assignment, reason: "Reassigned.", operator: "ops.lead" });

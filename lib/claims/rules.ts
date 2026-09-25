@@ -5,7 +5,7 @@ import type { DeathEvidenceGap, DeathRuleEvidence } from "./death-evidence";
 import { calculateDeathBenefit, type DeathBenefitEvidenceRef, type DeathBenefitFormula } from "./calculators/death-benefit";
 import { calculateAccidentalDeath } from "./calculators/accidental-death";
 import type { CauseDefinitionMatch } from "./calculators/evidence";
-import { selectApplicableDecision } from "./evidence/decision-selection";
+import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
 import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { assessCriticalIllness, nextCIQuestion } from "./ci-rules";
 import { assessMedicalClaim, nextMedicalQuestion, type MedicalRuleEvidence } from "./medical-rules";
@@ -260,7 +260,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
         ownershipEvidence,
       };
       const calc = product === "group personal accident"
-        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, evidenceRef) })
+        ? calculateAccidentalDeath({ ...sharedInput, accidentalDeathDefinitionEvidence: evidenceRef, causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, currentDefinition(rule.citation, rule.quote)) })
         : calculateDeathBenefit(sharedInput);
 
       if (calc.status === "blocked") {

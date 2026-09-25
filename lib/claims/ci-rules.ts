@@ -23,7 +23,7 @@ import type { ClaimAssessmentItem, ClaimEvidence, ClaimFacts, ClaimQuestion } fr
 import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { calculateCriticalIllness, type CIEvidenceRef, type CIFormula, type CIInput } from "./calculators/critical-illness";
 import type { CIDefinitionMatch } from "./calculators/evidence";
-import { selectApplicableDecision } from "./evidence/decision-selection";
+import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
 
 function amountText(amount: number | null, currency = "SGD") { return amount == null ? null : formatMoney(amount, currency); }
 
@@ -49,7 +49,7 @@ function applicableCIDefinitionMatch(facts: ClaimFacts, coverage: OwnedCoverage,
     (m.coverageId == null || m.coverageId === coverage.id) &&
     m.benefitCode === rule.benefitCode &&
     m.illnessName === rule.illnessName,
-  ), rule.citation);
+  ), currentDefinition(rule.citation, rule.quote));
 }
 
 const NEEDS_REVIEW_REASON: Record<string, string> = {

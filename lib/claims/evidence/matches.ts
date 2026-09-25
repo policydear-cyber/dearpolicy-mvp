@@ -28,6 +28,7 @@ import { loadDeathEvidence } from "@/lib/claims/death-evidence";
 import { validateCauseEvidence, validatePolicyEvidence, type CauseDefinitionMatchResult } from "@/lib/claims/calculators/evidence";
 import { appendClaimEvidenceAudit } from "./audit";
 import { provenanceSnapshotForExtraction } from "./extraction-provenance";
+import { definitionWordingHash } from "./decision-selection";
 import { getScopedEvidenceDocument, getLatestExtraction, recordCauseDefinitionMatch, transitionEvidenceStatus } from "./store";
 import type { ClaimEvidenceExtractedFields } from "./types";
 
@@ -104,7 +105,9 @@ export async function confirmCauseDefinitionMatch(args: {
   const match = await recordCauseDefinitionMatch({
     accountId: args.accountId, familyMemberId: args.familyMemberId, claimSessionId: args.claimSessionId,
     contractId: args.contractId, coverageId: args.coverageId, evidenceDocumentId: document.id,
-    causeEvidence: causeCheck.evidence, definitionEvidence: definitionCheck.evidence,
+    causeEvidence: causeCheck.evidence, // The clause wording fingerprint binds this decision to the exact
+    // wording the reviewer read -- see ./decision-selection.ts.
+    definitionEvidence: { ...definitionCheck.evidence, wordingHash: definitionWordingHash(rule.quote) },
     result: args.result, reviewedBy: args.reviewerName, reason: args.reason ?? null,
     // Server-side, from the stored extraction this review read -- never
     // from the request. Null (no persisted provenance) keeps amounts blocked.

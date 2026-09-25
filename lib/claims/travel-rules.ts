@@ -43,7 +43,7 @@ import type { TravelDeathRule, TravelEvidenceGap, TravelMedicalRule, TravelRuleE
 import { calculateMedicalReimbursement, type BilledExpenseItem, type MedicalReimbursementEvidenceRef } from "./calculators/medical-reimbursement";
 import { calculateAccidentalDeath, type DeathBenefitEvidenceRef } from "./calculators/accidental-death";
 import type { CauseDefinitionMatch } from "./calculators/evidence";
-import { selectApplicableDecision } from "./evidence/decision-selection";
+import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
 import { evaluateAggregateEvidenceAuthority } from "./evidence-authority";
 
 export type TravelRuleSet = { rules: TravelRuleEvidence[]; gaps: TravelEvidenceGap[] };
@@ -190,7 +190,7 @@ function assessTravelDeathBenefit(rule: TravelDeathRule, coverage: OwnedCoverage
     deathConfirmed: facts.death === true, dateOfDeath: deathDate, policyEffectiveDate: coverage.effectiveDate,
     sumInsured: null, currency: rule.currency, formula: { kind: "fixed", amount: rule.amount, evidence: evidenceRef },
     ruleEvidence: evidenceRef, ownershipEvidence: ownershipEvidenceRef(coverage), accidentalDeathDefinitionEvidence: evidenceRef,
-    causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, evidenceRef),
+    causeDefinitionMatch: applicableCauseDefinitionMatch(facts, coverage, sessionId, currentDefinition(rule.citation, rule.quote)),
   });
 
   if (calc.status === "blocked") {
