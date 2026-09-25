@@ -14,8 +14,6 @@
  * what actually resolves who's making a request, entirely independent of
  * whatever correlation id came in on the header.
  */
-import { randomUUID } from "node:crypto";
-
 // Deliberately permissive enough to accept a UUID (this codebase's own
 // randomUUID() output) or a short alphanumeric trace id from an upstream
 // proxy, but bounded and character-restricted so it can never carry an
@@ -33,7 +31,10 @@ export const CORRELATION_ID_HEADER = "x-correlation-id";
 export function resolveCorrelationId(incoming: string | null | undefined): string {
   const trimmed = (incoming ?? "").trim();
   if (trimmed && CORRELATION_ID_PATTERN.test(trimmed)) return trimmed;
-  return randomUUID();
+  // Web Crypto is available in both the Node and Edge runtimes. Keeping
+  // this shared middleware dependency runtime-neutral avoids bundling a
+  // Node-only module into Vercel's Edge middleware.
+  return globalThis.crypto.randomUUID();
 }
 
 export function isValidCorrelationId(value: string): boolean {
