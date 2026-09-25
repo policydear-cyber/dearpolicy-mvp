@@ -1,1796 +1,1 @@
-import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { PGlite } from "@electric-sql/pglite";
-import { vector } from "@electric-sql/pglite/vector";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-import { pool } from "@/lib/db/client";
-import { ensureChatSchema,getConversation,historyToken,openConversation,saveTurn,deleteHistory,ChatConflict } from "@/lib/chat/store";
-import { loadPolicyInventory,retrieveContractSources } from "@/lib/policies/inventory";
-import { negativeCoverageClaim } from "@/lib/policies/review-coverage";
-import { POST } from "@/app/api/chat/route";
-import { GET as getHistory,DELETE as removeHistory } from "@/app/api/chat/history/route";
-import { GET as getSavedChat } from "@/app/api/chat/history/[id]/route";
-import { GET as getJob } from "@/app/api/chat/jobs/[id]/route";
-import { GET as getBenefits,PATCH as patchBenefit,DELETE as deleteBenefit } from "@/app/api/benefits/route";
-import { GET as getLedger,PATCH as patchLedger,POST as postLedger } from "@/app/api/ledger/route";
-import { GET as getClaimPack } from "@/app/api/claims/[id]/pack/route";
-import { GET as getDashboard } from "@/app/api/dashboard/route";
-import { GET as getIndexStatus,POST as indexBenefits } from "@/app/api/benefits/index/route";
-import { POST as linkPerson } from "@/app/api/policies/link-person/route";
-import { NextRequest } from "next/server";
-import type { ChatAnswer } from "@/types";
-import type { Interpretation } from "@/lib/chat/facts";
-import type { PolicyAnalysis } from "@/lib/chat/types";
-
-/** Runs real PostgreSQL/pgvector SQL in a disposable WASM database.
- * Only Ollama responses are simulated; no user database, GPU or policies are modified.
- */
-async function main(){
-  const db=new PGlite({extensions:{vector,pgcrypto}});
-  await db.waitReady;
-  await db.exec(await readFile(path.resolve("sql/schema.sql"),"utf8"));
-  await db.exec(await readFile(path.resolve("sql/benefit-catalog.sql"),"utf8"));
-  await db.exec(await readFile(path.resolve("sql/model-usage.sql"),"utf8"));
-  await db.exec(await readFile(path.resolve("sql/coverage-ledger.sql"),"utf8"));
-  // Household-scoped routes now resolve identity through
-  // requireHouseholdContext()/createUserSupabaseClient(), which needs the
-  // authenticated/anon/service_role shim roles and the household_members
-  // RLS policies this file defines (see sql/household-rls.sql's own doc
-  // comment -- a real Supabase project already has the authenticated role
-  // and its default table grants; this file recreates just enough of that
-  // for a non-Supabase Postgres, including this PGlite instance, to behave
-  // the same way).
-  await db.exec(await readFile(path.resolve("sql/household-rls.sql"),"utf8"));
-  // Checkpoint 7: lib/policies/inventory.ts's loadPolicyInventory() now filters
-  // on policies.lifecycle_state via activePredicate() -- exec sql/lifecycle.sql
-  // so that column exists here too.
-  await db.exec(await readFile(path.resolve("sql/lifecycle.sql"),"utf8"));
-  // No domain table outside accounts/household_members/household_invitations
-  // has its own RLS policy file yet (see the Checkpoint 1/2 commit messages'
-  // disclosed gap: the claims/policies repository layer is authorized at the
-  // application layer -- explicit account_id filters -- not via Postgres
-  // RLS). A real Supabase project grants `authenticated` broad table access
-  // by default as part of its own bootstrapping; this mirrors that default
-  // for every table so createUserSupabaseClient()'s `SET LOCAL ROLE
-  // authenticated` can still reach them here, exactly as it can in production.
-  await db.exec("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;");
-  const account="00000000-0000-0000-0000-000000000001",foreign="00000000-0000-0000-0000-000000000099";
-  // requireCurrentUser() resolves through the dev-only session fallback
-  // (lib/auth/session.ts's devSessionUser(), gated behind DEV_AUTH_ENABLED
-  // and unconditionally unavailable in production) rather than a real
-  // Supabase session cookie -- there is no browser here, only a route
-  // handler invoked directly. DEV_ACCOUNT_ID is pinned to this fixture's
-  // own `account` id so every already-migrated route under test resolves
-  // to the same household its seeded rows belong to.
-  process.env.DEV_AUTH_ENABLED="1";
-  process.env.DEV_ACCOUNT_ID=account;
-  const uuid=(n:number)=>"10000000-0000-4000-8000-"+String(n).padStart(12,"0");
-  const people=Array.from({length:9},(_,i)=>({
-    id:uuid(i+1),display_name:i===0?"Tan Yi Chuen Desmond":i===1?"Ong Pei Lin Charmaine":"Family Member "+i,
-    preferred_name:i===0?"Desmond":i===1?"Charmaine":"Member "+i,relationship:i===0?"self":i===1?"spouse":i<5?"child":"parent",
-  }));
-  await db.query("INSERT INTO accounts(id,name) VALUES($1,'Test Family'),($2,'Other Account')",[account,foreign]);
-  // The dev-fallback session user (id == DEV_ACCOUNT_ID == account, see
-  // above) needs a genuine household_members row of their own --
-  // resolveActiveHouseholdId() re-verifies real membership on every call,
-  // so a route under test can't reach `account`'s data without one.
-  await db.query("INSERT INTO household_members(household_id,user_id,role) VALUES($1,$1,'owner')",[account]);
-  for(const p of people)await db.query("INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$4,$5)",[p.id,account,p.display_name,p.preferred_name,p.relationship]);
-  const foreignPerson=uuid(9999);
-  await db.query("INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,'Other Account Person','self')",[foreignPerson,foreign]);
-
-  // A connection mutex preserves transaction isolation for the single embedded
-  // PostgreSQL connection. All SQL and constraints execute in PostgreSQL.
-  let tail=Promise.resolve();
-  const acquire=async()=>{
-    const previous=tail;let release!:()=>void;
-    tail=new Promise<void>(resolve=>{release=resolve;});await previous;return release;
-  };
-  const execute=async(text:string,params:unknown[]=[])=>{
-    if(!params.length&&text.includes(";")){
-      const results=await db.exec(text);const result=results.at(-1);
-      return {rows:result?.rows??[],rowCount:result?.affectedRows??0};
-    }
-    const result=await db.query(text,params);
-    return {rows:result.rows,rowCount:result.affectedRows??result.rows.length};
-  };
-  const originalQuery=pool.query,originalConnect=pool.connect,originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
-  pool.query=(async(text:string,params:unknown[]=[])=>{const release=await acquire();try{return await execute(text,params);}finally{release();}}) as typeof pool.query;
-  pool.connect=(async()=>{
-    const release=await acquire();
-    return {query:execute,release};
-  }) as typeof pool.connect;
-  // The suite runs the routing production runs. Restored after any test that
-  // reroutes to another provider, so one test cannot silently change the next.
-  const HARNESS_PRESET="gemini",HARNESS_KEY="AQ.test-key";
-  const useHarnessModel=()=>{process.env.MODEL_PRESET=HARNESS_PRESET;process.env.GEMINI_API_KEY=HARNESS_KEY;};
-  useHarnessModel();
-  globalThis.setTimeout=((fn:Parameters<typeof setTimeout>[0],ms?:number,...args:unknown[])=>originalTimeout(fn,ms===700?0:ms,...args)) as typeof setTimeout;
-  let interpretationCalls=0,readingCalls=0,explanationCalls=0,maxModelUserCharacters=0,catalogCalls=0,categoriseCalls=0,relevanceCalls=0,ledgerReads=0,ledgerChecks=0;
-  let malformed=false,failReading=false,truncateInterpretations=0,misshapeReading=0;
-  // The simulated model answers on Google's wire format, because that is the
-  // one the app speaks. REPLAY_URL is how the provider-specific tests below
-  // reuse these same answers without re-implementing the decision table.
-  const REPLAY_URL="http://model.test/replay";
-  const googleReply=(text:string)=>Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
-  globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-    const url=String(input);
-    if(/googleapis\.com\/v1beta\/models\?/.test(url))
-      return Response.json({models:[{name:"models/gemini-3.6-flash",supportedGenerationMethods:["generateContent"]},
-        {name:"models/gemini-3.5-flash-lite",supportedGenerationMethods:["generateContent"]}]});
-    const google=/googleapis\.com/.test(url);
-    if(!google&&url!==REPLAY_URL)throw new Error("Unexpected model request: "+url);
-    const body=JSON.parse(String(init?.body));
-    const userText=google?String(body.contents[0].parts[0].text):String(body.user);
-    const system:string=google?String(body.systemInstruction.parts[0].text):String(body.system);
-    const user=JSON.parse(userText);
-    maxModelUserCharacters=Math.max(maxModelUserCharacters,userText.length);
-    const reply=(text:string)=>google
-      ?Response.json({candidates:[{content:{parts:[{text}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}})
-      :Response.json({content:text});
-    let result:unknown;
-    if(system.startsWith("Interpret this")){
-      interpretationCalls++;
-      if(malformed)return reply("invalid JSON");
-      const message:string=user.currentMessage,subject=user.subjects[0]?.id;
-      const facts:Interpretation["facts"]=[];
-      const scenarioCandidates:NonNullable<Interpretation["scenarioCandidates"]>=[];
-      const add=(key:string,value:Interpretation["facts"][number]["value"],state:"known"|"unknown"|"pending"="known")=>facts.push({subjectId:subject,key,value,state,quote:message});
-      const scenario=(label:string,family:NonNullable<Interpretation["scenarioCandidates"]>[number]["family"],traits:NonNullable<Interpretation["scenarioCandidates"]>[number]["traits"])=>
-        scenarioCandidates.push({subjectId:subject,label,family,traits,quote:message});
-      let intent:Interpretation["intent"]=/policies|portfolio|family have/i.test(message)?"portfolio":
-        // A hypothetical reports no event, which is what the real prompt says.
-        /\b(?:what if|if i|if my|suppose)\b/i.test(message)?"policy_question":
-        /matur|surrender|premium|guaranteed|endowment/i.test(message)?"policy_question":user.previousIntent?"follow_up":"claim";
-      if(/breast cancer/i.test(message)){
-        intent="claim";add("eventType","diagnosis");add("diagnosis","stage 2 breast cancer");add("diagnosisStage","2");add("diagnosisSite","breast");
-        facts.push({subjectId:subject,key:"diagnosisDate",value:"yesterday",state:"known",quote:"yesterday"});
-        scenario("Breast cancer diagnosis and hospital attendance","illness",["illness","diagnosis","hospitalisation","medical_expense"]);
-      }
-      if(/\b(?:was|were) murdered\b/i.test(message)){
-        intent="claim";add("eventType","death");add("death",true);add("causeOfDeath","murdered");add("eventLocation","Thailand");
-        scenario("Reported homicide","death",["death","sudden","external","violent","unintentional_to_insured"]);
-      }
-      if(/flight was delayed/i.test(message)){
-        intent="claim";add("eventType","travel_disruption");add("flightDelayHours",/three hours/i.test(message)?3:8);
-        scenario("Flight delay","travel",["travel_disruption","delay"]);
-      }
-      if(/car was damaged|vehicle was damaged/i.test(message)){
-        intent="claim";add("eventType","accident");add("vehicleDamaged",true);add("vehicleRepairBill",4000);
-        scenario("Vehicle collision damage","motor",["accident","sudden","external","vehicle_collision","property_damage"]);
-      }
-      if(/broke his (?:left )?forearm/i.test(message)){
-        intent="claim";add("eventType","accident");add("accidentType","playing basketball");add("injured",true);add("fractureBodyPart","forearm");
-        scenario("Broken forearm playing basketball","injury",["accident","bodily_injury","sudden","external"]);
-      }
-      if(/\bdengue\b/i.test(message)){
-        intent="claim";add("eventType","diagnosis");add("diagnosis","dengue");
-        scenario("Dengue fever","illness",["illness","diagnosis"]);
-      }
-      // A short answer to the pending question, the way the real prompt does it.
-      const pending=user.pendingQuestion as {factKey:string;subjectId:string}|null;
-      if(pending&&/^\s*(yes|no|not sure|\d+|an accident|an illness)\s*$/i.test(message)){
-        intent="follow_up";
-        const text=message.trim().toLowerCase();
-        if(text==="not sure")facts.push({subjectId:pending.subjectId,key:pending.factKey,value:null,state:"pending",quote:message});
-        else if(pending.factKey==="eventType")add("eventType",text==="an accident"?"accident":"diagnosis");
-        else if(/^\d+$/.test(text))add(pending.factKey,Number(text));
-        else add(pending.factKey,text==="yes");
-      }
-      if(/no ambulance/i.test(message))add("ambulanceUsed",false);
-      else if(/ambulance/i.test(message))add("ambulanceUsed",true);
-      const nights=message.match(/(\d+)\s*nights?/i);
-      if(nights&&!/don['â€™]?t know|not sure/i.test(message)){add("hospitalNights",Number(nights[1]));add("hospitalised",true);}
-      if(/bill/i.test(message)&&/don['â€™]?t know|not sure/i.test(message))add("hospitalBill",null,"pending");
-      if(/nights/i.test(message)&&/don['â€™]?t know|not sure/i.test(message))add("hospitalNights",null,"pending");
-      if(/warded for|still in hospital/i.test(message)){add("hospitalStayOngoing",true);add("hospitalised",true);}
-      if(/discharged after twelve nights/i.test(message)){
-        add("hospitalNights",12);add("hospitalStayOngoing",false);add("hospitalised",true);
-      }
-      result={intent,newTopic:false,searchTerms:["critical illness","major cancer","hospital cash","waiting period","maturity","accidental death","flight delay","vehicle damage"],facts,scenarioCandidates};
-    }else if(system.startsWith("List the insurance benefits")){
-      catalogCalls++;
-      const text=String(user.text);
-      const quote=text.match(/We pay 100% of Sum Insured for qualifying critical illness\./)?.[0];
-      result=quote?{benefits:[{name:"Major Critical Illness",quote,formulaKind:"sum_insured",formulaValue:1,currency:"SGD",
-        factKey:null,offsetDays:null,maximumDays:null,conditions:"The diagnosis must satisfy the defined illness."}]}
-        // A page with no benefit rule must produce nothing, not a guess.
-        :{benefits:[{name:"Invented",quote:"a quote that is not on this page at all",formulaKind:"fixed",formulaValue:99,
-          currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,conditions:[]}]};
-    }else if(system.startsWith("Build the coverage ledger")){
-      // The simulated reader knows the seed wordings. It writes ledger rows
-      // exactly the way the real reader is asked to: one row per rule, with
-      // the sentence it came from and the page it is on.
-      ledgerReads++;
-      const rows:Record<string,unknown>[]=[];
-      const family:string[]=user.familyMembers??[];
-      for(const page of user.pages as {page:number;text:string}[]){
-        const text:string=page.text;
-        const named=family.find(name=>text.includes(name))??null;
-        const plan=(text.match(/(?:owns |^)(Plan \d+ [A-Za-z ]+?|Review Fixture Critical Illness)(?:\.| Sum)/)?.[1]??text.match(/^([^.]+?)\./)?.[1]??"Plan").trim();
-        const sum=Number(text.match(/Sum Insured SGD (\d+)/)?.[1]??"")||null;
-        const q=(re:RegExp)=>text.match(re)?.[0]??null;
-        let quote:string|null;
-        if((quote=q(/we pay 100% of Sum Insured for a qualifying covered death\./i)))rows.push({insuredName:named,planName:plan,benefitName:"Death benefit",eventType:"death",paysKind:"percent_of_sum",amount:1,currency:"SGD",sumBasis:null,sourcePage:page.page,quote});
-        if((quote=q(/For Death due to Accident, we pay 100% of Sum Insured\./i)))rows.push({insuredName:named,planName:plan,benefitName:"Personal accident death benefit",eventType:"accidental_death",cause:"accident",paysKind:"percent_of_sum",amount:1,currency:"SGD",sourcePage:page.page,quote});
-        if((quote=q(/We pay 100% of Sum Insured for qualifying critical illness\./i)))rows.push({insuredName:named,planName:plan,benefitName:"Critical illness benefit",eventType:"critical_illness",paysKind:"percent_of_sum",amount:1,currency:"SGD",sourcePage:page.page,quote,conditions:["The diagnosis must satisfy the defined illness."]});
-        if((quote=q(/Daily hospital cash benefit S\$30 per day after the 10th day, maximum of 30 continuous days\./i)))rows.push({insuredName:named,planName:plan,benefitName:"Daily hospital cash",eventType:"hospital_daily_cash",paysKind:"per_day",amount:30,currency:"SGD",offsetDays:10,maximumDays:30,sourcePage:page.page,quote});
-        if((quote=q(/Flight delay benefit pays a fixed S\$300 if departure is delayed at least 6 hours\./i)))rows.push({insuredName:named,planName:plan,benefitName:"Flight delay benefit",eventType:"travel_delay",paysKind:"lump_sum",amount:300,currency:"SGD",sourcePage:page.page,quote,minimum:{factKey:"flightDelayHours",value:6}});
-        if((quote=q(/We reimburse the reasonable repair cost for accidental damage to the insured vehicle up to S\$100,000\./i)))rows.push({insuredName:named,planName:plan,benefitName:"Vehicle damage reimbursement",eventType:"motor_damage",cause:"accident",paysKind:"reimbursement_cap",amount:100000,currency:"SGD",sourcePage:page.page,quote});
-        if((quote=q(/Sum Insured SGD \d+\./)))for(const row of rows)if(row.sourcePage===page.page&&row.paysKind==="percent_of_sum"&&row.sumBasis==null)row.sumBasis=sum;
-        // A schedule line ("X owns Plan N Death. Sum Insured SGD 1000000.") states the sum insured of a plan, not a payout rule.
-      }
-      result={rows};
-    }else if(system.startsWith("Check coverage ledger rows")){
-      ledgerChecks++;
-      result={verdicts:(user.rows as {index:number}[]).map(r=>({index:r.index,supported:true}))};
-    }else if(system.startsWith("Read insurance")){
-      readingCalls++;
-      if(failReading)return reply("not valid json");
-      if(misshapeReading>0){
-        misshapeReading--;
-        const quote={sourceId:user.sources[0].id,quote:String(user.sources[0].text).slice(0,120)};
-        // The exact shape Qwen returned on DC's machine: a bare string where a
-        // list of quoted conditions belongs, and one quote instead of a list.
-        return reply(JSON.stringify({benefits:[{title:"Critical illness benefit",coverageId:user.confirmedCoverages[0]?.id,
-          evidence:quote,requirements:[],conditions:"Subject to the defined illness.",
-          formula:{kind:"none",value:null,currency:null,factKey:null,offsetDays:null,maximumDays:null,evidence:null}}],
-          observations:[],nextSteps:[]}));
-      }
-      const analysis:PolicyAnalysis={benefits:[],observations:[],nextSteps:[]};
-      const traits=new Set<string>((user.scenarioCandidates??[]).flatMap((candidate:{traits:string[]})=>candidate.traits));
-      for(const s of user.sources){
-        const text:string=s.text;
-        const q={sourceId:s.id,quote:text};
-        const owned=user.confirmedCoverages[0];
-        if(!owned)continue;
-        if(user.intent==="claim"&&traits.has("illness")&&/100% of Sum Insured for qualifying critical illness/i.test(text)){
-          analysis.benefits.push({title:"Critical illness benefit",coverageId:owned.id,evidence:[q],
-            formula:{kind:"sum_insured",value:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:q},
-            requirements:[{factKey:"medicalDefinitionConfirmed",operator:"document",value:null,question:"",why:"The diagnosis must satisfy the defined illness.",evidence:q}],
-            conditions:[{text:"The diagnosis must satisfy the defined illness.",evidence:q}]});
-        }
-        if(user.intent==="claim"&&traits.has("hospitalisation")&&/Daily hospital cash/i.test(text)){
-          analysis.benefits.push({title:"Daily hospital cash",coverageId:owned.id,evidence:[q],
-            formula:{kind:"daily",value:30,currency:"SGD",factKey:"hospitalNights",offsetDays:10,maximumDays:30,evidence:q},
-            requirements:[
-              {factKey:"hospitalised",operator:"equals",value:true,question:"Was this an inpatient admission?",why:"The benefit requires hospital admission.",evidence:q},
-              {factKey:"hospitalNights",operator:"present",value:null,question:"What was the completed length of the hospital stay?",why:"The hospital cash amount depends on the completed stay.",evidence:q},
-            ],conditions:[]});
-        }
-        if(user.intent==="claim"&&traits.has("death")&&/100% of Sum Insured for a qualifying covered death/i.test(text)){
-          analysis.benefits.push({title:"Death benefit",coverageId:owned.id,evidence:[q],
-            formula:{kind:"sum_insured",value:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:q},
-            requirements:[],conditions:[]});
-        }
-        if(user.intent==="claim"&&traits.has("death")&&/Death due to Accident, we pay 100% of Sum Insured/i.test(text)){
-          analysis.benefits.push({title:"Personal accident death benefit",coverageId:owned.id,evidence:[q],
-            formula:{kind:"sum_insured",value:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:q},
-            requirements:[{factKey:"accidentalDeath",operator:"equals",value:true,question:"",why:"The death must result from an Accident.",evidence:q}],conditions:[]});
-        }
-        if(user.intent==="claim"&&traits.has("delay")&&/Flight delay benefit pays a fixed S\$300/i.test(text)){
-          analysis.benefits.push({title:"Flight delay benefit",coverageId:owned.id,evidence:[q],
-            formula:{kind:"fixed",value:300,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,evidence:q},
-            requirements:[{factKey:"flightDelayHours",operator:"at_least",value:6,question:"Was the departure delayed for at least 6 hours?",why:"The benefit starts at 6 hours.",evidence:q}],conditions:[]});
-        }
-        if(user.intent==="claim"&&traits.has("property_damage")&&/reimburse the reasonable repair cost/i.test(text)){
-          analysis.benefits.push({title:"Vehicle damage reimbursement",coverageId:owned.id,evidence:[q],
-            formula:{kind:"expense_cap",value:100000,currency:"SGD",factKey:"vehicleRepairBill",offsetDays:null,maximumDays:null,evidence:q},
-            requirements:[{factKey:"vehicleDamaged",operator:"equals",value:true,question:"",why:"The insured vehicle must have accidental damage.",evidence:q}],conditions:[]});
-        }
-        if(user.intent!=="claim"&&/guaranteed maturity value/i.test(text)){
-          const guaranteed=text.match(/The guaranteed maturity value is SGD \d+\./)?.[0];
-          const projected=text.match(/The projected non-guaranteed maturity value is SGD \d+\./)?.[0];
-          if(guaranteed)analysis.observations.push({text:guaranteed,evidence:[{sourceId:s.id,quote:guaranteed}]});
-          if(projected)analysis.observations.push({text:projected,evidence:[{sourceId:s.id,quote:projected}]});
-        }
-      }
-      result=analysis;
-    }else if(system.startsWith("You decide which of a person")){
-      relevanceCalls++;
-      // The simulated reader knows what keywords cannot: dengue is not cancer.
-      const event=String(user.event)+" "+(user.facts as string[]).join(" ");
-      const candidates=user.candidates as {name:string}[];
-      const applies:{name:string;why:string}[]=[],ruledOut:{name:string;why:string}[]=[];
-      for(const c of candidates){
-        if(/dengue/i.test(event)&&/cancer|paley|radiotherapy|dialysis|surgery/i.test(c.name))ruledOut.push({name:c.name,why:"not a treatment for dengue"});
-        else applies.push({name:c.name,why:"responds to a hospital stay for an illness"});
-      }
-      result={applies,ruledOut};
-    }else if(system.startsWith("You are given rows recovered")){
-      categoriseCalls++;
-      // The simulated reader knows two things keyword rules do not: "Loss of
-      // speech" is a disability, and a premium is not a benefit.
-      result={rows:(user.rows as {index:number;label:string}[]).map(row=>({index:row.index,
-        isBenefit:!/premium/i.test(row.label),
-        respondsTo:/speech|hearing|sight/i.test(row.label)?["disability","bodily_injury"]:[]}))};
-    }else{
-      explanationCalls++;
-      result={summary:user.summary,details:(user.details??[]).slice(0,1)};
-    }
-    let content=JSON.stringify(result);
-    if(truncateInterpretations>0&&system.startsWith("Interpret this")){truncateInterpretations--;content=content.slice(0,Math.floor(content.length*0.75));}
-    return reply(content);
-  }) as typeof fetch;
-
-  let cases=0;const test=async(name:string,fn:()=>Promise<void>)=>{try{await fn();cases++;console.log("PASS "+name);}catch(error){throw new Error(name,{cause:error});}};
-  const blank:ChatAnswer={mode:"answer",summary:"Saved answer",details:[],claimItems:[],nextSteps:[],confidence:null,citations:[],disclaimer:"",
-    claimSessionId:null,questions:[],knownFacts:[],missingFacts:[]};
-  const send=async(message:string,member:string|null=people[0].id,conversationId?:string,revision?:number,asynchronous=false)=>{
-    const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({familyMemberId:member,scope:member?"member":"family",question:message,conversationId,conversationRevision:revision,asynchronous,timeZone:"Asia/Singapore"})}));
-    return {response,data:await response.json()};
-  };
-  const awaitJob=async(id:string)=>{
-    for(let i=0;i<3000;i++){
-      const response=await getJob(new NextRequest("http://localhost/api/chat/jobs/"+id),{params:Promise.resolve({id})});
-      const data=await response.json();
-      if(data.job?.status==="complete")return data.result.answer as ChatAnswer;
-      if(["failed","cancelled"].includes(data.job?.status))throw new Error(data.job.error);
-      await new Promise(resolve=>originalTimeout(resolve,2));
-    }
-    throw new Error("Simulated analysis did not complete");
-  };
-  const seedPlans=async(count:number)=>{
-    await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
-    await db.query("DELETE FROM policy_analysis_cache WHERE account_id=$1",[account]);
-    const types=["Savings","Investment","Motor","Travel","Death","Personal Accident","Critical Illness","Early Critical Illness","Hospital Cash","Home"];
-    for(let i=0;i<count;i++){
-      const p=people[i%9],type=types[Math.floor(i/9)%types.length],id=uuid(10000+i),ref=uuid(50000+i),name="Plan "+i+" "+type;
-      const sum=type==="Death"?1_000_000:type==="Personal Accident"?600_000:type==="Critical Illness"?350_000:100_000;
-      const schedule=p.display_name+" owns "+name+". Sum Insured SGD "+sum+".";
-      const wording=name+". "+(type==="Critical Illness"?"We pay 100% of Sum Insured for qualifying critical illness. The diagnosis must satisfy the defined illness.":
-        type==="Hospital Cash"?"Daily hospital cash benefit S$30 per day after the 10th day, maximum of 30 continuous days. Hospital admission is required.":
-        type==="Savings"?"The guaranteed maturity value is SGD 100000. The projected non-guaranteed maturity value is SGD 120000.":
-        type==="Death"?"If the insured dies while covered, we pay 100% of Sum Insured for a qualifying covered death.":
-        type==="Personal Accident"?"For Death due to Accident, we pay 100% of Sum Insured. The death must result from an Accident.":
-        type==="Travel"?"Flight delay benefit pays a fixed S$300 if departure is delayed at least 6 hours.":
-        type==="Motor"?"We reimburse the reasonable repair cost for accidental damage to the insured vehicle up to S$100,000.":
-        type==="Home"?"We reimburse replacement cost for stolen household contents up to S$100,000.":
-        "This plan is assessed from its own terms and schedule.");
-      for(const item of [{id,text:schedule,personal:true},{id:ref,text:wording,personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb)",
-          [item.id,account,p.id,name,"POLICY-"+i,type,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
-        await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,p.id,account]);
-        await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)",[account,item.id,item.text]);
-        await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,1,1,$5,$6::vector)",
-          [uuid(100000+(item.personal?i:count+i)),account,p.id,item.id,item.text,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
-      }
-      await db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,$5,$6,'SGD',$7,1,$8,true,true)",
-        [uuid(200000+i),account,id,p.id,type,sum,name,schedule]);
-    }
-    // Seeded documents have been READ. A household where nothing has ever been
-    // read is a different case, exercised explicitly by its own test.
-    await db.query("UPDATE policies SET benefits_indexed_at=now() WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account]);
-  };
-  try{
-    await test("Legacy guided sessions and ordinary chats migrate without losing facts",async()=>{
-      const claim=uuid(800000),plain=uuid(800001);
-      await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,facts,event_summary) VALUES($1,$2,$3,$4::jsonb,'Previous diagnosis')",[claim,account,people[1].id,JSON.stringify({diagnosis:"stage 2 breast cancer",uncertainFacts:["hospital_nights"]})]);
-      await db.query("INSERT INTO chat_messages(account_id,family_member_id,claim_session_id,role,content) VALUES($1,$2,$3,'user','Previous event')",[account,people[1].id,claim]);
-      await db.query("INSERT INTO chat_messages(id,account_id,family_member_id,role,content) VALUES($1,$2,$3,'user','Previous normal question')",[plain,account,people[0].id]);
-      await ensureChatSchema();
-      const c=await getConversation(account,claim);assert.equal(c?.state.subjects[people[1].id].hospitalNights.state,"unknown");
-      const migrated=await db.query<{conversation_id:string}>("SELECT conversation_id FROM chat_messages WHERE id=$1",[plain]);assert.ok(migrated.rows[0].conversation_id);
-      await db.exec(await readFile(path.resolve("sql/chat-upgrade.sql"),"utf8"));
-      assert.equal((await db.query("SELECT id FROM chat_conversations WHERE id=$1",[claim])).rows.length,1);
-    });
-    await seedPlans(90);
-    await test("Real SQL loads all 90 mixed policies and correctly scopes one family member",async()=>{
-      const all=await loadPolicyInventory(account,people);assert.equal(all.contracts.length,90);
-      assert.equal(all.contracts.every(c=>c.references.length===1),true);
-      const one=await loadPolicyInventory(account,[people[1]]);assert.equal(one.contracts.length,10);assert.equal(one.contracts.every(c=>c.ownerId===people[1].id),true);
-    });
-    await test("The last policy is retrieved independently of a global top-k",async()=>{
-      const inventory=await loadPolicyInventory(account,people);
-      const sources=await retrieveContractSources({accountId:account,contracts:inventory.contracts,question:"What death benefits are included?",searchTerms:["death"]});
-      assert.equal(sources.size,90);assert.ok(sources.get(inventory.contracts.at(-1)!.id)?.length);
-    });
-    await test("An ambiguous chat moves completely to the family member later selected",async()=>{
-      const first=await send("My parent was injured in an accident.");
-      assert.equal(first.response.status,200,JSON.stringify(first.data));
-      const prompt=first.data.answer as ChatAnswer;
-      assert.equal(prompt.mode,"fact_finding");assert.ok((prompt.personCandidates?.length??0)>1);
-      const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({familyMemberId:people[0].id,scope:"member",question:people[5].display_name,
-          conversationId:prompt.conversationId,conversationRevision:prompt.conversationRevision,personChoiceId:people[5].id,
-          personContextMessage:prompt.personContextMessage,personContextRecordedAt:prompt.personContextRecordedAt,
-          asynchronous:false,timeZone:"Asia/Singapore"})}));
-      const data=await response.json();assert.equal(response.status,200,JSON.stringify(data));
-      assert.equal(data.answer.resolvedFamilyMemberId,people[5].id);
-      const row=await getConversation(account,prompt.conversationId!);assert.equal(row?.family_member_id,people[5].id);
-      const messages=await db.query<{family_member_id:string}>("SELECT family_member_id FROM chat_messages WHERE account_id=$1 AND conversation_id=$2",[account,prompt.conversationId]);
-      assert.ok(messages.rows.length>=4);assert.equal(messages.rows.every(m=>m.family_member_id===people[5].id),true);
-    });
-    await test("A homicide keeps verified death cover visible and withholds inferred accidental death cover",async()=>{
-      const result=await send("Desmond was murdered in Thailand");
-      assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;
-      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\$1,000,000/);
-      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
-      assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText==="S$1,000,000"),answer.claimItems.map(i=>i.title).join(" | "));
-      assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText===null&&item.status==="needs_document"),answer.claimItems.map(i=>i.title).join(" | "));
-      assert.ok(answer.scenarioClassifications?.some(item=>item.traits.includes("violent")&&item.traits.includes("external")));
-      assert.equal(new Set(answer.details).size,answer.details.length);
-      const saved=(await getConversation(account,answer.conversationId!))!.state,state=saved.subjects[people[0].id];
-      assert.equal(state.death.value,true);assert.equal(state.causeOfDeath.value,"murdered");assert.equal(state.eventLocation.value,"Thailand");
-      assert.equal(state.accidentalDeath,undefined);assert.ok(saved.scenarios?.[people[0].id]?.length);
-    });
-    // Reading a travel rule into the ledger checks it twice before trusting
-    // it: the quote and every number must be on the cited page (deterministic,
-    // code-checked), and a second, independent read of the same page must
-    // agree it is what the document says. That double-check is the
-    // confirmation this benefit needs -- "the person never has to confirm
-    // anything; they can look" (lib/ledger/extract.ts) -- so once both checks
-    // pass, the figure is shown with confidence, not held back a third time
-    // for a human to re-approve what two independent reads already verified.
-    await test("A travel rule confirmed by a second, independent read is shown with a figure",async()=>{
-      const result=await send("Desmond's flight was delayed for eight hours.");
-      assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
-      assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(flight!.amountText,"S$300.00");
-      assert.equal(flight!.status,"likely_applicable");
-      assert.equal(flight!.estimateBasis,"confirmed");
-      assert.match(flight!.reason,/verified against the page by a second read/i);
-      assert.equal(answer.potentialPayoutTotals?.length,1);
-      assert.equal(answer.potentialPayoutTotals?.[0].amount,300);
-    });
-    await test("A duration below a travel threshold rules out only that benefit",async()=>{
-      const result=await send("Desmond's flight was delayed for three hours.");
-      assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      const item=answer.claimItems.find(value=>value.title.includes("Flight delay"));assert.equal(item?.status,"not_applicable");assert.equal(item?.amountText,null);
-      assert.equal(answer.potentialPayoutTotals?.length,0);
-    });
-    // Same double-check as the travel rule above: the motor reimbursement
-    // clause was confirmed by an independent second read, so the reported
-    // repair bill is priced against it. A reimbursement is still never
-    // summed into a lump-sum household total, which is the separate
-    // invariant this test also protects.
-    await test("A motor reimbursement confirmed by a second, independent read is priced, but never summed into a lump-sum total",async()=>{
-      const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
-      assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
-      const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
-      assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(item?.amountText,"S$4,000");
-      assert.equal(item?.status,"likely_applicable");
-      assert.equal(item?.amountLabel,"Potential reimbursement");
-      assert.equal(item?.aggregation,"reimbursement");
-      assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
-    });
-    await test("The active API resolves Charmaine before loading personal policies",async()=>{
-      const result=await send("Charmaine fainted yesterday and took the ambulance to hospital. She was diagnosed with stage 2 breast cancer. I still don't know how much the hospital bill will be.");
-      assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.equal(answer.resolvedFamilyMemberId,people[1].id);
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
-      assert.equal(answer.policyReview?.length,10);
-      const row=await getConversation(account,answer.conversationId!);assert.equal(row?.family_member_id,people[1].id);
-      assert.equal(row?.state.subjects[people[1].id].hospitalBill.state,"pending");
-      assert.ok(interpretationCalls>0&&readingCalls>0&&explanationCalls>0);
-    });
-    let ongoingAnswer:ChatAnswer;
-    await test("Unknown future nights do not repeat or block a separate cancer benefit",async()=>{
-      const history=await db.query<{id:string;last_answer:ChatAnswer}>("SELECT id,last_answer FROM chat_conversations WHERE account_id=$1 AND family_member_id=$2 ORDER BY updated_at DESC LIMIT 1",[account,people[1].id]);
-      const prior=history.rows[0].last_answer;
-      const reply=await send("still not sure how many nights she needs to be warded for",people[1].id,history.rows[0].id,prior.conversationRevision);
-      assert.equal(reply.response.status,200,JSON.stringify(reply.data));ongoingAnswer=reply.data.answer;
-      assert.equal(ongoingAnswer.questions.length,0);assert.ok(ongoingAnswer.claimItems.some(item=>item.title.includes("Critical illness")&&item.amountText===null&&item.status==="needs_document"));
-      const next=await send("i still don't know how many nights",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
-      assert.equal(next.response.status,200,JSON.stringify(next.data));ongoingAnswer=next.data.answer;assert.equal(ongoingAnswer.questions.length,0);
-      const state=(await getConversation(account,ongoingAnswer.conversationId!))!.state;
-      assert.equal(state.subjects[people[1].id].hospitalNights.state,"pending");
-      assert.equal(state.subjects[people[1].id].hospitalStayOngoing.value,true);
-    });
-    await test("A completed stay updates memory and permits the independent daily calculation",async()=>{
-      const result=await send("She was discharged after twelve nights.",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
-      assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText==="S$60.00"&&/applicable/.test(item.status)));
-      const row=await getConversation(account,answer.conversationId!);assert.equal(row?.state.subjects[people[1].id].hospitalNights.value,12);
-    });
-    await test("Automatic context retains a named reported condition when model facts are empty",async()=>{
-      const result=await send("Charmaine caught dengue",null);
-      assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.equal(answer.resolvedFamilyMemberId,people[1].id);
-      assert.ok(answer.knownFacts.includes("Diagnosis: dengue"));
-      assert.ok(answer.scenarioClassifications?.some(item=>item.family==="illness"&&item.traits.includes("diagnosis")));
-      assert.match(answer.summary,/Charmaine.*dengue/i);assert.equal(answer.policyReview?.length,10);
-      assert.ok(!answer.details.some(detail=>/model could not finish/i.test(detail)));
-    });
-    await test("Whole-family portfolio responses include all policies without a huge model prompt",async()=>{
-      const result=await send("What policies does my family have?",null);assert.equal(result.response.status,200,JSON.stringify(result.data));
-      assert.equal(result.data.answer.portfolioItems.length,90);assert.equal(result.data.answer.policyReview.length,90);
-      assert.ok(maxModelUserCharacters<11000,"Maximum model input: "+maxModelUserCharacters);
-    });
-    await test("Savings questions separate guaranteed and projected values",async()=>{
-      const result=await send("What happens when my endowment plan matures?",people[1].id);
-      assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const text=result.data.answer.details.join(" ");assert.match(text,/guaranteed maturity value is SGD 100000/);
-      assert.match(text,/projected non-guaranteed maturity value is SGD 120000/);assert.equal(result.data.answer.questions.length,0);
-    });
-    await test("Async analysis returns actual progress and a saved final answer",async()=>{
-      const result=await send("What policies does my family have?",null,undefined,undefined,true);
-      assert.equal(result.response.status,202,JSON.stringify(result.data));assert.ok(result.data.jobId);
-      const answer=await awaitJob(result.data.jobId);assert.equal(answer.portfolioItems?.length,90);
-      const saved=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
-      const payload=await saved.json();assert.equal(saved.status,200);assert.equal(payload.messages.length,2);assert.equal(payload.messages[1].answer_json.portfolioItems.length,90);
-    });
-    await test("A malformed model response is saved as an incomplete analysis",async()=>{
-      malformed=true;const result=await send("I still don't know how many hospital nights",people[1].id);malformed=false;
-      assert.equal(result.response.status,200,JSON.stringify(result.data));assert.equal(result.data.answer.claimItems.length,0);
-      assert.match(result.data.answer.summary,/couldnâ€™t read your message just now/);assert.equal(/\{|invalid JSON/.test(result.data.answer.summary+result.data.answer.details.join(" ")),false,"Raw model output never reaches the person");assert.equal(result.data.answer.confidence,"insufficient_evidence");
-    });
-    await test("Saved chats and API requests cannot access another account",async()=>{
-      const c=await openConversation({accountId:foreign,memberId:foreignPerson,title:"Other account secret"});
-      assert.equal(await getConversation(account,c.id),null);
-      const response=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+c.id),{params:Promise.resolve({id:c.id})});assert.equal(response.status,404);
-      const result=await send("What policies are there?",foreignPerson);assert.equal(result.response.status,404);
-      const removal=await removeHistory(new NextRequest("http://localhost/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:c.id})}));
-      assert.equal(removal.status,404);assert.ok(await getConversation(foreign,c.id));
-    });
-    await test("Concurrent replies cannot overwrite an already-saved revision",async()=>{
-      const c=await openConversation({accountId:account,memberId:people[0].id,title:"Revision test"}),token=await historyToken(account,c.family_member_id);
-      await saveTurn({conversation:c,token,state:c.state,message:"First message",answer:blank});
-      await assert.rejects(saveTurn({conversation:c,token,state:c.state,message:"Stale message",answer:blank}),ChatConflict);
-      assert.equal((await db.query("SELECT id FROM chat_messages WHERE conversation_id=$1",[c.id])).rows.length,2);
-    });
-    await test("Deleted chats cannot be restored by an in-flight result",async()=>{
-      const c=await openConversation({accountId:account,memberId:people[0].id,title:"Delete during work"}),token=await historyToken(account,c.family_member_id);
-      await deleteHistory(account,{id:c.id});
-      await assert.rejects(saveTurn({conversation:c,token,state:c.state,message:"Late answer",answer:blank}),ChatConflict);
-      assert.equal(await getConversation(account,c.id),null);
-    });
-    await test("Clearing a profile removes both normal and guided memory without deleting its policies",async()=>{
-      const before=(await db.query("SELECT id FROM policies WHERE account_id=$1",[account])).rows.length;
-      const c=await openConversation({accountId:account,memberId:people[1].id,title:"Clear during work"}),token=await historyToken(account,c.family_member_id);
-      await deleteHistory(account,{memberId:people[1].id});
-      await assert.rejects(saveTurn({conversation:c,token,state:c.state,message:"Late answer",answer:blank}),ChatConflict);
-      assert.equal((await db.query("SELECT id FROM chat_conversations WHERE account_id=$1 AND family_member_id=$2",[account,people[1].id])).rows.length,0);
-      assert.equal((await db.query("SELECT id FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2",[account,people[1].id])).rows.length,0);
-      assert.equal((await db.query("SELECT id FROM chat_messages WHERE account_id=$1 AND family_member_id=$2",[account,people[1].id])).rows.length,0);
-      assert.equal((await db.query("SELECT id FROM policies WHERE account_id=$1",[account])).rows.length,before);
-      assert.ok((await db.query("SELECT id FROM chat_conversations WHERE account_id=$1 AND family_member_id=$2",[account,people[0].id])).rows.length);
-      await db.exec(await readFile(path.resolve("sql/chat-upgrade.sql"),"utf8"));
-      assert.equal((await db.query("SELECT id FROM chat_conversations WHERE account_id=$1 AND family_member_id=$2",[account,people[1].id])).rows.length,0);
-    });
-    await test("Whole-family clear removes every account chat but preserves another account",async()=>{
-      await deleteHistory(account,{all:true});
-      assert.equal((await db.query("SELECT id FROM chat_conversations WHERE account_id=$1",[account])).rows.length,0);
-      assert.equal((await db.query("SELECT id FROM chat_messages WHERE account_id=$1",[account])).rows.length,0);
-      assert.equal((await db.query("SELECT id FROM policies WHERE account_id=$1",[account])).rows.length,180);
-      assert.ok((await db.query("SELECT id FROM chat_conversations WHERE account_id=$1",[foreign])).rows.length);
-    });
-    await test("History is paginated, with no fixed limit on retained conversations",async()=>{
-      for(let i=0;i<61;i++)await openConversation({accountId:account,memberId:people[0].id,title:"History "+i});
-      const response=await getHistory(new NextRequest("http://localhost/api/chat/history?scope="+people[0].id)),data=await response.json();
-      assert.equal(response.status,200);assert.equal(data.conversations.length,50);assert.ok(data.nextCursor);
-      const next=await getHistory(new NextRequest("http://localhost/api/chat/history?scope="+people[0].id+"&cursor="+data.nextCursor)),page=await next.json();
-      assert.equal(page.conversations.length,11);
-    });
-    const seedReviewFixture=async(wordingPages:number)=>{
-      await db.query("DELETE FROM policies WHERE account_id=$1",[account]);
-      await db.query("DELETE FROM policy_analysis_cache WHERE account_id=$1",[account]);
-      await db.query("DELETE FROM premium_records WHERE account_id=$1",[account]);
-      const person=people[0],id=uuid(700100),ref=uuid(700200),name="Review Fixture Critical Illness";
-      const schedule=person.display_name+" owns "+name+". Sum Insured SGD 350000.";
-      for(const item of [{id,text:schedule,personal:true},{id:ref,text:"placeholder",personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb)",
-          [item.id,account,person.id,name,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
-        await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,person.id,account]);
-      }
-      // These documents have been READ; they simply state no rule this fixture
-      // needs. That is a different state from never having been read, and it is
-      // the one these fallback tests are about.
-      await db.query("UPDATE policies SET benefits_indexed_at=now() WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account]);
-      await db.query("UPDATE policies SET conditions_indexed_at=now() WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account]).catch(()=>{});
-      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)",[account,id,schedule]);
-      await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,1,1,$5,$6::vector)",
-        [uuid(700300),account,person.id,id,schedule,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
-      for(let page=1;page<=wordingPages;page++){
-        const text=page===1?name+". We pay 100% of Sum Insured for qualifying critical illness. The diagnosis must satisfy the defined illness.":
-          name+". Section "+page+" sets out administrative conditions that this retrieval did not return. "+"Clause text ".repeat(120);
-        await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)",[account,ref,page,text]);
-        await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,$5,$5,$6,$7::vector)",
-          [uuid(700400+page),account,person.id,ref,page,text,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
-      }
-      await db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,'Critical Illness',350000,'SGD',$5,1,$6,true,true)",
-        [uuid(700500),account,id,person.id,name,schedule]);
-      return {policyId:id,referenceId:ref,person};
-    };
-    await test("An unread policy section is reported as a partial review, never as no coverage",async()=>{
-      await seedReviewFixture(12);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.reviewCoverage?.complete,false);
-      assert.equal(answer.reviewCoverage?.contractsTotal,1);
-      assert.equal(answer.reviewCoverage?.pagesTotal,13);
-      assert.ok((answer.reviewCoverage?.pagesRead??0)>0&&(answer.reviewCoverage?.pagesRead??0)<13,"Only the retrieved pages may count as read");
-      assert.equal(answer.policyReview?.[0].coverage?.completeness,"partial_retrieval");
-      assert.equal(answer.policyReview?.[0].coverage?.passagesTotal,13);
-      assert.match(answer.reviewCoverage!.statement,/^Partial review: \d+ of 13 processed pages/);
-      assert.ok(!answer.details.includes(answer.reviewCoverage!.statement),"The banner owns the statement; repeating it in details duplicated it on screen");
-      const normalised=answer.details.map(d=>d.toLowerCase().replace(/[^a-z0-9]+/g," ").trim());
-      assert.equal(new Set(normalised).size,normalised.length,"No detail may appear twice");
-      assert.equal(negativeCoverageClaim(answer.summary),false);
-      // The wording section (13 pages) was never fully retrieved, so the
-      // payout rule is not fully verified. The gate must withhold the
-      // amount -- but the benefit itself, being potentially relevant, must
-      // stay visible rather than disappearing or reading as "not covered".
-      const item=answer.claimItems[0];
-      assert.ok(item,"The potentially relevant critical-illness benefit must remain visible");
-      assert.match(item!.title,/[Cc]ritical [Ii]llness/);
-      assert.equal(item!.status,"needs_document");
-      assert.equal(item!.amountText,null);
-      assert.match(item!.reason,/withheld/i,"The reason must explain the amount was withheld, not just state a fact");
-      assert.ok(item!.conditions.some(c=>/partial policy review/i.test(c)),"A condition must name the incomplete review as the cause");
-    });
-    await test("A fully read contract is reported as a complete review",async()=>{
-      await seedReviewFixture(1);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.reviewCoverage?.complete,true);
-      assert.equal(answer.reviewCoverage?.pagesTotal,2);
-      assert.equal(answer.reviewCoverage?.pagesRead,2);
-      assert.equal(answer.policyReview?.[0].coverage?.completeness,"full_text_reviewed");
-      assert.match(answer.reviewCoverage!.statement,/^Complete review/);
-    });
-    await test("Missing premium evidence flags active status without changing ownership",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const stale=(await send("What policies do we have?",people[0].id)).data.answer as ChatAnswer;
-      const staleItem=stale.portfolioItems?.find(item=>item.ownerName===fixture.person.display_name);
-      assert.equal(staleItem?.confirmed,true);
-      assert.equal(staleItem?.coverages[0].amount,350000);
-      assert.equal(staleItem?.currentness?.state,"unknown");
-      assert.equal(staleItem?.currentness?.label,"Active status not recently verified");
-      assert.ok(stale.nextSteps.some(step=>/premium receipt or renewal notice/i.test(step)));
-      // The medical-definition match for a critical-illness diagnosis is a
-      // document-confirmation requirement the mock evidence never resolves
-      // (see the shared CI benefit fixture above), so this claim is withheld
-      // on that ground regardless of premium evidence. That withholding is
-      // separate from ownership/currentness -- the point under test here is
-      // that a missing premium receipt only ever adds its own qualifier and
-      // never substitutes for, or erases, the other reasons already present.
-      const claim=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      const claimItem=claim.claimItems[0];
-      assert.ok(claimItem,"The critical-illness benefit must remain visible");
-      assert.equal(claimItem!.status,"needs_document");
-      assert.equal(claimItem!.amountText,null,"A missing receipt must not manufacture an amount that was never confirmed");
-      assert.ok(claimItem!.conditions.some(c=>c.startsWith("Active status not recently verified")),"The currentness qualifier must still be present alongside the medical-definition qualifier");
-      assert.ok(claimItem!.conditions.some(c=>c.startsWith("The diagnosis must satisfy")),"The medical-definition qualifier that actually withholds the amount must also be present");
-      await db.query("INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,policy_number,amount,currency,payment_date) VALUES($1,$2,$3,'Example Insurer','REVIEW-1',1200,'SGD',current_date - 30)",
-        [account,fixture.policyId,fixture.person.id]);
-      const fresh=(await send("What policies do we have?",people[0].id)).data.answer as ChatAnswer;
-      const freshItem=fresh.portfolioItems?.find(item=>item.ownerName===fixture.person.display_name);
-      assert.equal(freshItem?.currentness?.state,"verified_recent");
-      assert.equal(freshItem?.coverages[0].amount,350000);
-    });
-    await test("A premium receipt for another person or policy cannot verify this contract",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,policy_number,amount,currency,payment_date) VALUES($1,NULL,$2,'Example Insurer','REVIEW-1',1200,'SGD',current_date - 10)",
-        [account,people[3].id]);
-      await db.query("INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,policy_number,amount,currency,payment_date) VALUES($1,NULL,$2,'Example Insurer','SOME-OTHER-POLICY',1200,'SGD',current_date - 10)",
-        [account,fixture.person.id]);
-      const answer=(await send("What policies do we have?",people[0].id)).data.answer as ChatAnswer;
-      const item=answer.portfolioItems?.find(row=>row.ownerName===fixture.person.display_name);
-      assert.equal(item?.currentness?.state,"unknown");
-      assert.equal(item?.confirmed,true);
-    });
-    await test("A long booklet is read deeper than the small-document floor",async()=>{
-      await seedReviewFixture(40);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.reviewCoverage?.pagesTotal,41);
-      assert.ok((answer.reviewCoverage?.pagesRead??0)>=8,"A 40-passage booklet must not be read six passages at a time, got "+answer.reviewCoverage?.pagesRead);
-      assert.equal(answer.reviewCoverage?.complete,false,"and what the call budget left unread is still reported");
-      // The critical-illness benefit's medical-definition match is a
-      // document-confirmation requirement (see the shared CI mock above),
-      // which the safety gate withholds regardless of how deep the read
-      // went -- the depth assertions above are what this test is actually
-      // about.
-      assert.equal(answer.claimItems[0]?.status,"needs_document");
-      assert.equal(answer.claimItems[0]?.amountText,null);
-    });
-    await test("A claim amount states the specific reasons it could settle differently",async()=>{
-      await seedReviewFixture(1);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      // The medical-definition match is a document-confirmation requirement
-      // (see the shared CI mock above), so the monetary gate withholds the
-      // amount outright rather than showing it with a qualifier -- a
-      // qualifier next to a figure that is not displayed is its own defect
-      // (fixed in lib/chat/workflow.ts alongside this test). The specific
-      // reasons this test is about must still be visible, on the benefit's
-      // own conditions, exactly as strongly as before.
-      const item=answer.claimItems[0];
-      assert.ok(item,"The potentially relevant benefit must remain visible");
-      assert.equal(item!.status,"needs_document");
-      assert.equal(item!.amountText,null);
-      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No total may be shown when its only item was withheld");
-      assert.ok(!answer.payoutQualifiers?.length,"A qualifier with no displayed total to qualify is a dangling caveat");
-      assert.ok(item!.conditions.some(c=>/defined illness|definition/i.test(c)),"The outstanding definition is the real reason here: "+JSON.stringify(item!.conditions));
-      assert.ok(item!.conditions.some(c=>/active status not recently verified/i.test(c)),"The missing premium/renewal evidence must also be named");
-      assert.doesNotMatch(answer.summary,/S\$350,000/,"An unconfirmed amount must never reach the summary text either");
-    });
-    await test("A failed evidence batch is never counted as text that was read",async()=>{
-      await seedReviewFixture(1);
-      failReading=true;
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      failReading=false;
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.reviewCoverage?.pagesRead,0,"Sections the model could not finish were sent, not read");
-      assert.equal(answer.reviewCoverage?.complete,false);
-      assert.ok((answer.reviewCoverage?.windowsFailed??0)>0);
-      assert.equal(answer.claimItems.length,0);
-      assert.equal(negativeCoverageClaim(answer.summary),false,"A failed batch must never read as an absence of cover");
-      assert.match(answer.summary,/incomplete review/i);
-      assert.ok(answer.nextSteps.some(step=>/evidence batch/i.test(step)),"The user must be told to retry rather than left with silence");
-    });
-    await test("A contract with no matching wording asks for it instead of going quiet",async()=>{
-      await db.query("DELETE FROM policies WHERE account_id=$1 AND document_role='policy_wording'",[account]);
-      await db.query("DELETE FROM policy_analysis_cache WHERE account_id=$1",[account]);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.claimItems.length,0);
-      assert.equal(answer.questions.length,1,"Missing wording is something the user can fix, so ask for it");
-      assert.match(answer.questions[0].text,/policy wording or benefit summary/i);
-      assert.match(answer.questions[0].why,/payout rule/i);
-      assert.equal(answer.policyReview?.[0].coverage?.completeness,"no_wording");
-    });
-    await test("Interpretation cut off part-way through still answers the turn",async()=>{
-      await seedReviewFixture(1);
-      truncateInterpretations=1;
-      const {response,data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      truncateInterpretations=0;
-      assert.equal(response.status,200,JSON.stringify(data));
-      const answer=data.answer as ChatAnswer;
-      assert.doesNotMatch(answer.summary,/invalid structured JSON/i,"A raw JSON dump must never reach the user");
-      assert.ok(!answer.details.some(d=>d.includes("subjectId")),"The raw model output must not be shown");
-      assert.ok(answer.claimItems[0],"A salvaged or retried interpretation still produces the assessment");
-      assert.equal(answer.claimItems[0]?.status,"needs_document");
-    });
-    await test("Short subject handles are mapped back to the real family member",async()=>{
-      await seedReviewFixture(1);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.resolvedFamilyMemberId,people[0].id);
-      assert.ok(answer.knownFacts.some(f=>/breast cancer/i.test(f)),"Facts must land on the real person, not on the handle");
-      const saved=await getConversation(account,answer.conversationId!);
-      assert.ok(saved?.state.subjects[people[0].id],"State is keyed by the real family member id");
-      assert.equal(Object.keys(saved!.state.subjects).some(k=>/^s\d+$/.test(k)),false,"No short handle may leak into saved state");
-    });
-    await test("A turn stops at its reading budget instead of running for minutes",async()=>{
-      await seedReviewFixture(40);
-      process.env.RAG_MAX_EVIDENCE_WINDOWS="2";
-      // Small sections so this document needs more of them than the budget
-      // allows, which is the situation the test is about. At the default size
-      // the whole document fits in one section and nothing is ever cut short.
-      process.env.RAG_EVIDENCE_WINDOW_CHARACTERS="3300";
-      const readsBefore=readingCalls;
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      delete process.env.RAG_MAX_EVIDENCE_WINDOWS;delete process.env.RAG_EVIDENCE_WINDOW_CHARACTERS;
-      const answer=data.answer as ChatAnswer;
-      assert.ok(readingCalls-readsBefore<=2,"The call ceiling must be enforced, made "+(readingCalls-readsBefore));
-      assert.equal(answer.reviewCoverage?.complete,false);
-      assert.equal(negativeCoverageClaim(answer.summary),false,"Stopping early is an incomplete review, not an absence of cover");
-      assert.ok(answer.details.some(d=>/still unread/i.test(d)),"The user must be told the read was cut short");
-    });
-    await test("A misshapen reading reply is repaired instead of losing the section",async()=>{
-      await seedReviewFixture(1);
-      misshapeReading=1;
-      const readsBefore=readingCalls;
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      misshapeReading=0;
-      const answer=data.answer as ChatAnswer;
-      assert.equal(readingCalls-readsBefore,1,"A wrong shape must not trigger a second, slower attempt");
-      assert.ok(answer.claimItems.some(item=>/Critical illness benefit/.test(item.title)),
-        "The salvageable benefit must survive: "+JSON.stringify(answer.claimItems.map(i=>i.title)));
-      assert.equal(answer.reviewCoverage?.windowsFailed,0,"The section counts as read, because it was");
-    });
-    await test("A failed section never prints validation output to the user",async()=>{
-      await seedReviewFixture(1);
-      failReading=true;
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      failReading=false;
-      const answer=data.answer as ChatAnswer;
-      const everything=[answer.summary,...answer.details,...answer.nextSteps].join(" ");
-      assert.ok(/evidence batch/i.test(everything),"The user is still told a section could not be read");
-      for(const leak of ["invalid_type","ZodError","{\"","received","sourceId"])
-        assert.equal(everything.includes(leak),false,"Raw model or validation output leaked: "+leak);
-    });
-    await test("The same benefit is not shown as two identical cards",async()=>{
-      await seedReviewFixture(1);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      const keys=answer.claimItems.map(item=>item.title+"|"+(item.amountText??"")+"|"+item.status);
-      assert.equal(new Set(keys).size,keys.length,"Duplicate cards: "+keys.join(" / "));
-    });
-    await test("With benefits on file, a claim is answered without reading documents",async()=>{
-      const fixture=await seedReviewFixture(40);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Death Benefit',ARRAY['death']::text[],'sum_insured',1,'SGD',NULL,9,'On death we pay the Sum Insured.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const readsBefore=readingCalls,narrationsBefore=explanationCalls;
-      const started=Date.now();
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(readingCalls-readsBefore,0,"Stored rules mean the documents are never re-read");
-      assert.equal(explanationCalls-narrationsBefore,1,"It should still speak like an assistant, not print a table");
-      assert.ok(Date.now()-started<4000,"A catalogued answer must be effectively instant");
-      assert.equal(answer.potentialPayoutTotals?.[0].amountText,"S$350,000");
-      assert.equal(answer.claimItems.length,1,"Only benefits the event can trigger: "+JSON.stringify(answer.claimItems.map(i=>i.title)));
-      assert.match(answer.claimItems[0].title,/Major Critical Illness/);
-      assert.match(answer.claimItems[0].reason,/page 7/);
-      assert.match(answer.summary,/S\$350,000/);
-    });
-    await test("A document whose conditions were never read has them read without being asked",async()=>{
-      const fixture=await seedReviewFixture(2);
-      // The state every household was in the day this shipped: rules on file,
-      // and nothing yet read about what those covers do NOT pay.
-      await db.query("UPDATE policies SET conditions_indexed_at=NULL WHERE account_id=$1",[account]);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const unreadBefore=Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account])).rows[0].n);
-      assert.ok(unreadBefore>0,"the fixture should start with conditions unread");
-      await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const unreadAfter=Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account])).rows[0].n);
-      assert.ok(unreadAfter<unreadBefore,"asking a question should have read the conditions, with nothing pressed");
-      // And never again: a document is read once and marked.
-      const callsBefore=readingCalls+explanationCalls;
-      await send("And what about a heart attack?",people[0].id);
-      const readAgain=Number((await db.query<{n:number}>("SELECT count(*)::int AS n FROM policies WHERE account_id=$1 AND conditions_indexed_at IS NULL",[account])).rows[0].n);
-      assert.ok(readAgain<=unreadAfter,"a document already read must not be read again");
-      assert.ok(readingCalls+explanationCalls-callsBefore<20,"the second question must not pay the reading cost again");
-    });
-    await test("The same question gives the same answer every time",async()=>{
-      const first=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      const second=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      // The DECISION is deterministic. The wording is free to vary, which is
-      // what keeps the chat feeling like a conversation rather than a report.
-      assert.deepEqual(first.claimItems,second.claimItems);
-      assert.deepEqual(first.potentialPayoutTotals,second.potentialPayoutTotals);
-    });
-    await test("Rebuilding the catalogue never touches documents or coverage",async()=>{
-      const { replaceBenefitCatalog,loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
-      const fixture=await db.query<{id:string}>("SELECT id FROM policies WHERE account_id=$1 AND document_role='policy_wording'",[account]);
-      const documentsBefore=(await db.query("SELECT id FROM policies WHERE account_id=$1",[account])).rows.length;
-      const coveragesBefore=(await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length;
-      const pagesBefore=(await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length;
-      await replaceBenefitCatalog(account,fixture.rows[0].id,[]);
-      assert.equal((await loadBenefitCatalog(account,[fixture.rows[0].id])).length,0);
-      assert.equal((await db.query("SELECT id FROM policies WHERE account_id=$1",[account])).rows.length,documentsBefore);
-      assert.equal((await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length,coveragesBefore);
-      assert.equal((await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length,pagesBefore);
-    });
-    await test("Indexing happens per document and refuses a quote that is not on the page",async()=>{
-      const fixture=await seedReviewFixture(3);
-      const { catalogueDocument,documentPages }=await import("@/lib/policies/catalog-builder");
-      const { loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
-      const before=catalogCalls;
-      const pages=await documentPages(account,fixture.referenceId);
-      const seen:number[]=[];
-      const stored=await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",
-        pages,report:(page)=>seen.push(page)});
-      assert.equal(catalogCalls-before,pages.length,"Every page is read exactly once");
-      assert.deepEqual(seen,pages.map((_,index)=>index+1),"Progress is reported per page so the user can watch it");
-      assert.equal(stored,1,"Only the page that actually states a rule yields a benefit");
-      const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
-      assert.equal(catalog.length,1);
-      assert.equal(catalog[0].benefitName,"Major Critical Illness");
-      assert.equal(catalog[0].formulaKind,"sum_insured");
-      assert.deepEqual(catalog[0].traits,["illness"],"Traits come from the wording itself, not from a model's opinion");
-      assert.deepEqual(catalog[0].conditions,["The diagnosis must satisfy the defined illness."],"A string condition is accepted as one condition");
-      assert.equal(catalog[0].sourcePage,1);
-      // Re-indexing replaces rather than accumulating.
-      await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",pages});
-      assert.equal((await loadBenefitCatalog(account,[fixture.referenceId])).length,1);
-    });
-    await test("The benefit schedule shows every stored rule in plain English",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Hospital Cash',ARRAY['hospitalisation']::text[],'daily',30,'SGD','hospitalNights',10,30,4,'We pay S$30 per day after the first 10 days, up to a maximum of 30 days.','[]'::jsonb,'[]'::jsonb,true)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      assert.equal(data.summary.total,2);
-      assert.equal(data.summary.needsYou,0,"A daily rule that states its own rate, waiting period and cap needs nothing from anyone");
-      assert.equal(data.summary.usable,2);
-      const hospital=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Hospital Cash");
-      // The whole point of the screen: a rule a non-specialist can check.
-      assert.equal(hospital.pays,"S$30.00 per day after the first 10 days, up to 30 days");
-      assert.equal(hospital.sourcePage,4,"A rule is only checkable next to the page it came from");
-      assert.deepEqual(hospital.owners,[people[0].display_name]);
-      assert.match(hospital.quote,/S\$30 per day/);
-      const illness=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Major Critical Illness");
-      assert.equal(illness.pays,"100% of the sum insured on your schedule");
-      const mine=await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+people[0].id))).json();
-      assert.equal(mine.summary.total,2);
-      const other=await (await getBenefits(new NextRequest("http://localhost/api/benefits?familyMemberId="+people[2].id))).json();
-      assert.equal(other.summary.total,0,"A person sees only the documents that are linked to them");
-    });
-    await test("A rule with no readable amount says so rather than showing a figure",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Dental',ARRAY['other']::text[],'none',NULL,NULL,12,'Dental treatment is covered as charged.','[]'::jsonb,'[]'::jsonb,true)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      const dental=data.benefits.find((b:{benefitName:string})=>b.benefitName==="Dental");
-      assert.equal(dental.pays,"Not yet readable â€” tell DearPolicy what this pays");
-      assert.equal(data.summary.unreadable,1);
-      assert.equal(/\d/.test(dental.pays),false,"An unreadable rule must never show a number");
-    });
-    await test("A correction outranks the parser and survives the document being read again",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const wording="We pay 100% of the Sum Insured for a qualifying critical illness.";
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,$4,'[]'::jsonb,'[]'::jsonb,true)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness",wording]);
-      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      const target=listed.benefits[0];
-      const saved=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
-        body:JSON.stringify({id:target.id,formula:{kind:"sum_insured",value:0.5,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null}})}));
-      assert.equal(saved.status,200);
-      const after=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      assert.equal(after.benefits[0].pays,"50% of the sum insured on your schedule");
-      assert.equal(after.summary.needsYou,0,"Correcting a rule is itself the answer");
-      assert.ok(after.benefits[0].reviewedAt,"The correction is recorded as human review");
-      // Re-reading the document must not quietly restore the parser's version.
-      const { replaceBenefitCatalog,loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
-      const stored=await replaceBenefitCatalog(account,fixture.referenceId,[{productName:"Review Fixture Critical Illness",
-        benefitName:"Major Critical Illness",traits:["illness"],formulaKind:"sum_insured",formulaValue:1,currency:"SGD",
-        factKey:null,offsetDays:null,maximumDays:null,sourcePage:7,quote:wording,conditions:[],requirements:[],needsReview:true}]);
-      assert.equal(stored,0,"A reviewed benefit is not re-extracted over the top of the person's answer");
-      const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
-      assert.equal(catalog.length,1,"Re-reading must not duplicate the benefit");
-      assert.equal(catalog[0].formulaValue,0.5);
-      assert.equal(catalog[0].needsReview,false);
-      // And the money actually answered with follows the correction.
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.claimItems[0].amountText,"S$175,000","The corrected rule is what the claim is calculated from");
-    });
-    await test("A rule DearPolicy could not compute is refused in plain language",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Hospital Cash',ARRAY['hospitalisation']::text[],'none',NULL,NULL,4,'A daily amount is payable while confined.','[]'::jsonb,'[]'::jsonb,true)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      const id=listed.benefits[0].id;
-      const attempt=async(formula:Record<string,unknown>)=>{
-        const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
-          body:JSON.stringify({id,formula})}));
-        return {status:response.status,error:(await response.json()).error as string};
-      };
-      const uncapped=await attempt({kind:"daily",value:30,currency:"SGD",factKey:"hospitalNights",offsetDays:10,maximumDays:null});
-      assert.equal(uncapped.status,400);
-      assert.match(uncapped.error,/maximum number of days/);
-      const unbound=await attempt({kind:"expense_cap",value:500,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null});
-      assert.equal(unbound.status,400);
-      assert.match(unbound.error,/which cost/i);
-      const negative=await attempt({kind:"fixed",value:0,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null});
-      assert.equal(negative.status,400);
-      for(const message of [uncapped.error,unbound.error,negative.error])
-        for(const leak of ["invalid_type","ZodError","{\"","received","formulaKind"])
-          assert.equal(message.includes(leak),false,"Raw validation output leaked to the user: "+leak);
-      const unchanged=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      assert.equal(unchanged.benefits[0].formulaKind,"none","A refused correction changes nothing");
-      assert.equal(unchanged.benefits[0].needsReview,true);
-    });
-    await test("Saying a rule is already right records the review without changing it",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,true)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
-        body:JSON.stringify({id:listed.benefits[0].id,needsReview:false})}));
-      assert.equal(response.status,200);
-      const after=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      assert.equal(after.benefits[0].formulaValue,1,"Confirming a rule must not alter it");
-      assert.equal(after.benefits[0].needsReview,false);
-      assert.ok(after.benefits[0].reviewedAt);
-    });
-    await test("Removing a row from the schedule leaves the document and cover untouched",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Table of Contents',ARRAY['other']::text[],'none',NULL,NULL,2,'Contents','[]'::jsonb,'[]'::jsonb,true)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const listed=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      const pagesBefore=(await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length;
-      const coveragesBefore=(await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length;
-      const response=await deleteBenefit(new NextRequest("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
-        body:JSON.stringify({id:listed.benefits[0].id})}));
-      assert.equal(response.status,200);
-      assert.equal((await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json()).summary.total,0);
-      assert.equal((await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length,pagesBefore);
-      assert.equal((await db.query("SELECT id FROM policy_coverages WHERE account_id=$1",[account])).rows.length,coveragesBefore);
-    });
-    await test("An out-of-date database upgrades itself instead of failing the person's next upload",async()=>{
-      await seedReviewFixture(1);
-      // Exactly what an existing install looks like before the upgrade.
-      await db.query("ALTER TABLE policy_benefits DROP COLUMN reviewed_at");
-      await db.query("ALTER TABLE policy_benefits DROP COLUMN basis_inferred");
-      delete (globalThis as {__dearpolicyBenefitSchema?:unknown}).__dearpolicyBenefitSchema;
-      const response=await getBenefits(new NextRequest("http://localhost/api/benefits"));
-      assert.equal(response.status,200,"A missing column must never reach the user as an error");
-      const columns=await db.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_name='policy_benefits' AND column_name IN ('reviewed_at','basis_inferred')");
-      assert.equal(columns.rows.length,2,"Every column the catalogue needs is added on first use");
-    });
-    await test("The benefit schedule never shows or changes another account's rules",async()=>{
-      await seedReviewFixture(1);
-      const foreignPolicy=uuid(700900);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Plan','OTHER-1','Critical Illness','policy_wording',60,'ready','other.pdf','other.pdf')",
-        [foreignPolicy,foreign,foreignPerson]);
-      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[foreignPolicy,foreignPerson,foreign]);
-      const inserted=await db.query<{id:string}>("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,'Other Plan','Other Benefit',ARRAY['illness']::text[],'fixed',1000,'SGD',1,'Other wording','[]'::jsonb,'[]'::jsonb,true) RETURNING id",
-        [foreign,foreignPolicy]);
-      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      assert.equal(data.benefits.some((b:{benefitName:string})=>b.benefitName==="Other Benefit"),false);
-      const response=await patchBenefit(new NextRequest("http://localhost/api/benefits",{method:"PATCH",headers:{"content-type":"application/json"},
-        body:JSON.stringify({id:inserted.rows[0].id,needsReview:false})}));
-      assert.equal(response.status,404);
-      assert.equal((await db.query<{needs_review:boolean}>("SELECT needs_review FROM policy_benefits WHERE id=$1",[inserted.rows[0].id])).rows[0].needs_review,true);
-      const removal=await deleteBenefit(new NextRequest("http://localhost/api/benefits",{method:"DELETE",headers:{"content-type":"application/json"},
-        body:JSON.stringify({id:inserted.rows[0].id})}));
-      assert.equal(removal.status,404);
-      assert.equal((await db.query("SELECT id FROM policy_benefits WHERE id=$1",[inserted.rows[0].id])).rows.length,1);
-      await db.query("DELETE FROM policies WHERE id=$1",[foreignPolicy]);
-    });
-    await test("An assessed claim produces a printable claim pack; an unassessed one says why not",async()=>{
-      const assessed=uuid(701100),unassessed=uuid(701200);
-      const packet={sessionId:assessed,eventSummary:"Fell from a motorcycle and fractured a wrist.",
-        facts:{eventType:"accident",eventDate:"2026-09-14",injured:true,injuries:["fracture"],fractureBodyPart:"wrist",
-          hospitalised:true,hospitalNights:4,uncertainFacts:[]},
-        knownFacts:[],missingFacts:["the final hospital bill"],relevantOwnedProducts:["Group Personal Accident"],
-        assessments:[{id:"gpa-fracture",title:"Simple Fracture (wrist)",status:"likely_applicable",amountText:"S$1,250",
-          calculatedAmount:1250,currency:"SGD",reason:"25% of the S$5,000 fracture limit printed in the schedule.",
-          conditions:[],evidenceTerms:["fracture"],productName:"Group Personal Accident",
-          ruleEvidence:{chunkId:"c1",policyId:"p1",policyName:"Group Personal Accident",pageStart:14,pageEnd:14}}],
-        nextSteps:["Ask the hospital for an itemised final bill."],ready:true};
-      await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts,decision_packet) VALUES($1,$2,$3,'complete','Motorcycle accident',$4::jsonb,$5::jsonb)",
-        [assessed,account,people[0].id,JSON.stringify(packet.facts),JSON.stringify(packet)]);
-      await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts) VALUES($1,$2,$3,'fact_finding','Still answering questions','{}'::jsonb)",
-        [unassessed,account,people[0].id]);
-      const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+assessed+"/pack"),{params:Promise.resolve({id:assessed})});
-      assert.equal(pack.status,200);
-      assert.equal(pack.headers.get("content-type"),"application/pdf");
-      assert.match(pack.headers.get("content-disposition")??"",/attachment; filename="DearPolicy claim summary - Tan Yi Chuen Desmond\.pdf"/);
-      const bytes=new Uint8Array(await pack.arrayBuffer());
-      assert.equal(Buffer.from(bytes.slice(0,5)).toString("latin1"),"%PDF-");
-      const { extractPdfPages }=await import("@/lib/documents/pdf");
-      const printed=(await extractPdfPages(bytes)).map(page=>page.text).join(" ").replace(/\s+/g," ");
-      assert.match(printed,/Tan Yi Chuen Desmond/);
-      assert.match(printed,/S\$1,250/);
-      assert.match(printed,/page 14/,"The insurer can check the figure against the wording");
-      assert.match(printed,/Hospital discharge summary/,"The checklist follows the reported event");
-      const pending=await getClaimPack(new NextRequest("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
-      assert.equal(pending.status,409);
-      assert.match((await pending.json()).error,/has not been assessed yet/);
-      await db.query("DELETE FROM claim_sessions WHERE id=ANY($1::uuid[])",[[assessed,unassessed]]);
-    });
-    await test("A claim pack cannot be downloaded from another account",async()=>{
-      const foreignClaim=uuid(701300);
-      await db.query("INSERT INTO claim_sessions(id,account_id,family_member_id,status,event_summary,facts,decision_packet) VALUES($1,$2,$3,'complete','Other event','{}'::jsonb,$4::jsonb)",
-        [foreignClaim,foreign,foreignPerson,JSON.stringify({sessionId:foreignClaim,eventSummary:"Other event",facts:{},knownFacts:[],missingFacts:[],relevantOwnedProducts:[],assessments:[],nextSteps:[],ready:true})]);
-      const response=await getClaimPack(new NextRequest("http://localhost/api/claims/"+foreignClaim+"/pack"),{params:Promise.resolve({id:foreignClaim})});
-      assert.equal(response.status,404);
-      assert.equal(response.headers.get("content-type")?.includes("pdf"),false);
-      await db.query("DELETE FROM claim_sessions WHERE id=$1",[foreignClaim]);
-    });
-    await test("A document nobody has claimed is surfaced with one question, and answering it is one click",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const orphan=uuid(701400);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Example Insurer','Household Shield Plan','ORPHAN-1','Personal Accident','policy_wording',60,'ready','shield-booklet.pdf','shield-booklet.pdf')",
-        [orphan,account,people[0].id]);
-      const before=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
-      const listed=before.unclaimed.find((doc:{id:string})=>doc.id===orphan);
-      assert.ok(listed,"An uploaded document with no owner is invisible everywhere else");
-      assert.equal(listed.product_name,"Household Shield Plan");
-      assert.ok(before.reminders.some((r:{title:string})=>/whose/i.test(r.title)),"It is on the to-do list, not only in a list of documents");
-      assert.equal(before.unclaimed.some((doc:{id:string})=>doc.id===fixture.referenceId),false,"A document that already has an owner is not asked about again");
-      // The person says whose it is. That is the whole interaction.
-      const linked=await linkPerson(new NextRequest("http://localhost/api/policies/link-person",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({policyId:orphan,familyMemberId:people[1].id,declared:true})}));
-      assert.equal(linked.status,200);
-      const after=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
-      assert.equal(after.unclaimed.some((doc:{id:string})=>doc.id===orphan),false);
-      assert.equal(after.reminders.some((r:{title:string})=>/whose/i.test(r.title)),false,"Answered questions leave the to-do list");
-      assert.equal((await db.query("SELECT source FROM policy_members WHERE policy_id=$1",[orphan])).rows.length,1);
-      await db.query("DELETE FROM policies WHERE id=$1",[orphan]);
-    });
-    await test("Another account's unclaimed documents are never asked about here",async()=>{
-      await seedReviewFixture(1);
-      const foreignOrphan=uuid(701500);
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,document_authority,processing_status,original_filename,storage_key) VALUES($1,$2,$3,'Other Insurer','Other Booklet','OTHER-2','Personal Accident','policy_wording',60,'ready','other-booklet.pdf','other-booklet.pdf')",
-        [foreignOrphan,foreign,foreignPerson]);
-      const data=await (await getDashboard(new NextRequest("http://localhost/api/dashboard"))).json();
-      assert.equal(data.unclaimed.some((doc:{id:string})=>doc.id===foreignOrphan),false);
-      await db.query("DELETE FROM policies WHERE id=$1",[foreignOrphan]);
-    });
-    await test("Reading a document by hand still works, for a deliberate re-read after the model changes",async()=>{
-      const fixture=await seedReviewFixture(1);
-      // What an install upgraded from an older version actually looks like.
-      await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1",[account]);
-      const listed=await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json();
-      assert.ok(listed.unread.length>=1,"A ready document with stored pages that has never been read is offered for reading");
-      assert.ok(listed.unread.every((doc:{pages:number})=>doc.pages>0),"Only documents whose pages are already stored: reading them needs no PDF and no OCR");
-      const first=await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json();
-      assert.ok(first.stored>=0);
-      assert.equal(typeof first.name,"string");
-      // Reading is one document per request so the screen can show progress.
-      let guard=0,remaining=first.remaining;
-      while(remaining>0&&guard++<10)
-        remaining=(await (await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},body:"{}"}))).json()).remaining;
-      assert.equal(remaining,0,"Every document is read in the end");
-      assert.equal((await (await getIndexStatus(new NextRequest("http://localhost/api/benefits/index"))).json()).unread.length,0,"Nothing is left asking to be read");
-      const catalog=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      assert.ok(catalog.summary.total>0,"Reading them is what puts amounts on the Benefits page");
-      assert.ok(catalog.benefits.some((b:{policyId:string})=>b.policyId===fixture.referenceId));
-      // A document that stated no rules has still been read, and must not keep asking.
-      assert.equal((await db.query("SELECT id FROM policies WHERE account_id=$1 AND benefits_indexed_at IS NULL AND processing_status='ready'",[account])).rows.length,0);
-      // And it never touched the document, its pages or the confirmed cover.
-      assert.equal((await db.query("SELECT id FROM policy_pages WHERE account_id=$1",[account])).rows.length>0,true);
-      assert.equal((await db.query("SELECT id FROM policy_coverages WHERE account_id=$1 AND confirmed=true",[account])).rows.length,1);
-    });
-    await test("Reading a document a person has already corrected keeps their correction",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,reviewed_at) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness']::text[],'sum_insured',0.5,'SGD',1,'We pay 100% of Sum Insured for qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false,now())",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1 AND id=$2",[account,fixture.referenceId]);
-      const response=await indexBenefits(new NextRequest("http://localhost/api/benefits/index",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({policyId:fixture.referenceId})}));
-      assert.equal(response.status,200);
-      const kept=await db.query<{formula_value:string}>("SELECT formula_value::text FROM policy_benefits WHERE account_id=$1 AND policy_id=$2 AND benefit_name='Major Critical Illness'",[account,fixture.referenceId]);
-      assert.equal(kept.rows.length,1,"Re-reading must not produce a second copy of a benefit the person has fixed");
-      assert.equal(Number(kept.rows[0].formula_value),0.5,"Their answer outranks the parser, every time it is read again");
-    });
-    await test("The schedule only asks the person for what only the person can answer",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const insert=(name:string,extra:string,values:string)=>db.query(
-        "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review"+extra+") VALUES($1,$2,$3,$4,ARRAY['other']::text[],"+values+")",
-        [account,fixture.referenceId,"Review Fixture Critical Illness",name]);
-      // 1. Stated outright by the document: nothing to ask.
-      await insert("Accidental Hospital Recuperation","","'fixed',250,'SGD',4,'We pay S$250.','[]'::jsonb,'[]'::jsonb,false");
-      // 2. Read from the table heading: DearPolicy will not use it until told.
-      await insert("Loss of speech",",basis_inferred","'sum_insured',0.5,'SGD',6,'Loss of speech 50%','[]'::jsonb,'[]'::jsonb,true,true");
-      // 3. A daily rate whose row never said for how many days.
-      await insert("Daily Hospital Cash",",fact_key,offset_days,maximum_days","'daily',30,'SGD',9,'S$30 per day.','[]'::jsonb,'[]'::jsonb,true,'hospitalNights',0,NULL");
-      // 4. No amount could be read at all: an admission, not a task.
-      await insert("Dental","","'none',NULL,NULL,12,'Dental treatment as charged.','[]'::jsonb,'[]'::jsonb,true");
-      const data=await (await getBenefits(new NextRequest("http://localhost/api/benefits"))).json();
-      const by=(name:string)=>data.benefits.find((b:{benefitName:string})=>b.benefitName===name);
-      assert.equal(by("Accidental Hospital Recuperation").attention,null);
-      assert.equal(by("Loss of speech").attention,"confirm");
-      assert.equal(by("Daily Hospital Cash").attention,"confirm");
-      assert.equal(by("Dental").attention,"unreadable",
-        "A row DearPolicy could not read an amount from is not work the person can do");
-      assert.equal(data.summary.needsYou,2,"Only the two rules that cannot be used without an answer are counted as the person's");
-      assert.equal(data.summary.unreadable,1);
-      assert.equal(data.summary.usable,1);
-      assert.equal(data.summary.needsYou+data.summary.unreadable+data.summary.usable,data.summary.total,
-        "Every row is in exactly one of the three states the screen shows");
-    });
-    await test("With nothing read yet, the chat reads what it needs and answers â€” nothing to press",async()=>{
-      await seedReviewFixture(12);
-      // What an install upgraded from an older version actually looks like,
-      // and what every household looked like the day conditions arrived.
-      await db.query("UPDATE policies SET benefits_indexed_at=NULL WHERE account_id=$1",[account]);
-      await db.query("UPDATE policies SET conditions_indexed_at=NULL WHERE account_id=$1",[account]).catch(()=>{});
-      const unreadBefore=(await db.query("SELECT id FROM policies WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account])).rows.length;
-      assert.ok(unreadBefore>0);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      // The person uploaded documents and asked a question. Everything between
-      // those two things is this system's job: it reads what it needs, then
-      // answers. It does not hand the work back.
-      const unreadAfter=(await db.query("SELECT id FROM policies WHERE account_id=$1 AND benefits_indexed_at IS NULL",[account])).rows.length;
-      assert.ok(unreadAfter<unreadBefore,"Asking the question should have read the documents it needed");
-      assert.doesNotMatch(answer.summary,/have not read your policy documents yet/,
-        "Telling someone their documents are unread is a confession, not an answer");
-      const everything=[answer.summary,...answer.details,...answer.nextSteps].join(" ");
-      for(const leak of ["RAG_","policies:index","npm run","benefits_indexed_at","Read them now"])
-        assert.equal(everything.includes(leak),false,"A person holding a policy document should never be shown: "+leak);
-      // Once its rules are on file, the same question is answered from them.
-      const fixture=await db.query<{id:string}>("SELECT id FROM policies WHERE account_id=$1 AND document_role='policy_wording'",[account]);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.rows[0].id,"Review Fixture Critical Illness"]);
-      const started=Date.now();
-      const after=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      assert.match(after.summary,/S\$350,000/);
-      assert.ok(Date.now()-started<4000,"Nothing is re-read, so a second question is immediate");
-    });
-    await test("A what-if question is answered from the stored benefits, with figures and a question back",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Ambulance Cost',ARRAY['accident','medical_expense']::text[],'expense_cap',500,'SGD','ambulanceBill',13,'Ambulance Cost Up to S$500 per incident','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Simple Fracture (wrist)',ARRAY['accident','bodily_injury']::text[],'fixed',1250,'SGD',14,'Arm, Elbow, Wrist or Ribs 25%','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const readsBefore=readingCalls;
-      const sessionsBefore=(await db.query("SELECT id FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2",[account,people[0].id])).rows.length;
-      const started=Date.now();
-      const {data}=await send("how much can i claim if i fell down and have a bill of $500",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(readingCalls-readsBefore,0,"A what-if must use the benefits already read, not re-read every PDF");
-      assert.ok(Date.now()-started<4000,"â€¦and come back immediately");
-      const titles=answer.claimItems.map(item=>item.title).join(" | ");
-      assert.match(titles,/Simple Fracture/,"A fall is an accident, and the accident plan is what should answer: "+titles);
-      assert.match(titles,/Ambulance Cost/);
-      // The rule itself is the answer when the amount depends on what happens.
-      const ambulance=answer.claimItems.find(item=>/Ambulance/.test(item.title))!;
-      assert.match(ambulance.amountText??"",/S\$500/,"A reimbursement limit is still a figure the person can act on");
-      const fracture=answer.claimItems.find(item=>/Fracture/.test(item.title))!;
-      assert.equal(fracture.amountText,"S$1,250");
-      // It asks the one thing that turns a rule into a number.
-      assert.equal(answer.questions.length,1,"One question, not an interrogation");
-      assert.match(answer.questions[0].text,/hospital|bill|ambulance/i);
-      // Nothing is recorded as an actual claim.
-      assert.ok(answer.details.some(detail=>/what-if/i.test(detail)&&/nothing here has been recorded as a claim/i.test(detail)));
-      const stored=await db.query("SELECT facts FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2",[account,people[0].id]);
-      assert.equal(stored.rows.length,sessionsBefore,"A hypothetical must not open a claim on anyone's profile");
-    });
-    await test("A portfolio question is not turned into a claim assessment",async()=>{
-      await seedReviewFixture(1);
-      const {data}=await send("what policies do i have?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.notEqual(answer.mode,"claim_assessment");
-    });
-    await test("Routing reading to another provider sends documents there and leaves chat where it was",async()=>{
-      const fixture=await seedReviewFixture(3);
-      const { catalogueDocument,documentPages }=await import("@/lib/policies/catalog-builder");
-      const { loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
-      const pages=await documentPages(account,fixture.referenceId);
-      const inner=globalThis.fetch;
-      let groqCalls=0,throttled=false,authHeader="";
-      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-        const url=String(input);
-        if(url.startsWith("https://api.groq.com/")){
-          groqCalls++;
-          authHeader=String((init?.headers as Record<string,string>)?.authorization??"");
-          // The free tier throttles by tokens per minute; the first page hits it.
-          if(!throttled){throttled=true;return new Response("rate limited",{status:429,headers:{"retry-after":"0"}});}
-          const body=JSON.parse(String(init?.body));
-          assert.equal(body.response_format?.type,"json_object");
-          assert.match(body.messages[0].content,/JSON Schema/,"The schema travels with the request so the reply can be validated");
-          const text=String(JSON.parse(body.messages[1].content).text);
-          const benefits=/100% of Sum Insured/.test(text)
-            ?[{name:"Major Critical Illness",quote:"We pay 100% of Sum Insured for qualifying critical illness.",formulaKind:"sum_insured",formulaValue:1,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,conditions:[]},
-              // A quote that is not on the page must be refused wherever it came from.
-              {name:"Invented Benefit",quote:"We pay S$999,999 on request.",formulaKind:"fixed",formulaValue:999999,currency:"SGD",factKey:null,offsetDays:null,maximumDays:null,conditions:[]}]
-            :[];
-          return Response.json({choices:[{message:{content:JSON.stringify({benefits})},finish_reason:"stop"}]});
-        }
-        return inner(input,init);
-      }) as typeof fetch;
-      // The preset would otherwise claim reading too; this test is about the
-      // per-job override, so it is what has to be out of the way.
-      const savedPreset=process.env.MODEL_PRESET;delete process.env.MODEL_PRESET;
-      process.env.READING_MODEL_PROVIDER="groq";process.env.GROQ_API_KEY="test-key";
-      try{
-        const stored=await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",pages});
-        assert.ok(groqCalls>=pages.length+1,"Every page went to the hosted reader, and the throttled page was retried");
-            assert.equal(authHeader,"Bearer test-key");
-        assert.equal(stored,1,"The invented quote was refused; only the real rule was stored");
-        const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
-        assert.deepEqual(catalog.map(b=>b.benefitName),["Major Critical Illness"]);
-        // Rerouting reading does not move the other jobs with it.
-        const readsBefore=explanationCalls;
-        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
-        assert.equal(explanationCalls-readsBefore,1,"Chat narration stays on the model its own setting names");
-      }finally{
-        delete process.env.READING_MODEL_PROVIDER;delete process.env.GROQ_API_KEY;
-        if(savedPreset)process.env.MODEL_PRESET=savedPreset;useHarnessModel();globalThis.fetch=inner;
-      }
-    });
-    await test("Rows are categorised by meaning after upload, not by keywords alone",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const { catalogueDocument }=await import("@/lib/policies/catalog-builder");
-      const { loadBenefitCatalog }=await import("@/lib/policies/benefit-catalog");
-      const table=["Schedule of Indemnities","(% of Sum Insured)","Loss of speech\t50%","Loss of one limb\t100%","Annual premium payable\t$1,200"].join("\n");
-      const before=categoriseCalls;
-      await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",
-        pages:[{page_number:1,text:table}]});
-      assert.equal(categoriseCalls-before,1,"One categorisation per page, for all its rows at once");
-      const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
-      const names=catalog.map(b=>b.benefitName);
-      assert.ok(names.includes("Loss of speech")&&names.includes("Loss of one limb"),names.join(" | "));
-      assert.equal(names.some(name=>/premium/i.test(name)),false,"The reader ruled the premium row out even though its value cell parsed");
-      const speech=catalog.find(b=>b.benefitName==="Loss of speech")!;
-      assert.ok(speech.traits.includes("disability"),"A trait the keywords could never find: "+speech.traits.join(","));
-      assert.ok(speech.traits.includes("bodily_injury"));
-      assert.equal(speech.traits.includes("other"),false,"'other' is only a placeholder for a row nothing could categorise");
-    });
-    await test("An illness is never offered accident-only benefits, and facts come before figures",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const product="Review Fixture Critical Illness";
-      const insert=(name:string,traits:string,requires:string,kind:string,value:number,factKey:string|null,offset:number|null,max:number|null,page:number)=>db.query(
-        "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,$4,$5::text[],$6::text[],$7,$8,'SGD',$9,$10,$11,$12,$13,'[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,product,name,traits.split(",").filter(Boolean),requires.split(",").filter(Boolean),kind,value,factKey,offset,max,page,name+" wording"]);
-      await insert("Ambulance Cost","accident,medical_expense","accident","expense_cap",500,"ambulanceBill",null,null,13);
-      await insert("Accidental Hospital Recuperation Benefit","accident,hospitalisation","accident","fixed",250,null,null,null,13);
-      await insert("Daily Hospital Cash Benefit","hospitalisation","","daily",30,"hospitalNights",0,30,5);
-      // The same daily benefit stated again in a second document of the same plan.
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Daily Hospital Cash Benefit',ARRAY['hospitalisation']::text[],'{}'::text[],'daily',30,'SGD','hospitalNights',0,30,9,'Daily Hospital Cash S$30 per day','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.policyId,product]);
-      const first=(await send("Desmond caught dengue. What can he claim?",people[0].id)).data;
-      const one=first.answer as ChatAnswer;
-      assert.equal(one.mode,"fact_finding","Facts come first");
-      assert.equal(one.claimItems.length,0,"No figure before the facts are in");
-      assert.equal(one.questions.length,1);
-      assert.match(one.questions[0].text,/hospital admission/i,"The first question is the one that rules benefits in or out: "+one.questions[0].text);
-      const candidates=one.details.find(detail=>detail.startsWith("Benefits that may respond"))??"";
-      assert.equal(/Ambulance|Accidental/.test(candidates),false,"Dengue is an illness; accident-only benefits are not candidates: "+candidates);
-      assert.match(candidates,/Daily Hospital Cash/);
-      // â€¦and the person is told why, rather than left to wonder whether they were missed.
-      const excluded=one.details.find(detail=>detail.startsWith("Not applicable here"))??"";
-      assert.match(excluded,/Ambulance Cost/);
-      assert.match(excluded,/only for an accident, and this was an illness/);
-      const second=(await send("Yes",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
-      const two=second.answer as ChatAnswer;
-      assert.equal(two.mode,"fact_finding");
-      assert.match(two.questions[0]?.text??"",/how many nights/i,"Then the quantity: "+JSON.stringify(two.questions));
-      const third=(await send("4",people[0].id,second.answer.conversationId,second.answer.conversationRevision)).data;
-      const three=third.answer as ChatAnswer;
-      assert.equal(three.mode,"claim_assessment","With the facts in, the figures come");
-      assert.equal(three.questions.length,0,"Nothing left to ask");
-      const titles=three.claimItems.map(item=>item.title);
-      assert.equal(titles.length,1,"One card per benefit per person, even when two documents state it: "+titles.join(" | "));
-      assert.match(titles[0],/Daily Hospital Cash/);
-      assert.equal(three.claimItems[0].amountText,"S$120.00","4 nights Ã— S$30, from the stored rule");
-      assert.equal(three.potentialPayoutTotals?.[0]?.amountText,"S$120.00");
-    });
-    await test("When the cause is unknown, it is asked rather than assumed",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      // The interpreter reports a hospital stay and nothing about its cause.
-      const first=(await send("Desmond was discharged after twelve nights",people[0].id)).data;
-      const one=first.answer as ChatAnswer;
-      assert.equal(one.mode,"fact_finding");
-      assert.match(one.questions[0]?.text??"",/accident, or an illness/i,JSON.stringify(one.questions));
-      const second=(await send("An accident",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
-      const two=second.answer as ChatAnswer;
-      assert.equal(two.mode,"claim_assessment");
-      assert.equal(two.claimItems[0]?.amountText,"S$250.00");
-    });
-    await test("A death benefit that sits in a sentence, not a table, is read into the ledger and answered",async()=>{
-      // The only rule on file is an accident-hospital row. A death benefit sits
-      // in a sentence of the policy wording that never became a table row.
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const deathClause="Review Fixture Critical Illness. If the insured dies while covered, we pay 100% of Sum Insured for a qualifying covered death.";
-      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)",[account,fixture.referenceId,deathClause]);
-      await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,2,2,$5,$6::vector)",
-        [uuid(700499),account,people[0].id,fixture.referenceId,deathClause,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
-      const {data}=await send("Desmond was murdered in Thailand",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.equal(answer.questions.length,0,"A death is not answered with a question about hospital admission: "+JSON.stringify(answer.questions));
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText==="S$350,000"),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
-      assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
-      assert.ok(answer.details.some(d=>/Coverage Ledger/.test(d)),"â€¦because the sentence was read into the ledger: "+answer.details.join(" / "));
-    });
-    // A certificate's schedule lines (no benefit table read yet) name a plan
-    // as potentially responding to a death, but only assume the standard
-    // rule for that kind of cover -- so the figure stays withheld, for a
-    // what-if and for a reported death alike, until the wording is read.
-    await test("A certificate's schedule lines name a death cover on their own, but withhold the figure until the wording is read",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const cover=async(id:number,category:string,amount:number)=>db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,$5,$6,'SGD','MINDEF Group Insurance',2,$7,true,true)",
-        [uuid(id),account,fixture.policyId,people[0].id,category,amount,category+" S$"+amount]);
-      await cover(700510,"Group Term Life",1_000_000);
-      await cover(700511,"Group Personal Accident",600_000);
-      await cover(700512,"Group Living Care",350_000);
-      // Labelled an inventory question ("policies"), it is a what-if about a payout.
-      const whatIf=(await send("If Desmond dies in an accident, how much would the payout be across his policies?",people[0].id)).data.answer as ChatAnswer;
-      assert.equal(whatIf.mode,"claim_assessment","A payout what-if is not answered with the inventory table: "+whatIf.summary);
-      assert.equal(whatIf.portfolioItems,undefined);
-      const titles=whatIf.claimItems.map(item=>item.title);
-      assert.ok(titles.some(t=>/Group Term Life/.test(t)),"The life sum assured is named as potentially responding to a death: "+titles.join(" | "));
-      assert.ok(titles.some(t=>/Group Personal Accident/.test(t)),"â€¦and the PA cover to an accidental death: "+titles.join(" | "));
-      assert.ok(!titles.some(t=>/Living Care/.test(t)),"A critical illness plan does not respond to a death: "+titles.join(" | "));
-      // Neither plan's benefit table has been read yet, so the schedule can
-      // only assume the standard rule for this kind of cover -- named, but
-      // without a bare figure, until the wording confirms it.
-      assert.ok(whatIf.claimItems.every(item=>item.amountText===null&&item.status==="needs_document"),
-        "Each figure is withheld until the wording is read: "+JSON.stringify(whatIf.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.ok(whatIf.claimItems.every(item=>item.conditions.some(c=>/Assumes the standard rule/.test(c))),"Each card says it assumes the standard rule until the wording is read");
-      assert.equal(whatIf.potentialPayoutTotals?.length??0,0,"No total may be shown when every item's amount is withheld");
-      // The same schedule answers a reported death whose cause is not yet known.
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Accidental Hospital Recuperation Benefit',ARRAY['accident','hospitalisation']::text[],ARRAY['accident']::text[],'fixed',250,'SGD',13,'Accidental Hospital Recuperation Benefit S$250','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const reported=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
-      assert.equal(reported.mode,"claim_assessment",reported.summary);
-      const life=reported.claimItems.find(item=>/Group Term Life/.test(item.title));
-      const pa=reported.claimItems.find(item=>/Group Personal Accident/.test(item.title));
-      assert.ok(life,"The life cover is still named for a reported death: "+reported.claimItems.map(i=>i.title).join(" | "));
-      assert.ok(pa,"â€¦and the PA cover for an accidental death");
-      // Neither plan's own wording has been read, so a reported death gets
-      // the same treatment as the what-if above: the cover is named, but no
-      // figure is shown until the schedule's assumed rule is confirmed by
-      // the actual clause.
-      assert.equal(life?.amountText,null);assert.equal(life?.status,"needs_document");
-      assert.equal(pa?.amountText,null);assert.equal(pa?.status,"needs_document");
-      assert.ok(life?.conditions.some(c=>/Assumes the standard rule/.test(c)),"An assumed ledger row says so: "+life?.conditions.join(" / "));
-      assert.equal(negativeCoverageClaim(reported.summary),false,"A withheld figure must never read as \"not covered\"");
-      assert.ok(reported.claimSessionId,"â€¦and the claim is on record with a pack to print");
-    });
-    await test("The Coverage Ledger: confirming a row makes the answer exact, rejecting removes it, and a row you add counts",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed) VALUES($1,$2,$3,$4,'Group Term Life',1000000,'SGD','MINDEF Group Insurance',2,'Group Term Life S$1,000,000',true,true)",
-        [uuid(700520),account,fixture.policyId,people[0].id]);
-      // The page lists what was read, marked as proposed.
-      const listed=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
-      type LRow={id:string;eventType:string;status:string;pays:string;planName:string;origin:string};
-      const life=(listed.rows as LRow[]).find(r=>r.eventType==="death"&&/Group Term Life/.test(r.planName));
-      assert.ok(life,"The certificate's life cover is a ledger row: "+JSON.stringify(listed.rows.map((r:LRow)=>r.planName+"/"+r.eventType)));
-      assert.equal(life!.status,"proposed");assert.match(life!.pays,/S\$1,000,000 lump sum/);
-      const tpd=(listed.rows as LRow[]).find(r=>r.eventType==="tpd"&&/Group Term Life/.test(r.planName));
-      assert.ok(tpd,"â€¦with the standard companion rows for that kind of plan");
-      // Before confirmation the answer is an estimate; after, it is confirmed.
-      const before=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
-      const beforeItem=before.claimItems.find(i=>/Group Term Life/.test(i.title));
-      // A proposed, unconfirmed row only assumes the standard rule, so the
-      // gate withholds the figure -- the same treatment the schedule-only
-      // death cover gets above -- until the person confirms it below.
-      assert.equal(beforeItem?.amountText,null);assert.equal(beforeItem?.status,"needs_document");
-      const confirmed=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:life!.id,status:"confirmed"})}));
-      assert.equal(confirmed.status,200);
-      // The person says the plan has no TPD cover; the row is gone from answers.
-      await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:tpd!.id,status:"rejected"})}));
-      // And DPS, which no document states, is entered by hand.
-      const added=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({familyMemberId:people[0].id,planName:"DPS",eventType:"death",paysKind:"lump_sum",amount:70000})}))).json();
-      assert.equal(added.row.status,"confirmed");
-      const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
-      const afterItem=after.claimItems.find(i=>/Group Term Life/.test(i.title));
-      assert.equal(afterItem?.estimateBasis,"confirmed");assert.equal(afterItem?.status,"likely_applicable");
-      assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText==="S$70,000"),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
-      assert.equal(after.potentialPayoutTotals?.[0]?.amountText,"S$1,070,000");
-      const again=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
-      assert.equal((again.rows as LRow[]).some(r=>r.id===tpd!.id),false,"A rejected row is not shown");
-      // Re-seeding after a new upload adds nothing twice and never touches a confirmed row.
-      const rebuilt=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"rebuild"})}))).json();
-      assert.equal(rebuilt.added,0);
-      const still=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
-      assert.equal((still.rows as LRow[]).find(r=>r.id===life!.id)?.status,"confirmed");
-      // Another account's rows are never visible or editable.
-      const foreignRow=await db.query<{id:string}>("INSERT INTO coverage_rules(account_id,family_member_id,plan_name,event_type,pays_kind,amount,origin) VALUES($1,$2,'Other Plan','death','lump_sum',5,'person') RETURNING id",[foreign,foreignPerson]);
-      const denied=await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:foreignRow.rows[0].id,status:"confirmed"})}));
-      assert.equal(denied.status,404);
-      assert.equal((still.rows as LRow[]).some(r=>r.planName==="Other Plan"),false);
-    });
-    await test("An assessment from the stored rules leaves a claim on record, with a pack to print",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      assert.ok(answer.claimSessionId,"The claim is on record");
-      assert.ok(answer.nextSteps.some(step=>/claim pack/i.test(step)),"The last thing said is what to do next: "+answer.nextSteps.join(" / "));
-      assert.ok(answer.nextSteps.some(step=>/Gather:/.test(step)&&/medical report/i.test(step)),"â€¦and what to gather follows the event: "+answer.nextSteps.join(" / "));
-      const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+answer.claimSessionId+"/pack"),{params:Promise.resolve({id:answer.claimSessionId!})});
-      assert.equal(pack.status,200,"The pack can be printed straight from a chat answer");
-      const { extractPdfPages }=await import("@/lib/documents/pdf");
-      const printed=(await extractPdfPages(new Uint8Array(await pack.arrayBuffer()))).map(page=>page.text).join(" ").replace(/\s+/g," ");
-      assert.match(printed,/S\$350,000/);
-      assert.match(printed,/page 7/);
-      // It appears on the Claims page for this person.
-      const listed=await (await db.query("SELECT status,decision_packet FROM claim_sessions WHERE id=$1",[answer.claimSessionId])).rows[0] as {status:string;decision_packet:{ready:boolean}};
-      assert.equal(listed.status,"complete");assert.equal(listed.decision_packet.ready,true);
-    });
-    await test("Relevance is read, not keyword-matched: dengue is not cancer, and 'no ambulance' is heard",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const product="Review Fixture Critical Illness";
-      const insert=(name:string,traits:string,requires:string,kind:string,value:number,factKey:string|null,offset:number|null,max:number|null)=>db.query(
-        "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,$4,$5::text[],$6::text[],$7,$8,'SGD',$9,$10,$11,6,$12,'[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,product,name,traits.split(",").filter(Boolean),requires.split(",").filter(Boolean),kind,value,factKey,offset,max,name+" wording"]);
-      // A health booklet: rows that all carry "hospitalisation" and would all match by keyword.
-      await insert("Cancer drug services","illness,hospitalisation,medical_expense","","fixed",4500,null,null,null);
-      await insert("Day surgery","hospitalisation","","fixed",1500,null,null,null);
-      await insert("Daily Hospital Cash Benefit","hospitalisation","","daily",30,"hospitalNights",0,30);
-      await insert("Ambulance Cost","medical_expense","","expense_cap",500,"ambulanceBill",null,null);
-      const before=relevanceCalls;
-      const first=(await send("Desmond caught dengue. What can he claim?",people[0].id)).data;
-      const one=first.answer as ChatAnswer;
-      assert.ok(relevanceCalls>before,"The shortlist was put to the reader");
-      const candidates=one.details.find(d=>d.startsWith("Benefits that may respond"))??"";
-      assert.equal(/Cancer|Day surgery/.test(candidates),false,"Rows the reader ruled out are not even named as candidates: "+candidates);
-      assert.match(candidates,/Daily Hospital Cash/);
-      const excluded=one.details.find(d=>d.startsWith("Not applicable here"))??"";
-      assert.match(excluded,/Cancer drug services/);
-      assert.match(excluded,/not a treatment for dengue/,"â€¦and the reader's reason is shown: "+excluded);
-      // Facts given in passing are heard: "no ambulance" ends the ambulance question for good.
-      const second=(await send("Yes",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
-      const third=(await send("3 nights, no ambulance, we took a taxi",people[0].id,second.answer.conversationId,second.answer.conversationRevision)).data;
-      const three=third.answer as ChatAnswer;
-      assert.equal(three.questions.some(q=>/ambulance/i.test(q.text)),false,"Never ask about a charge for something that did not happen: "+JSON.stringify(three.questions));
-      assert.equal(three.questions.some(q=>/maximum number of days|not stated in the row/i.test(q.text)),false,"Internal notes are never asked as questions");
-      const titles=three.claimItems.map(i=>i.title).join(" | ");
-      assert.equal(/Ambulance|Cancer|Day surgery/.test(titles),false,titles);
-      assert.match(titles,/Daily Hospital Cash/);
-      assert.equal(three.claimItems[0].amountText,"S$90.00");
-      assert.equal(/took a taxi/.test(three.summary),false,"The person's own words are never handed back as the answer");
-    });
-    await test("Every model call is on the ledger, priced, and the plan can be checked against it",async()=>{
-      const { usageThisMonth }=await import("@/lib/ai/ledger");
-      await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) SELECT $1,id,'Review Fixture Critical Illness','Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured.','[]'::jsonb,'[]'::jsonb,false FROM policies WHERE account_id=$1 AND document_role='policy_wording'",[account]);
-      const before=await usageThisMonth(account);
-      await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-      const after=await usageThisMonth(account);
-      assert.ok(after.calls>before.calls,"The turn's model calls were counted");
-      assert.ok(after.byRole.some(r=>r.role==="judgement"),"Interpretation and relevance are judgement work");
-      assert.ok(after.byRole.some(r=>r.role==="narration"),"Wording the answer is narration work");
-      // Every call is billable now, so a turn that costs nothing would mean the
-      // ledger missed it -- which is the failure this test exists to catch.
-      assert.ok(after.costUsd>before.costUsd,"A turn's hosted calls are priced, not just counted: "+before.costUsd+" -> "+after.costUsd);
-      assert.ok(after.byRole.every(r=>r.costUsd>=0),"No role reports a negative cost");
-      assert.equal(after.plan.priceUsd,4.99);
-      assert.ok(after.chatTurns>=1,"Questions are counted against the plan's allowance");
-    });
-    await test("A household past its spend limit is stopped before the next hosted call, in plain words",async()=>{
-      const { assertUnderSpendCap,SpendCapReached }=await import("@/lib/ai/ledger");
-      const { readableModelFailure }=await import("@/lib/ai/llm");
-      // This test sets the month's spend to the cent, so it needs the month to
-      // start empty. Every earlier turn in this suite is now a priced call, and
-      // without this the $14.99 below lands on top of them and trips the cap
-      // before the first assertion gets to check that it does not.
-      await db.query("DELETE FROM model_usage WHERE account_id=$1",[account]);
-      await db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced) VALUES($1,'reading','anthropic','claude-sonnet-5',1000000,200000,14.99,true)",[account]);
-      process.env.PLAN_HARD_STOP_USD="15";
-      try{
-        await assertUnderSpendCap(account); // 14.99 < 15: still allowed
-        await db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced) VALUES($1,'judgement','anthropic','claude-haiku-4-5',10000,1000,0.02,true)",[account]);
-        let stopped:unknown=null;
-        try{await assertUnderSpendCap(account);}catch(error){stopped=error;}
-        assert.ok(stopped instanceof SpendCapReached,"Past the stop, hosted calls are refused");
-        const message=readableModelFailure(stopped);
-        assert.match(message,/reached its model-spend limit/);
-        assert.match(message,/documents already read still work/,"The person is told what still works, not just what stopped");
-        for(const leak of ["PLAN_HARD_STOP","model_usage","{"])assert.equal(message.includes(leak),false);
-      }finally{delete process.env.PLAN_HARD_STOP_USD;await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='anthropic'",[account]);}
-    });
-    await test("MODEL_PRESET=anthropic runs a whole claim with one key and nothing local",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const inner=globalThis.fetch;
-      let anthropicCalls=0;const modelsUsed=new Set<string>();let cached=false;
-      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-        const url=String(input);
-        if(url.startsWith("https://api.anthropic.com/v1/messages")){
-          anthropicCalls++;
-          const body=JSON.parse(String(init?.body));
-          modelsUsed.add(body.model);
-          assert.equal((init?.headers as Record<string,string>)["x-api-key"],"sk-ant-test");
-          cached=cached||body.system?.[0]?.cache_control?.type==="ephemeral";
-          const system=String(body.system[0].text),user=JSON.parse(body.messages[0].content);
-          // Reuse the simulated model's answers by replaying the request through it.
-          const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
-          const content=(await replay.json()).content;
-          return Response.json({content:[{type:"text",text:content}],stop_reason:"end_turn",usage:{input_tokens:1200,output_tokens:90,cache_read_input_tokens:800}});
-        }
-        return inner(input,init);
-      }) as typeof fetch;
-      process.env.MODEL_PRESET="anthropic";process.env.ANTHROPIC_API_KEY="sk-ant-test";delete process.env.GEMINI_API_KEY;
-      try{
-        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        const answer=data.answer as ChatAnswer;
-        assert.equal(answer.claimItems[0]?.amountText,"S$350,000","The claim is answered");
-        assert.ok(anthropicCalls>=2,"Interpretation, relevance and narration went to Claude");
-        assert.ok(modelsUsed.has("claude-sonnet-5"),"Judgement on the mid tier: "+[...modelsUsed].join(","));
-        assert.ok(cached,"The system prompt is marked for prompt caching");
-        const { usageThisMonth }=await import("@/lib/ai/ledger");
-        const usage=await usageThisMonth(account);
-        assert.ok(usage.costUsd>0,"Hosted calls are priced on the ledger");
-        assert.ok(usage.byRole.some(r=>r.role==="judgement"&&r.costUsd>0));
-      }finally{
-        delete process.env.ANTHROPIC_API_KEY;useHarnessModel();globalThis.fetch=inner;
-        await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='anthropic'",[account]);
-      }
-    });
-    await test("MODEL_PRESET=gemini routes to Google, choosing the endpoint from the key",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const { geminiEndpoint }=await import("@/lib/ai/providers");
-      assert.match(geminiEndpoint("gemini-2.5-flash","AIzaSyExample"),/^https:\/\/generativelanguage\.googleapis\.com\/v1beta\/models\/gemini-2\.5-flash:generateContent$/,"An AI Studio key goes to the Gemini API");
-      assert.match(geminiEndpoint("gemini-2.5-flash","AQ.Ab8Example"),/^https:\/\/generativelanguage\.googleapis\.com/,"Key prefix is not a tell; the Gemini API is the default for every key");
-      process.env.GEMINI_ENDPOINT="vertex";
-      assert.match(geminiEndpoint("gemini-2.5-flash","AQ.Ab8Example"),/^https:\/\/aiplatform\.googleapis\.com\/v1\/publishers\/google\/models\/gemini-2\.5-flash:generateContent$/,"Vertex only when asked for");
-      delete process.env.GEMINI_ENDPOINT;
-      const inner=globalThis.fetch;
-      let googleCalls=0;const hosts=new Set<string>();
-      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-        const url=String(input);
-        if(/googleapis\.com\/v1beta\/models\?/.test(url))
-          return Response.json({models:[{name:"models/gemini-3.6-flash",supportedGenerationMethods:["generateContent"]},{name:"models/gemini-3.5-flash-lite",supportedGenerationMethods:["generateContent"]}]});
-        if(/googleapis\.com/.test(url)){
-          googleCalls++;hosts.add(new URL(url).host);
-          assert.match(url,/gemini-3\.(6-flash|5-flash-lite):generateContent/,"A family name resolves to a model Google actually serves: "+url);
-          assert.equal((init?.headers as Record<string,string>)["x-goog-api-key"],"AQ.test-key");
-          const body=JSON.parse(String(init?.body));
-          assert.equal(body.generationConfig.responseMimeType,"application/json");
-          const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
-          const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
-          const content=(await replay.json()).content;
-          return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
-        }
-        return inner(input,init);
-      }) as typeof fetch;
-      process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
-      try{
-        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
-        assert.ok(googleCalls>=2);
-        assert.deepEqual([...hosts],["generativelanguage.googleapis.com"],"The Gemini API by default");
-      }finally{
-        useHarnessModel();globalThis.fetch=inner;
-        await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
-      }
-    });
-    await test("Reading is given the output budget a hosted model can actually use",async()=>{
-      const { readingOutputTokens }=await import("@/lib/chat/policy-analysis");
-      const savedTokens=process.env.RAG_READING_OUTPUT_TOKENS;
-      delete process.env.RAG_READING_OUTPUT_TOKENS;
-      try{
-        // 900 was the local GPU's ceiling, and it forced the reader to choose
-        // between quoting a clause and structuring it. Nothing imposes it now.
-        assert.equal(readingOutputTokens(),2600,"A hosted model is not forced to choose between quoting a clause and also structuring it");
-        process.env.RAG_READING_OUTPUT_TOKENS="1500";
-        assert.equal(readingOutputTokens(),1500,"An explicit setting always wins over the default");
-      }finally{
-        if(savedTokens)process.env.RAG_READING_OUTPUT_TOKENS=savedTokens;else delete process.env.RAG_READING_OUTPUT_TOKENS;
-      }
-    });
-    await test("Retrieval depth per document is set for a reader that can take it",async()=>{
-      const { passageBudget }=await import("@/lib/policies/inventory");
-      const savedMax=process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
-      delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
-      try{
-        // A ceiling of 16 is how a real benefit table ranked just outside the
-        // retrieved set and never reached the model at all.
-        assert.equal(passageBudget(500),40,"A hosted reader can take the depth that keeps a real benefit table in the retrieved set");
-        process.env.RAG_MAX_PASSAGES_PER_DOCUMENT="10";
-        assert.equal(passageBudget(500),10,"An explicit setting always wins over the default");
-      }finally{
-        if(savedMax)process.env.RAG_MAX_PASSAGES_PER_DOCUMENT=savedMax;else delete process.env.RAG_MAX_PASSAGES_PER_DOCUMENT;
-      }
-    });
-    await test("A judgement call rate-limited on Google's pricier tier falls back to the cheaper tier instead of failing the chat",async()=>{
-      const fixture=await seedReviewFixture(1);
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review) VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)",
-        [account,fixture.referenceId,"Review Fixture Critical Illness"]);
-      const inner=globalThis.fetch;
-      let flashCalls=0,flashLiteCalls=0;
-      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-        const url=String(input);
-        if(/googleapis\.com\/v1beta\/models\?/.test(url))
-          return Response.json({models:[{name:"models/gemini-3.6-flash",supportedGenerationMethods:["generateContent"]},{name:"models/gemini-3.5-flash-lite",supportedGenerationMethods:["generateContent"]}]});
-        // The pricier judgement tier is out of quota for this whole test --
-        // every call to it fails, the way a real Google rate limit would.
-        if(/gemini-3\.6-flash:generateContent/.test(url)){flashCalls++;return new Response("rate limited",{status:429,headers:{"retry-after":"0"}});}
-        if(/gemini-3\.5-flash-lite:generateContent/.test(url)){
-          flashLiteCalls++;
-          const body=JSON.parse(String(init?.body));
-          const system=String(body.systemInstruction.parts[0].text),user=JSON.parse(body.contents[0].parts[0].text);
-          const replay=await inner(REPLAY_URL,{method:"POST",body:JSON.stringify({system,user:JSON.stringify(user)})});
-          const content=(await replay.json()).content;
-          return Response.json({candidates:[{content:{parts:[{text:content}]},finishReason:"STOP"}],usageMetadata:{promptTokenCount:900,candidatesTokenCount:80}});
-        }
-        return inner(input,init);
-      }) as typeof fetch;
-      process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
-      try{
-        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000","The chat still produced the right answer despite the pricier tier being down");
-        assert.ok(flashCalls>=1,"The primary judgement tier was tried first");
-        assert.ok(flashLiteCalls>=1,"...and every judgement call fell back to the tier that is not rate-limited");
-        const usage=(await db.query("SELECT model,ok FROM model_usage WHERE account_id=$1 AND role='judgement' ORDER BY at",[account])).rows as {model:string;ok:boolean}[];
-        assert.ok(usage.some(r=>r.model==="flash"&&r.ok===false),"The failed attempt on the primary model is on the ledger, not silently dropped: "+JSON.stringify(usage));
-        assert.ok(usage.some(r=>r.model==="flash-lite"&&r.ok===true),"...and the successful fallback attempt is billed under the model that actually ran: "+JSON.stringify(usage));
-      }finally{
-        useHarnessModel();globalThis.fetch=inner;
-        await db.query("DELETE FROM model_usage WHERE account_id=$1 AND provider='gemini'",[account]);
-      }
-    });
-    await test("Several reading windows restating the same \'no coverage\' conclusion collapse into one detail, not several near-duplicates",async()=>{
-      await seedReviewFixture(40);
-      const inner=globalThis.fetch;
-      let readingWindowCalls=0;
-      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-        const url=String(input);
-        if(!/googleapis\.com/.test(url)||!/generateContent/.test(url))return inner(input,init);
-        const body=JSON.parse(String(init?.body)),system=String(body.systemInstruction.parts[0].text);
-        if(!system.startsWith("Read insurance"))return inner(input,init);
-        readingWindowCalls++;
-        const user=JSON.parse(body.contents[0].parts[0].text),source=user.sources[0],quote=String(source.text).slice(0,40);
-        // Independent reading windows over the same undershot section, worded
-        // differently the way a real model varies its phrasing window to window.
-        const restatements=["This contract does not contain a critical illness benefit for this diagnosis.",
-          "The policy wording does not include any relevant benefit here.","These pages do not provide coverage for the reported event."];
-        const text=readingWindowCalls<=3?restatements[readingWindowCalls-1]:
-          "This particular passage raises an unrelated administrative point, not a coverage conclusion.";
-        return googleReply(JSON.stringify({benefits:[],observations:[{text,evidence:[{sourceId:source.id,quote}]}],nextSteps:[]}));
-      }) as typeof fetch;
-      // Small sections so these 40 pages span several reading windows, which is
-      // the condition the test is about; at the default size they fit in two.
-      process.env.RAG_EVIDENCE_WINDOW_CHARACTERS="3300";
-      try{
-        const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        const answer=data.answer as ChatAnswer;
-        assert.ok(readingWindowCalls>=4,"The fixture\'s 40 wording pages must span more than one reading window: "+readingWindowCalls);
-        const restatementLines=answer.details.filter(d=>/\b(?:do|does) not (?:contain|include|cover|provide)\b/i.test(d));
-        assert.equal(restatementLines.length,1,"Every window\'s restatement of the same \'no coverage\' conclusion collapses into a single detail line, not one per window: "+JSON.stringify(answer.details));
-        assert.ok(answer.details.some(d=>/unrelated administrative point/.test(d)),"A genuinely distinct observation for the same contract is still preserved: "+JSON.stringify(answer.details));
-      }finally{
-        delete process.env.RAG_EVIDENCE_WINDOW_CHARACTERS;globalThis.fetch=inner;
-      }
-    });
-    await test("A percentage-of-Sum-Insured clause the model only quoted as prose is still promoted into a computable claim",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const fractureText="For accidental fracture of a limb, compensation is provided for a broken forearm at 20% of the Sum Insured.";
-      await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)",[account,fixture.referenceId,fractureText]);
-      await db.query("INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,2,2,$5,$6::vector)",
-        [uuid(700600),account,fixture.person.id,fixture.referenceId,fractureText,"["+Array.from({length:1024},(_,j)=>j===0?1:0).join(",")+"]"]);
-      const inner=globalThis.fetch;
-      globalThis.fetch=(async(input:RequestInfo|URL,init?:RequestInit)=>{
-        const url=String(input);
-        if(!/googleapis\.com/.test(url)||!/generateContent/.test(url))return inner(input,init);
-        const body=JSON.parse(String(init?.body)),system=String(body.systemInstruction.parts[0].text);
-        if(!system.startsWith("Read insurance"))return inner(input,init);
-        const user=JSON.parse(body.contents[0].parts[0].text);
-        const fractureSource=(user.sources as {id:string;text:string}[]).find(s=>s.text.includes("broken forearm"));
-        if(!fractureSource)return inner(input,init);
-        // The model quotes the clause correctly but -- the way a small/cheap
-        // model sometimes does -- returns it only as prose, never structuring
-        // it into the benefits list alongside.
-        return googleReply(JSON.stringify({benefits:[],
-          observations:[{text:"Compensation is provided for a broken forearm at 20% of the Sum Insured.",
-            evidence:[{sourceId:fractureSource.id,quote:"compensation is provided for a broken forearm at 20% of the Sum Insured"}]}],
-          nextSteps:[]}));
-      }) as typeof fetch;
-      try{
-        const {data}=await send("He broke his left forearm playing basketball. What can he claim?",fixture.person.id);
-        const answer=data.answer as ChatAnswer;
-        const item=answer.claimItems.find(c=>/broken forearm/i.test(c.title));
-        assert.ok(item,"The quoted percentage clause must be promoted into a claim item, not left as prose the household has to work out itself: "+JSON.stringify(answer.claimItems));
-        assert.equal(item!.calculatedAmount,70000,"20% of the verified S$350,000 Sum Insured");
-        assert.equal(item!.amountText,"S$70,000");
-      }finally{
-        globalThis.fetch=inner;
-      }
-    });
-    await test("A printed figure outranks a heading-inferred percentage for the same benefit across two documents",async()=>{
-      const fixture=await seedReviewFixture(1);
-      const product="Review Fixture Critical Illness";
-      // Benefit summary: "% of Sum Insured" heading -> 20% of the S$350,000 cover = S$70,000. Wrong for a fracture.
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES($1,$2,$3,'Arm, Elbow, Wrist or Ribs (Other Fracture)',ARRAY['accident','bodily_injury']::text[],ARRAY['accident']::text[],'sum_insured',0.2,'SGD',8,'Arm, Elbow, Wrist or Ribs (Other Fracture) 20%','[]'::jsonb,'[]'::jsonb,true,true)",
-        [account,fixture.referenceId,product]);
-      // Product summary of the same plan: "% of S$5,000" heading -> S$1,250.
-      await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES($1,$2,$3,'Arm , Elbow, Wrist or Ribs',ARRAY['accident','bodily_injury']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','[]'::jsonb,'[]'::jsonb,true,true)",
-        [account,fixture.policyId,product]);
-      const {data}=await send("Desmond broke his forearm playing basketball",people[0].id);
-      const answer=data.answer as ChatAnswer;
-      const cards=answer.claimItems.map(item=>item.title+"="+item.amountText);
-      assert.equal(answer.claimItems.length,1,"One fracture benefit, not two versions of it: "+cards.join(" | "));
-      assert.match(answer.claimItems[0].title,/Arm.*Elbow.*Wrist/,"The printed S$5,000 clause outranks the heading-inferred percentage, even while both stay unpriced: "+cards.join(" | "));
-      // Both rates were read from a heading above their row, not the row
-      // itself, so neither is trusted for a bare figure until a person
-      // confirms it on the Benefits page -- which also means the wrong
-      // S$70,000 percentage-of-whole-sum reading can never leak through.
-      assert.equal(answer.claimItems[0].amountText,null);
-      assert.equal(answer.claimItems[0].status,"needs_document");
-      assert.equal(answer.claimItems[0].estimateBasis,"indicative","â€¦and it is still marked as read from a heading");
-      assert.ok(answer.claimItems[0].conditions.some(c=>/heading above the row/.test(c)),"The condition names the actual cause: a heading-read rate, not the row itself");
-      assert.equal(/S\$70,000/.test(JSON.stringify(answer)),false,"S$70,000 for a forearm never appears anywhere");
-    });
-    await seedPlans(900);
-    await test("Real keyset SQL and per-policy retrieval still include the 900th policy",async()=>{
-      const inventory=await loadPolicyInventory(account,people);assert.equal(inventory.contracts.length,900);
-      const sources=await retrieveContractSources({accountId:account,contracts:inventory.contracts,question:"death benefits",searchTerms:["death"]});
-      assert.equal(sources.size,900);assert.ok(sources.get(inventory.contracts.at(-1)!.id)?.length);
-    });
-    console.log("DearPolicy PostgreSQL/pgvector/API checks passed ("+cases+" checks; simulated Ollama responses).");
-    console.log("Model calls exercised: interpretation="+interpretationCalls+", policy reading="+readingCalls+", explanation="+explanationCalls+". Maximum user-prompt characters="+maxModelUserCharacters+".");
-  }finally{
-    pool.query=originalQuery;pool.connect=originalConnect;globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;await db.close();
-  }
-}
-main().catch(error=>{console.error(error);process.exitCode=1;});
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éíç8Ñ:-jZ.¶›­–)Ş³V–×÷'B76W'Bg&öÒ&æöFS¦76W'B÷7G&–7B#°¦–×÷'B²&VDf–ÆRÒg&öÒ&æöFS¦g2÷&öÖ—6W2#°¦–×÷'BF‚g&öÒ&æöFS§F‚#°¦–×÷'B²vÆ—FRÒg&öÒ$VÆV7G&–2×7Â÷vÆ—FR#°¦–×÷'B²fV7F÷"Òg&öÒ$VÆV7G&–2×7Â÷vÆ—FR÷fV7F÷"#°¦–×÷'B²v7'—FòÒg&öÒ$VÆV7G&–2×7Â÷vÆ—FRö6öçG&–"÷v7'—Fò#°¦–×÷'B²ööÂÒg&öÒ$öÆ–"öF"ö6Æ–VçB#°¦–×÷'B²Vç7W&T6†E66†VÖÆvWD6öçfW'6F–öâÆ†—7F÷'•Fö¶VâÆ÷Vä6öçfW'6F–öâÇ6fUGW&âÆFVÆWFT†—7F÷'’Ä6†D6öæfÆ–7BÒg&öÒ$öÆ–"ö6†B÷7F÷&R#°¦–×÷'B²ÆöEöÆ–7”–çfVçF÷'’Ç&WG&–WfT6öçG&7E6÷W&6W2Òg&öÒ$öÆ–"÷öÆ–6–W2ö–çfVçF÷'’#°¦–×÷'B²æVvF—fT6÷fW&vT6Æ–ÒÒg&öÒ$öÆ–"÷öÆ–6–W2÷&Wf–WrÖ6÷fW&vR#°¦–×÷'B²õ5BÒg&öÒ$öö’ö6†B÷&÷WFR#°¦–×÷'B²tUB2vWD†—7F÷'’ÄDTÄUDR2&VÖ÷fT†—7F÷'’Òg&öÒ$öö’ö6†Bö†—7F÷'’÷&÷WFR#°¦–×÷'B²tUB2vWE6fVD6†BÒg&öÒ$öö’ö6†Bö†—7F÷'’õ¶–EÒ÷&÷WFR#°¦–×÷'B²tUB2vWD¦ö"Òg&öÒ$öö’ö6†Bö¦ö'2õ¶–EÒ÷&÷WFR#°¦–×÷'B²tUB2vWD&VæVf—G2ÅD4‚2F6„&VæVf—BÄDTÄUDR2FVÆWFT&VæVf—BÒg&öÒ$öö’ö&VæVf—G2÷&÷WFR#°¦–×÷'B²tUB2vWDÆVFvW"ÅD4‚2F6„ÆVFvW"Åõ5B2÷7DÆVFvW"Òg&öÒ$öö’öÆVFvW"÷&÷WFR#°¦–×÷'B²tUB2vWD6Æ–Õ6²Òg&öÒ$öö’ö6Æ–×2õ¶–EÒ÷6²÷&÷WFR#°¦–×÷'B²tUB2vWDF6†&ö&BÒg&öÒ$öö’öF6†&ö&B÷&÷WFR#°¦–×÷'B²tUB2vWD–æFW…7FGW2Åõ5B2–æFW„&VæVf—G2Òg&öÒ$öö’ö&VæVf—G2ö–æFW‚÷&÷WFR#°¦–×÷'B²õ5B2Æ–æµW'6öâÒg&öÒ$öö’÷öÆ–6–W2öÆ–æ²×W'6öâ÷&÷WFR#°¦–×÷'B²æW‡E&WVW7BÒg&öÒ&æW‡B÷6W'fW"#°¦–×÷'BG—R²6†Dç7vW"Òg&öÒ$÷G—W2#°¦–×÷'BG—R²–çFW'&WFF–öâÒg&öÒ$öÆ–"ö6†Böf7G2#°¦–×÷'BG—R²öÆ–7”æÇ—6—2Òg&öÒ$öÆ–"ö6†B÷G—W2#° ¢ò¢¢'Vç2&VÂ÷7Fw&U5Â÷wfV7F÷"5Â–âF—7÷6&ÆRt4ÒFF&6Rà¢¢öæÇ’öÆÆÖ&W7öç6W2&R6–×VÆFVC²æòW6W"FF&6RÂuR÷"öÆ–6–W2&RÖöF–f–VBà¢¢ğ¦7–æ2gVæ7F–öâÖ–â‚—°¢6öç7BF#ÖæWrvÆ—FR‡¶W‡FVç6–öç3§·fV7F÷"Çv7'—F÷×Ò“°¢v—BF"çv—E&VG“°¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7Â÷66†VÖç7Â"’Â'WFc‚"’“°¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7Âö&VæVf—BÖ6FÆörç7Â"’Â'WFc‚"’“°¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7ÂöÖöFVÂ×W6vRç7Â"’Â'WFc‚"’“°¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7Âö6÷fW&vRÖÆVFvW"ç7Â"’Â'WFc‚"’“°¢òò†÷W6V†öÆB×66÷VB&÷WFW2æ÷r&W6öÇfR–FVçF—G’F‡&÷Vv€¢òò&WV—&T†÷W6V†öÆD6öçFW‡B‚’ö7&VFUW6W%7W&6T6Æ–VçB‚’Âv†–6‚æVVG2F†P¢òòWF†VçF–6FVBöæöâ÷6W'f–6U÷&öÆR6†–Ò&öÆW2æBF†R†÷W6V†öÆEöÖVÖ&W'0¢òò$Å2öÆ–6–W2F†—2f–ÆRFVf–æW2‡6VR7Âö†÷W6V†öÆB×&Ç2ç7Âw2÷vâFö0¢òò6öÖÖVçBÒÒ&VÂ7W&6R&ö¦V7BÇ&VG’†2F†RWF†VçF–6FVB&öÆP¢òòæB—G2FVfVÇBF&ÆRw&çG3²F†—2f–ÆR&V7&VFW2§W7BVæ÷Vv‚öbF†@¢òòf÷"æöâÕ7W&6R÷7Fw&W2Â–æ6ÇVF–ærF†—2vÆ—FR–ç7Fæ6RÂFò&V†fP¢òòF†R6ÖRv’’à¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7Âö†÷W6V†öÆB×&Ç2ç7Â"’Â'WFc‚"’“°¢òò6†V6·ö–çBs¢Æ–"÷öÆ–6–W2ö–çfVçF÷'’çG2w2ÆöEöÆ–7”–çfVçF÷'’‚’æ÷rf–ÇFW'0¢òòöâöÆ–6–W2æÆ–fV7–6ÆU÷7FFRf–7F—fU&VF–6FR‚’ÒÒW†V27ÂöÆ–fV7–6ÆRç7À¢òò6òF†B6öÇVÖâW†—7G2†W&RFöòà¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7ÂöÆ–fV7–6ÆRç7Â"’Â'WFc‚"’“°¢òòæòFöÖ–âF&ÆR÷WG6–FR66÷VçG2ö†÷W6V†öÆEöÖVÖ&W'2ö†÷W6V†öÆEö–çf—FF–öç0¢òò†2—G2÷vâ$Å2öÆ–7’f–ÆR–WB‡6VRF†R6†V6·ö–çBó"6öÖÖ—BÖW76vW2p¢òòF—66Æ÷6VBv¢F†R6Æ–×2÷öÆ–6–W2&W÷6—F÷'’Æ–W"—2WF†÷&—¦VBBF†P¢òòÆ–6F–öâÆ–W"ÒÒW‡Æ–6—B66÷VçEö–Bf–ÇFW'2ÒÒæ÷Bf–÷7Fw&W0¢òò$Å2’â&VÂ7W&6R&ö¦V7Bw&çG2WF†VçF–6FVF'&öBF&ÆR66W70¢òò'’FVfVÇB2'Böb—G2÷vâ&ö÷G7G&–æs²F†—2Ö—'&÷'2F†BFVfVÇ@¢òòf÷"WfW'’F&ÆR6ò7&VFUW6W%7W&6T6Æ–VçB‚’w24UBÄô4Â$ôÄP¢òòWF†VçF–6FVF6â7F–ÆÂ&V6‚F†VÒ†W&RÂW†7FÇ’2—B6â–â&öGV7F–öâà¢v—BF"æW†V2‚$u$åB4TÄT5BÂ”å4U%BÂUDDRÂDTÄUDRôâÄÂD$ÄU2”â44„TÔV&Æ–2DòWF†VçF–6FVC²"“°¢6öç7B66÷VçCÒ#ÓÓÓÓ"Æf÷&V–vãÒ#ÓÓÓÓ“’#°¢òò&WV—&T7W'&VçEW6W"‚’&W6öÇfW2F‡&÷Vv‚F†RFWbÖöæÇ’6W76–öâfÆÆ&6°¢òò†Æ–"öWF‚÷6W76–öâçG2w2FWe6W76–öåW6W"‚’ÂvFVB&V†–æBDUeôUD…ôTä$ÄT@¢òòæBVæ6öæF—F–öæÆÇ’Væf–Æ&ÆR–â&öGV7F–öâ’&F†W"F†â&VÀ¢òò7W&6R6W76–öâ6öö¶–RÒÒF†W&R—2æò'&÷w6W"†W&RÂöæÇ’&÷WFP¢òò†æFÆW"–çfö¶VBF—&V7FÇ’âDUeô44õTåEô”B—2–ææVBFòF†—2f—‡GW&Rw0¢òò÷vâ66÷VçF–B6òWfW'’Ç&VG’ÖÖ–w&FVB&÷WFRVæFW"FW7B&W6öÇfW0¢òòFòF†R6ÖR†÷W6V†öÆB—G26VVFVB&÷w2&VÆöærFòà¢&ö6W72æVçbäDUeôUD…ôTä$ÄTCÒ##°¢&ö6W72æVçbäDUeô44õTåEô”CÖ66÷VçC°¢6öç7BWV–CÒ†ã¦çVÖ&W"“Óâ#ÓÓCÓƒÒ"µ7G&–ær†â’çE7F'Bƒ"Â#"“°¢6öç7BV÷ÆSÔ'&’æg&öÒ‡¶ÆVæwFƒ£—ÒÂ…òÆ’“Óâ‡°¢–C§WV–B†’³’ÆF—7Æ•öæÖS¦“ÓÓÓò%Fâ–’6‡VVâFW6ÖöæB#¦“ÓÓÓò$öærV’Æ–â6†&Ö–æR#¢$fÖ–Ç’ÖVÖ&W""¶’À¢&VfW'&VEöæÖS¦“ÓÓÓò$FW6ÖöæB#¦“ÓÓÓò$6†&Ö–æR#¢$ÖVÖ&W""¶’Ç&VÆF–öç6†—¦“ÓÓÓò'6VÆb#¦“ÓÓÓò'7÷W6R#¦“ÃSò&6†–ÆB#¢'&VçB"À¢Ò’“°¢v—BF"çVW'’‚$”å4U%B”åDò66÷VçG2†–BÆæÖR’dÅTU2‚CÂuFW7BfÖ–Ç’r’Â‚C"Ât÷F†W"66÷VçBr’"Å¶66÷VçBÆf÷&V–våÒ“°¢òòF†RFWbÖfÆÆ&6²6W76–öâW6W"†–BÓÒDUeô44õTåEô”BÓÒ66÷VçBÂ6VP¢òò&÷fR’æVVG2vVçV–æR†÷W6V†öÆEöÖVÖ&W'2&÷röbF†V—"÷vâÒĞ¢òò&W6öÇfT7F—fT†÷W6V†öÆD–B‚’&R×fW&–f–W2&VÂÖVÖ&W'6†—öâWfW'’6ÆÂÀ¢òò6ò&÷WFRVæFW"FW7B6âwB&V6‚66÷VçFw2FFv—F†÷WBöæRà¢v—BF"çVW'’‚$”å4U%B”åDò†÷W6V†öÆEöÖVÖ&W'2††÷W6V†öÆEö–BÇW6W%ö–BÇ&öÆR’dÅTU2‚CÂCÂv÷væW"r’"Å¶66÷VçEÒ“°¢f÷"†6öç7BöbV÷ÆR–v—BF"çVW'’‚$”å4U%B”åDòfÖ–Ç•öÖVÖ&W'2†–BÆ66÷VçEö–BÆF—7Æ•öæÖRÇ&VfW'&VEöæÖRÇ&VÆF–öç6†—’dÅTU2‚CÂC"ÂC2ÂCBÂCR’"Å·æ–BÆ66÷VçBÇæF—7Æ•öæÖRÇç&VfW'&VEöæÖRÇç&VÆF–öç6†—Ò“°¢6öç7Bf÷&V–våW'6öã×WV–Bƒ“““’“°¢v—BF"çVW'’‚$”å4U%B”åDòfÖ–Ç•öÖVÖ&W'2†–BÆ66÷VçEö–BÆF—7Æ•öæÖRÇ&VÆF–öç6†—’dÅTU2‚CÂC"Ât÷F†W"66÷VçBW'6öârÂw6VÆbr’"Å¶f÷&V–våW'6öâÆf÷&V–våÒ“° ¢òò6öææV7F–öâ×WFW‚&W6W'fW2G&ç67F–öâ—6öÆF–öâf÷"F†R6–ævÆRVÖ&VFFV@¢òò÷7Fw&U5Â6öææV7F–öââÆÂ5ÂæB6öç7G&–çG2W†V7WFR–â÷7Fw&U5Âà¢ÆWBF–ÃÕ&öÖ—6Rç&W6öÇfR‚“°¢6öç7B7V—&SÖ7–æ2‚“Óç°¢6öç7B&Wf–÷W3×F–Ã¶ÆWB&VÆV6R¢‚“Óçfö–C°¢F–ÃÖæWr&öÖ—6SÇfö–Câ‡&W6öÇfSÓç·&VÆV6S×&W6öÇfS·Ò“¶v—B&Wf–÷W3·&WGW&â&VÆV6S°¢Ó°¢6öç7BW†V7WFSÖ7–æ2‡FW‡C§7G&–ærÇ&×3§Væ¶æ÷våµÓÕµÒ“Óç°¢–b‚&×2æÆVæwF‚bgFW‡Bæ–æ6ÇVFW2‚#²"’—°¢6öç7B&W7VÇG3Öv—BF"æW†V2‡FW‡B“¶6öç7B&W7VÇC×&W7VÇG2æB‚Ó“°¢&WGW&â·&÷w3§&W7VÇCòç&÷w3óõµÒÇ&÷t6÷VçC§&W7VÇCòæffV7FVE&÷w3óóÓ°¢Ğ¢6öç7B&W7VÇCÖv—BF"çVW'’‡FW‡BÇ&×2“°¢&WGW&â·&÷w3§&W7VÇBç&÷w2Ç&÷t6÷VçC§&W7VÇBæffV7FVE&÷w3ó÷&W7VÇBç&÷w2æÆVæwF‡Ó°¢Ó°¢6öç7B÷&–v–æÅVW'“×ööÂçVW'’Æ÷&–v–æÄ6öææV7C×ööÂæ6öææV7BÆ÷&–v–æÄfWF6ƒÖvÆö&ÅF†—2æfWF6‚Æ÷&–v–æÅF–ÖV÷WCÖvÆö&ÅF†—2ç6WEF–ÖV÷WC°¢ööÂçVW'“Ò†7–æ2‡FW‡C§7G&–ærÇ&×3§Væ¶æ÷våµÓÕµÒ“Óç¶6öç7B&VÆV6SÖv—B7V—&R‚“·G'—·&WGW&âv—BW†V7WFR‡FW‡BÇ&×2“·Öf–æÆÇ—·&VÆV6R‚“·×Ò’2G—VöbööÂçVW'“°¢ööÂæ6öææV7CÒ†7–æ2‚“Óç°¢6öç7B&VÆV6SÖv—B7V—&R‚“°¢&WGW&â·VW'“¦W†V7WFRÇ&VÆV6WÓ°¢Ò’2G—VöbööÂæ6öææV7C°¢òòF†R7V—FR'Vç2F†R&÷WF–ær&öGV7F–öâ'Vç2â&W7F÷&VBgFW"ç’FW7BF†@¢òò&W&÷WFW2Fòæ÷F†W"&÷f–FW"Â6òöæRFW7B6ææ÷B6–ÆVçFÇ’6†ævRF†RæW‡Bà¢6öç7B„$äU55õ$U4UCÒ&vVÖ–æ’"Ä„$äU55ô´U“Ò$çFW7BÖ¶W’#°¢6öç7BW6T†&æW74ÖöFVÃÒ‚“Óç·&ö6W72æVçbäÔôDTÅõ$U4UCÔ„$äU55õ$U4UC·&ö6W72æVçbätTÔ”ä•ô•ô´U“Ô„$äU55ô´U“·Ó°¢W6T†&æW74ÖöFVÂ‚“°¢vÆö&ÅF†—2ç6WEF–ÖV÷WCÒ‚†fã¥&ÖWFW'3ÇG—Vöb6WEF–ÖV÷WCå³ÒÆ×3ó¦çVÖ&W"Âââæ&w3§Væ¶æ÷våµÒ“Óæ÷&–v–æÅF–ÖV÷WB†fâÆ×3ÓÓÓsó¦×2Âââæ&w2’’2G—Vöb6WEF–ÖV÷WC°¢ÆWB–çFW'&WFF–öä6ÆÇ3ÓÇ&VF–æt6ÆÇ3ÓÆW‡ÆæF–öä6ÆÇ3ÓÆÖ„ÖöFVÅW6W$6†&7FW'3ÓÆ6FÆöt6ÆÇ3ÓÆ6FVv÷&—6T6ÆÇ3ÓÇ&VÆWfæ6T6ÆÇ3ÓÆÆVFvW%&VG3ÓÆÆVFvW$6†V6·3Ó°¢ÆWBÖÆf÷&ÖVCÖfÇ6RÆf–Å&VF–æsÖfÇ6RÇG'Væ6FT–çFW'&WFF–öç3ÓÆÖ—76†U&VF–æsÓ°¢òòF†R6–×VÆFVBÖöFVÂç7vW'2öâvöövÆRw2v—&Rf÷&ÖBÂ&V6W6RF†B—2F†P¢òòöæRF†R7V·2â$UÄ•õU$Â—2†÷rF†R&÷f–FW"×7V6–f–2FW7G2&VÆ÷p¢òò&WW6RF†W6R6ÖRç7vW'2v—F†÷WB&RÖ–×ÆVÖVçF–ærF†RFV6—6–öâF&ÆRà¢6öç7B$UÄ•õU$ÃÒ&‡GG¢òöÖöFVÂçFW7B÷&WÆ’#°¢6öç7BvöövÆU&WÇ“Ò‡FW‡C§7G&–ær“Óå&W7öç6Ræ§6öâ‡¶ÖöFVÅfW'6–öã¢&vVÖ–æ’Ó2ãbÖfÆ6‚"Ç&W7öç6T–C¢&f—‡GW&R×&W7öç6R"Æ6æF–FFW3¥·¶6öçFVçC§·'G3¥··FW‡GÕ×ÒÆf–æ—6…&V6öã¢%5Dõ'ÕÒÇW6vTÖWFFF§·&ö×EFö¶Vä6÷VçC£“Æ6æF–FFW5Fö¶Vä6÷VçC£ƒ×Ò“°¢vÆö&ÅF†—2æfWF6ƒÒ†7–æ2†–çWC¥&WVW7D–æf÷ÅU$ÂÆ–æ—Có¥&WVW7D–æ—B“Óç°¢6öç7BW&ÃÕ7G&–ær†–çWB“°¢–b‚övöövÆV—5Âæ6öÕÂ÷c&WFÂöÖöFVÇ5ÃòòçFW7B‡W&Â’¢&WGW&â&W7öç6Ræ§6öâ‡¶ÖöFVÇ3¥·¶æÖS¢&ÖöFVÇ2övVÖ–æ’Ó2ãbÖfÆ6‚"Ç7W÷'FVDvVæW&F–öäÖWF†öG3¥²&vVæW&FT6öçFVçB%×ÒÀ¢¶æÖS¢&ÖöFVÇ2övVÖ–æ’Ó2ãRÖfÆ6‚ÖÆ—FR"Ç7W÷'FVDvVæW&F–öäÖWF†öG3¥²&vVæW&FT6öçFVçB%×Õ×Ò“°¢6öç7BvöövÆSÒövöövÆV—5Âæ6öÒòçFW7B‡W&Â“°¢–b‚vöövÆRbgW&ÂÓÕ$UÄ•õU$Â—F‡&÷ræWrW'&÷"‚%VæW‡V7FVBÖöFVÂ&WVW7C¢"·W&Â“°¢6öç7B&öG“Ô¥4ôâç'6R…7G&–ær†–æ—Còæ&öG’’“°¢6öç7BW6W%FW‡CÖvöövÆSõ7G&–ær†&öG’æ6öçFVçG5³Òç'G5³ÒçFW‡B“¥7G&–ær†&öG’çW6W"“°¢6öç7B7—7FVÓ§7G&–æsÖvöövÆSõ7G&–ær†&öG’ç7—7FVÔ–ç7G'V7F–öâç'G5³ÒçFW‡B“¥7G&–ær†&öG’ç7—7FVÒ“°¢6öç7BW6W#Ô¥4ôâç'6R‡W6W%FW‡B“°¢Ö„ÖöFVÅW6W$6†&7FW'3ÔÖF‚æÖ‚†Ö„ÖöFVÅW6W$6†&7FW'2ÇW6W%FW‡BæÆVæwF‚“°¢6öç7B&WÇ“Ò‡FW‡C§7G&–ær“ÓævöövÆP¢õ&W7öç6Ræ§6öâ‡¶ÖöFVÅfW'6–öã¢&vVÖ–æ’Ó2ãbÖfÆ6‚"Ç&W7öç6T–C¢&f—‡GW&R×&W7öç6R"Æ6æF–FFW3¥·¶6öçFVçC§·'G3¥··FW‡GÕ×ÒÆf–æ—6…&V6öã¢%5Dõ'ÕÒÇW6vTÖWFFF§·&ö×EFö¶Vä6÷VçC£“Æ6æF–FFW5Fö¶Vä6÷VçC£ƒ×Ò¢¥&W7öç6Ræ§6öâ‡¶6öçFVçC§FW‡GÒ“°¢ÆWB&W7VÇC§Væ¶æ÷vã°¢–b‡7—7FVÒç7F'G5v—F‚‚$–çFW'&WBF†—2"’—°¢–çFW'&WFF–öä6ÆÇ2²³°¢–b†ÖÆf÷&ÖVB—&WGW&â&WÇ’‚&–çfÆ–B¥4ôâ"“°¢6öç7BÖW76vS§7G&–æs×W6W"æ7W'&VçDÖW76vRÇ7V&¦V7C×W6W"ç7V&¦V7G5³Óòæ–C°¢6öç7Bf7G3¤–çFW'&WFF–öå²&f7G2%ÓÕµÓ°¢6öç7B66Væ&–ô6æF–FFW3¤æöäçVÆÆ&ÆSÄ–çFW'&WFF–öå²'66Væ&–ô6æF–FFW2%ÓãÕµÓ°¢6öç7BFCÒ†¶W“§7G&–ærÇfÇVS¤–çFW'&WFF–öå²&f7G2%Õ¶çVÖ&W%Õ²'fÇVR%ÒÇ7FFS¢&¶æ÷vâ'Â'Væ¶æ÷vâ'Â'VæF–ær#Ò&¶æ÷vâ"“Óæf7G2çW6‚‡·7V&¦V7D–C§7V&¦V7BÆ¶W’ÇfÇVRÇ7FFRÇV÷FS¦ÖW76vWÒ“°¢6öç7B66Væ&–óÒ†Æ&VÃ§7G&–ærÆfÖ–Ç“¤æöäçVÆÆ&ÆSÄ–çFW'&WFF–öå²'66Væ&–ô6æF–FFW2%Óå¶çVÖ&W%Õ²&fÖ–Ç’%ÒÇG&—G3¤æöäçVÆÆ&ÆSÄ–çFW'&WFF–öå²'66Væ&–ô6æF–FFW2%Óå¶çVÖ&W%Õ²'G&—G2%Ò“Óà¢66Væ&–ô6æF–FFW2çW6‚‡·7V&¦V7D–C§7V&¦V7BÆÆ&VÂÆfÖ–Ç’ÇG&—G2ÇV÷FS¦ÖW76vWÒ“°¢ÆWB–çFVçC¤–çFW'&WFF–öå²&–çFVçB%ÓÒ÷öÆ–6–W7Ç÷'FföÆ–÷ÆfÖ–Ç’†fRö’çFW7B†ÖW76vR“ò'÷'FföÆ–ò# ¢òò‡—÷F†WF–6Â&W÷'G2æòWfVçBÂv†–6‚—2v†BF†R&VÂ&ö×B6—2à¢õÆ"ƒó§v†B–gÆ–b—Æ–b×—Ç7W÷6R•Æ"ö’çFW7B†ÖW76vR“ò'öÆ–7•÷VW7F–öâ# ¢öÖGW'Ç7W'&VæFW'Ç&VÖ—V×ÆwV&çFVVGÆVæF÷vÖVçBö’çFW7B†ÖW76vR“ò'öÆ–7•÷VW7F–öâ#§W6W"ç&Wf–÷W4–çFVçCò&föÆÆ÷u÷W#¢&6Æ–Ò#°¢–b‚ö'&V7B6æ6W"ö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&6Æ–Ò#¶FB‚&WfVçEG—R"Â&F–væ÷6—2"“¶FB‚&F–væ÷6—2"Â'7FvR"'&V7B6æ6W""“¶FB‚&F–væ÷6—57FvR"Â#""“¶FB‚&F–væ÷6—56—FR"Â&'&V7B"“°¢f7G2çW6‚‡·7V&¦V7D–C§7V&¦V7BÆ¶W“¢&F–væ÷6—4FFR"ÇfÇVS¢'–W7FW&F’"Ç7FFS¢&¶æ÷vâ"ÇV÷FS¢'–W7FW&F’'Ò“°¢66Væ&–ò‚$'&V7B6æ6W"F–væ÷6—2æB†÷7—FÂGFVæFæ6R"Â&–ÆÆæW72"Å²&–ÆÆæW72"Â&F–væ÷6—2"Â&†÷7—FÆ—6F–öâ"Â&ÖVF–6ÅöW‡Vç6R%Ò“°¢Ğ¢–b‚õÆ"ƒó§v7ÇvW&R’×W&FW&VEÆ"ö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&6Æ–Ò#¶FB‚&WfVçEG—R"Â&FVF‚"“¶FB‚&FVF‚"ÇG'VR“¶FB‚&6W6TödFVF‚"Â&×W&FW&VB"“¶FB‚&WfVçDÆö6F–öâ"Â%F†–ÆæB"“°¢66Væ&–ò‚%&W÷'FVB†öÖ–6–FR"Â&FVF‚"Å²&FVF‚"Â'7VFFVâ"Â&W‡FW&æÂ"Â'f–öÆVçB"Â'Væ–çFVçF–öæÅ÷Fõö–ç7W&VB%Ò“°¢Ğ¢–b‚öfÆ–v‡Bv2FVÆ–VBö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&6Æ–Ò#¶FB‚&WfVçEG—R"Â'G&fVÅöF—7'WF–öâ"“¶FB‚&fÆ–v‡DFVÆ”†÷W'2"Â÷F‡&VR†÷W'2ö’çFW7B†ÖW76vR“ó3£‚“°¢66Væ&–ò‚$fÆ–v‡BFVÆ’"Â'G&fVÂ"Å²'G&fVÅöF—7'WF–öâ"Â&FVÆ’%Ò“°¢Ğ¢–b‚ö6"v2FÖvVGÇfV†–6ÆRv2FÖvVBö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&6Æ–Ò#¶FB‚&WfVçEG—R"Â&66–FVçB"“¶FB‚'fV†–6ÆTFÖvVB"ÇG'VR“¶FB‚'fV†–6ÆU&W—$&–ÆÂ"ÃC“°¢66Væ&–ò‚%fV†–6ÆR6öÆÆ—6–öâFÖvR"Â&Ö÷F÷""Å²&66–FVçB"Â'7VFFVâ"Â&W‡FW&æÂ"Â'fV†–6ÆUö6öÆÆ—6–öâ"Â'&÷W'G•öFÖvR%Ò“°¢Ğ¢–b‚ö'&ö¶R†—2ƒó¦ÆVgB“öf÷&V&Òö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&6Æ–Ò#¶FB‚&WfVçEG—R"Â&66–FVçB"“¶FB‚&66–FVçEG—R"Â'Æ––ær&6¶WF&ÆÂ"“¶FB‚&–æ§W&VB"ÇG'VR“¶FB‚&g&7GW&T&öG•'B"Â&f÷&V&Ò"“°¢66Væ&–ò‚$'&ö¶Vâf÷&V&ÒÆ––ær&6¶WF&ÆÂ"Â&–æ§W'’"Å²&66–FVçB"Â&&öF–Ç•ö–æ§W'’"Â'7VFFVâ"Â&W‡FW&æÂ%Ò“°¢Ğ¢–b‚õÆ&FVæwVUÆ"ö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&6Æ–Ò#¶FB‚&WfVçEG—R"Â&F–væ÷6—2"“¶FB‚&F–væ÷6—2"Â&FVæwVR"“°¢66Væ&–ò‚$FVæwVRfWfW""Â&–ÆÆæW72"Å²&–ÆÆæW72"Â&F–væ÷6—2%Ò“°¢Ğ¢òò6†÷'Bç7vW"FòF†RVæF–ærVW7F–öâÂF†Rv’F†R&VÂ&ö×BFöW2—Bà¢6öç7BVæF–æs×W6W"çVæF–æuVW7F–öâ2¶f7D¶W“§7G&–æs·7V&¦V7D–C§7G&–æw×ÆçVÆÃ°¢–b‡VæF–ærbbõåÇ2¢‡–W7Ææ÷Ææ÷B7W&WÅÆB·Æâ66–FVçGÆâ–ÆÆæW72•Ç2¢Bö’çFW7B†ÖW76vR’—°¢–çFVçCÒ&föÆÆ÷u÷W#°¢6öç7BFW‡CÖÖW76vRçG&–Ò‚’çFôÆ÷vW$66R‚“°¢–b‡FW‡CÓÓÒ&æ÷B7W&R"–f7G2çW6‚‡·7V&¦V7D–C§VæF–ærç7V&¦V7D–BÆ¶W“§VæF–æræf7D¶W’ÇfÇVS¦çVÆÂÇ7FFS¢'VæF–ær"ÇV÷FS¦ÖW76vWÒ“°¢VÇ6R–b‡VæF–æræf7D¶W“ÓÓÒ&WfVçEG—R"–FB‚&WfVçEG—R"ÇFW‡CÓÓÒ&â66–FVçB#ò&66–FVçB#¢&F–væ÷6—2"“°¢VÇ6R–b‚õåÆB²BòçFW7B‡FW‡B’–FB‡VæF–æræf7D¶W’ÄçVÖ&W"‡FW‡B’“°¢VÇ6RFB‡VæF–æræf7D¶W’ÇFW‡CÓÓÒ'–W2"“°¢Ğ¢–b‚öæòÖ'VÆæ6Rö’çFW7B†ÖW76vR’–FB‚&Ö'VÆæ6UW6VB"ÆfÇ6R“°¢VÇ6R–b‚öÖ'VÆæ6Rö’çFW7B†ÖW76vR’–FB‚&Ö'VÆæ6UW6VB"ÇG'VR“°¢6öç7Bæ–v‡G3ÖÖW76vRæÖF6‚‚ò…ÆB²•Ç2¦æ–v‡G3òö’“°¢–b†æ–v‡G2bböFöå²~(	•Ó÷B¶æ÷wÆæ÷B7W&Rö’çFW7B†ÖW76vR’—¶FB‚&†÷7—FÄæ–v‡G2"ÄçVÖ&W"†æ–v‡G5³Ò’“¶FB‚&†÷7—FÆ—6VB"ÇG'VR“·Ğ¢–b‚ö&–ÆÂö’çFW7B†ÖW76vR’bböFöå²~(	•Ó÷B¶æ÷wÆæ÷B7W&Rö’çFW7B†ÖW76vR’–FB‚&†÷7—FÄ&–ÆÂ"ÆçVÆÂÂ'VæF–ær"“°¢–b‚öæ–v‡G2ö’çFW7B†ÖW76vR’bböFöå²~(	•Ó÷B¶æ÷wÆæ÷B7W&Rö’çFW7B†ÖW76vR’–FB‚&†÷7—FÄæ–v‡G2"ÆçVÆÂÂ'VæF–ær"“°¢–b‚÷v&FVBf÷'Ç7F–ÆÂ–â†÷7—FÂö’çFW7B†ÖW76vR’—¶FB‚&†÷7—FÅ7F”öævö–ær"ÇG'VR“¶FB‚&†÷7—FÆ—6VB"ÇG'VR“·Ğ¢–b‚öF—66†&vVBgFW"GvVÇfRæ–v‡G2ö’çFW7B†ÖW76vR’—°¢FB‚&†÷7—FÄæ–v‡G2"Ã"“¶FB‚&†÷7—FÅ7F”öævö–ær"ÆfÇ6R“¶FB‚&†÷7—FÆ—6VB"ÇG'VR“°¢Ğ¢&W7VÇC×¶–çFVçBÆæWuF÷–3¦fÇ6RÇ6V&6…FW&×3¥²&7&—F–6Â–ÆÆæW72"Â&Ö¦÷"6æ6W""Â&†÷7—FÂ66‚"Â'v—F–ærW&–öB"Â&ÖGW&—G’"Â&66–FVçFÂFVF‚"Â&fÆ–v‡BFVÆ’"Â'fV†–6ÆRFÖvR%ÒÆf7G2Ç66Væ&–ô6æF–FFW7Ó°¢ÖVÇ6R–b‡7—7FVÒç7F'G5v—F‚‚$Æ—7BF†R–ç7W&æ6R&VæVf—G2"’—°¢6FÆöt6ÆÇ2²³°¢6öç7BFW‡CÕ7G&–ær‡W6W"çFW‡B“°¢6öç7BV÷FS×FW‡BæÖF6‚‚õvR’Röb7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW75Ââò“òå³Ó°¢&W7VÇC×V÷FS÷¶&VæVf—G3¥·¶æÖS¢$Ö¦÷"7&—F–6Â–ÆÆæW72"ÇV÷FRÆf÷&×VÆ¶–æC¢'7VÕö–ç7W&VB"Æf÷&×VÆfÇVS£Æ7W'&Væ7“¢%4tB"À¢f7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆ6öæF—F–öç3¢%F†RF–væ÷6—2×W7B6F—6g’F†RFVf–æVB–ÆÆæW72â'Õ×Ğ¢òòvRv—F‚æò&VæVf—B'VÆR×W7B&öGV6Ræ÷F†–ærÂæ÷BwVW72à¢§¶&VæVf—G3¥·¶æÖS¢$–çfVçFVB"ÇV÷FS¢&V÷FRF†B—2æ÷BöâF†—2vRBÆÂ"Æf÷&×VÆ¶–æC¢&f—†VB"Æf÷&×VÆfÇVS£“’À¢7W'&Væ7“¢%4tB"Æf7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆ6öæF—F–öç3¥µ×Õ×Ó°¢ÖVÇ6R–b‡7—7FVÒç7F'G5v—F‚‚$'V–ÆBF†R6÷fW&vRÆVFvW""’—°¢òòF†R6–×VÆFVB&VFW"¶æ÷w2F†R6VVBv÷&F–æw2â—Bw&—FW2ÆVFvW"&÷w0¢òòW†7FÇ’F†Rv’F†R&VÂ&VFW"—26¶VBFó¢öæR&÷rW"'VÆRÂv—F€¢òòF†R6VçFVæ6R—B6ÖRg&öÒæBF†RvR—B—2öâà¢ÆVFvW%&VG2²³°¢6öç7B&÷w3¥&V6÷&CÇ7G&–ærÇVæ¶æ÷vãåµÓÕµÓ°¢6öç7BfÖ–Ç“§7G&–æuµÓ×W6W"æfÖ–Ç”ÖVÖ&W'3óõµÓ°¢f÷"†6öç7BvRöbW6W"çvW22·vS¦çVÖ&W#·FW‡C§7G&–æwÕµÒ—°¢6öç7BFW‡C§7G&–æs×vRçFW‡C°¢6öç7BæÖVCÖfÖ–Ç’æf–æB†æÖSÓçFW‡Bæ–æ6ÇVFW2†æÖR’“óöçVÆÃ°¢6öç7BÆãÒ‡FW‡BæÖF6‚‚òƒó¦÷vç2Åâ’…ÆâÆB²´Õ¦×¢Ò³÷Å&Wf–Wrf—‡GW&R7&—F–6Â–ÆÆæW72’ƒó¥ÂçÂ7VÒ’ò“òå³Óó÷FW‡BæÖF6‚‚õâ…µâåÒ³ò•Ââò“òå³Óóò%Æâ"’çG&–Ò‚“°¢6öç7B7VÓÔçVÖ&W"‡FW‡BæÖF6‚‚õ7VÒ–ç7W&VB4tB…ÆB²’ò“òå³Óóò""—ÇÆçVÆÃ°¢6öç7BÒ‡&S¥&VtW‡“ÓçFW‡BæÖF6‚‡&R“òå³ÓóöçVÆÃ°¢ÆWBV÷FS§7G&–æwÆçVÆÃ°¢–b‚‡V÷FS×‚÷vR’Röb7VÒ–ç7W&VBf÷"VÆ–g––ær6÷fW&VBFVF…Ââö’’’—&÷w2çW6‚‡¶–ç7W&VDæÖS¦æÖVBÇÆäæÖS§ÆâÆ&VæVf—DæÖS¢$FVF‚&VæVf—B"ÆWfVçEG—S¢&FVF‚"Ç—4¶–æC¢'W&6VçEööe÷7VÒ"ÆÖ÷VçC£Æ7W'&Væ7“¢%4tB"Ç7VÔ&6—3¦çVÆÂÇ6÷W&6UvS§vRçvRÇV÷FWÒ“°¢–b‚‡V÷FS×‚ôf÷"FVF‚GVRFò66–FVçBÂvR’Röb7VÒ–ç7W&VEÂâö’’’—&÷w2çW6‚‡¶–ç7W&VDæÖS¦æÖVBÇÆäæÖS§ÆâÆ&VæVf—DæÖS¢%W'6öæÂ66–FVçBFVF‚&VæVf—B"ÆWfVçEG—S¢&66–FVçFÅöFVF‚"Æ6W6S¢&66–FVçB"Ç—4¶–æC¢'W&6VçEööe÷7VÒ"ÆÖ÷VçC£Æ7W'&Væ7“¢%4tB"Ç6÷W&6UvS§vRçvRÇV÷FWÒ“°¢–b‚‡V÷FS×‚õvR’Röb7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW75Ââö’’’—&÷w2çW6‚‡¶–ç7W&VDæÖS¦æÖVBÇÆäæÖS§ÆâÆ&VæVf—DæÖS¢$7&—F–6Â–ÆÆæW72&VæVf—B"ÆWfVçEG—S¢&7&—F–6Åö–ÆÆæW72"Ç—4¶–æC¢'W&6VçEööe÷7VÒ"ÆÖ÷VçC£Æ7W'&Væ7“¢%4tB"Ç6÷W&6UvS§vRçvRÇV÷FRÆ6öæF—F–öç3¥²%F†RF–væ÷6—2×W7B6F—6g’F†RFVf–æVB–ÆÆæW72â%×Ò“°¢–b‚‡V÷FS×‚ôF–Ç’†÷7—FÂ66‚&VæVf—B5ÂC3W"F’gFW"F†RF‚F’ÂÖ†–×VÒöb36öçF–çV÷W2F—5Ââö’’’—&÷w2çW6‚‡¶–ç7W&VDæÖS¦æÖVBÇÆäæÖS§ÆâÆ&VæVf—DæÖS¢$F–Ç’†÷7—FÂ66‚"ÆWfVçEG—S¢&†÷7—FÅöF–Ç•ö66‚"Ç—4¶–æC¢'W%öF’"ÆÖ÷VçC£3Æ7W'&Væ7“¢%4tB"Æöfg6WDF—3£ÆÖ†–×VÔF—3£3Ç6÷W&6UvS§vRçvRÇV÷FWÒ“°¢–b‚‡V÷FS×‚ôfÆ–v‡BFVÆ’&VæVf—B—2f—†VB5ÂC3–bFW'GW&R—2FVÆ–VBBÆV7Bb†÷W'5Ââö’’’—&÷w2çW6‚‡¶–ç7W&VDæÖS¦æÖVBÇÆäæÖS§ÆâÆ&VæVf—DæÖS¢$fÆ–v‡BFVÆ’&VæVf—B"ÆWfVçEG—S¢'G&fVÅöFVÆ’"Ç—4¶–æC¢&ÇV×÷7VÒ"ÆÖ÷VçC£3Æ7W'&Væ7“¢%4tB"Ç6÷W&6UvS§vRçvRÇV÷FRÆÖ–æ–×VÓ§¶f7D¶W“¢&fÆ–v‡DFVÆ”†÷W'2"ÇfÇVS£g×Ò“°¢–b‚‡V÷FS×‚õvR&V–Ö'W'6RF†R&V6öæ&ÆR&W—"6÷7Bf÷"66–FVçFÂFÖvRFòF†R–ç7W&VBfV†–6ÆRWFò5ÂCÃÂâö’’’—&÷w2çW6‚‡¶–ç7W&VDæÖS¦æÖVBÇÆäæÖS§ÆâÆ&VæVf—DæÖS¢%fV†–6ÆRFÖvR&V–Ö'W'6VÖVçB"ÆWfVçEG—S¢&Ö÷F÷%öFÖvR"Æ6W6S¢&66–FVçB"Ç—4¶–æC¢'&V–Ö'W'6VÖVçEö6"ÆÖ÷VçC£Æ7W'&Væ7“¢%4tB"Ç6÷W&6UvS§vRçvRÇV÷FWÒ“°¢–b‚‡V÷FS×‚õ7VÒ–ç7W&VB4tBÆBµÂâò’’–f÷"†6öç7B&÷röb&÷w2––b‡&÷rç6÷W&6UvSÓÓ×vRçvRbg&÷rç—4¶–æCÓÓÒ'W&6VçEööe÷7VÒ"bg&÷rç7VÔ&6—3ÓÖçVÆÂ—&÷rç7VÔ&6—3×7VÓ°¢òò66†VGVÆRÆ–æR‚%‚÷vç2ÆââFVF‚â7VÒ–ç7W&VB4tBâ"’7FFW2F†R7VÒ–ç7W&VBöbÆâÂæ÷B–÷WB'VÆRà¢Ğ¢&W7VÇC×·&÷w7Ó°¢ÖVÇ6R–b‡7—7FVÒç7F'G5v—F‚‚$6†V6²6÷fW&vRÆVFvW"&÷w2"’—°¢ÆVFvW$6†V6·2²³°¢&W7VÇC×·fW&F–7G3¢‡W6W"ç&÷w22¶–æFWƒ¦çVÖ&W'ÕµÒ’æÖ‡#Óâ‡¶–æFWƒ§"æ–æFW‚Ç7W÷'FVC§G'VWÒ’—Ó°¢ÖVÇ6R–b‡7—7FVÒç7F'G5v—F‚‚%&VB–ç7W&æ6R"’—°¢&VF–æt6ÆÇ2²³°¢–b†f–Å&VF–ær—&WGW&â&WÇ’‚&æ÷BfÆ–B§6öâ"“°¢–b†Ö—76†U&VF–æsã—°¢Ö—76†U&VF–ærÒÓ°¢6öç7BV÷FS×·6÷W&6T–C§W6W"ç6÷W&6W5³Òæ–BÇV÷FS¥7G&–ær‡W6W"ç6÷W&6W5³ÒçFW‡B’ç6Æ–6RƒÃ#—Ó°¢òòF†RW†7B6†RvVâ&WGW&æVBöâD2w2Ö6†–æS¢&&R7G&–ærv†W&R¢òòÆ—7BöbV÷FVB6öæF—F–öç2&VÆöæw2ÂæBöæRV÷FR–ç7FVBöbÆ—7Bà¢&WGW&â&WÇ’„¥4ôâç7G&–æv–g’‡¶&VæVf—G3¥··F—FÆS¢$7&—F–6Â–ÆÆæW72&VæVf—B"Æ6÷fW&vT–C§W6W"æ6öæf—&ÖVD6÷fW&vW5³Óòæ–BÀ¢Wf–FVæ6S§V÷FRÇ&WV—&VÖVçG3¥µÒÆ6öæF—F–öç3¢%7V&¦V7BFòF†RFVf–æVB–ÆÆæW72â"À¢f÷&×VÆ§¶¶–æC¢&æöæR"ÇfÇVS¦çVÆÂÆ7W'&Væ7“¦çVÆÂÆf7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆWf–FVæ6S¦çVÆÇ×ÕÒÀ¢ö'6W'fF–öç3¥µÒÆæW‡E7FW3¥µ×Ò’“°¢Ğ¢6öç7BæÇ—6—3¥öÆ–7”æÇ—6—3×¶&VæVf—G3¥µÒÆö'6W'fF–öç3¥µÒÆæW‡E7FW3¥µ×Ó°¢6öç7BG&—G3ÖæWr6WCÇ7G&–æsâ‚‡W6W"ç66Væ&–ô6æF–FFW3óõµÒ’æfÆDÖ‚†6æF–FFS§·G&—G3§7G&–æuµ×Ò“Óæ6æF–FFRçG&—G2’“°¢f÷"†6öç7B2öbW6W"ç6÷W&6W2—°¢6öç7BFW‡C§7G&–æs×2çFW‡C°¢6öç7B×·6÷W&6T–C§2æ–BÇV÷FS§FW‡GÓ°¢6öç7B÷væVC×W6W"æ6öæf—&ÖVD6÷fW&vW5³Ó°¢–b‚÷væVB–6öçF–çVS°¢–b‡W6W"æ–çFVçCÓÓÒ&6Æ–Ò"bgG&—G2æ†2‚&–ÆÆæW72"’bbóRöb7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW72ö’çFW7B‡FW‡B’—°¢æÇ—6—2æ&VæVf—G2çW6‚‡·F—FÆS¢$7&—F–6Â–ÆÆæW72&VæVf—B"Æ6÷fW&vT–C¦÷væVBæ–BÆWf–FVæ6S¥·ÒÀ¢f÷&×VÆ§¶¶–æC¢'7VÕö–ç7W&VB"ÇfÇVS£Æ7W'&Væ7“¢%4tB"Æf7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆWf–FVæ6S§ÒÀ¢&WV—&VÖVçG3¥·¶f7D¶W“¢&ÖVF–6ÄFVf–æ—F–öä6öæf—&ÖVB"Æ÷W&F÷#¢&Fö7VÖVçB"ÇfÇVS¦çVÆÂÇVW7F–öã¢""Çv‡“¢%F†RF–væ÷6—2×W7B6F—6g’F†RFVf–æVB–ÆÆæW72â"ÆWf–FVæ6S§ÕÒÀ¢6öæF—F–öç3¥··FW‡C¢%F†RF–væ÷6—2×W7B6F—6g’F†RFVf–æVB–ÆÆæW72â"ÆWf–FVæ6S§Õ×Ò“°¢Ğ¢–b‡W6W"æ–çFVçCÓÓÒ&6Æ–Ò"bgG&—G2æ†2‚&†÷7—FÆ—6F–öâ"’bbôF–Ç’†÷7—FÂ66‚ö’çFW7B‡FW‡B’—°¢æÇ—6—2æ&VæVf—G2çW6‚‡·F—FÆS¢$F–Ç’†÷7—FÂ66‚"Æ6÷fW&vT–C¦÷væVBæ–BÆWf–FVæ6S¥·ÒÀ¢f÷&×VÆ§¶¶–æC¢&F–Ç’"ÇfÇVS£3Æ7W'&Væ7“¢%4tB"Æf7D¶W“¢&†÷7—FÄæ–v‡G2"Æöfg6WDF—3£ÆÖ†–×VÔF—3£3ÆWf–FVæ6S§ÒÀ¢&WV—&VÖVçG3¥°¢¶f7D¶W“¢&†÷7—FÆ—6VB"Æ÷W&F÷#¢&WVÇ2"ÇfÇVS§G'VRÇVW7F–öã¢%v2F†—2â–çF–VçBFÖ—76–öãò"Çv‡“¢%F†R&VæVf—B&WV—&W2†÷7—FÂFÖ—76–öââ"ÆWf–FVæ6S§ÒÀ¢¶f7D¶W“¢&†÷7—FÄæ–v‡G2"Æ÷W&F÷#¢'&W6VçB"ÇfÇVS¦çVÆÂÇVW7F–öã¢%v†Bv2F†R6ö×ÆWFVBÆVæwF‚öbF†R†÷7—FÂ7F“ò"Çv‡“¢%F†R†÷7—FÂ66‚Ö÷VçBFWVæG2öâF†R6ö×ÆWFVB7F’â"ÆWf–FVæ6S§ÒÀ¢ÒÆ6öæF—F–öç3¥µ×Ò“°¢Ğ¢–b‡W6W"æ–çFVçCÓÓÒ&6Æ–Ò"bgG&—G2æ†2‚&FVF‚"’bbóRöb7VÒ–ç7W&VBf÷"VÆ–g––ær6÷fW&VBFVF‚ö’çFW7B‡FW‡B’—°¢æÇ—6—2æ&VæVf—G2çW6‚‡·F—FÆS¢$FVF‚&VæVf—B"Æ6÷fW&vT–C¦÷væVBæ–BÆWf–FVæ6S¥·ÒÀ¢f÷&×VÆ§¶¶–æC¢'7VÕö–ç7W&VB"ÇfÇVS£Æ7W'&Væ7“¢%4tB"Æf7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆWf–FVæ6S§ÒÀ¢&WV—&VÖVçG3¥µÒÆ6öæF—F–öç3¥µ×Ò“°¢Ğ¢–b‡W6W"æ–çFVçCÓÓÒ&6Æ–Ò"bgG&—G2æ†2‚&FVF‚"’bbôFVF‚GVRFò66–FVçBÂvR’Röb7VÒ–ç7W&VBö’çFW7B‡FW‡B’—°¢æÇ—6—2æ&VæVf—G2çW6‚‡·F—FÆS¢%W'6öæÂ66–FVçBFVF‚&VæVf—B"Æ6÷fW&vT–C¦÷væVBæ–BÆWf–FVæ6S¥·ÒÀ¢f÷&×VÆ§¶¶–æC¢'7VÕö–ç7W&VB"ÇfÇVS£Æ7W'&Væ7“¢%4tB"Æf7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆWf–FVæ6S§ÒÀ¢&WV—&VÖVçG3¥·¶f7D¶W“¢&66–FVçFÄFVF‚"Æ÷W&F÷#¢&WVÇ2"ÇfÇVS§G'VRÇVW7F–öã¢""Çv‡“¢%F†RFVF‚×W7B&W7VÇBg&öÒâ66–FVçBâ"ÆWf–FVæ6S§ÕÒÆ6öæF—F–öç3¥µ×Ò“°¢Ğ¢–b‡W6W"æ–çFVçCÓÓÒ&6Æ–Ò"bgG&—G2æ†2‚&FVÆ’"’bbôfÆ–v‡BFVÆ’&VæVf—B—2f—†VB5ÂC3ö’çFW7B‡FW‡B’—°¢æÇ—6—2æ&VæVf—G2çW6‚‡·F—FÆS¢$fÆ–v‡BFVÆ’&VæVf—B"Æ6÷fW&vT–C¦÷væVBæ–BÆWf–FVæ6S¥·ÒÀ¢f÷&×VÆ§¶¶–æC¢&f—†VB"ÇfÇVS£3Æ7W'&Væ7“¢%4tB"Æf7D¶W“¦çVÆÂÆöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆWf–FVæ6S§ÒÀ¢&WV—&VÖVçG3¥·¶f7D¶W“¢&fÆ–v‡DFVÆ”†÷W'2"Æ÷W&F÷#¢&EöÆV7B"ÇfÇVS£bÇVW7F–öã¢%v2F†RFW'GW&RFVÆ–VBf÷"BÆV7Bb†÷W'3ò"Çv‡“¢%F†R&VæVf—B7F'G2Bb†÷W'2â"ÆWf–FVæ6S§ÕÒÆ6öæF—F–öç3¥µ×Ò“°¢Ğ¢–b‡W6W"æ–çFVçCÓÓÒ&6Æ–Ò"bgG&—G2æ†2‚'&÷W'G•öFÖvR"’bb÷&V–Ö'W'6RF†R&V6öæ&ÆR&W—"6÷7Bö’çFW7B‡FW‡B’—°¢æÇ—6—2æ&VæVf—G2çW6‚‡·F—FÆS¢%fV†–6ÆRFÖvR&V–Ö'W'6VÖVçB"Æ6÷fW&vT–C¦÷væVBæ–BÆWf–FVæ6S¥·ÒÀ¢f÷&×VÆ§¶¶–æC¢&W‡Vç6Uö6"ÇfÇVS£Æ7W'&Væ7“¢%4tB"Æf7D¶W“¢'fV†–6ÆU&W—$&–ÆÂ"Æöfg6WDF—3¦çVÆÂÆÖ†–×VÔF—3¦çVÆÂÆWf–FVæ6S§ÒÀ¢&WV—&VÖVçG3¥·¶f7D¶W“¢'fV†–6ÆTFÖvVB"Æ÷W&F÷#¢&WVÇ2"ÇfÇVS§G'VRÇVW7F–öã¢""Çv‡“¢%F†R–ç7W&VBfV†–6ÆR×W7B†fR66–FVçFÂFÖvRâ"ÆWf–FVæ6S§ÕÒÆ6öæF—F–öç3¥µ×Ò“°¢Ğ¢–b‡W6W"æ–çFVçBÓÒ&6Æ–Ò"bböwV&çFVVBÖGW&—G’fÇVRö’çFW7B‡FW‡B’—°¢6öç7BwV&çFVVC×FW‡BæÖF6‚‚õF†RwV&çFVVBÖGW&—G’fÇVR—24tBÆBµÂâò“òå³Ó°¢6öç7B&ö¦V7FVC×FW‡BæÖF6‚‚õF†R&ö¦V7FVBæöâÖwV&çFVVBÖGW&—G’fÇVR—24tBÆBµÂâò“òå³Ó°¢–b†wV&çFVVB–æÇ—6—2æö'6W'fF–öç2çW6‚‡·FW‡C¦wV&çFVVBÆWf–FVæ6S¥··6÷W&6T–C§2æ–BÇV÷FS¦wV&çFVVGÕ×Ò“°¢–b‡&ö¦V7FVB–æÇ—6—2æö'6W'fF–öç2çW6‚‡·FW‡C§&ö¦V7FVBÆWf–FVæ6S¥··6÷W&6T–C§2æ–BÇV÷FS§&ö¦V7FVGÕ×Ò“°¢Ğ¢Ğ¢&W7VÇCÖæÇ—6—3°¢ÖVÇ6R–b‡7—7FVÒç7F'G5v—F‚‚%–÷RFV6–FRv†–6‚öbW'6öâ"’—°¢&VÆWfæ6T6ÆÇ2²³°¢òòF†R6–×VÆFVB&VFW"¶æ÷w2v†B¶W—v÷&G26ææ÷C¢FVæwVR—2æ÷B6æ6W"à¢6öç7BWfVçCÕ7G&–ær‡W6W"æWfVçB’²""²‡W6W"æf7G227G&–æuµÒ’æ¦ö–â‚""“°¢6öç7B6æF–FFW3×W6W"æ6æF–FFW22¶æÖS§7G&–æwÕµÓ°¢6öç7BÆ–W3§¶æÖS§7G&–æs·v‡“§7G&–æwÕµÓÕµÒÇ'VÆVD÷WC§¶æÖS§7G&–æs·v‡“§7G&–æwÕµÓÕµÓ°¢f÷"†6öç7B2öb6æF–FFW2—°¢–b‚öFVæwVRö’çFW7B†WfVçB’bbö6æ6W'ÇÆW—Ç&F–÷F†W&—ÆF–Ç—6—7Ç7W&vW'’ö’çFW7B†2ææÖR’—'VÆVD÷WBçW6‚‡¶æÖS¦2ææÖRÇv‡“¢&æ÷BG&VFÖVçBf÷"FVæwVR'Ò“°¢VÇ6RÆ–W2çW6‚‡¶æÖS¦2ææÖRÇv‡“¢'&W7öæG2Fò†÷7—FÂ7F’f÷"â–ÆÆæW72'Ò“°¢Ğ¢&W7VÇC×¶Æ–W2Ç'VÆVD÷WGÓ°¢ÖVÇ6R–b‡7—7FVÒç7F'G5v—F‚‚%–÷R&Rv—fVâ&÷w2&V6÷fW&VB"’—°¢6FVv÷&—6T6ÆÇ2²³°¢òòF†R6–×VÆFVB&VFW"¶æ÷w2GvòF†–æw2¶W—v÷&B'VÆW2Fòæ÷C¢$Æ÷72ö`¢òò7VV6‚"—2F—6&–Æ—G’ÂæB&VÖ—VÒ—2æ÷B&VæVf—Bà¢&W7VÇC×·&÷w3¢‡W6W"ç&÷w22¶–æFWƒ¦çVÖ&W#¶Æ&VÃ§7G&–æwÕµÒ’æÖ‡&÷sÓâ‡¶–æFWƒ§&÷ræ–æFW‚À¢—4&VæVf—C¢÷&VÖ—VÒö’çFW7B‡&÷ræÆ&VÂ’À¢&W7öæG5Fó¢÷7VV6‡Æ†V&–æwÇ6–v‡Bö’çFW7B‡&÷ræÆ&VÂ“õ²&F—6&–Æ—G’"Â&&öF–Ç•ö–æ§W'’%Ó¥µ×Ò’—Ó°¢ÖVÇ6W°¢W‡ÆæF–öä6ÆÇ2²³°¢&W7VÇC×·7VÖÖ'“§W6W"ç7VÖÖ'’ÆFWF–Ç3¢‡W6W"æFWF–Ç3óõµÒ’ç6Æ–6RƒÃ—Ó°¢Ğ¢ÆWB6öçFVçCÔ¥4ôâç7G&–æv–g’‡&W7VÇB“°¢–b‡G'Væ6FT–çFW'&WFF–öç3ãbg7—7FVÒç7F'G5v—F‚‚$–çFW'&WBF†—2"’—·G'Væ6FT–çFW'&WFF–öç2ÒÓ¶6öçFVçCÖ6öçFVçBç6Æ–6RƒÄÖF‚æfÆö÷"†6öçFVçBæÆVæwF‚£ãsR’“·Ğ¢&WGW&â&WÇ’†6öçFVçB“°¢Ò’2G—VöbfWF6ƒ° ¢ÆWB66W3Ó¶6öç7BFW7CÖ7–æ2†æÖS§7G&–ærÆfã¢‚“Óå&öÖ—6SÇfö–Câ“Óç·G'—¶v—Bfâ‚“¶66W2²³¶6öç6öÆRæÆör‚%52"¶æÖR“·Ö6F6‚†W'&÷"—·F‡&÷ræWrW'&÷"†æÖRÇ¶6W6S¦W'&÷'Ò“·×Ó°¢6öç7B&Ææ³¤6†Dç7vW#×¶ÖöFS¢&ç7vW""Ç7VÖÖ'“¢%6fVBç7vW""ÆFWF–Ç3¥µÒÆ6Æ–Ô—FV×3¥µÒÆæW‡E7FW3¥µÒÆ6öæf–FVæ6S¦çVÆÂÆ6—FF–öç3¥µÒÆF—66Æ–ÖW#¢""À¢6Æ–Õ6W76–öä–C¦çVÆÂÇVW7F–öç3¥µÒÆ¶æ÷väf7G3¥µÒÆÖ—76–ætf7G3¥µ×Ó°¢6öç7B6VæCÖ7–æ2†ÖW76vS§7G&–ærÆÖVÖ&W#§7G&–æwÆçVÆÃ×V÷ÆU³Òæ–BÆ6öçfW'6F–öä–Có§7G&–ærÇ&Wf—6–öãó¦çVÖ&W"Æ7–æ6‡&öæ÷W3ÖfÇ6R“Óç°¢6öç7B&W7öç6SÖv—Bõ5B†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†B"Ç¶ÖWF†öC¢%õ5B"Æ†VFW'3§²&6öçFVçB×G—R#¢&Æ–6F–öâö§6öâ'ÒÀ¢&öG“¤¥4ôâç7G&–æv–g’‡¶fÖ–Ç”ÖVÖ&W$–C¦ÖVÖ&W"Ç66÷S¦ÖVÖ&W#ò&ÖVÖ&W"#¢&fÖ–Ç’"ÇVW7F–öã¦ÖW76vRÆ6öçfW'6F–öä–BÆ6öçfW'6F–öå&Wf—6–öã§&Wf—6–öâÆ7–æ6‡&öæ÷W2ÇF–ÖU¦öæS¢$6–õ6–æv÷&R'Ò—Ò’“°¢&WGW&â·&W7öç6RÆFF¦v—B&W7öç6Ræ§6öâ‚—Ó°¢Ó°¢6öç7Bv—D¦ö#Ö7–æ2†–C§7G&–ær“Óç°¢f÷"†ÆWB“Ó¶“Ã3¶’²²—°¢6öç7B&W7öç6SÖv—BvWD¦ö"†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†Bö¦ö'2ò"¶–B’Ç·&×3¥&öÖ—6Rç&W6öÇfR‡¶–GÒ—Ò“°¢6öç7BFFÖv—B&W7öç6Ræ§6öâ‚“°¢–b†FFæ¦ö#òç7FGW3ÓÓÒ&6ö×ÆWFR"—&WGW&âFFç&W7VÇBæç7vW"26†Dç7vW#°¢–b…²&f–ÆVB"Â&6æ6VÆÆVB%Òæ–æ6ÇVFW2†FFæ¦ö#òç7FGW2’—F‡&÷ræWrW'&÷"†FFæ¦ö"æW'&÷"“°¢v—BæWr&öÖ—6R‡&W6öÇfSÓæ÷&–v–æÅF–ÖV÷WB‡&W6öÇfRÃ"’“°¢Ğ¢F‡&÷ræWrW'&÷"‚%6–×VÆFVBæÇ—6—2F–Bæ÷B6ö×ÆWFR"“°¢Ó°¢6öç7B6VVEÆç3Ö7–æ2†6÷VçC¦çVÖ&W"“Óç°¢v—BF"çVW'’‚$DTÄUDRe$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢v—BF"çVW'’‚$DTÄUDRe$ôÒöÆ–7•öæÇ—6—5ö66†Rt„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢6öç7BG—W3Õ²%6f–æw2"Â$–çfW7FÖVçB"Â$Ö÷F÷""Â%G&fVÂ"Â$FVF‚"Â%W'6öæÂ66–FVçB"Â$7&—F–6Â–ÆÆæW72"Â$V&Ç’7&—F–6Â–ÆÆæW72"Â$†÷7—FÂ66‚"Â$†öÖR%Ó°¢f÷"†ÆWB“Ó¶“Æ6÷VçC¶’²²—°¢6öç7B×V÷ÆU¶’S•ÒÇG—S×G—W5´ÖF‚æfÆö÷"†’ó’’WG—W2æÆVæwF…ÒÆ–C×WV–Bƒ¶’’Ç&Vc×WV–BƒS¶’’ÆæÖSÒ%Æâ"¶’²""·G—S°¢6öç7B7VÓ×G—SÓÓÒ$FVF‚#óóó§G—SÓÓÒ%W'6öæÂ66–FVçB#ócó§G—SÓÓÒ$7&—F–6Â–ÆÆæW72#ó3Só£ó°¢6öç7B66†VGVÆS×æF—7Æ•öæÖR²"÷vç2"¶æÖR²"â7VÒ–ç7W&VB4tB"·7VÒ²"â#°¢6öç7Bv÷&F–æsÖæÖR²"â"²‡G—SÓÓÒ$7&—F–6Â–ÆÆæW72#ò%vR’Röb7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW72âF†RF–væ÷6—2×W7B6F—6g’F†RFVf–æVB–ÆÆæW72â# ¢G—SÓÓÒ$†÷7—FÂ66‚#ò$F–Ç’†÷7—FÂ66‚&VæVf—B2C3W"F’gFW"F†RF‚F’ÂÖ†–×VÒöb36öçF–çV÷W2F—2â†÷7—FÂFÖ—76–öâ—2&WV—&VBâ# ¢G—SÓÓÒ%6f–æw2#ò%F†RwV&çFVVBÖGW&—G’fÇVR—24tBâF†R&ö¦V7FVBæöâÖwV&çFVVBÖGW&—G’fÇVR—24tB#â# ¢G—SÓÓÒ$FVF‚#ò$–bF†R–ç7W&VBF–W2v†–ÆR6÷fW&VBÂvR’Röb7VÒ–ç7W&VBf÷"VÆ–g––ær6÷fW&VBFVF‚â# ¢G—SÓÓÒ%W'6öæÂ66–FVçB#ò$f÷"FVF‚GVRFò66–FVçBÂvR’Röb7VÒ–ç7W&VBâF†RFVF‚×W7B&W7VÇBg&öÒâ66–FVçBâ# ¢G—SÓÓÒ%G&fVÂ#ò$fÆ–v‡BFVÆ’&VæVf—B—2f—†VB2C3–bFW'GW&R—2FVÆ–VBBÆV7Bb†÷W'2â# ¢G—SÓÓÒ$Ö÷F÷"#ò%vR&V–Ö'W'6RF†R&V6öæ&ÆR&W—"6÷7Bf÷"66–FVçFÂFÖvRFòF†R–ç7W&VBfV†–6ÆRWFò2CÃâ# ¢G—SÓÓÒ$†öÖR#ò%vR&V–Ö'W'6R&WÆ6VÖVçB6÷7Bf÷"7FöÆVâ†÷W6V†öÆB6öçFVçG2WFò2CÃâ# ¢%F†—2Æâ—276W76VBg&öÒ—G2÷vâFW&×2æB66†VGVÆRâ"“°¢f÷"†6öç7B—FVÒöb·¶–BÇFW‡C§66†VGVÆRÇW'6öæÃ§G'VWÒÇ¶–C§&VbÇFW‡C§v÷&F–ærÇW'6öæÃ¦fÇ6WÕÒ—°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–6–W2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ–ç7W&W"Ç&öGV7EöæÖRÇöÆ–7•öçVÖ&W"ÇöÆ–7•÷G—RÆFö7VÖVçE÷&öÆRÇW'6öæÅö6÷fW&vUö6öæf—&ÖVBÆFö7VÖVçEöWF†÷&—G’Ç&ö6W76–æu÷7FGW2Æ÷&–v–æÅöf–ÆVæÖRÇ7F÷&vUö¶W’ÆVffV7F—fUöFFRÆW‡G&7FVEö§6öâ’dÅTU2‚CÂC"ÂC2ÂtW†×ÆR–ç7W&W"rÂCBÂCRÂCbÂCrÂC‚ÂC’Âw&VG’rÂCÂCÂs##"ÓÓrÂC£¦§6öæ"’"À¢¶—FVÒæ–BÆ66÷VçBÇæ–BÆæÖRÂ%ôÄ”5’Ò"¶’ÇG—RÆ—FVÒçW'6öæÃò'W'6öæÅ÷66†VGVÆR#¢'öÆ–7•÷v÷&F–ær"Æ—FVÒçW'6öæÂÆ—FVÒçW'6öæÃó“S£cÆ—FVÒæ–B²"çFb"Ä¥4ôâç7G&–æv–g’‡·&öGV7G4ÖVçF–öæVC¥¶æÖU×Ò•Ò“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•öÖVÖ&W'2‡öÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ66÷VçEö–B’dÅTU2‚CÂC"ÂC2’"Å¶—FVÒæ–BÇæ–BÆ66÷VçEÒ“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•÷vW2†66÷VçEö–BÇöÆ–7•ö–BÇvUöçVÖ&W"ÇFW‡B’dÅTU2‚CÂC"ÃÂC2’"Å¶66÷VçBÆ—FVÒæ–BÆ—FVÒçFW‡EÒ“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö6‡Væ·2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÇöÆ–7•ö–BÇvU÷7F'BÇvUöVæBÇFW‡BÆVÖ&VFF–ær’dÅTU2‚CÂC"ÂC2ÂCBÃÃÂCRÂCc£§fV7F÷"’"À¢·WV–Bƒ²†—FVÒçW'6öæÃö“¦6÷VçB¶’’’Æ66÷VçBÇæ–BÆ—FVÒæ–BÆ—FVÒçFW‡BÂ%²"´'&’æg&öÒ‡¶ÆVæwFƒ£#GÒÂ…òÆ¢“Óæ£ÓÓÓó£’æ¦ö–â‚"Â"’²%Ò%Ò“°¢Ğ¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö6÷fW&vW2†–BÆ66÷VçEö–BÇöÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ6FVv÷'’ÆÖ÷VçBÆ7W'&Væ7’Ç&öGV7EöæÖRÇ6÷W&6U÷vRÆWf–FVæ6U÷FW‡BÆWf–FVæ6U÷fW&–f–VBÆ6öæf—&ÖVB’dÅTU2‚CÂC"ÂC2ÂCBÂCRÂCbÂu4tBrÂCrÃÂC‚ÇG'VRÇG'VR’"À¢·WV–Bƒ#¶’’Æ66÷VçBÆ–BÇæ–BÇG—RÇ7VÒÆæÖRÇ66†VGVÆUÒ“°¢Ğ¢òò6VVFVBFö7VÖVçG2†fR&VVâ$TBâ†÷W6V†öÆBv†W&Ræ÷F†–ær†2WfW"&VVà¢òò&VB—2F–ffW&VçB66RÂW†W&6—6VBW‡Æ–6—FÇ’'’—G2÷vâFW7Bà¢v—BF"çVW'’‚%UDDRöÆ–6–W24UB&VæVf—G5ö–æFW†VEöCÖæ÷r‚’t„U$R66÷VçEö–CÒCäB&VæVf—G5ö–æFW†VEöB•2åTÄÂ"Å¶66÷VçEÒ“°¢Ó°¢G'—°¢v—BFW7B‚$ÆVv7’wV–FVB6W76–öç2æB÷&F–æ'’6†G2Ö–w&FRv—F†÷WBÆ÷6–ærf7G2"Æ7–æ2‚“Óç°¢6öç7B6Æ–Ó×WV–Bƒƒ’ÇÆ–ã×WV–Bƒƒ“°¢v—BF"çVW'’‚$”å4U%B”åDò6Æ–Õ÷6W76–öç2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆf7G2ÆWfVçE÷7VÖÖ'’’dÅTU2‚CÂC"ÂC2ÂCC£¦§6öæ"Âu&Wf–÷W2F–væ÷6—2r’"Å¶6Æ–ÒÆ66÷VçBÇV÷ÆU³Òæ–BÄ¥4ôâç7G&–æv–g’‡¶F–væ÷6—3¢'7FvR"'&V7B6æ6W""ÇVæ6W'F–äf7G3¥²&†÷7—FÅöæ–v‡G2%×Ò•Ò“°¢v—BF"çVW'’‚$”å4U%B”åDò6†EöÖW76vW2†66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ6Æ–Õ÷6W76–öåö–BÇ&öÆRÆ6öçFVçB’dÅTU2‚CÂC"ÂC2ÂwW6W"rÂu&Wf–÷W2WfVçBr’"Å¶66÷VçBÇV÷ÆU³Òæ–BÆ6Æ–ÕÒ“°¢v—BF"çVW'’‚$”å4U%B”åDò6†EöÖW76vW2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÇ&öÆRÆ6öçFVçB’dÅTU2‚CÂC"ÂC2ÂwW6W"rÂu&Wf–÷W2æ÷&ÖÂVW7F–öâr’"Å·Æ–âÆ66÷VçBÇV÷ÆU³Òæ–EÒ“°¢v—BVç7W&T6†E66†VÖ‚“°¢6öç7B3Öv—BvWD6öçfW'6F–öâ†66÷VçBÆ6Æ–Ò“¶76W'BæWVÂ†3òç7FFRç7V&¦V7G5·V÷ÆU³Òæ–EÒæ†÷7—FÄæ–v‡G2ç7FFRÂ'Væ¶æ÷vâ"“°¢6öç7BÖ–w&FVCÖv—BF"çVW'“Ç¶6öçfW'6F–öåö–C§7G&–æwÓâ‚%4TÄT5B6öçfW'6F–öåö–Be$ôÒ6†EöÖW76vW2t„U$R–CÒC"Å·Æ–åÒ“¶76W'Bæö²†Ö–w&FVBç&÷w5³Òæ6öçfW'6F–öåö–B“°¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7Âö6†B×Ww&FRç7Â"’Â'WFc‚"’“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†Eö6öçfW'6F–öç2t„U$R–CÒC"Å¶6Æ–ÕÒ’’ç&÷w2æÆVæwF‚Ã“°¢Ò“°¢v—B6VVEÆç2ƒ““°¢v—BFW7B‚%&VÂ5ÂÆöG2ÆÂ“Ö—†VBöÆ–6–W2æB6÷'&V7FÇ’66÷W2öæRfÖ–Ç’ÖVÖ&W""Æ7–æ2‚“Óç°¢6öç7BÆÃÖv—BÆöEöÆ–7”–çfVçF÷'’†66÷VçBÇV÷ÆR“¶76W'BæWVÂ†ÆÂæ6öçG&7G2æÆVæwF‚Ã““°¢76W'BæWVÂ†ÆÂæ6öçG&7G2æWfW'’†3Óæ2ç&VfW&Væ6W2æÆVæwFƒÓÓÓ’ÇG'VR“°¢6öç7BöæSÖv—BÆöEöÆ–7”–çfVçF÷'’†66÷VçBÅ·V÷ÆU³ÕÒ“¶76W'BæWVÂ†öæRæ6öçG&7G2æÆVæwF‚Ã“¶76W'BæWVÂ†öæRæ6öçG&7G2æWfW'’†3Óæ2æ÷væW$–CÓÓ×V÷ÆU³Òæ–B’ÇG'VR“°¢Ò“°¢v—BFW7B‚%F†RÆ7BöÆ–7’—2&WG&–WfVB–æFWVæFVçFÇ’öbvÆö&ÂF÷Ö²"Æ7–æ2‚“Óç°¢6öç7B–çfVçF÷'“Öv—BÆöEöÆ–7”–çfVçF÷'’†66÷VçBÇV÷ÆR“°¢6öç7B6÷W&6W3Öv—B&WG&–WfT6öçG&7E6÷W&6W2‡¶66÷VçD–C¦66÷VçBÆ6öçG&7G3¦–çfVçF÷'’æ6öçG&7G2ÇVW7F–öã¢%v†BFVF‚&VæVf—G2&R–æ6ÇVFVCò"Ç6V&6…FW&×3¥²&FVF‚%×Ò“°¢76W'BæWVÂ‡6÷W&6W2ç6—¦RÃ““¶76W'Bæö²‡6÷W&6W2ævWB†–çfVçF÷'’æ6öçG&7G2æB‚Ó’æ–B“òæÆVæwF‚“°¢Ò“°¢v—BFW7B‚$âÖ&–wV÷W26†BÖ÷fW26ö×ÆWFVÇ’FòF†RfÖ–Ç’ÖVÖ&W"ÆFW"6VÆV7FVB"Æ7–æ2‚“Óç°¢6öç7Bf—'7CÖv—B6VæB‚$×’&VçBv2–æ§W&VB–ââ66–FVçBâ"“°¢76W'BæWVÂ†f—'7Bç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’†f—'7BæFF’“°¢6öç7B&ö×CÖf—'7BæFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ‡&ö×BæÖöFRÂ&f7Eöf–æF–ær"“¶76W'Bæö²‚‡&ö×BçW'6öä6æF–FFW3òæÆVæwFƒóó“ã“°¢6öç7B&W7öç6SÖv—Bõ5B†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†B"Ç¶ÖWF†öC¢%õ5B"Æ†VFW'3§²&6öçFVçB×G—R#¢&Æ–6F–öâö§6öâ'ÒÀ¢&öG“¤¥4ôâç7G&–æv–g’‡¶fÖ–Ç”ÖVÖ&W$–C§V÷ÆU³Òæ–BÇ66÷S¢&ÖVÖ&W""ÇVW7F–öã§V÷ÆU³UÒæF—7Æ•öæÖRÀ¢6öçfW'6F–öä–C§&ö×Bæ6öçfW'6F–öä–BÆ6öçfW'6F–öå&Wf—6–öã§&ö×Bæ6öçfW'6F–öå&Wf—6–öâÇW'6öä6†ö–6T–C§V÷ÆU³UÒæ–BÀ¢W'6öä6öçFW‡DÖW76vS§&ö×BçW'6öä6öçFW‡DÖW76vRÇW'6öä6öçFW‡E&V6÷&FVDC§&ö×BçW'6öä6öçFW‡E&V6÷&FVDBÀ¢7–æ6‡&öæ÷W3¦fÇ6RÇF–ÖU¦öæS¢$6–õ6–æv÷&R'Ò—Ò’“°¢6öç7BFFÖv—B&W7öç6Ræ§6öâ‚“¶76W'BæWVÂ‡&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’†FF’“°¢76W'BæWVÂ†FFæç7vW"ç&W6öÇfVDfÖ–Ç”ÖVÖ&W$–BÇV÷ÆU³UÒæ–B“°¢6öç7B&÷sÖv—BvWD6öçfW'6F–öâ†66÷VçBÇ&ö×Bæ6öçfW'6F–öä–B“¶76W'BæWVÂ‡&÷sòæfÖ–Ç•öÖVÖ&W%ö–BÇV÷ÆU³UÒæ–B“°¢6öç7BÖW76vW3Öv—BF"çVW'“Ç¶fÖ–Ç•öÖVÖ&W%ö–C§7G&–æwÓâ‚%4TÄT5BfÖ–Ç•öÖVÖ&W%ö–Be$ôÒ6†EöÖW76vW2t„U$R66÷VçEö–CÒCäB6öçfW'6F–öåö–CÒC""Å¶66÷VçBÇ&ö×Bæ6öçfW'6F–öä–EÒ“°¢76W'Bæö²†ÖW76vW2ç&÷w2æÆVæwFƒãÓB“¶76W'BæWVÂ†ÖW76vW2ç&÷w2æWfW'’†ÓÓæÒæfÖ–Ç•öÖVÖ&W%ö–CÓÓ×V÷ÆU³UÒæ–B’ÇG'VR“°¢Ò“°¢v—BFW7B‚$†öÖ–6–FR¶VW2fW&–f–VBFVF‚6÷fW"f—6–&ÆRæBv—F††öÆG2–æfW'&VB66–FVçFÂFVF‚6÷fW""Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚$FW6ÖöæBv2×W&FW&VB–âF†–ÆæB"“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“°¢6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#°¢76W'BæÖF6‚†ç7vW"ç7VÖÖ'’Â÷&W÷'FVBFVF‚ö’“¶76W'BæÖF6‚†ç7vW"ç7VÖÖ'’ÂõF†–ÆæBö’“¶76W'BæÖF6‚†ç7vW"ç7VÖÖ'’Âõ5ÂCÃÃò“°¢76W'BæFVWWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ2Å·¶7W'&Væ7“¢%4tB"ÆÖ÷VçC£óóÆÖ÷VçEFW‡C¢%2CÃÃ"Æ—FVÔ6÷VçC£ÕÒ“°¢76W'Bæö²†ç7vW"æ6Æ–Ô—FV×2ç6öÖR†—FVÓÓâôFVF‚òçFW7B†—FVÒçF—FÆR’bf—FVÒæÖ÷VçEFW‡CÓÓÒ%2CÃÃ"’Æç7vW"æ6Æ–Ô—FV×2æÖ†“Óæ’çF—FÆR’æ¦ö–â‚"Â"’“°¢76W'Bæö²†ç7vW"æ6Æ–Ô—FV×2ç6öÖR†—FVÓÓâô66–FVçFÂFVF‡ÅW'6öæÂ66–FVçBö’çFW7B†—FVÒçF—FÆR’bf—FVÒæÖ÷VçEFW‡CÓÓÖçVÆÂbf—FVÒç7FGW3ÓÓÒ&æVVG5öFö7VÖVçB"’Æç7vW"æ6Æ–Ô—FV×2æÖ†“Óæ’çF—FÆR’æ¦ö–â‚"Â"’“°¢76W'Bæö²†ç7vW"ç66Væ&–ô6Æ76–f–6F–öç3òç6öÖR†—FVÓÓæ—FVÒçG&—G2æ–æ6ÇVFW2‚'f–öÆVçB"’bf—FVÒçG&—G2æ–æ6ÇVFW2‚&W‡FW&æÂ"’’“°¢76W'BæWVÂ†æWr6WB†ç7vW"æFWF–Ç2’ç6—¦RÆç7vW"æFWF–Ç2æÆVæwF‚“°¢6öç7B6fVCÒ†v—BvWD6öçfW'6F–öâ†66÷VçBÆç7vW"æ6öçfW'6F–öä–B’’ç7FFRÇ7FFS×6fVBç7V&¦V7G5·V÷ÆU³Òæ–EÓ°¢76W'BæWVÂ‡7FFRæFVF‚çfÇVRÇG'VR“¶76W'BæWVÂ‡7FFRæ6W6TödFVF‚çfÇVRÂ&×W&FW&VB"“¶76W'BæWVÂ‡7FFRæWfVçDÆö6F–öâçfÇVRÂ%F†–ÆæB"“°¢76W'BæWVÂ‡7FFRæ66–FVçFÄFVF‚ÇVæFVf–æVB“¶76W'Bæö²‡6fVBç66Væ&–÷3òå·V÷ÆU³Òæ–EÓòæÆVæwF‚“°¢Ò“°¢òò&VF–ærG&fVÂ'VÆR–çFòF†RÆVFvW"6†V6·2—BGv–6R&Vf÷&RG'W7F–æp¢òò—C¢F†RV÷FRæBWfW'’çVÖ&W"×W7B&RöâF†R6—FVBvR†FWFW&Ö–æ—7F–2À¢òò6öFRÖ6†V6¶VB’ÂæB6V6öæBÂ–æFWVæFVçB&VBöbF†R6ÖRvR×W7@¢òòw&VR—B—2v†BF†RFö7VÖVçB6—2âF†BF÷V&ÆRÖ6†V6²—2F†P¢òò6öæf—&ÖF–öâF†—2&VæVf—BæVVG2ÒÒ'F†RW'6öâæWfW"†2Fò6öæf—&Ğ¢òòç—F†–æs²F†W’6âÆöö²"†Æ–"öÆVFvW"öW‡G&7BçG2’ÒÒ6òöæ6R&÷F‚6†V6·0¢òò72ÂF†Rf–wW&R—26†÷vâv—F‚6öæf–FVæ6RÂæ÷B†VÆB&6²F†—&BF–ÖP¢òòf÷"‡VÖâFò&RÖ&÷fRv†BGvò–æFWVæFVçB&VG2Ç&VG’fW&–f–VBà¢v—BFW7B‚$G&fVÂ'VÆR6öæf—&ÖVB'’6V6öæBÂ–æFWVæFVçB&VB—26†÷vâv—F‚f–wW&R"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚$FW6ÖöæBw2fÆ–v‡Bv2FVÆ–VBf÷"V–v‡B†÷W'2â"“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“¶6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#°¢6öç7BfÆ–v‡CÖç7vW"æ6Æ–Ô—FV×2æf–æB†—FVÓÓæ—FVÒçF—FÆRæ–æ6ÇVFW2‚$fÆ–v‡BFVÆ’"’“°¢76W'Bæö²†fÆ–v‡BÄ¥4ôâç7G&–æv–g’†ç7vW"æ6Æ–Ô—FV×2æÖ†“Óå¶’çF—FÆRÆ’æÖ÷VçEFW‡BÆ’ç7FGW5Ò’’“°¢76W'BæWVÂ†fÆ–v‡BæÖ÷VçEFW‡BÂ%2C3ã"“°¢76W'BæWVÂ†fÆ–v‡Bç7FGW2Â&Æ–¶VÇ•öÆ–6&ÆR"“°¢76W'BæWVÂ†fÆ–v‡BæW7F–ÖFT&6—2Â&6öæf—&ÖVB"“°¢76W'BæÖF6‚†fÆ–v‡Bç&V6öâÂ÷fW&–f–VBv–ç7BF†RvR'’6V6öæB&VBö’“°¢76W'BæWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ3òæÆVæwF‚Ã“°¢76W'BæWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ3òå³ÒæÖ÷VçBÃ3“°¢Ò“°¢v—BFW7B‚$GW&F–öâ&VÆ÷rG&fVÂF‡&W6†öÆB'VÆW2÷WBöæÇ’F†B&VæVf—B"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚$FW6ÖöæBw2fÆ–v‡Bv2FVÆ–VBf÷"F‡&VR†÷W'2â"“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“¶6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#°¢6öç7B—FVÓÖç7vW"æ6Æ–Ô—FV×2æf–æB‡fÇVSÓçfÇVRçF—FÆRæ–æ6ÇVFW2‚$fÆ–v‡BFVÆ’"’“¶76W'BæWVÂ†—FVÓòç7FGW2Â&æ÷EöÆ–6&ÆR"“¶76W'BæWVÂ†—FVÓòæÖ÷VçEFW‡BÆçVÆÂ“°¢76W'BæWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ3òæÆVæwF‚Ã“°¢Ò“°¢òò6ÖRF÷V&ÆRÖ6†V6²2F†RG&fVÂ'VÆR&÷fS¢F†RÖ÷F÷"&V–Ö'W'6VÖVç@¢òò6ÆW6Rv26öæf—&ÖVB'’â–æFWVæFVçB6V6öæB&VBÂ6òF†R&W÷'FV@¢òò&W—"&–ÆÂ—2&–6VBv–ç7B—Bâ&V–Ö'W'6VÖVçB—27F–ÆÂæWfW ¢òò7VÖÖVB–çFòÇV××7VÒ†÷W6V†öÆBF÷FÂÂv†–6‚—2F†R6W&FP¢òò–çf&–çBF†—2FW7BÇ6ò&÷FV7G2à¢v—BFW7B‚$Ö÷F÷"&V–Ö'W'6VÖVçB6öæf—&ÖVB'’6V6öæBÂ–æFWVæFVçB&VB—2&–6VBÂ'WBæWfW"7VÖÖVB–çFòÇV××7VÒF÷FÂ"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚$FW6ÖöæBw26"v2FÖvVB–â6öÆÆ—6–öââF†RfV†–6ÆR&W—"&–ÆÂ—24tBBÃâ"“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“¶6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#°¢6öç7B—FVÓÖç7vW"æ6Æ–Ô—FV×2æf–æB‡fÇVSÓçfÇVRçF—FÆRæ–æ6ÇVFW2‚%fV†–6ÆRFÖvR"’“°¢76W'Bæö²†—FVÒÄ¥4ôâç7G&–æv–g’†ç7vW"æ6Æ–Ô—FV×2æÖ†“Óå¶’çF—FÆRÆ’æÖ÷VçEFW‡BÆ’ç7FGW5Ò’’“°¢76W'BæWVÂ†—FVÓòæÖ÷VçEFW‡BÂ%2CBÃ"“°¢76W'BæWVÂ†—FVÓòç7FGW2Â&Æ–¶VÇ•öÆ–6&ÆR"“°¢76W'BæWVÂ†—FVÓòæÖ÷VçDÆ&VÂÂ%÷FVçF–Â&V–Ö'W'6VÖVçB"“°¢76W'BæWVÂ†—FVÓòævw&VvF–öâÂ'&V–Ö'W'6VÖVçB"“°¢76W'BæWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ3òæÆVæwF‚ÃÂ$&V–Ö'W'6VÖVçB—2æWfW"FFVBFòÇV××7VÒ†÷W6V†öÆBF÷FÂ"“°¢Ò“°¢v—BFW7B‚%F†R7F—fR’&W6öÇfW26†&Ö–æR&Vf÷&RÆöF–ærW'6öæÂöÆ–6–W2"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚$6†&Ö–æRf–çFVB–W7FW&F’æBFöö²F†RÖ'VÆæ6RFò†÷7—FÂâ6†Rv2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"â’7F–ÆÂFöâwB¶æ÷r†÷r×V6‚F†R†÷7—FÂ&–ÆÂv–ÆÂ&Râ"“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“°¢6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#¶76W'BæWVÂ†ç7vW"ç&W6öÇfVDfÖ–Ç”ÖVÖ&W$–BÇV÷ÆU³Òæ–B“°¢76W'Bæö²†ç7vW"æ6Æ–Ô—FV×2ç6öÖR†—FVÓÓæ—FVÒçF—FÆRæ–æ6ÇVFW2‚$7&—F–6Â–ÆÆæW72"’bf—FVÒæÖ÷VçEFW‡CÓÓÖçVÆÂbf—FVÒç7FGW3ÓÓÒ&æVVG5öFö7VÖVçB"’“°¢76W'BæWVÂ†ç7vW"çöÆ–7•&Wf–WsòæÆVæwF‚Ã“°¢6öç7B&÷sÖv—BvWD6öçfW'6F–öâ†66÷VçBÆç7vW"æ6öçfW'6F–öä–B“¶76W'BæWVÂ‡&÷sòæfÖ–Ç•öÖVÖ&W%ö–BÇV÷ÆU³Òæ–B“°¢76W'BæWVÂ‡&÷sòç7FFRç7V&¦V7G5·V÷ÆU³Òæ–EÒæ†÷7—FÄ&–ÆÂç7FFRÂ'VæF–ær"“°¢76W'Bæö²†–çFW'&WFF–öä6ÆÇ3ãbg&VF–æt6ÆÇ3ãbfW‡ÆæF–öä6ÆÇ3ã“°¢Ò“°¢ÆWBöævö–ætç7vW#¤6†Dç7vW#°¢v—BFW7B‚%Væ¶æ÷vâgWGW&Ræ–v‡G2Fòæ÷B&WVB÷"&Æö6²6W&FR6æ6W"&VæVf—B"Æ7–æ2‚“Óç°¢6öç7B†—7F÷'“Öv—BF"çVW'“Ç¶–C§7G&–æs¶Æ7Eöç7vW#¤6†Dç7vW'Óâ‚%4TÄT5B–BÆÆ7Eöç7vW"e$ôÒ6†Eö6öçfW'6F–öç2t„U$R66÷VçEö–CÒCäBfÖ–Ç•öÖVÖ&W%ö–CÒC"õ$DU"%’WFFVEöBDU42Ä”Ô•B"Å¶66÷VçBÇV÷ÆU³Òæ–EÒ“°¢6öç7B&–÷#Ö†—7F÷'’ç&÷w5³ÒæÆ7Eöç7vW#°¢6öç7B&WÇ“Öv—B6VæB‚'7F–ÆÂæ÷B7W&R†÷rÖç’æ–v‡G26†RæVVG2Fò&Rv&FVBf÷""ÇV÷ÆU³Òæ–BÆ†—7F÷'’ç&÷w5³Òæ–BÇ&–÷"æ6öçfW'6F–öå&Wf—6–öâ“°¢76W'BæWVÂ‡&WÇ’ç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&WÇ’æFF’“¶öævö–ætç7vW#×&WÇ’æFFæç7vW#°¢76W'BæWVÂ†öævö–ætç7vW"çVW7F–öç2æÆVæwF‚Ã“¶76W'Bæö²†öævö–ætç7vW"æ6Æ–Ô—FV×2ç6öÖR†—FVÓÓæ—FVÒçF—FÆRæ–æ6ÇVFW2‚$7&—F–6Â–ÆÆæW72"’bf—FVÒæÖ÷VçEFW‡CÓÓÖçVÆÂbf—FVÒç7FGW3ÓÓÒ&æVVG5öFö7VÖVçB"’“°¢6öç7BæW‡CÖv—B6VæB‚&’7F–ÆÂFöâwB¶æ÷r†÷rÖç’æ–v‡G2"ÇV÷ÆU³Òæ–BÆöævö–ætç7vW"æ6öçfW'6F–öä–BÆöævö–ætç7vW"æ6öçfW'6F–öå&Wf—6–öâ“°¢76W'BæWVÂ†æW‡Bç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’†æW‡BæFF’“¶öævö–ætç7vW#ÖæW‡BæFFæç7vW#¶76W'BæWVÂ†öævö–ætç7vW"çVW7F–öç2æÆVæwF‚Ã“°¢6öç7B7FFSÒ†v—BvWD6öçfW'6F–öâ†66÷VçBÆöævö–ætç7vW"æ6öçfW'6F–öä–B’’ç7FFS°¢76W'BæWVÂ‡7FFRç7V&¦V7G5·V÷ÆU³Òæ–EÒæ†÷7—FÄæ–v‡G2ç7FFRÂ'VæF–ær"“°¢76W'BæWVÂ‡7FFRç7V&¦V7G5·V÷ÆU³Òæ–EÒæ†÷7—FÅ7F”öævö–ærçfÇVRÇG'VR“°¢Ò“°¢v—BFW7B‚$6ö×ÆWFVB7F’WFFW2ÖVÖ÷'’æBW&Ö—G2F†R–æFWVæFVçBF–Ç’6Æ7VÆF–öâ"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚%6†Rv2F—66†&vVBgFW"GvVÇfRæ–v‡G2â"ÇV÷ÆU³Òæ–BÆöævö–ætç7vW"æ6öçfW'6F–öä–BÆöævö–ætç7vW"æ6öçfW'6F–öå&Wf—6–öâ“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“°¢6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#¶76W'Bæö²†ç7vW"æ6Æ–Ô—FV×2ç6öÖR†—FVÓÓæ—FVÒçF—FÆRæ–æ6ÇVFW2‚$F–Ç’†÷7—FÂ"’bf—FVÒæÖ÷VçEFW‡CÓÓÒ%2Ccã"bböÆ–6&ÆRòçFW7B†—FVÒç7FGW2’’“°¢6öç7B&÷sÖv—BvWD6öçfW'6F–öâ†66÷VçBÆç7vW"æ6öçfW'6F–öä–B“¶76W'BæWVÂ‡&÷sòç7FFRç7V&¦V7G5·V÷ÆU³Òæ–EÒæ†÷7—FÄæ–v‡G2çfÇVRÃ"“°¢Ò“°¢v—BFW7B‚$WFöÖF–26öçFW‡B&WF–ç2æÖVB&W÷'FVB6öæF—F–öâv†VâÖöFVÂf7G2&RV×G’"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚$6†&Ö–æR6Vv‡BFVæwVR"ÆçVÆÂ“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“°¢6öç7Bç7vW#×&W7VÇBæFFæç7vW"26†Dç7vW#¶76W'BæWVÂ†ç7vW"ç&W6öÇfVDfÖ–Ç”ÖVÖ&W$–BÇV÷ÆU³Òæ–B“°¢76W'Bæö²†ç7vW"æ¶æ÷väf7G2æ–æ6ÇVFW2‚$F–væ÷6—3¢FVæwVR"’“°¢76W'Bæö²†ç7vW"ç66Væ&–ô6Æ76–f–6F–öç3òç6öÖR†—FVÓÓæ—FVÒæfÖ–Ç“ÓÓÒ&–ÆÆæW72"bf—FVÒçG&—G2æ–æ6ÇVFW2‚&F–væ÷6—2"’’“°¢76W'BæÖF6‚†ç7vW"ç7VÖÖ'’Âô6†&Ö–æRâ¦FVæwVRö’“¶76W'BæWVÂ†ç7vW"çöÆ–7•&Wf–WsòæÆVæwF‚Ã“°¢76W'Bæö²‚ç7vW"æFWF–Ç2ç6öÖR†FWF–ÃÓâöÖöFVÂ6÷VÆBæ÷Bf–æ—6‚ö’çFW7B†FWF–Â’’“°¢Ò“°¢v—BFW7B‚%v†öÆRÖfÖ–Ç’÷'FföÆ–ò&W7öç6W2–æ6ÇVFRÆÂöÆ–6–W2v—F†÷WB‡VvRÖöFVÂ&ö×B"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚%v†BöÆ–6–W2FöW2×’fÖ–Ç’†fSò"ÆçVÆÂ“¶76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“°¢76W'BæWVÂ‡&W7VÇBæFFæç7vW"ç÷'FföÆ–ô—FV×2æÆVæwF‚Ã““¶76W'BæWVÂ‡&W7VÇBæFFæç7vW"çöÆ–7•&Wf–WræÆVæwF‚Ã““°¢76W'Bæö²†Ö„ÖöFVÅW6W$6†&7FW'3ÃÂ$Ö†–×VÒÖöFVÂ–çWC¢"¶Ö„ÖöFVÅW6W$6†&7FW'2“°¢Ò“°¢v—BFW7B‚%6f–æw2VW7F–öç26W&FRwV&çFVVBæB&ö¦V7FVBfÇVW2"Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚%v†B†Vç2v†Vâ×’VæF÷vÖVçBÆâÖGW&W3ò"ÇV÷ÆU³Òæ–B“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“°¢6öç7BFW‡C×&W7VÇBæFFæç7vW"æFWF–Ç2æ¦ö–â‚""“¶76W'BæÖF6‚‡FW‡BÂöwV&çFVVBÖGW&—G’fÇVR—24tBò“°¢76W'BæÖF6‚‡FW‡BÂ÷&ö¦V7FVBæöâÖwV&çFVVBÖGW&—G’fÇVR—24tB#ò“¶76W'BæWVÂ‡&W7VÇBæFFæç7vW"çVW7F–öç2æÆVæwF‚Ã“°¢Ò“°¢v—BFW7B‚$7–æ2æÇ—6—2&WGW&ç27GVÂ&öw&W72æB6fVBf–æÂç7vW""Æ7–æ2‚“Óç°¢6öç7B&W7VÇCÖv—B6VæB‚%v†BöÆ–6–W2FöW2×’fÖ–Ç’†fSò"ÆçVÆÂÇVæFVf–æVBÇVæFVf–æVBÇG'VR“°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#"Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“¶76W'Bæö²‡&W7VÇBæFFæ¦ö$–B“°¢6öç7Bç7vW#Öv—Bv—D¦ö"‡&W7VÇBæFFæ¦ö$–B“¶76W'BæWVÂ†ç7vW"ç÷'FföÆ–ô—FV×3òæÆVæwF‚Ã““°¢6öç7B6fVCÖv—BvWE6fVD6†B†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†Bö†—7F÷'’ò"¶ç7vW"æ6öçfW'6F–öä–B’Ç·&×3¥&öÖ—6Rç&W6öÇfR‡¶–C¦ç7vW"æ6öçfW'6F–öä–BÒ—Ò“°¢6öç7B–ÆöCÖv—B6fVBæ§6öâ‚“¶76W'BæWVÂ‡6fVBç7FGW2Ã#“¶76W'BæWVÂ‡–ÆöBæÖW76vW2æÆVæwF‚Ã"“¶76W'BæWVÂ‡–ÆöBæÖW76vW5³Òæç7vW%ö§6öâç÷'FföÆ–ô—FV×2æÆVæwF‚Ã““°¢Ò“°¢v—BFW7B‚$ÖÆf÷&ÖVBÖöFVÂ&W7öç6R—26fVB2â–æ6ö×ÆWFRæÇ—6—2"Æ7–æ2‚“Óç°¢ÖÆf÷&ÖVC×G'VS¶6öç7B&W7VÇCÖv—B6VæB‚$’7F–ÆÂFöâwB¶æ÷r†÷rÖç’†÷7—FÂæ–v‡G2"ÇV÷ÆU³Òæ–B“¶ÖÆf÷&ÖVCÖfÇ6S°¢76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’‡&W7VÇBæFF’“¶76W'BæWVÂ‡&W7VÇBæFFæç7vW"æ6Æ–Ô—FV×2æÆVæwF‚Ã“°¢76W'BæÖF6‚‡&W7VÇBæFFæç7vW"ç7VÖÖ'’Âö6÷VÆFî(	—B&VB–÷W"ÖW76vR§W7Bæ÷rò“¶76W'BæWVÂ‚õÇ·Æ–çfÆ–B¥4ôâòçFW7B‡&W7VÇBæFFæç7vW"ç7VÖÖ'’·&W7VÇBæFFæç7vW"æFWF–Ç2æ¦ö–â‚""’’ÆfÇ6RÂ%&rÖöFVÂ÷WGWBæWfW"&V6†W2F†RW'6öâ"“¶76W'BæWVÂ‡&W7VÇBæFFæç7vW"æ6öæf–FVæ6RÂ&–ç7Vff–6–VçEöWf–FVæ6R"“°¢Ò“°¢v—BFW7B‚%6fVB6†G2æB’&WVW7G26ææ÷B66W72æ÷F†W"66÷VçB"Æ7–æ2‚“Óç°¢6öç7B3Öv—B÷Vä6öçfW'6F–öâ‡¶66÷VçD–C¦f÷&V–vâÆÖVÖ&W$–C¦f÷&V–våW'6öâÇF—FÆS¢$÷F†W"66÷VçB6V7&WB'Ò“°¢76W'BæWVÂ†v—BvWD6öçfW'6F–öâ†66÷VçBÆ2æ–B’ÆçVÆÂ“°¢6öç7B&W7öç6SÖv—BvWE6fVD6†B†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†Bö†—7F÷'’ò"¶2æ–B’Ç·&×3¥&öÖ—6Rç&W6öÇfR‡¶–C¦2æ–GÒ—Ò“¶76W'BæWVÂ‡&W7öç6Rç7FGW2ÃCB“°¢6öç7B&W7VÇCÖv—B6VæB‚%v†BöÆ–6–W2&RF†W&Sò"Æf÷&V–våW'6öâ“¶76W'BæWVÂ‡&W7VÇBç&W7öç6Rç7FGW2ÃCB“°¢6öç7B&VÖ÷fÃÖv—B&VÖ÷fT†—7F÷'’†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†Bö†—7F÷'’"Ç¶ÖWF†öC¢$DTÄUDR"Æ†VFW'3§²&6öçFVçB×G—R#¢&Æ–6F–öâö§6öâ'ÒÆ&öG“¤¥4ôâç7G&–æv–g’‡¶6öçfW'6F–öä–C¦2æ–GÒ—Ò’“°¢76W'BæWVÂ‡&VÖ÷fÂç7FGW2ÃCB“¶76W'Bæö²†v—BvWD6öçfW'6F–öâ†f÷&V–vâÆ2æ–B’“°¢Ò“°¢v—BFW7B‚$6öæ7W'&VçB&WÆ–W26ææ÷B÷fW'w&—FRâÇ&VG’×6fVB&Wf—6–öâ"Æ7–æ2‚“Óç°¢6öç7B3Öv—B÷Vä6öçfW'6F–öâ‡¶66÷VçD–C¦66÷VçBÆÖVÖ&W$–C§V÷ÆU³Òæ–BÇF—FÆS¢%&Wf—6–öâFW7B'Ò’ÇFö¶VãÖv—B†—7F÷'•Fö¶Vâ†66÷VçBÆ2æfÖ–Ç•öÖVÖ&W%ö–B“°¢v—B6fUGW&â‡¶6öçfW'6F–öã¦2ÇFö¶VâÇ7FFS¦2ç7FFRÆÖW76vS¢$f—'7BÖW76vR"Æç7vW#¦&Ææ·Ò“°¢v—B76W'Bç&V¦V7G2‡6fUGW&â‡¶6öçfW'6F–öã¦2ÇFö¶VâÇ7FFS¦2ç7FFRÆÖW76vS¢%7FÆRÖW76vR"Æç7vW#¦&Ææ·Ò’Ä6†D6öæfÆ–7B“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†EöÖW76vW2t„U$R6öçfW'6F–öåö–CÒC"Å¶2æ–EÒ’’ç&÷w2æÆVæwF‚Ã"“°¢Ò“°¢v—BFW7B‚$FVÆWFVB6†G26ææ÷B&R&W7F÷&VB'’â–âÖfÆ–v‡B&W7VÇB"Æ7–æ2‚“Óç°¢6öç7B3Öv—B÷Vä6öçfW'6F–öâ‡¶66÷VçD–C¦66÷VçBÆÖVÖ&W$–C§V÷ÆU³Òæ–BÇF—FÆS¢$FVÆWFRGW&–ærv÷&²'Ò’ÇFö¶VãÖv—B†—7F÷'•Fö¶Vâ†66÷VçBÆ2æfÖ–Ç•öÖVÖ&W%ö–B“°¢v—BFVÆWFT†—7F÷'’†66÷VçBÇ¶–C¦2æ–GÒ“°¢v—B76W'Bç&V¦V7G2‡6fUGW&â‡¶6öçfW'6F–öã¦2ÇFö¶VâÇ7FFS¦2ç7FFRÆÖW76vS¢$ÆFRç7vW""Æç7vW#¦&Ææ·Ò’Ä6†D6öæfÆ–7B“°¢76W'BæWVÂ†v—BvWD6öçfW'6F–öâ†66÷VçBÆ2æ–B’ÆçVÆÂ“°¢Ò“°¢v—BFW7B‚$6ÆV&–ær&öf–ÆR&VÖ÷fW2&÷F‚æ÷&ÖÂæBwV–FVBÖVÖ÷'’v—F†÷WBFVÆWF–ær—G2öÆ–6–W2"Æ7–æ2‚“Óç°¢6öç7B&Vf÷&SÒ†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwFƒ°¢6öç7B3Öv—B÷Vä6öçfW'6F–öâ‡¶66÷VçD–C¦66÷VçBÆÖVÖ&W$–C§V÷ÆU³Òæ–BÇF—FÆS¢$6ÆV"GW&–ærv÷&²'Ò’ÇFö¶VãÖv—B†—7F÷'•Fö¶Vâ†66÷VçBÆ2æfÖ–Ç•öÖVÖ&W%ö–B“°¢v—BFVÆWFT†—7F÷'’†66÷VçBÇ¶ÖVÖ&W$–C§V÷ÆU³Òæ–GÒ“°¢v—B76W'Bç&V¦V7G2‡6fUGW&â‡¶6öçfW'6F–öã¦2ÇFö¶VâÇ7FFS¦2ç7FFRÆÖW76vS¢$ÆFRç7vW""Æç7vW#¦&Ææ·Ò’Ä6†D6öæfÆ–7B“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†Eö6öçfW'6F–öç2t„U$R66÷VçEö–CÒCäBfÖ–Ç•öÖVÖ&W%ö–CÒC""Å¶66÷VçBÇV÷ÆU³Òæ–EÒ’’ç&÷w2æÆVæwF‚Ã“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6Æ–Õ÷6W76–öç2t„U$R66÷VçEö–CÒCäBfÖ–Ç•öÖVÖ&W%ö–CÒC""Å¶66÷VçBÇV÷ÆU³Òæ–EÒ’’ç&÷w2æÆVæwF‚Ã“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†EöÖW76vW2t„U$R66÷VçEö–CÒCäBfÖ–Ç•öÖVÖ&W%ö–CÒC""Å¶66÷VçBÇV÷ÆU³Òæ–EÒ’’ç&÷w2æÆVæwF‚Ã“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚Æ&Vf÷&R“°¢76W'Bæö²‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†Eö6öçfW'6F–öç2t„U$R66÷VçEö–CÒCäBfÖ–Ç•öÖVÖ&W%ö–CÒC""Å¶66÷VçBÇV÷ÆU³Òæ–EÒ’’ç&÷w2æÆVæwF‚“°¢v—BF"æW†V2†v—B&VDf–ÆR‡F‚ç&W6öÇfR‚'7Âö6†B×Ww&FRç7Â"’Â'WFc‚"’“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†Eö6öçfW'6F–öç2t„U$R66÷VçEö–CÒCäBfÖ–Ç•öÖVÖ&W%ö–CÒC""Å¶66÷VçBÇV÷ÆU³Òæ–EÒ’’ç&÷w2æÆVæwF‚Ã“°¢Ò“°¢v—BFW7B‚%v†öÆRÖfÖ–Ç’6ÆV"&VÖ÷fW2WfW'’66÷VçB6†B'WB&W6W'fW2æ÷F†W"66÷VçB"Æ7–æ2‚“Óç°¢v—BFVÆWFT†—7F÷'’†66÷VçBÇ¶ÆÃ§G'VWÒ“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†Eö6öçfW'6F–öç2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚Ã“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†EöÖW76vW2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚Ã“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚Ãƒ“°¢76W'Bæö²‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒ6†Eö6öçfW'6F–öç2t„U$R66÷VçEö–CÒC"Å¶f÷&V–våÒ’’ç&÷w2æÆVæwF‚“°¢Ò“°¢v—BFW7B‚$†—7F÷'’—2v–æFVBÂv—F‚æòf—†VBÆ–Ö—Böâ&WF–æVB6öçfW'6F–öç2"Æ7–æ2‚“Óç°¢f÷"†ÆWB“Ó¶“Ãc¶’²²–v—B÷Vä6öçfW'6F–öâ‡¶66÷VçD–C¦66÷VçBÆÖVÖ&W$–C§V÷ÆU³Òæ–BÇF—FÆS¢$†—7F÷'’"¶—Ò“°¢6öç7B&W7öç6SÖv—BvWD†—7F÷'’†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†Bö†—7F÷'“÷66÷SÒ"·V÷ÆU³Òæ–B’’ÆFFÖv—B&W7öç6Ræ§6öâ‚“°¢76W'BæWVÂ‡&W7öç6Rç7FGW2Ã#“¶76W'BæWVÂ†FFæ6öçfW'6F–öç2æÆVæwF‚ÃS“¶76W'Bæö²†FFææW‡D7W'6÷"“°¢6öç7BæW‡CÖv—BvWD†—7F÷'’†æWræW‡E&WVW7B‚&‡GG¢òöÆö6Æ†÷7Bö’ö6†Bö†—7F÷'“÷66÷SÒ"·V÷ÆU³Òæ–B²"f7W'6÷#Ò"¶FFææW‡D7W'6÷"’’ÇvSÖv—BæW‡Bæ§6öâ‚“°¢76W'BæWVÂ‡vRæ6öçfW'6F–öç2æÆVæwF‚Ã“°¢Ò“°¢6öç7B6VVE&Wf–Wtf—‡GW&SÖ7–æ2‡v÷&F–æuvW3¦çVÖ&W"“Óç°¢v—BF"çVW'’‚$DTÄUDRe$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢v—BF"çVW'’‚$DTÄUDRe$ôÒöÆ–7•öæÇ—6—5ö66†Rt„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢v—BF"çVW'’‚$DTÄUDRe$ôÒ&VÖ—VÕ÷&V6÷&G2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢6öç7BW'6öã×V÷ÆU³ÒÆ–C×WV–Bƒs’Ç&Vc×WV–Bƒs#’ÆæÖSÒ%&Wf–Wrf—‡GW&R7&—F–6Â–ÆÆæW72#°¢6öç7B66†VGVÆS×W'6öâæF—7Æ•öæÖR²"÷vç2"¶æÖR²"â7VÒ–ç7W&VB4tB3Sâ#°¢f÷"†6öç7B—FVÒöb·¶–BÇFW‡C§66†VGVÆRÇW'6öæÃ§G'VWÒÇ¶–C§&VbÇFW‡C¢'Æ6V†öÆFW""ÇW'6öæÃ¦fÇ6WÕÒ—°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–6–W2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ–ç7W&W"Ç&öGV7EöæÖRÇöÆ–7•öçVÖ&W"ÇöÆ–7•÷G—RÆFö7VÖVçE÷&öÆRÇW'6öæÅö6÷fW&vUö6öæf—&ÖVBÆFö7VÖVçEöWF†÷&—G’Ç&ö6W76–æu÷7FGW2Æ÷&–v–æÅöf–ÆVæÖRÇ7F÷&vUö¶W’ÆVffV7F—fUöFFRÆW‡G&7FVEö§6öâ’dÅTU2‚CÂC"ÂC2ÂtW†×ÆR–ç7W&W"rÂCBÂu$Ud”UrÓrÂt7&—F–6Â–ÆÆæW72rÂCRÂCbÂCrÂw&VG’rÂC‚ÂC‚Âs##"ÓÓrÂC“£¦§6öæ"’"À¢¶—FVÒæ–BÆ66÷VçBÇW'6öâæ–BÆæÖRÆ—FVÒçW'6öæÃò'W'6öæÅ÷66†VGVÆR#¢'öÆ–7•÷v÷&F–ær"Æ—FVÒçW'6öæÂÆ—FVÒçW'6öæÃó“S£cÆ—FVÒæ–B²"çFb"Ä¥4ôâç7G&–æv–g’‡·&öGV7G4ÖVçF–öæVC¥¶æÖU×Ò•Ò“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•öÖVÖ&W'2‡öÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ66÷VçEö–B’dÅTU2‚CÂC"ÂC2’"Å¶—FVÒæ–BÇW'6öâæ–BÆ66÷VçEÒ“°¢Ğ¢òòF†W6RFö7VÖVçG2†fR&VVâ$TC²F†W’6–×Ç’7FFRæò'VÆRF†—2f—‡GW&P¢òòæVVG2âF†B—2F–ffW&VçB7FFRg&öÒæWfW"†f–ær&VVâ&VBÂæB—B—0¢òòF†RöæRF†W6RfÆÆ&6²FW7G2&R&÷WBà¢v—BF"çVW'’‚%UDDRöÆ–6–W24UB&VæVf—G5ö–æFW†VEöCÖæ÷r‚’t„U$R66÷VçEö–CÒCäB&VæVf—G5ö–æFW†VEöB•2åTÄÂ"Å¶66÷VçEÒ“°¢v—BF"çVW'’‚%UDDRöÆ–6–W24UB6öæF—F–öç5ö–æFW†VEöCÖæ÷r‚’t„U$R66÷VçEö–CÒCäB6öæF—F–öç5ö–æFW†VEöB•2åTÄÂ"Å¶66÷VçEÒ’æ6F6‚‚‚“Óç·Ò“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•÷vW2†66÷VçEö–BÇöÆ–7•ö–BÇvUöçVÖ&W"ÇFW‡B’dÅTU2‚CÂC"ÃÂC2’"Å¶66÷VçBÆ–BÇ66†VGVÆUÒ“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö6‡Væ·2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÇöÆ–7•ö–BÇvU÷7F'BÇvUöVæBÇFW‡BÆVÖ&VFF–ær’dÅTU2‚CÂC"ÂC2ÂCBÃÃÂCRÂCc£§fV7F÷"’"À¢·WV–Bƒs3’Æ66÷VçBÇW'6öâæ–BÆ–BÇ66†VGVÆRÂ%²"´'&’æg&öÒ‡¶ÆVæwFƒ£#GÒÂ…òÆ¢“Óæ£ÓÓÓó£’æ¦ö–â‚"Â"’²%Ò%Ò“°¢f÷"†ÆWBvSÓ·vSÃ×v÷&F–æuvW3·vR²²—°¢6öç7BFW‡C×vSÓÓÓöæÖR²"âvR’Röb7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW72âF†RF–væ÷6—2×W7B6F—6g’F†RFVf–æVB–ÆÆæW72â# ¢æÖR²"â6V7F–öâ"·vR²"6WG2÷WBFÖ–æ—7G&F—fR6öæF—F–öç2F†BF†—2&WG&–WfÂF–Bæ÷B&WGW&ââ"²$6ÆW6RFW‡B"ç&WVBƒ#“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•÷vW2†66÷VçEö–BÇöÆ–7•ö–BÇvUöçVÖ&W"ÇFW‡B’dÅTU2‚CÂC"ÂC2ÂCB’"Å¶66÷VçBÇ&VbÇvRÇFW‡EÒ“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö6‡Væ·2†–BÆ66÷VçEö–BÆfÖ–Ç•öÖVÖ&W%ö–BÇöÆ–7•ö–BÇvU÷7F'BÇvUöVæBÇFW‡BÆVÖ&VFF–ær’dÅTU2‚CÂC"ÂC2ÂCBÂCRÂCRÂCbÂCs£§fV7F÷"’"À¢·WV–BƒsC·vR’Æ66÷VçBÇW'6öâæ–BÇ&VbÇvRÇFW‡BÂ%²"´'&’æg&öÒ‡¶ÆVæwFƒ£#GÒÂ…òÆ¢“Óæ£ÓÓÓó£’æ¦ö–â‚"Â"’²%Ò%Ò“°¢Ğ¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö6÷fW&vW2†–BÆ66÷VçEö–BÇöÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ6FVv÷'’ÆÖ÷VçBÆ7W'&Væ7’Ç&öGV7EöæÖRÇ6÷W&6U÷vRÆWf–FVæ6U÷FW‡BÆWf–FVæ6U÷fW&–f–VBÆ6öæf—&ÖVB’dÅTU2‚CÂC"ÂC2ÂCBÂt7&—F–6Â–ÆÆæW72rÃ3SÂu4tBrÂCRÃÂCbÇG'VRÇG'VR’"À¢·WV–BƒsS’Æ66÷VçBÆ–BÇW'6öâæ–BÆæÖRÇ66†VGVÆUÒ“°¢&WGW&â·öÆ–7”–C¦–BÇ&VfW&Væ6T–C§&VbÇW'6öçÓ°¢Ó°¢v—BFW7B‚$âVç&VBöÆ–7’6V7F–öâ—2&W÷'FVB2'F–Â&Wf–WrÂæWfW"2æò6÷fW&vR"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ"“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòæ6ö×ÆWFRÆfÇ6R“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòæ6öçG&7G5F÷FÂÃ“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5F÷FÂÃ2“°¢76W'Bæö²‚†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5&VCóó“ãbb†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5&VCóó“Ã2Â$öæÇ’F†R&WG&–WfVBvW2Ö’6÷VçB2&VB"“°¢76W'BæWVÂ†ç7vW"çöÆ–7•&Wf–Wsòå³Òæ6÷fW&vSòæ6ö×ÆWFVæW72Â''F–Å÷&WG&–WfÂ"“°¢76W'BæWVÂ†ç7vW"çöÆ–7•&Wf–Wsòå³Òæ6÷fW&vSòç76vW5F÷FÂÃ2“°¢76W'BæÖF6‚†ç7vW"ç&Wf–Wt6÷fW&vRç7FFVÖVçBÂõå'F–Â&Wf–Ws¢ÆB²öb2&ö6W76VBvW2ò“°¢76W'Bæö²‚ç7vW"æFWF–Ç2æ–æ6ÇVFW2†ç7vW"ç&Wf–Wt6÷fW&vRç7FFVÖVçB’Â%F†R&ææW"÷vç2F†R7FFVÖVçC²&WVF–ær—B–âFWF–Ç2GWÆ–6FVB—Böâ67&VVâ"“°¢6öç7Bæ÷&ÖÆ—6VCÖç7vW"æFWF–Ç2æÖ†CÓæBçFôÆ÷vW$66R‚’ç&WÆ6R‚õµæ×£Ó•Ò²örÂ""’çG&–Ò‚’“°¢76W'BæWVÂ†æWr6WB†æ÷&ÖÆ—6VB’ç6—¦RÆæ÷&ÖÆ—6VBæÆVæwF‚Â$æòFWF–ÂÖ’V"Gv–6R"“°¢76W'BæWVÂ†æVvF—fT6÷fW&vT6Æ–Ò†ç7vW"ç7VÖÖ'’’ÆfÇ6R“°¢òòF†Rv÷&F–ær6V7F–öâƒ2vW2’v2æWfW"gVÆÇ’&WG&–WfVBÂ6òF†P¢òò–÷WB'VÆR—2æ÷BgVÆÇ’fW&–f–VBâF†RvFR×W7Bv—F††öÆBF†P¢òòÖ÷VçBÒÒ'WBF†R&VæVf—B—G6VÆbÂ&V–ær÷FVçF–ÆÇ’&VÆWfçBÂ×W7@¢òò7F’f—6–&ÆR&F†W"F†âF—6V&–ær÷"&VF–ær2&æ÷B6÷fW&VB"à¢6öç7B—FVÓÖç7vW"æ6Æ–Ô—FV×5³Ó°¢76W'Bæö²†—FVÒÂ%F†R÷FVçF–ÆÇ’&VÆWfçB7&—F–6ÂÖ–ÆÆæW72&VæVf—B×W7B&VÖ–âf—6–&ÆR"“°¢76W'BæÖF6‚†—FVÒçF—FÆRÂõ´65×&—F–6Â´–•ÖÆÆæW72ò“°¢76W'BæWVÂ†—FVÒç7FGW2Â&æVVG5öFö7VÖVçB"“°¢76W'BæWVÂ†—FVÒæÖ÷VçEFW‡BÆçVÆÂ“°¢76W'BæÖF6‚†—FVÒç&V6öâÂ÷v—F††VÆBö’Â%F†R&V6öâ×W7BW‡Æ–âF†RÖ÷VçBv2v—F††VÆBÂæ÷B§W7B7FFRf7B"“°¢76W'Bæö²†—FVÒæ6öæF—F–öç2ç6öÖR†3Óâ÷'F–ÂöÆ–7’&Wf–Wrö’çFW7B†2’’Â$6öæF—F–öâ×W7BæÖRF†R–æ6ö×ÆWFR&Wf–Wr2F†R6W6R"“°¢Ò“°¢v—BFW7B‚$gVÆÇ’&VB6öçG&7B—2&W÷'FVB26ö×ÆWFR&Wf–Wr"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòæ6ö×ÆWFRÇG'VR“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5F÷FÂÃ"“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5&VBÃ"“°¢76W'BæWVÂ†ç7vW"çöÆ–7•&Wf–Wsòå³Òæ6÷fW&vSòæ6ö×ÆWFVæW72Â&gVÆÅ÷FW‡E÷&Wf–WvVB"“°¢76W'BæÖF6‚†ç7vW"ç&Wf–Wt6÷fW&vRç7FFVÖVçBÂõä6ö×ÆWFR&Wf–Wrò“°¢Ò“°¢v—BFW7B‚$Ö—76–ær&VÖ—VÒWf–FVæ6RfÆw27F—fR7FGW2v—F†÷WB6†æv–ær÷væW'6†—"Æ7–æ2‚“Óç°¢6öç7Bf—‡GW&SÖv—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢6öç7B7FÆSÒ†v—B6VæB‚%v†BöÆ–6–W2FòvR†fSò"ÇV÷ÆU³Òæ–B’’æFFæç7vW"26†Dç7vW#°¢6öç7B7FÆT—FVÓ×7FÆRç÷'FföÆ–ô—FV×3òæf–æB†—FVÓÓæ—FVÒæ÷væW$æÖSÓÓÖf—‡GW&RçW'6öâæF—7Æ•öæÖR“°¢76W'BæWVÂ‡7FÆT—FVÓòæ6öæf—&ÖVBÇG'VR“°¢76W'BæWVÂ‡7FÆT—FVÓòæ6÷fW&vW5³ÒæÖ÷VçBÃ3S“°¢76W'BæWVÂ‡7FÆT—FVÓòæ7W'&VçFæW73òç7FFRÂ'Væ¶æ÷vâ"“°¢76W'BæWVÂ‡7FÆT—FVÓòæ7W'&VçFæW73òæÆ&VÂÂ$7F—fR7FGW2æ÷B&V6VçFÇ’fW&–f–VB"“°¢76W'Bæö²‡7FÆRææW‡E7FW2ç6öÖR‡7FWÓâ÷&VÖ—VÒ&V6V—B÷"&VæWvÂæ÷F–6Rö’çFW7B‡7FW’’“°¢òòF†RÖVF–6ÂÖFVf–æ—F–öâÖF6‚f÷"7&—F–6ÂÖ–ÆÆæW72F–væ÷6—2—2¢òòFö7VÖVçBÖ6öæf—&ÖF–öâ&WV—&VÖVçBF†RÖö6²Wf–FVæ6RæWfW"&W6öÇfW0¢òò‡6VRF†R6†&VB4’&VæVf—Bf—‡GW&R&÷fR’Â6òF†—26Æ–Ò—2v—F††VÆ@¢òòöâF†Bw&÷VæB&Vv&FÆW72öb&VÖ—VÒWf–FVæ6RâF†Bv—F††öÆF–ær—0¢òò6W&FRg&öÒ÷væW'6†—ö7W'&VçFæW72ÒÒF†Rö–çBVæFW"FW7B†W&R—0¢òòF†BÖ—76–ær&VÖ—VÒ&V6V—BöæÇ’WfW"FG2—G2÷vâVÆ–f–W"æ@¢òòæWfW"7V'7F—GWFW2f÷"Â÷"W&6W2ÂF†R÷F†W"&V6öç2Ç&VG’&W6VçBà¢6öç7B6Æ–ÓÒ†v—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B’’æFFæç7vW"26†Dç7vW#°¢6öç7B6Æ–Ô—FVÓÖ6Æ–Òæ6Æ–Ô—FV×5³Ó°¢76W'Bæö²†6Æ–Ô—FVÒÂ%F†R7&—F–6ÂÖ–ÆÆæW72&VæVf—B×W7B&VÖ–âf—6–&ÆR"“°¢76W'BæWVÂ†6Æ–Ô—FVÒç7FGW2Â&æVVG5öFö7VÖVçB"“°¢76W'BæWVÂ†6Æ–Ô—FVÒæÖ÷VçEFW‡BÆçVÆÂÂ$Ö—76–ær&V6V—B×W7Bæ÷BÖçVf7GW&RâÖ÷VçBF†Bv2æWfW"6öæf—&ÖVB"“°¢76W'Bæö²†6Æ–Ô—FVÒæ6öæF—F–öç2ç6öÖR†3Óæ2ç7F'G5v—F‚‚$7F—fR7FGW2æ÷B&V6VçFÇ’fW&–f–VB"’’Â%F†R7W'&VçFæW72VÆ–f–W"×W7B7F–ÆÂ&R&W6VçBÆöæw6–FRF†RÖVF–6ÂÖFVf–æ—F–öâVÆ–f–W""“°¢76W'Bæö²†6Æ–Ô—FVÒæ6öæF—F–öç2ç6öÖR†3Óæ2ç7F'G5v—F‚‚%F†RF–væ÷6—2×W7B6F—6g’"’’Â%F†RÖVF–6ÂÖFVf–æ—F–öâVÆ–f–W"F†B7GVÆÇ’v—F††öÆG2F†RÖ÷VçB×W7BÇ6ò&R&W6VçB"“°¢v—BF"çVW'’‚$”å4U%B”åDò&VÖ—VÕ÷&V6÷&G2†66÷VçEö–BÇöÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ–ç7W&W"ÇöÆ–7•öçVÖ&W"ÆÖ÷VçBÆ7W'&Væ7’Ç–ÖVçEöFFR’dÅTU2‚CÂC"ÂC2ÂtW†×ÆR–ç7W&W"rÂu$Ud”UrÓrÃ#Âu4tBrÆ7W'&VçEöFFRÒ3’"À¢¶66÷VçBÆf—‡GW&RçöÆ–7”–BÆf—‡GW&RçW'6öâæ–EÒ“°¢6öç7Bg&W6ƒÒ†v—B6VæB‚%v†BöÆ–6–W2FòvR†fSò"ÇV÷ÆU³Òæ–B’’æFFæç7vW"26†Dç7vW#°¢6öç7Bg&W6„—FVÓÖg&W6‚ç÷'FföÆ–ô—FV×3òæf–æB†—FVÓÓæ—FVÒæ÷væW$æÖSÓÓÖf—‡GW&RçW'6öâæF—7Æ•öæÖR“°¢76W'BæWVÂ†g&W6„—FVÓòæ7W'&VçFæW73òç7FFRÂ'fW&–f–VE÷&V6VçB"“°¢76W'BæWVÂ†g&W6„—FVÓòæ6÷fW&vW5³ÒæÖ÷VçBÃ3S“°¢Ò“°¢v—BFW7B‚$&VÖ—VÒ&V6V—Bf÷"æ÷F†W"W'6öâ÷"öÆ–7’6ææ÷BfW&–g’F†—26öçG&7B"Æ7–æ2‚“Óç°¢6öç7Bf—‡GW&SÖv—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢v—BF"çVW'’‚$”å4U%B”åDò&VÖ—VÕ÷&V6÷&G2†66÷VçEö–BÇöÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ–ç7W&W"ÇöÆ–7•öçVÖ&W"ÆÖ÷VçBÆ7W'&Væ7’Ç–ÖVçEöFFR’dÅTU2‚CÄåTÄÂÂC"ÂtW†×ÆR–ç7W&W"rÂu$Ud”UrÓrÃ#Âu4tBrÆ7W'&VçEöFFRÒ’"À¢¶66÷VçBÇV÷ÆU³5Òæ–EÒ“°¢v—BF"çVW'’‚$”å4U%B”åDò&VÖ—VÕ÷&V6÷&G2†66÷VçEö–BÇöÆ–7•ö–BÆfÖ–Ç•öÖVÖ&W%ö–BÆ–ç7W&W"ÇöÆ–7•öçVÖ&W"ÆÖ÷VçBÆ7W'&Væ7’Ç–ÖVçEöFFR’dÅTU2‚CÄåTÄÂÂC"ÂtW†×ÆR–ç7W&W"rÂu4ôÔRÔõD„U"ÕôÄ”5’rÃ#Âu4tBrÆ7W'&VçEöFFRÒ’"À¢¶66÷VçBÆf—‡GW&RçW'6öâæ–EÒ“°¢6öç7Bç7vW#Ò†v—B6VæB‚%v†BöÆ–6–W2FòvR†fSò"ÇV÷ÆU³Òæ–B’’æFFæç7vW"26†Dç7vW#°¢6öç7B—FVÓÖç7vW"ç÷'FföÆ–ô—FV×3òæf–æB‡&÷sÓç&÷ræ÷væW$æÖSÓÓÖf—‡GW&RçW'6öâæF—7Æ•öæÖR“°¢76W'BæWVÂ†—FVÓòæ7W'&VçFæW73òç7FFRÂ'Væ¶æ÷vâ"“°¢76W'BæWVÂ†—FVÓòæ6öæf—&ÖVBÇG'VR“°¢Ò“°¢v—BFW7B‚$Æöær&öö¶ÆWB—2&VBFVWW"F†âF†R6ÖÆÂÖFö7VÖVçBfÆö÷""Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&RƒC“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5F÷FÂÃC“°¢76W'Bæö²‚†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5&VCóó“ãÓ‚Â$C×76vR&öö¶ÆWB×W7Bæ÷B&R&VB6—‚76vW2BF–ÖRÂv÷B"¶ç7vW"ç&Wf–Wt6÷fW&vSòçvW5&VB“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòæ6ö×ÆWFRÆfÇ6RÂ&æBv†BF†R6ÆÂ'VFvWBÆVgBVç&VB—27F–ÆÂ&W÷'FVB"“°¢òòF†R7&—F–6ÂÖ–ÆÆæW72&VæVf—Bw2ÖVF–6ÂÖFVf–æ—F–öâÖF6‚—2¢òòFö7VÖVçBÖ6öæf—&ÖF–öâ&WV—&VÖVçB‡6VRF†R6†&VB4’Öö6²&÷fR’À¢òòv†–6‚F†R6fWG’vFRv—F††öÆG2&Vv&FÆW72öb†÷rFVWF†R&V@¢òòvVçBÒÒF†RFWF‚76W'F–öç2&÷fR&Rv†BF†—2FW7B—27GVÆÇ¢òò&÷WBà¢76W'BæWVÂ†ç7vW"æ6Æ–Ô—FV×5³Óòç7FGW2Â&æVVG5öFö7VÖVçB"“°¢76W'BæWVÂ†ç7vW"æ6Æ–Ô—FV×5³ÓòæÖ÷VçEFW‡BÆçVÆÂ“°¢Ò“°¢v—BFW7B‚$6Æ–ÒÖ÷VçB7FFW2F†R7V6–f–2&V6öç2—B6÷VÆB6WGFÆRF–ffW&VçFÇ’"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢òòF†RÖVF–6ÂÖFVf–æ—F–öâÖF6‚—2Fö7VÖVçBÖ6öæf—&ÖF–öâ&WV—&VÖVç@¢òò‡6VRF†R6†&VB4’Öö6²&÷fR’Â6òF†RÖöæWF'’vFRv—F††öÆG2F†P¢òòÖ÷VçB÷WG&–v‡B&F†W"F†â6†÷v–ær—Bv—F‚VÆ–f–W"ÒÒ¢òòVÆ–f–W"æW‡BFòf–wW&RF†B—2æ÷BF—7Æ–VB—2—G2÷vâFVfV7@¢òò†f—†VB–âÆ–"ö6†B÷v÷&¶fÆ÷rçG2Æöæw6–FRF†—2FW7B’âF†R7V6–f–0¢òò&V6öç2F†—2FW7B—2&÷WB×W7B7F–ÆÂ&Rf—6–&ÆRÂöâF†R&VæVf—Bw0¢òò÷vâ6öæF—F–öç2ÂW†7FÇ’27G&öævÇ’2&Vf÷&Rà¢6öç7B—FVÓÖç7vW"æ6Æ–Ô—FV×5³Ó°¢76W'Bæö²†—FVÒÂ%F†R÷FVçF–ÆÇ’&VÆWfçB&VæVf—B×W7B&VÖ–âf—6–&ÆR"“°¢76W'BæWVÂ†—FVÒç7FGW2Â&æVVG5öFö7VÖVçB"“°¢76W'BæWVÂ†—FVÒæÖ÷VçEFW‡BÆçVÆÂ“°¢76W'BæWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ3òæÆVæwFƒóóÃÂ$æòF÷FÂÖ’&R6†÷vâv†Vâ—G2öæÇ’—FVÒv2v—F††VÆB"“°¢76W'Bæö²‚ç7vW"ç–÷WEVÆ–f–W'3òæÆVæwF‚Â$VÆ–f–W"v—F‚æòF—7Æ–VBF÷FÂFòVÆ–g’—2FævÆ–ær6fVB"“°¢76W'Bæö²†—FVÒæ6öæF—F–öç2ç6öÖR†3ÓâöFVf–æVB–ÆÆæW77ÆFVf–æ—F–öâö’çFW7B†2’’Â%F†R÷WG7FæF–ærFVf–æ—F–öâ—2F†R&VÂ&V6öâ†W&S¢"´¥4ôâç7G&–æv–g’†—FVÒæ6öæF—F–öç2’“°¢76W'Bæö²†—FVÒæ6öæF—F–öç2ç6öÖR†3Óâö7F—fR7FGW2æ÷B&V6VçFÇ’fW&–f–VBö’çFW7B†2’’Â%F†RÖ—76–ær&VÖ—VÒ÷&VæWvÂWf–FVæ6R×W7BÇ6ò&RæÖVB"“°¢76W'BæFöW4æ÷DÖF6‚†ç7vW"ç7VÖÖ'’Âõ5ÂC3SÃòÂ$âVæ6öæf—&ÖVBÖ÷VçB×W7BæWfW"&V6‚F†R7VÖÖ'’FW‡BV—F†W""“°¢Ò“°¢v—BFW7B‚$f–ÆVBWf–FVæ6R&F6‚—2æWfW"6÷VçFVB2FW‡BF†Bv2&VB"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢f–Å&VF–æs×G'VS°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢f–Å&VF–æsÖfÇ6S°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòçvW5&VBÃÂ%6V7F–öç2F†RÖöFVÂ6÷VÆBæ÷Bf–æ—6‚vW&R6VçBÂæ÷B&VB"“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòæ6ö×ÆWFRÆfÇ6R“°¢76W'Bæö²‚†ç7vW"ç&Wf–Wt6÷fW&vSòçv–æF÷w4f–ÆVCóó“ã“°¢76W'BæWVÂ†ç7vW"æ6Æ–Ô—FV×2æÆVæwF‚Ã“°¢76W'BæWVÂ†æVvF—fT6÷fW&vT6Æ–Ò†ç7vW"ç7VÖÖ'’’ÆfÇ6RÂ$f–ÆVB&F6‚×W7BæWfW"&VB2â'6Væ6Röb6÷fW""“°¢76W'BæÖF6‚†ç7vW"ç7VÖÖ'’Âö–æ6ö×ÆWFR&Wf–Wrö’“°¢76W'Bæö²†ç7vW"ææW‡E7FW2ç6öÖR‡7FWÓâöWf–FVæ6R&F6‚ö’çFW7B‡7FW’’Â%F†RW6W"×W7B&RFöÆBFò&WG'’&F†W"F†âÆVgBv—F‚6–ÆVæ6R"“°¢Ò“°¢v—BFW7B‚$6öçG&7Bv—F‚æòÖF6†–ærv÷&F–ær6·2f÷"—B–ç7FVBöbvö–ærV–WB"Æ7–æ2‚“Óç°¢v—BF"çVW'’‚$DTÄUDRe$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒCäBFö7VÖVçE÷&öÆSÒwöÆ–7•÷v÷&F–ærr"Å¶66÷VçEÒ“°¢v—BF"çVW'’‚$DTÄUDRe$ôÒöÆ–7•öæÇ—6—5ö66†Rt„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ†ç7vW"æ6Æ–Ô—FV×2æÆVæwF‚Ã“°¢76W'BæWVÂ†ç7vW"çVW7F–öç2æÆVæwF‚ÃÂ$Ö—76–ærv÷&F–ær—26öÖWF†–ærF†RW6W"6âf—‚Â6ò6²f÷"—B"“°¢76W'BæÖF6‚†ç7vW"çVW7F–öç5³ÒçFW‡BÂ÷öÆ–7’v÷&F–ær÷"&VæVf—B7VÖÖ'’ö’“°¢76W'BæÖF6‚†ç7vW"çVW7F–öç5³Òçv‡’Â÷–÷WB'VÆRö’“°¢76W'BæWVÂ†ç7vW"çöÆ–7•&Wf–Wsòå³Òæ6÷fW&vSòæ6ö×ÆWFVæW72Â&æõ÷v÷&F–ær"“°¢Ò“°¢v—BFW7B‚$–çFW'&WFF–öâ7WBöfb'B×v’F‡&÷Vv‚7F–ÆÂç7vW'2F†RGW&â"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢G'Væ6FT–çFW'&WFF–öç3Ó°¢6öç7B·&W7öç6RÆFFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢G'Væ6FT–çFW'&WFF–öç3Ó°¢76W'BæWVÂ‡&W7öç6Rç7FGW2Ã#Ä¥4ôâç7G&–æv–g’†FF’“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæFöW4æ÷DÖF6‚†ç7vW"ç7VÖÖ'’Âö–çfÆ–B7G'V7GW&VB¥4ôâö’Â$&r¥4ôâGV××W7BæWfW"&V6‚F†RW6W""“°¢76W'Bæö²‚ç7vW"æFWF–Ç2ç6öÖR†CÓæBæ–æ6ÇVFW2‚'7V&¦V7D–B"’’Â%F†R&rÖöFVÂ÷WGWB×W7Bæ÷B&R6†÷vâ"“°¢76W'Bæö²†ç7vW"æ6Æ–Ô—FV×5³ÒÂ$6ÇfvVB÷"&WG&–VB–çFW'&WFF–öâ7F–ÆÂ&öGV6W2F†R76W76ÖVçB"“°¢76W'BæWVÂ†ç7vW"æ6Æ–Ô—FV×5³Óòç7FGW2Â&æVVG5öFö7VÖVçB"“°¢Ò“°¢v—BFW7B‚%6†÷'B7V&¦V7B†æFÆW2&RÖVB&6²FòF†R&VÂfÖ–Ç’ÖVÖ&W""Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ†ç7vW"ç&W6öÇfVDfÖ–Ç”ÖVÖ&W$–BÇV÷ÆU³Òæ–B“°¢76W'Bæö²†ç7vW"æ¶æ÷väf7G2ç6öÖR†cÓâö'&V7B6æ6W"ö’çFW7B†b’’Â$f7G2×W7BÆæBöâF†R&VÂW'6öâÂæ÷BöâF†R†æFÆR"“°¢6öç7B6fVCÖv—BvWD6öçfW'6F–öâ†66÷VçBÆç7vW"æ6öçfW'6F–öä–B“°¢76W'Bæö²‡6fVCòç7FFRç7V&¦V7G5·V÷ÆU³Òæ–EÒÂ%7FFR—2¶W–VB'’F†R&VÂfÖ–Ç’ÖVÖ&W"–B"“°¢76W'BæWVÂ„ö&¦V7Bæ¶W—2‡6fVBç7FFRç7V&¦V7G2’ç6öÖR†³Óâõç5ÆB²BòçFW7B†²’’ÆfÇ6RÂ$æò6†÷'B†æFÆRÖ’ÆV²–çFò6fVB7FFR"“°¢Ò“°¢v—BFW7B‚$GW&â7F÷2B—G2&VF–ær'VFvWB–ç7FVBöb'Vææ–ærf÷"Ö–çWFW2"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&RƒC“°¢&ö6W72æVçbå$uôÔ…ôUd”DTä4Uõt”äDõu3Ò#"#°¢òò6ÖÆÂ6V7F–öç26òF†—2Fö7VÖVçBæVVG2Ö÷&RöbF†VÒF†âF†R'VFvW@¢òòÆÆ÷w2Âv†–6‚—2F†R6—GVF–öâF†RFW7B—2&÷WBâBF†RFVfVÇB6—¦P¢òòF†Rv†öÆRFö7VÖVçBf—G2–âöæR6V7F–öâæBæ÷F†–ær—2WfW"7WB6†÷'Bà¢&ö6W72æVçbå$uôUd”DTä4Uõt”äDõuô4„$5DU%3Ò#33#°¢6öç7B&VG4&Vf÷&S×&VF–æt6ÆÇ3°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢FVÆWFR&ö6W72æVçbå$uôÔ…ôUd”DTä4Uõt”äDõu3¶FVÆWFR&ö6W72æVçbå$uôUd”DTä4Uõt”äDõuô4„$5DU%3°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'Bæö²‡&VF–æt6ÆÇ2×&VG4&Vf÷&SÃÓ"Â%F†R6ÆÂ6V–Æ–ær×W7B&RVæf÷&6VBÂÖFR"²‡&VF–æt6ÆÇ2×&VG4&Vf÷&R’“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòæ6ö×ÆWFRÆfÇ6R“°¢76W'BæWVÂ†æVvF—fT6÷fW&vT6Æ–Ò†ç7vW"ç7VÖÖ'’’ÆfÇ6RÂ%7F÷–ærV&Ç’—2â–æ6ö×ÆWFR&Wf–WrÂæ÷Bâ'6Væ6Röb6÷fW""“°¢76W'Bæö²†ç7vW"æFWF–Ç2ç6öÖR†CÓâ÷7F–ÆÂVç&VBö’çFW7B†B’’Â%F†RW6W"×W7B&RFöÆBF†R&VBv27WB6†÷'B"“°¢Ò“°¢v—BFW7B‚$Ö—76†Vâ&VF–ær&WÇ’—2&W—&VB–ç7FVBöbÆ÷6–ærF†R6V7F–öâ"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢Ö—76†U&VF–æsÓ°¢6öç7B&VG4&Vf÷&S×&VF–æt6ÆÇ3°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢Ö—76†U&VF–æsÓ°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ‡&VF–æt6ÆÇ2×&VG4&Vf÷&RÃÂ$w&öær6†R×W7Bæ÷BG&–vvW"6V6öæBÂ6Æ÷vW"GFV×B"“°¢76W'Bæö²†ç7vW"æ6Æ–Ô—FV×2ç6öÖR†—FVÓÓâô7&—F–6Â–ÆÆæW72&VæVf—BòçFW7B†—FVÒçF—FÆR’’À¢%F†R6ÇfvV&ÆR&VæVf—B×W7B7W'f—fS¢"´¥4ôâç7G&–æv–g’†ç7vW"æ6Æ–Ô—FV×2æÖ†“Óæ’çF—FÆR’’“°¢76W'BæWVÂ†ç7vW"ç&Wf–Wt6÷fW&vSòçv–æF÷w4f–ÆVBÃÂ%F†R6V7F–öâ6÷VçG22&VBÂ&V6W6R—Bv2"“°¢Ò“°¢v—BFW7B‚$f–ÆVB6V7F–öâæWfW"&–çG2fÆ–FF–öâ÷WGWBFòF†RW6W""Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢f–Å&VF–æs×G'VS°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢f–Å&VF–æsÖfÇ6S°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢6öç7BWfW'—F†–æsÕ¶ç7vW"ç7VÖÖ'’Âââæç7vW"æFWF–Ç2Âââæç7vW"ææW‡E7FW5Òæ¦ö–â‚""“°¢76W'Bæö²‚öWf–FVæ6R&F6‚ö’çFW7B†WfW'—F†–ær’Â%F†RW6W"—27F–ÆÂFöÆB6V7F–öâ6÷VÆBæ÷B&R&VB"“°¢f÷"†6öç7BÆV²öb²&–çfÆ–E÷G—R"Â%¦öDW'&÷""Â'µÂ""Â'&V6V—fVB"Â'6÷W&6T–B%Ò¢76W'BæWVÂ†WfW'—F†–æræ–æ6ÇVFW2†ÆV²’ÆfÇ6RÂ%&rÖöFVÂ÷"fÆ–FF–öâ÷WGWBÆV¶VC¢"¶ÆV²“°¢Ò“°¢v—BFW7B‚%F†R6ÖR&VæVf—B—2æ÷B6†÷vâ2Gvò–FVçF–6Â6&G2"Æ7–æ2‚“Óç°¢v—B6VVE&Wf–Wtf—‡GW&Rƒ“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢6öç7B¶W—3Öç7vW"æ6Æ–Ô—FV×2æÖ†—FVÓÓæ—FVÒçF—FÆR²'Â"²†—FVÒæÖ÷VçEFW‡Cóò""’²'Â"¶—FVÒç7FGW2“°¢76W'BæWVÂ†æWr6WB†¶W—2’ç6—¦RÆ¶W—2æÆVæwF‚Â$GWÆ–6FR6&G3¢"¶¶W—2æ¦ö–â‚"ò"’“°¢Ò“°¢v—BFW7B‚%v—F‚&VæVf—G2öâf–ÆRÂ6Æ–Ò—2ç7vW&VBv—F†÷WB&VF–ærFö7VÖVçG2"Æ7–æ2‚“Óç°¢6öç7Bf—‡GW&SÖv—B6VVE&Wf–Wtf—‡GW&RƒC“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö&VæVf—G2†66÷VçEö–BÇöÆ–7•ö–BÇ&öGV7EöæÖRÆ&VæVf—EöæÖRÇG&—G2Æf÷&×VÆö¶–æBÆf÷&×VÆ÷fÇVRÆ7W'&Væ7’Ç6÷W&6U÷vRÇV÷FRÆ6öæF—F–öç2Ç&WV—&VÖVçG2ÆæVVG5÷&Wf–Wr’dÅTU2‚CÂC"ÂC2ÂtÖ¦÷"7&—F–6Â–ÆÆæW72rÄ%$•²v–ÆÆæW72rÂvF–væ÷6—2uÓ£§FW‡EµÒÂw7VÕö–ç7W&VBrÃÂu4tBrÃrÂuvR’RöbF†R7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW72ârÂuµÒs£¦§6öæ"ÂuµÒs£¦§6öæ"ÆfÇ6R’"À¢¶66÷VçBÆf—‡GW&Rç&VfW&Væ6T–BÂ%&Wf–Wrf—‡GW&R7&—F–6Â–ÆÆæW72%Ò“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö&VæVf—G2†66÷VçEö–BÇöÆ–7•ö–BÇ&öGV7EöæÖRÆ&VæVf—EöæÖRÇG&—G2Æf÷&×VÆö¶–æBÆf÷&×VÆ÷fÇVRÆ7W'&Væ7’Æf7Eö¶W’Ç6÷W&6U÷vRÇV÷FRÆ6öæF—F–öç2Ç&WV—&VÖVçG2ÆæVVG5÷&Wf–Wr’dÅTU2‚CÂC"ÂC2ÂtFVF‚&VæVf—BrÄ%$•²vFVF‚uÓ£§FW‡EµÒÂw7VÕö–ç7W&VBrÃÂu4tBrÄåTÄÂÃ’ÂtöâFVF‚vR’F†R7VÒ–ç7W&VBârÂuµÒs£¦§6öæ"ÂuµÒs£¦§6öæ"ÆfÇ6R’"À¢¶66÷VçBÆf—‡GW&Rç&VfW&Væ6T–BÂ%&Wf–Wrf—‡GW&R7&—F–6Â–ÆÆæW72%Ò“°¢6öç7B&VG4&Vf÷&S×&VF–æt6ÆÇ2Ææ'&F–öç4&Vf÷&SÖW‡ÆæF–öä6ÆÇ3°¢6öç7B7F'FVCÔFFRææ÷r‚“°¢6öç7B¶FFÓÖv—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7Bç7vW#ÖFFæç7vW"26†Dç7vW#°¢76W'BæWVÂ‡&VF–æt6ÆÇ2×&VG4&Vf÷&RÃÂ%7F÷&VB'VÆW2ÖVâF†RFö7VÖVçG2&RæWfW"&R×&VB"“°¢76W'BæWVÂ†W‡ÆæF–öä6ÆÇ2Öæ'&F–öç4&Vf÷&RÃÂ$—B6†÷VÆB7F–ÆÂ7V²Æ–¶Râ76—7FçBÂæ÷B&–çBF&ÆR"“°¢76W'Bæö²„FFRææ÷r‚’×7F'FVCÃCÂ$6FÆöwVVBç7vW"×W7B&RVffV7F—fVÇ’–ç7FçB"“°¢76W'BæWVÂ†ç7vW"ç÷FVçF–Å–÷WEF÷FÇ3òå³ÒæÖ÷VçEFW‡BÂ%2C3SÃ"“°¢76W'BæWVÂ†ç7vW"æ6Æ–Ô—FV×2æÆVæwF‚ÃÂ$öæÇ’&VæVf—G2F†RWfVçB6âG&–vvW#¢"´¥4ôâç7G&–æv–g’†ç7vW"æ6Æ–Ô—FV×2æÖ†“Óæ’çF—FÆR’’“°¢76W'BæÖF6‚†ç7vW"æ6Æ–Ô—FV×5³ÒçF—FÆRÂôÖ¦÷"7&—F–6Â–ÆÆæW72ò“°¢76W'BæÖF6‚†ç7vW"æ6Æ–Ô—FV×5³Òç&V6öâÂ÷vRrò“°¢76W'BæÖF6‚†ç7vW"ç7VÖÖ'’Âõ5ÂC3SÃò“°¢Ò“°¢v—BFW7B‚$Fö7VÖVçBv†÷6R6öæF—F–öç2vW&RæWfW"&VB†2F†VÒ&VBv—F†÷WB&V–ær6¶VB"Æ7–æ2‚“Óç°¢6öç7Bf—‡GW&SÖv—B6VVE&Wf–Wtf—‡GW&Rƒ"“°¢òòF†R7FFRWfW'’†÷W6V†öÆBv2–âF†RF’F†—26†—VC¢'VÆW2öâf–ÆRÀ¢òòæBæ÷F†–ær–WB&VB&÷WBv†BF†÷6R6÷fW'2FòäõB’à¢v—BF"çVW'’‚%UDDRöÆ–6–W24UB6öæF—F–öç5ö–æFW†VEöCÔåTÄÂt„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ“°¢v—BF"çVW'’‚$”å4U%B”åDòöÆ–7•ö&VæVf—G2†66÷VçEö–BÇöÆ–7•ö–BÇ&öGV7EöæÖRÆ&VæVf—EöæÖRÇG&—G2Æf÷&×VÆö¶–æBÆf÷&×VÆ÷fÇVRÆ7W'&Væ7’Ç6÷W&6U÷vRÇV÷FRÆ6öæF—F–öç2Ç&WV—&VÖVçG2ÆæVVG5÷&Wf–Wr’dÅTU2‚CÂC"ÂC2ÂtÖ¦÷"7&—F–6Â–ÆÆæW72rÄ%$•²v–ÆÆæW72rÂvF–væ÷6—2uÓ£§FW‡EµÒÂw7VÕö–ç7W&VBrÃÂu4tBrÃrÂuvR’RöbF†R7VÒ–ç7W&VBf÷"VÆ–g––ær7&—F–6Â–ÆÆæW72ârÂuµÒs£¦§6öæ"ÂuµÒs£¦§6öæ"ÆfÇ6R’"À¢¶66÷VçBÆf—‡GW&Rç&VfW&Væ6T–BÂ%&Wf–Wrf—‡GW&R7&—F–6Â–ÆÆæW72%Ò“°¢6öç7BVç&VD&Vf÷&SÔçVÖ&W"‚†v—BF"çVW'“Ç¶ã¦çVÖ&W'Óâ‚%4TÄT5B6÷VçB‚¢“£¦–çB2âe$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒCäB6öæF—F–öç5ö–æFW†VEöB•2åTÄÂ"Å¶66÷VçEÒ’’ç&÷w5³Òæâ“°¢76W'Bæö²‡Vç&VD&Vf÷&SãÂ'F†Rf—‡GW&R6†÷VÆB7F'Bv—F‚6öæF—F–öç2Vç&VB"“°¢v—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B“°¢6öç7BVç&VDgFW#ÔçVÖ&W"‚†v—BF"çVW'“Ç¶ã¦çVÖ&W'Óâ‚%4TÄT5B6÷VçB‚¢“£¦–çB2âe$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒCäB6öæF—F–öç5ö–æFW†VEöB•2åTÄÂ"Å¶66÷VçEÒ’’ç&÷w5³Òæâ“°¢76W'Bæö²‡Vç&VDgFW#ÇVç&VD&Vf÷&RÂ&6¶–ærVW7F–öâ6†÷VÆB†fR&VBF†R6öæF—F–öç2Âv—F‚æ÷F†–ær&W76VB"“°¢òòæBæWfW"v–ã¢Fö7VÖVçB—2&VBöæ6RæBÖ&¶VBà¢6öç7B6ÆÇ4&Vf÷&S×&VF–æt6ÆÇ2¶W‡ÆæF–öä6ÆÇ3°¢v—B6VæB‚$æBv†B&÷WB†V'BGF6³ò"ÇV÷ÆU³Òæ–B“°¢6öç7B&VDv–ãÔçVÖ&W"‚†v—BF"çVW'“Ç¶ã¦çVÖ&W'Óâ‚%4TÄT5B6÷VçB‚¢“£¦–çB2âe$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒCäB6öæF—F–öç5ö–æFW†VEöB•2åTÄÂ"Å¶66÷VçEÒ’’ç&÷w5³Òæâ“°¢76W'Bæö²‡&VDv–ãÃ×Vç&VDgFW"Â&Fö7VÖVçBÇ&VG’&VB×W7Bæ÷B&R&VBv–â"“°¢76W'Bæö²‡&VF–æt6ÆÇ2¶W‡ÆæF–öä6ÆÇ2Ö6ÆÇ4&Vf÷&SÃ#Â'F†R6V6öæBVW7F–öâ×W7Bæ÷B’F†R&VF–ær6÷7Bv–â"“°¢Ò“°¢v—BFW7B‚%F†R6ÖRVW7F–öâv—fW2F†R6ÖRç7vW"WfW'’F–ÖR"Æ7–æ2‚“Óç°¢6öç7Bf—'7CÒ†v—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B’’æFFæç7vW"26†Dç7vW#°¢6öç7B6V6öæCÒ†v—B6VæB‚$’v2F–væ÷6VBv—F‚7FvR"'&V7B6æ6W"âv†B6â’6Æ–Óò"ÇV÷ÆU³Òæ–B’’æFFæç7vW"26†Dç7vW#°¢òòF†RDT4•4”ôâ—2FWFW&Ö–æ—7F–2âF†Rv÷&F–ær—2g&VRFòf'’Âv†–6‚—0¢òòv†B¶VW2F†R6†BfVVÆ–ærÆ–¶R6öçfW'6F–öâ&F†W"F†â&W÷'Bà¢76W'BæFVWWVÂ†f—'7Bæ6Æ–Ô—FV×2Ç6V6öæBæ6Æ–Ô—FV×2“°¢76W'BæFVWWVÂ†f—'7Bç÷FVçF–Å–÷WEF÷FÇ2Ç6V6öæBç÷FVçF–Å–÷WEF÷FÇ2“°¢Ò“°¢v—BFW7B‚%&V'V–ÆF–ærF†R6FÆöwVRæWfW"F÷V6†W2Fö7VÖVçG2÷"6÷fW&vR"Æ7–æ2‚“Óç°¢6öç7B²&WÆ6T&VæVf—D6FÆörÆÆöD&VæVf—D6FÆörÓÖv—B–×÷'B‚$öÆ–"÷öÆ–6–W2ö&VæVf—BÖ6FÆör"“°¢6öç7Bf—‡GW&SÖv—BF"çVW'“Ç¶–C§7G&–æwÓâ‚%4TÄT5B–Be$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒCäBFö7VÖVçE÷&öÆSÒwöÆ–7•÷v÷&F–ærr"Å¶66÷VçEÒ“°¢6öç7BFö7VÖVçG4&Vf÷&SÒ†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwFƒ°¢6öç7B6÷fW&vW4&Vf÷&SÒ†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–7•ö6÷fW&vW2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwFƒ°¢6öç7BvW4&Vf÷&SÒ†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–7•÷vW2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwFƒ°¢v—B&WÆ6T&VæVf—D6FÆör†66÷VçBÆf—‡GW&Rç&÷w5³Òæ–BÅµÒ“°¢76W'BæWVÂ‚†v—BÆöD&VæVf—D6FÆör†66÷VçBÅ¶f—‡GW&Rç&÷w5³Òæ–EÒ’’æÆVæwF‚Ã“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–6–W2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚ÆFö7VÖVçG4&Vf÷&R“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–7•ö6÷fW&vW2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚Æ6÷fW&vW4&Vf÷&R“°¢76W'BæWVÂ‚†v—BF"çVW'’‚%4TÄT5B–Be$ôÒöÆ–7•÷vW2t„U$R66÷VçEö–CÒC"Å¶66÷VçEÒ’’ç&÷w2æÆVæwF‚ÇvW4&Vf÷&R“°¢Ò“°¢v—BFW7B‚$–æFW†–ær†Vç2W"Fö7VÖVçBæB&VgW6W2V÷FRF†B—2æ÷BöâF†RvR"Æ7–æ2‚“Óç°¢6öç7Bf—‡GW&SÖv—B6VVE&Wf–Wtf—‡GW&Rƒ2“°¢6öç7B²6FÆöwVTFö7VÖVçBÆFö7VÖVçEvW2ÓÖv—B–×÷'B‚$öÆ–"÷öÆ–6–W2ö6FÆörÖ'V–ÆFW""“°¢6öç7B²ÆöD&VæVf—D6FÆörÓÖv—B–×÷'B‚$öÆ–"÷öÆ–6–W2ö&VæVf—BÖ6FÆör"“°¢6öç7B&Vf÷&SÖ6FÆöt6ÆÇ3°¢6öç7BvW3Öv—BFö7VÖVçEvW2†66÷VçBÆf—‡GW&Rç&VfW&Væ6T–B“°¢6öç7B6VVã¦çVÖ&W%µÓÕµÓ°¢6öç7B7F÷&VCÖv—B6FÆöwVTFö7VÖVçB‡¶66÷VçD–C¦66÷VçBÇöÆ–7”–C¦f—‡GW&Rç&VfW&Væ6T–BÇ&öGV7DæÖS¢%&Wf–Wrf—‡GW&R7&—F4ãKh‘éì¶»§q«^t¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ€¡…İ…¥Ğ•Ñ	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ¤¤¤¹©Í½¸ ¤¤¹ÍÕµµ…Éä¹Ñ½Ñ…°°À¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥å}Á…•Ì]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ ±Á…•Í	•™½É”¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥å}½Ù•É…•Ì]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ ±½Ù•É…•Í	•™½É”¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰¸½ÕĞµ½˜µ‘…Ñ”‘…Ñ…‰…Í”ÕÁÉ…‘•Ì¥ÑÍ•±˜¥¹ÍÑ•…½˜™…¥±¥¹œÑ¡”Á•ÉÍ½¸Ì¹•áĞÕÁ±½…ˆ±…Íå¹Œ ¤ôùì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€€¼¼á…Ñ±äİ¡…Ğ…¸•á¥ÍÑ¥¹œ¥¹ÍÑ…±°±½½­Ì±¥­”‰•™½É”Ñ¡”ÕÁÉ…‘”¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QHQ	1Á½±¥å}‰•¹•™¥ÑÌI=@=1U58É•Ù¥•İ•‘}…Ğˆ¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QHQ	1Á½±¥å}‰•¹•™¥ÑÌI=@=1U58‰…Í¥Í}¥¹™•ÉÉ•ˆ¤ì(€€€€€‘•±•Ñ”€¡±½‰…±Q¡¥Ì…Ìí}}‘•…ÉÁ½±¥å	•¹•™¥ÑM¡•µ„üéÕ¹­¹½İ¹ô¤¹}}‘•…ÉÁ½±¥å	•¹•™¥ÑM¡•µ„ì(€€€€€½¹ÍĞÉ•ÍÁ½¹Í”õ…İ…¥Ğ•Ñ	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÌ°ÈÀÀ°‰µ¥ÍÍ¥¹œ½±Õµ¸µÕÍĞ¹•Ù•ÈÉ•… Ñ¡”ÕÍ•È…Ì…¸•ÉÉ½Èˆ¤ì(€€€€€½¹ÍĞ½±Õµ¹Ìõ…İ…¥Ğ‘ˆ¹ÅÕ•Éäñí½±Õµ¹}¹…µ”éÍÑÉ¥¹ôø ‰M1P½±Õµ¹}¹…µ”I=4¥¹™½Éµ…Ñ¥½¹}Í¡•µ„¹½±Õµ¹Ì]!IÑ…‰±•}¹…µ”ôÁ½±¥å}‰•¹•™¥ÑÌœ9½±Õµ¹}¹…µ”%8€ É•Ù¥•İ•‘}…Ğœ°‰…Í¥Í}¥¹™•ÉÉ•œ¤ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡½±Õµ¹Ì¹É½İÌ¹±•¹Ñ °È°‰Ù•Éä½±Õµ¸Ñ¡”…Ñ…±½Õ”¹••‘Ì¥Ì…‘‘•½¸™¥ÉÍĞÕÍ”ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰Q¡”‰•¹•™¥ĞÍ¡•‘Õ±”¹•Ù•ÈÍ¡½İÌ½È¡…¹•Ì…¹½Ñ¡•È…½Õ¹ĞÌÉÕ±•Ìˆ±…Íå¹Œ ¤ôùì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞ™½É•¥¹A½±¥äõÕÕ¥ ÜÀÀäÀÀ¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥¥•Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±¥¹ÍÕÉ•È±ÁÉ½‘ÕÑ}¹…µ”±Á½±¥å}¹Õµ‰•È±Á½±¥å}ÑåÁ”±‘½Õµ•¹Ñ}É½±”±‘½Õµ•¹Ñ}…ÕÑ¡½É¥Ñä±ÁÉ½•ÍÍ¥¹}ÍÑ…ÑÕÌ±½É¥¥¹…±}™¥±•¹…µ”±ÍÑ½É…•}­•ä¤Y1UL Ä°È°Ì°=Ñ¡•È%¹ÍÕÉ•Èœ°=Ñ¡•ÈA±…¸œ°=Q!H´Äœ°É¥Ñ¥…°%±±¹•ÍÌœ°Á½±¥å}İ½É‘¥¹œœ°ØÀ°É•…‘äœ°½Ñ¡•È¹Á‘˜œ°½Ñ¡•È¹Á‘˜œ¤ˆ°(€€€€€€€m™½É•¥¹A½±¥ä±™½É•¥¸±™½É•¥¹A•ÉÍ½¹t¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}µ•µ‰•ÉÌ¡Á½±¥å}¥±™…µ¥±å}µ•µ‰•É}¥±…½Õ¹Ñ}¥¤Y1UL Ä°È°Ì¤ˆ±m™½É•¥¹A½±¥ä±™½É•¥¹A•ÉÍ½¸±™½É•¥¹t¤ì(€€€€€½¹ÍĞ¥¹Í•ÉÑ•õ…İ…¥Ğ‘ˆ¹ÅÕ•Éäñí¥éÍÑÉ¥¹ôø ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°=Ñ¡•ÈA±…¸œ°=Ñ¡•È	•¹•™¥Ğœ±IIel¥±±¹•ÍÌtèéÑ•áÑmt°™¥á•œ°ÄÀÀÀ°Mœ°Ä°=Ñ¡•Èİ½É‘¥¹œœ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±ÑÉÕ”¤IQUI9%9¥ˆ°(€€€€€€€m™½É•¥¸±™½É•¥¹A½±¥åt¤ì(€€€€€½¹ÍĞ‘…Ñ„õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘…Ñ„¹‰•¹•™¥ÑÌ¹Í½µ” ¡ˆéí‰•¹•™¥Ñ9…µ”éÍÑÉ¥¹ô¤ôùˆ¹‰•¹•™¥Ñ9…µ”ôôô‰=Ñ¡•È	•¹•™¥Ğˆ¤±™…±Í”¤ì(€€€€€½¹ÍĞÉ•ÍÁ½¹Í”õ…İ…¥ĞÁ…Ñ¡	•¹•™¥Ğ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ±íµ•Ñ¡½è‰AQ ˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô°(€€€€€€€‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í¥é¥¹Í•ÉÑ•¹É½İÍlÁt¹¥±¹••‘ÍI•Ù¥•Üé™…±Í•ô¥ô¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÌ°ĞÀĞ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éäñí¹••‘Í}É•Ù¥•Üé‰½½±•…¹ôø ‰M1P¹••‘Í}É•Ù¥•ÜI=4Á½±¥å}‰•¹•™¥ÑÌ]!I¥ôÄˆ±m¥¹Í•ÉÑ•¹É½İÍlÁt¹¥‘t¤¤¹É½İÍlÁt¹¹••‘Í}É•Ù¥•Ü±ÑÉÕ”¤ì(€€€€€½¹ÍĞÉ•µ½Ù…°õ…İ…¥Ğ‘•±•Ñ•	•¹•™¥Ğ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ±íµ•Ñ¡½è‰1Qˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô°(€€€€€€€‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í¥é¥¹Í•ÉÑ•¹É½İÍlÁt¹¥‘ô¥ô¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•µ½Ù…°¹ÍÑ…ÑÕÌ°ĞÀĞ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥å}‰•¹•™¥ÑÌ]!I¥ôÄˆ±m¥¹Í•ÉÑ•¹É½İÍlÁt¹¥‘t¤¤¹É½İÌ¹±•¹Ñ °Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4Á½±¥¥•Ì]!I¥ôÄˆ±m™½É•¥¹A½±¥åt¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰¸…ÍÍ•ÍÍ•±…¥´ÁÉ½‘Õ•Ì„ÁÉ¥¹Ñ…‰±”±…¥´Á…¬ì…¸Õ¹…ÍÍ•ÍÍ•½¹”Í…åÌİ¡ä¹½Ğˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ…ÍÍ•ÍÍ•õÕÕ¥ ÜÀÄÄÀÀ¤±Õ¹…ÍÍ•ÍÍ•õÕÕ¥ ÜÀÄÈÀÀ¤ì(€€€€€½¹ÍĞÁ…­•ĞõíÍ•ÍÍ¥½¹%é…ÍÍ•ÍÍ•±•Ù•¹ÑMÕµµ…Éäè‰•±°™É½´„µ½Ñ½Éå±”…¹™É…ÑÕÉ•„İÉ¥ÍĞ¸ˆ°(€€€€€€€™…ÑÌéí•Ù•¹ÑQåÁ”è‰…¥‘•¹Ğˆ±•Ù•¹Ñ…Ñ”èˆÈÀÈØ´Àä´ÄĞˆ±¥¹©ÕÉ•éÑÉÕ”±¥¹©ÕÉ¥•Ìél‰™É…ÑÕÉ”‰t±™É…ÑÕÉ•	½‘åA…ÉĞè‰İÉ¥ÍĞˆ°(€€€€€€€€€¡½ÍÁ¥Ñ…±¥Í•éÑÉÕ”±¡½ÍÁ¥Ñ…±9¥¡ÑÌèĞ±Õ¹•ÉÑ…¥¹…ÑÌémuô°(€€€€€€€­¹½İ¹…ÑÌémt±µ¥ÍÍ¥¹…ÑÌél‰Ñ¡”™¥¹…°¡½ÍÁ¥Ñ…°‰¥±°‰t±É•±•Ù…¹Ñ=İ¹•‘AÉ½‘ÕÑÌél‰É½ÕÀA•ÉÍ½¹…°¥‘•¹Ğ‰t°(€€€€€€€…ÍÍ•ÍÍµ•¹ÑÌémí¥è‰Á„µ™É…ÑÕÉ”ˆ±Ñ¥Ñ±”è‰M¥µÁ±”É…ÑÕÉ”€¡İÉ¥ÍĞ¤ˆ±ÍÑ…ÑÕÌè‰±¥­•±å}…ÁÁ±¥…‰±”ˆ±…µ½Õ¹ÑQ•áĞè‰LÄ°ÈÔÀˆ°(€€€€€€€€€…±Õ±…Ñ•‘µ½Õ¹ĞèÄÈÔÀ±ÕÉÉ•¹äè‰Mˆ±É•…Í½¸èˆÈÔ”½˜Ñ¡”LÔ°ÀÀÀ™É…ÑÕÉ”±¥µ¥ĞÁÉ¥¹Ñ•¥¸Ñ¡”Í¡•‘Õ±”¸ˆ°(€€€€€€€€€½¹‘¥Ñ¥½¹Ìémt±•Ù¥‘•¹•Q•ÉµÌél‰™É…ÑÕÉ”‰t±ÁÉ½‘ÕÑ9…µ”è‰É½ÕÀA•ÉÍ½¹…°¥‘•¹Ğˆ°(€€€€€€€€€ÉÕ±•Ù¥‘•¹”éí¡Õ¹­%è‰ŒÄˆ±Á½±¥å%è‰ÀÄˆ±Á½±¥å9…µ”è‰É½ÕÀA•ÉÍ½¹…°¥‘•¹Ğˆ±Á…•MÑ…ÉĞèÄĞ±Á…•¹èÄÑõõt°(€€€€€€€¹•áÑMÑ•ÁÌél‰Í¬Ñ¡”¡½ÍÁ¥Ñ…°™½È…¸¥Ñ•µ¥Í•™¥¹…°‰¥±°¸‰t±É•…‘äéÑÉÕ•ôì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<±…¥µ}Í•ÍÍ¥½¹Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±ÍÑ…ÑÕÌ±•Ù•¹Ñ}ÍÕµµ…Éä±™…ÑÌ±‘•¥Í¥½¹}Á…­•Ğ¤Y1UL Ä°È°Ì°½µÁ±•Ñ”œ°5½Ñ½Éå±”…¥‘•¹Ğœ°Ğèé©Í½¹ˆ°Ôèé©Í½¹ˆ¤ˆ°(€€€€€€€m…ÍÍ•ÍÍ•±…½Õ¹Ğ±Á•½Á±•lÁt¹¥±)M=8¹ÍÑÉ¥¹¥™ä¡Á…­•Ğ¹™…ÑÌ¤±)M=8¹ÍÑÉ¥¹¥™ä¡Á…­•Ğ¥t¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<±…¥µ}Í•ÍÍ¥½¹Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±ÍÑ…ÑÕÌ±•Ù•¹Ñ}ÍÕµµ…Éä±™…ÑÌ¤Y1UL Ä°È°Ì°™…Ñ}™¥¹‘¥¹œœ°MÑ¥±°…¹Íİ•É¥¹œÅÕ•ÍÑ¥½¹Ìœ°íôœèé©Í½¹ˆ¤ˆ°(€€€€€€€mÕ¹…ÍÍ•ÍÍ•±…½Õ¹Ğ±Á•½Á±•lÁt¹¥‘t¤ì(€€€€€½¹ÍĞÁ…¬õ…İ…¥Ğ•Ñ±…¥µA…¬¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±…¥µÌ¼ˆ­…ÍÍ•ÍÍ•¬ˆ½Á…¬ˆ¤±íÁ…É…µÌéAÉ½µ¥Í”¹É•Í½±Ù”¡í¥é…ÍÍ•ÍÍ•‘ô¥ô¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á…¬¹ÍÑ…ÑÕÌ°ÈÀÀ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á…¬¹¡•…‘•ÉÌ¹•Ğ ‰½¹Ñ•¹ĞµÑåÁ”ˆ¤°‰…ÁÁ±¥…Ñ¥½¸½Á‘˜ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡Á…¬¹¡•…‘•ÉÌ¹•Ğ ‰½¹Ñ•¹Ğµ‘¥ÍÁ½Í¥Ñ¥½¸ˆ¤üüˆˆ°½…ÑÑ…¡µ•¹Ğì™¥±•¹…µ”ô‰•…ÉA½±¥ä±…¥´ÍÕµµ…Éä€´Q…¸e¤¡Õ•¸•Íµ½¹‘p¹Á‘˜ˆ¼¤ì(€€€€€½¹ÍĞ‰åÑ•Ìõ¹•ÜU¥¹ĞáÉÉ…ä¡…İ…¥ĞÁ…¬¹…ÉÉ…å	Õ™™•È ¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡	Õ™™•È¹™É½´¡‰åÑ•Ì¹Í±¥” À°Ô¤¤¹Ñ½MÑÉ¥¹œ ‰±…Ñ¥¸Äˆ¤°ˆ•A´ˆ¤ì(€€€€€½¹ÍĞì•áÑÉ…ÑA‘™A…•Ìôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½‘½Õµ•¹ÑÌ½Á‘˜ˆ¤ì(€€€€€½¹ÍĞÁÉ¥¹Ñ•ô¡…İ…¥Ğ•áÑÉ…ÑA‘™A…•Ì¡‰åÑ•Ì¤¤¹µ…À¡Á…”ôùÁ…”¹Ñ•áĞ¤¹©½¥¸ ˆ€ˆ¤¹É•Á±…” ½qÌ¬½œ°ˆ€ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÁÉ¥¹Ñ•°½Q…¸e¤¡Õ•¸•Íµ½¹¼¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÁÉ¥¹Ñ•°½MpÄ°ÈÔÀ¼¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÁÉ¥¹Ñ•°½Á…”€ÄĞ¼°‰Q¡”¥¹ÍÕÉ•È…¸¡•¬Ñ¡”™¥ÕÉ”……¥¹ÍĞÑ¡”İ½É‘¥¹œˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÁÉ¥¹Ñ•°½!½ÍÁ¥Ñ…°‘¥Í¡…É”ÍÕµµ…Éä¼°‰Q¡”¡•­±¥ÍĞ™½±±½İÌÑ¡”É•Á½ÉÑ••Ù•¹Ğˆ¤ì(€€€€€½¹ÍĞÁ•¹‘¥¹œõ…İ…¥Ğ•Ñ±…¥µA…¬¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±…¥µÌ¼ˆ­Õ¹…ÍÍ•ÍÍ•¬ˆ½Á…¬ˆ¤±íÁ…É…µÌéAÉ½µ¥Í”¹É•Í½±Ù”¡í¥éÕ¹…ÍÍ•ÍÍ•‘ô¥ô¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á•¹‘¥¹œ¹ÍÑ…ÑÕÌ°ĞÀä¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ  ¡…İ…¥ĞÁ•¹‘¥¹œ¹©Í½¸ ¤¤¹•ÉÉ½È°½¡…Ì¹½Ğ‰••¸…ÍÍ•ÍÍ•å•Ğ¼¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4±…¥µ}Í•ÍÍ¥½¹Ì]!I¥õ9d ÄèéÕÕ¥‘mt¤ˆ±mm…ÍÍ•ÍÍ•±Õ¹…ÍÍ•ÍÍ•‘ut¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰±…¥´Á…¬…¹¹½Ğ‰”‘½İ¹±½…‘•™É½´…¹½Ñ¡•È…½Õ¹Ğˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™½É•¥¹±…¥´õÕÕ¥ ÜÀÄÌÀÀ¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<±…¥µ}Í•ÍÍ¥½¹Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±ÍÑ…ÑÕÌ±•Ù•¹Ñ}ÍÕµµ…Éä±™…ÑÌ±‘•¥Í¥½¹}Á…­•Ğ¤Y1UL Ä°È°Ì°½µÁ±•Ñ”œ°=Ñ¡•È•Ù•¹Ğœ°íôœèé©Í½¹ˆ°Ğèé©Í½¹ˆ¤ˆ°(€€€€€€€m™½É•¥¹±…¥´±™½É•¥¸±™½É•¥¹A•ÉÍ½¸±)M=8¹ÍÑÉ¥¹¥™ä¡íÍ•ÍÍ¥½¹%é™½É•¥¹±…¥´±•Ù•¹ÑMÕµµ…Éäè‰=Ñ¡•È•Ù•¹Ğˆ±™…ÑÌéíô±­¹½İ¹…ÑÌémt±µ¥ÍÍ¥¹…ÑÌémt±É•±•Ù…¹Ñ=İ¹•‘AÉ½‘ÕÑÌémt±…ÍÍ•ÍÍµ•¹ÑÌémt±¹•áÑMÑ•ÁÌémt±É•…‘äéÑÉÕ•ô¥t¤ì(€€€€€½¹ÍĞÉ•ÍÁ½¹Í”õ…İ…¥Ğ•Ñ±…¥µA…¬¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±…¥µÌ¼ˆ­™½É•¥¹±…¥´¬ˆ½Á…¬ˆ¤±íÁ…É…µÌéAÉ½µ¥Í”¹É•Í½±Ù”¡í¥é™½É•¥¹±…¥µô¥ô¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÌ°ĞÀĞ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹¡•…‘•ÉÌ¹•Ğ ‰½¹Ñ•¹ĞµÑåÁ”ˆ¤ü¹¥¹±Õ‘•Ì ‰Á‘˜ˆ¤±™…±Í”¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4±…¥µ}Í•ÍÍ¥½¹Ì]!I¥ôÄˆ±m™½É•¥¹±…¥µt¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰‘½Õµ•¹Ğ¹½‰½‘ä¡…Ì±…¥µ•¥ÌÍÕÉ™…•İ¥Ñ ½¹”ÅÕ•ÍÑ¥½¸°…¹…¹Íİ•É¥¹œ¥Ğ¥Ì½¹”±¥¬ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞ½ÉÁ¡…¸õÕÕ¥ ÜÀÄĞÀÀ¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥¥•Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±¥¹ÍÕÉ•È±ÁÉ½‘ÕÑ}¹…µ”±Á½±¥å}¹Õµ‰•È±Á½±¥å}ÑåÁ”±‘½Õµ•¹Ñ}É½±”±‘½Õµ•¹Ñ}…ÕÑ¡½É¥Ñä±ÁÉ½•ÍÍ¥¹}ÍÑ…ÑÕÌ±½É¥¥¹…±}™¥±•¹…µ”±ÍÑ½É…•}­•ä¤Y1UL Ä°È°Ì°á…µÁ±”%¹ÍÕÉ•Èœ°!½ÕÍ•¡½±M¡¥•±A±…¸œ°=IA!8´Äœ°A•ÉÍ½¹…°¥‘•¹Ğœ°Á½±¥å}İ½É‘¥¹œœ°ØÀ°É•…‘äœ°Í¡¥•±µ‰½½­±•Ğ¹Á‘˜œ°Í¡¥•±µ‰½½­±•Ğ¹Á‘˜œ¤ˆ°(€€€€€€€m½ÉÁ¡…¸±…½Õ¹Ğ±Á•½Á±•lÁt¹¥‘t¤ì(€€€€€½¹ÍĞ‰•™½É”õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ…Í¡‰½…É¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‘…Í¡‰½…Éˆ¤¤¤¹©Í½¸ ¤ì(€€€€€½¹ÍĞ±¥ÍÑ•õ‰•™½É”¹Õ¹±…¥µ•¹™¥¹ ¡‘½Œéí¥éÍÑÉ¥¹ô¤ôù‘½Œ¹¥ôôõ½ÉÁ¡…¸¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡±¥ÍÑ•°‰¸ÕÁ±½…‘•‘½Õµ•¹Ğİ¥Ñ ¹¼½İ¹•È¥Ì¥¹Ù¥Í¥‰±”•Ù•Éåİ¡•É”•±Í”ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥ÍÑ•¹ÁÉ½‘ÕÑ}¹…µ”°‰!½ÕÍ•¡½±M¡¥•±A±…¸ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡‰•™½É”¹É•µ¥¹‘•ÉÌ¹Í½µ” ¡ÈéíÑ¥Ñ±”éÍÑÉ¥¹ô¤ôø½İ¡½Í”½¤¹Ñ•ÍĞ¡È¹Ñ¥Ñ±”¤¤°‰%Ğ¥Ì½¸Ñ¡”Ñ¼µ‘¼±¥ÍĞ°¹½Ğ½¹±ä¥¸„±¥ÍĞ½˜‘½Õµ•¹ÑÌˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰•™½É”¹Õ¹±…¥µ•¹Í½µ” ¡‘½Œéí¥éÍÑÉ¥¹ô¤ôù‘½Œ¹¥ôôõ™¥áÑÕÉ”¹É•™•É•¹•%¤±™…±Í”°‰‘½Õµ•¹ĞÑ¡…Ğ…±É•…‘ä¡…Ì…¸½İ¹•È¥Ì¹½Ğ…Í­•…‰½ÕĞ……¥¸ˆ¤ì(€€€€€€¼¼Q¡”Á•ÉÍ½¸Í…åÌİ¡½Í”¥Ğ¥Ì¸Q¡…Ğ¥ÌÑ¡”İ¡½±”¥¹Ñ•É…Ñ¥½¸¸(€€€€€½¹ÍĞ±¥¹­•õ…İ…¥Ğ±¥¹­A•ÉÍ½¸¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½Á½±¥¥•Ì½±¥¹¬µÁ•ÉÍ½¸ˆ±íµ•Ñ¡½è‰A=MPˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô°(€€€€€€€‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡íÁ½±¥å%é½ÉÁ¡…¸±™…µ¥±å5•µ‰•É%éÁ•½Á±•lÅt¹¥±‘•±…É•éÑÉÕ•ô¥ô¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥¹­•¹ÍÑ…ÑÕÌ°ÈÀÀ¤ì(€€€€€½¹ÍĞ…™Ñ•Èõ…İ…¥Ğ€¡…İ…¥Ğ•Ñ…Í¡‰½…É¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‘…Í¡‰½…Éˆ¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…™Ñ•È¹Õ¹±…¥µ•¹Í½µ” ¡‘½Œéí¥éÍÑÉ¥¹ô¤ôù‘½Œ¹¥ôôõ½ÉÁ¡…¸¤±™…±Í”¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…™Ñ•È¹É•µ¥¹‘•ÉÌ¹Í½µ” ¡ÈéíÑ¥Ñ±”éÍÑÉ¥¹ô¤ôø½İ¡½Í”½¤¹Ñ•ÍĞ¡È¹Ñ¥Ñ±”¤¤±™…±Í”°‰¹Íİ•É•ÅÕ•ÍÑ¥½¹Ì±•…Ù”Ñ¡”Ñ¼µ‘¼±¥ÍĞˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1PÍ½ÕÉ”I=4Á½±¥å}µ•µ‰•ÉÌ]!IÁ½±¥å}¥ôÄˆ±m½ÉÁ¡…¹t¤¤¹É½İÌ¹±•¹Ñ °Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4Á½±¥¥•Ì]!I¥ôÄˆ±m½ÉÁ¡…¹t¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰¹½Ñ¡•È…½Õ¹ĞÌÕ¹±…¥µ•‘½Õµ•¹ÑÌ…É”¹•Ù•È…Í­•…‰½ÕĞ¡•É”ˆ±…Íå¹Œ ¤ôùì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞ™½É•¥¹=ÉÁ¡…¸õÕÕ¥ ÜÀÄÔÀÀ¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥¥•Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±¥¹ÍÕÉ•È±ÁÉ½‘ÕÑ}¹…µ”±Á½±¥å}¹Õµ‰•È±Á½±¥å}ÑåÁ”±‘½Õµ•¹Ñ}É½±”±‘½Õµ•¹Ñ}…ÕÑ¡½É¥Ñä±ÁÉ½•ÍÍ¥¹}ÍÑ…ÑÕÌ±½É¥¥¹…±}™¥±•¹…µ”±ÍÑ½É…•}­•ä¤Y1UL Ä°È°Ì°=Ñ¡•È%¹ÍÕÉ•Èœ°=Ñ¡•È	½½­±•Ğœ°=Q!H´Èœ°A•ÉÍ½¹…°¥‘•¹Ğœ°Á½±¥å}İ½É‘¥¹œœ°ØÀ°É•…‘äœ°½Ñ¡•Èµ‰½½­±•Ğ¹Á‘˜œ°½Ñ¡•Èµ‰½½­±•Ğ¹Á‘˜œ¤ˆ°(€€€€€€€m™½É•¥¹=ÉÁ¡…¸±™½É•¥¸±™½É•¥¹A•ÉÍ½¹t¤ì(€€€€€½¹ÍĞ‘…Ñ„õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ…Í¡‰½…É¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‘…Í¡‰½…Éˆ¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘…Ñ„¹Õ¹±…¥µ•¹Í½µ” ¡‘½Œéí¥éÍÑÉ¥¹ô¤ôù‘½Œ¹¥ôôõ™½É•¥¹=ÉÁ¡…¸¤±™…±Í”¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4Á½±¥¥•Ì]!I¥ôÄˆ±m™½É•¥¹=ÉÁ¡…¹t¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I•…‘¥¹œ„‘½Õµ•¹Ğ‰ä¡…¹ÍÑ¥±°İ½É­Ì°™½È„‘•±¥‰•É…Ñ”É”µÉ•……™Ñ•ÈÑ¡”µ½‘•°¡…¹•Ìˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€€¼¼]¡…Ğ…¸¥¹ÍÑ…±°ÕÁÉ…‘•™É½´…¸½±‘•ÈÙ•ÉÍ¥½¸…ÑÕ…±±ä±½½­Ì±¥­”¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰UAQÁ½±¥¥•ÌMP‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğõ9U10]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤ì(€€€€€½¹ÍĞ±¥ÍÑ•õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ%¹‘•áMÑ…ÑÕÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌ½¥¹‘•àˆ¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡±¥ÍÑ•¹Õ¹É•…¹±•¹Ñ øôÄ°‰É•…‘ä‘½Õµ•¹Ğİ¥Ñ ÍÑ½É•Á…•ÌÑ¡…Ğ¡…Ì¹•Ù•È‰••¸É•…¥Ì½™™•É•™½ÈÉ•…‘¥¹œˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡±¥ÍÑ•¹Õ¹É•…¹•Ù•Éä ¡‘½ŒéíÁ…•Ìé¹Õµ‰•Éô¤ôù‘½Œ¹Á…•ÌøÀ¤°‰=¹±ä‘½Õµ•¹ÑÌİ¡½Í”Á…•Ì…É”…±É•…‘äÍÑ½É•èÉ•…‘¥¹œÑ¡•´¹••‘Ì¹¼A…¹¹¼=Hˆ¤ì(€€€€€½¹ÍĞ™¥ÉÍĞõ…İ…¥Ğ€¡…İ…¥Ğ¥¹‘•á	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌ½¥¹‘•àˆ±íµ•Ñ¡½è‰A=MPˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô±‰½‘äè‰íô‰ô¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡™¥ÉÍĞ¹ÍÑ½É•øôÀ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡ÑåÁ•½˜™¥ÉÍĞ¹¹…µ”°‰ÍÑÉ¥¹œˆ¤ì(€€€€€€¼¼I•…‘¥¹œ¥Ì½¹”‘½Õµ•¹ĞÁ•ÈÉ•ÅÕ•ÍĞÍ¼Ñ¡”ÍÉ••¸…¸Í¡½ÜÁÉ½É•ÍÌ¸(€€€€€±•ĞÕ…ÉôÀ±É•µ…¥¹¥¹œõ™¥ÉÍĞ¹É•µ…¥¹¥¹œì(€€€€€İ¡¥±”¡É•µ…¥¹¥¹œøÀ˜™Õ…É¬¬ğÄÀ¤(€€€€€€€É•µ…¥¹¥¹œô¡…İ…¥Ğ€¡…İ…¥Ğ¥¹‘•á	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌ½¥¹‘•àˆ±íµ•Ñ¡½è‰A=MPˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô±‰½‘äè‰íô‰ô¤¤¤¹©Í½¸ ¤¤¹É•µ…¥¹¥¹œì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•µ…¥¹¥¹œ°À°‰Ù•Éä‘½Õµ•¹Ğ¥ÌÉ•…¥¸Ñ¡”•¹ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ€¡…İ…¥Ğ•Ñ%¹‘•áMÑ…ÑÕÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌ½¥¹‘•àˆ¤¤¤¹©Í½¸ ¤¤¹Õ¹É•…¹±•¹Ñ °À°‰9½Ñ¡¥¹œ¥Ì±•™Ğ…Í­¥¹œÑ¼‰”É•…ˆ¤ì(€€€€€½¹ÍĞ…Ñ…±½œõ…İ…¥Ğ€¡…İ…¥Ğ•Ñ	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…Ñ…±½œ¹ÍÕµµ…Éä¹Ñ½Ñ…°øÀ°‰I•…‘¥¹œÑ¡•´¥Ìİ¡…ĞÁÕÑÌ…µ½Õ¹ÑÌ½¸Ñ¡”	•¹•™¥ÑÌÁ…”ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…Ñ…±½œ¹‰•¹•™¥ÑÌ¹Í½µ” ¡ˆéíÁ½±¥å%éÍÑÉ¥¹ô¤ôùˆ¹Á½±¥å%ôôõ™¥áÑÕÉ”¹É•™•É•¹•%¤¤ì(€€€€€€¼¼‘½Õµ•¹ĞÑ¡…ĞÍÑ…Ñ•¹¼ÉÕ±•Ì¡…ÌÍÑ¥±°‰••¸É•…°…¹µÕÍĞ¹½Ğ­••À…Í­¥¹œ¸(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥¥•Ì]!I…½Õ¹Ñ}¥ôÄ9‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğ%L9U109ÁÉ½•ÍÍ¥¹}ÍÑ…ÑÕÌôÉ•…‘äœˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ °À¤ì(€€€€€€¼¼¹¥Ğ¹•Ù•ÈÑ½Õ¡•Ñ¡”‘½Õµ•¹Ğ°¥ÑÌÁ…•Ì½ÈÑ¡”½¹™¥Éµ•½Ù•È¸(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥å}Á…•Ì]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ øÀ±ÑÉÕ”¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥å}½Ù•É…•Ì]!I…½Õ¹Ñ}¥ôÄ9½¹™¥Éµ•õÑÉÕ”ˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ °Ä¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I•…‘¥¹œ„‘½Õµ•¹Ğ„Á•ÉÍ½¸¡…Ì…±É•…‘ä½ÉÉ•Ñ•­••ÁÌÑ¡•¥È½ÉÉ•Ñ¥½¸ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü±É•Ù¥•İ•‘}…Ğ¤Y1UL Ä°È°Ì°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°À¸Ô°Mœ°Ä°]”Á…ä€ÄÀÀ”½˜MÕ´%¹ÍÕÉ•™½ÈÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”±¹½Ü ¤¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰UAQÁ½±¥¥•ÌMP‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğõ9U10]!I…½Õ¹Ñ}¥ôÄ9¥ôÈˆ±m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%‘t¤ì(€€€€€½¹ÍĞÉ•ÍÁ½¹Í”õ…İ…¥Ğ¥¹‘•á	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌ½¥¹‘•àˆ±íµ•Ñ¡½è‰A=MPˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô°(€€€€€€€‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡íÁ½±¥å%é™¥áÑÕÉ”¹É•™•É•¹•%‘ô¥ô¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•ÍÁ½¹Í”¹ÍÑ…ÑÕÌ°ÈÀÀ¤ì(€€€€€½¹ÍĞ­•ÁĞõ…İ…¥Ğ‘ˆ¹ÅÕ•Éäñí™½ÉµÕ±…}Ù…±Õ”éÍÑÉ¥¹ôø ‰M1P™½ÉµÕ±…}Ù…±Õ”èéÑ•áĞI=4Á½±¥å}‰•¹•™¥ÑÌ]!I…½Õ¹Ñ}¥ôÄ9Á½±¥å}¥ôÈ9‰•¹•™¥Ñ}¹…µ”ô5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœˆ±m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%‘t¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡­•ÁĞ¹É½İÌ¹±•¹Ñ °Ä°‰I”µÉ•…‘¥¹œµÕÍĞ¹½ĞÁÉ½‘Õ”„Í•½¹½Áä½˜„‰•¹•™¥ĞÑ¡”Á•ÉÍ½¸¡…Ì™¥á•ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡9Õµ‰•È¡­•ÁĞ¹É½İÍlÁt¹™½ÉµÕ±…}Ù…±Õ”¤°À¸Ô°‰Q¡•¥È…¹Íİ•È½ÕÑÉ…¹­ÌÑ¡”Á…ÉÍ•È°•Ù•ÉäÑ¥µ”¥Ğ¥ÌÉ•………¥¸ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰Q¡”Í¡•‘Õ±”½¹±ä…Í­ÌÑ¡”Á•ÉÍ½¸™½Èİ¡…Ğ½¹±äÑ¡”Á•ÉÍ½¸…¸…¹Íİ•Èˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞ¥¹Í•ÉĞô¡¹…µ”éÍÑÉ¥¹œ±•áÑÉ„éÍÑÉ¥¹œ±Ù…±Õ•ÌéÍÑÉ¥¹œ¤ôù‘ˆ¹ÅÕ•Éä (€€€€€€€€‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Üˆ­•áÑÉ„¬ˆ¤Y1UL Ä°È°Ì°Ğ±IIel½Ñ¡•ÈtèéÑ•áÑmt°ˆ­Ù…±Õ•Ì¬ˆ¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌˆ±¹…µ•t¤ì(€€€€€€¼¼€Ä¸MÑ…Ñ•½ÕÑÉ¥¡Ğ‰äÑ¡”‘½Õµ•¹Ğè¹½Ñ¡¥¹œÑ¼…Í¬¸(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸ˆ°ˆˆ°ˆ™¥á•œ°ÈÔÀ°Mœ°Ğ°]”Á…äLÈÔÀ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”ˆ¤ì(€€€€€€¼¼€È¸I•…™É½´Ñ¡”Ñ…‰±”¡•…‘¥¹œè•…ÉA½±¥äİ¥±°¹½ĞÕÍ”¥ĞÕ¹Ñ¥°Ñ½±¸(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰1½ÍÌ½˜ÍÁ•• ˆ°ˆ±‰…Í¥Í}¥¹™•ÉÉ•ˆ°ˆÍÕµ}¥¹ÍÕÉ•œ°À¸Ô°Mœ°Ø°1½ÍÌ½˜ÍÁ•• €ÔÀ”œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±ÑÉÕ”±ÑÉÕ”ˆ¤ì(€€€€€€¼¼€Ì¸‘…¥±äÉ…Ñ”İ¡½Í”É½Ü¹•Ù•ÈÍ…¥™½È¡½Üµ…¹ä‘…åÌ¸(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰…¥±ä!½ÍÁ¥Ñ…°…Í ˆ°ˆ±™…Ñ}­•ä±½™™Í•Ñ}‘…åÌ±µ…á¥µÕµ}‘…åÌˆ°ˆ‘…¥±äœ°ÌÀ°Mœ°ä°LÌÀÁ•È‘…ä¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±ÑÉÕ”°¡½ÍÁ¥Ñ…±9¥¡ÑÌœ°À±9U10ˆ¤ì(€€€€€€¼¼€Ğ¸9¼…µ½Õ¹Ğ½Õ±‰”É•……Ğ…±°è…¸…‘µ¥ÍÍ¥½¸°¹½Ğ„Ñ…Í¬¸(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰•¹Ñ…°ˆ°ˆˆ°ˆ¹½¹”œ±9U10±9U10°ÄÈ°•¹Ñ…°ÑÉ•…Ñµ•¹Ğ…Ì¡…É•¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±ÑÉÕ”ˆ¤ì(€€€€€½¹ÍĞ‘…Ñ„õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ	•¹•™¥ÑÌ¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½‰•¹•™¥ÑÌˆ¤¤¤¹©Í½¸ ¤ì(€€€€€½¹ÍĞ‰äô¡¹…µ”éÍÑÉ¥¹œ¤ôù‘…Ñ„¹‰•¹•™¥ÑÌ¹™¥¹ ¡ˆéí‰•¹•™¥Ñ9…µ”éÍÑÉ¥¹ô¤ôùˆ¹‰•¹•™¥Ñ9…µ”ôôõ¹…µ”¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰ä ‰¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸ˆ¤¹…ÑÑ•¹Ñ¥½¸±¹Õ±°¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰ä ‰1½ÍÌ½˜ÍÁ•• ˆ¤¹…ÑÑ•¹Ñ¥½¸°‰½¹™¥É´ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰ä ‰…¥±ä!½ÍÁ¥Ñ…°…Í ˆ¤¹…ÑÑ•¹Ñ¥½¸°‰½¹™¥É´ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰ä ‰•¹Ñ…°ˆ¤¹…ÑÑ•¹Ñ¥½¸°‰Õ¹É•…‘…‰±”ˆ°(€€€€€€€€‰É½Ü•…ÉA½±¥ä½Õ±¹½ĞÉ•……¸…µ½Õ¹Ğ™É½´¥Ì¹½Ğİ½É¬Ñ¡”Á•ÉÍ½¸…¸‘¼ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘…Ñ„¹ÍÕµµ…Éä¹¹••‘Íe½Ô°È°‰=¹±äÑ¡”Ñİ¼ÉÕ±•ÌÑ¡…Ğ…¹¹½Ğ‰”ÕÍ•İ¥Ñ¡½ÕĞ…¸…¹Íİ•È…É”½Õ¹Ñ•…ÌÑ¡”Á•ÉÍ½¸Ìˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘…Ñ„¹ÍÕµµ…Éä¹Õ¹É•…‘…‰±”°Ä¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘…Ñ„¹ÍÕµµ…Éä¹ÕÍ…‰±”°Ä¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘…Ñ„¹ÍÕµµ…Éä¹¹••‘Íe½Ô­‘…Ñ„¹ÍÕµµ…Éä¹Õ¹É•…‘…‰±”­‘…Ñ„¹ÍÕµµ…Éä¹ÕÍ…‰±”±‘…Ñ„¹ÍÕµµ…Éä¹Ñ½Ñ…°°(€€€€€€€€‰Ù•ÉäÉ½Ü¥Ì¥¸•á…Ñ±ä½¹”½˜Ñ¡”Ñ¡É•”ÍÑ…Ñ•ÌÑ¡”ÍÉ••¸Í¡½İÌˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰]¥Ñ ¹½Ñ¡¥¹œÉ•…å•Ğ°Ñ¡”¡…ĞÉ•…‘Ìİ¡…Ğ¥Ğ¹••‘Ì…¹…¹Íİ•ÉÌƒŠP¹½Ñ¡¥¹œÑ¼ÁÉ•ÍÌˆ±…Íå¹Œ ¤ôùì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” ÄÈ¤ì(€€€€€€¼¼]¡…Ğ…¸¥¹ÍÑ…±°ÕÁÉ…‘•™É½´…¸½±‘•ÈÙ•ÉÍ¥½¸…ÑÕ…±±ä±½½­Ì±¥­”°(€€€€€€¼¼…¹İ¡…Ğ•Ù•Éä¡½ÕÍ•¡½±±½½­•±¥­”Ñ¡”‘…ä½¹‘¥Ñ¥½¹Ì…ÉÉ¥Ù•¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰UAQÁ½±¥¥•ÌMP‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğõ9U10]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰UAQÁ½±¥¥•ÌMP½¹‘¥Ñ¥½¹Í}¥¹‘•á•‘}…Ğõ9U10]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤¹…Ñ   ¤ôùíô¤ì(€€€€€½¹ÍĞÕ¹É•…‘	•™½É”ô¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥¥•Ì]!I…½Õ¹Ñ}¥ôÄ9‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğ%L9U10ˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ ì(€€€€€…ÍÍ•ÉĞ¹½¬¡Õ¹É•…‘	•™½É”øÀ¤ì(€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€€¼¼Q¡”Á•ÉÍ½¸ÕÁ±½…‘•‘½Õµ•¹ÑÌ…¹…Í­•„ÅÕ•ÍÑ¥½¸¸Ù•ÉåÑ¡¥¹œ‰•Ñİ••¸(€€€€€€¼¼Ñ¡½Í”Ñİ¼Ñ¡¥¹Ì¥ÌÑ¡¥ÌÍåÍÑ•´Ì©½ˆè¥ĞÉ•…‘Ìİ¡…Ğ¥Ğ¹••‘Ì°Ñ¡•¸(€€€€€€¼¼…¹Íİ•ÉÌ¸%Ğ‘½•Ì¹½Ğ¡…¹Ñ¡”İ½É¬‰…¬¸(€€€€€½¹ÍĞÕ¹É•…‘™Ñ•Èô¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4Á½±¥¥•Ì]!I…½Õ¹Ñ}¥ôÄ9‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğ%L9U10ˆ±m…½Õ¹Ñt¤¤¹É½İÌ¹±•¹Ñ ì(€€€€€…ÍÍ•ÉĞ¹½¬¡Õ¹É•…‘™Ñ•ÈñÕ¹É•…‘	•™½É”°‰Í­¥¹œÑ¡”ÅÕ•ÍÑ¥½¸Í¡½Õ±¡…Ù”É•…Ñ¡”‘½Õµ•¹ÑÌ¥Ğ¹••‘•ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹‘½•Í9½Ñ5…Ñ ¡…¹Íİ•È¹ÍÕµµ…Éä°½¡…Ù”¹½ĞÉ•…å½ÕÈÁ½±¥ä‘½Õµ•¹ÑÌå•Ğ¼°(€€€€€€€€‰Q•±±¥¹œÍ½µ•½¹”Ñ¡•¥È‘½Õµ•¹ÑÌ…É”Õ¹É•…¥Ì„½¹™•ÍÍ¥½¸°¹½Ğ…¸…¹Íİ•Èˆ¤ì(€€€€€½¹ÍĞ•Ù•ÉåÑ¡¥¹œõm…¹Íİ•È¹ÍÕµµ…Éä°¸¸¹…¹Íİ•È¹‘•Ñ…¥±Ì°¸¸¹…¹Íİ•È¹¹•áÑMÑ•ÁÍt¹©½¥¸ ˆ€ˆ¤ì(€€€€€™½È¡½¹ÍĞ±•…¬½˜l‰I|ˆ°‰Á½±¥¥•Ìé¥¹‘•àˆ°‰¹Á´ÉÕ¸ˆ°‰‰•¹•™¥ÑÍ}¥¹‘•á•‘}…Ğˆ°‰I•…Ñ¡•´¹½Ü‰t¤(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡•Ù•ÉåÑ¡¥¹œ¹¥¹±Õ‘•Ì¡±•…¬¤±™…±Í”°‰Á•ÉÍ½¸¡½±‘¥¹œ„Á½±¥ä‘½Õµ•¹ĞÍ¡½Õ±¹•Ù•È‰”Í¡½İ¸è€ˆ­±•…¬¤ì(€€€€€€¼¼=¹”¥ÑÌÉÕ±•Ì…É”½¸™¥±”°Ñ¡”Í…µ”ÅÕ•ÍÑ¥½¸¥Ì…¹Íİ•É•™É½´Ñ¡•´¸(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥Ğ‘ˆ¹ÅÕ•Éäñí¥éÍÑÉ¥¹ôø ‰M1P¥I=4Á½±¥¥•Ì]!I…½Õ¹Ñ}¥ôÄ9‘½Õµ•¹Ñ}É½±”ôÁ½±¥å}İ½É‘¥¹œœˆ±m…½Õ¹Ñt¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌœ°‘¥…¹½Í¥ÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°Ä°Mœ°Ü°]”Á…ä€ÄÀÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•™½È„ÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É½İÍlÁt¹¥°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞÍÑ…ÉÑ•õ…Ñ”¹¹½Ü ¤ì(€€€€€½¹ÍĞ…™Ñ•Èô¡…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡…™Ñ•È¹ÍÕµµ…Éä°½MpÌÔÀ°ÀÀÀ¼¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…Ñ”¹¹½Ü ¤µÍÑ…ÉÑ•ğĞÀÀÀ°‰9½Ñ¡¥¹œ¥ÌÉ”µÉ•…°Í¼„Í•½¹ÅÕ•ÍÑ¥½¸¥Ì¥µµ•‘¥…Ñ”ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰İ¡…Ğµ¥˜ÅÕ•ÍÑ¥½¸¥Ì…¹Íİ•É•™É½´Ñ¡”ÍÑ½É•‰•¹•™¥ÑÌ°İ¥Ñ ™¥ÕÉ•Ì…¹„ÅÕ•ÍÑ¥½¸‰…¬ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±™…Ñ}­•ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°µ‰Õ±…¹”½ÍĞœ±IIel…¥‘•¹Ğœ°µ•‘¥…±}•áÁ•¹Í”tèéÑ•áÑmt°•áÁ•¹Í•}…Àœ°ÔÀÀ°Mœ°…µ‰Õ±…¹•	¥±°œ°ÄÌ°µ‰Õ±…¹”½ÍĞUÀÑ¼LÔÀÀÁ•È¥¹¥‘•¹Ğœ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°M¥µÁ±”É…ÑÕÉ”€¡İÉ¥ÍĞ¤œ±IIel…¥‘•¹Ğœ°‰½‘¥±å}¥¹©ÕÉätèéÑ•áÑmt°™¥á•œ°ÄÈÔÀ°Mœ°ÄĞ°É´°±‰½Ü°]É¥ÍĞ½ÈI¥‰Ì€ÈÔ”œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞÉ•…‘Í	•™½É”õÉ•…‘¥¹…±±Ìì(€€€€€½¹ÍĞÍ•ÍÍ¥½¹Í	•™½É”ô¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P¥I=4±…¥µ}Í•ÍÍ¥½¹Ì]!I…½Õ¹Ñ}¥ôÄ9™…µ¥±å}µ•µ‰•É}¥ôÈˆ±m…½Õ¹Ğ±Á•½Á±•lÁt¹¥‘t¤¤¹É½İÌ¹±•¹Ñ ì(€€€€€½¹ÍĞÍÑ…ÉÑ•õ…Ñ”¹¹½Ü ¤ì(€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰¡½ÜµÕ …¸¤±…¥´¥˜¤™•±°‘½İ¸…¹¡…Ù”„‰¥±°½˜€ÔÀÀˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•…‘¥¹…±±ÌµÉ•…‘Í	•™½É”°À°‰İ¡…Ğµ¥˜µÕÍĞÕÍ”Ñ¡”‰•¹•™¥ÑÌ…±É•…‘äÉ•…°¹½ĞÉ”µÉ•…•Ù•ÉäAˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…Ñ”¹¹½Ü ¤µÍÑ…ÉÑ•ğĞÀÀÀ°‹Š™…¹½µ”‰…¬¥µµ•‘¥…Ñ•±äˆ¤ì(€€€€€½¹ÍĞÑ¥Ñ±•Ìõ…¹Íİ•È¹±…¥µ%Ñ•µÌ¹µ…À¡¥Ñ•´ôù¥Ñ•´¹Ñ¥Ñ±”¤¹©½¥¸ ˆğ€ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡Ñ¥Ñ±•Ì°½M¥µÁ±”É…ÑÕÉ”¼°‰™…±°¥Ì…¸…¥‘•¹Ğ°…¹Ñ¡”…¥‘•¹ĞÁ±…¸¥Ìİ¡…ĞÍ¡½Õ±…¹Íİ•Èè€ˆ­Ñ¥Ñ±•Ì¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡Ñ¥Ñ±•Ì°½µ‰Õ±…¹”½ÍĞ¼¤ì(€€€€€€¼¼Q¡”ÉÕ±”¥ÑÍ•±˜¥ÌÑ¡”…¹Íİ•Èİ¡•¸Ñ¡”…µ½Õ¹Ğ‘•Á•¹‘Ì½¸İ¡…Ğ¡…ÁÁ•¹Ì¸(€€€€€½¹ÍĞ…µ‰Õ±…¹”õ…¹Íİ•È¹±…¥µ%Ñ•µÌ¹™¥¹¡¥Ñ•´ôø½µ‰Õ±…¹”¼¹Ñ•ÍĞ¡¥Ñ•´¹Ñ¥Ñ±”¤¤„ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡…µ‰Õ±…¹”¹…µ½Õ¹ÑQ•áĞüüˆˆ°½MpÔÀÀ¼°‰É•¥µ‰ÕÉÍ•µ•¹Ğ±¥µ¥Ğ¥ÌÍÑ¥±°„™¥ÕÉ”Ñ¡”Á•ÉÍ½¸…¸…Ğ½¸ˆ¤ì(€€€€€½¹ÍĞ™É…ÑÕÉ”õ…¹Íİ•È¹±…¥µ%Ñ•µÌ¹™¥¹¡¥Ñ•´ôø½É…ÑÕÉ”¼¹Ñ•ÍĞ¡¥Ñ•´¹Ñ¥Ñ±”¤¤„ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡™É…ÑÕÉ”¹…µ½Õ¹ÑQ•áĞ°‰LÄ°ÈÔÀˆ¤ì(€€€€€€¼¼%Ğ…Í­ÌÑ¡”½¹”Ñ¡¥¹œÑ¡…ĞÑÕÉ¹Ì„ÉÕ±”¥¹Ñ¼„¹Õµ‰•È¸(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹ÅÕ•ÍÑ¥½¹Ì¹±•¹Ñ °Ä°‰=¹”ÅÕ•ÍÑ¥½¸°¹½Ğ…¸¥¹Ñ•ÉÉ½…Ñ¥½¸ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡…¹Íİ•È¹ÅÕ•ÍÑ¥½¹ÍlÁt¹Ñ•áĞ°½¡½ÍÁ¥Ñ…±ñ‰¥±±ñ…µ‰Õ±…¹”½¤¤ì(€€€€€€¼¼9½Ñ¡¥¹œ¥ÌÉ•½É‘•…Ì…¸…ÑÕ…°±…¥´¸(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹‘•Ñ…¥±Ì¹Í½µ”¡‘•Ñ…¥°ôø½İ¡…Ğµ¥˜½¤¹Ñ•ÍĞ¡‘•Ñ…¥°¤˜˜½¹½Ñ¡¥¹œ¡•É”¡…Ì‰••¸É•½É‘•…Ì„±…¥´½¤¹Ñ•ÍĞ¡‘•Ñ…¥°¤¤¤ì(€€€€€½¹ÍĞÍÑ½É•õ…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1P™…ÑÌI=4±…¥µ}Í•ÍÍ¥½¹Ì]!I…½Õ¹Ñ}¥ôÄ9™…µ¥±å}µ•µ‰•É}¥ôÈˆ±m…½Õ¹Ğ±Á•½Á±•lÁt¹¥‘t¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡ÍÑ½É•¹É½İÌ¹±•¹Ñ ±Í•ÍÍ¥½¹Í	•™½É”°‰¡åÁ½Ñ¡•Ñ¥…°µÕÍĞ¹½Ğ½Á•¸„±…¥´½¸…¹å½¹”ÌÁÉ½™¥±”ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰Á½ÉÑ™½±¥¼ÅÕ•ÍÑ¥½¸¥Ì¹½ĞÑÕÉ¹•¥¹Ñ¼„±…¥´…ÍÍ•ÍÍµ•¹Ğˆ±…Íå¹Œ ¤ôùì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰İ¡…ĞÁ½±¥¥•Ì‘¼¤¡…Ù”üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹¹½ÑÅÕ…°¡…¹Íİ•È¹µ½‘”°‰±…¥µ}…ÍÍ•ÍÍµ•¹Ğˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I½ÕÑ¥¹œÉ•…‘¥¹œÑ¼…¹½Ñ¡•ÈÁÉ½Ù¥‘•ÈÍ•¹‘Ì‘½Õµ•¹ÑÌÑ¡•É”…¹±•…Ù•Ì¡…Ğİ¡•É”¥Ğİ…Ìˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ì¤ì(€€€€€½¹ÍĞì…Ñ…±½Õ•½Õµ•¹Ğ±‘½Õµ•¹ÑA…•Ìôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½Á½±¥¥•Ì½…Ñ…±½œµ‰Õ¥±‘•Èˆ¤ì(€€€€€½¹ÍĞì±½…‘	•¹•™¥Ñ…Ñ…±½œôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½Á½±¥¥•Ì½‰•¹•™¥Ğµ…Ñ…±½œˆ¤ì(€€€€€½¹ÍĞÁ…•Ìõ…İ…¥Ğ‘½Õµ•¹ÑA…•Ì¡…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%¤ì(€€€€€½¹ÍĞ¥¹¹•Èõ±½‰…±Q¡¥Ì¹™•Ñ ì(€€€€€±•ĞÉ½Å…±±ÌôÀ±Ñ¡É½ÑÑ±•õ™…±Í”±…ÕÑ¡!•…‘•Èôˆˆì(€€€€€±½‰…±Q¡¥Ì¹™•Ñ ô¡…Íå¹Œ¡¥¹ÁÕĞéI•ÅÕ•ÍÑ%¹™½ñUI0±¥¹¥ĞüéI•ÅÕ•ÍÑ%¹¥Ğ¤ôùì(€€€€€€€½¹ÍĞÕÉ°õMÑÉ¥¹œ¡¥¹ÁÕĞ¤ì(€€€€€€€¥˜¡ÕÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰¡ÑÑÁÌè¼½…Á¤¹É½Ä¹½´¼ˆ¤¥ì(€€€€€€€€€É½Å…±±Ì¬¬ì(€€€€€€€€€…ÕÑ¡!•…‘•ÈõMÑÉ¥¹œ ¡¥¹¥Ğü¹¡•…‘•ÉÌ…ÌI•½ÉñÍÑÉ¥¹œ±ÍÑÉ¥¹œø¤ü¹…ÕÑ¡½É¥é…Ñ¥½¸üüˆˆ¤ì(€€€€€€€€€€¼¼Q¡”™É•”Ñ¥•ÈÑ¡É½ÑÑ±•Ì‰äÑ½­•¹ÌÁ•Èµ¥¹ÕÑ”ìÑ¡”™¥ÉÍĞÁ…”¡¥ÑÌ¥Ğ¸(€€€€€€€€€¥˜ …Ñ¡É½ÑÑ±•¥íÑ¡É½ÑÑ±•õÑÉÕ”íÉ•ÑÕÉ¸¹•ÜI•ÍÁ½¹Í” ‰É…Ñ”±¥µ¥Ñ•ˆ±íÍÑ…ÑÕÌèĞÈä±¡•…‘•ÉÌéì‰É•ÑÉäµ…™Ñ•ÈˆèˆÀ‰õô¤íô(€€€€€€€€€½¹ÍĞ‰½‘äõ)M=8¹Á…ÉÍ”¡MÑÉ¥¹œ¡¥¹¥Ğü¹‰½‘ä¤¤ì(€€€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰½‘ä¹É•ÍÁ½¹Í•}™½Éµ…Ğü¹ÑåÁ”°‰©Í½¹}½‰©•Ğˆ¤ì(€€€€€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡‰½‘ä¹µ•ÍÍ…•ÍlÁt¹½¹Ñ•¹Ğ°½)M=8M¡•µ„¼°‰Q¡”Í¡•µ„ÑÉ…Ù•±Ìİ¥Ñ Ñ¡”É•ÅÕ•ÍĞÍ¼Ñ¡”É•Á±ä…¸‰”Ù…±¥‘…Ñ•ˆ¤ì(€€€€€€€€€½¹ÍĞÑ•áĞõMÑÉ¥¹œ¡)M=8¹Á…ÉÍ”¡‰½‘ä¹µ•ÍÍ…•ÍlÅt¹½¹Ñ•¹Ğ¤¹Ñ•áĞ¤ì(€€€€€€€€€½¹ÍĞ‰•¹•™¥ÑÌô¼ÄÀÀ”½˜MÕ´%¹ÍÕÉ•¼¹Ñ•ÍĞ¡Ñ•áĞ¤(€€€€€€€€€€€€ımí¹…µ”è‰5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌˆ±ÅÕ½Ñ”è‰]”Á…ä€ÄÀÀ”½˜MÕ´%¹ÍÕÉ•™½ÈÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸ˆ±™½ÉµÕ±…-¥¹è‰ÍÕµ}¥¹ÍÕÉ•ˆ±™½ÉµÕ±…Y…±Õ”èÄ±ÕÉÉ•¹äè‰Mˆ±™…Ñ-•äé¹Õ±°±½™™Í•Ñ…åÌé¹Õ±°±µ…á¥µÕµ…åÌé¹Õ±°±½¹‘¥Ñ¥½¹Ìémuô°(€€€€€€€€€€€€€€¼¼ÅÕ½Ñ”Ñ¡…Ğ¥Ì¹½Ğ½¸Ñ¡”Á…”µÕÍĞ‰”É•™ÕÍ•İ¡•É•Ù•È¥Ğ…µ”™É½´¸(€€€€€€€€€€€€€í¹…µ”è‰%¹Ù•¹Ñ•	•¹•™¥Ğˆ±ÅÕ½Ñ”è‰]”Á…äLäää°äää½¸É•ÅÕ•ÍĞ¸ˆ±™½ÉµÕ±…-¥¹è‰™¥á•ˆ±™½ÉµÕ±…Y…±Õ”èääääää±ÕÉÉ•¹äè‰Mˆ±™…Ñ-•äé¹Õ±°±½™™Í•Ñ…åÌé¹Õ±°±µ…á¥µÕµ…åÌé¹Õ±°±½¹‘¥Ñ¥½¹Ìémuõt(€€€€€€€€€€€€émtì(€€€€€€€€€É•ÑÕÉ¸I•ÍÁ½¹Í”¹©Í½¸¡í¥è‰™¥áÑÕÉ”µÉ½ÄµÉ•ÍÁ½¹Í”ˆ±µ½‘•°è‰±±…µ„´Ì¸Ì´ÜÁˆµÙ•ÉÍ…Ñ¥±”ˆ±¡½¥•Ìémíµ•ÍÍ…”éí½¹Ñ•¹Ğé)M=8¹ÍÑÉ¥¹¥™ä¡í‰•¹•™¥ÑÍô¥ô±™¥¹¥Í¡}É•…Í½¸è‰ÍÑ½À‰õuô¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€ô¤…ÌÑåÁ•½˜™•Ñ ì(€€€€€€¼¼Q¡”ÁÉ•Í•Ğİ½Õ±½Ñ¡•Éİ¥Í”±…¥´É•…‘¥¹œÑ½¼ìÑ¡¥ÌÑ•ÍĞ¥Ì…‰½ÕĞÑ¡”(€€€€€€¼¼Á•Èµ©½ˆ½Ù•ÉÉ¥‘”°Í¼¥Ğ¥Ìİ¡…Ğ¡…ÌÑ¼‰”½ÕĞ½˜Ñ¡”İ…ä¸(€€€€€½¹ÍĞÍ…Ù•‘AÉ•Í•ĞõÁÉ½•ÍÌ¹•¹Ø¹5=1}AIMPí‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹5=1}AIMPì(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹I%9}5=1}AI=Y%Hô‰É½ÄˆíÁÉ½•ÍÌ¹•¹Ø¹I=E}A%}-dô‰Ñ•ÍĞµ­•äˆì(€€€€€ÑÉåì(€€€€€€€½¹ÍĞÍÑ½É•õ…İ…¥Ğ…Ñ…±½Õ•½Õµ•¹Ğ¡í…½Õ¹Ñ%é…½Õ¹Ğ±Á½±¥å%é™¥áÑÕÉ”¹É•™•É•¹•%±ÁÉ½‘ÕÑ9…µ”è‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌˆ±Á…•Íô¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡É½Å…±±ÌøõÁ…•Ì¹±•¹Ñ ¬Ä°‰Ù•ÉäÁ…”İ•¹ĞÑ¼Ñ¡”¡½ÍÑ•É•…‘•È°…¹Ñ¡”Ñ¡É½ÑÑ±•Á…”İ…ÌÉ•ÑÉ¥•ˆ¤ì(€€€€€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…ÕÑ¡!•…‘•È°‰	•…É•ÈÑ•ÍĞµ­•äˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡ÍÑ½É•°Ä°‰Q¡”¥¹Ù•¹Ñ•ÅÕ½Ñ”İ…ÌÉ•™ÕÍ•ì½¹±äÑ¡”É•…°ÉÕ±”İ…ÌÍÑ½É•ˆ¤ì(€€€€€€€½¹ÍĞ…Ñ…±½œõ…İ…¥Ğ±½…‘	•¹•™¥Ñ…Ñ…±½œ¡…½Õ¹Ğ±m™¥áÑÕÉ”¹É•™•É•¹•%‘t¤ì(€€€€€€€…ÍÍ•ÉĞ¹‘••ÁÅÕ…°¡…Ñ…±½œ¹µ…À¡ˆôùˆ¹‰•¹•™¥Ñ9…µ”¤±l‰5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€€€€¼¼I•É½ÕÑ¥¹œÉ•…‘¥¹œ‘½•Ì¹½Ğµ½Ù”Ñ¡”½Ñ¡•È©½‰Ìİ¥Ñ ¥Ğ¸(€€€€€€€½¹ÍĞÉ•…‘Í	•™½É”õ•áÁ±…¹…Ñ¥½¹…±±Ìì(€€€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•È¤¹±…¥µ%Ñ•µÍlÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÌÔÀ°ÀÀÀˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡•áÁ±…¹…Ñ¥½¹…±±ÌµÉ•…‘Í	•™½É”°Ä°‰¡…Ğ¹…ÉÉ…Ñ¥½¸ÍÑ…åÌ½¸Ñ¡”µ½‘•°¥ÑÌ½İ¸Í•ÑÑ¥¹œ¹…µ•Ìˆ¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I%9}5=1}AI=Y%Hí‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I=E}A%}-dì(€€€€€€€¥˜¡Í…Ù•‘AÉ•Í•Ğ¥ÁÉ½•ÍÌ¹•¹Ø¹5=1}AIMPõÍ…Ù•‘AÉ•Í•ĞíÕÍ•!…É¹•ÍÍ5½‘•° ¤í±½‰…±Q¡¥Ì¹™•Ñ õ¥¹¹•Èì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I½İÌ…É”…Ñ•½É¥Í•‰äµ•…¹¥¹œ…™Ñ•ÈÕÁ±½…°¹½Ğ‰ä­•åİ½É‘Ì…±½¹”ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞì…Ñ…±½Õ•½Õµ•¹Ğôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½Á½±¥¥•Ì½…Ñ…±½œµ‰Õ¥±‘•Èˆ¤ì(€€€€€½¹ÍĞì±½…‘	•¹•™¥Ñ…Ñ…±½œôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½Á½±¥¥•Ì½‰•¹•™¥Ğµ…Ñ…±½œˆ¤ì(€€€€€½¹ÍĞÑ…‰±”õl‰M¡•‘Õ±”½˜%¹‘•µ¹¥Ñ¥•Ìˆ°ˆ ”½˜MÕ´%¹ÍÕÉ•¤ˆ°‰1½ÍÌ½˜ÍÁ••¡qĞÔÀ”ˆ°‰1½ÍÌ½˜½¹”±¥µ‰qĞÄÀÀ”ˆ°‰¹¹Õ…°ÁÉ•µ¥Õ´Á…å…‰±•qĞÄ°ÈÀÀ‰t¹©½¥¸ ‰q¸ˆ¤ì(€€€€€½¹ÍĞ‰•™½É”õ…Ñ•½É¥Í•…±±Ìì(€€€€€…İ…¥Ğ…Ñ…±½Õ•½Õµ•¹Ğ¡í…½Õ¹Ñ%é…½Õ¹Ğ±Á½±¥å%é™¥áÑÕÉ”¹É•™•É•¹•%±ÁÉ½‘ÕÑ9…µ”è‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌˆ°(€€€€€€€Á…•ÌémíÁ…•}¹Õµ‰•ÈèÄ±Ñ•áĞéÑ…‰±•õuô¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…Ñ•½É¥Í•…±±Ìµ‰•™½É”°Ä°‰=¹”…Ñ•½É¥Í…Ñ¥½¸Á•ÈÁ…”°™½È…±°¥ÑÌÉ½İÌ…Ğ½¹”ˆ¤ì(€€€€€½¹ÍĞ…Ñ…±½œõ…İ…¥Ğ±½…‘	•¹•™¥Ñ…Ñ…±½œ¡…½Õ¹Ğ±m™¥áÑÕÉ”¹É•™•É•¹•%‘t¤ì(€€€€€½¹ÍĞ¹…µ•Ìõ…Ñ…±½œ¹µ…À¡ˆôùˆ¹‰•¹•™¥Ñ9…µ”¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡¹…µ•Ì¹¥¹±Õ‘•Ì ‰1½ÍÌ½˜ÍÁ•• ˆ¤˜™¹…µ•Ì¹¥¹±Õ‘•Ì ‰1½ÍÌ½˜½¹”±¥µˆˆ¤±¹…µ•Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡¹…µ•Ì¹Í½µ”¡¹…µ”ôø½ÁÉ•µ¥Õ´½¤¹Ñ•ÍĞ¡¹…µ”¤¤±™…±Í”°‰Q¡”É•…‘•ÈÉÕ±•Ñ¡”ÁÉ•µ¥Õ´É½Ü½ÕĞ•Ù•¸Ñ¡½Õ ¥ÑÌÙ…±Õ”•±°Á…ÉÍ•ˆ¤ì(€€€€€½¹ÍĞÍÁ•• õ…Ñ…±½œ¹™¥¹¡ˆôùˆ¹‰•¹•™¥Ñ9…µ”ôôô‰1½ÍÌ½˜ÍÁ•• ˆ¤„ì(€€€€€…ÍÍ•ÉĞ¹½¬¡ÍÁ•• ¹ÑÉ…¥ÑÌ¹¥¹±Õ‘•Ì ‰‘¥Í…‰¥±¥Ñäˆ¤°‰ÑÉ…¥ĞÑ¡”­•åİ½É‘Ì½Õ±¹•Ù•È™¥¹è€ˆ­ÍÁ•• ¹ÑÉ…¥ÑÌ¹©½¥¸ ˆ°ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡ÍÁ•• ¹ÑÉ…¥ÑÌ¹¥¹±Õ‘•Ì ‰‰½‘¥±å}¥¹©ÕÉäˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡ÍÁ•• ¹ÑÉ…¥ÑÌ¹¥¹±Õ‘•Ì ‰½Ñ¡•Èˆ¤±™…±Í”°ˆ½Ñ¡•Èœ¥Ì½¹±ä„Á±…•¡½±‘•È™½È„É½Ü¹½Ñ¡¥¹œ½Õ±…Ñ•½É¥Í”ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰¸¥±±¹•ÍÌ¥Ì¹•Ù•È½™™•É•…¥‘•¹Ğµ½¹±ä‰•¹•™¥ÑÌ°…¹™…ÑÌ½µ”‰•™½É”™¥ÕÉ•Ìˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞÁÉ½‘ÕĞô‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌˆì(€€€€€½¹ÍĞ¥¹Í•ÉĞô¡¹…µ”éÍÑÉ¥¹œ±ÑÉ…¥ÑÌéÍÑÉ¥¹œ±É•ÅÕ¥É•ÌéÍÑÉ¥¹œ±­¥¹éÍÑÉ¥¹œ±Ù…±Õ”é¹Õµ‰•È±™…Ñ-•äéÍÑÉ¥¹ñ¹Õ±°±½™™Í•Ğé¹Õµ‰•Éñ¹Õ±°±µ…àé¹Õµ‰•Éñ¹Õ±°±Á…”é¹Õµ‰•È¤ôù‘ˆ¹ÅÕ•Éä (€€€€€€€€‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±™…Ñ}­•ä±½™™Í•Ñ}‘…åÌ±µ…á¥µÕµ}‘…åÌ±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°Ğ°ÔèéÑ•áÑmt°ØèéÑ•áÑmt°Ü°à°Mœ°ä°ÄÀ°ÄÄ°ÄÈ°ÄÌ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%±ÁÉ½‘ÕĞ±¹…µ”±ÑÉ…¥ÑÌ¹ÍÁ±¥Ğ ˆ°ˆ¤¹™¥±Ñ•È¡	½½±•…¸¤±É•ÅÕ¥É•Ì¹ÍÁ±¥Ğ ˆ°ˆ¤¹™¥±Ñ•È¡	½½±•…¸¤±­¥¹±Ù…±Õ”±™…Ñ-•ä±½™™Í•Ğ±µ…à±Á…”±¹…µ”¬ˆİ½É‘¥¹œ‰t¤ì(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰µ‰Õ±…¹”½ÍĞˆ°‰…¥‘•¹Ğ±µ•‘¥…±}•áÁ•¹Í”ˆ°‰…¥‘•¹Ğˆ°‰•áÁ•¹Í•}…Àˆ°ÔÀÀ°‰…µ‰Õ±…¹•	¥±°ˆ±¹Õ±°±¹Õ±°°ÄÌ¤ì(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥Ğˆ°‰…¥‘•¹Ğ±¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸ˆ°‰…¥‘•¹Ğˆ°‰™¥á•ˆ°ÈÔÀ±¹Õ±°±¹Õ±°±¹Õ±°°ÄÌ¤ì(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰…¥±ä!½ÍÁ¥Ñ…°…Í 	•¹•™¥Ğˆ°‰¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸ˆ°ˆˆ°‰‘…¥±äˆ°ÌÀ°‰¡½ÍÁ¥Ñ…±9¥¡ÑÌˆ°À°ÌÀ°Ô¤ì(€€€€€€¼¼Q¡”Í…µ”‘…¥±ä‰•¹•™¥ĞÍÑ…Ñ•……¥¸¥¸„Í•½¹‘½Õµ•¹Ğ½˜Ñ¡”Í…µ”Á±…¸¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±™…Ñ}­•ä±½™™Í•Ñ}‘…åÌ±µ…á¥µÕµ}‘…åÌ±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°…¥±ä!½ÍÁ¥Ñ…°…Í 	•¹•™¥Ğœ±IIel¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸tèéÑ•áÑmt°íôœèéÑ•áÑmt°‘…¥±äœ°ÌÀ°Mœ°¡½ÍÁ¥Ñ…±9¥¡ÑÌœ°À°ÌÀ°ä°…¥±ä!½ÍÁ¥Ñ…°…Í LÌÀÁ•È‘…äœ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹Á½±¥å%±ÁÉ½‘ÕÑt¤ì(€€€€€½¹ÍĞ™¥ÉÍĞô¡…İ…¥ĞÍ•¹ ‰•Íµ½¹…Õ¡Ğ‘•¹Õ”¸]¡…Ğ…¸¡”±…¥´üˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞ½¹”õ™¥ÉÍĞ¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡½¹”¹µ½‘”°‰™…Ñ}™¥¹‘¥¹œˆ°‰…ÑÌ½µ”™¥ÉÍĞˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡½¹”¹±…¥µ%Ñ•µÌ¹±•¹Ñ °À°‰9¼™¥ÕÉ”‰•™½É”Ñ¡”™…ÑÌ…É”¥¸ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡½¹”¹ÅÕ•ÍÑ¥½¹Ì¹±•¹Ñ °Ä¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡½¹”¹ÅÕ•ÍÑ¥½¹ÍlÁt¹Ñ•áĞ°½¡½ÍÁ¥Ñ…°…‘µ¥ÍÍ¥½¸½¤°‰Q¡”™¥ÉÍĞÅÕ•ÍÑ¥½¸¥ÌÑ¡”½¹”Ñ¡…ĞÉÕ±•Ì‰•¹•™¥ÑÌ¥¸½È½ÕĞè€ˆ­½¹”¹ÅÕ•ÍÑ¥½¹ÍlÁt¹Ñ•áĞ¤ì(€€€€€½¹ÍĞ…¹‘¥‘…Ñ•Ìõ½¹”¹‘•Ñ…¥±Ì¹™¥¹¡‘•Ñ…¥°ôù‘•Ñ…¥°¹ÍÑ…ÉÑÍ]¥Ñ  ‰	•¹•™¥ÑÌÑ¡…Ğµ…äÉ•ÍÁ½¹ˆ¤¤üüˆˆì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ½µ‰Õ±…¹•ñ¥‘•¹Ñ…°¼¹Ñ•ÍĞ¡…¹‘¥‘…Ñ•Ì¤±™…±Í”°‰•¹Õ”¥Ì…¸¥±±¹•ÍÌì…¥‘•¹Ğµ½¹±ä‰•¹•™¥ÑÌ…É”¹½Ğ…¹‘¥‘…Ñ•Ìè€ˆ­…¹‘¥‘…Ñ•Ì¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡…¹‘¥‘…Ñ•Ì°½…¥±ä!½ÍÁ¥Ñ…°…Í ¼¤ì(€€€€€€¼¼ƒŠ™…¹Ñ¡”Á•ÉÍ½¸¥ÌÑ½±İ¡ä°É…Ñ¡•ÈÑ¡…¸±•™ĞÑ¼İ½¹‘•Èİ¡•Ñ¡•ÈÑ¡•äİ•É”µ¥ÍÍ•¸(€€€€€½¹ÍĞ•á±Õ‘•õ½¹”¹‘•Ñ…¥±Ì¹™¥¹¡‘•Ñ…¥°ôù‘•Ñ…¥°¹ÍÑ…ÉÑÍ]¥Ñ  ‰9½Ğ…ÁÁ±¥…‰±”¡•É”ˆ¤¤üüˆˆì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•á±Õ‘•°½µ‰Õ±…¹”½ÍĞ¼¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•á±Õ‘•°½½¹±ä™½È…¸…¥‘•¹Ğ°…¹Ñ¡¥Ìİ…Ì…¸¥±±¹•ÍÌ¼¤ì(€€€€€½¹ÍĞÍ•½¹ô¡…İ…¥ĞÍ•¹ ‰e•Ìˆ±Á•½Á±•lÁt¹¥±™¥ÉÍĞ¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹%±™¥ÉÍĞ¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹I•Ù¥Í¥½¸¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞÑİ¼õÍ•½¹¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñİ¼¹µ½‘”°‰™…Ñ}™¥¹‘¥¹œˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡Ñİ¼¹ÅÕ•ÍÑ¥½¹ÍlÁtü¹Ñ•áĞüüˆˆ°½¡½Üµ…¹ä¹¥¡ÑÌ½¤°‰Q¡•¸Ñ¡”ÅÕ…¹Ñ¥Ñäè€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡Ñİ¼¹ÅÕ•ÍÑ¥½¹Ì¤¤ì(€€€€€½¹ÍĞÑ¡¥Éô¡…İ…¥ĞÍ•¹ ˆĞˆ±Á•½Á±•lÁt¹¥±Í•½¹¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹%±Í•½¹¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹I•Ù¥Í¥½¸¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞÑ¡É•”õÑ¡¥É¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹µ½‘”°‰±…¥µ}…ÍÍ•ÍÍµ•¹Ğˆ°‰]¥Ñ Ñ¡”™…ÑÌ¥¸°Ñ¡”™¥ÕÉ•Ì½µ”ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹ÅÕ•ÍÑ¥½¹Ì¹±•¹Ñ °À°‰9½Ñ¡¥¹œ±•™ĞÑ¼…Í¬ˆ¤ì(€€€€€½¹ÍĞÑ¥Ñ±•ÌõÑ¡É•”¹±…¥µ%Ñ•µÌ¹µ…À¡¥Ñ•´ôù¥Ñ•´¹Ñ¥Ñ±”¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¥Ñ±•Ì¹±•¹Ñ °Ä°‰=¹”…ÉÁ•È‰•¹•™¥ĞÁ•ÈÁ•ÉÍ½¸°•Ù•¸İ¡•¸Ñİ¼‘½Õµ•¹ÑÌÍÑ…Ñ”¥Ğè€ˆ­Ñ¥Ñ±•Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡Ñ¥Ñ±•ÍlÁt°½…¥±ä!½ÍÁ¥Ñ…°…Í ¼¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹±…¥µ%Ñ•µÍlÁt¹…µ½Õ¹ÑQ•áĞ°‰LÄÈÀ¸ÀÀˆ°ˆĞ¹¥¡ÑÌƒ\LÌÀ°™É½´Ñ¡”ÍÑ½É•ÉÕ±”ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹Á½Ñ•¹Ñ¥…±A…å½ÕÑQ½Ñ…±Ìü¹lÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÄÈÀ¸ÀÀˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰]¡•¸Ñ¡”…ÕÍ”¥ÌÕ¹­¹½İ¸°¥Ğ¥Ì…Í­•É…Ñ¡•ÈÑ¡…¸…ÍÍÕµ•ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥Ğœ±IIel…¥‘•¹Ğœ°¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸tèéÑ•áÑmt±IIel…¥‘•¹ĞtèéÑ•áÑmt°™¥á•œ°ÈÔÀ°Mœ°ÄÌ°¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥ĞLÈÔÀœ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€€¼¼Q¡”¥¹Ñ•ÉÁÉ•Ñ•ÈÉ•Á½ÉÑÌ„¡½ÍÁ¥Ñ…°ÍÑ…ä…¹¹½Ñ¡¥¹œ…‰½ÕĞ¥ÑÌ…ÕÍ”¸(€€€€€½¹ÍĞ™¥ÉÍĞô¡…İ…¥ĞÍ•¹ ‰•Íµ½¹İ…Ì‘¥Í¡…É•…™Ñ•ÈÑİ•±Ù”¹¥¡ÑÌˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞ½¹”õ™¥ÉÍĞ¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡½¹”¹µ½‘”°‰™…Ñ}™¥¹‘¥¹œˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡½¹”¹ÅÕ•ÍÑ¥½¹ÍlÁtü¹Ñ•áĞüüˆˆ°½…¥‘•¹Ğ°½È…¸¥±±¹•ÍÌ½¤±)M=8¹ÍÑÉ¥¹¥™ä¡½¹”¹ÅÕ•ÍÑ¥½¹Ì¤¤ì(€€€€€½¹ÍĞÍ•½¹ô¡…İ…¥ĞÍ•¹ ‰¸…¥‘•¹Ğˆ±Á•½Á±•lÁt¹¥±™¥ÉÍĞ¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹%±™¥ÉÍĞ¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹I•Ù¥Í¥½¸¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞÑİ¼õÍ•½¹¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñİ¼¹µ½‘”°‰±…¥µ}…ÍÍ•ÍÍµ•¹Ğˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñİ¼¹±…¥µ%Ñ•µÍlÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÈÔÀ¸ÀÀˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰‘•…Ñ ‰•¹•™¥ĞÑ¡…ĞÍ¥ÑÌ¥¸„Í•¹Ñ•¹”°¹½Ğ„Ñ…‰±”°¥ÌÉ•…¥¹Ñ¼Ñ¡”±•‘•È…¹…¹Íİ•É•ˆ±…Íå¹Œ ¤ôùì(€€€€€€¼¼Q¡”½¹±äÉÕ±”½¸™¥±”¥Ì…¸…¥‘•¹Ğµ¡½ÍÁ¥Ñ…°É½Ü¸‘•…Ñ ‰•¹•™¥ĞÍ¥ÑÌ(€€€€€€¼¼¥¸„Í•¹Ñ•¹”½˜Ñ¡”Á½±¥äİ½É‘¥¹œÑ¡…Ğ¹•Ù•È‰•…µ”„Ñ…‰±”É½Ü¸(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥Ğœ±IIel…¥‘•¹Ğœ°¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸tèéÑ•áÑmt±IIel…¥‘•¹ĞtèéÑ•áÑmt°™¥á•œ°ÈÔÀ°Mœ°ÄÌ°¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥ĞLÈÔÀœ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞ‘•…Ñ¡±…ÕÍ”ô‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ¸%˜Ñ¡”¥¹ÍÕÉ•‘¥•Ìİ¡¥±”½Ù•É•°İ”Á…ä€ÄÀÀ”½˜MÕ´%¹ÍÕÉ•™½È„ÅÕ…±¥™å¥¹œ½Ù•É•‘•…Ñ ¸ˆì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}Á…•Ì¡…½Õ¹Ñ}¥±Á½±¥å}¥±Á…•}¹Õµ‰•È±Ñ•áĞ¤Y1UL Ä°È°È°Ì¤ˆ±m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%±‘•…Ñ¡±…ÕÍ•t¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}¡Õ¹­Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±Á½±¥å}¥±Á…•}ÍÑ…ÉĞ±Á…•}•¹±Ñ•áĞ±•µ‰•‘‘¥¹œ¤Y1UL Ä°È°Ì°Ğ°È°È°Ô°ØèéÙ•Ñ½È¤ˆ°(€€€€€€€mÕÕ¥ ÜÀÀĞää¤±…½Õ¹Ğ±Á•½Á±•lÁt¹¥±™¥áÑÕÉ”¹É•™•É•¹•%±‘•…Ñ¡±…ÕÍ”°‰lˆ­ÉÉ…ä¹™É½´¡í±•¹Ñ èÄÀÈÑô°¡|±¨¤ôù¨ôôôÀüÄèÀ¤¹©½¥¸ ˆ°ˆ¤¬‰t‰t¤ì(€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰•Íµ½¹İ…ÌµÕÉ‘•É•¥¸Q¡…¥±…¹ˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹ÅÕ•ÍÑ¥½¹Ì¹±•¹Ñ °À°‰‘•…Ñ ¥Ì¹½Ğ…¹Íİ•É•İ¥Ñ „ÅÕ•ÍÑ¥½¸…‰½ÕĞ¡½ÍÁ¥Ñ…°…‘µ¥ÍÍ¥½¸è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡…¹Íİ•È¹ÅÕ•ÍÑ¥½¹Ì¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹±…¥µ%Ñ•µÌ¹Í½µ”¡¥Ñ•´ôù¥Ñ•´¹Ñ¥Ñ±”¹¥¹±Õ‘•Ì ‰•…Ñ ‰•¹•™¥Ğˆ¤˜™¥Ñ•´¹…µ½Õ¹ÑQ•áĞôôô‰LÌÔÀ°ÀÀÀˆ¤°‰Q¡”‘•…Ñ ‰•¹•™¥Ğ¥Ì™½Õ¹¥¸Ñ¡”İ½É‘¥¹œè€ˆ­…¹Íİ•È¹±…¥µ%Ñ•µÌ¹µ…À¡¤ôù¤¹Ñ¥Ñ±”¬ˆ€ˆ­¤¹…µ½Õ¹ÑQ•áĞ¤¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹‘½•Í9½Ñ5…Ñ ¡…¹Íİ•È¹ÍÕµµ…Éä°½9½¹”½˜Ñ¡”‰•¹•™¥ĞÉÕ±•Ì½¸™¥±”É•ÍÁ½¹¼°‰¸•µÁÑäÉÕ±”±¥ÍĞ¥Ì¹½Ğ„Ù•É‘¥Ğˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹‘•Ñ…¥±Ì¹Í½µ”¡ôø½½Ù•É…”1•‘•È¼¹Ñ•ÍĞ¡¤¤°‹Š™‰•…ÕÍ”Ñ¡”Í•¹Ñ•¹”İ…ÌÉ•…¥¹Ñ¼Ñ¡”±•‘•Èè€ˆ­…¹Íİ•È¹‘•Ñ…¥±Ì¹©½¥¸ ˆ€¼€ˆ¤¤ì(€€€ô¤ì(€€€€¼¼•ÉÑ¥™¥…Ñ”ÌÍ¡•‘Õ±”±¥¹•Ì€¡¹¼‰•¹•™¥ĞÑ…‰±”É•…å•Ğ¤¹…µ”„Á±…¸(€€€€¼¼…ÌÁ½Ñ•¹Ñ¥…±±äÉ•ÍÁ½¹‘¥¹œÑ¼„‘•…Ñ °‰ÕĞ½¹±ä…ÍÍÕµ”Ñ¡”ÍÑ…¹‘…É(€€€€¼¼ÉÕ±”™½ÈÑ¡…Ğ­¥¹½˜½Ù•È€´´Í¼Ñ¡”™¥ÕÉ”ÍÑ…åÌİ¥Ñ¡¡•±°™½È„(€€€€¼¼İ¡…Ğµ¥˜…¹™½È„É•Á½ÉÑ•‘•…Ñ …±¥­”°Õ¹Ñ¥°Ñ¡”İ½É‘¥¹œ¥ÌÉ•…¸(€€€…İ…¥ĞÑ•ÍĞ ‰•ÉÑ¥™¥…Ñ”ÌÍ¡•‘Õ±”±¥¹•Ì¹…µ”„‘•…Ñ ½Ù•È½¸Ñ¡•¥È½İ¸°‰ÕĞİ¥Ñ¡¡½±Ñ¡”™¥ÕÉ”Õ¹Ñ¥°Ñ¡”İ½É‘¥¹œ¥ÌÉ•…ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞ½Ù•Èõ…Íå¹Œ¡¥é¹Õµ‰•È±…Ñ•½ÉäéÍÑÉ¥¹œ±…µ½Õ¹Ğé¹Õµ‰•È¤ôù‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}½Ù•É…•Ì¡¥±…½Õ¹Ñ}¥±Á½±¥å}¥±™…µ¥±å}µ•µ‰•É}¥±…Ñ•½Éä±…µ½Õ¹Ğ±ÕÉÉ•¹ä±ÁÉ½‘ÕÑ}¹…µ”±Í½ÕÉ•}Á…”±•Ù¥‘•¹•}Ñ•áĞ±•Ù¥‘•¹•}Ù•É¥™¥•±½¹™¥Éµ•¤Y1UL Ä°È°Ì°Ğ°Ô°Ø°Mœ°5%9É½ÕÀ%¹ÍÕÉ…¹”œ°È°Ü±ÑÉÕ”±ÑÉÕ”¤ˆ°(€€€€€€€mÕÕ¥¡¥¤±…½Õ¹Ğ±™¥áÑÕÉ”¹Á½±¥å%±Á•½Á±•lÁt¹¥±…Ñ•½Éä±…µ½Õ¹Ğ±…Ñ•½Éä¬ˆLˆ­…µ½Õ¹Ñt¤ì(€€€€€…İ…¥Ğ½Ù•È ÜÀÀÔÄÀ°‰É½ÕÀQ•É´1¥™”ˆ°Å|ÀÀÁ|ÀÀÀ¤ì(€€€€€…İ…¥Ğ½Ù•È ÜÀÀÔÄÄ°‰É½ÕÀA•ÉÍ½¹…°¥‘•¹Ğˆ°ØÀÁ|ÀÀÀ¤ì(€€€€€…İ…¥Ğ½Ù•È ÜÀÀÔÄÈ°‰É½ÕÀ1¥Ù¥¹œ…É”ˆ°ÌÔÁ|ÀÀÀ¤ì(€€€€€€¼¼1…‰•±±•…¸¥¹Ù•¹Ñ½ÉäÅÕ•ÍÑ¥½¸€ ‰Á½±¥¥•Ìˆ¤°¥Ğ¥Ì„İ¡…Ğµ¥˜…‰½ÕĞ„Á…å½ÕĞ¸(€€€€€½¹ÍĞİ¡…Ñ%˜ô¡…İ…¥ĞÍ•¹ ‰%˜•Íµ½¹‘¥•Ì¥¸…¸…¥‘•¹Ğ°¡½ÜµÕ İ½Õ±Ñ¡”Á…å½ÕĞ‰”…É½ÍÌ¡¥ÌÁ½±¥¥•Ìüˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡İ¡…Ñ%˜¹µ½‘”°‰±…¥µ}…ÍÍ•ÍÍµ•¹Ğˆ°‰Á…å½ÕĞİ¡…Ğµ¥˜¥Ì¹½Ğ…¹Íİ•É•İ¥Ñ Ñ¡”¥¹Ù•¹Ñ½ÉäÑ…‰±”è€ˆ­İ¡…Ñ%˜¹ÍÕµµ…Éä¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡İ¡…Ñ%˜¹Á½ÉÑ™½±¥½%Ñ•µÌ±Õ¹‘•™¥¹•¤ì(€€€€€½¹ÍĞÑ¥Ñ±•Ìõİ¡…Ñ%˜¹±…¥µ%Ñ•µÌ¹µ…À¡¥Ñ•´ôù¥Ñ•´¹Ñ¥Ñ±”¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡Ñ¥Ñ±•Ì¹Í½µ”¡Ğôø½É½ÕÀQ•É´1¥™”¼¹Ñ•ÍĞ¡Ğ¤¤°‰Q¡”±¥™”ÍÕ´…ÍÍÕÉ•¥Ì¹…µ•…ÌÁ½Ñ•¹Ñ¥…±±äÉ•ÍÁ½¹‘¥¹œÑ¼„‘•…Ñ è€ˆ­Ñ¥Ñ±•Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡Ñ¥Ñ±•Ì¹Í½µ”¡Ğôø½É½ÕÀA•ÉÍ½¹…°¥‘•¹Ğ¼¹Ñ•ÍĞ¡Ğ¤¤°‹Š™…¹Ñ¡”A½Ù•ÈÑ¼…¸…¥‘•¹Ñ…°‘•…Ñ è€ˆ­Ñ¥Ñ±•Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬ …Ñ¥Ñ±•Ì¹Í½µ”¡Ğôø½1¥Ù¥¹œ…É”¼¹Ñ•ÍĞ¡Ğ¤¤°‰É¥Ñ¥…°¥±±¹•ÍÌÁ±…¸‘½•Ì¹½ĞÉ•ÍÁ½¹Ñ¼„‘•…Ñ è€ˆ­Ñ¥Ñ±•Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€€¼¼9•¥Ñ¡•ÈÁ±…¸Ì‰•¹•™¥ĞÑ…‰±”¡…Ì‰••¸É•…å•Ğ°Í¼Ñ¡”Í¡•‘Õ±”…¸(€€€€€€¼¼½¹±ä…ÍÍÕµ”Ñ¡”ÍÑ…¹‘…ÉÉÕ±”™½ÈÑ¡¥Ì­¥¹½˜½Ù•È€´´¹…µ•°‰ÕĞ(€€€€€€¼¼İ¥Ñ¡½ÕĞ„‰…É”™¥ÕÉ”°Õ¹Ñ¥°Ñ¡”İ½É‘¥¹œ½¹™¥ÉµÌ¥Ğ¸(€€€€€…ÍÍ•ÉĞ¹½¬¡İ¡…Ñ%˜¹±…¥µ%Ñ•µÌ¹•Ù•Éä¡¥Ñ•´ôù¥Ñ•´¹…µ½Õ¹ÑQ•áĞôôõ¹Õ±°˜™¥Ñ•´¹ÍÑ…ÑÕÌôôô‰¹••‘Í}‘½Õµ•¹Ğˆ¤°(€€€€€€€€‰… ™¥ÕÉ”¥Ìİ¥Ñ¡¡•±Õ¹Ñ¥°Ñ¡”İ½É‘¥¹œ¥ÌÉ•…è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡İ¡…Ñ%˜¹±…¥µ%Ñ•µÌ¹µ…À¡¤ôùm¤¹Ñ¥Ñ±”±¤¹…µ½Õ¹ÑQ•áĞ±¤¹ÍÑ…ÑÕÍt¤¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡İ¡…Ñ%˜¹±…¥µ%Ñ•µÌ¹•Ù•Éä¡¥Ñ•´ôù¥Ñ•´¹½¹‘¥Ñ¥½¹Ì¹Í½µ”¡Œôø½ÍÍÕµ•ÌÑ¡”ÍÑ…¹‘…ÉÉÕ±”¼¹Ñ•ÍĞ¡Œ¤¤¤°‰… …ÉÍ…åÌ¥Ğ…ÍÍÕµ•ÌÑ¡”ÍÑ…¹‘…ÉÉÕ±”Õ¹Ñ¥°Ñ¡”İ½É‘¥¹œ¥ÌÉ•…ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡İ¡…Ñ%˜¹Á½Ñ•¹Ñ¥…±A…å½ÕÑQ½Ñ…±Ìü¹±•¹Ñ üüÀ°À°‰9¼Ñ½Ñ…°µ…ä‰”Í¡½İ¸İ¡•¸•Ù•Éä¥Ñ•´Ì…µ½Õ¹Ğ¥Ìİ¥Ñ¡¡•±ˆ¤ì(€€€€€€¼¼Q¡”Í…µ”Í¡•‘Õ±”…¹Íİ•ÉÌ„É•Á½ÉÑ•‘•…Ñ İ¡½Í”…ÕÍ”¥Ì¹½Ğå•Ğ­¹½İ¸¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥Ğœ±IIel…¥‘•¹Ğœ°¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸tèéÑ•áÑmt±IIel…¥‘•¹ĞtèéÑ•áÑmt°™¥á•œ°ÈÔÀ°Mœ°ÄÌ°¥‘•¹Ñ…°!½ÍÁ¥Ñ…°I•ÕÁ•É…Ñ¥½¸	•¹•™¥ĞLÈÔÀœ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞÉ•Á½ÉÑ•ô¡…İ…¥ĞÍ•¹ ‰•Íµ½¹İ…ÌµÕÉ‘•É•¥¸Q¡…¥±…¹ˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•Á½ÉÑ•¹µ½‘”°‰±…¥µ}…ÍÍ•ÍÍµ•¹Ğˆ±É•Á½ÉÑ•¹ÍÕµµ…Éä¤ì(€€€€€½¹ÍĞ±¥™”õÉ•Á½ÉÑ•¹±…¥µ%Ñ•µÌ¹™¥¹¡¥Ñ•´ôø½É½ÕÀQ•É´1¥™”¼¹Ñ•ÍĞ¡¥Ñ•´¹Ñ¥Ñ±”¤¤ì(€€€€€½¹ÍĞÁ„õÉ•Á½ÉÑ•¹±…¥µ%Ñ•µÌ¹™¥¹¡¥Ñ•´ôø½É½ÕÀA•ÉÍ½¹…°¥‘•¹Ğ¼¹Ñ•ÍĞ¡¥Ñ•´¹Ñ¥Ñ±”¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡±¥™”°‰Q¡”±¥™”½Ù•È¥ÌÍÑ¥±°¹…µ•™½È„É•Á½ÉÑ•‘•…Ñ è€ˆ­É•Á½ÉÑ•¹±…¥µ%Ñ•µÌ¹µ…À¡¤ôù¤¹Ñ¥Ñ±”¤¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡Á„°‹Š™…¹Ñ¡”A½Ù•È™½È…¸…¥‘•¹Ñ…°‘•…Ñ ˆ¤ì(€€€€€€¼¼9•¥Ñ¡•ÈÁ±…¸Ì½İ¸İ½É‘¥¹œ¡…Ì‰••¸É•…°Í¼„É•Á½ÉÑ•‘•…Ñ •ÑÌ(€€€€€€¼¼Ñ¡”Í…µ”ÑÉ•…Ñµ•¹Ğ…ÌÑ¡”İ¡…Ğµ¥˜…‰½Ù”èÑ¡”½Ù•È¥Ì¹…µ•°‰ÕĞ¹¼(€€€€€€¼¼™¥ÕÉ”¥ÌÍ¡½İ¸Õ¹Ñ¥°Ñ¡”Í¡•‘Õ±”Ì…ÍÍÕµ•ÉÕ±”¥Ì½¹™¥Éµ•‰ä(€€€€€€¼¼Ñ¡”…ÑÕ…°±…ÕÍ”¸(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥™”ü¹…µ½Õ¹ÑQ•áĞ±¹Õ±°¤í…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥™”ü¹ÍÑ…ÑÕÌ°‰¹••‘Í}‘½Õµ•¹Ğˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á„ü¹…µ½Õ¹ÑQ•áĞ±¹Õ±°¤í…ÍÍ•ÉĞ¹•ÅÕ…°¡Á„ü¹ÍÑ…ÑÕÌ°‰¹••‘Í}‘½Õµ•¹Ğˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡±¥™”ü¹½¹‘¥Ñ¥½¹Ì¹Í½µ”¡Œôø½ÍÍÕµ•ÌÑ¡”ÍÑ…¹‘…ÉÉÕ±”¼¹Ñ•ÍĞ¡Œ¤¤°‰¸…ÍÍÕµ•±•‘•ÈÉ½ÜÍ…åÌÍ¼è€ˆ­±¥™”ü¹½¹‘¥Ñ¥½¹Ì¹©½¥¸ ˆ€¼€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡¹•…Ñ¥Ù•½Ù•É…•±…¥´¡É•Á½ÉÑ•¹ÍÕµµ…Éä¤±™…±Í”°‰İ¥Ñ¡¡•±™¥ÕÉ”µÕÍĞ¹•Ù•ÈÉ•……Ìp‰¹½Ğ½Ù•É•‘pˆˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡É•Á½ÉÑ•¹±…¥µM•ÍÍ¥½¹%°‹Š™…¹Ñ¡”±…¥´¥Ì½¸É•½Éİ¥Ñ „Á…¬Ñ¼ÁÉ¥¹Ğˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰Q¡”½Ù•É…”1•‘•Èè½¹™¥Éµ¥¹œ„É½Üµ…­•ÌÑ¡”…¹Íİ•È•á…Ğ°É•©•Ñ¥¹œÉ•µ½Ù•Ì¥Ğ°…¹„É½Üå½Ô…‘½Õ¹ÑÌˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}½Ù•É…•Ì¡¥±…½Õ¹Ñ}¥±Á½±¥å}¥±™…µ¥±å}µ•µ‰•É}¥±…Ñ•½Éä±…µ½Õ¹Ğ±ÕÉÉ•¹ä±ÁÉ½‘ÕÑ}¹…µ”±Í½ÕÉ•}Á…”±•Ù¥‘•¹•}Ñ•áĞ±•Ù¥‘•¹•}Ù•É¥™¥•±½¹™¥Éµ•¤Y1UL Ä°È°Ì°Ğ°É½ÕÀQ•É´1¥™”œ°ÄÀÀÀÀÀÀ°Mœ°5%9É½ÕÀ%¹ÍÕÉ…¹”œ°È°É½ÕÀQ•É´1¥™”LÄ°ÀÀÀ°ÀÀÀœ±ÑÉÕ”±ÑÉÕ”¤ˆ°(€€€€€€€mÕÕ¥ ÜÀÀÔÈÀ¤±…½Õ¹Ğ±™¥áÑÕÉ”¹Á½±¥å%±Á•½Á±•lÁt¹¥‘t¤ì(€€€€€€¼¼Q¡”Á…”±¥ÍÑÌİ¡…Ğİ…ÌÉ•…°µ…É­•…ÌÁÉ½Á½Í•¸(€€€€€½¹ÍĞ±¥ÍÑ•õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èı™…µ¥±å5•µ‰•É%ôˆ­Á•½Á±•lÁt¹¥¤¤¤¹©Í½¸ ¤ì(€€€€€ÑåÁ”1I½Üõí¥éÍÑÉ¥¹œí•Ù•¹ÑQåÁ”éÍÑÉ¥¹œíÍÑ…ÑÕÌéÍÑÉ¥¹œíÁ…åÌéÍÑÉ¥¹œíÁ±…¹9…µ”éÍÑÉ¥¹œí½É¥¥¸éÍÑÉ¥¹ôì(€€€€€½¹ÍĞ±¥™”ô¡±¥ÍÑ•¹É½İÌ…Ì1I½İmt¤¹™¥¹¡ÈôùÈ¹•Ù•¹ÑQåÁ”ôôô‰‘•…Ñ ˆ˜˜½É½ÕÀQ•É´1¥™”¼¹Ñ•ÍĞ¡È¹Á±…¹9…µ”¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡±¥™”°‰Q¡”•ÉÑ¥™¥…Ñ”Ì±¥™”½Ù•È¥Ì„±•‘•ÈÉ½Üè€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡±¥ÍÑ•¹É½İÌ¹µ…À ¡Èé1I½Ü¤ôùÈ¹Á±…¹9…µ”¬ˆ¼ˆ­È¹•Ù•¹ÑQåÁ”¤¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥™”„¹ÍÑ…ÑÕÌ°‰ÁÉ½Á½Í•ˆ¤í…ÍÍ•ÉĞ¹µ…Ñ ¡±¥™”„¹Á…åÌ°½MpÄ°ÀÀÀ°ÀÀÀ±ÕµÀÍÕ´¼¤ì(€€€€€½¹ÍĞÑÁô¡±¥ÍÑ•¹É½İÌ…Ì1I½İmt¤¹™¥¹¡ÈôùÈ¹•Ù•¹ÑQåÁ”ôôô‰ÑÁˆ˜˜½É½ÕÀQ•É´1¥™”¼¹Ñ•ÍĞ¡È¹Á±…¹9…µ”¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡ÑÁ°‹Š™İ¥Ñ Ñ¡”ÍÑ…¹‘…É½µÁ…¹¥½¸É½İÌ™½ÈÑ¡…Ğ­¥¹½˜Á±…¸ˆ¤ì(€€€€€€¼¼	•™½É”½¹™¥Éµ…Ñ¥½¸Ñ¡”…¹Íİ•È¥Ì…¸•ÍÑ¥µ…Ñ”ì…™Ñ•È°¥Ğ¥Ì½¹™¥Éµ•¸(€€€€€½¹ÍĞ‰•™½É”ô¡…İ…¥ĞÍ•¹ ‰•Íµ½¹İ…ÌµÕÉ‘•É•¥¸Q¡…¥±…¹ˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€½¹ÍĞ‰•™½É•%Ñ•´õ‰•™½É”¹±…¥µ%Ñ•µÌ¹™¥¹¡¤ôø½É½ÕÀQ•É´1¥™”¼¹Ñ•ÍĞ¡¤¹Ñ¥Ñ±”¤¤ì(€€€€€€¼¼ÁÉ½Á½Í•°Õ¹½¹™¥Éµ•É½Ü½¹±ä…ÍÍÕµ•ÌÑ¡”ÍÑ…¹‘…ÉÉÕ±”°Í¼Ñ¡”(€€€€€€¼¼…Ñ”İ¥Ñ¡¡½±‘ÌÑ¡”™¥ÕÉ”€´´Ñ¡”Í…µ”ÑÉ•…Ñµ•¹ĞÑ¡”Í¡•‘Õ±”µ½¹±ä(€€€€€€¼¼‘•…Ñ ½Ù•È•ÑÌ…‰½Ù”€´´Õ¹Ñ¥°Ñ¡”Á•ÉÍ½¸½¹™¥ÉµÌ¥Ğ‰•±½Ü¸(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰•™½É•%Ñ•´ü¹…µ½Õ¹ÑQ•áĞ±¹Õ±°¤í…ÍÍ•ÉĞ¹•ÅÕ…°¡‰•™½É•%Ñ•´ü¹ÍÑ…ÑÕÌ°‰¹••‘Í}‘½Õµ•¹Ğˆ¤ì(€€€€€½¹ÍĞ½¹™¥Éµ•õ…İ…¥ĞÁ…Ñ¡1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èˆ±íµ•Ñ¡½è‰AQ ˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í¥é±¥™”„¹¥±ÍÑ…ÑÕÌè‰½¹™¥Éµ•‰ô¥ô¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡½¹™¥Éµ•¹ÍÑ…ÑÕÌ°ÈÀÀ¤ì(€€€€€€¼¼Q¡”Á•ÉÍ½¸Í…åÌÑ¡”Á±…¸¡…Ì¹¼QA½Ù•ÈìÑ¡”É½Ü¥Ì½¹”™É½´…¹Íİ•ÉÌ¸(€€€€€…İ…¥ĞÁ…Ñ¡1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èˆ±íµ•Ñ¡½è‰AQ ˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í¥éÑÁ„¹¥±ÍÑ…ÑÕÌè‰É•©•Ñ•‰ô¥ô¤¤ì(€€€€€€¼¼¹AL°İ¡¥ ¹¼‘½Õµ•¹ĞÍÑ…Ñ•Ì°¥Ì•¹Ñ•É•‰ä¡…¹¸(€€€€€½¹ÍĞ…‘‘•õ…İ…¥Ğ€¡…İ…¥ĞÁ½ÍÑ1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èˆ±íµ•Ñ¡½è‰A=MPˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô°(€€€€€€€‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í™…µ¥±å5•µ‰•É%éÁ•½Á±•lÁt¹¥±Á±…¹9…µ”è‰ALˆ±•Ù•¹ÑQåÁ”è‰‘•…Ñ ˆ±Á…åÍ-¥¹è‰±ÕµÁ}ÍÕ´ˆ±…µ½Õ¹ĞèÜÀÀÀÁô¥ô¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…‘‘•¹É½Ü¹ÍÑ…ÑÕÌ°‰½¹™¥Éµ•ˆ¤ì(€€€€€½¹ÍĞ…™Ñ•Èô¡…İ…¥ĞÍ•¹ ‰•Íµ½¹İ…ÌµÕÉ‘•É•¥¸Q¡…¥±…¹ˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€½¹ÍĞ…™Ñ•É%Ñ•´õ…™Ñ•È¹±…¥µ%Ñ•µÌ¹™¥¹¡¤ôø½É½ÕÀQ•É´1¥™”¼¹Ñ•ÍĞ¡¤¹Ñ¥Ñ±”¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…™Ñ•É%Ñ•´ü¹•ÍÑ¥µ…Ñ•	…Í¥Ì°‰½¹™¥Éµ•ˆ¤í…ÍÍ•ÉĞ¹•ÅÕ…°¡…™Ñ•É%Ñ•´ü¹ÍÑ…ÑÕÌ°‰±¥­•±å}…ÁÁ±¥…‰±”ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹±…¥µ%Ñ•µÌ¹Í½µ”¡¤ôø½AL¼¹Ñ•ÍĞ¡¤¹Ñ¥Ñ±”¤˜™¤¹…µ½Õ¹ÑQ•áĞôôô‰LÜÀ°ÀÀÀˆ¤°‰É½Ü•¹Ñ•É•‰äÑ¡”Á•ÉÍ½¸¥Ì…¹Íİ•É•™É½´è€ˆ­…™Ñ•È¹±…¥µ%Ñ•µÌ¹µ…À¡¤ôù¤¹Ñ¥Ñ±”¤¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…™Ñ•È¹Á½Ñ•¹Ñ¥…±A…å½ÕÑQ½Ñ…±Ìü¹lÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÄ°ÀÜÀ°ÀÀÀˆ¤ì(€€€€€½¹ÍĞ……¥¸õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èı™…µ¥±å5•µ‰•É%ôˆ­Á•½Á±•lÁt¹¥¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡……¥¸¹É½İÌ…Ì1I½İmt¤¹Í½µ”¡ÈôùÈ¹¥ôôõÑÁ„¹¥¤±™…±Í”°‰É•©•Ñ•É½Ü¥Ì¹½ĞÍ¡½İ¸ˆ¤ì(€€€€€€¼¼I”µÍ••‘¥¹œ…™Ñ•È„¹•ÜÕÁ±½……‘‘Ì¹½Ñ¡¥¹œÑİ¥”…¹¹•Ù•ÈÑ½Õ¡•Ì„½¹™¥Éµ•É½Ü¸(€€€€€½¹ÍĞÉ•‰Õ¥±Ğõ…İ…¥Ğ€¡…İ…¥ĞÁ½ÍÑ1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èˆ±íµ•Ñ¡½è‰A=MPˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í…Ñ¥½¸è‰É•‰Õ¥±‰ô¥ô¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•‰Õ¥±Ğ¹…‘‘•°À¤ì(€€€€€½¹ÍĞÍÑ¥±°õ…İ…¥Ğ€¡…İ…¥Ğ•Ñ1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èı™…µ¥±å5•µ‰•É%ôˆ­Á•½Á±•lÁt¹¥¤¤¤¹©Í½¸ ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡ÍÑ¥±°¹É½İÌ…Ì1I½İmt¤¹™¥¹¡ÈôùÈ¹¥ôôõ±¥™”„¹¥¤ü¹ÍÑ…ÑÕÌ°‰½¹™¥Éµ•ˆ¤ì(€€€€€€¼¼¹½Ñ¡•È…½Õ¹ĞÌÉ½İÌ…É”¹•Ù•ÈÙ¥Í¥‰±”½È•‘¥Ñ…‰±”¸(€€€€€½¹ÍĞ™½É•¥¹I½Üõ…İ…¥Ğ‘ˆ¹ÅÕ•Éäñí¥éÍÑÉ¥¹ôø ‰%9MIP%9Q<½Ù•É…•}ÉÕ±•Ì¡…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±Á±…¹}¹…µ”±•Ù•¹Ñ}ÑåÁ”±Á…åÍ}­¥¹±…µ½Õ¹Ğ±½É¥¥¸¤Y1UL Ä°È°=Ñ¡•ÈA±…¸œ°‘•…Ñ œ°±ÕµÁ}ÍÕ´œ°Ô°Á•ÉÍ½¸œ¤IQUI9%9¥ˆ±m™½É•¥¸±™½É•¥¹A•ÉÍ½¹t¤ì(€€€€€½¹ÍĞ‘•¹¥•õ…İ…¥ĞÁ…Ñ¡1•‘•È¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±•‘•Èˆ±íµ•Ñ¡½è‰AQ ˆ±¡•…‘•ÉÌéì‰½¹Ñ•¹ĞµÑåÁ”ˆè‰…ÁÁ±¥…Ñ¥½¸½©Í½¸‰ô±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡í¥é™½É•¥¹I½Ü¹É½İÍlÁt¹¥±ÍÑ…ÑÕÌè‰½¹™¥Éµ•‰ô¥ô¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‘•¹¥•¹ÍÑ…ÑÕÌ°ĞÀĞ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡ÍÑ¥±°¹É½İÌ…Ì1I½İmt¤¹Í½µ”¡ÈôùÈ¹Á±…¹9…µ”ôôô‰=Ñ¡•ÈA±…¸ˆ¤±™…±Í”¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰¸…ÍÍ•ÍÍµ•¹Ğ™É½´Ñ¡”ÍÑ½É•ÉÕ±•Ì±•…Ù•Ì„±…¥´½¸É•½É°İ¥Ñ „Á…¬Ñ¼ÁÉ¥¹Ğˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌœ°‘¥…¹½Í¥ÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°Ä°Mœ°Ü°]”Á…ä€ÄÀÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•™½È„ÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹±…¥µM•ÍÍ¥½¹%°‰Q¡”±…¥´¥Ì½¸É•½Éˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹¹•áÑMÑ•ÁÌ¹Í½µ”¡ÍÑ•Àôø½±…¥´Á…¬½¤¹Ñ•ÍĞ¡ÍÑ•À¤¤°‰Q¡”±…ÍĞÑ¡¥¹œÍ…¥¥Ìİ¡…ĞÑ¼‘¼¹•áĞè€ˆ­…¹Íİ•È¹¹•áÑMÑ•ÁÌ¹©½¥¸ ˆ€¼€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹¹•áÑMÑ•ÁÌ¹Í½µ”¡ÍÑ•Àôø½…Ñ¡•Èè¼¹Ñ•ÍĞ¡ÍÑ•À¤˜˜½µ•‘¥…°É•Á½ÉĞ½¤¹Ñ•ÍĞ¡ÍÑ•À¤¤°‹Š™…¹İ¡…ĞÑ¼…Ñ¡•È™½±±½İÌÑ¡”•Ù•¹Ğè€ˆ­…¹Íİ•È¹¹•áÑMÑ•ÁÌ¹©½¥¸ ˆ€¼€ˆ¤¤ì(€€€€€½¹ÍĞÁ…¬õ…İ…¥Ğ•Ñ±…¥µA…¬¡¹•Ü9•áÑI•ÅÕ•ÍĞ ‰¡ÑÑÀè¼½±½…±¡½ÍĞ½…Á¤½±…¥µÌ¼ˆ­…¹Íİ•È¹±…¥µM•ÍÍ¥½¹%¬ˆ½Á…¬ˆ¤±íÁ…É…µÌéAÉ½µ¥Í”¹É•Í½±Ù”¡í¥é…¹Íİ•È¹±…¥µM•ÍÍ¥½¹%…ô¥ô¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á…¬¹ÍÑ…ÑÕÌ°ÈÀÀ°‰Q¡”Á…¬…¸‰”ÁÉ¥¹Ñ•ÍÑÉ…¥¡Ğ™É½´„¡…Ğ…¹Íİ•Èˆ¤ì(€€€€€½¹ÍĞì•áÑÉ…ÑA‘™A…•Ìôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½‘½Õµ•¹ÑÌ½Á‘˜ˆ¤ì(€€€€€½¹ÍĞÁÉ¥¹Ñ•ô¡…İ…¥Ğ•áÑÉ…ÑA‘™A…•Ì¡¹•ÜU¥¹ĞáÉÉ…ä¡…İ…¥ĞÁ…¬¹…ÉÉ…å	Õ™™•È ¤¤¤¤¹µ…À¡Á…”ôùÁ…”¹Ñ•áĞ¤¹©½¥¸ ˆ€ˆ¤¹É•Á±…” ½qÌ¬½œ°ˆ€ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÁÉ¥¹Ñ•°½MpÌÔÀ°ÀÀÀ¼¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÁÉ¥¹Ñ•°½Á…”€Ü¼¤ì(€€€€€€¼¼%Ğ…ÁÁ•…ÉÌ½¸Ñ¡”±…¥µÌÁ…”™½ÈÑ¡¥ÌÁ•ÉÍ½¸¸(€€€€€½¹ÍĞ±¥ÍÑ•õ…İ…¥Ğ€¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1PÍÑ…ÑÕÌ±‘•¥Í¥½¹}Á…­•ĞI=4±…¥µ}Í•ÍÍ¥½¹Ì]!I¥ôÄˆ±m…¹Íİ•È¹±…¥µM•ÍÍ¥½¹%‘t¤¤¹É½İÍlÁt…ÌíÍÑ…ÑÕÌéÍÑÉ¥¹œí‘•¥Í¥½¹}Á…­•ĞéíÉ•…‘äé‰½½±•…¹õôì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥ÍÑ•¹ÍÑ…ÑÕÌ°‰½µÁ±•Ñ”ˆ¤í…ÍÍ•ÉĞ¹•ÅÕ…°¡±¥ÍÑ•¹‘•¥Í¥½¹}Á…­•Ğ¹É•…‘ä±ÑÉÕ”¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I•±•Ù…¹”¥ÌÉ•…°¹½Ğ­•åİ½Éµµ…Ñ¡•è‘•¹Õ”¥Ì¹½Ğ…¹•È°…¹€¹¼…µ‰Õ±…¹”œ¥Ì¡•…Éˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞÁÉ½‘ÕĞô‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌˆì(€€€€€½¹ÍĞ¥¹Í•ÉĞô¡¹…µ”éÍÑÉ¥¹œ±ÑÉ…¥ÑÌéÍÑÉ¥¹œ±É•ÅÕ¥É•ÌéÍÑÉ¥¹œ±­¥¹éÍÑÉ¥¹œ±Ù…±Õ”é¹Õµ‰•È±™…Ñ-•äéÍÑÉ¥¹ñ¹Õ±°±½™™Í•Ğé¹Õµ‰•Éñ¹Õ±°±µ…àé¹Õµ‰•Éñ¹Õ±°¤ôù‘ˆ¹ÅÕ•Éä (€€€€€€€€‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±™…Ñ}­•ä±½™™Í•Ñ}‘…åÌ±µ…á¥µÕµ}‘…åÌ±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°Ğ°ÔèéÑ•áÑmt°ØèéÑ•áÑmt°Ü°à°Mœ°ä°ÄÀ°ÄÄ°Ø°ÄÈ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%±ÁÉ½‘ÕĞ±¹…µ”±ÑÉ…¥ÑÌ¹ÍÁ±¥Ğ ˆ°ˆ¤¹™¥±Ñ•È¡	½½±•…¸¤±É•ÅÕ¥É•Ì¹ÍÁ±¥Ğ ˆ°ˆ¤¹™¥±Ñ•È¡	½½±•…¸¤±­¥¹±Ù…±Õ”±™…Ñ-•ä±½™™Í•Ğ±µ…à±¹…µ”¬ˆİ½É‘¥¹œ‰t¤ì(€€€€€€¼¼¡•…±Ñ ‰½½­±•ĞèÉ½İÌÑ¡…Ğ…±°…ÉÉä€‰¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸ˆ…¹İ½Õ±…±°µ…Ñ ‰ä­•åİ½É¸(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰…¹•È‘ÉÕœÍ•ÉÙ¥•Ìˆ°‰¥±±¹•ÍÌ±¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸±µ•‘¥…±}•áÁ•¹Í”ˆ°ˆˆ°‰™¥á•ˆ°ĞÔÀÀ±¹Õ±°±¹Õ±°±¹Õ±°¤ì(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰…äÍÕÉ•Éäˆ°‰¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸ˆ°ˆˆ°‰™¥á•ˆ°ÄÔÀÀ±¹Õ±°±¹Õ±°±¹Õ±°¤ì(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰…¥±ä!½ÍÁ¥Ñ…°…Í 	•¹•™¥Ğˆ°‰¡½ÍÁ¥Ñ…±¥Í…Ñ¥½¸ˆ°ˆˆ°‰‘…¥±äˆ°ÌÀ°‰¡½ÍÁ¥Ñ…±9¥¡ÑÌˆ°À°ÌÀ¤ì(€€€€€…İ…¥Ğ¥¹Í•ÉĞ ‰µ‰Õ±…¹”½ÍĞˆ°‰µ•‘¥…±}•áÁ•¹Í”ˆ°ˆˆ°‰•áÁ•¹Í•}…Àˆ°ÔÀÀ°‰…µ‰Õ±…¹•	¥±°ˆ±¹Õ±°±¹Õ±°¤ì(€€€€€½¹ÍĞ‰•™½É”õÉ•±•Ù…¹•…±±Ìì(€€€€€½¹ÍĞ™¥ÉÍĞô¡…İ…¥ĞÍ•¹ ‰•Íµ½¹…Õ¡Ğ‘•¹Õ”¸]¡…Ğ…¸¡”±…¥´üˆ±Á•½Á±•lÁt¹¥¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞ½¹”õ™¥ÉÍĞ¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹½¬¡É•±•Ù…¹•…±±Ìù‰•™½É”°‰Q¡”Í¡½ÉÑ±¥ÍĞİ…ÌÁÕĞÑ¼Ñ¡”É•…‘•Èˆ¤ì(€€€€€½¹ÍĞ…¹‘¥‘…Ñ•Ìõ½¹”¹‘•Ñ…¥±Ì¹™¥¹¡ôù¹ÍÑ…ÉÑÍ]¥Ñ  ‰	•¹•™¥ÑÌÑ¡…Ğµ…äÉ•ÍÁ½¹ˆ¤¤üüˆˆì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ½…¹•Éñ…äÍÕÉ•Éä¼¹Ñ•ÍĞ¡…¹‘¥‘…Ñ•Ì¤±™…±Í”°‰I½İÌÑ¡”É•…‘•ÈÉÕ±•½ÕĞ…É”¹½Ğ•Ù•¸¹…µ•…Ì…¹‘¥‘…Ñ•Ìè€ˆ­…¹‘¥‘…Ñ•Ì¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡…¹‘¥‘…Ñ•Ì°½…¥±ä!½ÍÁ¥Ñ…°…Í ¼¤ì(€€€€€½¹ÍĞ•á±Õ‘•õ½¹”¹‘•Ñ…¥±Ì¹™¥¹¡ôù¹ÍÑ…ÉÑÍ]¥Ñ  ‰9½Ğ…ÁÁ±¥…‰±”¡•É”ˆ¤¤üüˆˆì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•á±Õ‘•°½…¹•È‘ÉÕœÍ•ÉÙ¥•Ì¼¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•á±Õ‘•°½¹½Ğ„ÑÉ•…Ñµ•¹Ğ™½È‘•¹Õ”¼°‹Š™…¹Ñ¡”É•…‘•ÈÌÉ•…Í½¸¥ÌÍ¡½İ¸è€ˆ­•á±Õ‘•¤ì(€€€€€€¼¼…ÑÌ¥Ù•¸¥¸Á…ÍÍ¥¹œ…É”¡•…Éè€‰¹¼…µ‰Õ±…¹”ˆ•¹‘ÌÑ¡”…µ‰Õ±…¹”ÅÕ•ÍÑ¥½¸™½È½½¸(€€€€€½¹ÍĞÍ•½¹ô¡…İ…¥ĞÍ•¹ ‰e•Ìˆ±Á•½Á±•lÁt¹¥±™¥ÉÍĞ¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹%±™¥ÉÍĞ¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹I•Ù¥Í¥½¸¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞÑ¡¥Éô¡…İ…¥ĞÍ•¹ ˆÌ¹¥¡ÑÌ°¹¼…µ‰Õ±…¹”°İ”Ñ½½¬„Ñ…á¤ˆ±Á•½Á±•lÁt¹¥±Í•½¹¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹%±Í•½¹¹…¹Íİ•È¹½¹Ù•ÉÍ…Ñ¥½¹I•Ù¥Í¥½¸¤¤¹‘…Ñ„ì(€€€€€½¹ÍĞÑ¡É•”õÑ¡¥É¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹ÅÕ•ÍÑ¥½¹Ì¹Í½µ”¡Äôø½…µ‰Õ±…¹”½¤¹Ñ•ÍĞ¡Ä¹Ñ•áĞ¤¤±™…±Í”°‰9•Ù•È…Í¬…‰½ÕĞ„¡…É”™½ÈÍ½µ•Ñ¡¥¹œÑ¡…Ğ‘¥¹½Ğ¡…ÁÁ•¸è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡Ñ¡É•”¹ÅÕ•ÍÑ¥½¹Ì¤¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹ÅÕ•ÍÑ¥½¹Ì¹Í½µ”¡Äôø½µ…á¥µÕ´¹Õµ‰•È½˜‘…åÍñ¹½ĞÍÑ…Ñ•¥¸Ñ¡”É½Ü½¤¹Ñ•ÍĞ¡Ä¹Ñ•áĞ¤¤±™…±Í”°‰%¹Ñ•É¹…°¹½Ñ•Ì…É”¹•Ù•È…Í­•…ÌÅÕ•ÍÑ¥½¹Ìˆ¤ì(€€€€€½¹ÍĞÑ¥Ñ±•ÌõÑ¡É•”¹±…¥µ%Ñ•µÌ¹µ…À¡¤ôù¤¹Ñ¥Ñ±”¤¹©½¥¸ ˆğ€ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ½µ‰Õ±…¹•ñ…¹•Éñ…äÍÕÉ•Éä¼¹Ñ•ÍĞ¡Ñ¥Ñ±•Ì¤±™…±Í”±Ñ¥Ñ±•Ì¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡Ñ¥Ñ±•Ì°½…¥±ä!½ÍÁ¥Ñ…°…Í ¼¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Ñ¡É•”¹±…¥µ%Ñ•µÍlÁt¹…µ½Õ¹ÑQ•áĞ°‰LäÀ¸ÀÀˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ½Ñ½½¬„Ñ…á¤¼¹Ñ•ÍĞ¡Ñ¡É•”¹ÍÕµµ…Éä¤±™…±Í”°‰Q¡”Á•ÉÍ½¸Ì½İ¸İ½É‘Ì…É”¹•Ù•È¡…¹‘•‰…¬…ÌÑ¡”…¹Íİ•Èˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰Ù•Éäµ½‘•°…±°¥Ì½¸Ñ¡”±•‘•È°ÁÉ¥•°…¹Ñ¡”Á±…¸…¸‰”¡•­•……¥¹ÍĞ¥Ğˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞìÕÍ…•Q¡¥Í5½¹Ñ ôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½…¤½±•‘•Èˆ¤ì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤M1P€Ä±¥°I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌœ°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌœ°‘¥…¹½Í¥ÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°Ä°Mœ°Ü°]”Á…ä€ÄÀÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”I=4Á½±¥¥•Ì]!I…½Õ¹Ñ}¥ôÄ9‘½Õµ•¹Ñ}É½±”ôÁ½±¥å}İ½É‘¥¹œœˆ±m…½Õ¹Ñt¤ì(€€€€€½¹ÍĞ‰•™½É”õ…İ…¥ĞÕÍ…•Q¡¥Í5½¹Ñ ¡…½Õ¹Ğ¤ì(€€€€€…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…™Ñ•Èõ…İ…¥ĞÕÍ…•Q¡¥Í5½¹Ñ ¡…½Õ¹Ğ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹…±±Ìù‰•™½É”¹…±±Ì°‰Q¡”ÑÕÉ¸Ìµ½‘•°…±±Ìİ•É”½Õ¹Ñ•ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹‰åI½±”¹Í½µ”¡ÈôùÈ¹É½±”ôôô‰©Õ‘•µ•¹Ğˆ¤°‰%¹Ñ•ÉÁÉ•Ñ…Ñ¥½¸…¹É•±•Ù…¹”…É”©Õ‘•µ•¹Ğİ½É¬ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹‰åI½±”¹Í½µ”¡ÈôùÈ¹É½±”ôôô‰¹…ÉÉ…Ñ¥½¸ˆ¤°‰]½É‘¥¹œÑ¡”…¹Íİ•È¥Ì¹…ÉÉ…Ñ¥½¸İ½É¬ˆ¤ì(€€€€€€¼¼Ù•Éä…±°¥Ì‰¥±±…‰±”¹½Ü°Í¼„ÑÕÉ¸Ñ¡…Ğ½ÍÑÌ¹½Ñ¡¥¹œİ½Õ±µ•…¸Ñ¡”(€€€€€€¼¼±•‘•Èµ¥ÍÍ•¥Ğ€´´İ¡¥ ¥ÌÑ¡”™…¥±ÕÉ”Ñ¡¥ÌÑ•ÍĞ•á¥ÍÑÌÑ¼…Ñ ¸(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹½ÍÑUÍù‰•™½É”¹½ÍÑUÍ°‰ÑÕÉ¸Ì¡½ÍÑ•…±±Ì…É”ÁÉ¥•°¹½Ğ©ÕÍĞ½Õ¹Ñ•è€ˆ­‰•™½É”¹½ÍÑUÍ¬ˆ€´ø€ˆ­…™Ñ•È¹½ÍÑUÍ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹‰åI½±”¹•Ù•Éä¡ÈôùÈ¹½ÍÑUÍøôÀ¤°‰9¼É½±”É•Á½ÉÑÌ„¹•…Ñ¥Ù”½ÍĞˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…™Ñ•È¹Á±…¸¹ÁÉ¥•UÍ°Ğ¸ää¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…™Ñ•È¹¡…ÑQÕÉ¹ÌøôÄ°‰EÕ•ÍÑ¥½¹Ì…É”½Õ¹Ñ•……¥¹ÍĞÑ¡”Á±…¸Ì…±±½İ…¹”ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰¡½ÕÍ•¡½±Á…ÍĞ¥ÑÌÍÁ•¹±¥µ¥Ğ¥ÌÍÑ½ÁÁ•‰•™½É”Ñ¡”¹•áĞ¡½ÍÑ•…±°°¥¸Á±…¥¸İ½É‘Ìˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞì…ÍÍ•ÉÑU¹‘•ÉMÁ•¹‘…À±MÁ•¹‘…ÁI•…¡•ôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½…¤½±•‘•Èˆ¤ì(€€€€€½¹ÍĞìÉ•…‘…‰±•5½‘•±…¥±ÕÉ”ôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½…¤½±±´ˆ¤ì(€€€€€€¼¼Q¡¥ÌÑ•ÍĞÍ•ÑÌÑ¡”µ½¹Ñ ÌÍÁ•¹Ñ¼Ñ¡”•¹Ğ°Í¼¥Ğ¹••‘ÌÑ¡”µ½¹Ñ Ñ¼(€€€€€€¼¼ÍÑ…ÉĞ•µÁÑä¸Ù•Éä•…É±¥•ÈÑÕÉ¸¥¸Ñ¡¥ÌÍÕ¥Ñ”¥Ì¹½Ü„ÁÉ¥•…±°°…¹(€€€€€€¼¼İ¥Ñ¡½ÕĞÑ¡¥ÌÑ¡”€ÄĞ¸ää‰•±½Ü±…¹‘Ì½¸Ñ½À½˜Ñ¡•´…¹ÑÉ¥ÁÌÑ¡”…À(€€€€€€¼¼‰•™½É”Ñ¡”™¥ÉÍĞ…ÍÍ•ÉÑ¥½¸•ÑÌÑ¼¡•¬Ñ¡…Ğ¥Ğ‘½•Ì¹½Ğ¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4µ½‘•±}ÕÍ…”]!I…½Õ¹Ñ}¥ôÄˆ±m…½Õ¹Ñt¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<µ½‘•±}ÕÍ…”¡…½Õ¹Ñ}¥±É½±”±ÁÉ½Ù¥‘•È±µ½‘•°±¥¹ÁÕÑ}Ñ½­•¹Ì±½ÕÑÁÕÑ}Ñ½­•¹Ì±½ÍÑ}ÕÍ±ÁÉ¥•¤Y1UL Ä°É•…‘¥¹œœ°…¹Ñ¡É½Á¥Œœ°±…Õ‘”µÍ½¹¹•Ğ´Ôœ°ÄÀÀÀÀÀÀ°ÈÀÀÀÀÀ°ÄĞ¸ää±ÑÉÕ”¤ˆ±m…½Õ¹Ñt¤ì(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹A19}!I}MQ=A}UMôˆÄÔˆì(€€€€€ÑÉåì(€€€€€€€…İ…¥Ğ…ÍÍ•ÉÑU¹‘•ÉMÁ•¹‘…À¡…½Õ¹Ğ¤ì€¼¼€ÄĞ¸ää€ğ€ÄÔèÍÑ¥±°…±±½İ•(€€€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<µ½‘•±}ÕÍ…”¡…½Õ¹Ñ}¥±É½±”±ÁÉ½Ù¥‘•È±µ½‘•°±¥¹ÁÕÑ}Ñ½­•¹Ì±½ÕÑÁÕÑ}Ñ½­•¹Ì±½ÍÑ}ÕÍ±ÁÉ¥•¤Y1UL Ä°©Õ‘•µ•¹Ğœ°…¹Ñ¡É½Á¥Œœ°±…Õ‘”µ¡…¥­Ô´Ğ´Ôœ°ÄÀÀÀÀ°ÄÀÀÀ°À¸ÀÈ±ÑÉÕ”¤ˆ±m…½Õ¹Ñt¤ì(€€€€€€€±•ĞÍÑ½ÁÁ•éÕ¹­¹½İ¸õ¹Õ±°ì(€€€€€€€ÑÉåí…İ…¥Ğ…ÍÍ•ÉÑU¹‘•ÉMÁ•¹‘…À¡…½Õ¹Ğ¤íõ…Ñ ¡•ÉÉ½È¥íÍÑ½ÁÁ•õ•ÉÉ½Èíô(€€€€€€€…ÍÍ•ÉĞ¹½¬¡ÍÑ½ÁÁ•¥¹ÍÑ…¹•½˜MÁ•¹‘…ÁI•…¡•°‰A…ÍĞÑ¡”ÍÑ½À°¡½ÍÑ•…±±Ì…É”É•™ÕÍ•ˆ¤ì(€€€€€€€½¹ÍĞµ•ÍÍ…”õÉ•…‘…‰±•5½‘•±…¥±ÕÉ”¡ÍÑ½ÁÁ•¤ì(€€€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡µ•ÍÍ…”°½É•…¡•¥ÑÌµ½‘•°µÍÁ•¹±¥µ¥Ğ¼¤ì(€€€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡µ•ÍÍ…”°½‘½Õµ•¹ÑÌ…±É•…‘äÉ•…ÍÑ¥±°İ½É¬¼°‰Q¡”Á•ÉÍ½¸¥ÌÑ½±İ¡…ĞÍÑ¥±°İ½É­Ì°¹½Ğ©ÕÍĞİ¡…ĞÍÑ½ÁÁ•ˆ¤ì(€€€€€€€™½È¡½¹ÍĞ±•…¬½˜l‰A19}!I}MQ=@ˆ°‰µ½‘•±}ÕÍ…”ˆ°‰ì‰t¥…ÍÍ•ÉĞ¹•ÅÕ…°¡µ•ÍÍ…”¹¥¹±Õ‘•Ì¡±•…¬¤±™…±Í”¤ì(€€€€€õ™¥¹…±±åí‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹A19}!I}MQ=A}UMí…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4µ½‘•±}ÕÍ…”]!I…½Õ¹Ñ}¥ôÄ9ÁÉ½Ù¥‘•Èô…¹Ñ¡É½Á¥Œœˆ±m…½Õ¹Ñt¤íô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰5=1}AIMPõ…¹Ñ¡É½Á¥ŒÉÕ¹Ì„İ¡½±”±…¥´İ¥Ñ ½¹”­•ä…¹¹½Ñ¡¥¹œ±½…°ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌœ°‘¥…¹½Í¥ÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°Ä°Mœ°Ü°]”Á…ä€ÄÀÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•™½È„ÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞ¥¹¹•Èõ±½‰…±Q¡¥Ì¹™•Ñ ì(€€€€€±•Ğ…¹Ñ¡É½Á¥…±±ÌôÀí½¹ÍĞµ½‘•±ÍUÍ•õ¹•ÜM•ĞñÍÑÉ¥¹œø ¤í±•Ğ…¡•õ™…±Í”ì(€€€€€±½‰…±Q¡¥Ì¹™•Ñ ô¡…Íå¹Œ¡¥¹ÁÕĞéI•ÅÕ•ÍÑ%¹™½ñUI0±¥¹¥ĞüéI•ÅÕ•ÍÑ%¹¥Ğ¤ôùì(€€€€€€€½¹ÍĞÕÉ°õMÑÉ¥¹œ¡¥¹ÁÕĞ¤ì(€€€€€€€¥˜¡ÕÉ°¹ÍÑ…ÉÑÍ]¥Ñ  ‰¡ÑÑÁÌè¼½…Á¤¹…¹Ñ¡É½Á¥Œ¹½´½ØÄ½µ•ÍÍ…•Ìˆ¤¥ì(€€€€€€€€€…¹Ñ¡É½Á¥…±±Ì¬¬ì(€€€€€€€€€½¹ÍĞ‰½‘äõ)M=8¹Á…ÉÍ”¡MÑÉ¥¹œ¡¥¹¥Ğü¹‰½‘ä¤¤ì(€€€€€€€€€µ½‘•±ÍUÍ•¹…‘¡‰½‘ä¹µ½‘•°¤ì(€€€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡¥¹¥Ğü¹¡•…‘•ÉÌ…ÌI•½ÉñÍÑÉ¥¹œ±ÍÑÉ¥¹œø¥l‰àµ…Á¤µ­•ä‰t°‰Í¬µ…¹ĞµÑ•ÍĞˆ¤ì(€€€€€€€€€…¡•õ…¡•‘ññ‰½‘ä¹ÍåÍÑ•´ü¹lÁtü¹…¡•}½¹ÑÉ½°ü¹ÑåÁ”ôôô‰•Á¡•µ•É…°ˆì(€€€€€€€€€½¹ÍĞÍåÍÑ•´õMÑÉ¥¹œ¡‰½‘ä¹ÍåÍÑ•µlÁt¹Ñ•áĞ¤±ÕÍ•Èõ)M=8¹Á…ÉÍ”¡‰½‘ä¹µ•ÍÍ…•ÍlÁt¹½¹Ñ•¹Ğ¤ì(€€€€€€€€€€¼¼I•ÕÍ”Ñ¡”Í¥µÕ±…Ñ•µ½‘•°Ì…¹Íİ•ÉÌ‰äÉ•Á±…å¥¹œÑ¡”É•ÅÕ•ÍĞÑ¡É½Õ ¥Ğ¸(€€€€€€€€€½¹ÍĞÉ•Á±…äõ…İ…¥Ğ¥¹¹•È¡IA1e}UI0±íµ•Ñ¡½è‰A=MPˆ±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡íÍåÍÑ•´±ÕÍ•Èé)M=8¹ÍÑÉ¥¹¥™ä¡ÕÍ•È¥ô¥ô¤ì(€€€€€€€€€½¹ÍĞ½¹Ñ•¹Ğô¡…İ…¥ĞÉ•Á±…ä¹©Í½¸ ¤¤¹½¹Ñ•¹Ğì(€€€€€€€€€É•ÑÕÉ¸I•ÍÁ½¹Í”¹©Í½¸¡í¥è‰™¥áÑÕÉ”µ…¹Ñ¡É½Á¥ŒµÉ•ÍÁ½¹Í”ˆ±µ½‘•°é‰½‘ä¹µ½‘•°±½¹Ñ•¹ĞémíÑåÁ”è‰Ñ•áĞˆ±Ñ•áĞé½¹Ñ•¹Ñõt±ÍÑ½Á}É•…Í½¸è‰•¹‘}ÑÕÉ¸ˆ±ÕÍ…”éí¥¹ÁÕÑ}Ñ½­•¹ÌèÄÈÀÀ±½ÕÑÁÕÑ}Ñ½­•¹ÌèäÀ±…¡•}É•…‘}¥¹ÁÕÑ}Ñ½­•¹ÌèàÀÁõô¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€ô¤…ÌÑåÁ•½˜™•Ñ ì(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹5=1}AIMPô‰…¹Ñ¡É½Á¥ŒˆíÁÉ½•ÍÌ¹•¹Ø¹9Q!I=A%}A%}-dô‰Í¬µ…¹ĞµÑ•ÍĞˆí‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹5%9%}A%}-dì(€€€€€ÑÉåì(€€€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹±…¥µ%Ñ•µÍlÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÌÔÀ°ÀÀÀˆ°‰Q¡”±…¥´¥Ì…¹Íİ•É•ˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Ñ¡É½Á¥…±±ÌøôÈ°‰%¹Ñ•ÉÁÉ•Ñ…Ñ¥½¸°É•±•Ù…¹”…¹¹…ÉÉ…Ñ¥½¸İ•¹ĞÑ¼±…Õ‘”ˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡µ½‘•±ÍUÍ•¹¡…Ì ‰±…Õ‘”µÍ½¹¹•Ğ´Ôˆ¤°‰)Õ‘•µ•¹Ğ½¸Ñ¡”µ¥Ñ¥•Èè€ˆ­l¸¸¹µ½‘•±ÍUÍ•‘t¹©½¥¸ ˆ°ˆ¤¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡…¡•°‰Q¡”ÍåÍÑ•´ÁÉ½µÁĞ¥Ìµ…É­•™½ÈÁÉ½µÁĞ…¡¥¹œˆ¤ì(€€€€€€€½¹ÍĞìÕÍ…•Q¡¥Í5½¹Ñ ôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½…¤½±•‘•Èˆ¤ì(€€€€€€€½¹ÍĞÕÍ…”õ…İ…¥ĞÕÍ…•Q¡¥Í5½¹Ñ ¡…½Õ¹Ğ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡ÕÍ…”¹½ÍÑUÍøÀ°‰!½ÍÑ•…±±Ì…É”ÁÉ¥•½¸Ñ¡”±•‘•Èˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡ÕÍ…”¹‰åI½±”¹Í½µ”¡ÈôùÈ¹É½±”ôôô‰©Õ‘•µ•¹Ğˆ˜™È¹½ÍÑUÍøÀ¤¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹9Q!I=A%}A%}-díÕÍ•!…É¹•ÍÍ5½‘•° ¤í±½‰…±Q¡¥Ì¹™•Ñ õ¥¹¹•Èì(€€€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4µ½‘•±}ÕÍ…”]!I…½Õ¹Ñ}¥ôÄ9ÁÉ½Ù¥‘•Èô…¹Ñ¡É½Á¥Œœˆ±m…½Õ¹Ñt¤ì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰5=1}AIMPõ•µ¥¹¤É½ÕÑ•ÌÑ¼½½±”°¡½½Í¥¹œÑ¡”•¹‘Á½¥¹Ğ™É½´Ñ¡”­•äˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌœ°‘¥…¹½Í¥ÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°Ä°Mœ°Ü°]”Á…ä€ÄÀÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•™½È„ÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞì•µ¥¹¥¹‘Á½¥¹Ğôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½…¤½ÁÉ½Ù¥‘•ÉÌˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•µ¥¹¥¹‘Á½¥¹Ğ ‰•µ¥¹¤´È¸Ôµ™±…Í ˆ°‰%é…Måá…µÁ±”ˆ¤°½y¡ÑÑÁÌép½p½•¹•É…Ñ¥Ù•±…¹Õ…•p¹½½±•…Á¥Íp¹½µp½ØÅ‰•Ñ…p½µ½‘•±Íp½•µ¥¹¤´Ép¸Ôµ™±…Í é•¹•É…Ñ•½¹Ñ•¹Ğ¼°‰¸$MÑÕ‘¥¼­•ä½•ÌÑ¼Ñ¡”•µ¥¹¤A$ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•µ¥¹¥¹‘Á½¥¹Ğ ‰•µ¥¹¤´È¸Ôµ™±…Í ˆ°‰D¹ˆáá…µÁ±”ˆ¤°½y¡ÑÑÁÌép½p½•¹•É…Ñ¥Ù•±…¹Õ…•p¹½½±•…Á¥Íp¹½´¼°‰-•äÁÉ•™¥à¥Ì¹½Ğ„Ñ•±°ìÑ¡”•µ¥¹¤A$¥ÌÑ¡”‘•™…Õ±Ğ™½È•Ù•Éä­•äˆ¤ì(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹5%9%}9A=%9Pô‰Ù•ÉÑ•àˆì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡•µ¥¹¥¹‘Á½¥¹Ğ ‰•µ¥¹¤´È¸Ôµ™±…Í ˆ°‰D¹ˆáá…µÁ±”ˆ¤°½y¡ÑÑÁÌép½p½…¥Á±…Ñ™½Éµp¹½½±•…Á¥Íp¹½µp½ØÅp½ÁÕ‰±¥Í¡•ÉÍp½½½±•p½µ½‘•±Íp½•µ¥¹¤´Ép¸Ôµ™±…Í é•¹•É…Ñ•½¹Ñ•¹Ğ¼°‰Y•ÉÑ•à½¹±äİ¡•¸…Í­•™½Èˆ¤ì(€€€€€‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹5%9%}9A=%9Pì(€€€€€½¹ÍĞ¥¹¹•Èõ±½‰…±Q¡¥Ì¹™•Ñ ì(€€€€€±•Ğ½½±•…±±ÌôÀí½¹ÍĞ¡½ÍÑÌõ¹•ÜM•ĞñÍÑÉ¥¹œø ¤ì(€€€€€±½‰…±Q¡¥Ì¹™•Ñ ô¡…Íå¹Œ¡¥¹ÁÕĞéI•ÅÕ•ÍÑ%¹™½ñUI0±¥¹¥ĞüéI•ÅÕ•ÍÑ%¹¥Ğ¤ôùì(€€€€€€€½¹ÍĞÕÉ°õMÑÉ¥¹œ¡¥¹ÁÕĞ¤ì(€€€€€€€¥˜ ½½½±•…Á¥Íp¹½µp½ØÅ‰•Ñ…p½µ½‘•±Ípü¼¹Ñ•ÍĞ¡ÕÉ°¤¤(€€€€€€€€€É•ÑÕÉ¸I•ÍÁ½¹Í”¹©Í½¸¡íµ½‘•±Ìémí¹…µ”è‰µ½‘•±Ì½•µ¥¹¤´Ì¸Øµ™±…Í ˆ±ÍÕÁÁ½ÉÑ•‘•¹•É…Ñ¥½¹5•Ñ¡½‘Ìél‰•¹•É…Ñ•½¹Ñ•¹Ğ‰uô±í¹…µ”è‰µ½‘•±Ì½•µ¥¹¤´Ì¸Ôµ™±…Í µ±¥Ñ”ˆ±ÍÕÁÁ½ÉÑ•‘•¹•É…Ñ¥½¹5•Ñ¡½‘Ìél‰•¹•É…Ñ•½¹Ñ•¹Ğ‰uõuô¤ì(€€€€€€€¥˜ ½½½±•…Á¥Íp¹½´¼¹Ñ•ÍĞ¡ÕÉ°¤¥ì(€€€€€€€€€½½±•…±±Ì¬¬í¡½ÍÑÌ¹…‘¡¹•ÜUI0¡ÕÉ°¤¹¡½ÍĞ¤ì(€€€€€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡ÕÉ°°½•µ¥¹¤´Íp¸ Øµ™±…Í¡ğÔµ™±…Í µ±¥Ñ”¤é•¹•É…Ñ•½¹Ñ•¹Ğ¼°‰™…µ¥±ä¹…µ”É•Í½±Ù•ÌÑ¼„µ½‘•°½½±”…ÑÕ…±±äÍ•ÉÙ•Ìè€ˆ­ÕÉ°¤ì(€€€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡¥¹¥Ğü¹¡•…‘•ÉÌ…ÌI•½ÉñÍÑÉ¥¹œ±ÍÑÉ¥¹œø¥l‰àµ½½œµ…Á¤µ­•ä‰t°‰D¹Ñ•ÍĞµ­•äˆ¤ì(€€€€€€€€€½¹ÍĞ‰½‘äõ)M=8¹Á…ÉÍ”¡MÑÉ¥¹œ¡¥¹¥Ğü¹‰½‘ä¤¤ì(€€€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡‰½‘ä¹•¹•É…Ñ¥½¹½¹™¥œ¹É•ÍÁ½¹Í•5¥µ•QåÁ”°‰…ÁÁ±¥…Ñ¥½¸½©Í½¸ˆ¤ì(€€€€€€€€€½¹ÍĞÍåÍÑ•´õMÑÉ¥¹œ¡‰½‘ä¹ÍåÍÑ•µ%¹ÍÑÉÕÑ¥½¸¹Á…ÉÑÍlÁt¹Ñ•áĞ¤±ÕÍ•Èõ)M=8¹Á…ÉÍ”¡‰½‘ä¹½¹Ñ•¹ÑÍlÁt¹Á…ÉÑÍlÁt¹Ñ•áĞ¤ì(€€€€€€€€€½¹ÍĞÉ•Á±…äõ…İ…¥Ğ¥¹¹•È¡IA1e}UI0±íµ•Ñ¡½è‰A=MPˆ±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡íÍåÍÑ•´±ÕÍ•Èé)M=8¹ÍÑÉ¥¹¥™ä¡ÕÍ•È¥ô¥ô¤ì(€€€€€€€€€½¹ÍĞ½¹Ñ•¹Ğô¡…İ…¥ĞÉ•Á±…ä¹©Í½¸ ¤¤¹½¹Ñ•¹Ğì(€€€€€€€€€É•ÑÕÉ¸I•ÍÁ½¹Í”¹©Í½¸¡íµ½‘•±Y•ÉÍ¥½¸éÕÉ°¹µ…Ñ  ½µ½‘•±Íp¼ ¸¨¤é•¹•É…Ñ•½¹Ñ•¹Ğ¼¤ü¹lÅtüü‰•µ¥¹¤´Ì¸Øµ™±…Í ˆ±É•ÍÁ½¹Í•%è‰™¥áÑÕÉ”µ•µ¥¹¤µÉ•ÍÁ½¹Í”ˆ±…¹‘¥‘…Ñ•Ìémí½¹Ñ•¹ĞéíÁ…ÉÑÌémíÑ•áĞé½¹Ñ•¹Ñõuô±™¥¹¥Í¡I•…Í½¸è‰MQ=@‰õt±ÕÍ…•5•Ñ…‘…Ñ„éíÁÉ½µÁÑQ½­•¹½Õ¹ĞèäÀÀ±…¹‘¥‘…Ñ•ÍQ½­•¹½Õ¹ĞèàÁõô¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€ô¤…ÌÑåÁ•½˜™•Ñ ì(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹5=1}AIMPô‰•µ¥¹¤ˆíÁÉ½•ÍÌ¹•¹Ø¹5%9%}A%}-dô‰D¹Ñ•ÍĞµ­•äˆì(€€€€€ÑÉåì(€€€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•È¤¹±…¥µ%Ñ•µÍlÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÌÔÀ°ÀÀÀˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡½½±•…±±ÌøôÈ¤ì(€€€€€€€…ÍÍ•ÉĞ¹‘••ÁÅÕ…°¡l¸¸¹¡½ÍÑÍt±l‰•¹•É…Ñ¥Ù•±…¹Õ…”¹½½±•…Á¥Ì¹½´‰t°‰Q¡”•µ¥¹¤A$‰ä‘•™…Õ±Ğˆ¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€ÕÍ•!…É¹•ÍÍ5½‘•° ¤í±½‰…±Q¡¥Ì¹™•Ñ õ¥¹¹•Èì(€€€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4µ½‘•±}ÕÍ…”]!I…½Õ¹Ñ}¥ôÄ9ÁÉ½Ù¥‘•Èô•µ¥¹¤œˆ±m…½Õ¹Ñt¤ì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I•…‘¥¹œ¥Ì¥Ù•¸Ñ¡”½ÕÑÁÕĞ‰Õ‘•Ğ„¡½ÍÑ•µ½‘•°…¸…ÑÕ…±±äÕÍ”ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞìÉ•…‘¥¹=ÕÑÁÕÑQ½­•¹Ìôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½¡…Ğ½Á½±¥äµ…¹…±åÍ¥Ìˆ¤ì(€€€€€½¹ÍĞÍ…Ù•‘Q½­•¹ÌõÁÉ½•ÍÌ¹•¹Ø¹I}I%9}=UQAUQ}Q=-9Lì(€€€€€‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I}I%9}=UQAUQ}Q=-9Lì(€€€€€ÑÉåì(€€€€€€€€¼¼€äÀÀİ…ÌÑ¡”±½…°ATÌ•¥±¥¹œ°…¹¥Ğ™½É•Ñ¡”É•…‘•ÈÑ¼¡½½Í”(€€€€€€€€¼¼‰•Ñİ••¸ÅÕ½Ñ¥¹œ„±…ÕÍ”…¹ÍÑÉÕÑÕÉ¥¹œ¥Ğ¸9½Ñ¡¥¹œ¥µÁ½Í•Ì¥Ğ¹½Ü¸(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•…‘¥¹=ÕÑÁÕÑQ½­•¹Ì ¤°ÈØÀÀ°‰¡½ÍÑ•µ½‘•°¥Ì¹½Ğ™½É•Ñ¼¡½½Í”‰•Ñİ••¸ÅÕ½Ñ¥¹œ„±…ÕÍ”…¹…±Í¼ÍÑÉÕÑÕÉ¥¹œ¥Ğˆ¤ì(€€€€€€€ÁÉ½•ÍÌ¹•¹Ø¹I}I%9}=UQAUQ}Q=-9LôˆÄÔÀÀˆì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•…‘¥¹=ÕÑÁÕÑQ½­•¹Ì ¤°ÄÔÀÀ°‰¸•áÁ±¥¥ĞÍ•ÑÑ¥¹œ…±İ…åÌİ¥¹Ì½Ù•ÈÑ¡”‘•™…Õ±Ğˆ¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€¥˜¡Í…Ù•‘Q½­•¹Ì¥ÁÉ½•ÍÌ¹•¹Ø¹I}I%9}=UQAUQ}Q=-9LõÍ…Ù•‘Q½­•¹Ìí•±Í”‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I}I%9}=UQAUQ}Q=-9Lì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I•ÑÉ¥•Ù…°‘•ÁÑ Á•È‘½Õµ•¹Ğ¥ÌÍ•Ğ™½È„É•…‘•ÈÑ¡…Ğ…¸Ñ…­”¥Ğˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞìÁ…ÍÍ…•	Õ‘•Ğôõ…İ…¥Ğ¥µÁ½ÉĞ ‰ ½±¥ˆ½Á½±¥¥•Ì½¥¹Ù•¹Ñ½Éäˆ¤ì(€€€€€½¹ÍĞÍ…Ù•‘5…àõÁÉ½•ÍÌ¹•¹Ø¹I}5a}AMMM}AI}=U59Pì(€€€€€‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I}5a}AMMM}AI}=U59Pì(€€€€€ÑÉåì(€€€€€€€€¼¼•¥±¥¹œ½˜€ÄØ¥Ì¡½Ü„É•…°‰•¹•™¥ĞÑ…‰±”É…¹­•©ÕÍĞ½ÕÑÍ¥‘”Ñ¡”(€€€€€€€€¼¼É•ÑÉ¥•Ù•Í•Ğ…¹¹•Ù•ÈÉ•…¡•Ñ¡”µ½‘•°…Ğ…±°¸(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á…ÍÍ…•	Õ‘•Ğ ÔÀÀ¤°ĞÀ°‰¡½ÍÑ•É•…‘•È…¸Ñ…­”Ñ¡”‘•ÁÑ Ñ¡…Ğ­••ÁÌ„É•…°‰•¹•™¥ĞÑ…‰±”¥¸Ñ¡”É•ÑÉ¥•Ù•Í•Ğˆ¤ì(€€€€€€€ÁÉ½•ÍÌ¹•¹Ø¹I}5a}AMMM}AI}=U59PôˆÄÀˆì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Á…ÍÍ…•	Õ‘•Ğ ÔÀÀ¤°ÄÀ°‰¸•áÁ±¥¥ĞÍ•ÑÑ¥¹œ…±İ…åÌİ¥¹Ì½Ù•ÈÑ¡”‘•™…Õ±Ğˆ¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€¥˜¡Í…Ù•‘5…à¥ÁÉ½•ÍÌ¹•¹Ø¹I}5a}AMMM}AI}=U59PõÍ…Ù•‘5…àí•±Í”‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I}5a}AMMM}AI}=U59Pì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰©Õ‘•µ•¹Ğ…±°É…Ñ”µ±¥µ¥Ñ•½¸½½±”ÌÁÉ¥¥•ÈÑ¥•È™…±±Ì‰…¬Ñ¼Ñ¡”¡•…Á•ÈÑ¥•È¥¹ÍÑ•…½˜™…¥±¥¹œÑ¡”¡…Ğˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü¤Y1UL Ä°È°Ì°5…©½ÈÉ¥Ñ¥…°%±±¹•ÍÌœ±IIel¥±±¹•ÍÌœ°‘¥…¹½Í¥ÌtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°Ä°Mœ°Ü°]”Á…ä€ÄÀÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•™½È„ÅÕ…±¥™å¥¹œÉ¥Ñ¥…°¥±±¹•ÍÌ¸œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±™…±Í”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%°‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌ‰t¤ì(€€€€€½¹ÍĞ¥¹¹•Èõ±½‰…±Q¡¥Ì¹™•Ñ ì(€€€€€±•Ğ™±…Í¡…±±ÌôÀ±™±…Í¡1¥Ñ•…±±ÌôÀì(€€€€€±½‰…±Q¡¥Ì¹™•Ñ ô¡…Íå¹Œ¡¥¹ÁÕĞéI•ÅÕ•ÍÑ%¹™½ñUI0±¥¹¥ĞüéI•ÅÕ•ÍÑ%¹¥Ğ¤ôùì(€€€€€€€½¹ÍĞÕÉ°õMÑÉ¥¹œ¡¥¹ÁÕĞ¤ì(€€€€€€€¥˜ ½½½±•…Á¥Íp¹½µp½ØÅ‰•Ñ…p½µ½‘•±Ípü¼¹Ñ•ÍĞ¡ÕÉ°¤¤(€€€€€€€€€É•ÑÕÉ¸I•ÍÁ½¹Í”¹©Í½¸¡íµ½‘•±Ìémí¹…µ”è‰µ½‘•±Ì½•µ¥¹¤´Ì¸Øµ™±…Í ˆ±ÍÕÁÁ½ÉÑ•‘•¹•É…Ñ¥½¹5•Ñ¡½‘Ìél‰•¹•É…Ñ•½¹Ñ•¹Ğ‰uô±í¹…µ”è‰µ½‘•±Ì½•µ¥¹¤´Ì¸Ôµ™±…Í µ±¥Ñ”ˆ±ÍÕÁÁ½ÉÑ•‘•¹•É…Ñ¥½¹5•Ñ¡½‘Ìél‰•¹•É…Ñ•½¹Ñ•¹Ğ‰uõuô¤ì(€€€€€€€€¼¼Q¡”ÁÉ¥¥•È©Õ‘•µ•¹ĞÑ¥•È¥Ì½ÕĞ½˜ÅÕ½Ñ„™½ÈÑ¡¥Ìİ¡½±”Ñ•ÍĞ€´´(€€€€€€€€¼¼•Ù•Éä…±°Ñ¼¥Ğ™…¥±Ì°Ñ¡”İ…ä„É•…°½½±”É…Ñ”±¥µ¥Ğİ½Õ±¸(€€€€€€€¥˜ ½•µ¥¹¤´Íp¸Øµ™±…Í é•¹•É…Ñ•½¹Ñ•¹Ğ¼¹Ñ•ÍĞ¡ÕÉ°¤¥í™±…Í¡…±±Ì¬¬íÉ•ÑÕÉ¸¹•ÜI•ÍÁ½¹Í” ‰É…Ñ”±¥µ¥Ñ•ˆ±íÍÑ…ÑÕÌèĞÈä±¡•…‘•ÉÌéì‰É•ÑÉäµ…™Ñ•ÈˆèˆÀ‰õô¤íô(€€€€€€€¥˜ ½•µ¥¹¤´Íp¸Ôµ™±…Í µ±¥Ñ”é•¹•É…Ñ•½¹Ñ•¹Ğ¼¹Ñ•ÍĞ¡ÕÉ°¤¥ì(€€€€€€€€€™±…Í¡1¥Ñ•…±±Ì¬¬ì(€€€€€€€€€½¹ÍĞ‰½‘äõ)M=8¹Á…ÉÍ”¡MÑÉ¥¹œ¡¥¹¥Ğü¹‰½‘ä¤¤ì(€€€€€€€€€½¹ÍĞÍåÍÑ•´õMÑÉ¥¹œ¡‰½‘ä¹ÍåÍÑ•µ%¹ÍÑÉÕÑ¥½¸¹Á…ÉÑÍlÁt¹Ñ•áĞ¤±ÕÍ•Èõ)M=8¹Á…ÉÍ”¡‰½‘ä¹½¹Ñ•¹ÑÍlÁt¹Á…ÉÑÍlÁt¹Ñ•áĞ¤ì(€€€€€€€€€½¹ÍĞÉ•Á±…äõ…İ…¥Ğ¥¹¹•È¡IA1e}UI0±íµ•Ñ¡½è‰A=MPˆ±‰½‘äé)M=8¹ÍÑÉ¥¹¥™ä¡íÍåÍÑ•´±ÕÍ•Èé)M=8¹ÍÑÉ¥¹¥™ä¡ÕÍ•È¥ô¥ô¤ì(€€€€€€€€€½¹ÍĞ½¹Ñ•¹Ğô¡…İ…¥ĞÉ•Á±…ä¹©Í½¸ ¤¤¹½¹Ñ•¹Ğì(€€€€€€€€€É•ÑÕÉ¸I•ÍÁ½¹Í”¹©Í½¸¡íµ½‘•±Y•ÉÍ¥½¸éÕÉ°¹µ…Ñ  ½µ½‘•±Íp¼ ¸¨¤é•¹•É…Ñ•½¹Ñ•¹Ğ¼¤ü¹lÅtüü‰•µ¥¹¤´Ì¸Øµ™±…Í ˆ±É•ÍÁ½¹Í•%è‰™¥áÑÕÉ”µ•µ¥¹¤µÉ•ÍÁ½¹Í”ˆ±…¹‘¥‘…Ñ•Ìémí½¹Ñ•¹ĞéíÁ…ÉÑÌémíÑ•áĞé½¹Ñ•¹Ñõuô±™¥¹¥Í¡I•…Í½¸è‰MQ=@‰õt±ÕÍ…•5•Ñ…‘…Ñ„éíÁÉ½µÁÑQ½­•¹½Õ¹ĞèäÀÀ±…¹‘¥‘…Ñ•ÍQ½­•¹½Õ¹ĞèàÁõô¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€ô¤…ÌÑåÁ•½˜™•Ñ ì(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹5=1}AIMPô‰•µ¥¹¤ˆíÁÉ½•ÍÌ¹•¹Ø¹5%9%}A%}-dô‰D¹Ñ•ÍĞµ­•äˆì(€€€€€ÑÉåì(€€€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ¡‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•È¤¹±…¥µ%Ñ•µÍlÁtü¹…µ½Õ¹ÑQ•áĞ°‰LÌÔÀ°ÀÀÀˆ°‰Q¡”¡…ĞÍÑ¥±°ÁÉ½‘Õ•Ñ¡”É¥¡Ğ…¹Íİ•È‘•ÍÁ¥Ñ”Ñ¡”ÁÉ¥¥•ÈÑ¥•È‰•¥¹œ‘½İ¸ˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡™±…Í¡…±±ÌøôÄ°‰Q¡”ÁÉ¥µ…Éä©Õ‘•µ•¹ĞÑ¥•Èİ…ÌÑÉ¥•™¥ÉÍĞˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡™±…Í¡1¥Ñ•…±±ÌøôÄ°ˆ¸¸¹…¹•Ù•Éä©Õ‘•µ•¹Ğ…±°™•±°‰…¬Ñ¼Ñ¡”Ñ¥•ÈÑ¡…Ğ¥Ì¹½ĞÉ…Ñ”µ±¥µ¥Ñ•ˆ¤ì(€€€€€€€½¹ÍĞÕÍ…”ô¡…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰M1Pµ½‘•°±½¬I=4µ½‘•±}ÕÍ…”]!I…½Õ¹Ñ}¥ôÄ9É½±”ô©Õ‘•µ•¹Ğœ=IH	d…Ğˆ±m…½Õ¹Ñt¤¤¹É½İÌ…Ìíµ½‘•°éÍÑÉ¥¹œí½¬é‰½½±•…¹õmtì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡ÕÍ…”¹Í½µ”¡ÈôùÈ¹µ½‘•°ôôô‰™±…Í ˆ˜™È¹½¬ôôõ™…±Í”¤°‰Q¡”™…¥±•…ÑÑ•µÁĞ½¸Ñ¡”ÁÉ¥µ…Éäµ½‘•°¥Ì½¸Ñ¡”±•‘•È°¹½ĞÍ¥±•¹Ñ±ä‘É½ÁÁ•è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡ÕÍ…”¤¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡ÕÍ…”¹Í½µ”¡ÈôùÈ¹µ½‘•°ôôô‰™±…Í µ±¥Ñ”ˆ˜™È¹½¬ôôõÑÉÕ”¤°ˆ¸¸¹…¹Ñ¡”ÍÕ•ÍÍ™Õ°™…±±‰…¬…ÑÑ•µÁĞ¥Ì‰¥±±•Õ¹‘•ÈÑ¡”µ½‘•°Ñ¡…Ğ…ÑÕ…±±äÉ…¸è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡ÕÍ…”¤¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€ÕÍ•!…É¹•ÍÍ5½‘•° ¤í±½‰…±Q¡¥Ì¹™•Ñ õ¥¹¹•Èì(€€€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰1QI=4µ½‘•±}ÕÍ…”]!I…½Õ¹Ñ}¥ôÄ9ÁÉ½Ù¥‘•Èô•µ¥¹¤œˆ±m…½Õ¹Ñt¤ì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰M•Ù•É…°É•…‘¥¹œİ¥¹‘½İÌÉ•ÍÑ…Ñ¥¹œÑ¡”Í…µ”p¹¼½Ù•É…•pœ½¹±ÕÍ¥½¸½±±…ÁÍ”¥¹Ñ¼½¹”‘•Ñ…¥°°¹½ĞÍ•Ù•É…°¹•…Èµ‘ÕÁ±¥…Ñ•Ìˆ±…Íå¹Œ ¤ôùì(€€€€€…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” ĞÀ¤ì(€€€€€½¹ÍĞ¥¹¹•Èõ±½‰…±Q¡¥Ì¹™•Ñ ì(€€€€€±•ĞÉ•…‘¥¹]¥¹‘½İ…±±ÌôÀì(€€€€€±½‰…±Q¡¥Ì¹™•Ñ ô¡…Íå¹Œ¡¥¹ÁÕĞéI•ÅÕ•ÍÑ%¹™½ñUI0±¥¹¥ĞüéI•ÅÕ•ÍÑ%¹¥Ğ¤ôùì(€€€€€€€½¹ÍĞÕÉ°õMÑÉ¥¹œ¡¥¹ÁÕĞ¤ì(€€€€€€€¥˜ „½½½±•…Á¥Íp¹½´¼¹Ñ•ÍĞ¡ÕÉ°¥ñğ„½•¹•É…Ñ•½¹Ñ•¹Ğ¼¹Ñ•ÍĞ¡ÕÉ°¤¥É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€€€½¹ÍĞ‰½‘äõ)M=8¹Á…ÉÍ”¡MÑÉ¥¹œ¡¥¹¥Ğü¹‰½‘ä¤¤±ÍåÍÑ•´õMÑÉ¥¹œ¡‰½‘ä¹ÍåÍÑ•µ%¹ÍÑÉÕÑ¥½¸¹Á…ÉÑÍlÁt¹Ñ•áĞ¤ì(€€€€€€€¥˜ …ÍåÍÑ•´¹ÍÑ…ÉÑÍ]¥Ñ  ‰I•…¥¹ÍÕÉ…¹”ˆ¤¥É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€€€É•…‘¥¹]¥¹‘½İ…±±Ì¬¬ì(€€€€€€€½¹ÍĞÕÍ•Èõ)M=8¹Á…ÉÍ”¡‰½‘ä¹½¹Ñ•¹ÑÍlÁt¹Á…ÉÑÍlÁt¹Ñ•áĞ¤±Í½ÕÉ”õÕÍ•È¹Í½ÕÉ•ÍlÁt±ÅÕ½Ñ”õMÑÉ¥¹œ¡Í½ÕÉ”¹Ñ•áĞ¤¹Í±¥” À°ĞÀ¤ì(€€€€€€€€¼¼%¹‘•Á•¹‘•¹ĞÉ•…‘¥¹œİ¥¹‘½İÌ½Ù•ÈÑ¡”Í…µ”Õ¹‘•ÉÍ¡½ĞÍ•Ñ¥½¸°İ½É‘•(€€€€€€€€¼¼‘¥™™•É•¹Ñ±äÑ¡”İ…ä„É•…°µ½‘•°Ù…É¥•Ì¥ÑÌÁ¡É…Í¥¹œİ¥¹‘½ÜÑ¼İ¥¹‘½Ü¸(€€€€€€€½¹ÍĞÉ•ÍÑ…Ñ•µ•¹ÑÌõl‰Q¡¥Ì½¹ÑÉ…Ğ‘½•Ì¹½Ğ½¹Ñ…¥¸„É¥Ñ¥…°¥±±¹•ÍÌ‰•¹•™¥Ğ™½ÈÑ¡¥Ì‘¥…¹½Í¥Ì¸ˆ°(€€€€€€€€€€‰Q¡”Á½±¥äİ½É‘¥¹œ‘½•Ì¹½Ğ¥¹±Õ‘”…¹äÉ•±•Ù…¹Ğ‰•¹•™¥Ğ¡•É”¸ˆ°‰Q¡•Í”Á…•Ì‘¼¹½ĞÁÉ½Ù¥‘”½Ù•É…”™½ÈÑ¡”É•Á½ÉÑ••Ù•¹Ğ¸‰tì(€€€€€€€½¹ÍĞÑ•áĞõÉ•…‘¥¹]¥¹‘½İ…±±ÌğôÌıÉ•ÍÑ…Ñ•µ•¹ÑÍmÉ•…‘¥¹]¥¹‘½İ…±±Ì´Åtè(€€€€€€€€€€‰Q¡¥ÌÁ…ÉÑ¥Õ±…ÈÁ…ÍÍ…”É…¥Í•Ì…¸Õ¹É•±…Ñ•…‘µ¥¹¥ÍÑÉ…Ñ¥Ù”Á½¥¹Ğ°¹½Ğ„½Ù•É…”½¹±ÕÍ¥½¸¸ˆì(€€€€€€€É•ÑÕÉ¸½½±•I•Á±ä¡)M=8¹ÍÑÉ¥¹¥™ä¡í‰•¹•™¥ÑÌémt±½‰Í•ÉÙ…Ñ¥½¹ÌémíÑ•áĞ±•Ù¥‘•¹”émíÍ½ÕÉ•%éÍ½ÕÉ”¹¥±ÅÕ½Ñ•õuõt±¹•áÑMÑ•ÁÌémuô¤¤ì(€€€€€ô¤…ÌÑåÁ•½˜™•Ñ ì(€€€€€€¼¼Mµ…±°Í•Ñ¥½¹ÌÍ¼Ñ¡•Í”€ĞÀÁ…•ÌÍÁ…¸Í•Ù•É…°É•…‘¥¹œİ¥¹‘½İÌ°İ¡¥ ¥Ì(€€€€€€¼¼Ñ¡”½¹‘¥Ñ¥½¸Ñ¡”Ñ•ÍĞ¥Ì…‰½ÕĞì…ĞÑ¡”‘•™…Õ±ĞÍ¥é”Ñ¡•ä™¥Ğ¥¸Ñİ¼¸(€€€€€ÁÉ½•ÍÌ¹•¹Ø¹I}Y%9}]%9=]}!IQILôˆÌÌÀÀˆì(€€€€€ÑÉåì(€€€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰$İ…Ì‘¥…¹½Í•İ¥Ñ ÍÑ…”€È‰É•…ÍĞ…¹•È¸]¡…Ğ…¸$±…¥´üˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡É•…‘¥¹]¥¹‘½İ…±±ÌøôĞ°‰Q¡”™¥áÑÕÉ•pÌ€ĞÀİ½É‘¥¹œÁ…•ÌµÕÍĞÍÁ…¸µ½É”Ñ¡…¸½¹”É•…‘¥¹œİ¥¹‘½Üè€ˆ­É•…‘¥¹]¥¹‘½İ…±±Ì¤ì(€€€€€€€½¹ÍĞÉ•ÍÑ…Ñ•µ•¹Ñ1¥¹•Ìõ…¹Íİ•È¹‘•Ñ…¥±Ì¹™¥±Ñ•È¡ôø½qˆ üé‘½ñ‘½•Ì¤¹½Ğ€ üé½¹Ñ…¥¹ñ¥¹±Õ‘•ñ½Ù•ÉñÁÉ½Ù¥‘”¥qˆ½¤¹Ñ•ÍĞ¡¤¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡É•ÍÑ…Ñ•µ•¹Ñ1¥¹•Ì¹±•¹Ñ °Ä°‰Ù•Éäİ¥¹‘½İpÌÉ•ÍÑ…Ñ•µ•¹Ğ½˜Ñ¡”Í…µ”p¹¼½Ù•É…•pœ½¹±ÕÍ¥½¸½±±…ÁÍ•Ì¥¹Ñ¼„Í¥¹±”‘•Ñ…¥°±¥¹”°¹½Ğ½¹”Á•Èİ¥¹‘½Üè€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡…¹Íİ•È¹‘•Ñ…¥±Ì¤¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹‘•Ñ…¥±Ì¹Í½µ”¡ôø½Õ¹É•±…Ñ•…‘µ¥¹¥ÍÑÉ…Ñ¥Ù”Á½¥¹Ğ¼¹Ñ•ÍĞ¡¤¤°‰•¹Õ¥¹•±ä‘¥ÍÑ¥¹Ğ½‰Í•ÉÙ…Ñ¥½¸™½ÈÑ¡”Í…µ”½¹ÑÉ…Ğ¥ÌÍÑ¥±°ÁÉ•Í•ÉÙ•è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡…¹Íİ•È¹‘•Ñ…¥±Ì¤¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€‘•±•Ñ”ÁÉ½•ÍÌ¹•¹Ø¹I}Y%9}]%9=]}!IQILí±½‰…±Q¡¥Ì¹™•Ñ õ¥¹¹•Èì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰Á•É•¹Ñ…”µ½˜µMÕ´µ%¹ÍÕÉ•±…ÕÍ”Ñ¡”µ½‘•°½¹±äÅÕ½Ñ•…ÌÁÉ½Í”¥ÌÍÑ¥±°ÁÉ½µ½Ñ•¥¹Ñ¼„½µÁÕÑ…‰±”±…¥´ˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞ™É…ÑÕÉ•Q•áĞô‰½È…¥‘•¹Ñ…°™É…ÑÕÉ”½˜„±¥µˆ°½µÁ•¹Í…Ñ¥½¸¥ÌÁÉ½Ù¥‘•™½È„‰É½­•¸™½É•…É´…Ğ€ÈÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•¸ˆì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}Á…•Ì¡…½Õ¹Ñ}¥±Á½±¥å}¥±Á…•}¹Õµ‰•È±Ñ•áĞ¤Y1UL Ä°È°È°Ì¤ˆ±m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%±™É…ÑÕÉ•Q•áÑt¤ì(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}¡Õ¹­Ì¡¥±…½Õ¹Ñ}¥±™…µ¥±å}µ•µ‰•É}¥±Á½±¥å}¥±Á…•}ÍÑ…ÉĞ±Á…•}•¹±Ñ•áĞ±•µ‰•‘‘¥¹œ¤Y1UL Ä°È°Ì°Ğ°È°È°Ô°ØèéÙ•Ñ½È¤ˆ°(€€€€€€€mÕÕ¥ ÜÀÀØÀÀ¤±…½Õ¹Ğ±™¥áÑÕÉ”¹Á•ÉÍ½¸¹¥±™¥áÑÕÉ”¹É•™•É•¹•%±™É…ÑÕÉ•Q•áĞ°‰lˆ­ÉÉ…ä¹™É½´¡í±•¹Ñ èÄÀÈÑô°¡|±¨¤ôù¨ôôôÀüÄèÀ¤¹©½¥¸ ˆ°ˆ¤¬‰t‰t¤ì(€€€€€½¹ÍĞ¥¹¹•Èõ±½‰…±Q¡¥Ì¹™•Ñ ì(€€€€€±½‰…±Q¡¥Ì¹™•Ñ ô¡…Íå¹Œ¡¥¹ÁÕĞéI•ÅÕ•ÍÑ%¹™½ñUI0±¥¹¥ĞüéI•ÅÕ•ÍÑ%¹¥Ğ¤ôùì(€€€€€€€½¹ÍĞÕÉ°õMÑÉ¥¹œ¡¥¹ÁÕĞ¤ì(€€€€€€€¥˜ „½½½±•…Á¥Íp¹½´¼¹Ñ•ÍĞ¡ÕÉ°¥ñğ„½•¹•É…Ñ•½¹Ñ•¹Ğ¼¹Ñ•ÍĞ¡ÕÉ°¤¥É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€€€½¹ÍĞ‰½‘äõ)M=8¹Á…ÉÍ”¡MÑÉ¥¹œ¡¥¹¥Ğü¹‰½‘ä¤¤±ÍåÍÑ•´õMÑÉ¥¹œ¡‰½‘ä¹ÍåÍÑ•µ%¹ÍÑÉÕÑ¥½¸¹Á…ÉÑÍlÁt¹Ñ•áĞ¤ì(€€€€€€€¥˜ …ÍåÍÑ•´¹ÍÑ…ÉÑÍ]¥Ñ  ‰I•…¥¹ÍÕÉ…¹”ˆ¤¥É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€€€½¹ÍĞÕÍ•Èõ)M=8¹Á…ÉÍ”¡‰½‘ä¹½¹Ñ•¹ÑÍlÁt¹Á…ÉÑÍlÁt¹Ñ•áĞ¤ì(€€€€€€€½¹ÍĞ™É…ÑÕÉ•M½ÕÉ”ô¡ÕÍ•È¹Í½ÕÉ•Ì…Ìí¥éÍÑÉ¥¹œíÑ•áĞéÍÑÉ¥¹õmt¤¹™¥¹¡ÌôùÌ¹Ñ•áĞ¹¥¹±Õ‘•Ì ‰‰É½­•¸™½É•…É´ˆ¤¤ì(€€€€€€€¥˜ …™É…ÑÕÉ•M½ÕÉ”¥É•ÑÕÉ¸¥¹¹•È¡¥¹ÁÕĞ±¥¹¥Ğ¤ì(€€€€€€€€¼¼Q¡”µ½‘•°ÅÕ½Ñ•ÌÑ¡”±…ÕÍ”½ÉÉ•Ñ±ä‰ÕĞ€´´Ñ¡”İ…ä„Íµ…±°½¡•…À(€€€€€€€€¼¼µ½‘•°Í½µ•Ñ¥µ•Ì‘½•Ì€´´É•ÑÕÉ¹Ì¥Ğ½¹±ä…ÌÁÉ½Í”°¹•Ù•ÈÍÑÉÕÑÕÉ¥¹œ(€€€€€€€€¼¼¥Ğ¥¹Ñ¼Ñ¡”‰•¹•™¥ÑÌ±¥ÍĞ…±½¹Í¥‘”¸(€€€€€€€É•ÑÕÉ¸½½±•I•Á±ä¡)M=8¹ÍÑÉ¥¹¥™ä¡í‰•¹•™¥ÑÌémt°(€€€€€€€€€½‰Í•ÉÙ…Ñ¥½¹ÌémíÑ•áĞè‰½µÁ•¹Í…Ñ¥½¸¥ÌÁÉ½Ù¥‘•™½È„‰É½­•¸™½É•…É´…Ğ€ÈÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•¸ˆ°(€€€€€€€€€€€•Ù¥‘•¹”émíÍ½ÕÉ•%é™É…ÑÕÉ•M½ÕÉ”¹¥±ÅÕ½Ñ”è‰½µÁ•¹Í…Ñ¥½¸¥ÌÁÉ½Ù¥‘•™½È„‰É½­•¸™½É•…É´…Ğ€ÈÀ”½˜Ñ¡”MÕ´%¹ÍÕÉ•‰õuõt°(€€€€€€€€€¹•áÑMÑ•ÁÌémuô¤¤ì(€€€€€ô¤…ÌÑåÁ•½˜™•Ñ ì(€€€€€ÑÉåì(€€€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰!”‰É½­”¡¥Ì±•™Ğ™½É•…É´Á±…å¥¹œ‰…Í­•Ñ‰…±°¸]¡…Ğ…¸¡”±…¥´üˆ±™¥áÑÕÉ”¹Á•ÉÍ½¸¹¥¤ì(€€€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€€€½¹ÍĞ¥Ñ•´õ…¹Íİ•È¹±…¥µ%Ñ•µÌ¹™¥¹¡Œôø½‰É½­•¸™½É•…É´½¤¹Ñ•ÍĞ¡Œ¹Ñ¥Ñ±”¤¤ì(€€€€€€€…ÍÍ•ÉĞ¹½¬¡¥Ñ•´°‰Q¡”ÅÕ½Ñ•Á•É•¹Ñ…”±…ÕÍ”µÕÍĞ‰”ÁÉ½µ½Ñ•¥¹Ñ¼„±…¥´¥Ñ•´°¹½Ğ±•™Ğ…ÌÁÉ½Í”Ñ¡”¡½ÕÍ•¡½±¡…ÌÑ¼İ½É¬½ÕĞ¥ÑÍ•±˜è€ˆ­)M=8¹ÍÑÉ¥¹¥™ä¡…¹Íİ•È¹±…¥µ%Ñ•µÌ¤¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡¥Ñ•´„¹…±Õ±…Ñ•‘µ½Õ¹Ğ°ÜÀÀÀÀ°ˆÈÀ”½˜Ñ¡”Ù•É¥™¥•LÌÔÀ°ÀÀÀMÕ´%¹ÍÕÉ•ˆ¤ì(€€€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡¥Ñ•´„¹…µ½Õ¹ÑQ•áĞ°‰LÜÀ°ÀÀÀˆ¤ì(€€€€€õ™¥¹…±±åì(€€€€€€€±½‰…±Q¡¥Ì¹™•Ñ õ¥¹¹•Èì(€€€€€ô(€€€ô¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰ÁÉ¥¹Ñ•™¥ÕÉ”½ÕÑÉ…¹­Ì„¡•…‘¥¹œµ¥¹™•ÉÉ•Á•É•¹Ñ…”™½ÈÑ¡”Í…µ”‰•¹•™¥Ğ…É½ÍÌÑİ¼‘½Õµ•¹ÑÌˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ™¥áÑÕÉ”õ…İ…¥ĞÍ••‘I•Ù¥•İ¥áÑÕÉ” Ä¤ì(€€€€€½¹ÍĞÁÉ½‘ÕĞô‰I•Ù¥•Ü¥áÑÕÉ”É¥Ñ¥…°%±±¹•ÍÌˆì(€€€€€€¼¼	•¹•™¥ĞÍÕµµ…Éäè€ˆ”½˜MÕ´%¹ÍÕÉ•ˆ¡•…‘¥¹œ€´ø€ÈÀ”½˜Ñ¡”LÌÔÀ°ÀÀÀ½Ù•È€ôLÜÀ°ÀÀÀ¸]É½¹œ™½È„™É…ÑÕÉ”¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü±‰…Í¥Í}¥¹™•ÉÉ•¤Y1UL Ä°È°Ì°É´°±‰½Ü°]É¥ÍĞ½ÈI¥‰Ì€¡=Ñ¡•ÈÉ…ÑÕÉ”¤œ±IIel…¥‘•¹Ğœ°‰½‘¥±å}¥¹©ÕÉätèéÑ•áÑmt±IIel…¥‘•¹ĞtèéÑ•áÑmt°ÍÕµ}¥¹ÍÕÉ•œ°À¸È°Mœ°à°É´°±‰½Ü°]É¥ÍĞ½ÈI¥‰Ì€¡=Ñ¡•ÈÉ…ÑÕÉ”¤€ÈÀ”œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±ÑÉÕ”±ÑÉÕ”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹É•™•É•¹•%±ÁÉ½‘ÕÑt¤ì(€€€€€€¼¼AÉ½‘ÕĞÍÕµµ…Éä½˜Ñ¡”Í…µ”Á±…¸è€ˆ”½˜LÔ°ÀÀÀˆ¡•…‘¥¹œ€´øLÄ°ÈÔÀ¸(€€€€€…İ…¥Ğ‘ˆ¹ÅÕ•Éä ‰%9MIP%9Q<Á½±¥å}‰•¹•™¥ÑÌ¡…½Õ¹Ñ}¥±Á½±¥å}¥±ÁÉ½‘ÕÑ}¹…µ”±‰•¹•™¥Ñ}¹…µ”±ÑÉ…¥ÑÌ±É•ÅÕ¥É•Ì±™½ÉµÕ±…}­¥¹±™½ÉµÕ±…}Ù…±Õ”±ÕÉÉ•¹ä±Í½ÕÉ•}Á…”±ÅÕ½Ñ”±½¹‘¥Ñ¥½¹Ì±É•ÅÕ¥É•µ•¹ÑÌ±¹••‘Í}É•Ù¥•Ü±‰…Í¥Í}¥¹™•ÉÉ•¤Y1UL Ä°È°Ì°É´€°±‰½Ü°]É¥ÍĞ½ÈI¥‰Ìœ±IIel…¥‘•¹Ğœ°‰½‘¥±å}¥¹©ÕÉätèéÑ•áÑmt±IIel…¥‘•¹ĞtèéÑ•áÑmt°™¥á•œ°ÄÈÔÀ°Mœ°ÄÌ°É´€°±‰½Ü°]É¥ÍĞ½ÈI¥‰Ì€ÈÔ”œ°mtœèé©Í½¹ˆ°mtœèé©Í½¹ˆ±ÑÉÕ”±ÑÉÕ”¤ˆ°(€€€€€€€m…½Õ¹Ğ±™¥áÑÕÉ”¹Á½±¥å%±ÁÉ½‘ÕÑt¤ì(€€€€€½¹ÍĞí‘…Ñ…ôõ…İ…¥ĞÍ•¹ ‰•Íµ½¹‰É½­”¡¥Ì™½É•…É´Á±…å¥¹œ‰…Í­•Ñ‰…±°ˆ±Á•½Á±•lÁt¹¥¤ì(€€€€€½¹ÍĞ…¹Íİ•Èõ‘…Ñ„¹…¹Íİ•È…Ì¡…Ñ¹Íİ•Èì(€€€€€½¹ÍĞ…É‘Ìõ…¹Íİ•È¹±…¥µ%Ñ•µÌ¹µ…À¡¥Ñ•´ôù¥Ñ•´¹Ñ¥Ñ±”¬ˆôˆ­¥Ñ•´¹…µ½Õ¹ÑQ•áĞ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹±…¥µ%Ñ•µÌ¹±•¹Ñ °Ä°‰=¹”™É…ÑÕÉ”‰•¹•™¥Ğ°¹½ĞÑİ¼Ù•ÉÍ¥½¹Ì½˜¥Ğè€ˆ­…É‘Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€…ÍÍ•ÉĞ¹µ…Ñ ¡…¹Íİ•È¹±…¥µ%Ñ•µÍlÁt¹Ñ¥Ñ±”°½É´¸©±‰½Ü¸©]É¥ÍĞ¼°‰Q¡”ÁÉ¥¹Ñ•LÔ°ÀÀÀ±…ÕÍ”½ÕÑÉ…¹­ÌÑ¡”¡•…‘¥¹œµ¥¹™•ÉÉ•Á•É•¹Ñ…”°•Ù•¸İ¡¥±”‰½Ñ ÍÑ…äÕ¹ÁÉ¥•è€ˆ­…É‘Ì¹©½¥¸ ˆğ€ˆ¤¤ì(€€€€€€¼¼	½Ñ É…Ñ•Ìİ•É”É•…™É½´„¡•…‘¥¹œ…‰½Ù”Ñ¡•¥ÈÉ½Ü°¹½ĞÑ¡”É½Ü(€€€€€€¼¼¥ÑÍ•±˜°Í¼¹•¥Ñ¡•È¥ÌÑÉÕÍÑ•™½È„‰…É”™¥ÕÉ”Õ¹Ñ¥°„Á•ÉÍ½¸(€€€€€€¼¼½¹™¥ÉµÌ¥Ğ½¸Ñ¡”	•¹•™¥ÑÌÁ…”€´´İ¡¥ …±Í¼µ•…¹ÌÑ¡”İÉ½¹œ(€€€€€€¼¼LÜÀ°ÀÀÀÁ•É•¹Ñ…”µ½˜µİ¡½±”µÍÕ´É•…‘¥¹œ…¸¹•Ù•È±•…¬Ñ¡É½Õ ¸(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹±…¥µ%Ñ•µÍlÁt¹…µ½Õ¹ÑQ•áĞ±¹Õ±°¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹±…¥µ%Ñ•µÍlÁt¹ÍÑ…ÑÕÌ°‰¹••‘Í}‘½Õµ•¹Ğˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡…¹Íİ•È¹±…¥µ%Ñ•µÍlÁt¹•ÍÑ¥µ…Ñ•	…Í¥Ì°‰¥¹‘¥…Ñ¥Ù”ˆ°‹Š™…¹¥Ğ¥ÌÍÑ¥±°µ…É­•…ÌÉ•…™É½´„¡•…‘¥¹œˆ¤ì(€€€€€…ÍÍ•ÉĞ¹½¬¡…¹Íİ•È¹±…¥µ%Ñ•µÍlÁt¹½¹‘¥Ñ¥½¹Ì¹Í½µ”¡Œôø½¡•…‘¥¹œ…‰½Ù”Ñ¡”É½Ü¼¹Ñ•ÍĞ¡Œ¤¤°‰Q¡”½¹‘¥Ñ¥½¸¹…µ•ÌÑ¡”…ÑÕ…°…ÕÍ”è„¡•…‘¥¹œµÉ•…É…Ñ”°¹½ĞÑ¡”É½Ü¥ÑÍ•±˜ˆ¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…° ½MpÜÀ°ÀÀÀ¼¹Ñ•ÍĞ¡)M=8¹ÍÑÉ¥¹¥™ä¡…¹Íİ•È¤¤±™…±Í”°‰LÜÀ°ÀÀÀ™½È„™½É•…É´¹•Ù•È…ÁÁ•…ÉÌ…¹åİ¡•É”ˆ¤ì(€€€ô¤ì(€€€…İ…¥ĞÍ••‘A±…¹Ì äÀÀ¤ì(€€€…İ…¥ĞÑ•ÍĞ ‰I•…°­•åÍ•ĞME0…¹Á•ÈµÁ½±¥äÉ•ÑÉ¥•Ù…°ÍÑ¥±°¥¹±Õ‘”Ñ¡”€äÀÁÑ Á½±¥äˆ±…Íå¹Œ ¤ôùì(€€€€€½¹ÍĞ¥¹Ù•¹Ñ½Éäõ…İ…¥Ğ±½…‘A½±¥å%¹Ù•¹Ñ½Éä¡…½Õ¹Ğ±Á•½Á±”¤í…ÍÍ•ÉĞ¹•ÅÕ…°¡¥¹Ù•¹Ñ½Éä¹½¹ÑÉ…ÑÌ¹±•¹Ñ °äÀÀ¤ì(€€€€€½¹ÍĞÍ½ÕÉ•Ìõ…İ…¥ĞÉ•ÑÉ¥•Ù•½¹ÑÉ…ÑM½ÕÉ•Ì¡í…½Õ¹Ñ%é…½Õ¹Ğ±½¹ÑÉ…ÑÌé¥¹Ù•¹Ñ½Éä¹½¹ÑÉ…ÑÌ±ÅÕ•ÍÑ¥½¸è‰‘•…Ñ ‰•¹•™¥ÑÌˆ±Í•…É¡Q•ÉµÌél‰‘•…Ñ ‰uô¤ì(€€€€€…ÍÍ•ÉĞ¹•ÅÕ…°¡Í½ÕÉ•Ì¹Í¥é”°äÀÀ¤í…ÍÍ•ÉĞ¹½¬¡Í½ÕÉ•Ì¹•Ğ¡¥¹Ù•¹Ñ½Éä¹½¹ÑÉ…ÑÌ¹…Ğ ´Ä¤„¹¥¤ü¹±•¹Ñ ¤ì(€€€ô¤ì(€€€½¹Í½±”¹±½œ ‰•…ÉA½±¥äA½ÍÑÉ•ME0½ÁÙ•Ñ½È½A$¡•­ÌÁ…ÍÍ•€ ˆ­…Í•Ì¬ˆ¡•­ÌìÍ¥µÕ±…Ñ•=±±…µ„É•ÍÁ½¹Í•Ì¤¸ˆ¤ì(€€€½¹Í½±”¹±½œ ‰5½‘•°…±±Ì•á•É¥Í•è¥¹Ñ•ÉÁÉ•Ñ…Ñ¥½¸ôˆ­¥¹Ñ•ÉÁÉ•Ñ…Ñ¥½¹…±±Ì¬ˆ°Á½±¥äÉ•…‘¥¹œôˆ­É•…‘¥¹…±±Ì¬ˆ°•áÁ±…¹…Ñ¥½¸ôˆ­•áÁ±…¹…Ñ¥½¹…±±Ì¬ˆ¸5…á¥µÕ´ÕÍ•ÈµÁÉ½µÁĞ¡…É…Ñ•ÉÌôˆ­µ…á5½‘•±UÍ•É¡…É…Ñ•ÉÌ¬ˆ¸ˆ¤ì(€õ™¥¹…±±åì(€€€Á½½°¹ÅÕ•Éäõ½É¥¥¹…±EÕ•ÉäíÁ½½°¹½¹¹•Ğõ½É¥¥¹…±½¹¹•Ğí±½‰…±Q¡¥Ì¹™•Ñ õ½É¥¥¹…±•Ñ í±½‰…±Q¡¥Ì¹Í•ÑQ¥µ•½ÕĞõ½É¥¥¹…±Q¥µ•½ÕĞí…İ…¥Ğ‘ˆ¹±½Í” ¤ì(€ô)ô)µ…¥¸ ¤¹…Ñ ¡•ÉÉ½Èôùí½¹Í½±”¹•ÉÉ½È¡•ÉÉ½È¤íÁÉ½•ÍÌ¹•á¥Ñ½‘”ôÄíô¤ì(
