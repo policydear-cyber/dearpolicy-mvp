@@ -369,3 +369,48 @@ While telemetry is intentionally disabled:
 - **no operational alert can fire**: scan failures, stuck quarantine, dead-letter jobs, failed exports or deletions, rejected monetary calculations, reviewer-assignment expiry, model/provenance staleness and authorization failures all go unobserved;
 - label every internal test session as running without operational telemetry, and check job, quarantine and dead-letter state manually (`npm run jobs:dead-letter -- list`, and the section 5 queries) at least daily;
 - never use this setting with real users. Before any wider rollout, wire a real adapter, set `TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true` and remove `TELEMETRY_INTENTIONALLY_DISABLED`.
+
+## 13. Internal-testing operations (current state)
+
+**Current state:**
+- `TELEMETRY_INTENTIONALLY_DISABLED=true`: nothing alerts; see §12.
+- VirusTotal is configured through `MALWARE_SCANNER_PROVIDER` and `VIRUSTOTAL_API_KEY`, Production only.
+- Background jobs run only when the Vercel Cron job runner is deployed and `CRON_SECRET` is set; see `docs/production-job-topology.md`. **Until then, every upload, evidence file, export and asynchronous chat stays queued.**
+
+Label every internal test session as **"running without operational telemetry"**. Use synthetic data only.
+
+**Daily checks** (read-only; run as the `DATABASE_URL` role or in the SQL editor). None of these reads document contents.
+
+```sql
+-- Job queue health: anything queued or retrying for more than 15 minutes means the runner is not running.
+SELECT job_type, status, count(*), min(created_at) AS oldest
+  FROM background_jobs WHERE status IN ('queued','failed_retryable','processing') GROUP BY 1,2 ORDER BY oldest;
+-- Leases that have expired (a killed or crashed run).
+SELECT job_type, count(*) FROM background_jobs WHERE status='processing' AND lease_expires_at < now() GROUP BY 1;
+-- Dead letters (inspect and retry with: npm run jobs:dead-letter -- list / retry --job=<id>).
+SELECT job_type, count(*), max(updated_at) FROM background_jobs WHERE status='dead_letter' GROUP BY 1;
+-- Stuck quarantine: policies and evidence that never got a clean verdict. Nothing re-scans these automatically; reprocess from the app.
+SELECT quarantine_status, count(*), min(updated_at) FROM policies WHERE quarantine_status IN ('uploaded','quarantined','scan_pending') GROUP BY 1;
+SELECT status, scan_status, count(*) FROM claim_evidence_documents WHERE status IN ('uploaded','quarantined') GROUP BY 1,2;
+-- Failed exports and unfinished deletions.
+SELECT status, count(*) FROM household_exports WHERE status IN ('pending','running','failed') GROUP BY 1;
+SELECT resource_type, lifecycle_state, count(*) FROM deletion_requests WHERE completed_at IS NULL GROUP BY 1,2;
+-- Reviewer assignments that have expired but are still referenced by open claims.
+SELECT count(*) FROM claim_review_assignments WHERE expires_at < now() AND revoked_at IS NULL;
+```
+The column names match `sql/background-jobs.sql`, `sql/lifecycle.sql`, `sql/claim-reviewers.sql` and `sql/schema.sql` as of `main` `7335fd7a`.
+
+Also:
+- **Weekly model and provenance check:** `npm run ai:model-execution-staleness-check`. It enqueues an audit, which the runner then processes.
+- **Weekly storage check:** `npm run storage:audit-orphans` (read-only). Run `npm run storage:cleanup` only after reviewing its dry run.
+- **VirusTotal quota:** check the VirusTotal account's API usage page daily. The free tier allows about 4 requests a minute and 500 a day. When it is exhausted, scans return "unavailable" and documents stay quarantined; they are never released.
+- **Synthetic cleanup:** after each test session, delete the synthetic household from the app (Settings, then Delete household). Confirm that its storage objects are gone with `npm run storage:audit-orphans`.
+
+**Stop internal testing immediately if:**
+- any document reaches processing without a clean scan;
+- any amount appears for a benefit whose evidence, provenance, ownership, currency or reviewer gate has not passed;
+- data from one household is visible to another;
+- dead letters or stuck-quarantine counts keep growing for more than a day;
+- the job runner cannot be confirmed to run.
+
+**Rollback:** redeploy the previous production deployment from the Vercel dashboard (Deployments, then Promote). Environment variables are not rolled back. Removing `CRON_SECRET` stops all background processing and fails closed: jobs stay queued.

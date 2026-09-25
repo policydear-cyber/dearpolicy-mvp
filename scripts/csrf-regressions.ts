@@ -138,6 +138,14 @@ async function main() {
   const notExemptResponse = await middleware(notActuallyExempt);
   assert.equal(notExemptResponse.status, 403, "a similarly-named path must NOT be swept into the exemption by a prefix match");
 
+  // The Vercel Cron job runner authenticates itself with CRON_SECRET, so it
+  // is exempt from the session requirement -- for exactly that path only.
+  const jobRunner = await middleware(new NextRequest("http://localhost/api/internal/jobs/run", { method: "GET" }));
+  assert.notEqual(jobRunner.status, 401, "the cron job runner must reach its own CRON_SECRET check, not the session gate");
+  assert.notEqual(jobRunner.status, 403, "the cron job runner must not be blocked by the CSRF check");
+  const jobRunnerLookalike = await middleware(new NextRequest("http://localhost/api/internal/jobs/run-evil", { method: "GET" }));
+  assert.equal(jobRunnerLookalike.status, 401, "a similarly-named path must NOT inherit the job runner's session exemption");
+
   console.log("middleware() CSRF-wiring regressions passed.");
 }
 

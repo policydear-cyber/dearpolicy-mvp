@@ -45,6 +45,11 @@ const OPEN_PATHS = new Set([
  * exactly these paths and nothing else. */
 const INTERNAL_CALLBACK_PATHS = new Set([
   "/api/policies/scan-callback",
+  // Vercel Cron's background-job runner: a GET carrying
+  // `Authorization: Bearer <CRON_SECRET>`, verified in constant time by
+  // lib/jobs/cron-runner.ts's authorizeJobRunner(); refuses every call when
+  // CRON_SECRET is not configured.
+  "/api/internal/jobs/run",
 ]);
 
 function devAuthEnabled(env: NodeJS.ProcessEnv = process.env): boolean {

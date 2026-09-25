@@ -60,6 +60,7 @@ import { classifyRoutes } from "./route-inventory-regressions";
 import { REQUIRED_CI_SUITES } from "./ci-required-suites";
 import { evaluateInfrastructureTableProtection } from "@/lib/launch/infrastructure-tables";
 import { evaluatePolicyStateProtection } from "@/lib/launch/policy-state-protection";
+import { evaluateJobExecutionTrigger } from "@/lib/launch/job-trigger";
 import { checkRequestOrigin } from "@/lib/http/csrf";
 import { checkMalwareScannerConfigured, registeredScanAdapterNames, selectedScanAdapterName } from "@/lib/claims/evidence/scan-adapter";
 
@@ -130,6 +131,7 @@ const CHECK_TYPES: Record<CapabilityId, CapabilityCheckType> = {
   infrastructure_table_protection: "static-grep",
   policy_state_protection: "static-grep",
   operational_telemetry: "env-check",
+  production_job_execution: "static-grep",
 };
 
 const PROBES: Record<CapabilityId, string> = {
@@ -160,6 +162,7 @@ const PROBES: Record<CapabilityId, string> = {
   infrastructure_table_protection: "evaluateInfrastructureTableProtection() (lib/launch/infrastructure-tables.ts): every sql/*.sql table classified in lib/db/table-inventory.ts; sql/infrastructure-rls.sql enables RLS, drops other policies, installs one always-false policy and revokes table/sequence privileges from PUBLIC/anon/authenticated for every service/operator-only table; no migration grants or opens one to a browser role; the security:infrastructure-tables-test suite is in package.json, CI and REQUIRED_CI_SUITES",
   policy_state_protection: "evaluatePolicyStateProtection() (lib/launch/policy-state-protection.ts): every policies/policy_coverages column any sql/*.sql creates is classified in POLICY_STATE_COLUMNS; BROWSER_WRITABLE_COLUMNS holds only household-editable/lifecycle-route columns and no INSERT/DELETE; sql/household-rls.sql enables RLS on both tables, revokes browser INSERT/UPDATE/DELETE/TRUNCATE and installs the guard_household_policy_update trigger (active -> pending_deletion only); no migration re-adds either table to member_tables, grants a browser role INSERT, table-wide UPDATE or UPDATE on an unlisted column, opens a non-SELECT policy, disables RLS or drops the trigger; the security:policy-state-test suite is in package.json, CI and REQUIRED_CI_SUITES",
   operational_telemetry: "checkTelemetryProductionAdapterConfigured() (lib/launch/guards.ts) evaluated as production against TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED / TELEMETRY_INTENTIONALLY_DISABLED: ready only when a real telemetry adapter is confirmed configured; intentionally disabled, unconfigured or contradictory is never ready",
+  production_job_execution: "evaluateJobExecutionTrigger() (lib/launch/job-trigger.ts): every job type passed to enqueueJob() is registered in PRODUCTION_JOB_TYPES; vercel.json schedules /api/internal/jobs/run; that route authenticates with authorizeJobRunner() and runs PRODUCTION_JOB_TYPES through runJobBatch(); middleware exempts exactly that path from the session gate; CRON_SECRET is set",
 };
 
 const REMEDIATIONS: Record<CapabilityId, string> = {
@@ -190,6 +193,7 @@ const REMEDIATIONS: Record<CapabilityId, string> = {
   infrastructure_table_protection: "Classify every new table in lib/db/table-inventory.ts; protect every service/operator-only table in sql/infrastructure-rls.sql; remove any browser grant/permissive policy on an infrastructure table; keep npm run security:infrastructure-tables-test in CI and REQUIRED_CI_SUITES.",
   policy_state_protection: "Classify every new policies/policy_coverages column in lib/db/table-inventory.ts POLICY_STATE_COLUMNS; keep both tables out of member_tables; keep sql/household-rls.sql's REVOKE, RLS and guard_household_policy_update trigger; grant browser roles nothing beyond SELECT and the BROWSER_WRITABLE_COLUMNS lifecycle columns; move any new trusted write to the server connection; keep npm run security:policy-state-test in CI and REQUIRED_CI_SUITES.",
   operational_telemetry: "Wire a real TelemetryAdapter (lib/telemetry/adapters.ts) for the production destination, verify it, then set TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true and remove TELEMETRY_INTENTIONALLY_DISABLED.",
+  production_job_execution: "Register every enqueued job type in lib/jobs/processors.ts PRODUCTION_JOB_TYPES, keep the vercel.json cron for /api/internal/jobs/run and its middleware exemption, and set a long random CRON_SECRET (Production only) in Vercel. Per-minute cron schedules require a Vercel plan that allows them.",
 };
 
 function report(
@@ -2043,6 +2047,39 @@ function checkOperationalTelemetry() {
   report("operational_telemetry", "blocked_by_external_configuration", `Production would refuse to start: ${guard.message}`);
 }
 
+// ---------------------------------------------------------------------
+// production_job_execution -- a processor function or a CLI is not proof
+// that production runs a job. Recomputed from the real source every run.
+// ---------------------------------------------------------------------
+function checkProductionJobExecution() {
+  let result: ReturnType<typeof evaluateJobExecutionTrigger>;
+  try {
+    result = evaluateJobExecutionTrigger();
+  } catch (error) {
+    report("production_job_execution", "blocked_by_code", `Could not evaluate the production job trigger: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  if (result.codeProblems.length > 0) {
+    report("production_job_execution", "blocked_by_code", `Enqueued background work has no real production execution trigger: ${result.codeProblems.join("; ")}.`, { evidenceSummary: result.summary });
+    return;
+  }
+  if (result.configProblems.length > 0) {
+    report(
+      "production_job_execution",
+      "blocked_by_external_configuration",
+      `The Vercel Cron job runner is wired for every enqueued job type, but ${result.configProblems.join("; ")}. Whether the deployed Vercel plan permits the schedule, and whether the cron actually fires, can only be confirmed in the Vercel dashboard or runtime logs.`,
+      { evidenceSummary: result.summary },
+    );
+    return;
+  }
+  report(
+    "production_job_execution",
+    "ready",
+    `${result.summary}. Every enqueued job type has a processor, vercel.json schedules the authenticated job runner, and CRON_SECRET is set. Cron firing itself is only observable in Vercel.`,
+    { evidenceSummary: result.summary },
+  );
+}
+
 async function main() {
   const { status: devAuthStatus, detail: devAuthDetail } = guardStatus(checkDevAuthNotInProduction, true);
   const { status: devAccountStatus, detail: devAccountDetail } = guardStatus(checkDevAccountIdNotInProduction, true);
@@ -2096,6 +2133,7 @@ async function main() {
   await runs("infrastructure_table_protection", checkInfrastructureTableProtection);
   await runs("policy_state_protection", checkPolicyStateProtection);
   await runs("operational_telemetry", checkOperationalTelemetry);
+  await runs("production_job_execution", checkProductionJobExecution);
 
   await runs(["household_authorization", "route_classification"], checkRouteInventoryCapabilities);
   await runs("live_rls_verification", checkLiveRlsVerification);

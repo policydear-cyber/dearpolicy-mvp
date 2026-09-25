@@ -30,6 +30,8 @@ import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { claimAndProcessOne, runWorkerLoop } from "@/lib/jobs/worker-runtime";
+import { authorizeJobRunner, runJobBatch } from "@/lib/jobs/cron-runner";
+import { NextRequest } from "next/server";
 
 const SQL_FILES = ["sql/schema.sql", "sql/background-jobs.sql"];
 
@@ -215,6 +217,91 @@ async function main() {
       assert.equal(recovered?.status, "failed_retryable", "attempt_count is 1 < max_attempts, so recovery must return it to failed_retryable, not dead_letter");
       assert.equal(recovered?.lease_owner, null);
     });
+
+    // ---- Vercel Cron job runner (lib/jobs/cron-runner.ts) -------------------
+    await testAsync("authorizeJobRunner fails closed without a secret and rejects anything but the exact bearer token", async () => {
+      const secret = "s".repeat(40);
+      assert.deepEqual(authorizeJobRunner(`Bearer ${secret}`, {} as NodeJS.ProcessEnv), { ok: false, status: 503 }, "no CRON_SECRET -> refuse every call");
+      assert.deepEqual(authorizeJobRunner("Bearer short", { CRON_SECRET: "short" } as NodeJS.ProcessEnv), { ok: false, status: 503 }, "too-short secret -> treated as unconfigured");
+      const env = { CRON_SECRET: secret } as NodeJS.ProcessEnv;
+      assert.deepEqual(authorizeJobRunner(null, env), { ok: false, status: 401 });
+      assert.deepEqual(authorizeJobRunner(secret, env), { ok: false, status: 401 }, "missing Bearer prefix");
+      assert.deepEqual(authorizeJobRunner(`Bearer ${"t".repeat(40)}`, env), { ok: false, status: 401 }, "same length, wrong secret");
+      assert.deepEqual(authorizeJobRunner(`Bearer ${secret}x`, env), { ok: false, status: 401 }, "different length");
+      assert.deepEqual(authorizeJobRunner(`Bearer ${secret}`, env), { ok: true });
+    });
+
+    await testAsync("runJobBatch drains every job type round-robin and reports counts only", async () => {
+      const a = `cr_a_${randomUUID()}`, b = `cr_b_${randomUUID()}`;
+      await enqueueJob(pool, { jobType: a, idempotencyKey: "1" });
+      await enqueueJob(pool, { jobType: a, idempotencyKey: "2" });
+      await enqueueJob(pool, { jobType: b, idempotencyKey: "1" });
+      const summary = await runJobBatch({
+        jobTypes: [
+          { jobType: a, process: async () => {} },
+          { jobType: b, process: async () => { throw new Error("secret-bearing failure detail 4111-1111"); } },
+        ],
+      });
+      assert.equal(summary.claimed, 3);
+      assert.deepEqual(summary.byType[a], { succeeded: 2, failed: 0 });
+      assert.deepEqual(summary.byType[b], { succeeded: 0, failed: 1 });
+      assert.equal(summary.stoppedBy, "empty");
+      assert.ok(!JSON.stringify(summary).includes("4111"), "the batch summary must never carry an error message");
+      assert.equal((await jobRow(b, "1"))?.status, "failed_retryable", "a failed job goes through the normal bounded-retry path");
+    });
+
+    await testAsync("runJobBatch stops claiming at maxJobs and leaves the rest queued", async () => {
+      const t = `cr_max_${randomUUID()}`;
+      for (const k of ["1", "2", "3"]) await enqueueJob(pool, { jobType: t, idempotencyKey: k });
+      const summary = await runJobBatch({ jobTypes: [{ jobType: t, process: async () => {} }], maxJobs: 2 });
+      assert.equal(summary.claimed, 2);
+      assert.equal(summary.stoppedBy, "max_jobs");
+      const statuses = (await pool.query<{ status: string }>(`SELECT status FROM background_jobs WHERE job_type=$1 ORDER BY idempotency_key`, [t])).rows.map((r) => r.status);
+      assert.equal(statuses.filter((s) => s === "queued").length, 1, "the job beyond maxJobs must stay queued for the next invocation");
+    });
+
+    await testAsync("runJobBatch stops claiming once the claim budget has elapsed", async () => {
+      const t = `cr_budget_${randomUUID()}`;
+      await enqueueJob(pool, { jobType: t, idempotencyKey: "1" });
+      let clock = 1_000;
+      const summary = await runJobBatch({ jobTypes: [{ jobType: t, process: async () => {} }], claimBudgetMs: 50, now: () => (clock += 100) });
+      assert.equal(summary.claimed, 0);
+      assert.equal(summary.stoppedBy, "time_budget");
+      assert.equal((await jobRow(t, "1"))?.status, "queued");
+    });
+
+    await testAsync("runJobBatch recovers an expired lease left by an instance the platform killed mid-job", async () => {
+      const t = `cr_lease_${randomUUID()}`;
+      await enqueueJob(pool, { jobType: t, idempotencyKey: "1" });
+      const { claimNextJob } = await import("@/lib/jobs/queue");
+      const claimed = await claimNextJob(pool, { jobType: t, workerId: "killed-instance" });
+      await pool.query(`UPDATE background_jobs SET lease_expires_at = now() - interval '1 hour' WHERE id=$1`, [claimed!.id]);
+      const summary = await runJobBatch({ jobTypes: [], maxJobs: 0 });
+      assert.ok(summary.recoveredLeases >= 1);
+      assert.equal((await jobRow(t, "1"))?.status, "failed_retryable");
+    });
+
+    await testAsync("GET /api/internal/jobs/run: 503 without CRON_SECRET, 401 on a wrong token, a counts-only batch on the right one", async () => {
+      const { GET } = await import("@/app/api/internal/jobs/run/route");
+      const previous = process.env.CRON_SECRET;
+      try {
+        delete process.env.CRON_SECRET;
+        const unconfigured = await GET(new NextRequest("http://localhost/api/internal/jobs/run", { headers: { authorization: "Bearer anything-at-all-here" } }));
+        assert.equal(unconfigured.status, 503);
+        process.env.CRON_SECRET = "c".repeat(48);
+        const wrong = await GET(new NextRequest("http://localhost/api/internal/jobs/run", { headers: { authorization: `Bearer ${"d".repeat(48)}` } }));
+        assert.equal(wrong.status, 401);
+        const right = await GET(new NextRequest("http://localhost/api/internal/jobs/run", { headers: { authorization: `Bearer ${"c".repeat(48)}` } }));
+        assert.equal(right.status, 200);
+        const body = (await right.json()) as { ok: boolean; claimed: number; stoppedBy: string };
+        assert.equal(body.ok, true);
+        assert.equal(typeof body.claimed, "number");
+        assert.equal(right.headers.get("cache-control"), "no-store");
+      } finally {
+        if (previous === undefined) delete process.env.CRON_SECRET;
+        else process.env.CRON_SECRET = previous;
+      }
+    });
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;
@@ -227,7 +314,8 @@ main()
     console.log(
       `worker-runtime regressions passed: ${cases} cases (empty-queue no-op, claim-what-a-different-call-enqueued, ` +
         `failure classification, multi-job-type draining, bounded/aborted loop termination, and lease-expiry recovery ` +
-        `across a simulated worker crash).`,
+        `across a simulated worker crash), plus the Vercel Cron job runner: CRON_SECRET auth, round-robin bounded batches, ` +
+        `max-jobs and claim-budget stops, lease recovery and the route's counts-only responses).`,
     );
   })
   .catch((error) => {

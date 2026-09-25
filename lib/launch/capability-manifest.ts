@@ -112,7 +112,8 @@ export type CapabilityId =
   | "github_ci_status"
   | "infrastructure_table_protection"
   | "policy_state_protection"
-  | "operational_telemetry";
+  | "operational_telemetry"
+  | "production_job_execution";
 
 export type CapabilityDefinition = { id: CapabilityId; label: string };
 
@@ -145,6 +146,7 @@ export const REQUIRED_CAPABILITIES: readonly CapabilityDefinition[] = [
   { id: "infrastructure_table_protection", label: "Infrastructure-table protection" },
   { id: "policy_state_protection", label: "Policy-processing and coverage-verification state protection" },
   { id: "operational_telemetry", label: "Operational telemetry destination" },
+  { id: "production_job_execution", label: "Production execution of background jobs" },
 ];
 
 const REQUIRED_IDS = new Set<CapabilityId>(REQUIRED_CAPABILITIES.map((c) => c.id));

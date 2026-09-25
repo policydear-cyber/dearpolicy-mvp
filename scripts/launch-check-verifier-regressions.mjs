@@ -298,16 +298,40 @@ function testPolicyStateProtectionIsSensitiveToTheRealMigrations() {
   cases++;
 }
 
+function testProductionJobExecutionIsSensitiveToTheRealSource() {
+  // Baseline in CI: the trigger is wired in code, but CRON_SECRET is not set
+  // in the CI environment, so the honest status is external configuration.
+  const id = "production_job_execution";
+  const baseline = statusOf(runOnly(id), id);
+  assert.notEqual(baseline, "blocked_by_code", `expected no code gap at baseline, got ${baseline}`);
+  const sabotages = [
+    ["the vercel.json cron removed", "vercel.json", '    { "path": "/api/internal/jobs/run", "schedule": "* * * * *" }\n', "", /no cron entry for \/api\/internal\/jobs\/run/],
+    ["a job type dropped from PRODUCTION_JOB_TYPES", "lib/jobs/processors.ts", "  { jobType: CHAT_ANALYSIS_JOB_TYPE, process: processChatAnalysisJob },\n", "", /CHAT_ANALYSIS_JOB_TYPE is enqueued but has no processor/],
+    ["the middleware exemption removed", "middleware.ts", '  "/api/internal/jobs/run",\n', "", /does not exempt \/api\/internal\/jobs\/run/],
+  ];
+  for (const [label, file, find, replaceWith, reason] of sabotages) {
+    sabotageRunRestore(file, find, replaceWith, () => {
+      const item = runOnly(id).find((r) => r.id === id);
+      assert.equal(item.status, "blocked_by_code", `${label} must flip ${id} to blocked_by_code, got ${item.status}`);
+      assert.match(item.blockingReason, reason, `${label} must be named in the blocking reason, got: ${item.blockingReason}`);
+    });
+    console.log(`  [${id}] sabotage (${label}) -> blocked_by_code naming it; restored.`);
+  }
+  assert.equal(statusOf(runOnly(id), id), baseline, "status must return to baseline after every restore");
+  cases++;
+}
+
 function main() {
   testMalwareScanningConfigurationIsSensitiveToTheRealRegistry();
   testRedactionVerificationIsSensitiveToTheRealRedactionEngine();
   testModelPromptSchemaGovernanceIsSensitiveToTheRealChokepointWiring();
   testInfrastructureTableProtectionIsSensitiveToTheRealMigrations();
   testPolicyStateProtectionIsSensitiveToTheRealMigrations();
+  testProductionJobExecutionIsSensitiveToTheRealSource();
   testHardcodedVerifiersCanNoLongerExistUndetected();
 
   console.log(
-    `\nlaunch-check verifier regressions passed: ${cases} cases (real sabotage-and-restore cycles against the VERIFIER ITSELF -- infrastructure_table_protection (5 sabotages), policy_state_protection (7 sabotages), ` +
+    `\nlaunch-check verifier regressions passed: ${cases} cases (real sabotage-and-restore cycles against the VERIFIER ITSELF -- infrastructure_table_protection (5 sabotages), policy_state_protection (7 sabotages), production_job_execution (3 sabotages), ` +
       "malware_scanning_configuration, redaction_verification, and model_prompt_schema_governance each proven to flip STATUS under a real " +
       "production-file sabotage (the last also proven to name the specific sabotaged chokepoint in its blocking reason) and flip back after " +
       "an exact byte-restore -- plus a structural guard confirming none of the 6 previously-hardcoded verifiers has silently regressed back " +
