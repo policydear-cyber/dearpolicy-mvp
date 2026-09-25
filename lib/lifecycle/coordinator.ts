@@ -54,6 +54,7 @@ import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
 import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequest, type DeletionRequestRow } from "./deletion-requests";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
+import { appendPolicyDocumentAudit } from "@/lib/policies/quarantine/audit";
 import { recordEvent } from "@/lib/telemetry";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
@@ -162,11 +163,11 @@ export async function requestPolicyDocumentDeletion(args: {
       [args.accountId, args.policyId],
     );
 
-    await args.client.query(
-      `INSERT INTO policy_document_audit_log(account_id,actor,action,previous_value,new_value,policy_id)
-       VALUES($1,'system','deleted',$2::jsonb,$3::jsonb,$4)`,
-      [args.accountId, JSON.stringify({ quarantineStatus: null }), JSON.stringify({ quarantineStatus: "deleted" }), args.policyId],
-    );
+    // The audit trail has one writer, the trusted server connection
+    // (sql/household-rls.sql: browser sessions may only read it).
+    await appendPolicyDocumentAudit(args.accountId, {
+      actor: "system", action: "deleted", previousValue: { quarantineStatus: null }, newValue: { quarantineStatus: "deleted" }, policyId: args.policyId,
+    });
 
     // Step 7: no durable job/lease framework exists yet (that is
     // Checkpoint 8's scope) so in-flight processPolicy() work for this
@@ -767,11 +768,9 @@ export async function requestPolicyDeletion(args: {
       [args.accountId, row.id],
     );
 
-    await args.client.query(
-      `INSERT INTO policy_document_audit_log(account_id,actor,action,previous_value,new_value,policy_id)
-       VALUES($1,'system','deleted',$2::jsonb,$3::jsonb,$4)`,
-      [args.accountId, JSON.stringify({ quarantineStatus: null }), JSON.stringify({ quarantineStatus: "deleted" }), row.id],
-    );
+    await appendPolicyDocumentAudit(args.accountId, {
+      actor: "system", action: "deleted", previousValue: { quarantineStatus: null }, newValue: { quarantineStatus: "deleted" }, policyId: row.id,
+    });
 
     // Step 7: no durable job/lease framework exists yet (Checkpoint 8) so
     // in-flight processPolicy() work for this document is not

@@ -84,7 +84,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION is_household_storage_object(text) FROM public;
-GRANT EXECUTE ON FUNCTION is_household_storage_object(text) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION is_household_storage_object(text) TO authenticated;
 
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS household_storage_objects_select ON storage.objects;

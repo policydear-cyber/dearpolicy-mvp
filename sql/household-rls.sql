@@ -123,8 +123,10 @@ $$;
 
 REVOKE ALL ON FUNCTION is_household_member(uuid) FROM public;
 REVOKE ALL ON FUNCTION is_household_owner(uuid) FROM public;
-GRANT EXECUTE ON FUNCTION is_household_member(uuid) TO authenticated, anon;
-GRANT EXECUTE ON FUNCTION is_household_owner(uuid) TO authenticated, anon;
+REVOKE ALL ON FUNCTION is_household_member(uuid) FROM anon;
+REVOKE ALL ON FUNCTION is_household_owner(uuid) FROM anon;
+GRANT EXECUTE ON FUNCTION is_household_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION is_household_owner(uuid) TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- accounts: membership grants read; only the owner may rename/delete the
@@ -187,8 +189,10 @@ DECLARE
     'policy_pages', 'policy_chunks', 'policy_coverages', 'premium_records',
     'chat_messages', 'policy_corrections', 'policy_reference_coverages',
     'claim_sessions', 'policy_benefits', 'coverage_rules', 'chat_conversations',
-    'chat_history_epochs', 'chat_analysis_jobs', 'policy_analysis_cache',
-    'policy_cover_conditions', 'model_usage',
+    'policy_cover_conditions',
+    -- chat_history_epochs, chat_analysis_jobs, policy_analysis_cache and
+    -- model_usage are server-only infrastructure (job/cache state and the
+    -- plan spend ledger): see sql/infrastructure-rls.sql.
     'claim_evidence_documents', 'claim_evidence_extractions',
     'claim_cause_definition_matches', 'claim_composition_snapshots',
     'claim_ci_definition_matches', 'claim_disability_definition_matches'
@@ -349,17 +353,13 @@ BEGIN
 END $$;
 
 -- policy_document_audit_log is an append-only audit trail for the
--- policy-document quarantine gate, mirroring claim_evidence_audit_log
--- exactly (see sql/schema.sql's own comment on this table): members may
--- read and insert (the app writes an entry on their behalf, e.g.
--- lib/policies/quarantine/audit.ts), but never update or delete a past
--- entry -- only a service_role job (which bypasses RLS entirely) may do
--- that. Without this block, the `authenticated` role has no grant at all
--- on this table (it is not in member_tables above, since that loop's
--- generic CRUD grant would incorrectly allow UPDATE/DELETE on an
--- append-only audit trail), which is exactly the gap that made
--- lib/household/export.ts's household-export query against this table
--- fail with a bare 42501 permission-denied error in production.
+-- policy-document quarantine gate, mirroring claim_evidence_audit_log:
+-- members may READ their household's entries (lib/household/export.ts's
+-- RLS-scoped export reads it), but the only writer is the trusted server
+-- (lib/policies/quarantine/audit.ts's appendPolicyDocumentAudit on the
+-- service connection, including for deletions recorded by
+-- lib/lifecycle/coordinator.ts). A browser session can never insert,
+-- rewrite or delete an entry.
 DO $$
 BEGIN
   IF to_regclass('public.policy_document_audit_log') IS NOT NULL THEN
@@ -367,8 +367,8 @@ BEGIN
     EXECUTE 'DROP POLICY IF EXISTS household_member_select ON public.policy_document_audit_log';
     EXECUTE 'DROP POLICY IF EXISTS household_member_insert ON public.policy_document_audit_log';
     EXECUTE $f$CREATE POLICY household_member_select ON public.policy_document_audit_log FOR SELECT TO authenticated USING (is_household_member(account_id))$f$;
-    EXECUTE $f$CREATE POLICY household_member_insert ON public.policy_document_audit_log FOR INSERT TO authenticated WITH CHECK (is_household_member(account_id))$f$;
-    EXECUTE 'GRANT SELECT, INSERT ON public.policy_document_audit_log TO authenticated';
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.policy_document_audit_log FROM authenticated, anon';
+    EXECUTE 'GRANT SELECT ON public.policy_document_audit_log TO authenticated';
   END IF;
 END $$;
 

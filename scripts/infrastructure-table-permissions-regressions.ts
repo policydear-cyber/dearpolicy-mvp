@@ -246,7 +246,11 @@ async function main() {
       { name: "reviewer", role: "authenticated" as const, userId: reviewer },
       { name: "other household", role: "authenticated" as const, userId: ownerB },
     ];
-    const firstColumn = async (t: string) => (await pool.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position LIMIT 1`, [t])).rows[0].column_name;
+    // An ordinary (non-identity, non-generated) column, so the UPDATE probe
+    // reaches the privilege check rather than an identity-column error.
+    const firstColumn = async (t: string) => (await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND is_identity='NO' AND is_generated='NEVER'
+         AND coalesce(column_default,'') NOT LIKE 'nextval(%' ORDER BY ordinal_position LIMIT 1`, [t])).rows[0].column_name;
     let matrix = 0;
     for (const t of INFRASTRUCTURE_TABLES) {
       if (!live.includes(t)) { record(false, `infrastructure table not created by the migrations: ${t}`); continue; }
