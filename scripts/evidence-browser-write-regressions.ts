@@ -22,9 +22,16 @@ import { asUser, fixedUuid, startReviewerHarness } from "./fixtures/reviewer-har
 import { BENEFIT_FIXTURES } from "./fixtures/reviewer-benefit-wording";
 
 let cases = 0;
+let finished = false;
 async function testAsync(name: string, fn: () => Promise<void>) {
+  console.log(`evidence browser-write: ${name}`);
   try { await fn(); cases++; } catch (error) { throw new Error(name, { cause: error }); }
 }
+// A suite whose awaited work never settles would otherwise let Node exit 0
+// with nothing run: fail loudly instead.
+process.on("beforeExit", () => {
+  if (!finished && !process.exitCode) { console.error("evidence browser-write regressions did not finish (a pending operation never settled)"); process.exitCode = 1; }
+});
 
 const BILL_PAYLOAD = {
   deceasedName: null, otherNamesMentioned: [], personIdentifiers: [{ label: "NRIC", value: "S1234567A" }],
@@ -308,6 +315,7 @@ async function main() {
   } finally {
     await h.close();
   }
+  finished = true;
   console.log(`DearPolicy evidence browser-write regressions passed (${cases} cases).`);
 }
 
