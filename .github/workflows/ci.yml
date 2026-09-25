@@ -67,6 +67,9 @@ jobs:
       - name: Travel currency safety suite (fail closed on any currency ambiguity; travel calculator, monetary gate, composition; PGlite)
         run: npm run claims:travel-currency-test
 
+      - name: Legacy reviewer-decision fail-closed regression suite (PGlite, no live DB needed)
+        run: npm run claims:legacy-decision-test
+
       - name: Claim-composition engine regression suite (PGlite, no live DB needed)
         run: npm run claims:composition-test
 

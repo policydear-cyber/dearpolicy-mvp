@@ -388,12 +388,14 @@ export async function recordCauseDefinitionMatch(args: {
     await client.query("BEGIN");
     await lockReviewSubject(client, ["cause", args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId]);
     // Supersedes ONLY the identical review subject -- same document and same
-    // definition citation (see ./decision-selection.ts). A decision on
-    // another document, or against other wording, is never touched.
+    // definition citation and wording (see ./decision-selection.ts), plus a
+    // legacy decision (no wording fingerprint) for that same citation, which
+    // a fingerprinted re-review replaces as history. A decision on another
+    // document, or against other wording, is never touched.
     await client.query(
       `UPDATE claim_cause_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
         WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
-          AND evidence_document_id=$6 AND definition_evidence=$7::jsonb AND superseded_at IS NULL`,
+          AND evidence_document_id=$6 AND (definition_evidence=$7::jsonb OR (NOT (definition_evidence ? 'wordingHash') AND definition_evidence->>'policyId' = $7::jsonb->>'policyId' AND definition_evidence->>'chunkId' = $7::jsonb->>'chunkId' AND definition_evidence->>'pageStart' = $7::jsonb->>'pageStart' AND definition_evidence->>'pageEnd' = $7::jsonb->>'pageEnd')) AND superseded_at IS NULL`,
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.evidenceDocumentId, JSON.stringify(args.definitionEvidence)],
     );
     const inserted = await client.query<ClaimCauseDefinitionMatchRow>(
@@ -462,7 +464,7 @@ export async function recordCIDefinitionMatch(args: {
     await client.query(
       `UPDATE claim_ci_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
         WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
-          AND benefit_code=$6 AND illness_name=$7 AND evidence_document_id=$8 AND definition_evidence=$9::jsonb AND superseded_at IS NULL`,
+          AND benefit_code=$6 AND illness_name=$7 AND evidence_document_id=$8 AND (definition_evidence=$9::jsonb OR (NOT (definition_evidence ? 'wordingHash') AND definition_evidence->>'policyId' = $9::jsonb->>'policyId' AND definition_evidence->>'chunkId' = $9::jsonb->>'chunkId' AND definition_evidence->>'pageStart' = $9::jsonb->>'pageStart' AND definition_evidence->>'pageEnd' = $9::jsonb->>'pageEnd')) AND superseded_at IS NULL`,
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.illnessName,
         args.evidenceDocumentId, JSON.stringify(args.definitionEvidence)],
     );
@@ -529,7 +531,7 @@ export async function recordDisabilityDefinitionMatch(args: {
     await client.query(
       `UPDATE claim_disability_definition_matches SET superseded_at=now(), superseded_reason='Superseded by a newer review.'
         WHERE account_id=$1 AND family_member_id=$2 AND claim_session_id=$3 AND contract_id=$4 AND coverage_id IS NOT DISTINCT FROM $5
-          AND benefit_code=$6 AND match_key=$7 AND evidence_document_id=$8 AND definition_evidence=$9::jsonb AND superseded_at IS NULL`,
+          AND benefit_code=$6 AND match_key=$7 AND evidence_document_id=$8 AND (definition_evidence=$9::jsonb OR (NOT (definition_evidence ? 'wordingHash') AND definition_evidence->>'policyId' = $9::jsonb->>'policyId' AND definition_evidence->>'chunkId' = $9::jsonb->>'chunkId' AND definition_evidence->>'pageStart' = $9::jsonb->>'pageStart' AND definition_evidence->>'pageEnd' = $9::jsonb->>'pageEnd')) AND superseded_at IS NULL`,
       [args.accountId, args.familyMemberId, args.claimSessionId, args.contractId, args.coverageId, args.benefitCode, args.matchKey,
         args.evidenceDocumentId, JSON.stringify(args.definitionEvidence)],
     );

@@ -21,6 +21,7 @@ import { ensureCriticalIllnessSchema } from "@/lib/claims/evidence/ci-schema";
 import { ensureDisabilitySchema } from "@/lib/claims/evidence/disability-schema";
 import { getLatestExtraction, listEvidenceDocuments } from "@/lib/claims/evidence/store";
 import { ACTIVE_ASSIGNMENT_CONDITIONS, type AssignedClaimReview } from "./boundary";
+import { isLegacyUnverifiedDecision } from "@/lib/claims/evidence/decision-selection";
 import { ensureClaimReviewerSchema } from "./schema";
 
 export type ReviewerAssignmentSummary = {
@@ -69,6 +70,8 @@ export type DecisionHistoryEntry = {
   id: string; kind: "cause" | "ci" | "disability"; evidenceDocumentId: string; contractId: string; coverageId: string | null;
   benefitCode: string | null; illnessName: string | null; matchKey: string | null;
   result: string; reason: string | null; reviewedBy: string; reviewedAt: string; supersededAt: string | null; supersededReason: string | null;
+  /** Recorded without a wording fingerprint: history only, never usable. */
+  legacyUnverified: boolean;
 };
 
 function citationOf(c: ClaimEvidence) {
@@ -143,19 +146,19 @@ export async function loadAssignmentWorkspace(review: AssignedClaimReview) {
   const history: DecisionHistoryEntry[] = documentIds.length === 0 ? [] : (await query<{
     id: string; kind: string; evidence_document_id: string; contract_id: string; coverage_id: string | null;
     benefit_code: string | null; illness_name: string | null; match_key: string | null; result: string; reason: string | null;
-    reviewed_by: string; reviewed_at: string; superseded_at: string | null; superseded_reason: string | null;
+    reviewed_by: string; reviewed_at: string; superseded_at: string | null; superseded_reason: string | null; definition_evidence: unknown;
   }>(
     `SELECT id::text AS id, 'cause' AS kind, evidence_document_id::text AS evidence_document_id, contract_id::text AS contract_id, coverage_id::text AS coverage_id,
             NULL::text AS benefit_code, NULL::text AS illness_name, NULL::text AS match_key, result, reason, reviewed_by, reviewed_at::text AS reviewed_at,
-            superseded_at::text AS superseded_at, superseded_reason
+            superseded_at::text AS superseded_at, superseded_reason, definition_evidence
        FROM claim_cause_definition_matches WHERE account_id=$1 AND claim_session_id=$2 AND family_member_id=$3 AND evidence_document_id=ANY($4::uuid[])
      UNION ALL
      SELECT id::text, 'ci', evidence_document_id::text, contract_id::text, coverage_id::text, benefit_code, illness_name, NULL::text, result, reason, reviewed_by, reviewed_at::text,
-            superseded_at::text, superseded_reason
+            superseded_at::text, superseded_reason, definition_evidence
        FROM claim_ci_definition_matches WHERE account_id=$1 AND claim_session_id=$2 AND family_member_id=$3 AND evidence_document_id=ANY($4::uuid[])
      UNION ALL
      SELECT id::text, 'disability', evidence_document_id::text, contract_id::text, coverage_id::text, benefit_code, NULL::text, match_key, result, reason, reviewed_by, reviewed_at::text,
-            superseded_at::text, superseded_reason
+            superseded_at::text, superseded_reason, definition_evidence
        FROM claim_disability_definition_matches WHERE account_id=$1 AND claim_session_id=$2 AND family_member_id=$3 AND evidence_document_id=ANY($4::uuid[])
      ORDER BY reviewed_at DESC, id`,
     [review.accountId, review.claimSessionId, review.familyMemberId, documentIds],
@@ -163,6 +166,7 @@ export async function loadAssignmentWorkspace(review: AssignedClaimReview) {
     id: r.id, kind: r.kind as DecisionHistoryEntry["kind"], evidenceDocumentId: r.evidence_document_id, contractId: r.contract_id, coverageId: r.coverage_id,
     benefitCode: r.benefit_code, illnessName: r.illness_name, matchKey: r.match_key, result: r.result, reason: r.reason,
     reviewedBy: r.reviewed_by, reviewedAt: r.reviewed_at, supersededAt: r.superseded_at, supersededReason: r.superseded_reason,
+    legacyUnverified: isLegacyUnverifiedDecision(r.definition_evidence),
   }));
 
   return {

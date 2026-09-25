@@ -49,21 +49,32 @@ function samePages(x: DefinitionIdentity, y: DefinitionIdentity) {
   return x.policyId === y.policyId && x.chunkId === y.chunkId && x.pageStart === y.pageStart && x.pageEnd === y.pageEnd;
 }
 
-/** Same citation AND, when the decision recorded one, the same clause
- * wording. Decisions recorded before wording fingerprints existed carry
- * none and are compared by citation only. */
+/** True for a decision recorded without a wording fingerprint (every
+ * decision saved before fingerprints existed, including household-era
+ * rows). Such a decision is kept as immutable history but can NEVER be
+ * used for money: its citation alone cannot prove which wording it was
+ * made against, and no fingerprint is ever backfilled from today's
+ * wording. */
+export function isLegacyUnverifiedDecision(definitionEvidence: unknown): boolean {
+  return !definitionIdentityOf(definitionEvidence)?.wordingHash;
+}
+
+/** Same citation AND the same recorded clause wording. A decision without
+ * a fingerprint never matches. */
 export function sameDefinitionIdentity(decision: unknown, current: unknown): boolean {
   const x = definitionIdentityOf(decision), y = definitionIdentityOf(current);
   if (!x || !y || !samePages(x, y)) return false;
-  return !x.wordingHash || !y.wordingHash || x.wordingHash === y.wordingHash;
+  return !!x.wordingHash && !!y.wordingHash && x.wordingHash === y.wordingHash;
 }
 
-/** Same citation but a different recorded clause wording: a decision the
- * calculator's own page check could not tell apart from a current one, so
- * it must never be handed over at all. */
-function staleWordingOnSamePages(decision: unknown, current: unknown): boolean {
+/** A decision that may be handed to a calculator even though it is not
+ * against the current definition: only a fingerprinted decision whose
+ * citation differs, which the calculator's own same-definition check then
+ * rejects with its specific reason. Anything with the same citation, and
+ * anything without a fingerprint, is never handed over at all. */
+function rejectableByCalculator(decision: unknown, current: unknown): boolean {
   const x = definitionIdentityOf(decision), y = definitionIdentityOf(current);
-  return !!x && !!y && samePages(x, y) && !!x.wordingHash && !!y.wordingHash && x.wordingHash !== y.wordingHash;
+  return !!x && !!x.wordingHash && !!y && !samePages(x, y);
 }
 
 function definitionKey(value: unknown): string {
@@ -107,7 +118,7 @@ export function decisionDocumentId(decision: Selectable): string {
 export function selectApplicableDecision<T extends Selectable>(candidates: T[], currentDefinition: unknown): T | null {
   if (candidates.length === 0) return null;
   const current = candidates.filter((c) => sameDefinitionIdentity(c.definitionEvidence, currentDefinition));
-  const pool = current.length ? current : candidates.filter((c) => !staleWordingOnSamePages(c.definitionEvidence, currentDefinition));
+  const pool = current.length ? current : candidates.filter((c) => rejectableByCalculator(c.definitionEvidence, currentDefinition));
   if (pool.length === 0) return null;
   const ordered = [...pool].sort((a, b) =>
     (a.reviewedAt < b.reviewedAt ? 1 : a.reviewedAt > b.reviewedAt ? -1 : 0)

@@ -56,6 +56,7 @@ import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimEvidence, type C
 import type { DisabilityDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import { verifiedEvidenceProvenance } from "@/scripts/fixtures/verified-evidence-provenance";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -100,7 +101,8 @@ function tpdMatch(overrides: Partial<DisabilityDefinitionMatch> = {}): Disabilit
     familyMemberId: FM, claimEventId: CLAIM, contractId: POLICY, coverageId: COVERAGE, benefitCode: "tpd-lump-sum",
     matchKey: TOTAL_PERMANENT_DISABILITY_MATCH_KEY,
     medicalEvidence: { documentId: "doc-1", documentType: "specialist_memo", familyMemberId: FM, claimEventId: CLAIM, pageStart: 3, pageEnd: 3 },
-    definitionEvidence: { policyId: POLICY, chunkId: "page:policy-1:20", pageStart: 20, pageEnd: 20 },
+    // Recorded against the exact clause of disabilityRule() below.
+    definitionEvidence: { policyId: POLICY, chunkId: "page:policy-1:20", pageStart: 20, pageEnd: 20, wordingHash: definitionWordingHash("150% of Sum Insured") },
     provenance: verifiedEvidenceProvenance("doc-1"),
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z", ...overrides,
   };

@@ -17,7 +17,7 @@ type Definition = ReviewerDecisionTarget & {
 type HistoryEntry = {
   id: string; evidenceDocumentId: string; contractId: string; result: string; reason: string | null;
   reviewedBy: string; reviewedAt: string; supersededAt: string | null; supersededReason: string | null;
-  benefitCode: string | null; illnessName: string | null; matchKey: string | null;
+  benefitCode: string | null; illnessName: string | null; matchKey: string | null; legacyUnverified?: boolean;
 };
 type Workspace = {
   assignment: { id: string; expiresAt: string; singleDocument: boolean };
@@ -168,6 +168,7 @@ function History({ entries }: { entries: HistoryEntry[] }) {
         {entries.map((h) => (
           <li key={h.id}>
             <b>{h.result.replace(/_/g, " ")}</b>{h.illnessName ? ` — ${h.illnessName}` : ""}{h.matchKey ? ` — ${h.matchKey}` : ""} · {new Date(h.reviewedAt).toLocaleString()} · {h.reviewedBy}
+            {h.legacyUnverified && <span className="status"> legacy — recorded without the exact wording; not usable, needs re-review</span>}
             {h.supersededAt ? <span className="status"> superseded {new Date(h.supersededAt).toLocaleString()}{h.supersededReason ? ` (${h.supersededReason})` : ""}</span> : <span className="status"> current</span>}
             {h.reason && <div className="muted">{h.reason}</div>}
           </li>

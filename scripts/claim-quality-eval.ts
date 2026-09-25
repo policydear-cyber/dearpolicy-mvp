@@ -53,6 +53,7 @@ import { TOTAL_PERMANENT_DISABILITY_MATCH_KEY } from "@/lib/claims/calculators/d
 import type { TravelRuleSet } from "@/lib/claims/travel-rules";
 import type { CauseDefinitionMatch, CIDefinitionMatch, DisabilityDefinitionMatch, VerifiedMedicalBillFacts } from "@/lib/claims/calculators/evidence";
 import { verifiedEvidenceProvenance } from "@/scripts/fixtures/verified-evidence-provenance";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 
 // ---------------------------------------------------------------------
 // The household: one family member owning six covers across five
@@ -139,19 +140,19 @@ function causeMatch(overrides: Partial<CauseDefinitionMatch> = {}): CauseDefinit
   return {
     familyMemberId: FM, claimEventId: CLAIM, contractId: LIFE_POLICY, coverageId: gpa.id,
     causeEvidence: { documentId: "doc-death", documentType: "death_certificate", pageStart: 1, pageEnd: 1, familyMemberId: FM, claimEventId: CLAIM },
-    definitionEvidence: { policyId: LIFE_POLICY, chunkId: citation(LIFE_POLICY, 9, "x").chunkId, pageStart: 9, pageEnd: 9 },
+    definitionEvidence: { policyId: LIFE_POLICY, chunkId: citation(LIFE_POLICY, 9, "x").chunkId, pageStart: 9, pageEnd: 9, wordingHash: definitionWordingHash("100% of Sum Insured on accidental death.") },
     provenance: verifiedEvidenceProvenance("doc-death"),
     result: "matches", reviewedAt: "2024-06-10T00:00:00Z", ...overrides,
   };
 }
 function travelDeathMatch(overrides: Partial<CauseDefinitionMatch> = {}): CauseDefinitionMatch {
-  return { ...causeMatch(), contractId: TRAVEL_POLICY, coverageId: travel.id, definitionEvidence: { policyId: TRAVEL_POLICY, chunkId: citation(TRAVEL_POLICY, 3, "x").chunkId, pageStart: 3, pageEnd: 3 }, ...overrides };
+  return { ...causeMatch(), contractId: TRAVEL_POLICY, coverageId: travel.id, definitionEvidence: { policyId: TRAVEL_POLICY, chunkId: citation(TRAVEL_POLICY, 3, "x").chunkId, pageStart: 3, pageEnd: 3, wordingHash: definitionWordingHash("Accidental Death Benefit: S$150,000.") }, ...overrides };
 }
 function ciMatch(overrides: Partial<CIDefinitionMatch> = {}): CIDefinitionMatch {
   return {
     familyMemberId: FM, claimEventId: CLAIM, contractId: CI_POLICY, coverageId: ci.id, benefitCode: "ci-major", illnessName: ILLNESS,
     medicalEvidence: { documentId: "doc-medical", documentType: "medical_report", familyMemberId: FM, claimEventId: CLAIM, pageStart: 2, pageEnd: 2 },
-    definitionEvidence: { policyId: CI_POLICY, chunkId: citation(CI_POLICY, 19, "x").chunkId, pageStart: 19, pageEnd: 19 },
+    definitionEvidence: { policyId: CI_POLICY, chunkId: citation(CI_POLICY, 19, "x").chunkId, pageStart: 19, pageEnd: 19, wordingHash: definitionWordingHash(`Major Cancer and other severe critical illnesses including ${ILLNESS}: 100% of Sum Insured.`) },
     provenance: verifiedEvidenceProvenance("doc-medical"),
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z", ...overrides,
   };
@@ -160,7 +161,7 @@ function tpdMatch(overrides: Partial<DisabilityDefinitionMatch> = {}): Disabilit
   return {
     familyMemberId: FM, claimEventId: CLAIM, contractId: LIFE_POLICY, coverageId: gpa.id, benefitCode: "tpd-lump-sum", matchKey: TOTAL_PERMANENT_DISABILITY_MATCH_KEY,
     medicalEvidence: { documentId: "doc-tpd", documentType: "specialist_memo", familyMemberId: FM, claimEventId: CLAIM, pageStart: 3, pageEnd: 3 },
-    definitionEvidence: { policyId: LIFE_POLICY, chunkId: citation(LIFE_POLICY, 11, "x").chunkId, pageStart: 11, pageEnd: 11 },
+    definitionEvidence: { policyId: LIFE_POLICY, chunkId: citation(LIFE_POLICY, 11, "x").chunkId, pageStart: 11, pageEnd: 11, wordingHash: definitionWordingHash("150% of Sum Insured for qualifying TPD.") },
     provenance: verifiedEvidenceProvenance("doc-tpd"),
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z", ...overrides,
   };

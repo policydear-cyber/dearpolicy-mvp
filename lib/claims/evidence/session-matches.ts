@@ -15,7 +15,7 @@
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
 import { loadActiveCauseDefinitionMatches, loadEvidenceProvenanceContext } from "./store";
 import { resolveMatchProvenance } from "./extraction-provenance";
-import { activeDecisionsWithoutAmbiguity } from "./decision-selection";
+import { activeDecisionsWithoutAmbiguity, isLegacyUnverifiedDecision } from "./decision-selection";
 
 export async function loadCauseDefinitionMatchesForFacts(accountId: string, familyMemberId: string, claimSessionId: string): Promise<CauseDefinitionMatch[]> {
   // Ambiguous historical duplicates for one review subject are dropped, never
@@ -25,7 +25,10 @@ export async function loadCauseDefinitionMatchesForFacts(accountId: string, fami
   // see resolveMatchProvenance(). No rows means no extra query.
   const contexts = await loadEvidenceProvenanceContext(accountId, rows.map((row) => row.evidence_document_id));
   return rows.map((row) => {
-    const provenance = resolveMatchProvenance(row.evidence_provenance, contexts.get(row.evidence_document_id), {
+    // A legacy decision (no wording fingerprint) never carries provenance
+    // into a calculator, so every calculator independently blocks it with
+    // EVIDENCE_PROVENANCE_MISSING -- see ./decision-selection.ts.
+    const provenance = isLegacyUnverifiedDecision(row.definition_evidence) ? undefined : resolveMatchProvenance(row.evidence_provenance, contexts.get(row.evidence_document_id), {
       documentId: row.evidence_document_id, familyMemberId: row.family_member_id, claimSessionId: row.claim_session_id,
     });
     const match: CauseDefinitionMatch = {

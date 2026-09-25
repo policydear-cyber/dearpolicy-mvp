@@ -4,7 +4,7 @@
 export const INDICATIVE_ESTIMATE_NOTICE =
   "Any amount DearPolicy shows after this review is an indicative estimate from the policy wording only. The insurer makes every claim decision.";
 
-export type HouseholdReviewStatus = "awaiting_assignment" | "in_review" | "more_evidence_required" | "reviewed";
+export type HouseholdReviewStatus = "awaiting_assignment" | "in_review" | "more_evidence_required" | "reviewed" | "re_review_required";
 
 export const HOUSEHOLD_REVIEW_STATUS_COPY: Record<HouseholdReviewStatus, { label: string; detail: string }> = {
   awaiting_assignment: {
@@ -18,6 +18,10 @@ export const HOUSEHOLD_REVIEW_STATUS_COPY: Record<HouseholdReviewStatus, { label
   more_evidence_required: {
     label: "More evidence needed",
     detail: "The reviewer could not settle this from the documents so far. Adding a clearer or more detailed document may help.",
+  },
+  re_review_required: {
+    label: "New review needed",
+    detail: "An earlier decision on this document was recorded before DearPolicy kept the exact policy wording it was checked against, so it can no longer be used. A DearPolicy reviewer needs to check it again.",
   },
   reviewed: {
     label: "Reviewed",

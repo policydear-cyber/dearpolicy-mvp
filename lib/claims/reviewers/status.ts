@@ -7,6 +7,7 @@ import { query } from "@/lib/db/client";
 import { ensureCriticalIllnessSchema } from "@/lib/claims/evidence/ci-schema";
 import { ensureDisabilitySchema } from "@/lib/claims/evidence/disability-schema";
 import type { HouseholdReviewStatus } from "./copy";
+import { isLegacyUnverifiedDecision } from "@/lib/claims/evidence/decision-selection";
 import { ensureClaimReviewerSchema } from "./schema";
 
 /** A decision that settles the definition question either way. Every other
@@ -24,18 +25,22 @@ export async function loadHouseholdReviewStatuses(accountId: string, claimSessio
   // decision on another document never changes this one's status. Settled
   // only when every active decision on it (one per policy/benefit it was
   // reviewed against) is a settled result; any open one asks for more.
-  const decisions = await query<{ evidence_document_id: string; result: string }>(
-    `SELECT evidence_document_id::text AS evidence_document_id, result FROM claim_cause_definition_matches
+  const decisions = await query<{ evidence_document_id: string; result: string; definition_evidence: unknown }>(
+    `SELECT evidence_document_id::text AS evidence_document_id, result, definition_evidence FROM claim_cause_definition_matches
       WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
      UNION ALL
-     SELECT evidence_document_id::text, result FROM claim_ci_definition_matches
+     SELECT evidence_document_id::text, result, definition_evidence FROM claim_ci_definition_matches
       WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])
      UNION ALL
-     SELECT evidence_document_id::text, result FROM claim_disability_definition_matches
+     SELECT evidence_document_id::text, result, definition_evidence FROM claim_disability_definition_matches
       WHERE account_id=$1 AND claim_session_id=$2 AND superseded_at IS NULL AND evidence_document_id=ANY($3::uuid[])`,
     [accountId, claimSessionId, documentIds],
   );
+  // Legacy decisions (no wording fingerprint) never count as a review: the
+  // document needs a new reviewer decision.
+  const legacyOnly = new Set<string>();
   for (const d of decisions.rows) {
+    if (isLegacyUnverifiedDecision(d.definition_evidence)) { legacyOnly.add(d.evidence_document_id); continue; }
     const settled = SETTLED_RESULTS.has(d.result);
     if (!settled) statuses.set(d.evidence_document_id, "more_evidence_required");
     else if (!statuses.has(d.evidence_document_id)) statuses.set(d.evidence_document_id, "reviewed");
@@ -52,7 +57,7 @@ export async function loadHouseholdReviewStatuses(accountId: string, claimSessio
   const assigned = new Set(assignments.rows.map((a) => a.evidence_document_id).filter((id): id is string => id !== null));
   for (const id of documentIds) {
     if (statuses.has(id)) continue;
-    statuses.set(id, wholeClaim || assigned.has(id) ? "in_review" : "awaiting_assignment");
+    statuses.set(id, wholeClaim || assigned.has(id) ? "in_review" : legacyOnly.has(id) ? "re_review_required" : "awaiting_assignment");
   }
   return statuses;
 }

@@ -27,6 +27,7 @@ import { pool } from "@/lib/db/client";
 import { setTelemetryAdapter } from "@/lib/telemetry";
 import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import fixture from "./fixtures/singlife-death-wording.json";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 
 let cases = 0;
 async function testAsync(name: string, fn: () => Promise<void>) {
@@ -360,7 +361,7 @@ async function main() {
       await toNeedsReview(document.id);
       const extraction = (await getLatestExtraction(account, document.id))!;
       const medicalEvidence = { documentId: document.id, documentType: "medical_report", familyMemberId: desmond, claimEventId: claimA, pageStart: 1, pageEnd: 1 };
-      const definitionEvidence = { policyId: policyA, chunkId: `page:${policyA}:5`, pageStart: 5, pageEnd: 5 };
+      const definitionEvidence = { policyId: policyA, chunkId: `page:${policyA}:5`, pageStart: 5, pageEnd: 5, wordingHash: definitionWordingHash("Fixture definition clause.") };
       await recordCIDefinitionMatch({
         accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: coverageA, evidenceDocumentId: document.id,
         benefitCode: "ci-major", illnessName: "Major Cancer", medicalEvidence, definitionEvidence, result: "matches", reviewedBy: "R", reason: null,

@@ -45,6 +45,7 @@ import { composeClaim } from "@/lib/claims/composition/engine";
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimFacts } from "@/lib/claims/types";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -77,7 +78,8 @@ function ciMatch(overrides: Partial<CIDefinitionMatch> = {}): CIDefinitionMatch 
   return {
     familyMemberId: FM, claimEventId: CLAIM, contractId: POLICY, coverageId: COVERAGE,
     benefitCode: "ci-major", illnessName: "Major Cancer",
-    medicalEvidence: medicalEvidence(), definitionEvidence: citation(),
+    // Recorded against the exact clause of makeCIRule() below.
+    medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
     result: "matches", reviewedAt: "2024-01-01T00:00:00.000Z",
     provenance: verifiedEvidenceProvenance("doc-1"),
     ...overrides,
@@ -518,13 +520,15 @@ async function runDatabaseTests() {
       await recordCIDefinitionMatch({
         accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: null,
         evidenceDocumentId: docId, benefitCode: "ci-major", illnessName: "Major Cancer",
-        medicalEvidence: medicalEvidence(), definitionEvidence: citation(),
+        // Recorded against the exact clause of makeCIRule() below.
+    medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
         result: "matches", reviewedBy: "Household reviewer", reason: null,
       });
       await recordCIDefinitionMatch({
         accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: null,
         evidenceDocumentId: docId, benefitCode: "ci-early", illnessName: "Early Stage Critical Illness",
-        medicalEvidence: medicalEvidence(), definitionEvidence: citation(),
+        // Recorded against the exact clause of makeCIRule() below.
+    medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
         result: "needs_medical_review", reviewedBy: "Household reviewer", reason: null,
       });
       const active = await loadActiveCIDefinitionMatches(account, desmond, claimA);
@@ -535,7 +539,8 @@ async function runDatabaseTests() {
       await recordCIDefinitionMatch({
         accountId: account, familyMemberId: desmond, claimSessionId: claimA, contractId: policyA, coverageId: null,
         evidenceDocumentId: docId, benefitCode: "ci-major", illnessName: "Major Cancer",
-        medicalEvidence: medicalEvidence(), definitionEvidence: citation(),
+        // Recorded against the exact clause of makeCIRule() below.
+    medicalEvidence: medicalEvidence(), definitionEvidence: { ...citation(), wordingHash: definitionWordingHash("100% of Sum Insured shall be paid for Major Cancer.") },
         result: "does_not_match", reviewedBy: "Household reviewer", reason: "Corrected after re-review.",
       });
       const active = await loadActiveCIDefinitionMatches(account, desmond, claimA);

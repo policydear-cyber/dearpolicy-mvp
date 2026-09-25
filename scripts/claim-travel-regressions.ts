@@ -44,6 +44,7 @@ import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimEvidence, type C
 import type { CauseDefinitionMatch, VerifiedMedicalBillFacts } from "@/lib/claims/calculators/evidence";
 import type { OwnedCoverage } from "@/lib/coverage/facts";
 import { verifiedEvidenceProvenance } from "@/scripts/fixtures/verified-evidence-provenance";
+import { definitionWordingHash } from "@/lib/claims/evidence/decision-selection";
 
 let cases = 0;
 function test(name: string, fn: () => void) {
@@ -201,7 +202,7 @@ function matchingCauseMatch(overrides: Partial<CauseDefinitionMatch> = {}): Caus
   return {
     familyMemberId: FM, claimEventId: CLAIM, contractId: POLICY, coverageId: COVERAGE,
     causeEvidence: { documentId: "doc-death", documentType: "death_certificate", pageStart: 1, pageEnd: 1, familyMemberId: FM, claimEventId: CLAIM },
-    definitionEvidence: { policyId: deathCitation().policyId, chunkId: deathCitation().chunkId, pageStart: deathCitation().pageStart, pageEnd: deathCitation().pageEnd },
+    definitionEvidence: { policyId: deathCitation().policyId, chunkId: deathCitation().chunkId, pageStart: deathCitation().pageStart, pageEnd: deathCitation().pageEnd, wordingHash: definitionWordingHash(DEATH_CLAUSE) },
     provenance: verifiedEvidenceProvenance("doc-death"),
     result: "matches", reviewedAt: "2024-06-10T00:00:00Z", ...overrides,
   };
