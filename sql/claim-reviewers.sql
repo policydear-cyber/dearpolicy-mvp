@@ -80,7 +80,7 @@ CREATE INDEX IF NOT EXISTS claim_reviewer_audit_log_reviewer ON claim_reviewer_a
 CREATE INDEX IF NOT EXISTS claim_reviewer_audit_log_claim ON claim_reviewer_audit_log(account_id, claim_session_id);
 
 CREATE OR REPLACE FUNCTION claim_reviewer_audit_log_append_only() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   RAISE EXCEPTION 'claim_reviewer_audit_log is append-only';
 END;

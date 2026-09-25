@@ -165,6 +165,19 @@ async function main() {
       assert.equal(baseline.forgedItems, 0);
     });
 
+    // === 0. trigger functions: SECURITY INVOKER with a fixed search_path ===
+    const TRIGGER_FUNCTIONS = ["claim_reviewer_audit_log_append_only", "guard_household_decision_retirement", "guard_household_policy_update", "guard_household_evidence_update"];
+    const triggerFns = (await pool.query<{ proname: string; prosecdef: boolean; proconfig: string[] | null }>(
+      `SELECT proname, prosecdef, proconfig FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname IN (${TRIGGER_FUNCTIONS.map((n) => `'${n}'`).join(", ")})`,
+    )).rows;
+    for (const name of TRIGGER_FUNCTIONS) {
+      const row = triggerFns.find((r) => r.proname === name);
+      record(!!row, `trigger function ${name} does not exist`);
+      if (!row) continue;
+      record(row.prosecdef === false, `${name} must stay SECURITY INVOKER`);
+      record((row.proconfig ?? []).some((c) => /^search_path=(""|)$/.test(c)), `${name} must run with a fixed empty search_path (proconfig ${JSON.stringify(row.proconfig)})`);
+    }
+
     // === 1. every live column classified ===============================
     for (const t of ["policies", "policy_coverages"] as const) {
       const live = (await pool.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1`, [t])).rows.map((r) => r.column_name);

@@ -227,7 +227,7 @@ END $$;
 -- both still live -- which would otherwise let it hide an unfavourable
 -- decision. The trusted server connection is not affected.
 CREATE OR REPLACE FUNCTION public.guard_household_decision_retirement() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
@@ -299,8 +299,14 @@ END $$;
 -- lib/db/table-inventory.ts's POLICY_STATE_COLUMNS / BROWSER_WRITABLE_COLUMNS
 -- is the authoritative classification; scripts/policy-state-protection-
 -- regressions.ts and launch:check enforce it.
+-- The household guard trigger functions (and claim-reviewers.sql's
+-- append-only trigger) are SECURITY INVOKER and run with an empty, fixed
+-- search_path: every object they reference is schema-qualified, and the
+-- built-ins they use (current_user, comparisons, integer arithmetic) resolve
+-- from pg_catalog regardless. scripts/policy-state-protection-regressions.ts
+-- fails if a fixed search_path is removed.
 CREATE OR REPLACE FUNCTION public.guard_household_policy_update() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   -- Browser roles only; the trusted server connection (table owner) is not constrained.
   IF current_user IN ('authenticated', 'anon') AND (
@@ -373,7 +379,7 @@ END $$;
 -- row, revive a deleted one, skip lifecycle states or touch any other
 -- column. The trusted server connection is not affected.
 CREATE OR REPLACE FUNCTION public.guard_household_evidence_update() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
   IF current_user NOT IN ('authenticated', 'anon') THEN
     RETURN NEW;
