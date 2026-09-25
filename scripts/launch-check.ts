@@ -58,6 +58,7 @@ import {
 import { classifyRoutes } from "./route-inventory-regressions";
 import { REQUIRED_CI_SUITES } from "./ci-required-suites";
 import { evaluateInfrastructureTableProtection } from "@/lib/launch/infrastructure-tables";
+import { evaluatePolicyStateProtection } from "@/lib/launch/policy-state-protection";
 import { checkRequestOrigin } from "@/lib/http/csrf";
 import { checkMalwareScannerConfigured, registeredScanAdapterNames, selectedScanAdapterName } from "@/lib/claims/evidence/scan-adapter";
 
@@ -126,6 +127,7 @@ const CHECK_TYPES: Record<CapabilityId, CapabilityCheckType> = {
   production_build: "build-probe",
   github_ci_status: "ci-api-check",
   infrastructure_table_protection: "static-grep",
+  policy_state_protection: "static-grep",
 };
 
 const PROBES: Record<CapabilityId, string> = {
@@ -154,6 +156,7 @@ const PROBES: Record<CapabilityId, string> = {
   production_build: "spawned `npm run build`",
   github_ci_status: "GitHub Checks/Statuses API query for the current commit",
   infrastructure_table_protection: "evaluateInfrastructureTableProtection() (lib/launch/infrastructure-tables.ts): every sql/*.sql table classified in lib/db/table-inventory.ts; sql/infrastructure-rls.sql enables RLS, drops other policies, installs one always-false policy and revokes table/sequence privileges from PUBLIC/anon/authenticated for every service/operator-only table; no migration grants or opens one to a browser role; the security:infrastructure-tables-test suite is in package.json, CI and REQUIRED_CI_SUITES",
+  policy_state_protection: "evaluatePolicyStateProtection() (lib/launch/policy-state-protection.ts): every policies/policy_coverages column any sql/*.sql creates is classified in POLICY_STATE_COLUMNS; BROWSER_WRITABLE_COLUMNS holds only household-editable/lifecycle-route columns and no INSERT/DELETE; sql/household-rls.sql enables RLS on both tables, revokes browser INSERT/UPDATE/DELETE/TRUNCATE and installs the guard_household_policy_update trigger (active -> pending_deletion only); no migration re-adds either table to member_tables, grants a browser role INSERT, table-wide UPDATE or UPDATE on an unlisted column, opens a non-SELECT policy, disables RLS or drops the trigger; the security:policy-state-test suite is in package.json, CI and REQUIRED_CI_SUITES",
 };
 
 const REMEDIATIONS: Record<CapabilityId, string> = {
@@ -182,6 +185,7 @@ const REMEDIATIONS: Record<CapabilityId, string> = {
   production_build: "Investigate the `npm run build` failure output captured in the blocking reason.",
   github_ci_status: "Investigate the failing CI check(s)/run(s), or configure GITHUB_TOKEN/CI access so this check has something real to query.",
   infrastructure_table_protection: "Classify every new table in lib/db/table-inventory.ts; protect every service/operator-only table in sql/infrastructure-rls.sql; remove any browser grant/permissive policy on an infrastructure table; keep npm run security:infrastructure-tables-test in CI and REQUIRED_CI_SUITES.",
+  policy_state_protection: "Classify every new policies/policy_coverages column in lib/db/table-inventory.ts POLICY_STATE_COLUMNS; keep both tables out of member_tables; keep sql/household-rls.sql's REVOKE, RLS and guard_household_policy_update trigger; grant browser roles nothing beyond SELECT and the BROWSER_WRITABLE_COLUMNS lifecycle columns; move any new trusted write to the server connection; keep npm run security:policy-state-test in CI and REQUIRED_CI_SUITES.",
 };
 
 function report(
@@ -1982,6 +1986,31 @@ function checkInfrastructureTableProtection() {
   );
 }
 
+// ---------------------------------------------------------------------
+// policy_state_protection -- recomputed from the real migration source,
+// column classification, workflow and required-suite inventory on every
+// run; never hardcoded (see scripts/launch-check-verifier-regressions.mjs).
+// ---------------------------------------------------------------------
+function checkPolicyStateProtection() {
+  let result: ReturnType<typeof evaluatePolicyStateProtection>;
+  try {
+    result = evaluatePolicyStateProtection();
+  } catch (error) {
+    report("policy_state_protection", "blocked_by_code", `Could not evaluate policy-state protection: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+  if (!result.ok) {
+    report("policy_state_protection", "blocked_by_code", `Browser roles are not provably excluded from policy-processing / coverage-verification state: ${result.problems.join("; ")}.`, { evidenceSummary: result.summary });
+    return;
+  }
+  report(
+    "policy_state_protection",
+    "ready",
+    `${result.summary}. In the migration source no browser role can INSERT or DELETE a policy or coverage, UPDATE any quarantine, processing, identity, extraction or verification column, or move a policy anywhere but active -> pending_deletion (guard trigger); read paths require scan_clean and not superseded; and scripts/policy-state-protection-regressions.ts (security:policy-state-test) -- which proves the INSERT/UPDATE refusal matrix for anon, member, owner, reviewer and another household plus the trusted-path and chat/calculator controls -- is wired into CI and REQUIRED_CI_SUITES. Whether the live database matches is live_rls_verification's job.`,
+    { evidenceSummary: result.summary },
+  );
+}
+
 async function main() {
   const { status: devAuthStatus, detail: devAuthDetail } = guardStatus(checkDevAuthNotInProduction, true);
   const { status: devAccountStatus, detail: devAccountDetail } = guardStatus(checkDevAccountIdNotInProduction, true);
@@ -2033,6 +2062,7 @@ async function main() {
   await runs("full_household_e2e_journey", checkFullHouseholdE2eJourney);
   await runs("evaluation_thresholds", checkEvaluationThresholds);
   await runs("infrastructure_table_protection", checkInfrastructureTableProtection);
+  await runs("policy_state_protection", checkPolicyStateProtection);
 
   await runs(["household_authorization", "route_classification"], checkRouteInventoryCapabilities);
   await runs("live_rls_verification", checkLiveRlsVerification);

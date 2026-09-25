@@ -110,7 +110,8 @@ export type CapabilityId =
   | "evaluation_thresholds"
   | "production_build"
   | "github_ci_status"
-  | "infrastructure_table_protection";
+  | "infrastructure_table_protection"
+  | "policy_state_protection";
 
 export type CapabilityDefinition = { id: CapabilityId; label: string };
 
@@ -141,6 +142,7 @@ export const REQUIRED_CAPABILITIES: readonly CapabilityDefinition[] = [
   { id: "production_build", label: "Production build" },
   { id: "github_ci_status", label: "GitHub CI status/manual verification state" },
   { id: "infrastructure_table_protection", label: "Infrastructure-table protection" },
+  { id: "policy_state_protection", label: "Policy-processing and coverage-verification state protection" },
 ];
 
 const REQUIRED_IDS = new Set<CapabilityId>(REQUIRED_CAPABILITIES.map((c) => c.id));

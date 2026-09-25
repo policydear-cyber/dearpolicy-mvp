@@ -42,6 +42,17 @@ Also confirm, outside SQL:
    \copy (SELECT grantee, table_schema, table_name, privilege_type FROM information_schema.role_table_grants WHERE grantee IN ('anon','authenticated')) TO 'pre_table_grants.csv' CSV HEADER
    \copy (SELECT grantee, table_name, column_name, privilege_type FROM information_schema.column_privileges WHERE grantee IN ('anon','authenticated')) TO 'pre_column_grants.csv' CSV HEADER
    ```
+4. Record what browser roles can currently do to policy documents and coverages (the policy-state fix, §5.8). Before this release, expect `authenticated` to hold INSERT/UPDATE/DELETE on both tables; keep the output in the change ticket:
+   ```sql
+   SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants
+    WHERE table_name IN ('policies','policy_coverages') AND grantee IN ('anon','authenticated','PUBLIC') ORDER BY 1,2,3;
+   SELECT table_name, column_name, grantee, privilege_type FROM information_schema.column_privileges
+    WHERE table_name IN ('policies','policy_coverages') AND grantee IN ('anon','authenticated')
+      AND privilege_type IN ('INSERT','UPDATE') ORDER BY 1,2,3,4;
+   SELECT tablename, policyname, cmd FROM pg_policies WHERE schemaname='public' AND tablename IN ('policies','policy_coverages') ORDER BY 1,2;
+   -- Documents that would stop contributing coverage after this release (not yet scan_clean, or superseded) -- counts only:
+   SELECT quarantine_status, (superseded_at IS NOT NULL) AS superseded, processing_status, count(*) FROM policies GROUP BY 1,2,3 ORDER BY 1,2,3;
+   ```
 
 ## 3. Migration order (derived from the SQL itself)
 
@@ -64,7 +75,7 @@ Each row lists what the file needs to exist first. It is verified against the `R
 | 13 | `background-jobs.sql` | 1 | Uses `accounts`. |
 | 14 | `lifecycle.sql` | 1, 8 | Adds lifecycle columns to `accounts`, `policies`, `family_members` and (only if it exists) `claim_evidence_documents`. **Must run after 8**, otherwise the evidence lifecycle columns are silently skipped. |
 | 15 | `claim-reviewers.sql` | 1, 8, roles | Uses `claim_evidence_documents` and `claim_sessions`. Revokes browser roles from the reviewer tables. |
-| 16 | `household-rls.sql` | **all of 1-15** | Enables RLS and policies on every household table. Narrows the evidence tables (a column grant plus a guard trigger that depend on 14's `lifecycle_state`), the three decision tables (8, 9, 10), `model_executions` (11), `scan_provider_events` and the audit logs (1, 8). Each optional block is `to_regclass`-guarded, so running it too early silently skips protections. |
+| 16 | `household-rls.sql` | **all of 1-15** | Enables RLS and policies on every household table. Narrows the evidence tables (a column grant plus a guard trigger that depend on 14's `lifecycle_state`), the three decision tables (8, 9, 10), `model_executions` (11), `scan_provider_events` and the audit logs (1, 8). Takes `policies` and `policy_coverages` out of the generic member CRUD loop: browser roles keep SELECT only, plus UPDATE on `policies(lifecycle_state, lifecycle_version, updated_at)` guarded by the `guard_household_policy_update` trigger (active -> pending_deletion only); that grant and trigger also depend on 14. Each optional block is `to_regclass`-guarded, so running it too early silently skips protections. |
 | 17 | `infrastructure-rls.sql` | **all of 1-16** | For each of the 18 service/operator-only tables in `lib/db/table-inventory.ts` (jobs, dead letters, deletion requests and audit, rate-limit buckets, exports and export audit, storage-cleanup locks and audit, model provenance, the `model_usage` spend ledger, chat job/cache/epoch state, the scan ledger, and the reviewer registry): enables RLS, drops every other policy, installs one always-false policy, and revokes all table and sequence privileges from PUBLIC, `anon` and `authenticated`. Removes `anon` EXECUTE on the SECURITY DEFINER helpers. **It must run after 16, and be re-run whenever 16 is re-run**, because 16's grants would otherwise stand. RLS is deliberately not FORCEd; see §11. |
 | 18 | `storage-rls.sql` | 16, Supabase Storage | Uses `is_household_member()` from 16 (it raises an exception if that is missing). The household object policies cover only `policy-files`; `claim-evidence-files` has no household access. Forces both app buckets private. |
 
@@ -137,8 +148,8 @@ SELECT grantee, table_name FROM information_schema.role_table_grants
 
 -- 5.4 Guard triggers are installed.
 SELECT tgrelid::regclass, tgname FROM pg_trigger WHERE NOT tgisinternal
- AND tgname IN ('guard_household_evidence_update','guard_household_decision_retirement','claim_reviewer_audit_log_append_only')
- ORDER BY 1;  -- 1 evidence + 3 decision + 1 reviewer audit = 5 rows
+ AND tgname IN ('guard_household_evidence_update','guard_household_decision_retirement','claim_reviewer_audit_log_append_only','guard_household_policy_update')
+ ORDER BY 1;  -- 1 evidence + 3 decision + 1 reviewer audit + 1 policy = 6 rows
 
 -- 5.5 Lifecycle columns exist on evidence.
 SELECT column_name FROM information_schema.columns WHERE table_name='claim_evidence_documents' AND column_name IN ('lifecycle_state','lifecycle_version');
@@ -174,6 +185,30 @@ SELECT proname FROM pg_proc WHERE pronamespace='public'::regnamespace AND prosec
 SELECT c.relname FROM pg_class c
  WHERE c.relnamespace='public'::regnamespace AND c.relkind='r' AND NOT c.relrowsecurity
    AND has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE');
+
+-- 5.8 Policy-processing and coverage-verification state (lib/db/table-inventory.ts POLICY_STATE_COLUMNS).
+-- a) No table-level write privilege for any browser role (expect 0 rows).
+SELECT t, r, p FROM unnest(ARRAY['policies','policy_coverages']) t, unnest(ARRAY['anon','authenticated']) r,
+       unnest(ARRAY['INSERT','UPDATE','DELETE','TRUNCATE']) p
+ WHERE has_table_privilege(r, 'public.'||t, p);
+-- b) Column-level write privileges: expect exactly 3 rows, all authenticated/UPDATE on policies:
+--    lifecycle_state, lifecycle_version, updated_at. Any other row -- in particular quarantine_status,
+--    scan_*, processing_*, file_hash, storage_key, supersedes_id, superseded_at, account_id,
+--    family_member_id, personal_coverage_confirmed, needs_review, or ANY policy_coverages column
+--    (confirmed, evidence_verified, amount, currency, category, source_page, evidence_text, ...) -- is an abort (§10).
+SELECT a.attrelid::regclass AS tbl, a.attname, r, p FROM pg_attribute a,
+       unnest(ARRAY['anon','authenticated']) r, unnest(ARRAY['INSERT','UPDATE']) p
+ WHERE a.attrelid IN ('public.policies'::regclass,'public.policy_coverages'::regclass) AND a.attnum > 0 AND NOT a.attisdropped
+   AND has_column_privilege(r, a.attrelid, a.attname, p)
+ ORDER BY 1,2,3,4;
+-- c) RLS on, and only the expected policies (policies: household_member_select + household_member_update;
+--    policy_coverages: household_member_select).
+SELECT relname, relrowsecurity FROM pg_class WHERE oid IN ('public.policies'::regclass,'public.policy_coverages'::regclass);
+SELECT tablename, policyname, cmd FROM pg_policies WHERE schemaname='public' AND tablename IN ('policies','policy_coverages') ORDER BY 1,2;
+-- d) The lifecycle guard is installed and enabled (expect 1 row, tgenabled = 'O').
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid='public.policies'::regclass AND tgname='guard_household_policy_update';
+-- e) Every live column is classified: compare this list with POLICY_STATE_COLUMNS (43 policies, 15 policy_coverages columns).
+SELECT table_name, count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name IN ('policies','policy_coverages') GROUP BY 1;
 ```
 
 Check 5.7 must return **0 rows**. Every household table has RLS from `household-rls.sql`, and every infrastructure table has RLS with no browser privilege from `infrastructure-rls.sql`. A row here means a table exists that is not classified in `lib/db/table-inventory.ts`: stop (§10).
@@ -184,6 +219,15 @@ Check 5.7 must return **0 rows**. Every household table has RLS from `household-
 - deleting a family member from the app succeeds;
 - a household export completes;
 - `npm run reviewer:admin -- assign ...` succeeds.
+
+**Trusted-worker controls for policy documents.** Every write to `policies` and `policy_coverages` other than the deletion move now runs on the server connection: the upload route's INSERT, the quarantine gate and scan callback (`lib/policies/quarantine/store.ts`), the ingest pipeline (`lib/rag/ingest.ts`: processing state, extraction, `policy_coverages` rebuild), reprocess queueing, family linking (`lib/policies/linking.ts`, link-person review flags) and supersession. Before sign-off, confirm the server connection is the table owner (or otherwise bypasses RLS and holds the table privileges):
+```sql
+SELECT c.relname, pg_get_userbyid(c.relowner) AS owner, current_user,
+       (SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user) AS bypassrls
+  FROM pg_class c WHERE c.oid IN ('public.policies'::regclass,'public.policy_coverages'::regclass);
+-- run as the DATABASE_URL role: owner must equal current_user, or bypassrls must be true.
+```
+If neither holds, stop (§10): the enforcement is correct but the server would lose its write path.
 
 ## 6. RLS tests with household, reviewer and service identities
 
@@ -208,8 +252,32 @@ INSERT INTO scan_provider_events(provider,event_id) VALUES ('virustotal','x');
 SELECT 1 FROM claim_reviewers;
 -- 6.3 Lifecycle: skipping a state must fail with "may only move an active evidence document to pending deletion".
 UPDATE claim_evidence_documents SET lifecycle_state='soft_deleted', lifecycle_version=lifecycle_version+1 WHERE id='<EVIDENCE_A_UUID>';
+-- 6.4 Policy state: each must fail with "permission denied" (one at a time, rolling back after each).
+UPDATE policies SET quarantine_status='scan_clean' WHERE id='<POLICY_A_UUID>';
+UPDATE policies SET processing_status='ready' WHERE id='<POLICY_A_UUID>';
+UPDATE policies SET file_hash='x', storage_key='x' WHERE id='<POLICY_A_UUID>';
+UPDATE policies SET family_member_id='<OTHER_MEMBER_A_UUID>' WHERE id='<POLICY_A_UUID>';
+INSERT INTO policies(account_id,family_member_id,original_filename,storage_key,quarantine_status,processing_status)
+  VALUES ('<HOUSEHOLD_A_UUID>','<MEMBER_A_UUID>','x.pdf','x','scan_clean','ready');
+UPDATE policy_coverages SET confirmed=true, evidence_verified=true WHERE policy_id='<POLICY_A_UUID>';
+UPDATE policy_coverages SET amount=9999999 WHERE policy_id='<POLICY_A_UUID>';
+INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,confirmed,evidence_verified)
+  VALUES ('<HOUSEHOLD_A_UUID>','<POLICY_A_UUID>','<MEMBER_A_UUID>','x',1,true,true);
+DELETE FROM policies WHERE id='<POLICY_A_UUID>';
+-- 6.5 Lifecycle on a policy: reviving or skipping must fail with "may only move an active policy to pending deletion".
+UPDATE policies SET lifecycle_state='active', lifecycle_version=lifecycle_version+1 WHERE id='<DELETED_POLICY_A_UUID>';
+UPDATE policies SET lifecycle_state='soft_deleted', lifecycle_version=lifecycle_version+1 WHERE id='<POLICY_A_UUID>';
 ROLLBACK;
 ```
+Repeat 6.4 as `anon` (no `sub`): every statement fails with "permission denied".
+
+**Policy upload / scan / process smoke tests** (staging, deployed build, dedicated test household):
+1. Upload a policy PDF. Expect `policies.quarantine_status` to move `uploaded -> quarantined -> scan_pending` and, after the scanner verdict or callback, `scan_clean`; nothing is extracted before that.
+2. Once `scan_clean`, processing reaches `processing_status='ready'`, chunks and coverages exist, and the dashboard and chat show the document.
+3. Upload the EICAR test file: it ends `scan_rejected`, never reaches processing, and contributes nothing to the dashboard, chat or claims.
+4. Reprocess a ready document from the app: it returns 202 and re-reaches `ready`; a second reprocess while it is running is refused.
+5. Link a detected person to a family member from the app: the linked member's coverage appears only after linking, and the review flags update.
+6. Delete a policy from the app: it moves to `pending_deletion`, disappears from chat and claims, and the deletion worker completes it.
 
 Repeat block 6 with `<HOUSEHOLD_B_OWNER_UUID>`: every read of household A returns 0 rows and every update affects 0 rows. Repeat with `<REVIEWER_USER_UUID>` (a provisioned reviewer): the same result, because reviewers never read evidence through the database API; they read it through the reviewer routes only.
 
@@ -241,7 +309,7 @@ Prefer forward fixes. Roll back only when the application cannot run safely on t
 |------|----------|
 | storage-rls.sql | Re-create the pre-migration storage policies from `pre_policies.csv`, or, to fail closed, `DROP POLICY household_storage_objects_{select,insert,update,delete} ON storage.objects` (the service role is unaffected). Never make a bucket public. |
 | infrastructure-rls.sql | Do not roll back. It only removes browser privileges and adds an always-false policy; no data is changed or destroyed, and the server connection is unaffected. If a server path unexpectedly fails, fix that path forward. Restoring browser access (re-granting from `pre_table_grants.csv`) reopens the unauthorized paths this migration closes. |
-| household-rls.sql | Re-apply the `household-rls.sql` from the previously deployed commit, then restore grants from `pre_table_grants.csv` and `pre_column_grants.csv`. Note: this re-opens the household write paths that this release closed. Prefer staying on the new file and fixing forward. |
+| household-rls.sql | Re-apply the `household-rls.sql` from the previously deployed commit, then restore grants from `pre_table_grants.csv` and `pre_column_grants.csv`. Note: this re-opens the household write paths that this release closed -- including direct browser writes to `policies.quarantine_status` and `policy_coverages.confirmed`/`evidence_verified`, i.e. a household could mark an unscanned document clean or its own coverage verified. Prefer staying on the new file and fixing forward. **Deployment coupling:** the previous application build inserts policies and queues reprocessing through the browser-scoped connection; against the new grants those requests are refused (fail closed, no data change) until this release's build is deployed. Rolling the application back while keeping the new migration therefore disables upload, reprocess and link-person but leaves no security gap. To remove only the policy-state block, restore the table grants for `policies`/`policy_coverages` from `pre_table_grants.csv` and `DROP TRIGGER guard_household_policy_update ON public.policies`; do not do this while any household can reach the app. |
 | claim-reviewers.sql | New tables only: `DROP TABLE claim_reviewer_audit_log, claim_review_assignments, claim_reviewers CASCADE;` is safe only before any reviewer or assignment is recorded. After that, restore from backup instead, because the audit log is append-only by design. |
 | lifecycle.sql | Additive columns and tables. Leave in place; older code ignores them. To remove, restore from backup; do not drop columns by hand while any row is non-`active`. |
 | background-jobs, rate-limit, model-provenance, claim-composition, coverage-ledger, cover-conditions, benefit-catalog, model-usage | Additive. Leave in place, or drop the new tables if they are empty. |
@@ -275,6 +343,9 @@ npm run reviewer:admin -- suspend    --user <AUTH_USER_UUID> --reason "<why>" --
 - Any check in section 5 differs from its expected result.
 - Check 5.6 returns any row: an authenticated or anonymous browser role still holds a privilege on an infrastructure table, a permissive policy exists on one, a sequence behind one is usable by a browser role, or a SECURITY DEFINER helper is executable by anon.
 - Check 5.7 returns any row (an unclassified table reachable by browser sessions).
+- Check 5.8 shows any browser role able to INSERT, UPDATE, DELETE or TRUNCATE `policies` or `policy_coverages` beyond UPDATE on `policies(lifecycle_state, lifecycle_version, updated_at)`, RLS off on either table, or the `guard_household_policy_update` trigger missing or disabled. In particular: **abort if any browser role can set any security or verification field** -- `policies.quarantine_status`, `scan_provider`, `scan_result_detail`, `scan_event_id`, `scanned_at`, `personal_coverage_confirmed`, `needs_review`, `review_reason`, or `policy_coverages.confirmed`, `evidence_verified`.
+- The `DATABASE_URL` role is neither the owner of `policies`/`policy_coverages` nor `BYPASSRLS` (§5 trusted-worker controls).
+- Any statement in 6.4 or 6.5 succeeds, or any policy upload/scan/process smoke test fails.
 - Any RLS test in section 6 lets a household, another household or a reviewer read or change what it should not, or any service-path check fails.
 - Any bucket in section 7 is public, or a household session can reach `claim-evidence-files` directly.
 - The application was deployed against this database before the migrations finished.

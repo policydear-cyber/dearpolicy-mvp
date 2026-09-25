@@ -268,15 +268,46 @@ function testInfrastructureTableProtectionIsSensitiveToTheRealMigrations() {
   cases++;
 }
 
+function testPolicyStateProtectionIsSensitiveToTheRealMigrations() {
+  // Healthy baseline: every policies/policy_coverages column classified,
+  // sql/household-rls.sql revokes browser writes, enables RLS and installs
+  // the lifecycle guard trigger, and the policy-state suite is wired into CI.
+  const id = "policy_state_protection";
+  const before = statusOf(runOnly(id), id);
+  assert.equal(before, "ready", `expected healthy baseline ready, got ${before}`);
+  const trigger = "      EXECUTE 'CREATE TRIGGER guard_household_policy_update BEFORE UPDATE ON public.policies FOR EACH ROW EXECUTE FUNCTION public.guard_household_policy_update()';\n";
+  const sabotages = [
+    ["broad browser UPDATE restored via member_tables", "sql/household-rls.sql", "    'policy_pages', 'policy_chunks', 'premium_records',\n", "    'policy_pages', 'policy_chunks', 'premium_records', 'policies',\n", /member_tables restores household INSERT\/UPDATE\/DELETE on policies/],
+    ["broad browser UPDATE restored via a table-wide grant", "sql/household-rls.sql", "EXECUTE 'GRANT SELECT ON public.policies TO authenticated';", "EXECUTE 'GRANT SELECT, UPDATE ON public.policies TO authenticated';", /grants UPDATE on every column of policies/],
+    ["browser INSERT granted on a verification column", "sql/household-rls.sql", "EXECUTE 'GRANT SELECT ON public.policy_coverages TO authenticated';", "EXECUTE 'GRANT SELECT, INSERT (confirmed, evidence_verified) ON public.policy_coverages TO authenticated';", /grants INSERT \(confirmed\) on policy_coverages/],
+    ["RLS removed from policy_coverages", "sql/household-rls.sql", "    EXECUTE 'ALTER TABLE public.policy_coverages ENABLE ROW LEVEL SECURITY';\n", "", /no longer enables RLS on policy_coverages/],
+    ["the lifecycle guard trigger removed", "sql/household-rls.sql", trigger, "", /no longer installs trigger guard_household_policy_update/],
+    ["the CI step removed", ".github/workflows/ci.yml", "        run: npm run security:policy-state-test\n", "", /CI does not run npm run security:policy-state-test/],
+    ["an unclassified trusted column added", "sql/schema.sql", "ALTER TABLE policies ADD COLUMN IF NOT EXISTS scanned_at timestamptz;\n", "ALTER TABLE policies ADD COLUMN IF NOT EXISTS scanned_at timestamptz;\nALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_override_verdict text;\n", /policies\.scan_override_verdict is created by a migration but not classified/],
+  ];
+  for (const [label, file, find, replaceWith, reason] of sabotages) {
+    sabotageRunRestore(file, find, replaceWith, () => {
+      const item = runOnly(id).find((r) => r.id === id);
+      assert.equal(item.status, "blocked_by_code", `${label} must flip ${id} to blocked_by_code, got ${item.status}`);
+      assert.match(item.blockingReason, reason, `${label} must be named in the blocking reason, got: ${item.blockingReason}`);
+    });
+    console.log(`  [${id}] sabotage (${label}) -> blocked_by_code naming it; restored.`);
+  }
+  const after = statusOf(runOnly(id), id);
+  assert.equal(after, "ready", `status must flip back to ready after every restore, got ${after}`);
+  cases++;
+}
+
 function main() {
   testMalwareScanningConfigurationIsSensitiveToTheRealRegistry();
   testRedactionVerificationIsSensitiveToTheRealRedactionEngine();
   testModelPromptSchemaGovernanceIsSensitiveToTheRealChokepointWiring();
   testInfrastructureTableProtectionIsSensitiveToTheRealMigrations();
+  testPolicyStateProtectionIsSensitiveToTheRealMigrations();
   testHardcodedVerifiersCanNoLongerExistUndetected();
 
   console.log(
-    `\nlaunch-check verifier regressions passed: ${cases} cases (real sabotage-and-restore cycles against the VERIFIER ITSELF -- infrastructure_table_protection (5 sabotages), ` +
+    `\nlaunch-check verifier regressions passed: ${cases} cases (real sabotage-and-restore cycles against the VERIFIER ITSELF -- infrastructure_table_protection (5 sabotages), policy_state_protection (7 sabotages), ` +
       "malware_scanning_configuration, redaction_verification, and model_prompt_schema_governance each proven to flip STATUS under a real " +
       "production-file sabotage (the last also proven to name the specific sabotaged chokepoint in its blocking reason) and flip back after " +
       "an exact byte-restore -- plus a structural guard confirming none of the 6 previously-hardcoded verifiers has silently regressed back " +
