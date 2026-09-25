@@ -125,7 +125,18 @@ async function main() {
   );
   await db.query("INSERT INTO storage.buckets(id, name, public) VALUES ('policy-files','policy-files',true), ('claim-evidence-files','claim-evidence-files',true), ('some-other-bucket','some-other-bucket',false)");
 
+  // Supabase grants EXECUTE on every new public function to anon and
+  // authenticated through default privileges (not through PUBLIC). Reproduce
+  // that before applying the migration, so the assertion below proves
+  // sql/storage-rls.sql itself removes anon's direct grant.
+  await db.exec("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated");
   await db.exec(await readFile(path.resolve("sql/storage-rls.sql"), "utf8"));
+
+  const helperExec = await db.query<{ anon: boolean; authenticated: boolean }>(
+    "SELECT has_function_privilege('anon', 'public.is_household_storage_object(text)', 'EXECUTE') AS anon, has_function_privilege('authenticated', 'public.is_household_storage_object(text)', 'EXECUTE') AS authenticated",
+  );
+  assert.equal(helperExec.rows[0].anon, false, "anon must not be able to execute the SECURITY DEFINER storage helper, even with Supabase's default function grants");
+  assert.equal(helperExec.rows[0].authenticated, true, "authenticated must keep EXECUTE on the storage helper (the storage.objects policies call it)");
 
   const afterMigration = await db.query<{ id: string; public: boolean }>(
     "SELECT id, public FROM storage.buckets WHERE id IN ('policy-files','claim-evidence-files') ORDER BY id",

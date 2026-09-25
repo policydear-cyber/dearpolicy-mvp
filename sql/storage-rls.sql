@@ -84,6 +84,12 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION is_household_storage_object(text) FROM public;
+-- Supabase's default privileges grant EXECUTE on new public functions to
+-- anon directly (not via PUBLIC), so the PUBLIC revoke alone leaves anon able
+-- to call this SECURITY DEFINER helper. infrastructure-rls.sql's anon revoke
+-- runs one step earlier (runbook step 17) and cannot cover a function this
+-- file (step 18) creates, so revoke it here.
+REVOKE ALL ON FUNCTION is_household_storage_object(text) FROM anon;
 GRANT EXECUTE ON FUNCTION is_household_storage_object(text) TO authenticated;
 
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
