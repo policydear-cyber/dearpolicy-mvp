@@ -38,6 +38,7 @@ import { ClaimEvidenceExtractionSchema } from "@/lib/claims/evidence/extraction-
 import type { ClaimEvidenceDocumentRow, ClaimEvidenceExtractedFields } from "@/lib/claims/evidence/types";
 import { calculateAccidentalDeath } from "@/lib/claims/calculators/accidental-death";
 import type { CauseDefinitionMatch } from "@/lib/claims/calculators/evidence";
+import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provenance";
 import { resolveDeathEvidence, type DeathWordingPage } from "@/lib/claims/death-evidence";
 
 let cases = 0;
@@ -203,7 +204,7 @@ function runPureTests() {
   const matchFor = (definitionEvidence: typeof definitionEvidenceA, contractId = "policyA", coverageId = "covA"): CauseDefinitionMatch => ({
     familyMemberId: "m1", claimEventId: "claim-1", contractId, coverageId,
     causeEvidence: { documentId: "doc-1", documentType: "police_report", familyMemberId: "m1", claimEventId: "claim-1", pageStart: 1, pageEnd: 1 },
-    definitionEvidence, result: "matches", reviewedAt: "2026-09-02",
+    definitionEvidence, result: "matches", reviewedAt: "2026-09-02", provenance: verifiedEvidenceProvenance("doc-1"),
   });
 
   test("calculator: no match on file blocks, no amount", () => {
@@ -575,7 +576,7 @@ async function runDatabaseTests() {
       assert.equal(deferred.result, "needs_review");
     });
 
-    await testAsync("confirmCauseDefinitionMatch end to end: a confirmed match unlocks ONLY its own policy, never another", async () => {
+    await testAsync("confirmCauseDefinitionMatch end to end: a reviewed match without persisted model provenance fails closed for every policy", async () => {
       const { document } = await createEvidenceDocument({ accountId: account, familyMemberId: desmond, claimSessionId: claimA, documentType: "police_report", originalFilename: "e2e.pdf", storageKey: "k14", mimeType: "application/pdf", byteSize: 100, fileHash: "hash-14" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "uploaded", to: "quarantined" });
       await transitionEvidenceStatus({ accountId: account, id: document.id, from: "quarantined", to: "processing" });
@@ -605,7 +606,8 @@ async function runDatabaseTests() {
         ruleEvidence: definitionA, ownershipEvidence: { policyId: policyA, chunkId: `coverage:${coverageA}`, coverageId: coverageA, familyMemberId: desmond },
       };
       const resultA = calculateAccidentalDeath({ ...sharedInput, ownership: { contractId: policyA, coverageId: coverageA }, accidentalDeathDefinitionEvidence: definitionA, causeDefinitionMatch: forPolicyA! });
-      assert.equal(resultA.status, "calculated");
+      assert.equal(resultA.status, "blocked");
+      if (resultA.status === "blocked") assert.equal(resultA.reasonCode, "EVIDENCE_PROVENANCE_MISSING");
 
       const resultB = calculateAccidentalDeath({ ...sharedInput, ownership: { contractId: policyB, coverageId: coverageB }, ruleEvidence: definitionB, ownershipEvidence: { policyId: policyB, chunkId: `coverage:${coverageB}`, coverageId: coverageB, familyMemberId: desmond }, formula: { kind: "sum_insured_fraction" as const, fraction: 1, evidence: definitionB }, accidentalDeathDefinitionEvidence: definitionB, causeDefinitionMatch: forPolicyA! });
       assert.equal(resultB.status, "blocked");
