@@ -247,7 +247,7 @@ async function main() {
       assert.deepEqual(summary.byType[b], { succeeded: 0, failed: 1 });
       assert.equal(summary.stoppedBy, "empty");
       assert.ok(!JSON.stringify(summary).includes("4111"), "the batch summary must never carry an error message");
-      assert.equal((await jobRow(b, "1"))?.status, "failed_retryable", "a failed job goes through the normal bounded-retry path");
+      assert.equal((await jobRow(b, "1"))?.status, "dead_letter", "a failed job goes through failJob()'s normal classification (an unclassified error is non-retryable)");
     });
 
     await testAsync("runJobBatch stops claiming at maxJobs and leaves the rest queued", async () => {
