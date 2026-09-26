@@ -54,8 +54,13 @@ const FM = "fam-synthetic-answer-1";
 const CLAIM = "claim-synthetic-answer-1";
 const ILLNESS = "Systemic Lupus Erythematosus";
 
+/** Each synthetic cover models a personal certificate that writes its own
+ * currency (currencyVerified). Since the currency-provenance change, a cover
+ * whose certificate states no currency is never priced; that case is
+ * asserted in scripts/cross-product-currency-regressions.ts. */
 function coverage(overrides: Partial<OwnedCoverage>): OwnedCoverage {
   return {
+    currencyVerified: true,
     id: "x", policyId: "p", familyMemberId: FM, category: "Critical Illness", amount: null, currency: "SGD", productName: null,
     sourcePage: 1, evidenceText: null, insurer: "Synthetic Insurer", policyName: "SYNTHETIC Household Plan", policyNumber: "SYN-1",
     groupPolicyNumber: null, documentRole: "certificate", effectiveDate: "2019-01-01", renewalOrExpiryDate: null,
@@ -241,12 +246,9 @@ const scenarios: Scenario[] = [
     controlExpect: { included: { ["ci-major-systemic-lupus-erythematosus@" + ciA.policyId]: [200_000, "SGD", ciA.policyId, 19], ["ci-major-systemic-lupus-erythematosus@" + ciB.policyId]: [100_000, "SGD", ciB.policyId, 19] }, totals: { SGD: 300_000 }, question: null },
   },
   {
-    // KNOWN GAP (reported, not asserted as safe): a sum-insured benefit on a
-    // cover whose currency column was never extracted (currencyVerified
-    // false, currency defaulted to SGD) still calculates and is labelled SGD.
-    // Only travel benefits check currencyVerified (lib/claims/currency-
-    // evidence.ts). Whether such covers should show any amount is a product
-    // decision; this scenario asserts only the verified two-currency case.
+    // Both covers state their currency on the certificate. A cover whose
+    // certificate states no currency is never priced (currency provenance;
+    // scripts/cross-product-currency-regressions.ts).
     name: "independent policies in two currencies: totals stay separated per currency and are never combined",
     blocked: { facts: diagnosisFacts([ciMatch(ciA, 19)]), coverages: [ciA, ciUsd], ciRules: [ciRule(ciA, 19), ciRule(ciUsd, 7)] },
     blockedExpect: { included: { ["ci-major-systemic-lupus-erythematosus@" + ciA.policyId]: [200_000, "SGD", ciA.policyId, 19] }, totals: { SGD: 200_000 }, question: null },
@@ -358,7 +360,7 @@ function walkHospitalOrder(): { order: string[]; problems: string[]; finalAmount
 // unperturbed card is the positive control.
 // ---------------------------------------------------------------------
 const LIVE_CONTROL: ClaimItem = {
-  title: "SYNTHETIC Parent · Critical illness benefit", status: "potentially_applicable", amountText: "S$200,000", amountLabel: "Potential payout",
+  title: "SYNTHETIC Parent · Critical illness benefit", status: "potentially_applicable", amountText: "S$200,000", amountLabel: "Calculated benefit (internal)",
   estimateBasis: "confirmed", calculatedAmount: 200_000, currency: "SGD", calculationKind: "sum_insured", aggregation: "additive",
   calculationId: "synthetic-calc-1", coverKey: "SYN-1", contractId: "contract-syn-1", reason: "Quoted wording and personal schedule both found.", conditions: [],
 };
