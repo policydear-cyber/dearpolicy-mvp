@@ -99,7 +99,10 @@ export async function ensureDefaultHousehold(userId: string, displayName: string
     );
     if (existing.rows.length > 0) return existing.rows[0].household_id;
 
-    const created = await client.query<{ id: string }>(`insert into accounts(name) values ($1) returning id`, [
+    // accounts.id has NO column default in sql/schema.sql (nor in the live
+    // database), so the id must be generated here -- relying on a default
+    // made every first sign-in fail with a NOT NULL violation.
+    const created = await client.query<{ id: string }>(`insert into accounts(id, name) values (gen_random_uuid(), $1) returning id`, [
       displayName || "My household",
     ]);
     const householdId = created.rows[0].id;
