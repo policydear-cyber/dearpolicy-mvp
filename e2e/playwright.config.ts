@@ -6,6 +6,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 240_000,
+  globalTimeout: 20 * 60_000,
   expect: { timeout: 20_000 },
   reporter: [["list"]],
   globalTeardown: "./support/cleanup.ts",

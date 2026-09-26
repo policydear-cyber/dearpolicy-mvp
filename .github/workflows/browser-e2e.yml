@@ -76,6 +76,7 @@ jobs:
             curl -s -o /dev/null --max-time 180 "http://localhost:3001$p" || true
           done
       - name: Run the synthetic browser journey
+        timeout-minutes: 25
         run: npm run e2e:browser
       - name: Service logs on failure (synthetic data only; no secrets exist in this job)
         if: failure()

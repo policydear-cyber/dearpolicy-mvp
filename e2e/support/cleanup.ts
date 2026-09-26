@@ -19,6 +19,8 @@ export default async function cleanup() {
   const users = [process.env.E2E_USER_A, process.env.E2E_USER_B].filter((u): u is string => !!u);
   const client = new Client({ connectionString: url });
   await client.connect();
+  // A hung lock must fail the run loudly, never hang it.
+  await client.query(`SET lock_timeout = '10s'; SET statement_timeout = '30s'`);
   try {
     const households = (await client.query<{ id: string }>(`SELECT id::text FROM accounts WHERE name LIKE $1`, [`${PREFIX}-%`])).rows.map((r) => r.id);
     const targets = [...households, ...users];
@@ -26,7 +28,7 @@ export default async function cleanup() {
     const tables = (await client.query<{ table_name: string }>(
       `SELECT DISTINCT table_name FROM information_schema.columns WHERE table_schema='public' AND column_name='account_id' AND table_name <> 'accounts'`)).rows.map((r) => r.table_name);
     for (let pass = 0; pass < 6; pass++) {
-      for (const t of tables) await client.query(`DELETE FROM "${t}" WHERE account_id::text = ANY($1)`, [targets]).catch(() => undefined);
+      for (const t of tables) await client.query(`DELETE FROM "${t}" WHERE account_id::text = ANY($1)`, [targets]).catch((e) => { if (pass === 5) console.log(`cleanup: ${t}: ${e instanceof Error ? e.message : e}`); });
     }
     await client.query(`DELETE FROM household_members WHERE household_id::text = ANY($1) OR user_id::text = ANY($2)`, [households, users]).catch(() => undefined);
     await client.query(`DELETE FROM accounts WHERE id::text = ANY($1)`, [households]).catch(() => undefined);
