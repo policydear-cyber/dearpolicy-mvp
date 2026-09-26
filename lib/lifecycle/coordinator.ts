@@ -960,14 +960,19 @@ export async function requestFamilyMemberDeletion(args: {
     // handler computed, now the coordinator's own precondition rather
     // than a route-level check that bypassed the lifecycle machinery.
     // Only `policies` carries its own lifecycle_state among these
-    // tables, so it is the only count scoped by activePredicate(); the
-    // others (policy_members, chat_conversations, claim_sessions,
+    // tables, so it is scoped by activePredicate() -- both directly and
+    // through policy_members (a link to a policy that has already been
+    // deleted is not "linked activity": otherwise a person who deletes the
+    // only document linked to a profile can never delete that profile,
+    // and the UI offers nothing left to remove). The
+    // others (chat_conversations, claim_sessions,
     // coverage_rules, premium_records) have no lifecycle column of
     // their own and are counted as-is, exactly matching prior behavior.
     const usage = await args.client.query<{ n: number }>(
       `SELECT (
           (SELECT count(*) FROM policies WHERE family_member_id=$1 AND ${activePredicate()})
-        + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
+        + (SELECT count(*) FROM policy_members pm JOIN policies p ON p.id=pm.policy_id AND p.account_id=pm.account_id
+            WHERE pm.family_member_id=$1 AND ${activePredicate("p")})
         + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
         + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
         + (SELECT count(*) FROM coverage_rules WHERE family_member_id=$1)
