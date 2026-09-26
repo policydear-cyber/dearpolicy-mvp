@@ -1733,7 +1733,7 @@ async function main(){
         delete process.env.RAG_EVIDENCE_WINDOW_CHARACTERS;globalThis.fetch=inner;
       }
     });
-    await test("A percentage-of-Sum-Insured clause the model only quoted as prose is still promoted into a computable claim",async()=>{
+    await test("A percentage-of-Sum-Insured clause quoted as prose is promoted into a preliminary benefit",async()=>{
       const fixture=await seedReviewFixture(1);
       const fractureText="For accidental fracture of a limb, compensation is provided for a broken forearm at 20% of the Sum Insured.";
       await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)",[account,fixture.referenceId,fractureText]);
@@ -1761,7 +1761,7 @@ async function main(){
         const answer=data.answer as ChatAnswer;
         const item=answer.claimItems.find(c=>/broken forearm/i.test(c.title));
         assert.ok(item,"The quoted percentage clause must be promoted into a claim item, not left as prose the household has to work out itself: "+JSON.stringify(answer.claimItems));
-        assert.equal(item!.calculatedAmount,70000,"20% of the verified S$350,000 Sum Insured");
+        assert.equal(item!.calculatedAmount,undefined,"Pre-review chat must not expose a computed payout");
         assert.equal(item!.amountText,null);
       }finally{
         globalThis.fetch=inner;
