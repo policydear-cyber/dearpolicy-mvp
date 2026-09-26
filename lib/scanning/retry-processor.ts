@@ -13,6 +13,7 @@
  * the document keeps its hold with a fixed, safe audit message.
  */
 import { pool, query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { BackgroundJobRow } from "@/lib/jobs/queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { appendPolicyDocumentAudit } from "@/lib/policies/quarantine/audit";
@@ -23,7 +24,6 @@ import { processPolicy, type ProcessPolicyArgs } from "@/lib/rag/ingest";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { heartbeatJob } from "@/lib/jobs/queue";
 import {
-import { activePredicate } from "@/lib/lifecycle/scopes";
   isScanRetryPayload, MAX_SCAN_RETRY_ATTEMPTS, SCAN_RETRY_EXHAUSTED_ERROR, SCAN_RETRY_EXHAUSTED_MESSAGE, countScanRetries,
 } from "./retry";
 
