@@ -431,14 +431,14 @@ async function main(){
     // anything; they can look" (lib/ledger/extract.ts) -- so once both checks
     // pass, the figure is shown with confidence, not held back a third time
     // for a human to re-approve what two independent reads already verified.
-    await test("A travel rule confirmed by a second, independent read is shown with a figure",async()=>{
+    await test("A travel rule is found without a pre-review payout figure",async()=>{
       const result=await send("Desmond's flight was delayed for eight hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
       assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
       assert.equal(flight!.amountText,null,"No flight-delay estimate before claim evidence review");
       assert.equal(flight!.status,"likely_applicable");
-      assert.equal(flight!.preliminaryStatus,"reviewer_assessment_needed");
+      assert.equal(flight!.preliminaryStatus,"policy_condition_unresolved");
       assert.match(flight!.reason,/verified against the page by a second read/i);
       assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
     });
@@ -453,7 +453,7 @@ async function main(){
     // repair bill is priced against it. A reimbursement is still never
     // summed into a lump-sum household total, which is the separate
     // invariant this test also protects.
-    await test("A motor reimbursement confirmed by a second, independent read is priced, but never summed into a lump-sum total",async()=>{
+    await test("A motor reimbursement is found without a pre-review payout or total",async()=>{
       const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
