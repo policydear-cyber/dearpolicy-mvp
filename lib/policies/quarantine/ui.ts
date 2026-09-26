@@ -49,3 +49,23 @@ export function userFacingScanResultDetail(policy: PolicyQuarantineUiInput): str
   if (raw.toLowerCase().includes("no malware-scanning adapter")) return NO_SCANNER_CONFIGURED_DETAIL;
   return SCAN_DID_NOT_COMPLETE_DETAIL;
 }
+
+/**
+ * The value WRITTEN to policies.scan_result_detail for a scanner outcome.
+ * That column is household-readable (RLS SELECT on policies for the
+ * household's own rows), so provider-internal text -- a VirusTotal analysis
+ * id, engine counts, retry or poll-budget diagnostics -- is never stored in
+ * it; only the fixed category strings above. The raw provider detail goes to
+ * the server log instead (lib/policies/quarantine/store.ts), which only
+ * operators can read.
+ */
+export function persistableScanResultDetail(outcome: "clean" | "infected" | "scan_unavailable", raw: string | null | undefined): string | null {
+  if (outcome === "infected") return SCAN_REJECTED_DETAIL;
+  if (outcome === "clean") return null;
+  if (raw && raw.toLowerCase().includes("no malware-scanning adapter")) return NO_SCANNER_CONFIGURED_DETAIL;
+  return SCAN_DID_NOT_COMPLETE_DETAIL;
+}
+
+/** The only processing_error value the policy list API returns: the raw
+ * pipeline error (provider responses, storage paths) stays server-side. */
+export const POLICY_PROCESSING_STOPPED_MESSAGE = "Analysis stopped. DearPolicy kept the uploaded PDF; use Re-analyse to try again.";

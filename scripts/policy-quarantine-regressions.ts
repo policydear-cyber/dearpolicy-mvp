@@ -83,6 +83,11 @@ async function runDatabaseTests() {
     __registerFileScanAdapterForTests({ name: "test-clean", async scanFile() { return { status: "clean" as const }; } });
     __registerFileScanAdapterForTests({ name: "test-infected", async scanFile() { return { status: "infected" as const }; } });
     __registerFileScanAdapterForTests({ name: "test-throws", async scanFile(): Promise<never> { throw new Error("scan timed out"); } });
+    const VT_ANALYSIS = "NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA==";
+    __registerFileScanAdapterForTests({ name: "test-vt-clean", async scanFile() { return { status: "clean" as const, detail: `VirusTotal analysis ${VT_ANALYSIS}: malicious=0 suspicious=0 harmless=0 undetected=64 timeout=0.` }; } });
+    __registerFileScanAdapterForTests({ name: "test-vt-infected", async scanFile() { return { status: "infected" as const, detail: `VirusTotal analysis ${VT_ANALYSIS}: malicious=3 suspicious=1 harmless=0 undetected=60 timeout=0.` }; } });
+    __registerFileScanAdapterForTests({ name: "test-vt-unavailable", async scanFile() { return { status: "scan_unavailable" as const, detail: `VirusTotal analysis ${VT_ANALYSIS} did not complete within the 60000ms poll budget (still "queued").` }; } });
+    __registerFileScanAdapterForTests({ name: "test-throws-storage", async scanFile(): Promise<never> { throw new Error("download failed for storage key accounts/SYNTHETIC/policies/SECRET-STORAGE-KEY.pdf"); } });
 
     const account = "60000000-0000-4000-8000-000000000001";
     const otherAccount = "60000000-0000-4000-8000-000000000099";
@@ -347,6 +352,37 @@ async function runDatabaseTests() {
       // The route itself must apply the mapping -- a raw pass-through of the column would reintroduce the leak.
       const routeSource = await readFile(path.join(process.cwd(), "app/api/policies/route.ts"), "utf8");
       assert.match(routeSource, /scan_result_detail:\s*userFacingScanResultDetail\(p\)/);
+    });
+
+    // 19c. Provider-internal detail is never WRITTEN to household-readable
+    // storage (policies.scan_result_detail, policy_document_audit_log), which
+    // the household can read directly under RLS, not only via the API.
+    await testAsync("scanner detail and raw scan errors are never persisted to household-readable columns", async () => {
+      const leak = /virustotal|analysis|malicious=|NjY0|SECRET-STORAGE-KEY|storage key/i;
+      const cases: [string, string, string | null][] = [
+        ["test-vt-clean", "scan_clean", null],
+        ["test-vt-infected", "scan_rejected", SCAN_REJECTED_DETAIL],
+        ["test-vt-unavailable", "scan_pending", SCAN_DID_NOT_COMPLETE_DETAIL],
+        ["test-throws-storage", "scan_pending", null],
+      ];
+      for (const [provider, status, detail] of cases) {
+        process.env.MALWARE_SCANNER_PROVIDER = provider;
+        const id = await insertPolicy();
+        const gate = await runPolicyQuarantineGate({ accountId: account, policyId: id, readBytes: noBytes });
+        assert.equal(gate.row?.quarantine_status, status, `${provider}: status`);
+        assert.equal(gate.row?.scan_result_detail ?? null, detail, `${provider}: stored detail must be the fixed category string`);
+        const stored = await pool.query(`SELECT scan_result_detail FROM policies WHERE id=$1`, [id]);
+        assert.ok(!leak.test(String(stored.rows[0]?.scan_result_detail ?? "")), `${provider}: provider detail leaked into policies.scan_result_detail`);
+        const audit = await listPolicyDocumentAudit(account, id);
+        for (const a of audit) assert.ok(!leak.test(`${a.reason ?? ""} ${JSON.stringify(a.new_value ?? {})} ${JSON.stringify(a.previous_value ?? {})}`), `${provider}: provider detail or raw error leaked into the audit trail (${a.action})`);
+        if (provider === "test-throws-storage") assert.ok(audit.some((a) => a.action === "scan_attempt_failed" && a.reason_code === "SCAN_ATTEMPT_FAILED"), "the failed attempt is still audited");
+        // Fail closed throughout: only a clean verdict clears processing.
+        assert.equal(gate.cleared, status === "scan_clean", `${provider}: cleared`);
+      }
+      // The list route also returns a fixed string instead of the raw processing error.
+      const routeSource = await readFile(path.join(process.cwd(), "app/api/policies/route.ts"), "utf8");
+      assert.match(routeSource, /processing_error:\s*p\.processing_error \? POLICY_PROCESSING_STOPPED_MESSAGE : null/);
+      delete process.env.MALWARE_SCANNER_PROVIDER;
     });
 
     // Audit-event creation -- exercised throughout every test above; one
