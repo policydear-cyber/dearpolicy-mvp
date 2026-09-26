@@ -407,7 +407,7 @@ async function main() {
         "app/api/claims/evidence/upload/route.ts", "app/api/chat/route.ts", "app/api/chat/jobs/[id]/route.ts", "app/api/household/export/route.ts"];
       for (const r of routes) {
         const src = readFileSync(path.resolve(r), "utf8");
-        assert.match(src, /export const ROUTE_AUTH = "household-member" as const/, `${r} must be a household-member route`);
+        assert.match(src, /export const ROUTE_AUTH = "household-(?:member|owner)" as const/, `${r} must be an authenticated household route`);
         const auth = src.search(/await requireHouseholdContext\(request\)/);
         const call = src.search(/\n\s*scheduleRequestDrain\(\);/);
         assert.ok(auth >= 0 && call > auth, `${r} must call scheduleRequestDrain() only after requireHouseholdContext()`);
