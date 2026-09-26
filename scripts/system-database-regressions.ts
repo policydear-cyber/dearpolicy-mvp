@@ -490,7 +490,7 @@ async function main(){
     await test("A completed stay updates memory and permits the independent daily calculation",async()=>{
       const result=await send("She was discharged after twelve nights.",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText==="S$60.00"&&/applicable/.test(item.status)));
+      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText===null&&/applicable/.test(item.status)));
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.state.subjects[people[1].id].hospitalNights.value,12);
     });
     await test("Automatic context retains a named reported condition when model facts are empty",async()=>{
@@ -1785,7 +1785,7 @@ async function main(){
       // S$70,000 percentage-of-whole-sum reading can never leak through.
       assert.equal(answer.claimItems[0].amountText,null);
       assert.equal(answer.claimItems[0].status,"needs_document");
-      assert.equal(answer.claimItems[0].estimateBasis,"indicative","…and it is still marked as read from a heading");
+      assert.equal(answer.claimItems[0].estimateBasis,undefined,"Pre-review cards do not expose an estimate basis");
       assert.ok(answer.claimItems[0].conditions.some(c=>/heading above the row/.test(c)),"The condition names the actual cause: a heading-read rate, not the row itself");
       assert.equal(/S\$70,000/.test(JSON.stringify(answer)),false,"S$70,000 for a forearm never appears anywhere");
     });
