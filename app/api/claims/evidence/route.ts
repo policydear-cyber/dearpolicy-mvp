@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { getClaimSession } from "@/lib/claims/session";
 import { listEvidenceDocuments, getLatestExtraction } from "@/lib/claims/evidence/store";
 import { documentTypeGroup } from "@/lib/claims/evidence/document-catalogue";
@@ -13,6 +14,7 @@ export const ROUTE_AUTH = "household-member" as const;
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     const url = new URL(request.url);
     const familyMemberId = url.searchParams.get("familyMemberId") ?? "";
     const claimSessionId = url.searchParams.get("claimSessionId") ?? "";

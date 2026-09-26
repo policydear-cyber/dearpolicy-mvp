@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createHash, randomUUID } from "node:crypto";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -29,6 +30,7 @@ class DuplicateDocument extends Error {
 export async function POST(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     const form = await request.formData();
     const file = form.get("file");
     let familyMemberId = String(form.get("familyMemberId") ?? "");

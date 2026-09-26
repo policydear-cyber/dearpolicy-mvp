@@ -26,6 +26,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { requireRecentAuthentication } from "@/lib/auth/session";
 import { requireHouseholdOwner } from "@/lib/household/repo";
 import { pool } from "@/lib/db/client";
@@ -60,6 +61,7 @@ function toResponse(row: HouseholdExportRow) {
 export async function POST(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     requireRecentAuthentication(ctx.user);
     await requireHouseholdOwner(ctx.userId, ctx.householdId);
 
@@ -106,6 +108,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     await requireHouseholdOwner(ctx.userId, ctx.householdId);
     const rows = await listRecentExports(pool, ctx.householdId);
     return NextResponse.json({ exports: rows.map(toResponse) });

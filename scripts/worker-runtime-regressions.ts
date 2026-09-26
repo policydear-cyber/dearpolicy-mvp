@@ -31,6 +31,8 @@ import { NoopTelemetryAdapter } from "@/lib/telemetry/adapters";
 import { enqueueJob } from "@/lib/jobs/queue";
 import { claimAndProcessOne, runWorkerLoop } from "@/lib/jobs/worker-runtime";
 import { authorizeJobRunner, runJobBatch } from "@/lib/jobs/cron-runner";
+import { drainOnce, resetRequestDrainStateForTests, scheduleRequestDrain, REQUEST_DRAIN_MAX_JOBS, REQUEST_DRAIN_MIN_INTERVAL_MS } from "@/lib/jobs/request-drain";
+import { readFileSync } from "node:fs";
 import { NextRequest } from "next/server";
 
 const SQL_FILES = ["sql/schema.sql", "sql/background-jobs.sql"];
@@ -302,6 +304,111 @@ async function main() {
         else process.env.CRON_SECRET = previous;
       }
     });
+
+    // ---- Request-driven drain (lib/jobs/request-drain.ts): the prompt
+    // trigger on Vercel Hobby, where Cron runs at most once a day.
+    await pool.query(`DELETE FROM background_jobs`);
+    const rdType = "rd_test_prompt";
+    const rdCounts = async () => (await pool.query<{ status: string; n: number }>(
+      `SELECT status, count(*)::int AS n FROM background_jobs WHERE job_type=$1 GROUP BY status`, [rdType])).rows
+      .reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.status]: Number(r.n) }), {});
+    let clock = 1_000_000;
+    const now = () => clock;
+    const tick = () => { clock += REQUEST_DRAIN_MIN_INTERVAL_MS + 1; };
+    const ran: string[] = [];
+    const rdTypes = [{ jobType: rdType, process: async (job: { idempotency_key: string }) => { ran.push(job.idempotency_key); } }];
+
+    await testAsync("request drain: JOB_DRAIN_ON_REQUEST=false disables it", async () => {
+      resetRequestDrainStateForTests();
+      const outcome = await drainOnce({ jobTypes: rdTypes as never, now, env: { JOB_DRAIN_ON_REQUEST: "false" } });
+      assert.deepEqual(outcome, { ran: false, reason: "disabled" });
+    });
+
+    await testAsync("request drain: nothing claimable -> no batch at all", async () => {
+      resetRequestDrainStateForTests(); tick();
+      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: {} }), { ran: false, reason: "no_work" });
+    });
+
+    await testAsync("request drain: claims at most REQUEST_DRAIN_MAX_JOBS per drain, then is throttled per instance", async () => {
+      resetRequestDrainStateForTests(); tick();
+      for (const k of ["a", "b", "c"]) await enqueueJob(pool, { jobType: rdType, idempotencyKey: `rd-${k}` });
+      const first = await drainOnce({ jobTypes: rdTypes as never, now, env: {} });
+      assert.equal(first.ran, true);
+      assert.equal(first.ran && first.summary.claimed, REQUEST_DRAIN_MAX_JOBS);
+      assert.equal(first.ran && first.summary.stoppedBy, "max_jobs");
+      assert.deepEqual(await rdCounts(), { succeeded: 2, queued: 1 });
+      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: {} }), { ran: false, reason: "throttled" });
+      tick();
+      const second = await drainOnce({ jobTypes: rdTypes as never, now, env: {} });
+      assert.equal(second.ran && second.summary.claimed, 1);
+      assert.deepEqual(await rdCounts(), { succeeded: 3 });
+      assert.equal(new Set(ran).size, 3, "every job ran exactly once");
+      assert.equal(ran.length, 3);
+    });
+
+    await testAsync("request drain: a delayed (scan-retry style) job is not run early, and is picked up by the first drain after it is due", async () => {
+      resetRequestDrainStateForTests(); tick();
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-later", availableAt: new Date(Date.now() + 60 * 60_000) });
+      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: {} }), { ran: false, reason: "no_work" });
+      assert.equal((await rdCounts()).queued, 1);
+      await pool.query(`UPDATE background_jobs SET available_at = now() - interval '1 second' WHERE job_type=$1 AND idempotency_key='rd-later'`, [rdType]);
+      tick();
+      const due = await drainOnce({ jobTypes: rdTypes as never, now, env: {} });
+      assert.equal(due.ran && due.summary.claimed, 1);
+      assert.equal((await rdCounts()).queued, undefined);
+    });
+
+    await testAsync("request drain: at most one drain in flight per instance", async () => {
+      resetRequestDrainStateForTests(); tick();
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-slow" });
+      let release!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      let started!: () => void;
+      const startedP = new Promise<void>((r) => { started = r; });
+      const slow = [{ jobType: rdType, process: async () => { started(); await gate; } }];
+      const firstP = drainOnce({ jobTypes: slow as never, now, env: {} });
+      await startedP;
+      tick();
+      assert.deepEqual(await drainOnce({ jobTypes: slow as never, now, env: {} }), { ran: false, reason: "in_flight" });
+      release();
+      const first = await firstP;
+      assert.equal(first.ran && first.summary.claimed, 1);
+    });
+
+    await testAsync("request drain: a failing job goes through bounded retry (failed_retryable), never succeeded", async () => {
+      resetRequestDrainStateForTests(); tick();
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-fail" });
+      const failing = [{ jobType: rdType, process: async () => { throw new Error("synthetic transient failure"); } }];
+      const out = await drainOnce({ jobTypes: failing as never, now, env: {} });
+      assert.equal(out.ran && out.summary.byType[rdType]?.failed, 1);
+      const row = await jobRow(rdType, "rd-fail");
+      assert.equal(row?.status, "failed_retryable");
+      assert.equal(row?.attempt_count, 1);
+    });
+
+    await testAsync("request drain: outside a request scope scheduleRequestDrain() is a no-op (never races a caller)", async () => {
+      resetRequestDrainStateForTests(); tick();
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [rdType]);
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-untouched" });
+      scheduleRequestDrain();
+      await new Promise((r) => setTimeout(r, 100));
+      assert.equal((await jobRow(rdType, "rd-untouched"))?.status, "queued");
+    });
+
+    await testAsync("request drain: wired after authentication into every enqueueing and status-polling household route", async () => {
+      const routes = ["app/api/policies/route.ts", "app/api/policies/upload/route.ts", "app/api/policies/reprocess/route.ts", "app/api/claims/evidence/route.ts",
+        "app/api/claims/evidence/upload/route.ts", "app/api/chat/route.ts", "app/api/chat/jobs/[id]/route.ts", "app/api/household/export/route.ts"];
+      for (const r of routes) {
+        const src = readFileSync(path.resolve(r), "utf8");
+        assert.match(src, /export const ROUTE_AUTH = "household-member" as const/, `${r} must be a household-member route`);
+        const auth = src.search(/await requireHouseholdContext\(request\)/);
+        const call = src.search(/\n\s*scheduleRequestDrain\(\);/);
+        assert.ok(auth >= 0 && call > auth, `${r} must call scheduleRequestDrain() only after requireHouseholdContext()`);
+      }
+      const drain = readFileSync(path.resolve("lib/jobs/request-drain.ts"), "utf8");
+      assert.match(drain, /runJobBatch\(\{ jobTypes, maxJobs: REQUEST_DRAIN_MAX_JOBS, claimBudgetMs: REQUEST_DRAIN_CLAIM_BUDGET_MS/);
+      assert.doesNotMatch(drain, /request\.|searchParams|headers\(/, "the caller must not be able to influence the drain");
+    });
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;
@@ -315,7 +422,7 @@ main()
       `worker-runtime regressions passed: ${cases} cases (empty-queue no-op, claim-what-a-different-call-enqueued, ` +
         `failure classification, multi-job-type draining, bounded/aborted loop termination, and lease-expiry recovery ` +
         `across a simulated worker crash), plus the Vercel Cron job runner: CRON_SECRET auth, round-robin bounded batches, ` +
-        `max-jobs and claim-budget stops, lease recovery and the route's counts-only responses).`,
+        `max-jobs and claim-budget stops, lease recovery and the route's counts-only responses), plus the request-driven drain (bounded, throttled, single-flight, delayed-retry pickup, no-op outside a request, wired after auth).`,
     );
   })
   .catch((error) => {

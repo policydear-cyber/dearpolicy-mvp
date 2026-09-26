@@ -80,3 +80,41 @@ Any of these still requires `CRON_SECRET` (Production, Sensitive). As of 2026-09
 | Retries bounded? | Yes: `max_attempts`, default 5, with exponential backoff, then `dead_letter`. |
 | Dead letters recoverable? | Manually, with `npm run jobs:dead-letter`. |
 | Heavy synchronous work left in routes? | Synchronous chat (by design, `maxDuration` 300) and deletions. Uploads only enqueue. |
+
+## Request-driven drain (prompt processing on Hobby)
+
+`lib/jobs/request-drain.ts` adds a second trigger that needs no plan change, no third-party scheduler and no copy of `CRON_SECRET` outside Vercel.
+
+- **Where:** the routes that enqueue work or that the UI polls while a household waits: `GET /api/policies` (polled every 1.4 s by the documents page), `POST /api/policies/upload`, `POST /api/policies/reprocess`, `GET /api/claims/evidence` (polled every 4 s by the claim page), `POST /api/claims/evidence/upload`, `POST /api/chat`, `GET /api/chat/jobs/[id]`, and `GET`/`POST /api/household/export`. Each calls `scheduleRequestDrain()` only **after** `requireHouseholdContext()` has authenticated the caller.
+- **What:** after the response is sent (`after()`, which Vercel keeps alive with `waitUntil`), one bounded `runJobBatch()`: the same lease recovery, `SKIP LOCKED` + CAS claim, heartbeats, bounded retries and dead-lettering as the cron route, over the same `PRODUCTION_JOB_TYPES`.
+- **Bounds:** at most 2 jobs and a 20 s claim window per drain; at most one drain in flight and one drain start per 5 s per server instance; a cheap `EXISTS` query skips the batch when nothing is claimable.
+- **Nothing reaches the caller:** the response is already sent; the caller cannot choose job types, households, limits or worker identity; failures log an error class only.
+- **Scan retries** (`document_scan_retry`, #30) are delayed `background_jobs` rows, so the first drain after a retry is due runs it. Infected stays terminal and deleted/superseded documents are skipped by the processors themselves; the drain does not change what a job may do.
+- **Limit (honest):** this is prompt only **while someone is using the app**. A retry that falls due while nobody is signed in waits for the next request or the daily 03:00 UTC Cron backstop. That is acceptable for controlled internal testing, where the tester is watching the page, and is **not** a production trigger, so `launch:check` still reports `production_job_execution` blocked until a frequent trigger exists.
+- **Long jobs:** a policy-processing job claimed by a drain runs inside that function invocation (Vercel Hobby with Fluid compute allows up to 300 s). A job cut off by the platform stops heartbeating; its lease expires after 5 minutes and it is retried (bounded), exactly as for a crashed worker.
+- `JOB_DRAIN_ON_REQUEST=false` turns it off.
+
+Tests: `scripts/worker-runtime-regressions.ts` (disabled flag, no-work skip, `max_jobs` bound, per-instance throttle, single flight, delayed-retry pickup, bounded failure, no-op outside a request, wiring after authentication on every listed route).
+
+## Production-topology proof (CI)
+
+`.github/workflows/production-topology.yml` builds the app, runs `next start` with `NODE_ENV=production` (every startup guard active), a local Postgres, a local fake VirusTotal API and a run-scoped synthetic `CRON_SECRET`, then drives only the HTTP surface Vercel Cron uses. It proves:
+1. production refuses to start without `CRON_SECRET`;
+2. `GET /api/internal/jobs/run` refuses a missing or wrong bearer (401);
+3. one authorised call claims the three queued synthetic jobs and completes a scan through the real VirusTotal adapter: the clean document reaches `scan_clean`, the infected one `scan_rejected`;
+4. infected is terminal and is never resubmitted on a later run;
+5. a document deleted before the run is never sent to the scanner.
+
+Differences from Vercel, stated plainly: storage is local disk (Vercel uses Supabase Storage), the database is local without TLS (the pool only enables TLS for non-local hosts), the scanner is a local fake, no model provider is configured (so post-scan extraction may fail and retry, which the proof reports rather than hides), and `after()` is served by `next start`, not Vercel's `waitUntil`.
+
+## Exact change for a frequent trigger (blocked: needs the owner)
+
+Plan change (Vercel Pro), then in `vercel.json`:
+
+```json
+{ "crons": [ { "path": "/api/internal/jobs/run", "schedule": "* * * * *" } ] }
+```
+
+Before any deploy that contains this branch: create `CRON_SECRET` in the `dearpolicy-mvp` project, **Production** target, type **Sensitive**, at least 32 random characters (for example `openssl rand -hex 32`, generated and pasted by the owner; never shared). As of 2026-09-26 the project's environment metadata lists no `CRON_SECRET` in any target, and the owner account reports `billing.plan: "hobby"`.
+
+Evidence to collect after deploy (owner): Vercel → Project → Settings → Cron Jobs shows the entry; Runtime Logs show `GET /api/internal/jobs/run` 200 responses with counts only; a synthetic upload moves from `queued` to a scan verdict without anyone pressing Re-analyse.
