@@ -461,7 +461,7 @@ async function main(){
       assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
       assert.equal(item?.amountText,"S$4,000");
       assert.equal(item?.status,"likely_applicable");
-      assert.equal(item?.amountLabel,"Potential reimbursement");
+      assert.equal(item?.amountLabel,"Calculated reimbursement (internal)");
       assert.equal(item?.aggregation,"reimbursement");
       assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });

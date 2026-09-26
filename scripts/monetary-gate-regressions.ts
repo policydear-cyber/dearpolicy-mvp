@@ -135,7 +135,7 @@ export function runMonetaryGateRegressions() {
     title: "Avery · Hospital cash",
     status: "likely_applicable",
     amountText: "S$300",
-    amountLabel: "Potential payout",
+    amountLabel: "Calculated benefit (internal)",
     estimateBasis: "confirmed",
     calculatedAmount: 300,
     currency: "SGD",

@@ -38,7 +38,7 @@ function randomItem(index:number):ClaimItem{
     title:"Person · Benefit "+index,
     status:pick(["likely_applicable","potentially_applicable"] as const),
     amountText:"S$"+amount.toLocaleString("en-SG"),
-    amountLabel:"Potential payout",
+    amountLabel:"Calculated benefit (internal)",
     estimateBasis:pick(["confirmed","estimated","indicative"] as const),
     calculatedAmount:amount,
     currency:pick(["SGD","SGD","SGD","USD"]),

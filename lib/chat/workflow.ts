@@ -31,6 +31,8 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
+function liveClaimContext(intent:string|undefined,a:ChatAnswer):boolean{const mode:string=a.mode;return intent==="claim"||mode!=="answer"||a.claimItems.length>0}
+
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
   question:string;conversationId?:string|null;conversationRevision?:number;
@@ -495,7 +497,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:state.intent==="claim"||answer.mode!=="answer"||answer.claimItems.length>0}),jobId:options?.jobId});
+              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             // A row that only says "as stated in the plan" is not yet an answer;
@@ -558,7 +560,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:state.intent==="claim"||answer.mode!=="answer"||answer.claimItems.length>0}),jobId:options?.jobId});
+              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             }
@@ -614,7 +616,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:state.intent==="claim"||answer.mode!=="answer"||answer.claimItems.length>0}),jobId:options?.jobId});
+          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
         // Carried into the reading path when the rules on file have nothing to
@@ -800,7 +802,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
             answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
             await check();
-            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:state.intent==="claim"||answer.mode!=="answer"||answer.claimItems.length>0}),jobId:options?.jobId});
+            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
             return {answer,retrieved:[]};
           }
           delete state.pending;
@@ -854,7 +856,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:state.intent==="claim"||answer.mode!=="answer"||answer.claimItems.length>0}),jobId:options?.jobId});
+          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
           }
         }
@@ -1100,7 +1102,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   }
   answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
   await check();
-  await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:state.intent==="claim"||answer.mode!=="answer"||answer.claimItems.length>0}),jobId:options?.jobId});
+  await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
   return {answer,retrieved:[]};
 }
 
