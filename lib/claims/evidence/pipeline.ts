@@ -21,6 +21,7 @@
  * application log -- only status, stage and error CODES. See the catch
  * block below.
  */
+import { EVIDENCE_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { query } from "@/lib/db/client";
 import { readClaimEvidenceFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
@@ -237,8 +238,11 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     const code = (error && typeof error === "object" && "code" in error && typeof (error as { code?: unknown }).code === "string")
       ? (error as { code: string }).code
       : "PROCESSING_ERROR";
-    const message = error instanceof Error ? error.message : "Claim-evidence processing failed.";
-    await markFailed(args.accountId, args.documentId, current.status, code, message);
+    // The document row and its audit trail are household-readable: only a
+    // fixed message is stored there; the raw error goes to the service-only
+    // diagnostics table (lib/diagnostics/processing-failures.ts).
+    await recordProcessingFailure({ accountId: args.accountId, resourceType: "claim_evidence", resourceId: args.documentId, failureCode: code, error });
+    await markFailed(args.accountId, args.documentId, current.status, code, EVIDENCE_PROCESSING_FAILED_MESSAGE);
     // Checkpoint 8 (claude/v1-launch-hardening): re-throw after recording the
     // document-level failure. The document's own status='failed' is the
     // user-visible terminal state either way -- this throw exists so the

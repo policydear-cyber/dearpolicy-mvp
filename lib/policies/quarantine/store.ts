@@ -19,6 +19,7 @@ import { currentFileScanAdapter } from "@/lib/scanning/adapter";
 import { assertValidPolicyQuarantineTransition } from "./state-machine";
 import { appendPolicyDocumentAudit } from "./audit";
 import { persistableScanResultDetail } from "./ui";
+import { recordProcessingFailure, SCAN_ATTEMPT_FAILED_MESSAGE } from "@/lib/diagnostics/processing-failures";
 import { isPolicyQuarantineStatus, type PolicyQuarantineRow, type PolicyQuarantineStatus, type PolicyScanResultOutcome } from "./types";
 
 const ROW_COLUMNS = `id::text,account_id,quarantine_status,scan_provider,scan_result_detail,scan_event_id,
@@ -228,10 +229,11 @@ export async function runPolicyQuarantineGate(args: {
         // error (which can name a storage key or a provider response) is not
         // stored; the server log gets its class name for operators.
         console.warn(`malware scan attempt failed for policy ${args.policyId} (${error instanceof Error ? error.name : "unknown"})`);
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_scan", resourceId: args.policyId, failureCode: "SCAN_ATTEMPT_FAILED", error });
         await appendPolicyDocumentAudit(args.accountId, {
           actor: "system", action: "scan_attempt_failed", policyId: args.policyId,
           previousValue: { quarantineStatus: "scan_pending" },
-          reason: "The malware scan could not be completed; the document stays on hold.", reasonCode: "SCAN_ATTEMPT_FAILED",
+          reason: SCAN_ATTEMPT_FAILED_MESSAGE, reasonCode: "SCAN_ATTEMPT_FAILED",
         });
         return { cleared: false, row };
       }
@@ -246,7 +248,10 @@ export async function runPolicyQuarantineGate(args: {
         if (result.status === "clean") {
           await recordPolicyScanResult({ accountId: args.accountId, policyId: args.policyId, status: "scan_clean", scanProvider: adapter.name, scanResultDetail: result.detail ?? null });
         } else {
-          if (result.detail) console.info(`malware scan unavailable (${adapter.name}) for policy ${args.policyId}: ${result.detail}`);
+          if (result.detail) {
+            console.info(`malware scan unavailable (${adapter.name}) for policy ${args.policyId}: ${result.detail}`);
+            await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_scan", resourceId: args.policyId, failureCode: "SCAN_UNAVAILABLE", error: result.detail });
+          }
           await query(`UPDATE policies SET scan_provider=$1, scan_result_detail=$2, updated_at=now() WHERE id=$3 AND account_id=$4 AND quarantine_status='scan_pending'`, [adapter.name, persistableScanResultDetail("scan_unavailable", result.detail), args.policyId, args.accountId]);
         }
       }

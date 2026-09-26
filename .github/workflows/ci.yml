@@ -98,6 +98,8 @@ jobs:
       - name: Travel-claims engine regression suite
         run: npm run claims:travel-test
 
+      - name: Safe processing-failure storage (no raw provider/pipeline errors in household-readable tables; diagnostics service-only)
+        run: npm run security:processing-failure-storage-test
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
 
