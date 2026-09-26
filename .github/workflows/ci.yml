@@ -104,6 +104,9 @@ jobs:
       - name: Bounded automatic scan retry (durable, idempotent, fail-closed)
         run: npm run security:scan-retry-test
 
+      - name: Processing-failure migration procedure rehearsal (runbook pre/post checks, single-transaction apply, Supabase-style default grants)
+        run: npm run security:processing-failure-migration-procedure-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
 
