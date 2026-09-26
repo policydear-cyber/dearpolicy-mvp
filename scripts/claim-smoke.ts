@@ -18,7 +18,7 @@ import { runLedgerHospitalCashRegressions } from "./ledger-hospital-cash-regress
 import { runAccidentalDeathCalculatorRegressions, runDeathBenefitCalculatorRegressions } from "./death-benefit-calculator-regressions";
 import { runDeathBenefitContextualRegressions } from "./death-benefit-contextual-regressions";
 
-const baseCoverage=(overrides:Partial<OwnedCoverage>):OwnedCoverage=>({id:"x",policyId:"p",familyMemberId:"m",category:"Death",amount:null,currency:"SGD",productName:null,sourcePage:1,evidenceText:"test",insurer:"Singlife",policyName:"MINDEF & MHA Group Insurance",policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null,...overrides});
+const baseCoverage=(overrides:Partial<OwnedCoverage>):OwnedCoverage=>({id:"x",policyId:"p",familyMemberId:"m",category:"Death",amount:null,currency:"SGD",productName:null,sourcePage:1,evidenceText:"test",insurer:"Singlife",policyName:"MINDEF & MHA Group Insurance",policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true,...overrides});
 const coverages:OwnedCoverage[]=[
   baseCoverage({id:"gtl",category:"Death",amount:1_000_000,productName:"Group Term Life"}),
   baseCoverage({id:"gpa",category:"Personal Accident",amount:600_000,productName:"Group Personal Accident"}),

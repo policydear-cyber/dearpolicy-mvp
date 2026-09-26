@@ -278,7 +278,7 @@ function makeCoverage(overrides: Partial<OwnedCoverage> & { id: string; policyId
   return {
     familyMemberId: FM, category: "Critical Illness", amount: 50_000, currency: CCY, productName: "Living Care",
     sourcePage: null, evidenceText: null, insurer: "Singlife", policyName: "Living Care", policyNumber: overrides.policyId.toUpperCase(),
-    groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null,
+    groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null, currencyVerified: true,
     ...overrides,
   };
 }
@@ -380,7 +380,7 @@ function makeCompositionCoverage(overrides: Partial<OwnedCoverage> & { id: strin
   return {
     familyMemberId: FM, category: "Death", amount: null, currency: CCY, productName: "Group Term Life",
     sourcePage: null, evidenceText: null, insurer: "Singlife", policyName: "Group Term Life", policyNumber: overrides.policyId.toUpperCase(),
-    groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: null, renewalOrExpiryDate: null,
+    groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: null, renewalOrExpiryDate: null, currencyVerified: true,
     ...overrides,
   };
 }

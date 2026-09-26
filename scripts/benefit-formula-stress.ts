@@ -40,7 +40,7 @@ const coverage=(amount:number|null,currency="SGD"):OwnedCoverage=>({
   id:"cov-1",policyId:"doc-1",familyMemberId:"m-1",category:"Death",amount,currency,
   productName:"Group Term Life",sourcePage:1,evidenceText:"Certificate",insurer:"Singlife",
   policyName:"Scheme",policyNumber:"3037850",groupPolicyNumber:null,documentRole:"certificate",
-  effectiveDate:"2022-10-06",renewalOrExpiryDate:null});
+  effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true});
 
 const benefit=(over:Partial<CatalogBenefit>={}):CatalogBenefit=>({
   id:"b-1",policyId:"doc-1",productName:"Group Term Life",benefitName:"Death Benefit",

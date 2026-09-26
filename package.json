@@ -95,7 +95,8 @@
     "reviewer:admin": "node --import tsx scripts/claim-reviewer-admin.ts",
     "e2e:full-household-test": "node --import tsx scripts/full-household-e2e-regressions.ts",
     "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs",
-    "security:live-chat-monetary-boundary-test": "node --import tsx scripts/live-chat-monetary-boundary-regressions.ts"
+    "security:live-chat-monetary-boundary-test": "node --import tsx scripts/live-chat-monetary-boundary-regressions.ts",
+    "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

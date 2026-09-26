@@ -316,6 +316,7 @@ export function injuryNotReported(benefit:CatalogBenefit,facts:SubjectFacts){
   return benefit.benefitName;
 }
 export type CatalogAssessment={item:ClaimItem;missing:string[]};
+export const CATALOG_CURRENCY_MISSING="the policy page that states the currency of this benefit (DearPolicy never assumes one)";
 /** Arithmetic in application code, from a stored rule and a verified insured
  * amount. No model is involved and the result is identical every time. */
 export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:OwnedCoverage|null;ownerName:string;facts:SubjectFacts;
@@ -328,15 +329,21 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
    * of "the sum insured" cannot be computed without their schedule. */
   declaredOnly?:boolean}):CatalogAssessment{
   const {benefit,coverage,facts}=args;
-  const currency=normalizeCurrencyCode(benefit.currency??coverage?.currency??null,coverage?.currency??"SGD");
+  // Currency comes from the quoted clause, or -- for a share of the sum
+  // insured -- from the cover's own currency when its policy evidence states
+  // it. Never defaulted to SGD; without one there is no figure.
+  const statedCurrencyCode=benefit.currency?normalizeCurrencyCode(benefit.currency)
+    :benefit.formulaKind==="sum_insured"&&coverage?.currencyVerified===true?normalizeCurrencyCode(coverage.currency):null;
+  const currency=statedCurrencyCode??"";
   const missing:string[]=[];
   const conditions=[...benefit.conditions];
   let amount:number|null=null,basis="",aggregation:"additive"|"reimbursement"="additive";
   // A per-day figure worked out without knowing the policy's own day limit.
   let uncappedDaily=false;
   const wrongInjury=injuryNotReported(benefit,facts);
-  if(wrongInjury)missing.push("confirmation that \u201c"+wrongInjury+"\u201d is what happened \u2014 this benefit pays for that specific injury, and it is not among the ones you described");
-  else if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&currency===coverage.currency){
+  if(!statedCurrencyCode&&benefit.formulaKind!=="none")missing.push(CATALOG_CURRENCY_MISSING);
+  else if(wrongInjury)missing.push("confirmation that \u201c"+wrongInjury+"\u201d is what happened \u2014 this benefit pays for that specific injury, and it is not among the ones you described");
+  else if(benefit.formulaKind==="sum_insured"&&benefit.formulaValue!=null&&coverage?.amount!=null&&coverage.currencyVerified===true&&currency===normalizeCurrencyCode(coverage.currency)){
     amount=Math.round(coverage.amount*benefit.formulaValue*100)/100;
     basis=Math.round(benefit.formulaValue*1000)/10+"% of verified "+formatMoney(coverage.amount,currency);
   } else if(benefit.formulaKind==="fixed"&&benefit.formulaValue!=null){
@@ -432,7 +439,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     ...(coverLabel?{coverLabel}:{}),
     ...(namesASpecificInjury(benefit.benefitName)
       ?{scaleGroup:benefit.policyId+"#"+(benefit.sourcePage??0)}:{}),
-    ...(coverage?.amount!=null&&coverage.amount>0&&normalizeCurrencyCode(coverage.currency,"SGD")===currency
+    ...(coverage?.amount!=null&&coverage.amount>0&&coverage.currencyVerified===true&&normalizeCurrencyCode(coverage.currency)===currency
       ?{coverAmount:coverage.amount}:{}),
     ...(paysOn?{payingEvent:paysOn}:{}),
     status:amount!=null?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
@@ -541,9 +548,14 @@ export function validateCatalogFormula(input:{
   const quote=normalText(input.quote);
   const value=input.value;
   if(input.kind==="none"||value==null||!Number.isFinite(value)||value<0)return none;
+  // The currency is what the quoted clause writes. A sum-insured percentage
+  // quotes none -- it is paid in the cover's own currency, which is verified
+  // against the personal schedule when used. Nothing is defaulted to SGD, and
+  // a currency supplied by the reader but absent from the quote is not proof.
   const quoted=explicitCurrency(input.quote);
-  const currency=normalizeCurrencyCode(input.currency??quoted??input.coverageCurrency??null,quoted??input.coverageCurrency??"SGD");
-  if(quoted&&quoted!==currency)return none;
+  const declared=input.currency?normalizeCurrencyCode(input.currency):null;
+  if(quoted&&declared&&quoted!==declared)return none;
+  const currency:string|null=quoted??(input.kind==="sum_insured"&&input.coverageCurrency?normalizeCurrencyCode(input.coverageCurrency):null);
   if(input.kind==="sum_insured"){
     if(/\b(?:less|minus|greater|lower|bonus|previous|deduct|reduced)\b/.test(quote))return none;
     const percentage=quote.match(new RegExp("(\\d+(?:\\.\\d+)?)\\s*%\\s*(?:of\\s*)?(?:the\\s+|your\\s+)?(?:relevant\\s+|applicable\\s+)?"+INSURED_AMOUNT))?.[1];
@@ -623,18 +635,19 @@ export const DAILY_FACT_KEYS=["hospitalNights"] as const;
 /** One sentence saying what this benefit pays. Used on the schedule screen and
  * anywhere a rule is shown without a claim in progress. */
 export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">){
-  const currency=normalizeCurrencyCode(benefit.currency,"SGD");
+  const currency=benefit.currency?normalizeCurrencyCode(benefit.currency):null;
   const value=benefit.formulaValue;
+  const money=(amount:number,code:string|null)=>code?formatMoney(amount,code):amount.toLocaleString("en-US")+" (currency not stated in the policy wording)";
   if(benefit.formulaKind==="sum_insured"&&value!=null)
     return (Math.round(value*1000)/10)+"% of the sum insured on your schedule";
   if(benefit.formulaKind==="fixed"&&value!=null)
-    return formatMoney(value,currency);
+    return money(value,currency);
   if(benefit.formulaKind==="expense_cap"&&value!=null)
-    return "Reimburses the "+factKeyLabel(benefit.factKey)+", up to "+formatMoney(value,currency);
+    return "Reimburses the "+factKeyLabel(benefit.factKey)+", up to "+money(value,currency);
   if(benefit.formulaKind==="daily"&&value!=null){
     const after=benefit.offsetDays?" after the first "+benefit.offsetDays+" day"+(benefit.offsetDays===1?"":"s"):"";
     const cap=benefit.maximumDays!=null?", up to "+benefit.maximumDays+" days":"";
-    return formatMoney(value,currency)+" per day"+after+cap;
+    return money(value,currency)+" per day"+after+cap;
   }
   return "Not yet readable — tell DearPolicy what this pays";
 }
@@ -651,7 +664,8 @@ export function reviewedBenefitFormula(input:{kind:string;value:number|null;curr
   if(kind==="none")return {ok:true,formula:{formulaKind:"none",formulaValue:null,currency:null,factKey:null,offsetDays:null,maximumDays:null}};
   const value=input.value;
   if(value==null||!Number.isFinite(value)||value<=0)return {ok:false,error:"Enter an amount greater than zero."};
-  const currency=normalizeCurrencyCode(input.currency,"SGD");
+  const currency=input.currency?normalizeCurrencyCode(input.currency):null;
+  if(kind!=="sum_insured"&&!currency)return {ok:false,error:"Choose the currency your policy states for this amount."};
   if(kind==="sum_insured"){
     if(value>2)return {ok:false,error:"A percentage of the sum insured cannot be more than 200%."};
     return {ok:true,formula:{formulaKind:"sum_insured",formulaValue:value,currency,factKey:null,offsetDays:null,maximumDays:null}};
@@ -933,23 +947,27 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
         missing.push(TRAIT_ASK[required]??required);
       }
       if(contradicted)continue;
-      const currency=normalizeCurrencyCode(coverage.currency)??"SGD";
+      // A schedule line is a figure only when its currency is written in the
+      // cover's own policy evidence; otherwise the benefit is listed without one.
+      const verifiedCurrency=coverage.currencyVerified===true?normalizeCurrencyCode(coverage.currency):null;
+      const currency=verifiedCurrency??"";
       const label=coverage.productName&&normalText(coverage.productName)!==normalText(coverage.category)?coverage.productName+" ("+coverage.category+")":coverage.category;
       items.push({
         title:args.contract.ownerName+" · "+label+" — "+rule.pays,
         contractId:args.contract.id,
-        status:missing.length?"potentially_applicable":"likely_applicable",
-        amountText:formatMoney(coverage.amount,currency),amountLabel:"Calculated benefit (internal)",
-        estimateBasis:rule.basis,calculatedAmount:coverage.amount,currency,calculationKind:"sum_insured",aggregation:"additive",calculationId:"coverage:"+coverage.id,
+        status:verifiedCurrency?(missing.length?"potentially_applicable":"likely_applicable"):"needs_document",
+        ...(verifiedCurrency?{amountText:formatMoney(coverage.amount,currency),amountLabel:"Calculated benefit (internal)" as const,
+          estimateBasis:rule.basis,calculatedAmount:coverage.amount,currency,calculationKind:"sum_insured" as const,aggregation:"additive" as const,calculationId:"coverage:"+coverage.id}
+          :{amountText:null}),
         coverKey:coverKey({policyNumber:coverage.policyNumber,groupPolicyNumber:coverage.groupPolicyNumber,
           insurer:coverage.insurer??args.contract.insurer??null,
           productName:canonicalProduct(coverage.productName??coverage.policyName??coverage.category),
           contractId:args.contract.id,contractName:args.contract.name}),
         ...(payingEvent(benefitTriggerEvents(rule.pays,rule.rule),events)?{payingEvent:payingEvent(benefitTriggerEvents(rule.pays,rule.rule),events)!}:{}),
-        reason:"Your "+(coverage.evidenceText?"document":"schedule")+" shows "+formatMoney(coverage.amount,currency)+" of "+label+" cover for "+args.contract.ownerName+(coverage.sourcePage?" (page "+coverage.sourcePage+")":"")+". "
+        reason:"Your "+(coverage.evidenceText?"document":"schedule")+" shows "+(verifiedCurrency?formatMoney(coverage.amount,currency):Number(coverage.amount).toLocaleString("en-US")+" (currency not stated in the evidence read)")+" of "+label+" cover for "+args.contract.ownerName+(coverage.sourcePage?" (page "+coverage.sourcePage+")":"")+". "
           +"No benefit table for this plan has been read, so this assumes the standard rule: "+rule.rule+". "
           +(rule.basis==="indicative"?"Shown for reference and not added to the total until the plan's own wording is read.":"Upload the policy wording or benefit summary and DearPolicy will calculate from the actual clause instead."),
-        conditions:[...missing.map(m=>"Still needed: "+m),"Subject to the insurer's assessment and the plan's own terms and exclusions."],
+        conditions:[...missing.map(m=>"Still needed: "+m),...(verifiedCurrency?[]:["Still needed: "+CATALOG_CURRENCY_MISSING]),"Subject to the insurer's assessment and the plan's own terms and exclusions."],
       });
       citations.push({chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,policyName:coverage.productName??args.contract.name,insurer:coverage.insurer??args.contract.insurer??undefined,
         pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,personalEvidence:true,evidenceLabel:"Verified personal cover"});

@@ -32,6 +32,7 @@ import { calculateHospitalCash, type HospitalCashEvidenceRef } from "./calculato
 import { calculateMedicalReimbursement, type BilledExpenseItem, type CategoryLimit, type DeductionStep, type MedicalReimbursementEvidenceRef } from "./calculators/medical-reimbursement";
 import type { VerifiedMedicalBillFacts } from "./calculators/evidence";
 import { evaluateAggregateEvidenceAuthority } from "./evidence-authority";
+import { checkNonTravelCurrency } from "./currency-evidence";
 
 export type MedicalRuleEvidence = {
   cashRules: MedicalCashRule[];
@@ -142,8 +143,12 @@ function assessCashBenefit(
       conditions: ["Upload the discharge summary or ICU transfer notes showing the ICU admission/discharge times."],
     };
   }
+  const cashCurrency = checkNonTravelCurrency({ coverage, requireCoverageCurrency: false, quoted: [rule.currency] });
+  if (!cashCurrency.ok) {
+    return { ...base, status: "needs_document", amountText: null, reason: `${benefitTitle(rule.benefitCode)} may apply. ${cashCurrency.reason}`, conditions: [cashCurrency.condition] };
+  }
   const calc = calculateHospitalCash({
-    dailyRate: rule.dailyRateMinor / 100, currency: rule.currency, hospitalStayOngoing: false, hospitalNights: nights,
+    dailyRate: rule.dailyRateMinor / 100, currency: cashCurrency.currency, hospitalStayOngoing: false, hospitalNights: nights,
     offsetDays: 0, maximumDays: rule.capDays, ownership: ownershipRef(coverage), ruleEvidence: toRef(rule.citation),
     ownershipEvidence: ownershipEvidenceRef(coverage),
   });
@@ -197,10 +202,13 @@ function assessReimbursementBenefit(
       conditions: [reimbursementAuthority.message],
     };
   }
-  const claimCurrency = /^[A-Z]{3}$/.test(coverage.currency ?? "") ? (coverage.currency as string) : (verified.lineItems[0]?.currency ?? null);
-  if (!claimCurrency) {
-    return { ...base, status: "needs_document", amountText: null, reason: `${benefitTitle(rule.benefitCode)} may apply, but this cover has no verified currency to calculate in.`, conditions: ["Confirm the currency of this cover against the personal certificate."] };
+  // The claim is calculated only in the cover's own verified currency. The
+  // bills' currency is never used to fill a gap in the policy evidence.
+  const coverCurrency = checkNonTravelCurrency({ coverage, requireCoverageCurrency: true, quoted: [] });
+  if (!coverCurrency.ok) {
+    return { ...base, status: "needs_document", amountText: null, reason: `${benefitTitle(rule.benefitCode)} may apply. ${coverCurrency.reason}`, conditions: [coverCurrency.condition] };
   }
+  const claimCurrency = coverCurrency.currency;
   const eligibleSet = new Set(rule.eligibleCategories);
   const mismatchedCurrency = verified.lineItems.filter((li) => eligibleSet.has(li.category) && li.currency !== claimCurrency);
   if (mismatchedCurrency.length > 0) {

@@ -38,7 +38,7 @@ const document=(override:Partial<InventoryDocument>={}):InventoryDocument=>({
 const cover=(id:string,category:string,amount:number,productName:string):OwnedCoverage=>({
   id,policyId:CERT,familyMemberId:PERSON,category,amount,currency:"SGD",productName,sourcePage:1,
   evidenceText:"Certificate of insurance",insurer:"Singlife",policyName:"MINDEF & MHA Group Insurance",
-  policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null});
+  policyNumber:"3037850",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true});
 
 const contract:PolicyContract={
   id:CONTRACT,ownerId:PERSON,ownerName:"Charmaine",name:"MINDEF & MHA Group Insurance",insurer:"Singlife",

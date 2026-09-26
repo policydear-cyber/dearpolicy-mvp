@@ -75,7 +75,7 @@ function baseCoverage(overrides: Partial<OwnedCoverage>): OwnedCoverage {
   return {
     id: "x", policyId: "p", familyMemberId: FM, category: "Death", amount: null, currency: CCY, productName: null,
     sourcePage: 1, evidenceText: null, insurer: "Great Eastern", policyName: "Household Plan", policyNumber: "P-1",
-    groupPolicyNumber: null, documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null,
+    groupPolicyNumber: null, documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null, currencyVerified: true,
     ...overrides,
   };
 }

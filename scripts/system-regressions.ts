@@ -37,7 +37,7 @@ export function runSystemRegressions(){
   const coverage=(override:Partial<OwnedCoverage>={}):OwnedCoverage=>({
     id:"cover-a",policyId:"schedule",familyMemberId:person,category:"Other",amount:350000,currency:"SGD",productName:"Flexible Plan",
     sourcePage:1,evidenceText:"Verified cover",insurer:"Example Insurer",policyName:"Flexible Plan",policyNumber:"P-100",groupPolicyNumber:null,
-    documentRole:"personal_schedule",effectiveDate:"2022-01-01",renewalOrExpiryDate:null,...override});
+    documentRole:"personal_schedule",effectiveDate:"2022-01-01",renewalOrExpiryDate:null, currencyVerified: true,...override});
   const contract:PolicyContract={id:"contract",ownerId:person,ownerName:"Person A",name:"Flexible Plan",insurer:"Example Insurer",
     documents:[document()],references:[document({id:"wording",personal_coverage_confirmed:false,document_role:"policy_wording"})],
     coverages:[coverage()],confirmed:true,effectiveDate:"2022-01-01",ownershipBasis:"evidence"};
@@ -458,17 +458,17 @@ export function runSystemRegressions(){
     assert.equal(negativeCoverageClaim("I found two benefits that may respond."),false);
   });
   test("Currentness reports payment recency without touching ownership",()=>{
-    const fresh=assessCurrentness({now,lastEvidenceOn:"2026-06-01",renewalOrExpiryDate:"2027-01-01"});
+    const fresh=assessCurrentness({now,lastEvidenceOn:"2026-06-01",renewalOrExpiryDate:"2027-01-01", currencyVerified: true});
     assert.equal(fresh.state,"verified_recent");assert.equal(fresh.label,"Active status evidenced");
-    const stale=assessCurrentness({now,lastEvidenceOn:"2023-01-01",renewalOrExpiryDate:null});
+    const stale=assessCurrentness({now,lastEvidenceOn:"2023-01-01",renewalOrExpiryDate:null, currencyVerified: true});
     assert.equal(stale.state,"not_recently_verified");assert.match(stale.detail,/Ownership stays confirmed/);
-    const none=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:null});
+    const none=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:null, currencyVerified: true});
     assert.equal(none.state,"unknown");assert.match(none.detail,/Ownership stays confirmed/);
-    const expired=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:"2025-01-01"});
+    const expired=assessCurrentness({now,lastEvidenceOn:null,renewalOrExpiryDate:"2025-01-01", currencyVerified: true});
     assert.equal(expired.state,"expiry_date_passed");assert.match(expired.detail,/Ownership stays confirmed/);
     // A later receipt outranks a passed printed expiry date.
-    assert.equal(assessCurrentness({now,lastEvidenceOn:"2026-08-01",renewalOrExpiryDate:"2025-01-01"}).state,"verified_recent");
-    assert.equal(assessCurrentness({now,lastEvidenceOn:"not-a-date",renewalOrExpiryDate:"not-a-date"}).state,"unknown");
+    assert.equal(assessCurrentness({now,lastEvidenceOn:"2026-08-01",renewalOrExpiryDate:"2025-01-01", currencyVerified: true}).state,"verified_recent");
+    assert.equal(assessCurrentness({now,lastEvidenceOn:"not-a-date",renewalOrExpiryDate:"not-a-date", currencyVerified: true}).state,"unknown");
     for(const state of [fresh,stale,none,expired])assert.equal(state.state==="verified_recent",state.label==="Active status evidenced");
   });
   test("Premium evidence must belong to the same person and contract",()=>{

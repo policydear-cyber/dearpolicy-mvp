@@ -11,7 +11,7 @@ import { verifiedEvidenceProvenance } from "./fixtures/verified-evidence-provena
 export async function runDeathEvidenceRegressions() {
   let cases=0;
   const test=(name:string,fn:()=>void)=>{try{fn();cases++;}catch(error){throw new Error(name,{cause:error});}};
-  const base:OwnedCoverage={id:"gtl",policyId:"personal",familyMemberId:"desmond",category:"Death",amount:1_000_000,currency:"SGD",productName:"Group Term Life",sourcePage:1,evidenceText:"personal certificate",insurer:"Singapore Life Ltd",policyName:"MINDEF & MHA",policyNumber:"personal",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null};
+  const base:OwnedCoverage={id:"gtl",policyId:"personal",familyMemberId:"desmond",category:"Death",amount:1_000_000,currency:"SGD",productName:"Group Term Life",sourcePage:1,evidenceText:"personal certificate",insurer:"Singapore Life Ltd",policyName:"MINDEF & MHA",policyNumber:"personal",groupPolicyNumber:"G007500",documentRole:"certificate",effectiveDate:"2022-10-06",renewalOrExpiryDate:null, currencyVerified: true};
   const covers=[base,{...base,id:"gpa",category:"Personal Accident",amount:600_000,productName:"Group Personal Accident"}];
   const pages=fixture.benefitSummary.pages.map(p=>({page_number:p.pageNumber,text:p.text}));
   const rows:DeathWordingPage[]=pages.map(p=>({...p,policy_id:"summary",group_policy_number:null,insurer:"Singlife",product_name:"Benefit Summary",original_filename:fixture.benefitSummary.sourceFile,document_role:"benefit_guide",personal_coverage_confirmed:false,linked_to_member:false}));
