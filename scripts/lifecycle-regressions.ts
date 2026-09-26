@@ -445,8 +445,24 @@ async function runDatabaseTests() {
   }
 }
 
+/** PGlite is a single connection, so it cannot reproduce the multi-
+ * connection wait this guards against: every deletion transaction in
+ * lib/lifecycle/coordinator.ts writes its audit row through the SERVICE pool
+ * (a second connection) whose foreign key to the locked row needs FOR KEY
+ * SHARE. A row locked FOR UPDATE blocks that forever on real Postgres, so
+ * the coordinator must lock FOR NO KEY UPDATE. Behavioural coverage on real
+ * Postgres is the browser E2E's delete steps (.github/workflows/browser-e2e.yml). */
+async function lockLevelGuard() {
+  const src = await readFile(path.resolve("lib/lifecycle/coordinator.ts"), "utf8");
+  const sql = src.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "");
+  assert.ok(!/FOR\s+UPDATE/.test(sql), "lib/lifecycle/coordinator.ts must not lock rows FOR UPDATE (its service-pool audit writes would wait on it forever); use FOR NO KEY UPDATE");
+  assert.ok((sql.match(/FOR NO KEY UPDATE/g) ?? []).length >= 4, "every deletion transaction still locks its row (FOR NO KEY UPDATE)");
+  cases++;
+}
+
 async function main() {
   await runDatabaseTests();
+  await lockLevelGuard();
   console.log(`lifecycle regressions passed: ${cases} cases (state machine CAS, deletion-request idempotency, policy-document deletion flow, chat-retrieval exclusion, storage-cleanup integration, audit redaction).`);
 }
 
