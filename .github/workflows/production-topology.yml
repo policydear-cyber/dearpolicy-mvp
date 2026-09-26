@@ -1,0 +1,96 @@
+name: Production topology proof (synthetic data only)
+
+# Builds the app and runs it with `next start` and NODE_ENV=production, so
+# every production startup guard is active, against a LOCAL Postgres and a
+# LOCAL fake VirusTotal API. Proves: production refuses to start without
+# CRON_SECRET; the job-runner endpoint refuses unauthenticated callers; one
+# authorised call (what Vercel Cron sends) starts the worker, claims queued
+# jobs and completes a synthetic scan through the real VirusTotal adapter;
+# infected stays terminal; a deleted document is never scanned.
+# No production URL, database, secret or real document is used.
+on:
+  push:
+    branches: ["claude/vercel-cron-job-runner"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  topology:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dearpolicy
+          POSTGRES_PASSWORD: dearpolicy
+          POSTGRES_DB: dearpolicy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.topology-storage
+      MALWARE_SCANNER_PROVIDER: virustotal
+      VIRUSTOTAL_API_KEY: synthetic-topology-virustotal-key
+      VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      VIRUSTOTAL_POLL_BUDGET_MS: "3000"
+      VIRUSTOTAL_POLL_INTERVAL_MS: "300"
+      TOPOLOGY_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply the repository schema to the local CI database
+        run: node --import tsx scripts/topology/apply-schema.ts
+      - name: Seed one synthetic household with three synthetic documents and queued jobs
+        run: node --import tsx scripts/topology/seed.ts
+      - name: Production build
+        run: npm run build
+      - name: Generate a synthetic, run-scoped CRON_SECRET (never a real one)
+        run: echo "CRON_SECRET=synthetic-topology-$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+      - name: Production start is refused without CRON_SECRET
+        env:
+          NODE_ENV: production
+          SUPABASE_URL: http://127.0.0.1:4010/synthetic-supabase
+          SUPABASE_SERVICE_ROLE_KEY: synthetic-topology-service-role
+          SUPABASE_ANON_KEY: synthetic-topology-anon
+          TELEMETRY_PSEUDONYM_SECRET: synthetic-topology-pseudonym-secret-0000000000
+          TELEMETRY_INTENTIONALLY_DISABLED: "true"
+        run: |
+          set +e
+          CRON_SECRET= timeout 60 npx next start -p 3101 > missing-secret.log 2>&1 &
+          pid=$!
+          for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:3101/api/health && break; sleep 1; done
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3101/api/health)
+          kill $pid 2>/dev/null; wait $pid 2>/dev/null
+          echo "health status without CRON_SECRET: $code"
+          grep -q "CRON_SECRET is missing" missing-secret.log || { echo "expected the CRON_SECRET startup refusal"; tail -40 missing-secret.log; exit 1; }
+          [ "$code" != "200" ] || { echo "server must not serve without CRON_SECRET"; exit 1; }
+      - name: Start the fake VirusTotal API and the production server
+        env:
+          NODE_ENV: production
+          SUPABASE_URL: http://127.0.0.1:4010/synthetic-supabase
+          SUPABASE_SERVICE_ROLE_KEY: synthetic-topology-service-role
+          SUPABASE_ANON_KEY: synthetic-topology-anon
+          TELEMETRY_PSEUDONYM_SECRET: synthetic-topology-pseudonym-secret-0000000000
+          TELEMETRY_INTENTIONALLY_DISABLED: "true"
+        run: |
+          mkdir -p logs
+          nohup node scripts/topology/fake-virustotal.mjs > logs/fake.log 2>&1 &
+          nohup npx next start -p 3100 > logs/app.log 2>&1 &
+          for url in http://127.0.0.1:4010/__health http://127.0.0.1:3100/api/health; do
+            for i in $(seq 1 60); do curl -sf -o /dev/null "$url" && break; sleep 2; done
+            curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
+          done
+      - name: Prove the worker starts, claims and completes a synthetic scan via the cron endpoint
+        run: node --import tsx scripts/topology/prove.ts
+      - name: Service logs on failure (synthetic data only)
+        if: failure()
+        run: for f in logs/*.log missing-secret.log; do [ -f "$f" ] && { echo "===== $f"; tail -n 200 "$f"; }; done

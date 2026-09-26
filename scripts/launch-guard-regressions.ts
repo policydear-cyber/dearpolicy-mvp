@@ -16,10 +16,12 @@ import {
   checkRequiredProductionSecrets,
   checkServiceRoleKeyNotPublic,
   checkTelemetryProductionAdapterConfigured,
+  checkCronSecretConfigured,
   telemetryIntentionallyDisabled,
   TELEMETRY_INTENTIONALLY_DISABLED_WARNING,
   assertProductionSafe,
 } from "@/lib/launch/guards";
+import { cronIntervalMinutes, evaluateJobExecutionTrigger, EXTERNAL_SCHEDULER_FLAG } from "@/lib/launch/job-trigger";
 
 async function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => Promise<T> | T): Promise<T> {
   const original: Record<string, string | undefined> = {};
@@ -69,6 +71,7 @@ function runGuardRegressions() {
     SUPABASE_ANON_KEY: "anon-key",
     TELEMETRY_PSEUDONYM_SECRET: "test-pseudonym-secret-32-bytes-min",
     TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED: "true",
+    CRON_SECRET: "test-cron-secret-at-least-16-chars",
   };
 
   assert.equal(checkDevAuthNotInProduction(prodBase).ok, true, "DEV_AUTH_ENABLED unset in production must pass");
@@ -185,6 +188,45 @@ function runGuardRegressions() {
     () => assertProductionSafe({ NODE_ENV: "development", DEV_AUTH_ENABLED: "true", DEV_ACCOUNT_ID: "x" }),
     "assertProductionSafe() must be a no-op outside production, even with dev-only flags set",
   );
+
+  // CRON_SECRET: production refuses to start without a usable job-runner
+  // secret, because every enqueued job would otherwise stay queued forever.
+  {
+    const { CRON_SECRET: _omitCron, ...noCron } = prodBase;
+    assert.equal(checkCronSecretConfigured(prodBase).ok, true, "CRON_SECRET >= 16 chars in production must pass");
+    assert.equal(checkCronSecretConfigured(noCron).ok, false, "missing CRON_SECRET in production must fail");
+    assert.equal(checkCronSecretConfigured({ ...prodBase, CRON_SECRET: "short-secret" }).ok, false, "a CRON_SECRET under 16 chars must fail");
+    assert.equal(checkCronSecretConfigured({ ...prodBase, CRON_SECRET: "                    " }).ok, false, "a whitespace-only CRON_SECRET must fail");
+    assert.equal(checkCronSecretConfigured({ ...noCron, NODE_ENV: "development" }).ok, true, "the CRON_SECRET guard is a no-op outside production");
+    assert.throws(() => assertProductionSafe(noCron), /CRON_SECRET is missing/, "missing CRON_SECRET must refuse production startup");
+    assert.doesNotThrow(() => assertProductionSafe(prodBase), "a complete production configuration must start");
+    assert.ok(!checkCronSecretConfigured({ ...prodBase, CRON_SECRET: "short-secret" }).message.includes("short-secret"), "the guard never echoes the secret");
+  }
+
+  // Job-trigger frequency: Vercel Hobby's once-daily cron is a backstop, never
+  // a sufficient trigger for interactive uploads.
+  {
+    assert.equal(cronIntervalMinutes("* * * * *"), 1);
+    assert.equal(cronIntervalMinutes("*/5 * * * *"), 5);
+    assert.equal(cronIntervalMinutes("*/10 * * * *"), 10);
+    assert.equal(cronIntervalMinutes("7 * * * *"), 60);
+    assert.equal(cronIntervalMinutes("0 */2 * * *"), 120);
+    assert.equal(cronIntervalMinutes("0 3 * * *"), 1440);
+    assert.equal(cronIntervalMinutes("* * * * 1"), 1440, "a weekday-restricted schedule is treated as daily or rarer");
+    assert.equal(cronIntervalMinutes("not a cron"), null);
+
+    const env = { NODE_ENV: "test", CRON_SECRET: "test-cron-secret-at-least-16-chars" } as NodeJS.ProcessEnv;
+    const daily = evaluateJobExecutionTrigger(process.cwd(), env);
+    assert.deepEqual(daily.codeProblems, [], `the repository's job trigger wiring must be complete: ${daily.codeProblems.join("; ")}`);
+    assert.ok(
+      daily.configProblems.some((p) => /backstop, not a trigger/.test(p) && /Vercel Pro/.test(p) && new RegExp(EXTERNAL_SCHEDULER_FLAG).test(p)),
+      "a once-daily Vercel cron must stay blocked and name both remedies",
+    );
+    const attested = evaluateJobExecutionTrigger(process.cwd(), { ...env, [EXTERNAL_SCHEDULER_FLAG]: "true" });
+    assert.deepEqual(attested.configProblems, [], "an attested external scheduler plus CRON_SECRET clears the configuration blockers");
+    const attestedNoSecret = evaluateJobExecutionTrigger(process.cwd(), { NODE_ENV: "test", [EXTERNAL_SCHEDULER_FLAG]: "true" } as NodeJS.ProcessEnv);
+    assert.ok(attestedNoSecret.configProblems.some((p) => /CRON_SECRET/.test(p)), "an external scheduler without CRON_SECRET is still blocked");
+  }
 
   console.log("lib/launch/guards.ts regressions passed.");
 }

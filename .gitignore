@@ -13,3 +13,5 @@ e2e-results
 logs
 .e2e-seed.json
 .e2e-state.json
+.topology-seed.json
+.topology-storage/

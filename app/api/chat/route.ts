@@ -8,6 +8,7 @@ import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-
 // lib/rag/chat.ts, which also carries the legacy orchestrator path
 // (scripts/live-chat-monetary-boundary-regressions.ts enforces this).
 import { askContextualDearPolicy as askDearPolicy } from "@/lib/chat/workflow";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 
@@ -31,6 +32,7 @@ export async function POST(request:NextRequest){
   try{
     const body=BodySchema.parse(await request.json().catch(()=>({})));
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     if(body.familyMemberId){
       const member=await query<{id:string}>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family member not found."},{status:404});

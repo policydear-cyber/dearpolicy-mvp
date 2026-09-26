@@ -164,6 +164,30 @@ export function checkDeterministicModelNotInProduction(env: NodeJS.ProcessEnv = 
   return { ok: true, message: "The deterministic model stand-in is not configured in production." };
 }
 
+/** Minimum CRON_SECRET length; shorter values are treated as not configured.
+ * Shared with lib/jobs/cron-runner.ts's authorizeJobRunner() so the startup
+ * guard and the endpoint agree on what "configured" means. */
+export const MIN_CRON_SECRET_LENGTH = 16;
+
+/** The background-job runner (app/api/internal/jobs/run) authenticates every
+ * call with `Authorization: Bearer <CRON_SECRET>` and refuses all calls
+ * without it -- so a production deployment without a usable CRON_SECRET would
+ * start, accept uploads, and silently never process them. Refuse to start
+ * instead. Never reports the value or its length. */
+export function checkCronSecretConfigured(env: NodeJS.ProcessEnv = process.env): GuardResult {
+  if (!isProduction(env)) return { ok: true, message: "Not production; CRON_SECRET check skipped." };
+  if ((env.CRON_SECRET?.trim() ?? "").length < MIN_CRON_SECRET_LENGTH) {
+    return {
+      ok: false,
+      message:
+        `CRON_SECRET is missing or shorter than ${MIN_CRON_SECRET_LENGTH} characters. The background-job runner ` +
+        "(/api/internal/jobs/run) refuses every call without it, so uploads, evidence, exports and chat analysis " +
+        "would stay queued forever. Set a long random CRON_SECRET in Production (Sensitive).",
+    };
+  }
+  return { ok: true, message: "CRON_SECRET is configured for the background-job runner." };
+}
+
 export const PRODUCTION_STARTUP_GUARDS: Guard[] = [
   checkDeterministicModelNotInProduction,
   checkDevAuthNotInProduction,
@@ -172,6 +196,7 @@ export const PRODUCTION_STARTUP_GUARDS: Guard[] = [
   checkRequiredProductionSecrets,
   checkServiceRoleKeyNotPublic,
   checkTelemetryProductionAdapterConfigured,
+  checkCronSecretConfigured,
 ];
 
 export function runGuards(guards: Guard[], env: NodeJS.ProcessEnv = process.env): GuardResult[] {

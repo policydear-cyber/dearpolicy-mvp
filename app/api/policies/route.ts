@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail } from "@/lib/policies/quarantine/ui";
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ type PolicyRow = {
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     const url = new URL(request.url);
     const familyMemberId = url.searchParams.get("familyMemberId");
     if (familyMemberId && !isUuid(familyMemberId)) return NextResponse.json({ policies: [] });

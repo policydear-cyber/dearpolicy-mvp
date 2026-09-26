@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { cancelChatJob,getChatJob } from "@/lib/chat/jobs";
 import { sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
 import { invalidateAnswersWithDeletedPolicies } from "@/lib/chat/stale-answers";
@@ -13,6 +14,7 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
   try{
     const {id}=await params;z.string().uuid().parse(id);
     const ctx=await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     const job=await getChatJob(ctx.householdId,id);
     if(!job)return NextResponse.json({error:"Analysis not found or its chat was deleted."},{status:404});
     let result:unknown=job.status==="complete"?sanitizeStoredAnswer(job.result_json):null;
