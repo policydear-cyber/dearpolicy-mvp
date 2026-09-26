@@ -369,3 +369,42 @@ While telemetry is intentionally disabled:
 - **no operational alert can fire**: scan failures, stuck quarantine, dead-letter jobs, failed exports or deletions, rejected monetary calculations, reviewer-assignment expiry, model/provenance staleness and authorization failures all go unobserved;
 - label every internal test session as running without operational telemetry, and check job, quarantine and dead-letter state manually (`npm run jobs:dead-letter -- list`, and the section 5 queries) at least daily;
 - never use this setting with real users. Before any wider rollout, wire a real adapter, set `TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true` and remove `TELEMETRY_INTENTIONALLY_DISABLED`.
+
+## 14. `processing-failure-diagnostics.sql` (PR #28): application procedure
+
+**Not applied to any live database.** Applying it needs the owner's explicit authorization. It is a data migration as well as DDL: its backfill **rewrites existing rows** of `policies`, `policy_document_audit_log`, `claim_evidence_documents` and `claim_evidence_audit_log` that hold raw failure text. That can include the existing live policy records, so the owner must approve that change specifically; the counts from P3 below show how many rows it would touch, without reading their contents.
+
+### 14.1 What it does
+- Creates the service-only `processing_failure_diagnostics` table (and its `bigserial` sequence and index).
+- Copies raw failure detail into it, then replaces every household-readable copy with fixed text (`policies.processing_error`, `policies.scan_result_detail`, `claim_evidence_documents.processing_error`, the `processing_failed` reasons in `claim_evidence_audit_log`, the `scan_attempt_failed` reasons in `policy_document_audit_log`).
+- Idempotent: every step touches only rows that still hold something other than the fixed text.
+
+### 14.2 Order and coupling
+- **Requires** 1–17 of §3 (it reads the audit logs and evidence tables) and PR #22's code (#28 is stacked on #22). Merge order: **#22 → #28 → #30**.
+- **Must be applied in the same transaction as the updated `infrastructure-rls.sql` from the same commit.** Supabase's default privileges grant `anon`/`authenticated` on every new table in `public`, so between `CREATE TABLE` and the `REVOKE` in `infrastructure-rls.sql` the raw detail would be browser-readable. The CI rehearsal proves both the window (negative control) and that the single transaction closes it.
+- Code vs schema: `recordProcessingFailure()` never throws, so a build deployed **before** the migration loses diagnostics but still stores only fixed text. A migration applied **before** the deploy leaves the old build writing raw text into household-readable columns until the new build is live. Therefore: apply → deploy → **re-run the same transaction once** to scrub anything written in between (a no-op if nothing was).
+
+### 14.3 Steps (owner, staging first)
+1. §1 prerequisites and §2 backup/recovery point. Record the PITR timestamp.
+2. Pre-checks, read-only, counts and catalog facts only:
+   `psql -v ON_ERROR_STOP=1 -f sql/checks/processing-failure-diagnostics-pre.sql`
+   Expected: P1 all `t`; P2 `f`; P3 five non-negative counts (record them; these rows will be rewritten); P4 shows the default ACL (for the ticket).
+3. Apply both files atomically, as the table owner:
+   `psql -v ON_ERROR_STOP=1 --single-transaction -f sql/processing-failure-diagnostics.sql -f sql/infrastructure-rls.sql`
+4. Post-checks: `psql -v ON_ERROR_STOP=1 -f sql/checks/processing-failure-diagnostics-post.sql`
+   Expected: Q1 and Q2 every column `t`; Q3 every count `0`; Q4 `diagnostics_rows` ≥ the sum of P3.
+5. Browser-role probe (rolled back): `BEGIN; SET LOCAL ROLE authenticated; SELECT count(*) FROM processing_failure_diagnostics; ROLLBACK;` must fail with `permission denied`.
+6. Deploy the build, then repeat step 3 once and step 4 (Q3 must still be 0).
+7. Staging only: trigger one synthetic failure (a synthetic PDF that fails processing) and confirm the household sees only the fixed message while one new diagnostics row exists.
+
+### 14.4 Abort conditions
+- P1 has any `f`, or P2 is `t` with a different shape: stop.
+- Any error during step 3: the single transaction rolls back completely; nothing changed. Stop and investigate.
+- Q2 has any `f`: run `sql/infrastructure-rls.sql` again immediately (it only removes browser privileges), then re-check.
+
+### 14.5 Rollback
+- The table: `DROP TABLE processing_failure_diagnostics;` is safe only while nothing depends on its contents (it is diagnostics only). Keep it unless it causes harm.
+- The backfill is **not reversible from the database alone**: the fixed text replaced the raw text in household-readable columns, and the only copy of the raw text is in the diagnostics table (restorable by joining on `resource_id`) or in the §2 backup. Do not copy raw text back into household-readable columns; that re-opens the leak this migration closes. Full rollback = PITR to the §2 recovery point.
+
+### 14.6 Rehearsed in CI
+`npm run security:processing-failure-migration-procedure-test` (`scripts/processing-failure-migration-procedure-regressions.ts`) runs these exact pre/post SQL files on a PGlite database with every earlier migration applied, Supabase-style default grants and synthetic raw-text rows, applies both files in one transaction, re-applies it (no-op), and shows that applying the migration alone leaves the table readable by `authenticated` (negative control). PGlite is not Supabase; the live run is still required and is not done.

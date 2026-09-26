@@ -95,7 +95,8 @@
     "reviewer:admin": "node --import tsx scripts/claim-reviewer-admin.ts",
     "e2e:full-household-test": "node --import tsx scripts/full-household-e2e-regressions.ts",
     "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs",
-    "security:processing-failure-storage-test": "node --import tsx scripts/processing-failure-storage-regressions.ts"
+    "security:processing-failure-storage-test": "node --import tsx scripts/processing-failure-storage-regressions.ts",
+    "security:processing-failure-migration-procedure-test": "node --import tsx scripts/processing-failure-migration-procedure-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
