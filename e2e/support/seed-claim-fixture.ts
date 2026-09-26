@@ -20,10 +20,25 @@ async function main() {
   const member = randomUUID(), schedule = randomUUID(), wording = randomUUID();
   const product = `${prefix} Critical Illness Plan`;
   await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'self')`, [member, household, `${prefix}-Claimant`]);
-  // A second synthetic relative: a death can only be reported about someone
-  // other than the signed-in household member themself (the app correctly
-  // treats "I died" as a what-if).
-  await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'parent')`, [randomUUID(), household, `${prefix}-Parent`]);
+  // A synthetic relative with one synthetic personal-accident schedule: a
+  // death is reported about someone other than the signed-in member (the app
+  // treats a member reporting their own death as a what-if), and a claim turn
+  // needs at least one confirmed personal policy to review.
+  const relative = randomUUID(), paSchedule = randomUUID();
+  const paProduct = `${prefix} Personal Accident Plan`;
+  const paText = `${prefix}-Relative owns ${paProduct}. Accidental death sum insured: S$100,000. SYNTHETIC TEST DOCUMENT - NOT A REAL POLICY.`;
+  await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'parent')`, [relative, household, `${prefix}-Relative`]);
+  await pool.query(
+    `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status,file_hash,benefits_indexed_at)
+     VALUES($1,$2,$3,'Synthetic Test Insurer (fictitious)',$4,'SYNTHETIC-PA-1','Personal Accident','personal_schedule',true,95,'ready',$5,$5,'2022-01-01',$6::jsonb,'scan_clean',$7,now())`,
+    [paSchedule, household, relative, paProduct, `${prefix}-pa-schedule.pdf`, JSON.stringify({ productsMentioned: [paProduct] }), `sha256:${paSchedule}`]);
+  await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)`, [paSchedule, relative, household]);
+  await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)`, [household, paSchedule, paText]);
+  await pool.query(`INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,1,1,$5,$6::vector)`,
+    [randomUUID(), household, relative, paSchedule, paText, "[" + Array.from({ length: 1024 }, (_, j) => (j === 0 ? 1 : 0)).join(",") + "]"]);
+  await pool.query(`UPDATE policies SET conditions_indexed_at=now() WHERE id=$1`, [paSchedule]).catch(() => undefined);
+  await pool.query(`INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed)
+    VALUES($1,$2,$3,$4,'Personal Accident',100000,'SGD',$5,1,$6,true,true)`, [randomUUID(), household, paSchedule, relative, paProduct, "Accidental death sum insured: S$100,000"]);
   const scheduleText = `${prefix}-Claimant owns ${product}. Critical illness sum insured: S$350,000. SYNTHETIC TEST DOCUMENT - NOT A REAL POLICY.`;
   const wordingText = `${product}. We pay 100% of the Sum Insured for a qualifying critical illness. The diagnosis must satisfy the defined illness. SYNTHETIC TEST DOCUMENT.`;
   for (const [id, role, personal, text, page] of [[schedule, "personal_schedule", true, scheduleText, 1], [wording, "policy_wording", false, wordingText, 7]] as const) {
