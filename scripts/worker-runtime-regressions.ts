@@ -376,15 +376,21 @@ async function main() {
       assert.equal(first.ran && first.summary.claimed, 1);
     });
 
-    await testAsync("request drain: a failing job goes through bounded retry (failed_retryable), never succeeded", async () => {
+    await testAsync("request drain: failures go through the same bounded retry/dead-letter classification, never succeeded", async () => {
       resetRequestDrainStateForTests(); tick();
-      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-fail" });
-      const failing = [{ jobType: rdType, process: async () => { throw new Error("synthetic transient failure"); } }];
-      const out = await drainOnce({ jobTypes: failing as never, now, env: NO_ENV });
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-transient" });
+      const transient = [{ jobType: rdType, process: async () => { throw new Error("synthetic provider timeout ETIMEDOUT"); } }];
+      const out = await drainOnce({ jobTypes: transient as never, now, env: NO_ENV });
       assert.equal(out.ran && out.summary.byType[rdType]?.failed, 1);
-      const row = await jobRow(rdType, "rd-fail");
-      assert.equal(row?.status, "failed_retryable");
+      const row = await jobRow(rdType, "rd-transient");
+      assert.equal(row?.status, "failed_retryable", "a transient failure is retried later, with backoff");
       assert.equal(row?.attempt_count, 1);
+      await pool.query(`DELETE FROM background_jobs WHERE job_type=$1`, [rdType]);
+      resetRequestDrainStateForTests(); tick();
+      await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-permanent" });
+      const permanent = [{ jobType: rdType, process: async () => { throw new Error("synthetic unrecoverable failure"); } }];
+      await drainOnce({ jobTypes: permanent as never, now, env: NO_ENV });
+      assert.equal((await jobRow(rdType, "rd-permanent"))?.status, "dead_letter", "a non-retryable failure is dead-lettered, not retried forever");
     });
 
     await testAsync("request drain: outside a request scope scheduleRequestDrain() is a no-op (never races a caller)", async () => {
