@@ -507,11 +507,35 @@ async function main(){
       assert.equal(result.data.answer.portfolioItems.length,90);assert.equal(result.data.answer.policyReview.length,90);
       assert.ok(maxModelUserCharacters<11000,"Maximum model input: "+maxModelUserCharacters);
     });
-    await test("Savings questions separate guaranteed and projected values",async()=>{
+    // A maturity question asks what the policy document states. It is policy
+    // information, not a claim assessment: the cited guaranteed and projected
+    // values are explained separately, while no claim card carries an amount
+    // and nothing is totalled.
+    await test("Savings questions are policy information: cited guaranteed and projected values stay separate",async()=>{
       const result=await send("What happens when my endowment plan matures?",people[1].id);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const text=result.data.answer.details.join(" ");assert.match(text,/guaranteed maturity value/);assert.doesNotMatch(text,/SGD 100000/);
-      assert.match(text,/projected non-guaranteed maturity value/);assert.doesNotMatch(text,/SGD 120000/);assert.equal(result.data.answer.questions.length,0);
+      const answer=result.data.answer as ChatAnswer;
+      const text=answer.details.join(" ");
+      assert.match(text,/The guaranteed maturity value is SGD 100000\./);
+      assert.match(text,/The projected non-guaranteed maturity value is SGD 120000\./);
+      assert.doesNotMatch(text,/guaranteed maturity value is SGD 120000/,"A projected value is never presented as guaranteed");
+      assert.equal(answer.questions.length,0);
+      assert.equal(answer.mode,"answer");
+      assert.notEqual(answer.assessmentKind,"preliminary","A policy-information answer is not framed as a claim assessment");
+      assert.equal(answer.potentialPayoutTotals?.length??0,0);
+      assert.ok(answer.claimItems.every(item=>item.amountText===null&&item.calculatedAmount===undefined));
+      assert.ok(answer.citations.length>0,"Policy-stated values are explained from cited wording");
+    });
+    // Negative control for the same wording: once the question asks what can
+    // be claimed, the pre-review claim boundary applies and no figure is shown.
+    await test("A claim-money question about the same plan stays inside the pre-review boundary",async()=>{
+      const result=await send("My endowment plan matured. How much can I claim?",people[1].id);
+      assert.equal(result.response.status,200,JSON.stringify(result.data));
+      const answer=result.data.answer as ChatAnswer;
+      const prose=[answer.summary,...answer.details,...answer.nextSteps].join(" ");
+      assert.doesNotMatch(prose,/SGD 100000|SGD 120000|100,000|120,000/);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0);
+      assert.ok(answer.claimItems.every(item=>item.amountText===null));
     });
     await test("Async analysis returns actual progress and a saved final answer",async()=>{
       const result=await send("What policies does my family have?",null,undefined,undefined,true);

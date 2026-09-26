@@ -89,6 +89,23 @@ export function isValidPolicyStatedLimit(limit: PolicyStatedLimit | undefined | 
   return marker.test(limit.quote);
 }
 
+/** Policy-value questions (maturity, surrender, cash value, premiums) ask what
+ * the policy document itself states; they are policy information, not claim
+ * assessments, so cited figures from verified policy quotes may be explained.
+ * Anything that reports an event, asks what can be claimed/received, or comes
+ * from the claim or fact-finding workflow stays inside the pre-review claim
+ * boundary. When in doubt this returns true (claim context, fail closed). */
+const POLICY_VALUE_QUESTION = /\b(?:matur\w*|endowment|surrender\w*|cash values?|survival benefits?|premiums?)\b/i;
+const CLAIM_MONEY_QUESTION = /\b(?:claim\w*|payouts?|pay\s*out|compensat\w*|reimburs\w*|entitled|settlement)\b/i;
+const CLAIM_EVENT = /\b(?:die[sd]?|death|dead|passed away|diagnos\w*|hospital\w*|admitted|accident\w*|injur\w*|cancer|illness|disab\w*|fractur\w*|surgery|operation|delay\w*|damage\w*|stolen|theft|collision|crash\w*|murder\w*|killed)\b/i;
+export function liveClaimContext(intent: string | undefined, answer: Pick<ChatAnswer, "mode" | "claimItems">, question = ""): boolean {
+  const mode: string = answer.mode;
+  if (intent === "claim" || mode !== "answer") return true;
+  if (CLAIM_MONEY_QUESTION.test(question) || CLAIM_EVENT.test(question)) return true;
+  if (intent === "policy_question" && POLICY_VALUE_QUESTION.test(question)) return false;
+  return answer.claimItems.length > 0;
+}
+
 export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { claimContext?: boolean } = {}): ChatAnswer {
   const limits: PolicyStatedLimit[] = [...(answer.policyStatedLimits ?? [])].filter(isValidPolicyStatedLimit);
   const claimContext = options.claimContext ?? (answer.mode !== "answer" || answer.claimItems.length > 0);

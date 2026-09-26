@@ -15,7 +15,7 @@ import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTrai
 import { loadCoverConditions,readWhateverIsStillUnread } from "@/lib/policies/condition-catalog";
 import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
-import { enforceLiveChatMonetaryBoundary } from "./monetary-boundary";
+import { enforceLiveChatMonetaryBoundary, liveClaimContext } from "./monetary-boundary";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
@@ -31,7 +31,6 @@ import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 
-function liveClaimContext(intent:string|undefined,a:ChatAnswer):boolean{const mode:string=a.mode;return intent==="claim"||mode!=="answer"||a.claimItems.length>0}
 
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
@@ -497,7 +496,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
+              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             // A row that only says "as stated in the plan" is not yet an answer;
@@ -560,7 +559,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
+              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             }
@@ -616,7 +615,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
+          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
         // Carried into the reading path when the rules on file have nothing to
@@ -802,7 +801,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
             answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
             await check();
-            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
+            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
             return {answer,retrieved:[]};
           }
           delete state.pending;
@@ -856,7 +855,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
+          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
           }
         }
@@ -1040,7 +1039,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         const eventLead=claimEventLead(context.people,state);
         await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
         warnAboutInconsistentSchedules(answer,contracts);
-          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:true});
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)});
           answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
@@ -1056,7 +1055,9 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           .map(q=>q.length>180?q.slice(0,177).trimEnd()+"…":q))].slice(0,4);
         void totalText;void totalItems;
         answer.summary=(eventLead?eventLead+" ":"")+(
-          answer.claimItems.length?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+". This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until the claim evidence has been reviewed. Any amount shown is a policy-stated coverage limit, not an estimate for this event.":
+          answer.claimItems.length?(liveClaimContext(state.intent,answer,request.question)
+            ?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+". This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until the claim evidence has been reviewed. Any amount shown is a policy-stated coverage limit, not an estimate for this event."
+            :"These are the relevant parts of your policy documents, cited below. This is policy information, not a claim assessment."):
           observations.length?"The uploaded passages support the policy details below.":
           contracts.length?"I searched the uploaded personal policies but couldn’t verify a matching benefit from the retrieved sections. "+
             (negativeConclusionPermitted(answer.reviewCoverage)?"Every processed page was read, so the remaining gap is missing wording or evidence rather than an unsearched section.":"This is an incomplete review, so it doesn’t establish that the event is uninsured."):
@@ -1102,7 +1103,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   }
   answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
   await check();
-  await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer)}),jobId:options?.jobId});
+  await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
   return {answer,retrieved:[]};
 }
 

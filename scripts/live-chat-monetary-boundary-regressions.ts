@@ -9,7 +9,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   containsForbiddenPhrase, containsMoney, enforceLiveChatMonetaryBoundary, FORBIDDEN_MONETARY_PHRASES, INDICATIVE_ESTIMATE_NOTICE,
-  isValidPolicyStatedLimit, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE, PRELIMINARY_ASSESSMENT_NOTICE, sanitizeStoredAnswer,
+  isValidPolicyStatedLimit, liveClaimContext, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE, PRELIMINARY_ASSESSMENT_NOTICE, sanitizeStoredAnswer,
 } from "@/lib/chat/monetary-boundary";
 import { assessmentFromBenefit, policyStatedLimitFor } from "@/lib/chat/policy-analysis";
 import type { PolicyBenefit, PolicySource, SubjectFacts } from "@/lib/chat/types";
@@ -148,6 +148,20 @@ test("an ordinary policy question keeps its cited explanation text but can never
   assert.match(out.summary, /S\$500,000/, "cited explanation kept");
   for (const item of out.claimItems) assert.equal(item.calculatedAmount, undefined);
   assert.deepEqual(out.potentialPayoutTotals, []);
+});
+test("classification: only a policy-value question in answer mode is policy information; every claim signal keeps the boundary", () => {
+  const plain = { mode: "answer" as ChatAnswer["mode"], claimItems: [] as ClaimItem[] };
+  const withItem = { mode: "answer" as ChatAnswer["mode"], claimItems: [unsafeAnswer().claimItems[0]] };
+  // Positive control: the maturity question is policy information even when a maturity benefit card is present.
+  assert.equal(liveClaimContext("policy_question", withItem, "What happens when my endowment plan matures?"), false);
+  assert.equal(liveClaimContext("policy_question", plain, "What is my surrender value?"), false);
+  // Each exact blocker turns it back into claim context.
+  assert.equal(liveClaimContext("claim", withItem, "What happens when my endowment plan matures?"), true, "claim intent");
+  assert.equal(liveClaimContext("policy_question", { ...withItem, mode: "claim_assessment" }, "What happens when my endowment plan matures?"), true, "claim workflow mode");
+  assert.equal(liveClaimContext("policy_question", withItem, "My endowment matured, how much can I claim?"), true, "claim-money wording");
+  assert.equal(liveClaimContext("policy_question", withItem, "If I die before my endowment matures what is paid?"), true, "claim event");
+  assert.equal(liveClaimContext(undefined, withItem, "What happens when my endowment plan matures?"), true, "unknown intent fails closed");
+  assert.equal(liveClaimContext("follow_up", withItem, "Tell me more"), true, "benefit cards without a policy-value question fail closed");
 });
 test("an indicative estimate exists only as the evidence-gated composition, always with the indicative notice", () => {
   const a = unsafeAnswer(); a.composition = { engineVersion: "1", calculationId: "c", calculatedAt: "x", policies: [], alternativeGroups: [], totalsByCurrency: [], excludedBenefits: [], outstandingQuestions: [], disclaimer: "old" } as never;
