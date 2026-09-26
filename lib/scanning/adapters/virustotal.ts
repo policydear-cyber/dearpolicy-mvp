@@ -57,7 +57,7 @@
  * that IS webhook-based (recordPolicyScanResult()'s idempotent CAS write
  * doesn't care which path produced the verdict).
  */
-import type { FileScanAdapter, FileScanResult, FileScanStatus } from "../adapter";
+import type { FileScanAdapter, FileScanResult, FileScanStatus, ScanRetryHint } from "../adapter";
 
 export const VIRUSTOTAL_DEFAULT_BASE_URL = "https://www.virustotal.com/api/v3";
 export const VIRUSTOTAL_DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
@@ -194,10 +194,27 @@ function sleep(ms: number): Promise<void> {
  * throws) once retries are exhausted on a transient failure, so the
  * caller can fall back to "scan_unavailable" instead of failing the whole
  * scan attempt; throws a VirusTotalAdapterError for "auth"/"other". */
+/** What the last transient failure of a call looked like, so scanFile() can
+ * tell the caller WHY it gave up (lib/scanning/retry.ts schedules a bounded
+ * retry from this) -- never the provider's raw text. */
+type TransientTrace = { reason: ScanRetryHint["reason"] | null; retryAfterSeconds: number | null };
+
+/** The provider's own Retry-After metadata (seconds or an HTTP date), bounded
+ * to one day; null when absent or unreadable -- never guessed. */
+export function parseRetryAfterHeader(value: string | null | undefined, now = Date.now()): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Math.min(Number(trimmed), 86_400);
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return null;
+  return Math.min(Math.max(Math.ceil((at - now) / 1000), 0), 86_400);
+}
+
 async function callWithTransientRetry(
   label: string,
   attempt: () => Promise<Response>,
   config: VirusTotalConfig,
+  trace: TransientTrace = { reason: null, retryAfterSeconds: null },
 ): Promise<Response | null> {
   let lastError: unknown = null;
   for (let attemptNumber = 0; attemptNumber <= config.maxTransientRetries; attemptNumber++) {
@@ -214,9 +231,13 @@ async function callWithTransientRetry(
         throw new VirusTotalAdapterError(`VirusTotal ${label} failed (${parsed.code ?? response.status}): ${parsed.message}`);
       }
       lastError = new VirusTotalAdapterError(`VirusTotal ${label} transient failure (${parsed.code ?? response.status}): ${parsed.message}`);
+      trace.reason = response.status === 429 || parsed.code === "QuotaExceededError" || parsed.code === "TooManyRequestsError" ? "rate_limited" : "provider_unavailable";
+      trace.retryAfterSeconds = parseRetryAfterHeader(response.headers.get("retry-after"));
     } catch (error) {
       if (error instanceof VirusTotalAdapterError) throw error;
       lastError = error;
+      trace.reason = "provider_timeout";
+      trace.retryAfterSeconds = null;
     }
     if (attemptNumber < config.maxTransientRetries) {
       const backoffMs = Math.min(config.retryBackoffBaseMs * 2 ** attemptNumber, config.retryBackoffBaseMs * 10);
@@ -227,7 +248,7 @@ async function callWithTransientRetry(
   return null;
 }
 
-async function submitFile(bytes: Uint8Array, config: VirusTotalConfig): Promise<string | null> {
+async function submitFile(bytes: Uint8Array, config: VirusTotalConfig, trace?: TransientTrace): Promise<string | null> {
   const form = new FormData();
   // Cast needed because TS's lib.dom BlobPart type only accepts a view over
   // a plain ArrayBuffer, not the wider ArrayBufferLike (which also covers
@@ -238,6 +259,7 @@ async function submitFile(bytes: Uint8Array, config: VirusTotalConfig): Promise<
     "file submission",
     () => fetchWithTimeout(`${config.baseUrl}/files`, { method: "POST", headers: { "x-apikey": config.apiKey }, body: form }, config.requestTimeoutMs),
     config,
+    trace,
   );
   if (!response) return null;
   const json = (await response.json()) as { data?: { id?: string } };
@@ -246,11 +268,12 @@ async function submitFile(bytes: Uint8Array, config: VirusTotalConfig): Promise<
   return analysisId;
 }
 
-async function fetchAnalysis(analysisId: string, config: VirusTotalConfig): Promise<{ status: VirusTotalAnalysisStatus; stats: VirusTotalStats } | null> {
+async function fetchAnalysis(analysisId: string, config: VirusTotalConfig, trace?: TransientTrace): Promise<{ status: VirusTotalAnalysisStatus; stats: VirusTotalStats } | null> {
   const response = await callWithTransientRetry(
     "analysis lookup",
     () => fetchWithTimeout(`${config.baseUrl}/analyses/${encodeURIComponent(analysisId)}`, { method: "GET", headers: { "x-apikey": config.apiKey } }, config.requestTimeoutMs),
     config,
+    trace,
   );
   if (!response) return null;
   const json = (await response.json()) as { data?: { attributes?: { status?: string; stats?: VirusTotalStats } } };
@@ -274,16 +297,18 @@ async function scanFile(bytes: Uint8Array, env: NodeJS.ProcessEnv = process.env)
     );
   }
 
-  const analysisId = await submitFile(bytes, config);
+  const trace: TransientTrace = { reason: null, retryAfterSeconds: null };
+  const hint = (): ScanRetryHint => ({ reason: trace.reason ?? "provider_unavailable", retryAfterSeconds: trace.retryAfterSeconds });
+  const analysisId = await submitFile(bytes, config, trace);
   if (!analysisId) {
-    return { status: "scan_unavailable", detail: "VirusTotal file submission did not succeed after retrying transient failures." };
+    return { status: "scan_unavailable", detail: "VirusTotal file submission did not succeed after retrying transient failures.", retry: hint() };
   }
 
   const deadline = Date.now() + config.pollBudgetMs;
   for (;;) {
-    const analysis = await fetchAnalysis(analysisId, config);
+    const analysis = await fetchAnalysis(analysisId, config, trace);
     if (!analysis) {
-      return { status: "scan_unavailable", detail: `VirusTotal analysis ${analysisId} lookup did not succeed after retrying transient failures.` };
+      return { status: "scan_unavailable", detail: `VirusTotal analysis ${analysisId} lookup did not succeed after retrying transient failures.`, retry: hint() };
     }
     if (analysis.status === "completed") {
       const status = classifyVirusTotalStats(analysis.stats);
@@ -293,6 +318,7 @@ async function scanFile(bytes: Uint8Array, env: NodeJS.ProcessEnv = process.env)
       return {
         status: "scan_unavailable",
         detail: `VirusTotal analysis ${analysisId} did not complete within the ${config.pollBudgetMs}ms poll budget (still "${analysis.status}").`,
+        retry: { reason: "analysis_pending", retryAfterSeconds: null },
       };
     }
     await sleep(config.pollIntervalMs);

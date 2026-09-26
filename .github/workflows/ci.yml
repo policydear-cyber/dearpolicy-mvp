@@ -100,6 +100,10 @@ jobs:
 
       - name: Safe processing-failure storage (no raw provider/pipeline errors in household-readable tables; diagnostics service-only)
         run: npm run security:processing-failure-storage-test
+
+      - name: Bounded automatic scan retry (durable, idempotent, fail-closed)
+        run: npm run security:scan-retry-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
 
