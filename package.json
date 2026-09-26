@@ -94,7 +94,9 @@
     "jobs:dead-letter": "node --import tsx scripts/dead-letter.ts",
     "reviewer:admin": "node --import tsx scripts/claim-reviewer-admin.ts",
     "e2e:full-household-test": "node --import tsx scripts/full-household-e2e-regressions.ts",
-    "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs"
+    "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs",
+    "e2e:browser": "playwright test -c e2e/playwright.config.ts",
+    "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -109,6 +111,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.15",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
     "@types/react": "^19.2.0",
