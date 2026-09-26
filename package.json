@@ -39,6 +39,7 @@
     "claims:disability-test": "node --import tsx scripts/claim-disability-regressions.ts",
     "claims:travel-test": "node --import tsx scripts/claim-travel-regressions.ts",
     "eval:claim-quality": "node --import tsx scripts/claim-quality-eval.ts",
+    "eval:claim-answer-pipeline": "node --import tsx scripts/claim-answer-pipeline-eval.ts",
     "security:test": "node --import tsx scripts/security-regressions.ts",
     "security:tls-test": "node --import tsx scripts/tls-config-regressions.ts",
     "security:launch-guard-test": "node --import tsx scripts/launch-guard-regressions.ts",

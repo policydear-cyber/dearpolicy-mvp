@@ -111,7 +111,9 @@ export type CompositionBenefitView = {
   currency:string;
   rawAmount:number;
   payableAmount:number;
-  payableAmountText:string;
+  /** Null unless status is "included": a benefit that is blocked, excluded,
+   * not selected or still waiting on evidence is never rendered as "$0". */
+  payableAmountText:string|null;
   compositionType:"independent_additive"|"alternative_highest"|"alternative_selected"|"accelerated_from_base"|"additional_to_base"|"shared_policy_cap"|"shared_event_cap"|"informational_only"|"unknown";
   compositionGroupId:string|null;
   status:"included"|"excluded"|"blocked"|"needs_document"|"needs_review";
