@@ -148,7 +148,24 @@ export function telemetryIntentionallyDisabled(env: NodeJS.ProcessEnv = process.
   return isProduction(env) && truthy(env.TELEMETRY_INTENTIONALLY_DISABLED) && !truthy(env.TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED);
 }
 
+/** The deterministic model stand-in (lib/ai/deterministic-model.ts) is for
+ * synthetic browser/CI journeys only. Its flag must not even be present in a
+ * production or Vercel-hosted server. */
+export function checkDeterministicModelNotInProduction(env: NodeJS.ProcessEnv = process.env): GuardResult {
+  const requested = (env.DEARPOLICY_DETERMINISTIC_MODEL ?? "").trim() !== "";
+  if (requested && (isProduction(env) || (env.VERCEL ?? "").trim() !== "" || (env.VERCEL_ENV ?? "").trim() !== "")) {
+    return {
+      ok: false,
+      message:
+        "DEARPOLICY_DETERMINISTIC_MODEL is set in a production or Vercel-hosted environment. The deterministic " +
+        "model stand-in is for synthetic browser tests only. Remove it from this environment's configuration.",
+    };
+  }
+  return { ok: true, message: "The deterministic model stand-in is not configured in production." };
+}
+
 export const PRODUCTION_STARTUP_GUARDS: Guard[] = [
+  checkDeterministicModelNotInProduction,
   checkDevAuthNotInProduction,
   checkDevAccountIdNotInProduction,
   checkDatabaseTlsIsSecure,

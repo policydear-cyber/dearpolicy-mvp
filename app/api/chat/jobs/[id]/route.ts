@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { cancelChatJob,getChatJob } from "@/lib/chat/jobs";
 import { sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
+import { invalidateAnswersWithDeletedPolicies } from "@/lib/chat/stale-answers";
+import type { ChatAnswer } from "@/types";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -13,7 +15,14 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
     const ctx=await requireHouseholdContext(request);
     const job=await getChatJob(ctx.householdId,id);
     if(!job)return NextResponse.json({error:"Analysis not found or its chat was deleted."},{status:404});
-    return NextResponse.json({job:{id:job.id,status:job.status,progress:job.progress,error:job.error},result:job.status==="complete"?sanitizeStoredAnswer(job.result_json):null});
+    let result:unknown=job.status==="complete"?sanitizeStoredAnswer(job.result_json):null;
+    // An answer that relied on a since-deleted policy is never re-served as current cover.
+    if(result&&typeof result==="object"){
+      const wrapper=result as {answer?:Partial<ChatAnswer>};
+      if(wrapper.answer&&typeof wrapper.answer==="object"){const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[wrapper.answer]);result={...wrapper,answer:current};}
+      else{const [current]=await invalidateAnswersWithDeletedPolicies(ctx.householdId,[result as Partial<ChatAnswer>]);result=current;}
+    }
+    return NextResponse.json({job:{id:job.id,status:job.status,progress:job.progress,error:job.error},result});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Analysis lookup failed"},{status:400});
     const authResponse=routeErrorResponse(error);

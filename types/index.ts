@@ -204,6 +204,9 @@ export type ChatAnswer = {
   /** Deterministic fact-finding plan per family member and claim category
    * (lib/claims/fact-finding.ts). Never carries an amount. */
   factFinding?:FactFindingPlanView[];
+  /** Set when a saved answer is re-served after a policy it relied on was
+   * deleted (lib/chat/stale-answers.ts): it no longer describes cover. */
+  invalidated?:{reason:"policy_deleted"};
   /** "preliminary": no reviewed claim evidence, so no event amount at all.
    * "indicative": an amount produced by the evidence-gated deterministic
    * composition path. Absent for ordinary policy questions. */

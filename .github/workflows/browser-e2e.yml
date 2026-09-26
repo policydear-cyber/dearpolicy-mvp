@@ -1,0 +1,99 @@
+name: Browser E2E (synthetic data only)
+
+# Real Chromium against a real Next.js server, real PostgreSQL, the real job
+# worker and the real VirusTotal adapter pointed at a LOCAL fake VirusTotal
+# API. No production URL, database, secret or real document is used.
+on:
+  push:
+    branches: ["claude/browser-e2e", "claude/browser-claim-journey"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dearpolicy
+          POSTGRES_PASSWORD: dearpolicy
+          POSTGRES_DB: dearpolicy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      DATABASE_SSL: "off"
+      E2E_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      E2E_USER_A: 7e2e0000-0000-4000-8000-00000000000a
+      E2E_USER_B: 7e2e0000-0000-4000-8000-00000000000b
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.e2e-storage
+      MALWARE_SCANNER_PROVIDER: virustotal
+      VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
+      VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      VIRUSTOTAL_POLL_BUDGET_MS: "3000"
+      VIRUSTOTAL_POLL_INTERVAL_MS: "500"
+      DEV_AUTH_ENABLED: "true"
+      # Deterministic model stand-in for the synthetic journey only; refused in
+      # production by lib/launch/guards.ts and lib/ai/deterministic-model.ts.
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
+      NEXT_TELEMETRY_DISABLED: "1"
+      # The CSRF gate compares the browser Origin with the server's own
+      # origin; next dev reports it as localhost.
+      E2E_BASE_URL_A: http://localhost:3000
+      E2E_BASE_URL_B: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Apply the repository schema to the local CI database
+        run: node --import tsx e2e/support/apply-schema.ts
+      - name: Provision two synthetic households (sign-up's own ensureDefaultHousehold)
+        run: node --import tsx e2e/support/provision.ts
+      - name: Seed one synthetic claim fixture for household A
+        run: node --import tsx e2e/support/seed-claim-fixture.ts
+      - name: Start the fake VirusTotal API, the job worker and two app servers (users A and B)
+        run: |
+          mkdir -p "$LOCAL_STORAGE_DIR" logs
+          nohup node e2e/support/fake-services.mjs > logs/fake.log 2>&1 &
+          DEARPOLICY_WORKER_POLL_INTERVAL_MS=500 nohup npm run jobs:worker > logs/worker.log 2>&1 &
+          DEV_ACCOUNT_ID=$E2E_USER_A nohup npx next dev -p 3000 > logs/app-a.log 2>&1 &
+          mkdir -p ../app-b
+          tar --exclude=./node_modules --exclude=./.git --exclude=./.next --exclude=./logs -cf - . | (cd ../app-b && tar -xf -)
+          # Turbopack rejects a node_modules symlink that leaves the project root; hard links are fast and allowed.
+          cp -al "$GITHUB_WORKSPACE/node_modules" ../app-b/node_modules
+          (cd ../app-b && DEV_ACCOUNT_ID=$E2E_USER_B nohup npx next dev -p 3001 > "$GITHUB_WORKSPACE/logs/app-b.log" 2>&1 &)
+          for url in http://127.0.0.1:4010/__health http://localhost:3000/api/health http://localhost:3001/api/health; do
+            for i in $(seq 1 120); do curl -sf -o /dev/null "$url" && break; sleep 2; done
+            curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
+          done
+          # Warm up next dev's on-demand compilation so the first test is not a compile timeout.
+          for p in / /chat /family /policies /household /api/family /api/policies /api/household; do
+            curl -s -o /dev/null --max-time 180 "http://localhost:3000$p" || true
+            curl -s -o /dev/null --max-time 180 "http://localhost:3001$p" || true
+          done
+      - name: Run the synthetic browser journey
+        timeout-minutes: 25
+        run: npm run e2e:browser
+      - name: Database lock diagnostics on failure (synthetic CI database only)
+        if: failure()
+        run: node e2e/support/diagnose-locks.mjs
+      - name: Service logs on failure (synthetic data only; no secrets exist in this job)
+        if: failure()
+        run: |
+          for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done
+      - name: Failure screenshots (synthetic pages only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-screenshots
+          path: e2e-results/**/*.png
+          retention-days: 7

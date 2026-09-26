@@ -116,6 +116,12 @@ jobs:
       - name: Deterministic claim fact-finding (six categories; no amount before review)
         run: npm run claims:fact-finding-test
 
+      - name: Deterministic model stand-in cannot run in production
+        run: npm run security:deterministic-model-guard-test
+
+      - name: Indicative estimate only after reviewer decision; currencies separate; stale answers invalidated
+        run: npm run claims:indicative-estimate-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
       - name: Claim-answer pipeline adversarial evaluation (assess -> monetary gate -> composition -> rendered view, plus the live chat gate; positive controls, 5x determinism)

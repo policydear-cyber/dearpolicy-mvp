@@ -107,7 +107,7 @@ export default function ReviewerAssignmentPage() {
               {doc.citations.length > 0 && (
                 <ul className="muted">{doc.citations.map((c, i) => <li key={i}>{c.field}: {pages(c.pageStart, c.pageEnd)} — “{c.excerpt}”</li>)}</ul>
               )}
-              {workspace.definitions.length > 0 && <DecisionForm assignmentId={workspace.assignment.id} documentId={doc.id} definitions={workspace.definitions} onSaved={load} />}
+              {workspace.definitions.length > 0 && <DecisionForm assignmentId={workspace.assignment.id} documentId={doc.id} definitions={workspace.definitions} labels={workspace.definitions.map((d) => definitionLabel(d, workspace.coverages))} onSaved={load} />}
               <History entries={workspace.history.filter((h) => h.evidenceDocumentId === doc.id)} />
             </div>
           </div>
@@ -117,7 +117,15 @@ export default function ReviewerAssignmentPage() {
   );
 }
 
-function DecisionForm({ assignmentId, documentId, definitions, onSaved }: { assignmentId: string; documentId: string; definitions: Definition[]; onSaved: () => Promise<void> }) {
+/** Names the exact cover a definition belongs to, so a reviewer choosing
+ * between several covers with the same benefit never picks the wrong one. */
+function definitionLabel(d: Definition, coverages: Workspace["coverages"]): string {
+  const c = coverages.find((x) => x.id === d.coverageId);
+  const cover = c ? [c.insurer, c.policyName ?? c.productName, c.policyNumber ? `policy ${c.policyNumber}` : null].filter(Boolean).join(" · ") : d.contractId;
+  return `${d.label} — ${cover}`;
+}
+
+function DecisionForm({ assignmentId, documentId, definitions, labels, onSaved }: { assignmentId: string; documentId: string; definitions: Definition[]; labels: string[]; onSaved: () => Promise<void> }) {
   const [targetIndex, setTargetIndex] = useState(0);
   const [choice, setChoice] = useState<ReviewerDecisionChoice | "">("");
   const [reason, setReason] = useState("");
@@ -142,7 +150,7 @@ function DecisionForm({ assignmentId, documentId, definitions, onSaved }: { assi
       <legend>Record a decision for this document</legend>
       <label>Definition
         <select value={targetIndex} onChange={(e) => setTargetIndex(Number(e.target.value))}>
-          {definitions.map((d, i) => <option key={i} value={i}>{d.label}</option>)}
+          {definitions.map((d, i) => <option key={i} value={i}>{labels[i] ?? d.label}</option>)}
         </select>
       </label>
       {REVIEWER_DECISION_CHOICES.map((c) => (

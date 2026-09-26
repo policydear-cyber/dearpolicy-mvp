@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deterministicHostedReply, deterministicModelEnabled } from "./deterministic-model";
 
 /** Which model does which job, as three settings.
  *
@@ -340,6 +341,9 @@ export function providerMessage(bodyText:string){
   }catch{return bodyText.replace(/[{}]/g,"").slice(0,400);}
 }
 export async function hostedStructuredCompletion(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}){
+  // Synthetic browser/CI journeys only; impossible in production (see
+  // lib/ai/deterministic-model.ts and lib/launch/guards.ts).
+  if(deterministicModelEnabled())return deterministicHostedReply(args);
   if(choice.provider==="anthropic")return anthropicMessages(choice,args);
   if(choice.provider==="gemini")return geminiGenerate(choice,args);
   return openAiCompatible(choice,args);

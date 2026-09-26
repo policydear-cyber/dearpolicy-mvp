@@ -8,6 +8,7 @@ import {
 import { BILL_REVIEW_NOTICE, billReviewDraftFrom, buildBillReviewRequest, type BillReviewDraft } from "@/lib/claims/evidence/bill-review";
 import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceDocumentType } from "@/lib/claims/evidence/types";
 import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE, type HouseholdReviewStatus } from "@/lib/claims/reviewers/copy";
+import { IndicativeEstimatePanel } from "./indicative-panel";
 
 type Claim = { id: string; family_member_id: string; status: string; event_summary: string | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
 type ExtractedFields = {
@@ -129,15 +130,11 @@ export default function ClaimEvidencePage() {
         </form>
       </section>
 
-      {documents.some((d) => d.reviewStatus === "reviewed") && (
-        <section className="section">
-          <h2>Claim assessment</h2>
-          <p className="muted">{INDICATIVE_ESTIMATE_NOTICE}</p>
-          {claim.decision_packet?.assessments?.length
-            ? <ul>{claim.decision_packet.assessments.map((a) => <li key={a.id}>{a.title}</li>)}</ul>
-            : <p>Ask DearPolicy about this claim to refresh the assessment with the review.</p>}
-        </section>
-      )}
+      <section className="section">
+        <h2>Claim assessment</h2>
+        <p className="muted">{INDICATIVE_ESTIMATE_NOTICE}</p>
+        <IndicativeEstimatePanel claimSessionId={claimSessionId} refreshKey={documents.map((d) => `${d.id}:${d.status}:${d.reviewStatus ?? ""}`).join("|")} />
+      </section>
 
       <section className="section">
         <h2>Documents</h2>
