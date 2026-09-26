@@ -78,11 +78,16 @@ async function runDatabaseTests() {
       supersedePolicyDocument,
     } = await import("@/lib/policies/quarantine/store");
     const { listPolicyDocumentAudit } = await import("@/lib/policies/quarantine/audit");
-    const { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } = await import("@/lib/policies/quarantine/ui");
+    const { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel, userFacingScanResultDetail, NO_SCANNER_CONFIGURED_DETAIL, SCAN_DID_NOT_COMPLETE_DETAIL, SCAN_REJECTED_DETAIL } = await import("@/lib/policies/quarantine/ui");
 
     __registerFileScanAdapterForTests({ name: "test-clean", async scanFile() { return { status: "clean" as const }; } });
     __registerFileScanAdapterForTests({ name: "test-infected", async scanFile() { return { status: "infected" as const }; } });
     __registerFileScanAdapterForTests({ name: "test-throws", async scanFile(): Promise<never> { throw new Error("scan timed out"); } });
+    const VT_ANALYSIS = "NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA==";
+    __registerFileScanAdapterForTests({ name: "test-vt-clean", async scanFile() { return { status: "clean" as const, detail: `VirusTotal analysis ${VT_ANALYSIS}: malicious=0 suspicious=0 harmless=0 undetected=64 timeout=0.` }; } });
+    __registerFileScanAdapterForTests({ name: "test-vt-infected", async scanFile() { return { status: "infected" as const, detail: `VirusTotal analysis ${VT_ANALYSIS}: malicious=3 suspicious=1 harmless=0 undetected=60 timeout=0.` }; } });
+    __registerFileScanAdapterForTests({ name: "test-vt-unavailable", async scanFile() { return { status: "scan_unavailable" as const, detail: `VirusTotal analysis ${VT_ANALYSIS} did not complete within the 60000ms poll budget (still "queued").` }; } });
+    __registerFileScanAdapterForTests({ name: "test-throws-storage", async scanFile(): Promise<never> { throw new Error("download failed for storage key accounts/SYNTHETIC/policies/SECRET-STORAGE-KEY.pdf"); } });
 
     const account = "60000000-0000-4000-8000-000000000001";
     const otherAccount = "60000000-0000-4000-8000-000000000099";
@@ -322,6 +327,62 @@ async function runDatabaseTests() {
       );
       assert.equal(policyQuarantineLabel({ quarantine_status: "scan_pending", scan_result_detail: null }), "Waiting for malware scan");
       assert.equal(policyQuarantineLabel({ quarantine_status: "uploaded", scan_result_detail: null }), "Waiting to start malware scan");
+    });
+
+    // 19b. Raw scanner detail never reaches a household member.
+    await testAsync("the policy list API never returns raw scanner detail (analysis ids, engine counts, retry diagnostics) -- only fixed category strings", async () => {
+      const vtClean = "VirusTotal analysis NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA==: malicious=0 suspicious=0 harmless=0 undetected=64 timeout=0.";
+      const vtInfected = "VirusTotal analysis NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA==: malicious=3 suspicious=1 harmless=0 undetected=60 timeout=0.";
+      const vtPoll = "VirusTotal analysis NjY0ZjU3YzFjNWM2YjM6MTcwMDAwMDAwMA== did not complete within the 60000ms poll budget (still \"queued\").";
+      const vtQuota = "VirusTotal file submission did not succeed after retrying transient failures.";
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_clean", scan_result_detail: vtClean }), null);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_rejected", scan_result_detail: vtInfected }), SCAN_REJECTED_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: vtPoll }), SCAN_DID_NOT_COMPLETE_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: vtQuota }), SCAN_DID_NOT_COMPLETE_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: null }), null);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: "No malware-scanning adapter is configured in this environment." }), NO_SCANNER_CONFIGURED_DETAIL);
+      assert.equal(userFacingScanResultDetail({ quarantine_status: "deleted", scan_result_detail: vtClean }), null);
+      for (const out of [vtClean, vtInfected, vtPoll, vtQuota].flatMap((raw) => ["scan_clean", "scan_rejected", "scan_pending", "quarantined", "deleted"].map((status) => userFacingScanResultDetail({ quarantine_status: status, scan_result_detail: raw })))) {
+        assert.ok(out === null || !/virustotal|analysis|malicious=|NjY0/i.test(out), `leaked scanner detail: ${out}`);
+      }
+      // A scan that did not complete (quota, poll budget) is labelled as on hold, never as clean or as still actively scanning.
+      assert.equal(policyQuarantineLabel({ quarantine_status: "scan_pending", scan_result_detail: userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: vtQuota }) }), "On hold: malware scan did not complete");
+      // The label is computed from the sanitized value the API returns, and the null-adapter label still works through it.
+      assert.equal(policyQuarantineLabel({ quarantine_status: "scan_pending", scan_result_detail: userFacingScanResultDetail({ quarantine_status: "scan_pending", scan_result_detail: "No malware-scanning adapter is configured in this environment." }) }), "On hold: malware scanning unavailable");
+      // The route itself must apply the mapping -- a raw pass-through of the column would reintroduce the leak.
+      const routeSource = await readFile(path.join(process.cwd(), "app/api/policies/route.ts"), "utf8");
+      assert.match(routeSource, /scan_result_detail:\s*userFacingScanResultDetail\(p\)/);
+    });
+
+    // 19c. Provider-internal detail is never WRITTEN to household-readable
+    // storage (policies.scan_result_detail, policy_document_audit_log), which
+    // the household can read directly under RLS, not only via the API.
+    await testAsync("scanner detail and raw scan errors are never persisted to household-readable columns", async () => {
+      const leak = /virustotal|analysis|malicious=|NjY0|SECRET-STORAGE-KEY|storage key/i;
+      const cases: [string, string, string | null][] = [
+        ["test-vt-clean", "scan_clean", null],
+        ["test-vt-infected", "scan_rejected", SCAN_REJECTED_DETAIL],
+        ["test-vt-unavailable", "scan_pending", SCAN_DID_NOT_COMPLETE_DETAIL],
+        ["test-throws-storage", "scan_pending", null],
+      ];
+      for (const [provider, status, detail] of cases) {
+        process.env.MALWARE_SCANNER_PROVIDER = provider;
+        const id = await insertPolicy();
+        const gate = await runPolicyQuarantineGate({ accountId: account, policyId: id, readBytes: noBytes });
+        assert.equal(gate.row?.quarantine_status, status, `${provider}: status`);
+        assert.equal(gate.row?.scan_result_detail ?? null, detail, `${provider}: stored detail must be the fixed category string`);
+        const stored = await pool.query(`SELECT scan_result_detail FROM policies WHERE id=$1`, [id]);
+        assert.ok(!leak.test(String(stored.rows[0]?.scan_result_detail ?? "")), `${provider}: provider detail leaked into policies.scan_result_detail`);
+        const audit = await listPolicyDocumentAudit(account, id);
+        for (const a of audit) assert.ok(!leak.test(`${a.reason ?? ""} ${JSON.stringify(a.new_value ?? {})} ${JSON.stringify(a.previous_value ?? {})}`), `${provider}: provider detail or raw error leaked into the audit trail (${a.action})`);
+        if (provider === "test-throws-storage") assert.ok(audit.some((a) => a.action === "scan_attempt_failed" && a.reason_code === "SCAN_ATTEMPT_FAILED"), "the failed attempt is still audited");
+        // Fail closed throughout: only a clean verdict clears processing.
+        assert.equal(gate.cleared, status === "scan_clean", `${provider}: cleared`);
+      }
+      // The list route also returns a fixed string instead of the raw processing error.
+      const routeSource = await readFile(path.join(process.cwd(), "app/api/policies/route.ts"), "utf8");
+      assert.match(routeSource, /processing_error:\s*p\.processing_error \? POLICY_PROCESSING_STOPPED_MESSAGE : null/);
+      delete process.env.MALWARE_SCANNER_PROVIDER;
     });
 
     // Audit-event creation -- exercised throughout every test above; one

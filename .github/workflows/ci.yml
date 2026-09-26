@@ -98,6 +98,15 @@ jobs:
       - name: Travel-claims engine regression suite
         run: npm run claims:travel-test
 
+      - name: Safe processing-failure storage (no raw provider/pipeline errors in household-readable tables; diagnostics service-only)
+        run: npm run security:processing-failure-storage-test
+
+      - name: Bounded automatic scan retry (durable, idempotent, fail-closed)
+        run: npm run security:scan-retry-test
+
+      - name: Processing-failure migration procedure rehearsal (runbook pre/post checks, single-transaction apply, Supabase-style default grants)
+        run: npm run security:processing-failure-migration-procedure-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
       - name: Claim-answer pipeline adversarial evaluation (assess -> monetary gate -> composition -> rendered view, plus the live chat gate; positive controls, 5x determinism)

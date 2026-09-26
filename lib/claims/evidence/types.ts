@@ -55,11 +55,13 @@ export function isMedicalClaimEligibleDocumentType(value: ClaimEvidenceDocumentT
 export type ClaimEvidenceStatus =
   | "uploaded" | "quarantined" | "processing" | "extracted" | "needs_review" | "matched" | "rejected" | "failed";
 
-/** No malware scanner is wired into this environment (see ./scan-adapter.ts
- * for the documented extension point) -- so this stays "pending_scan" or
- * "scan_unavailable" throughout, and processing is never gated on it. A
- * value here of "clean" or "infected" is only ever set by a real adapter,
- * never assumed. */
+/** Set by the configured malware-scanning adapter (./scan-adapter.ts, which
+ * resolves the shared lib/scanning registry -- e.g. VirusTotal when
+ * MALWARE_SCANNER_PROVIDER=virustotal). Processing IS gated on it: evidence
+ * only leaves quarantine when this is "clean" (./pipeline.ts); "pending_scan"
+ * and "scan_unavailable" keep it held, and "infected" rejects it. A value of
+ * "clean" or "infected" is only ever set by a real adapter, never assumed.
+ * Held evidence is not re-scanned automatically. */
 export type ClaimEvidenceScanStatus = "pending_scan" | "clean" | "infected" | "scan_unavailable";
 
 export type ClaimEvidenceIdentityStatus = "pending" | "confirmed" | "needs_review" | "mismatch";

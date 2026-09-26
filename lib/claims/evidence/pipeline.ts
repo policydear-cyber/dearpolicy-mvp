@@ -21,6 +21,7 @@
  * application log -- only status, stage and error CODES. See the catch
  * block below.
  */
+import { EVIDENCE_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { query } from "@/lib/db/client";
 import { readClaimEvidenceFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
@@ -32,8 +33,10 @@ import { evaluateClaimEvidenceIdentity } from "./identity";
 import { appendClaimEvidenceAudit } from "./audit";
 import {
   findReusedEvidenceAcrossScopes, getEvidenceDocument, incrementProcessingAttempts,
-  listEvidenceDocuments, recordExtraction, transitionEvidenceStatus,
+  listEvidenceDocuments, markEvidenceRescanClean, recordExtraction, transitionEvidenceStatus,
 } from "./store";
+import type { ScanRetryHint } from "@/lib/scanning/adapter";
+import { MAX_SCAN_RETRY_ATTEMPTS, SCAN_RETRY_SCHEDULED_MESSAGE, scheduleScanRetry } from "@/lib/scanning/retry";
 import type { ClaimEvidenceDocumentRow, ClaimEvidenceStatus } from "./types";
 import type { ClaimFacts } from "@/lib/claims/types";
 import { activePredicate } from "@/lib/lifecycle/scopes";
@@ -53,7 +56,27 @@ export type ProcessClaimEvidenceArgs = {
   // regression suite), which simply gets no heartbeat -- exactly today's
   // (pre-fix) behavior.
   jobHeartbeat?: () => Promise<void>;
+  /** Set only by the bounded scan-retry job (lib/scanning/retry.ts): a
+   * document held in `quarantined` because its scan did not complete
+   * (scan_unavailable) is scanned again. Every other caller leaves a held
+   * document on hold, exactly as before. */
+  rescanUnavailable?: boolean;
 };
+
+async function scheduleEvidenceScanRetry(accountId: string, doc: ClaimEvidenceDocumentRow, hint: ScanRetryHint): Promise<void> {
+  try {
+    const outcome = await scheduleScanRetry({ accountId, resourceType: "claim_evidence", resourceId: doc.id, hint });
+    if (outcome.scheduled && outcome.created) {
+      await appendClaimEvidenceAudit(accountId, {
+        actor: "system", action: "scan_retry_scheduled", evidenceDocumentId: doc.id, claimSessionId: doc.claim_session_id,
+        reasonCode: "SCAN_RETRY_SCHEDULED", reason: SCAN_RETRY_SCHEDULED_MESSAGE,
+        newValue: { attempt: outcome.attempt, maxAttempts: MAX_SCAN_RETRY_ATTEMPTS, notBefore: outcome.availableAt.toISOString() },
+      });
+    }
+  } catch (error) {
+    console.warn(`could not schedule a scan retry for evidence ${doc.id} (${error instanceof Error ? error.name : "unknown"})`);
+  }
+}
 
 // Best-effort, matching lib/rag/ingest.ts's identically-named pattern: a
 // heartbeat failure (including the job's lease already having been lost to
@@ -136,6 +159,7 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
       // audit log's JSON blob, never queryable) so both the gate just
       // below and the UI can see the real outcome.
       const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "uploaded", to: "quarantined", scanStatus: scan.status });
+      if (moved && scan.status === "scan_unavailable" && scan.retry) await scheduleEvidenceScanRetry(args.accountId, moved, scan.retry);
       if (moved) {
         current = moved;
         await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "status_transition", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, previousValue: { status: "uploaded" }, newValue: { status: "quarantined", scanStatus: scan.status } });
@@ -145,6 +169,31 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     }
     await heartbeat(args);
     if (!RESUMABLE.includes(current.status)) return;
+
+    // --- bounded automatic rescan (lib/scanning/retry.ts) ----------------
+    // Only the scan-retry job sets rescanUnavailable. The same rules apply
+    // as the first scan: infected is terminal, only a real clean verdict
+    // releases the document, and anything else keeps it on hold.
+    if (args.rescanUnavailable && current.status === "quarantined" && current.scan_status === "scan_unavailable") {
+      const bytes = await readClaimEvidenceFile(current.storage_key);
+      const rescan = await currentScanAdapter().scanFile(bytes);
+      if (rescan.status === "infected") {
+        const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "quarantined", to: "rejected", errorCode: "MALWARE_DETECTED", errorMessage: "This file was flagged by malware scanning and cannot be processed.", scanStatus: "infected" });
+        if (moved) await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "rejected", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, reasonCode: "MALWARE_DETECTED", newValue: { status: "rejected", scanStatus: "infected" } });
+        return;
+      }
+      if (rescan.status === "clean") {
+        const cleared = await markEvidenceRescanClean(args.accountId, current.id);
+        if (cleared) {
+          current = cleared;
+          await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "scan_result_recorded", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, previousValue: { scanStatus: "scan_unavailable" }, newValue: { scanStatus: "clean" } });
+        } else {
+          current = (await getEvidenceDocument(args.accountId, args.documentId)) ?? current;
+        }
+      } else if (rescan.retry) {
+        await scheduleEvidenceScanRetry(args.accountId, current, rescan.retry);
+      }
+    }
 
     // --- quarantined -> processing -------------------------------------
     // Gate strictly on an explicit clean scan: "Only scan_clean documents
@@ -237,8 +286,11 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     const code = (error && typeof error === "object" && "code" in error && typeof (error as { code?: unknown }).code === "string")
       ? (error as { code: string }).code
       : "PROCESSING_ERROR";
-    const message = error instanceof Error ? error.message : "Claim-evidence processing failed.";
-    await markFailed(args.accountId, args.documentId, current.status, code, message);
+    // The document row and its audit trail are household-readable: only a
+    // fixed message is stored there; the raw error goes to the service-only
+    // diagnostics table (lib/diagnostics/processing-failures.ts).
+    await recordProcessingFailure({ accountId: args.accountId, resourceType: "claim_evidence", resourceId: args.documentId, failureCode: code, error });
+    await markFailed(args.accountId, args.documentId, current.status, code, EVIDENCE_PROCESSING_FAILED_MESSAGE);
     // Checkpoint 8 (claude/v1-launch-hardening): re-throw after recording the
     // document-level failure. The document's own status='failed' is the
     // user-visible terminal state either way -- this throw exists so the

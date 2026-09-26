@@ -167,6 +167,21 @@ export async function transitionEvidenceStatus(args: {
   return result.rows[0] ?? null;
 }
 
+/** The only way a held document's scan_unavailable becomes clean: a real
+ * clean verdict from the bounded rescan (./pipeline.ts). CAS on the held
+ * state, so a document that was deleted, superseded, rejected or already
+ * moved on is never touched. */
+export async function markEvidenceRescanClean(accountId: string, id: string): Promise<ClaimEvidenceDocumentRow | null> {
+  await ensureClaimEvidenceSchema();
+  const result = await query<ClaimEvidenceDocumentRow>(
+    `UPDATE claim_evidence_documents SET scan_status='clean', updated_at=now()
+      WHERE id=$1 AND account_id=$2 AND status='quarantined' AND scan_status='scan_unavailable' AND superseded_at IS NULL AND ${activePredicate()}
+      RETURNING ${DOCUMENT_COLUMNS}`,
+    [id, accountId],
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function incrementProcessingAttempts(accountId: string, id: string): Promise<number> {
   await ensureClaimEvidenceSchema();
   const result = await query<{ processing_attempts: number }>(

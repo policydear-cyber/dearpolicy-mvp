@@ -18,7 +18,12 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { currentFileScanAdapter } from "@/lib/scanning/adapter";
 import { assertValidPolicyQuarantineTransition } from "./state-machine";
 import { appendPolicyDocumentAudit } from "./audit";
+import { persistableScanResultDetail } from "./ui";
+import { recordProcessingFailure, SCAN_ATTEMPT_FAILED_MESSAGE } from "@/lib/diagnostics/processing-failures";
 import { isPolicyQuarantineStatus, type PolicyQuarantineRow, type PolicyQuarantineStatus, type PolicyScanResultOutcome } from "./types";
+import type { ScanRetryHint } from "@/lib/scanning/adapter";
+import { VirusTotalAdapterError } from "@/lib/scanning/adapters/virustotal";
+import { MAX_SCAN_RETRY_ATTEMPTS, SCAN_RETRY_SCHEDULED_MESSAGE, scheduleScanRetry } from "@/lib/scanning/retry";
 
 const ROW_COLUMNS = `id::text,account_id,quarantine_status,scan_provider,scan_result_detail,scan_event_id,
   scanned_at::text,supersedes_id::text,superseded_at::text,processing_status,storage_key`;
@@ -121,9 +126,14 @@ export async function recordPolicyScanResult(args: {
   accountId: string; policyId: string; status: "scan_clean" | "scan_rejected";
   scanProvider: string; scanResultDetail?: string | null; scanEventId?: string | null;
 }): Promise<PolicyScanResultOutcome> {
+  // Provider-internal detail (an analysis id, engine counts) is logged for
+  // operators and never written to the household-readable column.
+  if (args.scanResultDetail) console.info(`malware scan result (${args.scanProvider}) for policy ${args.policyId}: ${args.scanResultDetail}`);
   const applied = await transitionQuarantineStatus({
     accountId: args.accountId, policyId: args.policyId, from: "scan_pending", to: args.status,
-    scanProvider: args.scanProvider, scanResultDetail: args.scanResultDetail, scanEventId: args.scanEventId, markScanned: true,
+    scanProvider: args.scanProvider,
+    scanResultDetail: persistableScanResultDetail(args.status === "scan_rejected" ? "infected" : "clean", args.scanResultDetail),
+    scanEventId: args.scanEventId, markScanned: true,
   });
   if (applied) {
     await appendPolicyDocumentAudit(args.accountId, {
@@ -168,6 +178,24 @@ export async function recordPolicyScanResult(args: {
  * never advances it to scan_clean, and never throws further -- an upload
  * request must not 500 just because the file could not be scanned yet.
  */
+/** Schedules the next bounded automatic retry (lib/scanning/retry.ts) and
+ * audits it with fixed wording. Failure-isolated: if scheduling itself fails
+ * the document simply stays on hold -- never released, never a 500. */
+async function schedulePolicyScanRetry(accountId: string, policyId: string, hint: ScanRetryHint): Promise<void> {
+  try {
+    const outcome = await scheduleScanRetry({ accountId, resourceType: "policy_document", resourceId: policyId, hint });
+    if (outcome.scheduled && outcome.created) {
+      await appendPolicyDocumentAudit(accountId, {
+        actor: "system", action: "scan_retry_scheduled", policyId,
+        newValue: { attempt: outcome.attempt, maxAttempts: MAX_SCAN_RETRY_ATTEMPTS, notBefore: outcome.availableAt.toISOString() },
+        reason: SCAN_RETRY_SCHEDULED_MESSAGE, reasonCode: "SCAN_RETRY_SCHEDULED",
+      });
+    }
+  } catch (error) {
+    console.warn(`could not schedule a scan retry for policy ${policyId} (${error instanceof Error ? error.name : "unknown"})`);
+  }
+}
+
 export async function runPolicyQuarantineGate(args: {
   accountId: string; policyId: string; readBytes: () => Promise<Uint8Array>;
 }): Promise<{ cleared: boolean; row: PolicyQuarantineRow | null }> {
@@ -218,14 +246,27 @@ export async function runPolicyQuarantineGate(args: {
         const bytes = await args.readBytes();
         result = await adapter.scanFile(bytes);
       } catch (error) {
+        // The audit trail is household-readable: a fixed reason only. The raw
+        // error (which can name a storage key or a provider response) is not
+        // stored; the server log gets its class name for operators.
+        console.warn(`malware scan attempt failed for policy ${args.policyId} (${error instanceof Error ? error.name : "unknown"})`);
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_scan", resourceId: args.policyId, failureCode: "SCAN_ATTEMPT_FAILED", error });
         await appendPolicyDocumentAudit(args.accountId, {
           actor: "system", action: "scan_attempt_failed", policyId: args.policyId,
           previousValue: { quarantineStatus: "scan_pending" },
-          reason: error instanceof Error ? error.message : "Unknown scan error", reasonCode: "SCAN_ATTEMPT_FAILED",
+          reason: SCAN_ATTEMPT_FAILED_MESSAGE, reasonCode: "SCAN_ATTEMPT_FAILED",
         });
+        // A scanner that threw on its own misconfiguration (bad API key,
+        // unrecognised response) is never retried automatically; anything
+        // else (reading the stored bytes, a crashed provider call) is
+        // treated as a temporary provider failure.
+        if (!(error instanceof VirusTotalAdapterError)) {
+          await schedulePolicyScanRetry(args.accountId, args.policyId, { reason: "provider_unavailable", retryAfterSeconds: null });
+        }
         return { cleared: false, row };
       }
       if (result.status === "infected") {
+        if (result.detail) console.info(`malware scan result (${adapter.name}) for policy ${args.policyId}: ${result.detail}`);
         await recordPolicyScanResult({ accountId: args.accountId, policyId: args.policyId, status: "scan_rejected", scanProvider: adapter.name, scanResultDetail: "This file was flagged by malware scanning and cannot be processed." });
       } else {
         // "clean" or "scan_unavailable" -- scan_unavailable is recorded as
@@ -235,7 +276,12 @@ export async function runPolicyQuarantineGate(args: {
         if (result.status === "clean") {
           await recordPolicyScanResult({ accountId: args.accountId, policyId: args.policyId, status: "scan_clean", scanProvider: adapter.name, scanResultDetail: result.detail ?? null });
         } else {
-          await query(`UPDATE policies SET scan_provider=$1, scan_result_detail=$2, updated_at=now() WHERE id=$3 AND account_id=$4 AND quarantine_status='scan_pending'`, [adapter.name, result.detail ?? null, args.policyId, args.accountId]);
+          if (result.detail) {
+            console.info(`malware scan unavailable (${adapter.name}) for policy ${args.policyId}: ${result.detail}`);
+            await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_scan", resourceId: args.policyId, failureCode: "SCAN_UNAVAILABLE", error: result.detail });
+          }
+          await query(`UPDATE policies SET scan_provider=$1, scan_result_detail=$2, updated_at=now() WHERE id=$3 AND account_id=$4 AND quarantine_status='scan_pending'`, [adapter.name, persistableScanResultDetail("scan_unavailable", result.detail), args.policyId, args.accountId]);
+          if (result.retry) await schedulePolicyScanRetry(args.accountId, args.policyId, result.retry);
         }
       }
       row = await getPolicyQuarantineRow(args.accountId, args.policyId);

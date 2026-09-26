@@ -13,10 +13,10 @@
 import type { ClaimEvidenceScanStatus } from "./types";
 import {
   currentFileScanAdapter, selectedFileScanAdapterName, checkFileScannerConfigured,
-  nullFileScanAdapter, registeredFileScanAdapterNames, type FileScanAdapter, type FileScanResult,
+  nullFileScanAdapter, registeredFileScanAdapterNames, type FileScanAdapter, type FileScanResult, type ScanRetryHint,
 } from "@/lib/scanning/adapter";
 
-export type ScanResult = { status: ClaimEvidenceScanStatus; detail?: string };
+export type ScanResult = { status: ClaimEvidenceScanStatus; detail?: string; retry?: ScanRetryHint };
 
 export interface EvidenceScanAdapter {
   readonly name: string;
@@ -36,7 +36,7 @@ function wrapAdapter(inner: FileScanAdapter): EvidenceScanAdapter {
     name: inner.name,
     async scanFile(bytes: Uint8Array): Promise<ScanResult> {
       const result = await inner.scanFile(bytes);
-      return { status: toEvidenceScanStatus(result), detail: result.detail };
+      return { status: toEvidenceScanStatus(result), detail: result.detail, ...(result.status === "scan_unavailable" && result.retry ? { retry: result.retry } : {}) };
     },
   };
 }
