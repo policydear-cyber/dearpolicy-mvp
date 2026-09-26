@@ -154,28 +154,29 @@ test.describe.serial("synthetic claim journey", () => {
   });
 
   test("6. every claim category enters fact-finding through the UI, with no amount", async () => {
-    await page.goto("/chat");
-    await page.getByRole("button", { name: "New chat" }).click();
     const claimant = `${PREFIX}-Claimant`;
-    const cases: [string, RegExp][] = [
-      [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, /Hospital cash/i],
-      [`${claimant}'s flight was delayed 9 hours on the trip. Can we claim?`, /Travel/i],
-      [`${claimant} is unable to work since 2026-07-01 after an injury. What can be claimed?`, /Disability/i],
-      [`${claimant} died in a road accident on 2026-09-01. What can we claim?`, /Accidental death/i],
-      [`${claimant} was diagnosed with stage 2 breast cancer on 2026-06-01. How much can I claim?`, /Critical illness/i],
+    // Each is a separate event, so each starts its own chat (a follow-up in the
+    // same chat is, correctly, treated as more facts about the same event).
+    const cases: [string, RegExp[]][] = [
+      [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, [/Hospital cash/i, /Medical reimbursement/i]],
+      [`${claimant}'s flight was delayed 9 hours on the trip. Can we claim?`, [/Travel/i]],
+      [`${claimant} is unable to work since 2026-07-01 after an injury. What can be claimed?`, [/Disability/i]],
+      [`${claimant} died in a road accident on 2026-09-01. What can we claim?`, [/Accidental death/i]],
+      [`${claimant} was diagnosed with stage 2 breast cancer on 2026-06-01. How much can I claim?`, [/Critical illness/i]],
     ];
-    for (const [message, category] of cases) {
+    for (const [message, categories] of cases) {
+      await page.goto("/chat");
+      await page.getByRole("button", { name: "New chat" }).click();
       const answer = await ask(page, message);
       const plan = answer.getByTestId("fact-finding");
       await expect(plan, message).toBeVisible();
-      await expect(plan).toContainText(category);
+      for (const category of categories) await expect(plan, message).toContainText(category);
       await expect(plan).toContainText(/Information needed|Evidence needed|Reviewer assessment needed/);
       const text = await answer.innerText();
       expect(text, message).not.toMatch(FORBIDDEN);
       for (const card of await answer.locator(".claim-item, .claim-card").allInnerTexts()) expect(card).not.toMatch(MONEY);
       expect(await answer.getByTestId("indicative-estimate").count()).toBe(0);
     }
-    await expect(page.locator(".message.assistant").last().getByTestId("fact-finding")).toContainText(/Medical reimbursement/i);
   });
 
   test("7-12, 14. evidence -> scan -> reading -> reviewer UI -> indicative estimate: cited, per currency, never for an unstated currency, a negative decision or a flagged file", async ({ browser }) => {
