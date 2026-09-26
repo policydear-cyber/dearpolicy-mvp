@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { rootCertificates } from "node:tls";
+import { SUPABASE_ROOT_2021_CA } from "./supabase-root-ca";
 import { Pool, type PoolConfig, type QueryResultRow } from "pg";
 
 const connectionString = process.env.DATABASE_URL;
@@ -39,6 +41,11 @@ export type SslConfigInput = {
 // any process.env mutation/module re-import trickery. Called with no
 // arguments (falling back to real process.env / the real DATABASE_URL) when
 // the connection pool below is actually constructed.
+/** True for a Supabase-managed Postgres host (pooler or direct). */
+export function isSupabaseHost(databaseUrl: string): boolean {
+  try { return /(^|\.)supabase\.(co|com)$/i.test(new URL(databaseUrl).hostname); } catch { return false; }
+}
+
 export function sslConfig(input: SslConfigInput = {}): PoolConfig["ssl"] {
   const databaseUrl = input.databaseUrl ?? connectionString;
   const nodeEnv = input.nodeEnv ?? process.env.NODE_ENV;
@@ -83,10 +90,12 @@ export function sslConfig(input: SslConfigInput = {}): PoolConfig["ssl"] {
     }
   }
 
-  // Supabase's connection pooler and direct connection both present a
-  // certificate chained to a publicly trusted root (see Supabase's TLS
-  // documentation), so Node's default trust store verifies it without a
-  // pinned CA bundle in the normal case.
+  // Supabase's pooler and direct hosts present certificates chained to
+  // Supabase's own root CA, which is NOT publicly trusted (observed: "self-
+  // signed certificate in certificate chain"). Trust that one published root
+  // in addition to the public roots -- verification stays on, hostname
+  // checking included. Any other host uses the public roots only.
+  if (isSupabaseHost(databaseUrl)) return { rejectUnauthorized: true, ca: [...rootCertificates, SUPABASE_ROOT_2021_CA] };
   return { rejectUnauthorized: true };
 }
 
