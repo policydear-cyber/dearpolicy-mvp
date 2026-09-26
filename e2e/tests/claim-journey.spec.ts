@@ -169,7 +169,8 @@ test.describe.serial("synthetic claim journey", () => {
       await page.getByRole("button", { name: "New chat" }).click();
       const answer = await ask(page, message);
       const plan = answer.getByTestId("fact-finding");
-      await expect(plan, message).toBeVisible();
+      // On failure, show what the assistant actually said (synthetic data only).
+      await expect(plan, `${message}\n--- answer ---\n${(await answer.innerText()).slice(0, 1500)}`).toBeVisible();
       for (const category of categories) await expect(plan, message).toContainText(category);
       await expect(plan).toContainText(/Information needed|Evidence needed|Reviewer assessment needed/);
       const text = await answer.innerText();
