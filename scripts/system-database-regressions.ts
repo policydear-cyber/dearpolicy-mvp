@@ -413,9 +413,9 @@ async function main(){
       const result=await send("Desmond was murdered in Thailand");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;
-      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\$1,000,000/);
-      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
-      assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText==="S$1,000,000"),answer.claimItems.map(i=>i.title).join(" | "));
+      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.doesNotMatch(answer.summary,/S\$1,000,000/);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
+      assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText===null),answer.claimItems.map(i=>i.title).join(" | "));
       assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText===null&&item.status==="needs_document"),answer.claimItems.map(i=>i.title).join(" | "));
       assert.ok(answer.scenarioClassifications?.some(item=>item.traits.includes("violent")&&item.traits.includes("external")));
       assert.equal(new Set(answer.details).size,answer.details.length);
@@ -436,12 +436,11 @@ async function main(){
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
       assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(flight!.amountText,"S$300.00");
+      assert.equal(flight!.amountText,null,"No flight-delay estimate before claim evidence review");
       assert.equal(flight!.status,"likely_applicable");
       assert.equal(flight!.estimateBasis,"confirmed");
       assert.match(flight!.reason,/verified against the page by a second read/i);
-      assert.equal(answer.potentialPayoutTotals?.length,1);
-      assert.equal(answer.potentialPayoutTotals?.[0].amount,300);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
       const result=await send("Desmond's flight was delayed for three hours.");
@@ -459,9 +458,9 @@ async function main(){
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
       assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(item?.amountText,"S$4,000");
+      assert.equal(item?.amountText,null,"No reimbursement estimate before claim evidence review");
       assert.equal(item?.status,"likely_applicable");
-      assert.equal(item?.amountLabel,"Calculated reimbursement (internal)");
+      assert.notEqual(item?.amountLabel,"Calculated reimbursement (internal)");
       assert.equal(item?.aggregation,"reimbursement");
       assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });
