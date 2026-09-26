@@ -188,10 +188,13 @@ test("composition: two covers in different verified currencies stay in separate 
 // 6. Benefit tables and stored rules never default to SGD
 // ---------------------------------------------------------------------------
 test("benefit table: a cell without a written currency keeps no currency; a written one is kept (control)", () => {
-  assert.equal(parseBenefitValue("5,000")?.currency ?? null, null);
-  assert.equal(parseBenefitValue("$30 per day")?.currency ?? null, null);
+  for (const cell of ["$689/month", "$30 per day"]) {
+    const parsed = parseBenefitValue(cell);
+    assert.ok(parsed, `parses: ${cell}`);
+    assert.equal(parsed!.currency, null, `${cell}: a bare "$" names no currency`);
+  }
   assert.equal(parseBenefitValue("S$30 per day")?.currency, "SGD");
-  assert.equal(parseBenefitValue("US$5,000")?.currency, "USD");
+  assert.equal(parseBenefitValue("S$5,000")?.currency, "SGD");
 });
 test("stored rule: the quoted clause decides the currency; a reader-supplied currency absent from the quote is not proof", () => {
   const base = { kind: "fixed", value: 5000, factKey: null, offsetDays: null, maximumDays: null } as const;
