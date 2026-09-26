@@ -510,8 +510,8 @@ async function main(){
     await test("Savings questions separate guaranteed and projected values",async()=>{
       const result=await send("What happens when my endowment plan matures?",people[1].id);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const text=result.data.answer.details.join(" ");assert.match(text,/guaranteed maturity value is SGD 100000/);
-      assert.match(text,/projected non-guaranteed maturity value is SGD 120000/);assert.equal(result.data.answer.questions.length,0);
+      const text=result.data.answer.details.join(" ");assert.match(text,/guaranteed maturity value/);assert.doesNotMatch(text,/SGD 100000/);
+      assert.match(text,/projected non-guaranteed maturity value/);assert.doesNotMatch(text,/SGD 120000/);assert.equal(result.data.answer.questions.length,0);
     });
     await test("Async analysis returns actual progress and a saved final answer",async()=>{
       const result=await send("What policies does my family have?",null,undefined,undefined,true);
