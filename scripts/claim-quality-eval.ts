@@ -522,6 +522,22 @@ const scenarios: Scenario[] = [
 ];
 
 // ---------------------------------------------------------------------
+// Positive controls for the adversarial dimension: each adversarial scenario
+// perturbs ONE thing in an otherwise-evidenced claim. Its control is that
+// same claim with the perturbation removed, and it MUST calculate -- a
+// blocked result whose control does not unlock proves nothing.
+// ---------------------------------------------------------------------
+type Control = { facts: ClaimFacts; deathRules?: DeathRuleEvidence[]; ciRules?: CIRuleEvidence[]; medicalRules?: MedicalRuleEvidence; disabilityRules?: DisabilityRuleSet; travelRules?: TravelRuleSet; id: string; amount: number };
+const DEATH_BASE = { eventType: "death" as const, death: true, deathDate: "2024-06-05", accidentalDeath: true, causeOfDeathDocumentAvailable: true, causeOfDeathEvidenceReviewed: true };
+const ADVERSARIAL_CONTROLS: [string, Control][] = [
+  ["adversarial/death:", { facts: facts({ ...DEATH_BASE, causeDefinitionMatches: [causeMatch()] }), deathRules: DEATH_RULES, id: "gpa-accidental-death", amount: 300_000 }],
+  ["adversarial/travel:", { facts: facts({ ...DEATH_BASE, causeDefinitionMatches: [causeMatch(), travelDeathMatch()], tripDepartureDate: "2024-06-01", tripReturnDate: "2024-06-10" }), deathRules: DEATH_RULES, travelRules: TRAVEL_RULES, id: "travel-accidental-death", amount: 150_000 }],
+  ["adversarial/ci:", { facts: facts({ eventType: "diagnosis", diagnosis: ILLNESS, diagnosisDate: "2024-03-01", hospitalised: false, medicalEvidenceDocumentAvailable: true, ciDefinitionMatches: [ciMatch()] }), ciRules: CI_RULES, id: "ci-major-systemic-lupus-erythematosus", amount: 200_000 }],
+  ["adversarial/disability:", { facts: facts({ eventType: "disability", eventDate: "2024-04-01", permanentImpairment: true, diagnosis: "traumatic brain injury", disabilityAssessmentDocumentAvailable: true, disabilityAssessmentEvidenceReviewed: true, disabilityDefinitionMatches: [tpdMatch()] }), disabilityRules: DISABILITY_RULES, id: "tpd-lump-sum", amount: 450_000 }],
+  ["adversarial/medical:", { facts: facts({ eventType: "hospitalisation", eventDate: "2024-06-03", diagnosis: "appendicitis", hospitalNights: 3, verifiedMedicalBillFacts: bill(), medicalBillDocumentAvailable: true, medicalBillEvidenceReviewed: true, panelStatusReported: "panel" }), medicalRules: MEDICAL_RULES, id: "med-inpatient", amount: 8_000 }],
+];
+
+// ---------------------------------------------------------------------
 // Runner
 // ---------------------------------------------------------------------
 
@@ -571,6 +587,16 @@ for (const s of scenarios) {
     if (!cover) { problems.push(`invariant: item "${item.id}" carries an amount but names no owned cover (${String(item.coverageId)})`); continue; }
     if (item.ruleEvidence && item.ruleEvidence.policyId !== cover.policyId) problems.push(`invariant: item "${item.id}" cites policy ${item.ruleEvidence.policyId} but is paid from ${cover.policyId}`);
     if (item.currency !== undefined && item.currency !== cover.currency) problems.push(`invariant: item "${item.id}" is in ${item.currency} but its cover is in ${cover.currency}`);
+  }
+
+  if (s.dimension === "adversarial") {
+    const control = ADVERSARIAL_CONTROLS.find(([prefix]) => s.name.startsWith(prefix))?.[1];
+    if (!control) problems.push("adversarial scenario has no positive control");
+    else {
+      const ctl = assessClaim(control.facts, HOUSEHOLD, control.deathRules ?? [], [], CLAIM, control.ciRules ?? [], [], control.medicalRules, control.disabilityRules, control.travelRules ?? EMPTY_TRAVEL);
+      const got = ctl.find((i) => i.id === control.id)?.calculatedAmount;
+      if (got !== control.amount) problems.push(`positive control: with the perturbation removed, "${control.id}" must calculate ${control.amount}, got ${got}`);
+    }
   }
 
   if (problems.length === 0) { passed++; bucket.passed++; console.log(`PASS  [${s.dimension}] ${s.name}`); }
