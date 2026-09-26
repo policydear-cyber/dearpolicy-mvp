@@ -10,6 +10,7 @@ import path from "node:path";
 import {
   containsForbiddenPhrase, containsMoney, enforceLiveChatMonetaryBoundary, FORBIDDEN_MONETARY_PHRASES, INDICATIVE_ESTIMATE_NOTICE,
   isValidPolicyStatedLimit, liveClaimContext, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE, PRELIMINARY_ASSESSMENT_NOTICE, sanitizeStoredAnswer,
+  scrubMonetaryText, WITHHELD_AMOUNT_TEXT,
 } from "@/lib/chat/monetary-boundary";
 import { assessmentFromBenefit, policyStatedLimitFor } from "@/lib/chat/policy-analysis";
 import type { PolicyBenefit, PolicySource, SubjectFacts } from "@/lib/chat/types";
@@ -214,6 +215,24 @@ test("every exit of the live workflow passes the boundary: claim sections before
   assert.ok(saves.length >= 6, "found every persistence exit");
   for (const save of saves) assert.match(save, /answer:enforceLiveChatMonetaryBoundary\(answer,/, `unbounded exit: ${save.slice(0, 120)}`);
   for (const route of ["app/api/chat/history/[id]/route.ts", "app/api/chat/jobs/[id]/route.ts"]) assert.match(readFileSync(route, "utf8"), /sanitizeStoredAnswer\(/, `${route} sanitizes stored answers`);
+});
+
+test("an amount that states no currency is still withheld before review when a money cue introduces it; non-money numbers are untouched", () => {
+  deterministic("cued bare amounts", () => {
+    for (const [input, withheld] of [
+      ["Living Care sum insured: 50,000.", true], ["Sum Assured 250000 on death.", true], ["Benefit limit of 25,000 per year.", true],
+      ["Accidental Death Benefit: 150,000 payable on accidental death.", true], ["The amount payable is 12,500.50.", true],
+      ["A waiting period of 90 days applies.", false], ["Critical Illness Benefit: 100% of the Sum Insured is payable.", false],
+      ["See page 4 of the certificate.", false], ["Cover started on 2020-01-01.", false], ["Benefit payable after 2024 days.", false],
+    ] as const) {
+      const out = scrubMonetaryText(input);
+      assert.equal(out.includes(WITHHELD_AMOUNT_TEXT), withheld, `${input} -> ${out}`);
+      assert.equal(containsMoney(input), withheld, `containsMoney(${input})`);
+      if (withheld) assert.ok(!/\d{1,3},\d{3}|\d{4,}/.test(out), `no figure survives: ${out}`);
+      else assert.equal(out, input);
+    }
+    return true;
+  });
 });
 
 console.log(`live-chat monetary boundary regressions passed: ${cases} cases (policy-stated limit source with ${blockers.length} blockers + controls, boundary stripping, typed-limit forgery, stored answers, import/rendering boundaries; each deterministic over ${REPEATS} runs).`);

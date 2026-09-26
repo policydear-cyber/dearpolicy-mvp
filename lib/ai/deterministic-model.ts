@@ -105,15 +105,18 @@ function words(text: string) { return new Set(text.toLowerCase().replace(/[^a-z0
  * against the stored page before it is cited. */
 export function deterministicReading(user: { question?: string; sources?: { id: string; text: string }[] }) {
   const asked = words(String(user.question ?? ""));
-  const observations: { text: string; evidence: { sourceId: string; quote: string }[] }[] = [];
+  const candidates: { score: number; order: number; text: string; sourceId: string }[] = [];
   for (const source of user.sources ?? []) {
     for (const sentence of String(source.text).split(/(?<=[.!?])\s+/)) {
       const s = sentence.trim();
       if (s.length < 20 || s.length > 230 || s.includes(SYNTHETIC_EXTRACTION_MARKER)) continue;
       const shared = [...words(s)].filter((w) => asked.has(w)).length;
-      if (shared >= 2 && observations.length < 3) observations.push({ text: s, evidence: [{ sourceId: source.id, quote: s }] });
+      if (shared >= 2) candidates.push({ score: shared, order: candidates.length, text: s, sourceId: source.id });
     }
   }
+  // The most relevant sentences first (ties keep document order), at most 3.
+  const observations = candidates.sort((a, b) => b.score - a.score || a.order - b.order).slice(0, 3)
+    .map((c) => ({ text: c.text, evidence: [{ sourceId: c.sourceId, quote: c.text }] }));
   return { benefits: [], observations, nextSteps: [] };
 }
 

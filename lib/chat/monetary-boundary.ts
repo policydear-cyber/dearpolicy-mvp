@@ -46,8 +46,16 @@ export const MONEY_PATTERN = new RegExp(
   "gi",
 );
 
+/** A figure that states no currency but is plainly an amount because a money
+ * cue introduces it ("Sum insured: 50,000", "benefit limit 25000"). Without a
+ * currency it can be neither shown as money nor relabelled, so before review
+ * it is withheld exactly like a currency amount. Only thousands-separated or
+ * 4+ digit figures directly after the cue qualify, so "Page 4", "100%" and
+ * "90 days" are untouched. */
+export const CUED_BARE_AMOUNT_PATTERN = /\b(sums? (?:insured|assured)|benefit(?: amount| limit)?|limit|payable|pays?|coverage|amount)(\s*(?::|=|of|is|up to)?\s*)(\d{1,3}(?:,\d{3})+|\d{4,})(?:\.\d+)?(?![\d%])(?!\s*(?:days?|months?|years?|%))/gi;
+
 export function containsMoney(text: string | null | undefined): boolean {
-  return !!text && new RegExp(MONEY_PATTERN.source, "i").test(text);
+  return !!text && (new RegExp(MONEY_PATTERN.source, "i").test(text) || new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "i").test(text));
 }
 export function containsForbiddenPhrase(text: string | null | undefined): boolean {
   return !!text && FORBIDDEN_MONETARY_PHRASES.some((p) => p.test(text));
@@ -55,6 +63,7 @@ export function containsForbiddenPhrase(text: string | null | undefined): boolea
 
 export function scrubMonetaryText(text: string): string {
   let out = text.replace(new RegExp(MONEY_PATTERN.source, "gi"), WITHHELD_AMOUNT_TEXT);
+  out = out.replace(new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "gi"), (_m, cue: string, gap: string) => `${cue}${gap}${WITHHELD_AMOUNT_TEXT}`);
   out = out.replace(/the an amount that is only shown after claim evidence has been reviewed\s+([a-z]+) limit/gi, "the $1 limit");
   out = out.replace(/verified an amount that is only shown after claim evidence has been reviewed/gi, "the verified policy limit");
   out = out.replace(/potential payouts?|expected payouts?|claimable amounts?|estimated claim amounts?|estimated settlements?|approved amounts?|amounts? you will receive/gi, "possible benefit");

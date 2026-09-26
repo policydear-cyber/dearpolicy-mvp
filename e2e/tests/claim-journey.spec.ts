@@ -140,6 +140,10 @@ test.describe.serial("synthetic claim journey", () => {
     await page.getByRole("button", { name: "New chat" }).click();
     const answer = await ask(page, `${patientName}: what is the waiting period for critical illness on the Living Care plan?`);
     await expect(answer).toContainText("90 days");
+    // Before review no policy amount is shown, with or without a stated currency.
+    const text1 = await answer.innerText();
+    expect(text1).not.toMatch(MONEY);
+    expect(text1).not.toMatch(/\b(?:50|100|200),000\b/);
     const citations = answer.locator("details.citations");
     await expect(citations).toContainText("Living Care");
     await expect(citations).toContainText("Page 5");
