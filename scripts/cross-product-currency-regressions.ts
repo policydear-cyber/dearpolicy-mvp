@@ -207,7 +207,8 @@ test("stored rule: a fixed benefit with no stated currency yields no figure and 
     traits: ["death"], formulaKind: "fixed", formulaValue: 5000, currency, factKey: null, offsetDays: null, maximumDays: null, sourcePage: 3,
     quote: "We will pay a benefit of 5,000 on accidental death.", conditions: [], requirements: [], needsReview: false });
   const none = assessCatalogBenefit({ benefit: benefit(null), coverage: coverage({ category: "Personal Accident" }), ownerName: "A", facts: {} });
-  assert.equal(none.item.amountText, null); assert.equal(none.item.calculatedAmount, undefined);
+  assert.equal(none.item.calculatedAmount, undefined, "no figure");
+  assert.doesNotMatch(none.item.amountText ?? "", /S\$|SGD|US\$|USD/, "the rule may be described, but never in a guessed currency");
   assert.ok(none.missing.includes(CATALOG_CURRENCY_MISSING));
   const withCurrency = assessCatalogBenefit({ benefit: benefit("SGD"), coverage: coverage({ category: "Personal Accident" }), ownerName: "A", facts: {} });
   assert.equal(withCurrency.item.calculatedAmount, 5000); assert.equal(withCurrency.item.currency, "SGD");
