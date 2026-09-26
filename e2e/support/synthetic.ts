@@ -26,5 +26,10 @@ export async function syntheticWordingPdf(label: string, extraLines: string[] = 
     const page = doc.addPage([595, 842]);
     lines.forEach((line, i) => page.drawText(line, { x: 48, y: 780 - i * 22, size: 11, font }));
   }
-  return Buffer.from(await doc.save());
+  const bytes = Buffer.from(await doc.save());
+  // pdf-lib compresses page content, so a scan marker drawn on the page is
+  // not visible in the raw bytes a scanner receives. Scanner markers are
+  // therefore also appended as a trailing PDF comment (valid PDF).
+  const markers = extraLines.filter((l) => l === SYNTHETIC_MALWARE_MARKER || l === SYNTHETIC_PENDING_MARKER);
+  return markers.length ? Buffer.concat([bytes, Buffer.from(markers.map((m) => `\n%${m}\n`).join(""), "latin1")]) : bytes;
 }
