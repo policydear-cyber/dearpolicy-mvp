@@ -39,6 +39,10 @@ jobs:
       VIRUSTOTAL_POLL_INTERVAL_MS: "500"
       DEV_AUTH_ENABLED: "true"
       NEXT_TELEMETRY_DISABLED: "1"
+      # The CSRF gate compares the browser Origin with the server's own
+      # origin; next dev reports it as localhost.
+      E2E_BASE_URL_A: http://localhost:3000
+      E2E_BASE_URL_B: http://localhost:3001
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,20 +60,20 @@ jobs:
           mkdir -p "$LOCAL_STORAGE_DIR" logs
           nohup node e2e/support/fake-services.mjs > logs/fake.log 2>&1 &
           DEARPOLICY_WORKER_POLL_INTERVAL_MS=500 nohup npm run jobs:worker > logs/worker.log 2>&1 &
-          DEV_ACCOUNT_ID=$E2E_USER_A nohup npx next dev -p 3000 -H 127.0.0.1 > logs/app-a.log 2>&1 &
+          DEV_ACCOUNT_ID=$E2E_USER_A nohup npx next dev -p 3000 > logs/app-a.log 2>&1 &
           mkdir -p ../app-b
           tar --exclude=./node_modules --exclude=./.git --exclude=./.next --exclude=./logs -cf - . | (cd ../app-b && tar -xf -)
           # Turbopack rejects a node_modules symlink that leaves the project root; hard links are fast and allowed.
           cp -al "$GITHUB_WORKSPACE/node_modules" ../app-b/node_modules
-          (cd ../app-b && DEV_ACCOUNT_ID=$E2E_USER_B nohup npx next dev -p 3001 -H 127.0.0.1 > "$GITHUB_WORKSPACE/logs/app-b.log" 2>&1 &)
-          for url in http://127.0.0.1:4010/__health http://127.0.0.1:3000/api/health http://127.0.0.1:3001/api/health; do
+          (cd ../app-b && DEV_ACCOUNT_ID=$E2E_USER_B nohup npx next dev -p 3001 > "$GITHUB_WORKSPACE/logs/app-b.log" 2>&1 &)
+          for url in http://127.0.0.1:4010/__health http://localhost:3000/api/health http://localhost:3001/api/health; do
             for i in $(seq 1 120); do curl -sf -o /dev/null "$url" && break; sleep 2; done
             curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
           done
           # Warm up next dev's on-demand compilation so the first test is not a compile timeout.
           for p in / /family /policies /household /api/family /api/policies /api/household; do
-            curl -s -o /dev/null --max-time 180 "http://127.0.0.1:3000$p" || true
-            curl -s -o /dev/null --max-time 180 "http://127.0.0.1:3001$p" || true
+            curl -s -o /dev/null --max-time 180 "http://localhost:3000$p" || true
+            curl -s -o /dev/null --max-time 180 "http://localhost:3001$p" || true
           done
       - name: Run the synthetic browser journey
         run: npm run e2e:browser

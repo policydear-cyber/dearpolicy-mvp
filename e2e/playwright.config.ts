@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: [["list"]],
   globalTeardown: "./support/cleanup.ts",
   use: {
-    baseURL: process.env.E2E_BASE_URL_A ?? "http://127.0.0.1:3000",
+    baseURL: process.env.E2E_BASE_URL_A ?? "http://localhost:3000",
     // No traces or videos (they capture cookies and network bodies);
     // screenshots only on failure, of synthetic pages only.
     trace: "off",

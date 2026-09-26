@@ -5,7 +5,7 @@
 import { test, expect, type Page, type Browser } from "@playwright/test";
 import { name, syntheticWordingPdf, SYNTHETIC_MALWARE_MARKER, SYNTHETIC_PENDING_MARKER, PREFIX } from "../support/synthetic";
 
-const BASE_B = process.env.E2E_BASE_URL_B ?? "http://127.0.0.1:3001";
+const BASE_B = process.env.E2E_BASE_URL_B ?? "http://localhost:3001";
 const FAKE = process.env.E2E_FAKE_SERVICES_URL ?? "http://127.0.0.1:4010";
 
 type Policy = { id: string; original_filename: string; product_name: string | null; processing_status: string; quarantine_status: string; scan_result_detail: string | null; linked_people: { id: string; name: string }[] };
