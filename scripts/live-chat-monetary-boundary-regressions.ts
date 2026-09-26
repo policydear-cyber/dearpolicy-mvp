@@ -203,7 +203,10 @@ test("no live-chat source still carries a forbidden pre-review payout phrase", (
 });
 test("every exit of the live workflow passes the boundary: claim sections before narration, and the final answer before persistence", () => {
   const src = readFileSync("lib/chat/workflow.ts", "utf8");
-  const gates = src.match(/enforceChatMonetarySafety\(answer\.claimItems[^;]*\);enforceLiveChatMonetaryBoundary\(answer,\{claimContext:true\}\);/g) ?? [];
+  // The claim workflow's sections always use claim context; the reading path
+  // classifies policy-value questions with liveClaimContext() (item amounts
+  // are stripped either way).
+  const gates = src.match(/enforceChatMonetarySafety\(answer\.claimItems[^;]*\);enforceLiveChatMonetaryBoundary\(answer,\{claimContext:(?:true|liveClaimContext\(state\.intent,answer,request\.question\))\}\);/g) ?? [];
   assert.equal(gates.length, (src.match(/enforceChatMonetarySafety\(answer\.claimItems/g) ?? []).length, "every monetary-safety call is followed by the boundary");
   // Every persisted-and-returned turn (the workflow has several exits) goes through the boundary, after any narration.
   const saves = src.match(/await saveTurn\([^\n]*\);/g) ?? [];
