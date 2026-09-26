@@ -6,6 +6,8 @@
  * every name carries the run's SYNTHETIC-DPTEST prefix so cleanup finds it.
  */
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { pool } from "@/lib/db/client";
 
 async function main() {
@@ -35,7 +37,44 @@ async function main() {
     VALUES($1,$2,$3,$4,'Critical Illness',350000,'SGD',$5,1,$6,true,true)`, [randomUUID(), household, schedule, member, product, "Critical illness sum insured: S$350,000"]);
   await pool.query(`INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review)
     VALUES($1,$2,$3,'Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,'SGD',7,'We pay 100% of the Sum Insured for a qualifying critical illness.','[]'::jsonb,'[]'::jsonb,false)`, [household, wording, product]);
-  console.log(`seeded synthetic claim fixture for household A (member ${member})`);
+
+  // ---- Evidence-gated fixture: one member, three critical-illness covers ----
+  // SGD (certificate writes S$), USD (certificate writes US$), and one whose
+  // certificate writes no currency at all. The wording is the production CI
+  // parser's own format (scripts/fixtures/reviewer-benefit-wording.ts).
+  const patient = randomUUID();
+  const patientName = `${prefix}-Patient`;
+  await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$3,'spouse')`, [patient, household, patientName]);
+  const wording = "Group Living Care benefit summary. Critical Illness Benefit: 100% of the Sum Insured is payable upon diagnosis of a covered Critical Illness.";
+  const waiting = "Living Care waiting period. A waiting period of 90 days applies to the Critical Illness Benefit from the cover start date.";
+  const covers: { key: string; policyNumber: string; amount: number; currency: string; evidence: string }[] = [
+    { key: "sgd", policyNumber: `${prefix}-LC-SGD`, amount: 200000, currency: "SGD", evidence: "Living Care sum insured: S$200,000" },
+    { key: "usd", policyNumber: `${prefix}-LC-USD`, amount: 100000, currency: "USD", evidence: "Living Care sum insured: US$100,000" },
+    { key: "unstated", policyNumber: `${prefix}-LC-NOCCY`, amount: 50000, currency: "SGD", evidence: "Living Care sum insured: 50,000" },
+  ];
+  const policyIds: Record<string, string> = {};
+  for (const c of covers) {
+    const id = randomUUID(); policyIds[c.key] = id;
+    await pool.query(
+      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,group_policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,file_hash,benefits_indexed_at)
+       VALUES($1,$2,$3,'Singlife','Living Care',$4,'G007500','Critical Illness','certificate',true,90,'ready',$5,$5,'2020-01-01','scan_clean',$6,now())`,
+      [id, household, patient, c.policyNumber, `${c.policyNumber}.pdf`, `sha256:${id}`]);
+    await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)`, [id, patient, household]);
+    const pages: [number, string][] = [[1, `Certificate of insurance. SYNTHETIC TEST DOCUMENT. Insured person: ${patientName}. ${c.evidence}.`], [4, wording], ...(c.key === "sgd" ? [[5, waiting] as [number, string]] : [])];
+    for (const [page, text] of pages) {
+      await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [household, id, page, text]);
+      await pool.query(`INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,$5,$5,$6,$7::vector)`,
+        [randomUUID(), household, patient, id, page, text, "[" + Array.from({ length: 1024 }, (_, j) => (j === 1 ? 1 : 0)).join(",") + "]"]);
+    }
+    await pool.query(`INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed)
+      VALUES($1,$2,$3,$4,'Critical Illness',$5,$6,'Living Care',1,$7,true,true)`, [randomUUID(), household, id, patient, c.amount, c.currency, c.evidence]);
+  }
+  // A stored rule so the chat can record the claim; the estimate itself only
+  // ever comes from the evidence-gated engine.
+  await pool.query(`INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review)
+    VALUES($1,$2,'Living Care','Major Critical Illness',ARRAY['illness','diagnosis']::text[],'sum_insured',1,NULL,4,'100% of the Sum Insured is payable upon diagnosis of a covered Critical Illness.','[]'::jsonb,'[]'::jsonb,false)`, [household, policyIds.sgd]);
+  await writeFile(path.resolve(".e2e-seed.json"), JSON.stringify({ household, claimant: member, patient, patientName, policyIds }, null, 2));
+  console.log(`seeded synthetic claim fixtures for household A (members ${member}, ${patient})`);
   await pool.end();
 }
 main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });

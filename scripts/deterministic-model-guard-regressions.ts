@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { deterministicModelEnabled, deterministicStructuredCompletion, deterministicInterpretation, DeterministicModelUnavailableError } from "@/lib/ai/deterministic-model";
+import { deterministicModelEnabled, deterministicHostedReply, deterministicInterpretation, deterministicReading, syntheticExtractionFrom, DeterministicModelUnavailableError, DETERMINISTIC_MODEL_ID, SYNTHETIC_EXTRACTION_MARKER } from "@/lib/ai/deterministic-model";
 import { checkDeterministicModelNotInProduction } from "@/lib/launch/guards";
 
 let cases = 0;
@@ -43,17 +43,27 @@ async function main() {
     assert.ok(a.facts.some((f) => f.key === "diagnosis"));
     assert.ok(!a.facts.some((f) => typeof f.value === "number"), "no amount becomes a fact value");
   });
-  await t("narration hands back the given summary; reading returns nothing; anything else is unavailable", async () => {
-    const schema = z.object({ summary: z.string(), details: z.array(z.string()) });
-    const out = await deterministicStructuredCompletion({ system: "Explain", user: JSON.stringify({ summary: "Preliminary claim assessment." }), schema, operation: "chat_reply" });
-    assert.deepEqual(out, { summary: "Preliminary claim assessment.", details: [] });
-    await assert.rejects(deterministicStructuredCompletion({ system: "x", user: "{}", schema, operation: "policy_extraction" }), DeterministicModelUnavailableError);
+  await t("narration hands back the given summary; reading quotes only verbatim passage sentences; extraction only from a synthetic marker; anything else is unavailable", () => {
+    const narration = deterministicHostedReply({ system: "Explain", user: JSON.stringify({ whatTheyTold: "x", summary: "Preliminary claim assessment.", benefitCount: 1 }) });
+    assert.deepEqual(JSON.parse(narration.content), { summary: "Preliminary claim assessment.", details: [] });
+    assert.equal(narration.resolved.resolvedModel, DETERMINISTIC_MODEL_ID);
+    const passage = "A waiting period of 90 days applies to critical illness from the cover start date. Premiums are due monthly.";
+    const read = deterministicReading({ question: "What is the waiting period for critical illness?", sources: [{ id: "src-1", text: passage }] });
+    assert.equal(read.observations.length, 1);
+    assert.ok(passage.includes(read.observations[0].evidence[0].quote), "quotes are verbatim");
+    assert.equal(read.benefits.length, 0, "the stand-in never structures a payout rule");
+    const payload = { patientName: "SYNTHETIC-DPTEST Claimant", exactDiagnosis: "x" };
+    const page = `Specialist memo. ${SYNTHETIC_EXTRACTION_MARKER}${Buffer.from(JSON.stringify(payload)).toString("base64")}`;
+    assert.deepEqual(syntheticExtractionFrom(page), payload);
+    assert.equal(syntheticExtractionFrom("A real specialist memo with no marker."), null);
+    assert.throws(() => deterministicHostedReply({ system: "You extract structured facts from a MEDICAL EVIDENCE document", user: "--- Page 1 ---\nA real memo." }), DeterministicModelUnavailableError);
+    assert.throws(() => deterministicHostedReply({ system: "List the insurance benefits", user: "{}" }), DeterministicModelUnavailableError);
   });
   await t("the stand-in is reachable from exactly one call site, behind the guard", () => {
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = path.join(dir, f); return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(f) ? [p] : []; });
     const users = [...walk("lib"), ...walk("app")].filter((f) => !f.endsWith("deterministic-model.ts") && /from ["'][^"']*deterministic-model["']/.test(readFileSync(f, "utf8")));
-    assert.deepEqual(users.map((f) => f.split(path.sep).join("/")), ["lib/ai/llm.ts"]);
-    assert.match(readFileSync("lib/ai/llm.ts", "utf8"), /if \(deterministicModelEnabled\(\)\) return deterministicStructuredCompletion\(/);
+    assert.deepEqual(users.map((f) => f.split(path.sep).join("/")), ["lib/ai/providers.ts"]);
+    assert.match(readFileSync("lib/ai/providers.ts", "utf8"), /if\(deterministicModelEnabled\(\)\)return deterministicHostedReply\(args\);/);
   });
   console.log(`deterministic-model guard regressions passed: ${cases} cases`);
 }

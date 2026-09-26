@@ -11,3 +11,5 @@ paddleocr-service/output
 .e2e-storage
 e2e-results
 logs
+.e2e-seed.json
+.e2e-state.json

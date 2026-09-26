@@ -2,6 +2,8 @@
  * Synthetic household journey in a real browser. Synthetic data only; see
  * e2e/README.md for the stack and for what this does NOT cover.
  */
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { test, expect, type Page, type Browser } from "@playwright/test";
 import { name, syntheticWordingPdf, SYNTHETIC_MALWARE_MARKER, SYNTHETIC_PENDING_MARKER, PREFIX } from "../support/synthetic";
 
@@ -224,5 +226,17 @@ test.describe.serial("synthetic household journey", () => {
     expect(after.status).toBe(404);
     const fam = await api(page, "/api/family");
     expect(JSON.stringify(fam.body)).not.toContain(parent);
+    // Deleting the household removes its saved chat answers and claim
+    // estimates: none can be reopened as current cover.
+    const statePath = path.resolve(".e2e-state.json");
+    if (existsSync(statePath)) {
+      const state = JSON.parse(readFileSync(statePath, "utf8")) as { factualConversationId?: string; claimConversationId?: string; claimId?: string };
+      for (const id of [state.factualConversationId, state.claimConversationId].filter(Boolean)) {
+        const res = await api(page, `/api/chat/history/${id}`);
+        expect([401, 403, 404], `saved chat ${id}`).toContain(res.status);
+        expect(JSON.stringify(res.body)).not.toMatch(/Living Care|Critical Illness Plan|90 days/);
+      }
+      if (state.claimId) expect([401, 403, 404]).toContain((await api(page, `/api/claims/${state.claimId}/indicative`)).status);
+    }
   });
 });
