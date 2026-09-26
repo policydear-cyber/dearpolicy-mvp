@@ -13,6 +13,8 @@ import path from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { pool } from "@/lib/db/client";
+import { recordProcessingFailure, POLICY_PROCESSING_FAILED_MESSAGE } from "@/lib/diagnostics/processing-failures";
 
 const FILES = [
   "sql/schema.sql", "sql/benefit-catalog.sql", "sql/cover-conditions.sql", "sql/coverage-ledger.sql", "sql/model-usage.sql",
@@ -62,6 +64,28 @@ async function authenticatedCanRead(db: PGlite): Promise<boolean> {
   } catch { return false; } finally { await db.query("ROLLBACK"); }
 }
 
+/** Points the application's own pool at a PGlite database (as the server connection). */
+function useDb(db: PGlite) {
+  pool.query = (async (text: string, params: unknown[] = []) => { const r = await db.query(text, params); return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length }; }) as typeof pool.query;
+}
+/** Ownership fingerprint: every household-scoped id and its owner, as one string. */
+async function ownership(db: PGlite): Promise<string> {
+  const rows = (await db.query<{ k: string }>(`SELECT string_agg(k, ',' ORDER BY k) AS k FROM (
+      SELECT 'p:'||id||':'||account_id||':'||family_member_id AS k FROM policies
+      UNION ALL SELECT 'e:'||id||':'||account_id||':'||family_member_id||':'||claim_session_id FROM claim_evidence_documents
+      UNION ALL SELECT 'c:'||id||':'||account_id||':'||family_member_id FROM claim_sessions
+      UNION ALL SELECT 's:'||id||':'||coalesce(quarantine_status,'')||':'||processing_status FROM policies) x`)).rows;
+  return rows[0]?.k ?? "";
+}
+async function householdReadsOwnPolicy(db: PGlite): Promise<string | null> {
+  await db.query("BEGIN");
+  try {
+    await db.query("SET LOCAL ROLE authenticated");
+    await db.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [U]);
+    return (await db.query<{ e: string | null }>("SELECT processing_error AS e FROM policies WHERE id=$1", [POL])).rows[0]?.e ?? null;
+  } finally { await db.query("ROLLBACK"); }
+}
+
 async function main() {
   const migration = await readFile(path.resolve("sql/processing-failure-diagnostics.sql"), "utf8");
   const infra = await readFile(path.resolve("sql/infrastructure-rls.sql"), "utf8");
@@ -75,6 +99,15 @@ async function main() {
     for (const k of COUNT_KEYS) assert.equal(counts[k], 1, k);
     preCounts = counts;
     assert.ok(String(defaults.default_acl ?? "").includes("authenticated"), "the rehearsal DB has Supabase-style default grants (the test is meaningful)");
+  });
+
+  await t("release preflight (sql/checks/release-preflight.sql) returns counts and booleans only, never row content", async () => {
+    const [row] = await runChecks(db, "sql/checks/release-preflight.sql");
+    assert.ok(Object.keys(row).length >= 18, "one row with every preflight column");
+    for (const [k, v] of Object.entries(row)) assert.ok(typeof v === "number" || typeof v === "boolean", `${k} must be a count or boolean, got ${typeof v}`);
+    assert.equal(row.diagnostics_table_exists, false);
+    assert.equal(row.rewrite_policies_processing_error, 1);
+    assert.equal(row.public_tables_without_rls, 0);
   });
 
   await t("apply: migration + infrastructure-rls.sql in ONE transaction", async () => {
@@ -107,6 +140,37 @@ async function main() {
     await bare.close();
   });
 
-  console.log(`processing-failure migration procedure rehearsal passed: ${cases} cases (pre-check, single-transaction apply, post-check, idempotent re-apply, negative control).`);
+  const originalQuery = pool.query;
+  try {
+    await t("application on the OLD schema (table absent): the failure writer never throws and stores fixed text only", async () => {
+      const old = await liveLikeDb();
+      useDb(old);
+      await recordProcessingFailure({ accountId: H, resourceType: "policy_document", resourceId: POL, failureCode: "PROCESSING_FAILED", error: new Error(RAW) });
+      assert.equal((await old.query<{ t: unknown }>("SELECT to_regclass('public.processing_failure_diagnostics') AS t")).rows[0].t, null);
+      await old.close();
+    });
+
+    await t("application on the PARTIAL and FINAL schema: diagnostics recorded server-side; browsers never read them; household still reads its own (fixed-text) row; ownership unchanged", async () => {
+      const live = await liveLikeDb();
+      const before = await ownership(live);
+      await live.exec(`BEGIN;\n${migration}\n${infra}\nCOMMIT;`);
+      assert.equal(await ownership(live), before, "no policy, claim or evidence changes owner, member, claim or status");
+      useDb(live);
+      await recordProcessingFailure({ accountId: H, resourceType: "policy_document", resourceId: POL, failureCode: "PROCESSING_FAILED", error: new Error(RAW) });
+      assert.ok((await live.query<{ n: number }>("SELECT count(*)::int AS n FROM processing_failure_diagnostics WHERE detail LIKE '%SECRET-STORAGE-KEY%' OR detail LIKE 'SYNTHETIC raw%'")).rows[0].n >= 2, "server connection writes and keeps raw detail");
+      assert.equal(await authenticatedCanRead(live), false);
+      assert.equal(await householdReadsOwnPolicy(live), POLICY_PROCESSING_FAILED_MESSAGE, "the household still reads its own policy, with the fixed message only");
+      // Rollback by dropping the new table never re-exposes raw text: household columns keep the fixed text.
+      await live.exec("DROP TABLE processing_failure_diagnostics");
+      assert.equal(await householdReadsOwnPolicy(live), POLICY_PROCESSING_FAILED_MESSAGE, "dropping diagnostics does not restore raw text");
+      await recordProcessingFailure({ accountId: H, resourceType: "policy_document", resourceId: POL, failureCode: "PROCESSING_FAILED", error: new Error(RAW) });
+      // Forward repair: re-applying the transaction restores the table with no browser access.
+      await live.exec(`BEGIN;\n${migration}\n${infra}\nCOMMIT;`);
+      assert.equal(await authenticatedCanRead(live), false);
+      await live.close();
+    });
+  } finally { pool.query = originalQuery; }
+
+  console.log(`processing-failure migration procedure rehearsal passed: ${cases} cases (pre-check, single-transaction apply, post-check, idempotent re-apply, negative control, old/partial/final application compatibility, ownership unchanged, rollback without re-exposure, forward repair).`);
 }
 main().catch((e) => { console.error(e); process.exitCode = 1; });
