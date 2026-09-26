@@ -15,6 +15,11 @@
  */
 import assert from "node:assert/strict";
 import type { Pool, PoolClient } from "pg";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { PGlite } from "@electric-sql/pglite";
+import { vector } from "@electric-sql/pglite/vector";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import {
   ConflictError,
   ForbiddenError,
@@ -68,6 +73,28 @@ async function main() {
     assert.equal(id, HOUSEHOLD);
     assert.ok(executed.some((s) => /^insert into accounts/i.test(s)), "a household must be created when none exists yet");
     assert.ok(executed.some((s) => /^insert into household_members/i.test(s)), "the creator must be inserted as owner");
+  }
+
+  // --- ensureDefaultHousehold against the REAL repository schema ----------
+  // The scripted pool above cannot see column defaults. accounts.id has none
+  // (sql/schema.sql), so a first sign-in failed with a NOT NULL violation;
+  // this runs the real function against the real DDL.
+  {
+    const db = await PGlite.create({ extensions: { vector, pgcrypto } });
+    await db.exec(await readFile(path.resolve("sql/schema.sql"), "utf8"));
+    await db.exec(await readFile(path.resolve("sql/household-rls.sql"), "utf8"));
+    const client = {
+      query: async (sql: string, params?: unknown[]) => { const r = await db.query(sql, params as unknown[]); return { rows: r.rows, rowCount: r.affectedRows ?? r.rows.length }; },
+      release: () => {},
+    } as unknown as PoolClient;
+    const realPool: Pick<Pool, "connect"> = { connect: async () => client };
+    const created = await ensureDefaultHousehold(OWNER, "SYNTHETIC first sign-in household", realPool as unknown as Pool);
+    assert.match(created, /^[0-9a-f-]{36}$/, "a first sign-in must create a household with a generated id");
+    const again = await ensureDefaultHousehold(OWNER, "SYNTHETIC first sign-in household", realPool as unknown as Pool);
+    assert.equal(again, created, "idempotent against the real schema too");
+    const owner = await db.query<{ role: string }>(`select role from household_members where household_id=$1 and user_id=$2`, [created, OWNER]);
+    assert.equal(owner.rows[0]?.role, "owner", "the creator is the owner");
+    await db.close();
   }
 
   // --- removeMember: last-owner protection -------------------------------

@@ -246,6 +246,24 @@ async function runDatabaseTests() {
       );
     });
 
+    await testAsync("a policy_members link to a policy that is already deleted does not block deleting the profile", async () => {
+      const accountId = await seedAccount(pool);
+      const ownerId = await seedFamilyMember(pool, accountId, { relationship: "self" });
+      const sharedId = await seedFamilyMember(pool, accountId, { relationship: "child" });
+      const policyId = await seedPolicy(pool, accountId, ownerId, { lifecycleState: "soft_deleted" });
+      await linkPolicyMember(pool, accountId, policyId, sharedId);
+
+      const outcome = await requestFamilyMemberDeletion({
+        client: fakeScopedClient,
+        accountId,
+        actorUserId: randomUUID(),
+        familyMemberId: sharedId,
+        reasonCategory: "user_requested",
+        idempotencyKey: "member-4b",
+      });
+      assert.equal(outcome.status, "accepted", "a link to a deleted policy is not linked activity");
+    });
+
     await testAsync("a profile with chat history is refused", async () => {
       const accountId = await seedAccount(pool);
       const memberId = await seedFamilyMember(pool, accountId);
