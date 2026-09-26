@@ -12,9 +12,11 @@ type Policy = { id: string; original_filename: string; product_name: string | nu
 
 /** API call made FROM the page, so it carries the browser's own origin and
  * session exactly like the app's UI does (the CSRF gate requires both). */
-async function api<T = any>(page: Page, path: string, init?: { method?: string; body?: unknown }): Promise<{ status: number; body: T }> {
+async function api<T = any>(page: Page, path: string, init?: { method?: string; body?: unknown; headers?: Record<string, string> }): Promise<{ status: number; body: T }> {
   return page.evaluate(async ({ path, init }) => {
-    const res = await fetch(path, { method: init?.method ?? "GET", headers: init?.body ? { "content-type": "application/json" } : undefined, body: init?.body ? JSON.stringify(init.body) : undefined, cache: "no-store" });
+    const headers: Record<string, string> = { ...(init?.headers ?? {}) };
+    if (init?.body) headers["content-type"] = "application/json";
+    const res = await fetch(path, { method: init?.method ?? "GET", headers, body: init?.body ? JSON.stringify(init.body) : undefined, cache: "no-store" });
     const text = await res.text();
     let body: unknown = text; try { body = JSON.parse(text); } catch { /* non-JSON body */ }
     return { status: res.status, body: body as never };
@@ -166,7 +168,7 @@ test.describe.serial("synthetic household journey", () => {
   });
 
   test("20. household export completes and contains only this household's synthetic data (API from the browser session: no export UI exists)", async () => {
-    const started = await api(page, "/api/household/export", { method: "POST" });
+    const started = await api(page, "/api/household/export", { method: "POST", headers: { "Idempotency-Key": name("export-1") } });
     expect([200, 201, 202]).toContain(started.status);
     const exportId = started.body.id ?? started.body.export?.id;
     expect(exportId).toBeTruthy();
@@ -185,6 +187,8 @@ test.describe.serial("synthetic household journey", () => {
     expect(download.status).toBe(200);
     expect(download.text).toContain(parent);
     expect(download.text).not.toContain(`${PREFIX}-Household-B`);
+    // No storage keys, local paths, signed URLs or tokens in what the household downloads.
+    expect(download.text).not.toMatch(/"storage_key"|\.e2e-storage|[?&](token|X-Amz-Signature|sig)=|service_role/i);
   });
 
   test("21-22. delete a policy, a family member and the household; deleted data disappears", async () => {
