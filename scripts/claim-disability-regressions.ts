@@ -89,7 +89,7 @@ function coverage(overrides: Partial<OwnedCoverage> = {}): OwnedCoverage {
   return {
     id: COVERAGE, policyId: POLICY, familyMemberId: FM, category: "Personal Accident", amount: 100_000, currency: CCY,
     productName: "Group Personal Accident", sourcePage: 1, evidenceText: null, insurer: "Great Eastern", policyName: "GPA Plan",
-    policyNumber: "P-001", groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null,
+    policyNumber: "P-001", groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null, currencyVerified: true,
     ...overrides,
   };
 }

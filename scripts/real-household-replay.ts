@@ -48,7 +48,7 @@ const coverages:OwnedCoverage[]=spec.coverages.map((cover:{category:string;amoun
   amount:cover.amount,currency:"SGD",productName:cover.productName,sourcePage:1,
   evidenceText:"Certificate of insurance",insurer:spec.insurer,policyName:spec.scheme,
   policyNumber:spec.policyNumber,groupPolicyNumber:spec.groupPolicyNumber,documentRole:"certificate",
-  effectiveDate:spec.effectiveDate,renewalOrExpiryDate:null}));
+  effectiveDate:spec.effectiveDate,renewalOrExpiryDate:null, currencyVerified: true}));
 
 const contract:PolicyContract={
   id:CONTRACT,ownerId:MEMBER,ownerName:spec.members[0].name,name:spec.scheme,insurer:spec.insurer,

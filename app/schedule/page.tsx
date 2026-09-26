@@ -52,7 +52,8 @@ function draftFrom(benefit:Benefit):Draft{
     kind:benefit.formulaKind,
     // A share of the sum insured is stored as a fraction and read as a percentage.
     amount:benefit.formulaValue==null?"":String(benefit.formulaKind==="sum_insured"?Math.round(benefit.formulaValue*1000)/10:benefit.formulaValue),
-    currency:benefit.currency??"SGD",
+    // Never pre-filled with SGD: the person picks the currency their policy states.
+    currency:benefit.currency??"",
     factKey:benefit.factKey??"",
     offsetDays:benefit.offsetDays==null?"":String(benefit.offsetDays),
     maximumDays:benefit.maximumDays==null?"":String(benefit.maximumDays),
@@ -319,6 +320,7 @@ export default function SchedulePage(){
               {draft.kind!=="none"&&<div className="field"><label htmlFor="benefit-amount">{draft.kind==="sum_insured"?"Percentage":draft.kind==="daily"?"Amount for each day":draft.kind==="expense_cap"?"Limit":"Amount"}</label>
                 <div className="schedule-amount-row">
                   {draft.kind!=="sum_insured"&&<select aria-label="Currency" value={draft.currency} onChange={e=>setDraft({...draft,currency:e.target.value})}>
+                    <option value="">Currency in policy</option>
                     {["SGD","USD","MYR","HKD","AUD","GBP","EUR"].map(c=><option value={c} key={c}>{c}</option>)}
                   </select>}
                   <input id="benefit-amount" inputMode="decimal" value={draft.amount} onChange={e=>setDraft({...draft,amount:e.target.value})} />

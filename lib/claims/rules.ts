@@ -1,4 +1,5 @@
 import { formatMoney } from "@/lib/format/currency";
+import { checkNonTravelCurrency } from "./currency-evidence";
 import { canonicalProduct, coverageByProduct, productFromCategory, type OwnedCoverage } from "@/lib/coverage/facts";
 import type { ClaimAssessmentItem, ClaimEvidence, ClaimFacts, ClaimQuestion } from "./types";
 import type { DeathEvidenceGap, DeathRuleEvidence } from "./death-evidence";
@@ -175,6 +176,13 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
 }
 
 function amountText(amount: number | null, currency = "SGD") { return amount == null ? null : formatMoney(amount,currency); }
+/** A cover amount named in explanatory text. Its currency is printed only
+ * when verified from the cover's own policy evidence; otherwise the figure is
+ * given without one, never relabelled as SGD. */
+function coverAmountText(coverage: { amount: number | null; currency: string; currencyVerified?: boolean }) {
+  if (coverage.amount == null) return null;
+  return coverage.currencyVerified === true ? formatMoney(coverage.amount, coverage.currency) : `${coverage.amount.toLocaleString("en-US")} (currency not stated in the policy evidence read)`;
+}
 
 function g007500(coverages: OwnedCoverage[]) {
   return coverages.some((c) => c.groupPolicyNumber === "G007500");
@@ -209,7 +217,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       const rule = deathRules.find(r => r.coverageId === coverage.id && r.benefit === benefit);
       if (coverage.groupPolicyNumber?.replace(/\s+/g,"").toUpperCase() !== "G007500" || !rule) {
         const gap = deathGaps.find(g => g.coverageId === coverage.id);
-        const confirmed = coverage.amount != null ? `The personal certificate confirms ${amountText(coverage.amount,coverage.currency)} of this cover. ` : "Personal ownership is confirmed. ";
+        const confirmed = coverage.amount != null ? `The personal certificate confirms ${coverAmountText(coverage)} of this cover. ` : "Personal ownership is confirmed. ";
         items.push({ ...base, status: "needs_document", amountText: null, reason: confirmed + (gap?.reason ?? "I could not verify the matching death-benefit wording."), conditions: [gap?.nextStep ?? "Check that the matching policy wording or benefit summary is available."] });
         continue;
       }
@@ -234,10 +242,14 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       if (product === "group personal accident") conditions.push("The death certificate and accident/medical report must establish death directly caused by the accident; accident exclusions and any time limits still need checking.");
       if (product === "group personal accident" && facts.competitiveRacing === true && rule.racingExclusion?.authorityException) conditions.push("Provide proof that the racing was sanctioned by MINDEF/MHA; the insurer must accept the exception.");
 
-      const formulaCurrencyOk = rule.formula.kind !== "fixed" || rule.formula.currency === coverage.currency;
-      const capCurrencyOk = !rule.cap || rule.cap.currency === coverage.currency;
-      if (!formulaCurrencyOk || !capCurrencyOk) {
-        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The matching wording quotes an amount in a different currency than this person's verified sum insured, so DearPolicy cannot compute a figure from it.", conditions: ["Confirm the currency of the quoted benefit against the personal certificate."] });
+      // Cross-product currency gate (lib/claims/currency-evidence.ts): the
+      // cover's currency must be written in its own policy evidence and every
+      // amount the wording quotes must state the same currency. Never assumed,
+      // relabelled or converted.
+      const currencyCheck = checkNonTravelCurrency({ coverage, requireCoverageCurrency: true,
+        quoted: [rule.formula.kind === "fixed" ? rule.formula.currency : undefined, rule.cap ? rule.cap.currency : undefined] });
+      if (!currencyCheck.ok) {
+        items.push({ ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: currencyCheck.reason, conditions: [currencyCheck.condition] });
         continue;
       }
       const evidenceRef = toEvidenceRef(rule.citation);
@@ -288,7 +300,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       }
       items.push({ ...base, ruleEvidence: rule.citation, status: "potentially_applicable", amountText: amountText(calc.potentialAmount, calc.currency),
         calculatedAmount: calc.potentialAmount, currency: calc.currency, calculationId: calc.calculationId,
-        reason: `The personal certificate confirms ${amountText(coverage.amount, coverage.currency)} of cover. The matching death-benefit clause pays ${calc.formulaBasis}.`, conditions });
+        reason: `The personal certificate confirms ${coverAmountText(coverage)} of cover. The matching death-benefit clause pays ${calc.formulaBasis}.`, conditions });
     }
     // Additive: a Travel cover's own Accidental Death benefit alongside
     // gtl-death/gpa-accidental-death above -- never a parallel claim
@@ -340,7 +352,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       const waiting = dateIsWithinDays(facts.diagnosisDate,livingCare.effectiveDate,90);
       if (beforeCover === true) items.push({id:"living-care",title:"Living Care critical illness",status:"not_applicable",amountText:null,reason:"The reported diagnosis date is before the effective date shown for this Living Care cover.",conditions:[],evidenceTerms:[],productName:"Living Care"});
       else if (waiting === true) items.push({id:"living-care",title:"Living Care critical illness",status:"not_applicable",amountText:null,reason:"The diagnosis date appears to fall within the 90-day waiting period from the effective date shown in the uploaded personal evidence.",conditions:[],evidenceTerms:["Waiting Period","90 days"],productName:"Living Care"});
-      else items.push({id:"living-care",title:"Living Care critical illness",status:"potentially_applicable",amountText:amountText(livingCare.amount,livingCare.currency),reason:`Your personal certificate confirms ${amountText(livingCare.amount,livingCare.currency) ?? "Critical Illness"} of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.`,conditions:["The diagnosis must satisfy the policy's defined critical illness.","A 30-day survival period applies.",waiting===null?"DearPolicy could not automatically verify the waiting period from the available dates.":"The diagnosis date appears to be outside the 90-day waiting period."],evidenceTerms:["Major Cancer","Survival Period","Waiting Period"],productName:"Living Care"});
+      else items.push({id:"living-care",title:"Living Care critical illness",status:"potentially_applicable",amountText:amountText(livingCare.amount,livingCare.currency),reason:`Your personal certificate confirms ${coverAmountText(livingCare) ?? "Critical Illness"} of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.`,conditions:["The diagnosis must satisfy the policy's defined critical illness.","A 30-day survival period applies.",waiting===null?"DearPolicy could not automatically verify the waiting period from the available dates.":"The diagnosis date appears to be outside the 90-day waiting period."],evidenceTerms:["Major Cancer","Survival Period","Waiting Period"],productName:"Living Care"});
     }
 
     const livingCarePlus = bestCoverage(coverages,"living care plus","Early Critical Illness");

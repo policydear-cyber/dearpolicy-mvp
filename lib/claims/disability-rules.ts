@@ -43,6 +43,7 @@ import { calculateDisabilityBenefit, TOTAL_PERMANENT_DISABILITY_MATCH_KEY, type 
 import { calculateDisabilityIncome, DISABILITY_INCOME_MATCH_KEY, type DisabilityIncomeEvidenceRef } from "./calculators/disability-income";
 import type { DisabilityDefinitionMatch } from "./calculators/evidence";
 import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
+import { checkNonTravelCurrency } from "./currency-evidence";
 
 export type DisabilityRuleSet = { rules: DisabilityRuleEvidence[]; gaps: DisabilityEvidenceGap[] };
 const EMPTY_DISABILITY_RULES: DisabilityRuleSet = { rules: [], gaps: [] };
@@ -84,10 +85,10 @@ function assessTPDBenefit(rule: DisabilityRuleEvidence, coverage: OwnedCoverage,
   // amount or cap quoted in another currency than the verified sum insured
   // is never applied to it (it would otherwise be treated as the same
   // currency by the calculator).
-  const formulaCurrencyOk = rule.formula.kind !== "fixed" || rule.formula.currency === coverage.currency;
-  const capCurrencyOk = !rule.cap || rule.cap.currency === coverage.currency;
-  if (match?.result === "matches" && (!formulaCurrencyOk || !capCurrencyOk)) {
-    return { ...base, status: "needs_document", amountText: null, reason: "The matching wording quotes an amount in a different currency than this person's verified sum insured, so DearPolicy cannot compute a figure from it.", conditions: ["Confirm the currency of the quoted benefit against the personal certificate."] };
+  const currencyCheck = checkNonTravelCurrency({ coverage, requireCoverageCurrency: true,
+    quoted: [rule.formula.kind === "fixed" ? rule.formula.currency : undefined, rule.cap ? rule.cap.currency : undefined] });
+  if (match?.result === "matches" && !currencyCheck.ok) {
+    return { ...base, status: "needs_document", amountText: null, reason: currencyCheck.reason, conditions: [currencyCheck.condition] };
   }
   const calc = calculateDisabilityBenefit({
     benefitKind: "tpd", ownership: ownershipRef(coverage), familyMember: { id: coverage.familyMemberId, confirmed: true },
@@ -141,6 +142,13 @@ function assessScheduleBenefits(scheduleRules: DisabilityRuleEvidence[], coverag
     const match = applicableDisabilityMatch(facts, coverage, sessionId, "ppd-schedule", rule.matchKey, currentDefinition(rule.citation, rule.quote));
     if (!match) continue;
     anyReviewed = true;
+    const scheduleCurrency = checkNonTravelCurrency({ coverage, requireCoverageCurrency: true, quoted: [] });
+    if (!scheduleCurrency.ok) {
+      items.push({ id: `ppd-schedule-${rule.matchKey}`, title: `Schedule of Injuries: ${rule.label}`, productName: coverage.productName,
+        coverageId: coverage.id, evidenceTerms: [rule.quote], ruleEvidence: rule.citation, coverLabel: coverage.productName ?? undefined,
+        status: "needs_document", amountText: null, reason: scheduleCurrency.reason, conditions: [scheduleCurrency.condition] });
+      continue;
+    }
     const calc = calculateDisabilityBenefit({
       benefitKind: "schedule", ownership: ownershipRef(coverage), familyMember: { id: coverage.familyMemberId, confirmed: true },
       claimEventId: sessionId, benefitCode: "ppd-schedule", scheduleRowCode: rule.matchKey,
@@ -195,8 +203,12 @@ function assessDisabilityIncomeBenefit(rule: DisabilityRuleEvidence, coverage: O
   // this benefit always stops at needs_document once a definition match
   // exists, rather than guessing either figure from chat. See this
   // module's own doc comment.
+  const incomeCurrency = checkNonTravelCurrency({ coverage, requireCoverageCurrency: false, quoted: [rule.formula.currency] });
+  if (!incomeCurrency.ok) {
+    return { ...base, status: "needs_document", amountText: null, reason: incomeCurrency.reason, conditions: [incomeCurrency.condition] };
+  }
   const calc = calculateDisabilityIncome({
-    monthlyBenefitAmount: rule.formula.amount, currency: rule.formula.currency,
+    monthlyBenefitAmount: rule.formula.amount, currency: incomeCurrency.currency,
     ownership: ownershipRef(coverage), familyMember: { id: coverage.familyMemberId, confirmed: true }, claimEventId: sessionId,
     benefitCode: "di-monthly", deferredPeriodMonths: rule.deferredPeriodMonths ?? null, maximumBenefitMonths: rule.maximumBenefitMonths ?? null,
     monthsAlreadyPaid: null, completedMonthsClaimed: null,

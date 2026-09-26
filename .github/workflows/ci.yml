@@ -107,6 +107,15 @@ jobs:
       - name: Processing-failure migration procedure rehearsal (runbook pre/post checks, single-transaction apply, Supabase-style default grants)
         run: npm run security:processing-failure-migration-procedure-test
 
+      - name: Live-chat monetary boundary (policy-stated limits vs preliminary assessment; no pre-review payout figures; import/rendering boundaries)
+        run: npm run security:live-chat-monetary-boundary-test
+
+      - name: Cross-product currency provenance (no default or inferred currency)
+        run: npm run security:cross-product-currency-test
+
+      - name: Deterministic claim fact-finding (six categories; no amount before review)
+        run: npm run claims:fact-finding-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
       - name: Claim-answer pipeline adversarial evaluation (assess -> monetary gate -> composition -> rendered view, plus the live chat gate; positive controls, 5x determinism)

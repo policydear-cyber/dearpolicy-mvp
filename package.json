@@ -98,7 +98,10 @@
     "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs",
     "security:scan-retry-test": "node --import tsx scripts/scan-retry-regressions.ts",
     "security:processing-failure-storage-test": "node --import tsx scripts/processing-failure-storage-regressions.ts",
-    "security:processing-failure-migration-procedure-test": "node --import tsx scripts/processing-failure-migration-procedure-regressions.ts"
+    "security:processing-failure-migration-procedure-test": "node --import tsx scripts/processing-failure-migration-procedure-regressions.ts",
+    "security:live-chat-monetary-boundary-test": "node --import tsx scripts/live-chat-monetary-boundary-regressions.ts",
+    "claims:fact-finding-test": "node --import tsx scripts/fact-finding-regressions.ts",
+    "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

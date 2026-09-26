@@ -24,6 +24,7 @@ import type { CIEvidenceGap, CIRuleEvidence } from "./ci-evidence";
 import { calculateCriticalIllness, type CIEvidenceRef, type CIFormula, type CIInput } from "./calculators/critical-illness";
 import type { CIDefinitionMatch } from "./calculators/evidence";
 import { currentDefinition, selectApplicableDecision } from "./evidence/decision-selection";
+import { checkNonTravelCurrency } from "./currency-evidence";
 
 function amountText(amount: number | null, currency = "SGD") { return amount == null ? null : formatMoney(amount, currency); }
 
@@ -107,10 +108,10 @@ function assessOneCIRule(facts: ClaimFacts, coverage: OwnedCoverage, rule: CIRul
   // match.result === "matches" from here on -- the calculator independently
   // re-checks every one of these fields again before it will compute
   // anything, so nothing below is trusted blindly.
-  const formulaCurrencyOk = rule.formula.kind !== "fixed" || rule.formula.currency === coverage.currency;
-  const capCurrencyOk = !rule.cap || rule.cap.currency === coverage.currency;
-  if (!formulaCurrencyOk || !capCurrencyOk) {
-    return { ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: "The matching wording quotes an amount in a different currency than this person's verified sum insured, so DearPolicy cannot compute a figure from it.", conditions: ["Confirm the currency of the quoted benefit against the personal certificate."] };
+  const currencyCheck = checkNonTravelCurrency({ coverage, requireCoverageCurrency: true,
+    quoted: [rule.formula.kind === "fixed" ? rule.formula.currency : undefined, rule.cap ? rule.cap.currency : undefined] });
+  if (!currencyCheck.ok) {
+    return { ...base, ruleEvidence: rule.citation, status: "needs_document", amountText: null, reason: currencyCheck.reason, conditions: [currencyCheck.condition] };
   }
 
   const formula: CIFormula = rule.formula.kind === "fixed"

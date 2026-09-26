@@ -40,13 +40,20 @@ export async function runClaimPackRegressions(){
     generatedOn:new Date("2026-09-16T00:00:00+08:00")});
   const flat=content.sections.flatMap(section=>[section.heading,...section.lines,section.note??""]).join("\n");
 
-  assert.match(flat,/Simple Fracture \(wrist\) — S\$1,250/,"The benefit and its amount appear together");
-  assert.match(flat,/page 14/,"A figure is only usable next to the page it came from");
+  // Binding V1 product decision (lib/chat/monetary-boundary.ts): a claim pack
+  // is built from a PRELIMINARY assessment -- no reviewed claim evidence -- so
+  // it names benefits, pages, conditions and documents, and never an amount.
+  // These assertions replaced the earlier "the amount appears" checks.
+  assert.match(flat,/Simple Fracture \(wrist\)/,"The benefit is still named");
+  assert.equal(/S\$|SGD|\$\s?\d/.test(flat.replace(/What happened[\s\S]*?(?=Benefits that may be relevant)/,"")),false,"No amount or total appears for any benefit");
+  assert.match(flat,/page 14/,"Each benefit is next to the page it came from");
   assert.match(flat,/A medical report confirming the fracture is required\./);
   assert.equal(/Death Benefit/.test(flat),false,"A benefit that does not apply must never reach the insurer's desk");
   assert.match(flat,/the final hospital bill/,"What is still missing is stated, not hidden");
   assert.match(content.footer,/not an offer, an admission of liability, or a decision by any insurer/);
-  assert.match(flat,/ESTIMATED claim amount/,"The sheet an insurer reads must call the figure what it is");
+  assert.match(flat,/Preliminary claim assessment/,"The sheet says what it is");
+  assert.equal(/estimated claim amount|potential payout/i.test(flat),false,"No pre-review payout language");
+  assert.equal(content.sections.some(section=>/estimated claim amount/i.test(section.heading)),false,"No totals section");
 
   // Documents follow the event, not a fixed list.
   const attachments=documentsToAttach(facts);
@@ -58,43 +65,30 @@ export async function runClaimPackRegressions(){
   assert.equal(bereaved.some(item=>/Operation report/.test(item)),false,"Only what this event actually needs is asked for");
   assert.equal(new Set(attachments).size,attachments.length,"The same document is never asked for twice");
 
-  // The number the household came for. A reimbursement of an actual bill is
-  // listed beside the total, not inside it, and a benefit paid instead of
-  // another is excluded entirely.
-  const estimate=content.sections.find(section=>section.heading==="Estimated claim amount")!;
-  assert.ok(estimate,"The pack states an estimated claim amount");
-  assert.match(estimate.lines.join(" | "),/Lump-sum benefits: S\$1,250 across 1 benefit/);
-  assert.match(estimate.lines.join(" | "),/Reimbursement of actual eligible expenses: up to S\$220\.00/);
-  // With one cover there is nothing to break down; with two there is.
-  const twoCovers=claimPackContent({packet:{...packet,assessments:[
-    {...packet.assessments[0],coverLabel:"Group Personal Accident"},
-    {id:"gtl-tpd",title:"Desmond · Total and Permanent Disability",status:"likely_applicable",
-     amountText:"S$1,000,000",calculatedAmount:1_000_000,currency:"SGD",coverLabel:"Group Term Life",
-     reason:"100% of the sum insured.",conditions:[],evidenceTerms:[],productName:"Group Term Life"},
-  ]},claimantName:"Tan Yi Chuen Desmond"});
-  const split=twoCovers.sections.find(section=>section.heading==="Estimated claim amount")!.lines.join(" | ");
-  assert.match(split,/S\$1,001,250 across 2 benefits/);
-  assert.match(split,/S\$1,000,000 from the Group Term Life cover/);
-  assert.match(split,/S\$1,250 from the Group Personal Accident cover/);
+  // Two covers, and a row paid instead of another: still no figure or total,
+  // and the superseded row still says which benefit is paid instead of it.
   const twice=claimPackContent({packet:{...packet,assessments:[
     ...packet.assessments,
     {id:"gpa-fracture-dup",title:"Desmond · Fracture of the wrist",status:"potentially_applicable",
      amountText:"S$1,250",currency:"SGD",supersededBy:"Desmond · Simple Fracture (wrist)",
      reason:"Same benefit read from the benefit table.",conditions:[],evidenceTerms:[],productName:"Group Personal Accident"},
+    {id:"gtl-tpd",title:"Desmond · Total and Permanent Disability",status:"likely_applicable",
+     amountText:"S$1,000,000",calculatedAmount:1_000_000,currency:"SGD",coverLabel:"Group Term Life",
+     reason:"100% of the sum insured of S$1,000,000.",conditions:[],evidenceTerms:[],productName:"Group Term Life"},
   ]},claimantName:"Tan Yi Chuen Desmond"});
-  const twiceEstimate=twice.sections.find(section=>section.heading==="Estimated claim amount")!;
-  assert.match(twiceEstimate.lines.join(" | "),/Lump-sum benefits: S\$1,250 across 1 benefit/,
-    "The same cover described twice is counted once");
-  assert.match(twice.sections.find(section=>section.heading==="Benefits being claimed")!.lines.join(" | "),
-    /paid instead of/,"and the row that is not counted says which benefit is paid instead of it");
+  const twiceBenefits=twice.sections.find(section=>section.heading==="Benefits that may be relevant")!.lines.join(" | ");
+  assert.match(twiceBenefits,/pays this instead of/,"the row that is not counted says which benefit is paid instead of it");
+  assert.equal(/S\$|1,000,000|1,250/.test(twiceBenefits),false,"no amount survives, including one written inside a reason");
 
   // An unassessed claim states that plainly instead of printing an empty sheet.
   const empty=claimPackContent({packet:{...packet,assessments:[]},claimantName:"Tan Yi Chuen Desmond"});
-  const claimed=empty.sections.find(section=>section.heading==="Benefits being claimed")!;
-  assert.match(claimed.lines.join(" "),/No benefit could be calculated yet/);
-  assert.equal(/S\$/.test(claimed.lines.join(" ")),false,"With nothing assessed, no claimable figure may appear");
-  // What the person reported is still theirs and still printed.
-  assert.match(empty.sections.find(section=>section.heading==="What happened")!.lines.join(" "),/Ambulance bill: S\$220\.00/);
+  const claimed=empty.sections.find(section=>section.heading==="Benefits that may be relevant")!;
+  assert.match(claimed.lines.join(" "),/No relevant benefit has been identified yet/);
+  assert.equal(/S\$/.test(claimed.lines.join(" ")),false,"With nothing assessed, no figure may appear");
+  // What the person reported is still theirs and still printed -- as a fact to verify, never with an assumed currency.
+  const happened=empty.sections.find(section=>section.heading==="What happened")!.lines.join(" ");
+  assert.match(happened,/Ambulance bill: 220 as reported \(currency and amount to be verified from the receipts\)/);
+  assert.equal(/S\$|SGD/.test(happened),false,"A reported bill is never given a default SGD currency");
 
   // The printed page itself, read back with the real PDF extractor.
   const bytes=await renderClaimPack(content);
@@ -104,7 +98,8 @@ export async function runClaimPackRegressions(){
   const printed=pages.map(page=>page.text).join(" ").replace(/\s+/g," ");
   assert.match(printed,/Claim summary/);
   assert.match(printed,/Tan Yi Chuen Desmond/);
-  assert.match(printed,/S\$1,250/,"The calculated amount survives into the printed page");
+  assert.equal(/S\$1,250/.test(printed),false,"No calculated amount reaches the printed page");
+  assert.match(printed,/Preliminary claim assessment/);
   assert.match(printed,/Hospital discharge summary/);
   assert.equal(/Death Benefit/.test(printed),false);
 
