@@ -6,7 +6,10 @@
  * production-throws branches, is exercised directly here.
  */
 import assert from "node:assert/strict";
-import { sslConfig } from "@/lib/db/client";
+import { X509Certificate } from "node:crypto";
+import { rootCertificates } from "node:tls";
+import { SUPABASE_ROOT_2021_CA, SUPABASE_ROOT_2021_CA_SHA256 } from "@/lib/db/supabase-root-ca";
+import { isSupabaseHost, sslConfig } from "@/lib/db/client";
 import { checkDatabaseTlsIsSecure } from "@/lib/launch/guards";
 
 function assertThrows(fn: () => unknown, pattern: RegExp, message: string) {
@@ -26,16 +29,28 @@ function runSslConfigRegressions() {
   assert.equal(sslConfig({ databaseUrl: localUrl, nodeEnv: "development" }), undefined, "a localhost DATABASE_URL never needs TLS");
   assert.equal(sslConfig({ databaseUrl: undefined, nodeEnv: "development" }), undefined, "no DATABASE_URL configured means no TLS to configure");
 
+  const supabaseDefault = { rejectUnauthorized: true, ca: [...rootCertificates, SUPABASE_ROOT_2021_CA] };
   assert.deepEqual(
     sslConfig({ databaseUrl: remoteUrl, nodeEnv: "development" }),
-    { rejectUnauthorized: true },
-    "a remote DATABASE_URL defaults to certificate verification ON, even outside production",
+    supabaseDefault,
+    "a remote Supabase DATABASE_URL defaults to certificate verification ON (public roots + Supabase's root), even outside production",
   );
   assert.deepEqual(
     sslConfig({ databaseUrl: remoteUrl, nodeEnv: "production" }),
-    { rejectUnauthorized: true },
+    supabaseDefault,
     "a correctly configured production connection verifies certificates",
   );
+  const poolerUrl = "postgresql://postgres.ref:pass@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres";
+  assert.deepEqual(sslConfig({ databaseUrl: poolerUrl, nodeEnv: "production" }), supabaseDefault, "the Supabase pooler host trusts Supabase's root with verification on");
+  assert.deepEqual(sslConfig({ databaseUrl: "postgresql://u:p@db.example.com:5432/x", nodeEnv: "production" }), { rejectUnauthorized: true },
+    "a non-Supabase host trusts only the public roots");
+  assert.equal(isSupabaseHost("postgresql://u:p@evil-supabase.co.attacker.example:5432/x"), false, "a look-alike host is not treated as Supabase");
+  assert.equal(isSupabaseHost("postgresql://u:p@notsupabase.com:5432/x"), false, "a suffix without the dot boundary is not Supabase");
+  // The embedded root is exactly Supabase's published 2021 root CA.
+  const cert = new X509Certificate(SUPABASE_ROOT_2021_CA);
+  assert.equal(cert.fingerprint256, SUPABASE_ROOT_2021_CA_SHA256, "pinned Supabase root CA fingerprint");
+  assert.match(cert.subject, /CN=Supabase Root 2021 CA/);
+  assert.ok(cert.ca, "it is a CA certificate");
 
   assert.deepEqual(
     sslConfig({ databaseUrl: remoteUrl, nodeEnv: "development", databaseSslInsecure: "true" }),
