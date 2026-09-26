@@ -2,7 +2,7 @@ import { query } from "@/lib/db/client";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
-import { currencyStatedIn, statedCurrency } from "@/lib/claims/currency-evidence";
+import { currenciesStatedIn, currencyStatedIn, statedCurrency } from "@/lib/claims/currency-evidence";
 
 export type OwnedCoverage = {
   id: string;
@@ -63,7 +63,9 @@ export function productFromCategory(category: string) {
 export function coverageCurrencyVerified(stored: string | null | undefined, evidenceText: string | null | undefined, sourcePageText: string | null | undefined): boolean {
   const code = (stored ?? "").trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(code)) return false;
-  if (currencyStatedIn(code, evidenceText)) return statedCurrency(evidenceText) === code;
+  // The certificate line's own currency, when it writes one, decides: the
+  // page is consulted only for a line that writes no currency at all.
+  if (currenciesStatedIn(evidenceText).length) return statedCurrency(evidenceText) === code && currencyStatedIn(code, evidenceText);
   return statedCurrency(sourcePageText) === code;
 }
 
