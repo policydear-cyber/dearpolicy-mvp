@@ -107,6 +107,9 @@ jobs:
       - name: Deterministic claim fact-finding (six categories; no amount before review)
         run: npm run claims:fact-finding-test
 
+      - name: Deterministic model stand-in cannot run in production
+        run: npm run security:deterministic-model-guard-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
 

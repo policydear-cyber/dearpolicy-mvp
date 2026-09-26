@@ -167,17 +167,15 @@ test.describe.serial("synthetic household journey", () => {
     await other.context().close();
   });
 
-  test("20. household export completes and contains only this household's synthetic data (API from the browser session: no export UI exists)", async () => {
-    const started = await api(page, "/api/household/export", { method: "POST", headers: { "Idempotency-Key": name("export-1") } });
-    expect([200, 201, 202]).toContain(started.status);
-    const exportId = started.body.id ?? started.body.export?.id;
+  test("20. household export through the Household page's download button contains only this household's synthetic data", async () => {
+    await page.goto("/household");
+    const panel = page.getByTestId("household-export");
+    await expect(panel).toBeVisible();
+    await panel.getByRole("button", { name: /prepare my download/i }).click();
+    const link = page.getByTestId("household-export-download");
+    await expect(link).toBeVisible({ timeout: 180_000 });
+    const exportId = ((await link.getAttribute("href")) ?? "").match(/export\/([0-9a-f-]{36})\/download/)?.[1];
     expect(exportId).toBeTruthy();
-    let status = "";
-    for (let i = 0; i < 120 && status !== "ready" && status !== "failed"; i++) {
-      status = (await api(page, `/api/household/export/${exportId}`)).body.status ?? (await api(page, `/api/household/export/${exportId}`)).body.export?.status;
-      if (status !== "ready") await page.waitForTimeout(1000);
-    }
-    expect(status).toBe("ready");
     const download = await page.evaluate(async (id) => {
       const res = await fetch(`/api/household/export/${id}/download`, { cache: "no-store" });
       const buf = new Uint8Array(await res.arrayBuffer());

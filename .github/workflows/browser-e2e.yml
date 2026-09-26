@@ -5,7 +5,7 @@ name: Browser E2E (synthetic data only)
 # API. No production URL, database, secret or real document is used.
 on:
   push:
-    branches: ["claude/browser-e2e"]
+    branches: ["claude/browser-e2e", "claude/browser-claim-journey"]
   pull_request:
   workflow_dispatch:
 
@@ -38,6 +38,9 @@ jobs:
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "500"
       DEV_AUTH_ENABLED: "true"
+      # Deterministic model stand-in for the synthetic journey only; refused in
+      # production by lib/launch/guards.ts and lib/ai/deterministic-model.ts.
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
       NEXT_TELEMETRY_DISABLED: "1"
       # The CSRF gate compares the browser Origin with the server's own
       # origin; next dev reports it as localhost.
@@ -55,6 +58,8 @@ jobs:
         run: node --import tsx e2e/support/apply-schema.ts
       - name: Provision two synthetic households (sign-up's own ensureDefaultHousehold)
         run: node --import tsx e2e/support/provision.ts
+      - name: Seed one synthetic claim fixture for household A
+        run: node --import tsx e2e/support/seed-claim-fixture.ts
       - name: Start the fake VirusTotal API, the job worker and two app servers (users A and B)
         run: |
           mkdir -p "$LOCAL_STORAGE_DIR" logs
@@ -71,7 +76,7 @@ jobs:
             curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
           done
           # Warm up next dev's on-demand compilation so the first test is not a compile timeout.
-          for p in / /family /policies /household /api/family /api/policies /api/household; do
+          for p in / /chat /family /policies /household /api/family /api/policies /api/household; do
             curl -s -o /dev/null --max-time 180 "http://localhost:3000$p" || true
             curl -s -o /dev/null --max-time 180 "http://localhost:3001$p" || true
           done

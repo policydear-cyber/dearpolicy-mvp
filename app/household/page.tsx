@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import { HouseholdExportPanel } from "./export-panel";
 
 type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string };
 type Invitation = { id: string; household_id: string; email: string; role: "owner" | "member"; invited_by: string; created_at: string; expires_at: string };
@@ -241,6 +242,8 @@ export default function HouseholdPage() {
               )}
             </section>
           )}
+
+          {isOwner && <HouseholdExportPanel />}
 
           {isOwner && (
             <section className="section danger-zone">

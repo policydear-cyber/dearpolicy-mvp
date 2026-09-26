@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deterministicModelEnabled, deterministicStructuredCompletion } from "./deterministic-model";
 import { randomUUID } from "node:crypto";
 import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
@@ -89,6 +90,9 @@ export async function structuredCompletion<T>(args: {
    * fallback pair. Optional: existing callers are unaffected. */
   onExecutionRecord?: (record: ModelExecutionRecord) => void;
 } & CompletionRuntimeOptions): Promise<T> {
+  // Synthetic browser/CI journeys only; impossible in production (see
+  // lib/ai/deterministic-model.ts and lib/launch/guards.ts).
+  if (deterministicModelEnabled()) return deterministicStructuredCompletion({ system: args.system, user: args.user, schema: args.schema, operation: args.operation });
   // Checkpoint 14i: "Model completions" was named as a required
   // telemetry call site (scripts/launch-check.ts's privacy_safe_
   // observability capability) -- structuredCompletion() is the ONE
