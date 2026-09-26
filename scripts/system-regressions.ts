@@ -891,25 +891,28 @@ export function runSystemRegressions(){
     assert.deepEqual(lineFrom([at("a",10,700,5),at("b",90,700,5)]).cells,["a","b"],"A wide gap is a cell break");
   });
   test("A schedule cell states its own payout rule, parsed without a model",()=>{
-    const cases:[string,string,number][]=[
+    // Currency is only what the cell writes: a share of the sum insured is
+    // paid in the cover's own (separately verified) currency, and a bare "$"
+    // names no currency -- neither is defaulted to SGD.
+    const cases:[string,string,number,string|null][]=[
       // The exact MINDEF/MHA fixture: both halves are printed in the one cell,
       // so the figure is computable with no schedule and no model.
-      ["25% of S$5,000","fixed",1250],
-      ["50% of S$1,200.50","fixed",600.25],
-      ["100% of the Sum Insured","sum_insured",1],
-      ["150% of Sum Insured","sum_insured",1.5],
-      ["Up to S$500 per incident","expense_cap",500],
-      ["maximum of S$10,000","expense_cap",10000],
-      ["S$30 per day","daily",30],
-      ["$689/month","fixed",689],
-      ["S$5,000","fixed",5000],
+      ["25% of S$5,000","fixed",1250,"SGD"],
+      ["50% of S$1,200.50","fixed",600.25,"SGD"],
+      ["100% of the Sum Insured","sum_insured",1,null],
+      ["150% of Sum Insured","sum_insured",1.5,null],
+      ["Up to S$500 per incident","expense_cap",500,"SGD"],
+      ["maximum of S$10,000","expense_cap",10000,"SGD"],
+      ["S$30 per day","daily",30,"SGD"],
+      ["$689/month","fixed",689,null],
+      ["S$5,000","fixed",5000,"SGD"],
     ];
-    for(const [cell,kind,value] of cases){
+    for(const [cell,kind,value,currency] of cases){
       const parsed=parseBenefitValue(cell);
       assert.ok(parsed,"should parse: "+cell);
       assert.equal(parsed!.kind,kind,cell);
       assert.equal(parsed!.value,value,cell);
-      assert.equal(parsed!.currency,"SGD",cell);
+      assert.equal(parsed!.currency,currency,cell);
     }
     // The same cell must always give the same rule.
     assert.deepEqual(parseBenefitValue("25% of S$5,000"),parseBenefitValue("25% of S$5,000"));
