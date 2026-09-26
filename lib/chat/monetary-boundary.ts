@@ -56,6 +56,7 @@ export function containsForbiddenPhrase(text: string | null | undefined): boolea
 export function scrubMonetaryText(text: string): string {
   let out = text.replace(new RegExp(MONEY_PATTERN.source, "gi"), WITHHELD_AMOUNT_TEXT);
   out = out.replace(/the an amount that is only shown after claim evidence has been reviewed\s+([a-z]+) limit/gi, "the $1 limit");
+  out = out.replace(/verified an amount that is only shown after claim evidence has been reviewed/gi, "the verified policy limit");
   out = out.replace(/potential payouts?|expected payouts?|claimable amounts?|estimated claim amounts?|estimated settlements?|approved amounts?|amounts? you will receive/gi, "possible benefit");
   out = out.replace(/potential reimbursements?/gi, "possible reimbursement");
   out = out.replace(/you (can|could|will|would|should) (claim|receive|get) (up to |about |around )?/gi, "the policy may respond with ");
