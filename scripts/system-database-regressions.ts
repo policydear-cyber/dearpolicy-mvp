@@ -1477,7 +1477,8 @@ async function main(){
       assert.equal(pack.status,200,"The pack can be printed straight from a chat answer");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(new Uint8Array(await pack.arrayBuffer()))).map(page=>page.text).join(" ").replace(/\s+/g," ");
-      assert.match(printed,/S\$350,000/);
+      assert.doesNotMatch(printed,/S\$350,000/,"A preliminary pack does not state a payout");
+      assert.doesNotMatch(printed,/verified an amount/,"Redaction keeps the explanation readable");
       assert.match(printed,/page 7/);
       // It appears on the Claims page for this person.
       const listed=await (await db.query("SELECT status,decision_packet FROM claim_sessions WHERE id=$1",[answer.claimSessionId])).rows[0] as {status:string;decision_packet:{ready:boolean}};
