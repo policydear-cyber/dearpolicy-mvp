@@ -175,6 +175,7 @@ test.describe.serial("synthetic claim journey", () => {
       await expect(plan).toContainText(/Information needed|Evidence needed|Reviewer assessment needed/);
       const text = await answer.innerText();
       expect(text, message).not.toMatch(FORBIDDEN);
+      expect(text, message).not.toMatch(/\b(?:figures?|amounts?)\b[^.]{0,20}\bestimate\b/i);
       for (const card of await answer.locator(".claim-item, .claim-card").allInnerTexts()) expect(card).not.toMatch(MONEY);
       expect(await answer.getByTestId("indicative-estimate").count()).toBe(0);
     }
