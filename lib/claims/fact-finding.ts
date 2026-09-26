@@ -139,7 +139,7 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
 
 /** Keys a family member may use to state what they expect to be paid. They
  * are recorded as reported and never used by any calculation. */
-const REPORTED_AMOUNT_KEY = /(?:payout|settlement|compensation)|(?:claim|expected|desired|benefit)Amount$|^amountExpected$|(?:Bill|Cost|Expense|Paid|Amount)$/i;
+const REPORTED_AMOUNT_KEY = /(?:payout|settlement|compensation)|(?:claim|expected|desired|benefit)Amount$|^amountExpected$|(?:Bill|Cost|Expense|Paid|Amount)$|^outOfPocket$/i;
 const UNCERTAIN_VALUE = /^(?:unknown|not sure|unsure|don'?t know|do not know|maybe|possibly|perhaps|tbc|to be confirmed)\b|\?\s*$/i;
 
 export type FactFindingQuestion = { id: string; factKey: string; text: string; type: "text" | "date" | "yes_no" | "choice"; options?: string[]; why: string };
