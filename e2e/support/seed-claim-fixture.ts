@@ -45,7 +45,7 @@ async function main() {
   const patient = randomUUID();
   const patientName = `${prefix}-Patient`;
   await pool.query(`INSERT INTO family_members(id,account_id,display_name,preferred_name,relationship) VALUES($1,$2,$3,$3,'spouse')`, [patient, household, patientName]);
-  const wording = "Group Living Care benefit summary. Critical Illness Benefit: 100% of the Sum Insured is payable upon diagnosis of a covered Critical Illness.";
+  const lcWording = "Group Living Care benefit summary. Critical Illness Benefit: 100% of the Sum Insured is payable upon diagnosis of a covered Critical Illness.";
   const waiting = "Living Care waiting period. A waiting period of 90 days applies to the Critical Illness Benefit from the cover start date.";
   const covers: { key: string; policyNumber: string; amount: number; currency: string; evidence: string }[] = [
     { key: "sgd", policyNumber: `${prefix}-LC-SGD`, amount: 200000, currency: "SGD", evidence: "Living Care sum insured: S$200,000" },
@@ -60,7 +60,7 @@ async function main() {
        VALUES($1,$2,$3,'Singlife','Living Care',$4,'G007500','Critical Illness','certificate',true,90,'ready',$5,$5,'2020-01-01','scan_clean',$6,now())`,
       [id, household, patient, c.policyNumber, `${c.policyNumber}.pdf`, `sha256:${id}`]);
     await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)`, [id, patient, household]);
-    const pages: [number, string][] = [[1, `Certificate of insurance. SYNTHETIC TEST DOCUMENT. Insured person: ${patientName}. ${c.evidence}.`], [4, wording], ...(c.key === "sgd" ? [[5, waiting] as [number, string]] : [])];
+    const pages: [number, string][] = [[1, `Certificate of insurance. SYNTHETIC TEST DOCUMENT. Insured person: ${patientName}. ${c.evidence}.`], [4, lcWording], ...(c.key === "sgd" ? [[5, waiting] as [number, string]] : [])];
     for (const [page, text] of pages) {
       await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [household, id, page, text]);
       await pool.query(`INSERT INTO policy_chunks(id,account_id,family_member_id,policy_id,page_start,page_end,text,embedding) VALUES($1,$2,$3,$4,$5,$5,$6,$7::vector)`,

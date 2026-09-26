@@ -35,7 +35,7 @@ async function main() {
       const member = await h.createMember(household, fixedUuid("d9000000", n), "Tan Yi Chuen Desmond");
       const claim = await h.createClaim(household, member, fixedUuid("e9000000", n), "diagnosis");
       await pool.query(`UPDATE claim_sessions SET facts=$2::jsonb WHERE id=$1`, [claim, JSON.stringify(ci.facts)]);
-      const policies = [];
+      const policies: { policyId: string; coverageId: string }[] = [];
       for (const [i, c] of covers.entries()) {
         policies.push(await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f9100000", n * 10 + i), coverageId: fixedUuid("f9200000", n * 10 + i),
           ...ci.policy, policyNumber: `SYN-${n}-${i}`, amount: c.amount, currency: c.currency, coverageEvidenceText: c.evidence }));
