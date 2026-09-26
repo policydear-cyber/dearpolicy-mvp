@@ -171,6 +171,17 @@ export type ClaimCompositionView = {
   disclaimer:string;
 };
 
+export type FactFindingPlanView = {
+  subjectId:string;subjectName?:string;
+  category:"accidental_death"|"critical_illness"|"disability_tpd"|"medical_reimbursement"|"hospital_cash"|"travel";
+  label:string;
+  status:"information_needed"|"evidence_needed"|"reviewer_assessment_needed"|"policy_condition_unresolved"|"ready_for_evidence_gated_estimate";
+  nextQuestions:{id:string;factKey:string;text:string;type:"text"|"date"|"yes_no"|"choice";options?:string[];why:string}[];
+  missingFacts:string[];staleFacts:string[];conflictingFacts:string[];uncertainFacts:string[];
+  missingDocuments:string[];reviewerRequirements:string[];reportedAmountsIgnored:string[];
+  readyForEvidenceGatedEstimate:boolean;blockedReasons:string[];
+};
+
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -188,6 +199,9 @@ export type ChatAnswer = {
   /** Policy-stated coverage limits: typed, cited, currency-verified, and
    * structurally separate from any claim estimate (never totalled). */
   policyStatedLimits?:PolicyStatedLimit[];
+  /** Deterministic fact-finding plan per family member and claim category
+   * (lib/claims/fact-finding.ts). Never carries an amount. */
+  factFinding?:FactFindingPlanView[];
   /** "preliminary": no reviewed claim evidence, so no event amount at all.
    * "indicative": an amount produced by the evidence-gated deterministic
    * composition path. Absent for ordinary policy questions. */

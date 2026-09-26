@@ -104,6 +104,9 @@ jobs:
       - name: Cross-product currency provenance (no default or inferred currency)
         run: npm run security:cross-product-currency-test
 
+      - name: Deterministic claim fact-finding (six categories; no amount before review)
+        run: npm run claims:fact-finding-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
 

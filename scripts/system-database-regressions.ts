@@ -422,6 +422,14 @@ async function main(){
       const saved=(await getConversation(account,answer.conversationId!))!.state,state=saved.subjects[people[0].id];
       assert.equal(state.death.value,true);assert.equal(state.causeOfDeath.value,"murdered");assert.equal(state.eventLocation.value,"Thailand");
       assert.equal(state.accidentalDeath,undefined);assert.ok(saved.scenarios?.[people[0].id]?.length);
+      // Deterministic fact-finding: what is still needed, never an amount,
+      // and no question about a fact the family already gave.
+      const plan=answer.factFinding?.find(p=>p.category==="accidental_death"&&p.subjectId===people[0].id);
+      assert.ok(plan,JSON.stringify(answer.factFinding));
+      assert.equal(plan!.readyForEvidenceGatedEstimate,false);
+      assert.ok(plan!.missingDocuments.includes("Death certificate"));
+      assert.ok(!plan!.nextQuestions.some(q=>q.factKey==="causeOfDeath"||q.factKey==="eventLocation"),"known facts are not asked again");
+      assert.doesNotMatch(JSON.stringify(answer.factFinding),/S\$|SGD|US\$/);
     });
     // Reading a travel rule into the ledger checks it twice before trusting
     // it: the quote and every number must be on the cited page (deterministic,
