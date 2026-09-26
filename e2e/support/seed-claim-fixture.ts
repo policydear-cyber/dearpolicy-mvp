@@ -20,6 +20,10 @@ async function main() {
   const member = randomUUID(), schedule = randomUUID(), wording = randomUUID();
   const product = `${prefix} Critical Illness Plan`;
   await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'self')`, [member, household, `${prefix}-Claimant`]);
+  // A second synthetic relative: a death can only be reported about someone
+  // other than the signed-in household member themself (the app correctly
+  // treats "I died" as a what-if).
+  await pool.query(`INSERT INTO family_members(id,account_id,display_name,relationship) VALUES($1,$2,$3,'parent')`, [randomUUID(), household, `${prefix}-Parent`]);
   const scheduleText = `${prefix}-Claimant owns ${product}. Critical illness sum insured: S$350,000. SYNTHETIC TEST DOCUMENT - NOT A REAL POLICY.`;
   const wordingText = `${product}. We pay 100% of the Sum Insured for a qualifying critical illness. The diagnosis must satisfy the defined illness. SYNTHETIC TEST DOCUMENT.`;
   for (const [id, role, personal, text, page] of [[schedule, "personal_schedule", true, scheduleText, 1], [wording, "policy_wording", false, wordingText, 7]] as const) {
