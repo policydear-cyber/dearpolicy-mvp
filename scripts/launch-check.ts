@@ -2067,7 +2067,7 @@ function checkProductionJobExecution() {
     report(
       "production_job_execution",
       "blocked_by_external_configuration",
-      `The Vercel Cron job runner is wired for every enqueued job type, but ${result.configProblems.join("; ")}. Whether the deployed Vercel plan permits the schedule, and whether the cron actually fires, can only be confirmed in the Vercel dashboard or runtime logs.`,
+      `The authenticated job runner is wired for every enqueued job type, but ${result.configProblems.join("; ")}. Whether the trigger actually fires, and whether the queue drains, can only be confirmed in the Vercel dashboard or runtime logs.`,
       { evidenceSummary: result.summary },
     );
     return;
@@ -2075,7 +2075,7 @@ function checkProductionJobExecution() {
   report(
     "production_job_execution",
     "ready",
-    `${result.summary}. Every enqueued job type has a processor, vercel.json schedules the authenticated job runner, and CRON_SECRET is set. Cron firing itself is only observable in Vercel.`,
+    `${result.summary}. Every enqueued job type has a processor, a frequent trigger calls the authenticated job runner, and CRON_SECRET is set. Trigger firing itself is only observable in Vercel or the external scheduler.`,
     { evidenceSummary: result.summary },
   );
 }

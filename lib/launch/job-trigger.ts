@@ -10,6 +10,39 @@ import path from "node:path";
 
 export const JOB_RUNNER_ROUTE = "app/api/internal/jobs/run/route.ts";
 export const JOB_RUNNER_PATH = "/api/internal/jobs/run";
+/** Interactive work (a household waiting for its upload to be scanned and
+ * processed) needs the runner at least this often. */
+export const MAX_JOB_TRIGGER_INTERVAL_MINUTES = 5;
+/** Operator attestation that a frequent trigger OTHER than Vercel Cron (an
+ * approved external scheduler calling the protected endpoint) is configured.
+ * An attestation, like TELEMETRY_INTENTIONALLY_DISABLED: launch:check cannot
+ * observe an external scheduler, only the operator's statement that it exists. */
+export const EXTERNAL_SCHEDULER_FLAG = "JOB_RUNNER_EXTERNAL_SCHEDULER_CONFIRMED";
+
+/** Worst-case minutes between runs for a 5-field cron expression, for the
+ * simple shapes this repository uses; anything more specific (a fixed hour,
+ * day-of-month, month or weekday) is treated as daily or rarer. Returns null
+ * for an expression that is not 5 fields. */
+export function cronIntervalMinutes(schedule: string): number | null {
+  const f = schedule.trim().split(/\s+/);
+  if (f.length !== 5) return null;
+  const [min, hour, dom, mon, dow] = f;
+  if (dom !== "*" || mon !== "*" || dow !== "*") return 1440;
+  const step = (field: string, unit: number): number | null => {
+    if (field === "*") return 1;
+    const m = /^\*\/(\d+)$/.exec(field);
+    if (m && Number(m[1]) > 0 && Number(m[1]) <= unit) return Number(m[1]);
+    return null;
+  };
+  const minStep = step(min, 59);
+  if (hour === "*") {
+    if (minStep !== null) return minStep;
+    return /^\d+$/.test(min) ? 60 : 1440;
+  }
+  const hourStep = step(hour, 23);
+  if (hourStep !== null && /^\d+$/.test(min)) return hourStep * 60;
+  return 1440;
+}
 
 function walk(dir: string, out: string[] = []): string[] {
   if (!existsSync(dir)) return out;
@@ -72,13 +105,27 @@ export function evaluateJobExecutionTrigger(root = process.cwd(), env: NodeJS.Pr
   const internal = /const INTERNAL_CALLBACK_PATHS = new Set\(\[([\s\S]*?)\]\)/.exec(middleware)?.[1] ?? "";
   if (!internal.replace(/\/\/[^\n]*/g, "").includes(`"${JOB_RUNNER_PATH}"`)) codeProblems.push(`middleware.ts does not exempt ${JOB_RUNNER_PATH} from the session gate, so Vercel Cron would be rejected with 401`);
 
-  // 4. External: the runner refuses every call until CRON_SECRET is set.
+  // 4. External: a FREQUENT trigger. Vercel Hobby only allows Cron once a
+  //    day, which is a backstop sweep, not a trigger for interactive uploads.
+  const runnerCron = crons.find((c) => c.path === JOB_RUNNER_PATH && typeof c.schedule === "string");
+  const interval = runnerCron ? cronIntervalMinutes(runnerCron.schedule as string) : null;
+  const externalConfirmed = /^(1|true|on|yes)$/i.test(env[EXTERNAL_SCHEDULER_FLAG]?.trim() ?? "");
+  if (interval !== null && interval > MAX_JOB_TRIGGER_INTERVAL_MINUTES && !externalConfirmed) {
+    configProblems.push(
+      `vercel.json runs the job runner only every ${interval} minute(s) ("${runnerCron?.schedule}"), which is a backstop, not a trigger for ` +
+      `interactive uploads (a document could wait up to ${interval >= 1440 ? "a day" : `${interval} minutes`} to be scanned). A trigger at least ` +
+      `every ${MAX_JOB_TRIGGER_INTERVAL_MINUTES} minutes is required: upgrade to Vercel Pro and schedule "* * * * *", or configure an approved ` +
+      `external scheduler to call ${JOB_RUNNER_PATH} and set ${EXTERNAL_SCHEDULER_FLAG}=true`,
+    );
+  }
+
+  // 5. External: the runner refuses every call until CRON_SECRET is set.
   if ((env.CRON_SECRET?.trim() ?? "").length < 16) configProblems.push("CRON_SECRET is not set (at least 16 characters) in this environment, so the job runner refuses every call");
 
   return {
     codeProblems,
     configProblems,
     enqueuedJobTypes: [...enqueued].sort(),
-    summary: `${enqueued.size} enqueued job type(s) (${[...enqueued].sort().join(", ")}); cron entries: ${crons.length}; ${codeProblems.length} code problem(s), ${configProblems.length} configuration problem(s)`,
+    summary: `${enqueued.size} enqueued job type(s) (${[...enqueued].sort().join(", ")}); cron entries: ${crons.length}; runner interval: ${interval === null ? "none" : `${interval} min`}${externalConfirmed ? " (external scheduler attested)" : ""}; ${codeProblems.length} code problem(s), ${configProblems.length} configuration problem(s)`,
   };
 }

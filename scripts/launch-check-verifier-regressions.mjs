@@ -304,8 +304,13 @@ function testProductionJobExecutionIsSensitiveToTheRealSource() {
   const id = "production_job_execution";
   const baseline = statusOf(runOnly(id), id);
   assert.notEqual(baseline, "blocked_by_code", `expected no code gap at baseline, got ${baseline}`);
+  // The once-daily schedule (all Vercel Hobby allows) must never read as a
+  // sufficient trigger: at baseline the reason names it as a backstop.
+  const baselineItem = runOnly(id).find((r) => r.id === id);
+  assert.equal(baselineItem.status, "blocked_by_external_configuration", `a daily-only trigger must stay blocked, got ${baselineItem.status}`);
+  assert.match(baselineItem.blockingReason ?? "", /backstop, not a trigger/, `the daily-only trigger must be named, got: ${baselineItem.blockingReason}`);
   const sabotages = [
-    ["the vercel.json cron removed", "vercel.json", '    { "path": "/api/internal/jobs/run", "schedule": "* * * * *" }\n', "", /no cron entry for \/api\/internal\/jobs\/run/],
+    ["the vercel.json cron removed", "vercel.json", '    { "path": "/api/internal/jobs/run", "schedule": "0 3 * * *" }\n', "", /no cron entry for \/api\/internal\/jobs\/run/],
     ["a job type dropped from PRODUCTION_JOB_TYPES", "lib/jobs/processors.ts", "  { jobType: CHAT_ANALYSIS_JOB_TYPE, process: processChatAnalysisJob },\n", "", /CHAT_ANALYSIS_JOB_TYPE is enqueued but has no processor/],
     ["the middleware exemption removed", "middleware.ts", '  "/api/internal/jobs/run",\n', "", /does not exempt \/api\/internal\/jobs\/run/],
   ];

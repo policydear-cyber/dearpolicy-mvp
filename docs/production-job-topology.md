@@ -14,10 +14,11 @@ Audited against `main` at `7335fd7a` (2026-09-26), and against branch `claude/ve
 Request handlers only **enqueue** durable jobs into `background_jobs` (`lib/jobs/queue.ts`: idempotency key, `FOR UPDATE SKIP LOCKED` claim with a CAS lease, heartbeat, bounded retries with backoff (default 5 attempts), then `dead_letter`). Before this branch, the only thing that claimed jobs was `npm run jobs:worker` (`scripts/worker.ts`), a long-running Node process. **Vercel has no long-running process and the repository had no `vercel.json` cron, so on production every enqueued job stayed `queued` forever.** That includes the malware scan, which runs inside the processing job.
 
 This branch adds:
-- **`vercel.json`:** a cron entry that calls `GET /api/internal/jobs/run` every minute.
+- **`vercel.json`:** a cron entry that calls `GET /api/internal/jobs/run` **once a day** (`0 3 * * *`, 03:00 UTC). That is the most Vercel Hobby allows, and it is only a backstop sweep (see "Vercel plan and the trigger" below).
 - **The route (`app/api/internal/jobs/run/route.ts`, `ROUTE_AUTH = "internal"`):**
   - authenticates with `Authorization: Bearer <CRON_SECRET>`, compared in constant time;
-  - refuses every call (503) when `CRON_SECRET` is unset or shorter than 16 characters;
+  - refuses every call (503) when `CRON_SECRET` is unset or shorter than 16 characters, and production refuses to **start** without it (`checkCronSecretConfigured` in `lib/launch/guards.ts`);
+  - takes no query parameters or body: job types, household and worker identity cannot be chosen by the caller;
   - is exempt from the session gate for exactly that path.
 - **The batch (`lib/jobs/cron-runner.ts`, `runJobBatch`):**
   - recovers expired leases, then claims round-robin across `PRODUCTION_JOB_TYPES`;
@@ -30,7 +31,19 @@ This branch adds:
 
 **Required outside the repository:**
 - `CRON_SECRET`, Production only.
-- A Vercel plan that allows a per-minute cron. On Hobby, cron jobs are limited to once a day; a deployment with a more frequent schedule is rejected, so the schedule would have to be relaxed.
+- A trigger at least every 5 minutes. See the next section.
+
+## Vercel plan and the trigger
+
+Read-only account metadata (2026-09-26) reports the `dearpolicy-mvp` owner on the **Hobby** plan (`billing.plan: "hobby"`, a Pro trial still available). The team-scoped read of the project's own plan returned 403, so this comes from the owner's billing record, not from the team endpoint. On Hobby, Vercel Cron runs **at most once a day** and a deployment with a more frequent schedule is rejected, so `vercel.json` schedules `0 3 * * *`.
+
+Once a day is **not** a trigger for interactive work: an uploaded policy could wait up to a day to be scanned and processed. `launch:check` (`production_job_execution`) therefore stays **blocked by external configuration** until one of these is in place:
+
+1. **Upgrade to Vercel Pro**, then change the schedule in `vercel.json` to `* * * * *` (per-minute cron is supported on Pro and Enterprise).
+2. **An approved external scheduler** that calls `GET https://<production-domain>/api/internal/jobs/run` with `Authorization: Bearer <CRON_SECRET>` at least every 5 minutes, then set `JOB_RUNNER_EXTERNAL_SCHEDULER_CONFIRMED=true` in Production. This means storing `CRON_SECRET` in a third-party service; it needs the owner's explicit approval first, and none is configured by this repository.
+3. **Manual invocation during tightly controlled internal tests only:** the project owner runs `vercel crons run /api/internal/jobs/run` after each test upload, so Vercel sends the secret itself (runbook §13.3). This is not a production trigger and does **not** clear the launch check.
+
+Any of these still requires `CRON_SECRET` (Production, Sensitive). As of 2026-09-26 it is **not set**.
 
 ## Workflow matrix
 
@@ -60,7 +73,7 @@ This branch adds:
 
 | Question | Answer |
 |---|---|
-| Can jobs remain queued forever? | On `main` today, yes: every enqueued job, on Vercel. With this branch, only while `CRON_SECRET` is unset or the plan blocks the cron. |
+| Can jobs remain queued forever? | On `main` today, yes: every enqueued job, on Vercel. With this branch, up to a day on Hobby (daily backstop only), and indefinitely while `CRON_SECRET` is unset (production then refuses to start). |
 | Can concurrent instances run a job twice? | No. The claim is `FOR UPDATE SKIP LOCKED` plus a CAS on the lease owner, and completion and failure are CAS-guarded on `lease_owner`. |
 | Timeout safety? | Heartbeats during long policy processing, lease expiry recovery, and a claim budget in the runner. |
 | Worker endpoint authenticated? | Yes: `CRON_SECRET` bearer, constant-time, and fail-closed when unset. |

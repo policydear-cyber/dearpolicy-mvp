@@ -372,45 +372,101 @@ While telemetry is intentionally disabled:
 
 ## 13. Internal-testing operations (current state)
 
-**Current state:**
-- `TELEMETRY_INTENTIONALLY_DISABLED=true`: nothing alerts; see §12.
-- VirusTotal is configured through `MALWARE_SCANNER_PROVIDER` and `VIRUSTOTAL_API_KEY`, Production only.
-- Background jobs run only when the Vercel Cron job runner is deployed and `CRON_SECRET` is set; see `docs/production-job-topology.md`. **Until then, every upload, evidence file, export and asynchronous chat stays queued.**
+This is the exact procedure for **controlled internal testing** of the prototype. It is not a production operating procedure, and DearPolicy is not production-ready.
 
-Label every internal test session as **"running without operational telemetry"**. Use synthetic data only.
+### 13.1 Current state (2026-09-26)
+- **No operational telemetry.** `TELEMETRY_INTENTIONALLY_DISABLED=true`: no alert can fire for scan failures, stuck quarantine, dead letters, failed exports or deletions, rejected calculations or authorization failures (§12). Every check below is manual. Label every test session **"running without operational telemetry"**.
+- **Malware scanning:** VirusTotal, through `MALWARE_SCANNER_PROVIDER` and `VIRUSTOTAL_API_KEY` (Production only, Sensitive). No synthetic file has yet been observed going through it in production.
+- **Background jobs:** processed only by `GET /api/internal/jobs/run` (`docs/production-job-topology.md`). It needs `CRON_SECRET` (Production, Sensitive; **not set** as of 2026-09-26; production refuses to start without it once the runner is merged). The project is on **Vercel Hobby**, so `vercel.json` can only schedule a **once-daily** backstop (`0 3 * * *`). Until Vercel Pro or an approved external scheduler is in place, **every test upload must be followed by a manual run** (13.3).
 
-**Daily checks** (read-only; run as the `DATABASE_URL` role or in the SQL editor). None of these reads document contents.
+### 13.2 Synthetic data rules
+- Only synthetic data. Never a real policy, medical or identity document, and never upload any real document to VirusTotal.
+- Name everything with the prefix `SYNTHETIC-DPTEST-<yyyymmdd>-<initials>-`: household name, family members (for example `SYNTHETIC-DPTEST-20260926-DC-Parent`), uploaded file names, claim descriptions. Synthetic test accounts use an email alias you control containing `+dptest`.
+- Synthetic PDFs contain only the prefix, a fictitious insurer name and made-up benefit wording. No personal, medical or real policy data.
+- Never open, edit, reprocess or delete the six pre-existing policy records. Every query below aggregates counts only and never reads document contents.
 
+### 13.3 Running the job runner by hand (Hobby only)
+Preferred: as the project owner, run `vercel crons run /api/internal/jobs/run` (Vercel CLI, logged in and linked to `dearpolicy-mvp`), or use the equivalent control on the project's Cron Jobs settings page. Vercel triggers the deployed cron itself and sends the `CRON_SECRET` header, so nobody handles the secret.
+
+Fallback, only for an operator who already holds `CRON_SECRET` (a Sensitive variable cannot be read back from Vercel):
+```bash
+read -rs CRON_SECRET   # paste; not echoed, not saved in shell history
+curl -sS -H "Authorization: Bearer $CRON_SECRET" https://dearpolicy-mvp.vercel.app/api/internal/jobs/run
+unset CRON_SECRET
+```
+Deployment Protection may block direct calls to `*.vercel.app` URLs; if so, use `vercel crons run` instead. Never paste the secret into chat, tickets or a third-party scheduler without the owner's explicit approval.
+
+**Expected result:** HTTP 200 with a counts-only body, for example `{"ok":true,"claimed":2,"byType":{"policy_processing":{"succeeded":2,"failed":0}},"recoveredLeases":0,"deadLetteredLeases":0,"stoppedBy":"empty"}`. `401` means the header is wrong. `503` means `CRON_SECRET` is not configured. `500` means the batch failed; check the Vercel function log (it logs the error class only). Repeat until `stoppedBy` is `"empty"`.
+
+### 13.4 Checking that the trigger ran and the queue drained
+1. **Invocation:** Vercel dashboard, then Settings, Cron Jobs (last run), or Logs filtered to `/api/internal/jobs/run`. Confirm a 200 at the expected time: 03:00 UTC daily, or right after a manual run.
+2. **Queue drain** (read-only, as the `DATABASE_URL` role or in the SQL editor):
 ```sql
--- Job queue health: anything queued or retrying for more than 15 minutes means the runner is not running.
+-- Anything queued or retrying for more than 15 minutes after a run means the runner is not working.
 SELECT job_type, status, count(*), min(created_at) AS oldest
   FROM background_jobs WHERE status IN ('queued','failed_retryable','processing') GROUP BY 1,2 ORDER BY oldest;
--- Leases that have expired (a killed or crashed run).
+```
+Pass condition: after a manual run returns `stoppedBy: "empty"`, no `queued` rows older than the run, and no `processing` rows.
+
+### 13.5 Leases and dead letters
+```sql
+-- Expired leases (a run killed mid-job). The next run returns them to failed_retryable or dead_letter.
 SELECT job_type, count(*) FROM background_jobs WHERE status='processing' AND lease_expires_at < now() GROUP BY 1;
--- Dead letters (inspect and retry with: npm run jobs:dead-letter -- list / retry --job=<id>).
+-- Dead letters.
 SELECT job_type, count(*), max(updated_at) FROM background_jobs WHERE status='dead_letter' GROUP BY 1;
--- Stuck quarantine: policies and evidence that never got a clean verdict. Nothing re-scans these automatically; reprocess from the app.
-SELECT quarantine_status, count(*), min(updated_at) FROM policies WHERE quarantine_status IN ('uploaded','quarantined','scan_pending') GROUP BY 1;
-SELECT status, scan_status, count(*) FROM claim_evidence_documents WHERE status IN ('uploaded','quarantined') GROUP BY 1,2;
--- Failed exports and unfinished deletions.
+```
+Inspect with `npm run jobs:dead-letter -- list`. Retry one job only after reading its error category: `npm run jobs:dead-letter -- retry --job=<id>`.
+
+### 13.6 Stuck quarantine
+```sql
+SELECT quarantine_status, count(*), min(updated_at) FROM policies
+  WHERE quarantine_status IN ('uploaded','quarantined','scan_pending') GROUP BY 1;
+SELECT status, scan_status, count(*) FROM claim_evidence_documents
+  WHERE status IN ('uploaded','quarantined') GROUP BY 1,2;
+```
+Nothing re-scans these automatically. A synthetic document stuck at `scan_pending` is re-scanned by reprocessing it from the app and then running the job runner (13.3). It must never reach processing without a clean verdict.
+
+### 13.7 VirusTotal quota and timeouts
+- Check the VirusTotal account's API usage page before and after each session. The free tier allows about 4 requests a minute and 500 a day.
+- Upload at most 3 synthetic files per minute.
+- A quota error, a timeout or an exhausted 60 s poll budget leaves the file on hold and shows "On hold: malware scan did not complete" (once PR #22 is merged). It is never released. Count these in 13.6.
+
+### 13.8 Failed exports and deletions
+```sql
 SELECT status, count(*) FROM household_exports WHERE status IN ('pending','running','failed') GROUP BY 1;
 SELECT resource_type, lifecycle_state, count(*) FROM deletion_requests WHERE completed_at IS NULL GROUP BY 1,2;
--- Reviewer assignments that have expired but are still referenced by open claims.
+-- Reviewer assignments past expiry that were never revoked.
 SELECT count(*) FROM claim_review_assignments WHERE expires_at < now() AND revoked_at IS NULL;
 ```
-The column names match `sql/background-jobs.sql`, `sql/lifecycle.sql`, `sql/claim-reviewers.sql` and `sql/schema.sql` as of `main` `7335fd7a`.
+Review each failed export or unfinished deletion by hand before the next session. Do not retry a deletion by editing rows.
 
-Also:
-- **Weekly model and provenance check:** `npm run ai:model-execution-staleness-check`. It enqueues an audit, which the runner then processes.
-- **Weekly storage check:** `npm run storage:audit-orphans` (read-only). Run `npm run storage:cleanup` only after reviewing its dry run.
-- **VirusTotal quota:** check the VirusTotal account's API usage page daily. The free tier allows about 4 requests a minute and 500 a day. When it is exhausted, scans return "unavailable" and documents stay quarantined; they are never released.
-- **Synthetic cleanup:** after each test session, delete the synthetic household from the app (Settings, then Delete household). Confirm that its storage objects are gone with `npm run storage:audit-orphans`.
+### 13.9 Weekly
+- `npm run ai:model-execution-staleness-check`: enqueues an audit, which then needs a runner pass (13.3).
+- `npm run storage:audit-orphans` (read-only). Run `npm run storage:cleanup` only after reviewing its dry run.
 
-**Stop internal testing immediately if:**
-- any document reaches processing without a clean scan;
-- any amount appears for a benefit whose evidence, provenance, ownership, currency or reviewer gate has not passed;
+### 13.10 Synthetic cleanup after every session
+1. Delete each synthetic household from the app (Settings, then Delete household), then run the job runner (13.3) so deletion jobs execute.
+2. Confirm no rows remain, using counts only:
+```sql
+SELECT count(*) FROM accounts WHERE name LIKE 'SYNTHETIC-DPTEST-%';
+SELECT count(*) FROM family_members WHERE display_name LIKE 'SYNTHETIC-DPTEST-%';
+SELECT count(*) FROM policies WHERE original_filename LIKE 'SYNTHETIC-DPTEST-%';
+```
+3. Run `npm run storage:audit-orphans` and confirm no orphaned objects.
+4. Revoke any synthetic reviewer assignment (Operators only, through the authorised reviewer tooling).
+
+### 13.11 Stop conditions
+**Internal testing must stop if the worker does not run reliably, quarantine can be bypassed, synthetic cleanup fails, or any unsupported positive claim amount appears.**
+
+Also stop if any of these happen:
+- a document reaches processing without a clean scan;
+- a blocked benefit is shown as `$0`, or amounts in different currencies are combined;
 - data from one household is visible to another;
-- dead letters or stuck-quarantine counts keep growing for more than a day;
-- the job runner cannot be confirmed to run.
+- dead letters or stuck-quarantine counts keep growing between sessions;
+- a real (non-synthetic) document is uploaded by mistake. Delete it immediately, and do not reprocess it.
 
-**Rollback:** redeploy the previous production deployment from the Vercel dashboard (Deployments, then Promote). Environment variables are not rolled back. Removing `CRON_SECRET` stops all background processing and fails closed: jobs stay queued.
+### 13.12 Rollback
+- **Code:** in the Vercel dashboard, go to Deployments, pick the previous production deployment, then Promote. Environment variables are not rolled back.
+- **Pause background processing:** disable the job in Settings, then Cron Jobs, and stop manual runs. Jobs then stay queued (fail closed).
+- **Do not remove `CRON_SECRET` to pause.** Once the runner is merged, production refuses to start without it.
+- **Database:** no migration in this branch. Never roll back by editing rows.
