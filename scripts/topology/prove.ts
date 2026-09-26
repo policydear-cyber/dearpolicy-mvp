@@ -36,7 +36,7 @@ async function main() {
   //    claims the queued jobs and scans through the real adapter.
   const res = await call(`Bearer ${secret}`);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get("cache-control"), "no-store");
+  assert.match(res.headers.get("cache-control") ?? "", /\bno-store\b/);
   const body = (await res.json()) as { ok: boolean; claimed: number; byType: Record<string, { succeeded: number; failed: number }>; stoppedBy: string };
   assert.equal(body.ok, true);
   assert.equal(body.claimed, 3, "the run must claim all three queued synthetic jobs");
