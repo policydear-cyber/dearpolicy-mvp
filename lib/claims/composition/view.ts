@@ -32,7 +32,10 @@ function benefitView(benefit: ComposedBenefit): CompositionBenefitView {
     currency: benefit.currency,
     rawAmount: benefit.rawAmount,
     payableAmount: benefit.payableAmount,
-    payableAmountText: formatMoney(benefit.payableAmount, benefit.currency),
+    // A blocked/excluded/unselected benefit's payableAmount is 0 by
+    // construction; rendering that as "S$0" would read as "you get nothing"
+    // rather than "not calculated / not counted". Only included benefits get text.
+    payableAmountText: benefit.status === "included" ? formatMoney(benefit.payableAmount, benefit.currency) : null,
     compositionType: benefit.compositionType,
     compositionGroupId: benefit.compositionGroupId,
     status: benefit.status,
