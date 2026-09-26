@@ -309,6 +309,7 @@ async function main() {
     // trigger on Vercel Hobby, where Cron runs at most once a day.
     await pool.query(`DELETE FROM background_jobs`);
     const rdType = "rd_test_prompt";
+    const NO_ENV = {} as unknown as NodeJS.ProcessEnv;
     const rdCounts = async () => (await pool.query<{ status: string; n: number }>(
       `SELECT status, count(*)::int AS n FROM background_jobs WHERE job_type=$1 GROUP BY status`, [rdType])).rows
       .reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.status]: Number(r.n) }), {});
@@ -320,26 +321,26 @@ async function main() {
 
     await testAsync("request drain: JOB_DRAIN_ON_REQUEST=false disables it", async () => {
       resetRequestDrainStateForTests();
-      const outcome = await drainOnce({ jobTypes: rdTypes as never, now, env: { JOB_DRAIN_ON_REQUEST: "false" } });
+      const outcome = await drainOnce({ jobTypes: rdTypes as never, now, env: { JOB_DRAIN_ON_REQUEST: "false" } as unknown as NodeJS.ProcessEnv });
       assert.deepEqual(outcome, { ran: false, reason: "disabled" });
     });
 
     await testAsync("request drain: nothing claimable -> no batch at all", async () => {
       resetRequestDrainStateForTests(); tick();
-      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: {} }), { ran: false, reason: "no_work" });
+      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: NO_ENV }), { ran: false, reason: "no_work" });
     });
 
     await testAsync("request drain: claims at most REQUEST_DRAIN_MAX_JOBS per drain, then is throttled per instance", async () => {
       resetRequestDrainStateForTests(); tick();
       for (const k of ["a", "b", "c"]) await enqueueJob(pool, { jobType: rdType, idempotencyKey: `rd-${k}` });
-      const first = await drainOnce({ jobTypes: rdTypes as never, now, env: {} });
+      const first = await drainOnce({ jobTypes: rdTypes as never, now, env: NO_ENV });
       assert.equal(first.ran, true);
       assert.equal(first.ran && first.summary.claimed, REQUEST_DRAIN_MAX_JOBS);
       assert.equal(first.ran && first.summary.stoppedBy, "max_jobs");
       assert.deepEqual(await rdCounts(), { succeeded: 2, queued: 1 });
-      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: {} }), { ran: false, reason: "throttled" });
+      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: NO_ENV }), { ran: false, reason: "throttled" });
       tick();
-      const second = await drainOnce({ jobTypes: rdTypes as never, now, env: {} });
+      const second = await drainOnce({ jobTypes: rdTypes as never, now, env: NO_ENV });
       assert.equal(second.ran && second.summary.claimed, 1);
       assert.deepEqual(await rdCounts(), { succeeded: 3 });
       assert.equal(new Set(ran).size, 3, "every job ran exactly once");
@@ -349,11 +350,11 @@ async function main() {
     await testAsync("request drain: a delayed (scan-retry style) job is not run early, and is picked up by the first drain after it is due", async () => {
       resetRequestDrainStateForTests(); tick();
       await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-later", availableAt: new Date(Date.now() + 60 * 60_000) });
-      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: {} }), { ran: false, reason: "no_work" });
+      assert.deepEqual(await drainOnce({ jobTypes: rdTypes as never, now, env: NO_ENV }), { ran: false, reason: "no_work" });
       assert.equal((await rdCounts()).queued, 1);
       await pool.query(`UPDATE background_jobs SET available_at = now() - interval '1 second' WHERE job_type=$1 AND idempotency_key='rd-later'`, [rdType]);
       tick();
-      const due = await drainOnce({ jobTypes: rdTypes as never, now, env: {} });
+      const due = await drainOnce({ jobTypes: rdTypes as never, now, env: NO_ENV });
       assert.equal(due.ran && due.summary.claimed, 1);
       assert.equal((await rdCounts()).queued, undefined);
     });
@@ -366,10 +367,10 @@ async function main() {
       let started!: () => void;
       const startedP = new Promise<void>((r) => { started = r; });
       const slow = [{ jobType: rdType, process: async () => { started(); await gate; } }];
-      const firstP = drainOnce({ jobTypes: slow as never, now, env: {} });
+      const firstP = drainOnce({ jobTypes: slow as never, now, env: NO_ENV });
       await startedP;
       tick();
-      assert.deepEqual(await drainOnce({ jobTypes: slow as never, now, env: {} }), { ran: false, reason: "in_flight" });
+      assert.deepEqual(await drainOnce({ jobTypes: slow as never, now, env: NO_ENV }), { ran: false, reason: "in_flight" });
       release();
       const first = await firstP;
       assert.equal(first.ran && first.summary.claimed, 1);
@@ -379,7 +380,7 @@ async function main() {
       resetRequestDrainStateForTests(); tick();
       await enqueueJob(pool, { jobType: rdType, idempotencyKey: "rd-fail" });
       const failing = [{ jobType: rdType, process: async () => { throw new Error("synthetic transient failure"); } }];
-      const out = await drainOnce({ jobTypes: failing as never, now, env: {} });
+      const out = await drainOnce({ jobTypes: failing as never, now, env: NO_ENV });
       assert.equal(out.ran && out.summary.byType[rdType]?.failed, 1);
       const row = await jobRow(rdType, "rd-fail");
       assert.equal(row?.status, "failed_retryable");
