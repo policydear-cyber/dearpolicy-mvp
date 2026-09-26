@@ -23,6 +23,7 @@ import type { MedicalCashRule, MedicalPlanProvisions, MedicalReimbursementRule }
 import { evaluateMonetaryEligibility } from "@/lib/claims/monetary-gate";
 import { composeClaim } from "@/lib/claims/composition/engine";
 import { EMPTY_CLAIM_FACTS, type ClaimAssessmentItem, type ClaimEvidence, type ClaimFacts } from "@/lib/claims/types";
+import { assessClaim, UNSTATED_CURRENCY_AMOUNT_TEXT } from "@/lib/claims/rules";
 import type { VerifiedMedicalBillFacts } from "@/lib/claims/calculators/evidence";
 import { validateCatalogFormula, assessCatalogBenefit, CATALOG_CURRENCY_MISSING, type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { parseBenefitValue } from "@/lib/policies/benefit-rows";
@@ -221,6 +222,21 @@ test("stored rule: a share of the sum insured needs the cover's verified currenc
   const unverified = assessCatalogBenefit({ benefit: share, coverage: coverage({ category: "Death", amount: 350_000, currencyVerified: false }), ownerName: "A", facts: {} });
   assert.equal(unverified.item.calculatedAmount, undefined, "no figure on an unverified cover");
   assert.doesNotMatch(unverified.item.amountText ?? "", /350[,.]?000|S\$|SGD/, "the rule may be described, but the cover amount is never shown");
+});
+
+test("explanatory text never shows a cover figure whose currency is unverified (no bare number, no SGD); a verified one is shown with its currency", () => {
+  const ci = (verified: boolean) => coverage({ id: "cov-lc", policyId: "policy-lc", category: "Critical Illness", productName: "Living Care", policyName: "Living Care",
+    amount: 50_000, currencyVerified: verified, evidenceText: verified ? "Living Care sum insured: S$50,000" : "Living Care sum insured: 50,000" });
+  const diag = { ...EMPTY_CLAIM_FACTS, eventType: "diagnosis", diagnosis: "stage 2 breast cancer", diagnosisDate: "2024-03-01", eventDate: "2024-03-01" } as ClaimFacts;
+  for (let i = 0; i < RUNS; i++) {
+    const text = (items: ClaimAssessmentItem[]) => items.flatMap((x) => [x.reason, ...x.conditions, x.amountText ?? ""]).join(" ");
+    const unverified = assessClaim(diag, [ci(false)]);
+    assert.ok(unverified.some((x) => x.id === "living-care"), "control: the Living Care benefit is assessed");
+    assert.doesNotMatch(text(unverified).replace(/S\$|SGD/g, "") , /50[,.]?000/, "no bare figure for an unverified currency");
+    assert.ok(text(unverified).includes(UNSTATED_CURRENCY_AMOUNT_TEXT), "says an amount exists without showing it");
+    const verified = assessClaim(diag, [ci(true)]);
+    assert.match(verified.find((x) => x.id === "living-care")!.reason, /S\$50,000/, "control: a verified currency is shown with its figure");
+  }
 });
 
 console.log(`Cross-product currency regressions passed: ${cases} cases (${RUNS} repeated runs where noted).`);

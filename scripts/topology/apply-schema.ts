@@ -11,6 +11,7 @@ const FILES = [
   "sql/critical-illness.sql", "sql/disability.sql", "sql/cover-conditions.sql", "sql/model-usage.sql",
   "sql/chat-upgrade.sql", "sql/coverage-ledger.sql", "sql/background-jobs.sql", "sql/rate-limit.sql",
   "sql/lifecycle.sql", "sql/claim-reviewers.sql", "sql/model-provenance.sql", "sql/household-rls.sql",
+  "sql/processing-failure-diagnostics.sql",
   "sql/infrastructure-rls.sql",
 ];
 

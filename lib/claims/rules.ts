@@ -176,12 +176,14 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
 }
 
 function amountText(amount: number | null, currency = "SGD") { return amount == null ? null : formatMoney(amount,currency); }
-/** A cover amount named in explanatory text. Its currency is printed only
- * when verified from the cover's own policy evidence; otherwise the figure is
- * given without one, never relabelled as SGD. */
+/** A cover amount named in explanatory text. It is printed only when its
+ * currency is verified from the cover's own policy evidence. Without a
+ * verified currency no figure is shown at all -- never a bare number and never
+ * relabelled as SGD -- only that an amount exists whose currency is unstated. */
+export const UNSTATED_CURRENCY_AMOUNT_TEXT = "an amount whose currency the policy evidence does not state (not shown)";
 function coverAmountText(coverage: { amount: number | null; currency: string; currencyVerified?: boolean }) {
   if (coverage.amount == null) return null;
-  return coverage.currencyVerified === true ? formatMoney(coverage.amount, coverage.currency) : `${coverage.amount.toLocaleString("en-US")} (currency not stated in the policy evidence read)`;
+  return coverage.currencyVerified === true ? formatMoney(coverage.amount, coverage.currency) : UNSTATED_CURRENCY_AMOUNT_TEXT;
 }
 
 function g007500(coverages: OwnedCoverage[]) {
@@ -352,14 +354,14 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       const waiting = dateIsWithinDays(facts.diagnosisDate,livingCare.effectiveDate,90);
       if (beforeCover === true) items.push({id:"living-care",title:"Living Care critical illness",status:"not_applicable",amountText:null,reason:"The reported diagnosis date is before the effective date shown for this Living Care cover.",conditions:[],evidenceTerms:[],productName:"Living Care"});
       else if (waiting === true) items.push({id:"living-care",title:"Living Care critical illness",status:"not_applicable",amountText:null,reason:"The diagnosis date appears to fall within the 90-day waiting period from the effective date shown in the uploaded personal evidence.",conditions:[],evidenceTerms:["Waiting Period","90 days"],productName:"Living Care"});
-      else items.push({id:"living-care",title:"Living Care critical illness",status:"potentially_applicable",amountText:amountText(livingCare.amount,livingCare.currency),reason:`Your personal certificate confirms ${coverAmountText(livingCare) ?? "Critical Illness"} of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.`,conditions:["The diagnosis must satisfy the policy's defined critical illness.","A 30-day survival period applies.",waiting===null?"DearPolicy could not automatically verify the waiting period from the available dates.":"The diagnosis date appears to be outside the 90-day waiting period."],evidenceTerms:["Major Cancer","Survival Period","Waiting Period"],productName:"Living Care"});
+      else items.push({id:"living-care",title:"Living Care critical illness",status:"potentially_applicable",amountText:(livingCare.currencyVerified===true?amountText(livingCare.amount,livingCare.currency):null),reason:`Your personal certificate confirms ${coverAmountText(livingCare) ?? "Critical Illness"} of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.`,conditions:["The diagnosis must satisfy the policy's defined critical illness.","A 30-day survival period applies.",waiting===null?"DearPolicy could not automatically verify the waiting period from the available dates.":"The diagnosis date appears to be outside the 90-day waiting period."],evidenceTerms:["Major Cancer","Survival Period","Waiting Period"],productName:"Living Care"});
     }
 
     const livingCarePlus = bestCoverage(coverages,"living care plus","Early Critical Illness");
     if (livingCarePlus && /early|stage\s*0|stage\s*1|stage\s*i\b/i.test(diagnosis)) {
       const waiting = dateIsWithinDays(facts.diagnosisDate,livingCarePlus.effectiveDate,60);
       if (waiting === true) items.push({id:"living-care-plus",title:"Living Care Plus early critical illness",status:"not_applicable",amountText:null,reason:"The diagnosis appears to fall within the 60-day waiting period for Living Care Plus.",conditions:[],evidenceTerms:["Living Care Plus benefit is not payable","sixty (60) days"],productName:"Living Care Plus"});
-      else items.push({id:"living-care-plus",title:"Living Care Plus early critical illness",status:"potentially_applicable",amountText:amountText(livingCarePlus.amount,livingCarePlus.currency),reason:"Your personal certificate confirms Living Care Plus cover and the uploaded wording covers specified early critical illnesses.",conditions:["The diagnosis must meet one of the policy's defined early critical illnesses.","A 30-day survival period applies."],evidenceTerms:["Living Care Plus","survive for 30 days"],productName:"Living Care Plus"});
+      else items.push({id:"living-care-plus",title:"Living Care Plus early critical illness",status:"potentially_applicable",amountText:(livingCarePlus.currencyVerified===true?amountText(livingCarePlus.amount,livingCarePlus.currency):null),reason:"Your personal certificate confirms Living Care Plus cover and the uploaded wording covers specified early critical illnesses.",conditions:["The diagnosis must meet one of the policy's defined early critical illnesses.","A 30-day survival period applies."],evidenceTerms:["Living Care Plus","survive for 30 days"],productName:"Living Care Plus"});
     }
 
     const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");

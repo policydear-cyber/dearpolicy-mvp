@@ -59,7 +59,7 @@ async function ask(page: Page, text: string) {
 async function syntheticMemo(patientName: string, extraLines: string[] = []): Promise<Buffer> {
   const DIAGNOSIS = "Malignant neoplasm of the colon, stage III";
   const payload = {
-    deceasedName: null, otherNamesMentioned: [], personIdentifiers: [], dateOfDeath: null, statedCauseOfDeath: null, mannerOfDeath: null,
+    deceasedName: null, otherNamesMentioned: [], personIdentifiers: [{ label: "Hospital case number", value: `${PREFIX}-CASE-0001` }], dateOfDeath: null, statedCauseOfDeath: null, mannerOfDeath: null,
     patientName, exactDiagnosis: DIAGNOSIS, diagnosisDate: "2026-06-01", diseaseStage: "Stage III",
     issuingAuthority: "Synthetic Test Hospital", documentReference: `${PREFIX}-MEMO`, documentType: "specialist_memo",
     pageCitations: [{ field: "exactDiagnosis", pageStart: 1, pageEnd: 1, excerpt: DIAGNOSIS }], confidence: {},
@@ -67,9 +67,12 @@ async function syntheticMemo(patientName: string, extraLines: string[] = []): Pr
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const page = doc.addPage([595, 842]);
-  const lines = [`Specialist memo. SYNTHETIC TEST DOCUMENT. Patient: ${patientName}.`, `Diagnosis: ${DIAGNOSIS}. Date of diagnosis 2026-06-01.`, ...extraLines];
+  const lines = [`Specialist memo. SYNTHETIC TEST DOCUMENT. Patient: ${patientName}.`, `Hospital case number ${PREFIX}-CASE-0001.`, `Diagnosis: ${DIAGNOSIS}. Date of diagnosis 2026-06-01.`, ...extraLines];
   lines.forEach((l, i) => page.drawText(l, { x: 40, y: 790 - i * 20, size: 10, font }));
-  page.drawText(`DPTEST-EXTRACTION:${Buffer.from(JSON.stringify(payload)).toString("base64")}`, { x: 10, y: 60, size: 3, font });
+  // The synthetic extraction, wrapped so every line fits on the page (a PDF
+  // text layer keeps only what is drawn), ending in the end marker.
+  const encoded = `DPTEST-EXTRACTION:${Buffer.from(JSON.stringify(payload)).toString("base64")}:DPTEST-END`;
+  (encoded.match(/.{1,110}/g) ?? []).forEach((chunk, i) => page.drawText(chunk, { x: 20, y: 700 - i * 9, size: 7, font }));
   const bytes = Buffer.from(await doc.save());
   const markers = extraLines.filter((l) => l === SYNTHETIC_MALWARE_MARKER);
   return markers.length ? Buffer.concat([bytes, Buffer.from(markers.map((m) => `\n%${m}\n`).join(""), "latin1")]) : bytes;
@@ -234,7 +237,12 @@ test.describe.serial("synthetic claim journey", () => {
     const reviewer = await (await browser.newContext({ baseURL: BASE_B })).newPage();
     await reviewer.goto(`${BASE_B}/reviewer`);
     await reviewer.getByRole("link").filter({ hasText: s.patientName }).first().click();
-    await expect(reviewer.getByText(`${PREFIX}-memo.pdf`)).toBeVisible();
+    // The assignment page may compile on first use (next dev); wait for the navigation itself.
+    await reviewer.waitForURL(/\/reviewer\/assignments\//, { timeout: 180_000 });
+    await reviewer.waitForLoadState("networkidle").catch(() => undefined);
+    // On failure, show what the reviewer actually sees (synthetic data only).
+    const reviewerView = async () => `${reviewer.url()}\n${(await reviewer.locator("main").innerText().catch(() => "")).slice(0, 2500)}`;
+    await expect(reviewer.getByText(`${PREFIX}-memo.pdf`), await reviewerView()).toBeVisible();
     const card = reviewer.locator(".action-card").filter({ hasText: `${PREFIX}-memo.pdf` });
     await expect(card).toContainText("reading provenance verified");
     const decide = async (policyNumber: string, choice: RegExp) => {
@@ -243,7 +251,11 @@ test.describe.serial("synthetic claim journey", () => {
       await card.getByLabel(choice).check();
       await card.locator("textarea").fill("Synthetic review against the cited definition.");
       await card.getByRole("button", { name: "Record decision" }).click();
-      await expect(card.getByRole("button", { name: "Record decision" })).toBeEnabled({ timeout: 30_000 });
+      // Saved: the form finishes "Recording…", shows no error, and resets
+      // (a failed save keeps the reason and shows an alert instead).
+      await expect(card.getByRole("button", { name: "Record decision" })).toBeVisible({ timeout: 30_000 });
+      await expect(card.getByRole("alert"), `${policyNumber}: ${(await card.getByRole("alert").allInnerTexts()).join(" | ")}`).toHaveCount(0);
+      await expect(card.locator("textarea")).toHaveValue("");
     };
 
     // A negative decision never produces an amount.

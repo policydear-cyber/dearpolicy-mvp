@@ -30,6 +30,8 @@ export const DETERMINISTIC_MODEL_VALUE = "synthetic-e2e";
 /** The model identity recorded in provenance for stand-in replies. */
 export const DETERMINISTIC_MODEL_ID = "dearpolicy-deterministic-e2e-v1";
 export const SYNTHETIC_EXTRACTION_MARKER = "DPTEST-EXTRACTION:";
+/** Ends a synthetic extraction that a PDF wraps over several text lines. */
+export const SYNTHETIC_EXTRACTION_END = ":DPTEST-END";
 
 export function deterministicModelRequested(env: NodeJS.ProcessEnv = process.env): boolean {
   return (env[DETERMINISTIC_MODEL_FLAG] ?? "").trim() !== "";
@@ -129,8 +131,14 @@ export function deterministicReading(user: { question?: string; sources?: { id: 
 export function syntheticExtractionFrom(text: string): unknown | null {
   const at = text.indexOf(SYNTHETIC_EXTRACTION_MARKER);
   if (at < 0) return null;
-  const encoded = text.slice(at + SYNTHETIC_EXTRACTION_MARKER.length).match(/^\s*([A-Za-z0-9+/=]+)/)?.[1];
-  if (!encoded) return null;
+  const rest = text.slice(at + SYNTHETIC_EXTRACTION_MARKER.length);
+  const end = rest.indexOf(SYNTHETIC_EXTRACTION_END);
+  // A real PDF wraps a long line, so the payload may span several text lines
+  // up to the end marker; whitespace between chunks is dropped. Anything that
+  // is not base64 inside the block makes it invalid (never partially parsed).
+  const block = end >= 0 ? rest.slice(0, end).replace(/\s+/g, "") : rest.match(/^\s*([A-Za-z0-9+/=]+)/)?.[1] ?? "";
+  if (!block || !/^[A-Za-z0-9+/=]+$/.test(block)) return null;
+  const encoded = block;
   try { return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")); } catch { return null; }
 }
 
