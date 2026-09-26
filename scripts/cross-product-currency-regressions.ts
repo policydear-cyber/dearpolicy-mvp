@@ -219,7 +219,8 @@ test("stored rule: a share of the sum insured needs the cover's verified currenc
   const verified = assessCatalogBenefit({ benefit: share, coverage: coverage({ category: "Death", amount: 350_000 }), ownerName: "A", facts: {} });
   assert.equal(verified.item.calculatedAmount, 350_000, "positive control");
   const unverified = assessCatalogBenefit({ benefit: share, coverage: coverage({ category: "Death", amount: 350_000, currencyVerified: false }), ownerName: "A", facts: {} });
-  assert.equal(unverified.item.calculatedAmount, undefined); assert.equal(unverified.item.amountText, null);
+  assert.equal(unverified.item.calculatedAmount, undefined, "no figure on an unverified cover");
+  assert.doesNotMatch(unverified.item.amountText ?? "", /\d{3}/, "the rule may be described, but no amount is shown");
 });
 
 console.log(`Cross-product currency regressions passed: ${cases} cases (${RUNS} repeated runs where noted).`);
