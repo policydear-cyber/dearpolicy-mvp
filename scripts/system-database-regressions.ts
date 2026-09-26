@@ -1063,8 +1063,9 @@ async function main(){
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(bytes)).map(page=>page.text).join(" ").replace(/\s+/g," ");
       assert.match(printed,/Tan Yi Chuen Desmond/);
-      assert.match(printed,/S\$1,250/);
-      assert.match(printed,/page 14/,"The insurer can check the figure against the wording");
+      assert.doesNotMatch(printed,/S\$1,250/,"Preliminary claim pack must not print a proposed payout");
+      assert.match(printed,/page 14/,"The insurer can check the policy wording");
+      assert.doesNotMatch(printed,/the an amount/,"Redaction must leave readable prose");
       assert.match(printed,/Hospital discharge summary/,"The checklist follows the reported event");
       const pending=await getClaimPack(new NextRequest("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
       assert.equal(pending.status,409);
