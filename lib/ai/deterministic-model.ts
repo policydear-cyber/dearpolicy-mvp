@@ -58,8 +58,11 @@ export function deterministicInterpretation(user: { currentMessage?: string; sub
   const facts: Fact[] = [];
   const scenarioCandidates: Scenario[] = [];
   const quote = message.slice(0, 480) || "message";
-  const add = (key: string, value: Fact["value"]) => facts.push({ subjectId: subject, key, value, state: "known", quote });
-  const scenario = (label: string, family: string, traits: string[]) => scenarioCandidates.push({ subjectId: subject, label, family, traits, quote });
+  const add = (key: string, value: Fact["value"], q: string = quote) => facts.push({ subjectId: subject, key, value, state: "known", quote: q });
+  const scenario = (label: string, family: string, traits: string[], q: string = quote) => scenarioCandidates.push({ subjectId: subject, label, family, traits, quote: q });
+  // Like the production prompt asks ("the shortest span that proves the
+  // fact"): the one sentence that reports the event, not the whole message.
+  const sentenceWith = (re: RegExp) => message.split(/(?<=[.!?])\s+/).find((x) => re.test(x))?.trim() || quote;
   const date = message.match(/\b(20\d\d-\d\d-\d\d)\b/)?.[1] ?? null;
   let intent: "claim" | "portfolio" | "policy_question" | "follow_up" =
     /\b(?:what policies|portfolio|family have)\b/i.test(message) ? "portfolio"
@@ -72,11 +75,12 @@ export function deterministicInterpretation(user: { currentMessage?: string; sub
     scenario("Reported diagnosis", "illness", ["illness", "diagnosis"]);
   }
   if (/\b(?:died|passed away|was killed)\b/i.test(message) && !/\bif\b/i.test(message)) {
-    intent = "claim"; add("eventType", "death"); add("death", true);
-    if (date) { add("deathDate", date); add("eventDate", date); }
-    const accident = /\baccident|collision|crash\b/i.test(message);
-    if (accident) add("causeOfDeath", "road traffic accident");
-    scenario(accident ? "Accidental death" : "Reported death", "death", accident ? ["death", "accident", "sudden", "external"] : ["death"]);
+    const said = sentenceWith(/\b(?:died|passed away|was killed)\b/i);
+    intent = "claim"; add("eventType", "death", said); add("death", true, said);
+    if (date) { add("deathDate", date, said); add("eventDate", date, said); }
+    const cause = said.match(/\b((?:road |traffic |car )?accident|collision|crash)\b/i)?.[1];
+    if (cause) add("causeOfDeath", cause, said);
+    scenario(cause ? "Accidental death" : "Reported death", "death", cause ? ["death", "accident", "sudden", "external"] : ["death"], said);
   }
   if (/\b(?:unable to work|cannot work|can't work|permanently disabled|disabled)\b/i.test(message) && !/\bif\b/i.test(message)) {
     intent = "claim"; add("eventType", "disability"); add("disabled", true);
