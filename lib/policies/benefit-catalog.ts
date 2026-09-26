@@ -439,7 +439,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     amountText:amount!=null?formatMoney(amount,currency):null,
     amountLabel:amount==null?undefined
       :args.declaredOnly?"Amount printed in the policy document — not yet confirmed against your own schedule"
-      :aggregation==="reimbursement"?"Potential reimbursement":"Potential payout",
+      :aggregation==="reimbursement"?"Calculated reimbursement (internal)":"Calculated benefit (internal)",
     ...(amount!=null?{estimateBasis}:{}),
     ...(amount!=null?{calculatedAmount:amount,currency,calculationKind:benefit.formulaKind as Exclude<CatalogFormulaKind,"none">,
       // A figure that has not been checked against the person's own schedule is
@@ -939,7 +939,7 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
         title:args.contract.ownerName+" · "+label+" — "+rule.pays,
         contractId:args.contract.id,
         status:missing.length?"potentially_applicable":"likely_applicable",
-        amountText:formatMoney(coverage.amount,currency),amountLabel:"Potential payout",
+        amountText:formatMoney(coverage.amount,currency),amountLabel:"Calculated benefit (internal)",
         estimateBasis:rule.basis,calculatedAmount:coverage.amount,currency,calculationKind:"sum_insured",aggregation:"additive",calculationId:"coverage:"+coverage.id,
         coverKey:coverKey({policyNumber:coverage.policyNumber,groupPolicyNumber:coverage.groupPolicyNumber,
           insurer:coverage.insurer??args.contract.insurer??null,

@@ -218,7 +218,7 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
           coverKey:coverKey({insurer:row.insurer,productName:row.planName,contractId:rowContractId}),
           status:amount!=null?(missing.length||row.status!=="confirmed"||row.conditions.length?"potentially_applicable":"likely_applicable"):"needs_document",
           amountText:amount!=null?formatMoney(amount,row.currency):(row.paysKind==="stated"||whatIf||row.paysKind==="per_month")?describePays(row):null,
-          amountLabel:amount!=null?(row.paysKind==="reimbursement_cap"?"Potential reimbursement":"Potential payout"):"What this benefit pays",
+          amountLabel:amount!=null?(row.paysKind==="reimbursement_cap"?"Calculated reimbursement (internal)":"Calculated benefit (internal)"):"What this benefit pays",
           ...(amount!=null?{estimateBasis:basis,calculatedAmount:amount,currency:row.currency,
             calculationKind:row.paysKind==="percent_of_sum"?"sum_insured":row.paysKind==="lump_sum"?"fixed":row.paysKind==="per_day"?"daily":"expense_cap",
             aggregation:row.paysKind==="reimbursement_cap"?"reimbursement" as const:"additive" as const,calculationId:"ledger:"+row.id}:{}),

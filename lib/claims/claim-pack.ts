@@ -1,5 +1,5 @@
 import { PDFDocument,StandardFonts,rgb } from "pdf-lib";
-import { formatMoney } from "@/lib/format/currency";
+import { PRELIMINARY_ASSESSMENT_NOTICE,scrubMonetaryText } from "@/lib/chat/monetary-boundary";
 import type { ClaimDecisionPacket,ClaimFacts } from "./types";
 
 /** The claim pack.
@@ -35,9 +35,12 @@ function eventLines(facts:ClaimFacts){
   if(facts.hospitalNights!=null)add("Nights in hospital",String(facts.hospitalNights));
   if(facts.surgery)add("Surgery","yes");
   if(facts.ambulanceUsed)add("Ambulance used","yes");
-  if(facts.hospitalBill!=null)add("Hospital bill",formatMoney(facts.hospitalBill,"SGD"));
-  if(facts.ambulanceBill!=null)add("Ambulance bill",formatMoney(facts.ambulanceBill,"SGD"));
-  if(facts.outOfPocket!=null)add("Paid out of pocket",formatMoney(facts.outOfPocket,"SGD"));
+  // Figures the family typed are facts to verify, never coverage, and their
+  // currency is unknown: no currency symbol is ever attached to them.
+  const reported=(value:number)=>value.toLocaleString("en-SG")+" as reported (currency and amount to be verified from the receipts)";
+  if(facts.hospitalBill!=null)add("Hospital bill",reported(facts.hospitalBill));
+  if(facts.ambulanceBill!=null)add("Ambulance bill",reported(facts.ambulanceBill));
+  if(facts.outOfPocket!=null)add("Paid out of pocket",reported(facts.outOfPocket));
   return lines;
 }
 /** What an insurer asks for, decided by what actually happened. Generic enough
@@ -75,45 +78,24 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
     ...(args.relationship&&args.relationship!=="self"?["Relationship to the policyholder: "+args.relationship]:[]),
   ]});
   sections.push({heading:"What happened",lines:[packet.eventSummary,...eventLines(packet.facts)].filter(Boolean)});
+  // A claim pack is built from a PRELIMINARY claim assessment (live chat has
+  // no reviewed claim evidence), so it lists benefits, pages, conditions and
+  // documents -- never an amount or a total. See lib/chat/monetary-boundary.ts.
   if(claimable.length)sections.push({
-    heading:"Benefits being claimed",
+    heading:"Benefits that may be relevant",
     lines:claimable.flatMap(item=>{
       const evidence=item.ruleEvidence;
       return [
-        item.title+(item.amountText?" \u2014 "+item.amountText:"")
-          +(item.supersededBy?" (paid instead of \u201c"+item.supersededBy+"\u201d, not added to the total)":""),
-        "    How this figure was reached: "+item.reason,
+        item.title+(item.supersededBy?" (the policy pays this instead of \u201c"+item.supersededBy+"\u201d)":""),
+        "    Why it may be relevant: "+scrubMonetaryText(item.reason),
         ...(evidence?["    Policy wording: "+evidence.policyName+", page "+evidence.pageStart+(evidence.pageEnd!==evidence.pageStart?"–"+evidence.pageEnd:"")]:[]),
-        ...item.conditions.map(condition=>"    Condition: "+condition),
+        ...item.conditions.map(condition=>"    Condition: "+scrubMonetaryText(condition)),
       ];
     }),
-    note:"Each benefit is assessed on its own. Every figure here is an ESTIMATED claim amount, calculated by DearPolicy from the policy wording quoted above and the claimant's own schedule. It is not a quotation and not an offer: the insurer decides the final amount on assessment.",
+    note:PRELIMINARY_ASSESSMENT_NOTICE+" The insurer determines eligibility and any amount after assessment.",
   });
-  // The number the household came for, struck once and struck correctly:
-  // benefits that pay instead of one another are already excluded, and a
-  // reimbursement of an actual bill is listed beside the total rather than
-  // inside it.
-  const lumpSums=claimable.filter(item=>item.aggregation!=="reimbursement"&&!item.supersededBy&&typeof item.calculatedAmount==="number");
-  const reimbursements=claimable.filter(item=>item.aggregation==="reimbursement"&&typeof item.calculatedAmount==="number");
-  if(lumpSums.length||reimbursements.length){
-    const currency=lumpSums[0]?.currency??reimbursements[0]?.currency??"SGD";
-    const lumpTotal=lumpSums.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
-    const billTotal=reimbursements.reduce((sum,item)=>sum+(item.calculatedAmount??0),0);
-    // Cover by cover, so the figure can be held against the certificate.
-    const byCover=new Map<string,number>();
-    for(const item of lumpSums){
-      const label=item.coverLabel??item.productName??"this plan";
-      byCover.set(label,(byCover.get(label)??0)+(item.calculatedAmount??0));
-    }
-    sections.push({heading:"Estimated claim amount",lines:[
-      ...(lumpSums.length?["Lump-sum benefits: "+formatMoney(lumpTotal,currency)+" across "+lumpSums.length+" benefit"+(lumpSums.length===1?"":"s")]:[]),
-      ...(byCover.size>1?[...byCover].sort((a,b)=>b[1]-a[1]).map(([label,amount])=>"    "+formatMoney(amount,currency)+" from the "+label+" cover"):[]),
-      ...(reimbursements.length?["Reimbursement of actual eligible expenses: up to "+formatMoney(billTotal,currency)
-        +" across "+reimbursements.length+" benefit"+(reimbursements.length===1?"":"s")+", against receipts"]:[]),
-    ],note:"Benefits paid by the same policy for the same event are counted once, not added together. This is DearPolicy's estimate from the documents on file and remains subject to the insurer's assessment."});
-  }
-  else sections.push({heading:"Benefits being claimed",lines:[
-    "No benefit could be calculated yet from the documents on file.",
+  else sections.push({heading:"Benefits that may be relevant",lines:[
+    "No relevant benefit has been identified yet from the documents on file.",
   ],note:"This usually means a policy schedule or the benefit wording is still missing. Upload it and the claim pack can be produced again."});
   if(packet.missingFacts.length)sections.push({
     heading:"Still needed before this is submitted",

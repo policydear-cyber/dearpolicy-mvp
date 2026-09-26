@@ -3,11 +3,13 @@
 import { FormEvent,Suspense,useEffect,useRef,useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
+import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
+const preliminaryStatusCopy:Record<NonNullable<ClaimItem["preliminaryStatus"]>,string>={information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"Reviewer assessment needed",policy_condition_unresolved:"Policy condition unresolved",not_applicable:"Not applicable"};
 const statusCopy:Record<ClaimItem["status"],string>={likely_applicable:"Likely applicable",potentially_applicable:"Potentially applicable",not_applicable:"Not applicable",needs_document:"Needs checking"};
 const reviewCopy:Record<string,string>={searched:"Retrieved sections checked",missing_wording:"Matching wording needed",not_ready:"Document processing",no_matching_section:"No match in retrieved sections",needs_review:"Further review needed"};
 const completenessCopy:Record<string,string>={full_text_reviewed:"All processed pages read",partial_retrieval:"Part of the document read",no_wording:"No matching wording uploaded",not_processed:"Still processing"};
@@ -234,13 +236,17 @@ function ChatContent(){
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{q.text}</strong><small>{q.why}</small>
             <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
           </div>)}
-          {message.answer?.potentialPayoutTotals?.length?<div className="potential-totals"><small>Estimated claim amount so far · subject to the insurer's assessment</small><div>{message.answer.potentialPayoutTotals.map(total=><strong key={total.currency}>{total.amountText}</strong>)}</div><p>Adds up the benefits that can be calculated from your own schedule and the policy wording. Indicative figures are shown on their cards but not added. This is not claim approval.</p>{message.answer.payoutQualifiers?.length?<div className="payout-qualifiers"><small>Why the settled amount could differ</small><ul>{message.answer.payoutQualifiers.map((q,i)=><li key={i}>{q}</li>)}</ul></div>:null}</div>:null}
+          {message.answer?.assessmentKind==="preliminary"?<div className="preliminary-assessment" data-testid="preliminary-assessment"><small>Preliminary claim assessment</small><p>{PRELIMINARY_ASSESSMENT_NOTICE}</p></div>:null}
+          {message.answer?.policyStatedLimits?.length?<div className="policy-stated-limits" data-testid="policy-stated-limits">{message.answer.policyStatedLimits.map((limit,i)=><div className="policy-stated-limit" key={i}>
+            <small>{POLICY_STATED_LIMIT_LABEL}</small><strong>{limit.amountText}</strong><span>{limit.ownerName?limit.ownerName+" · ":""}{limit.benefitTitle}</span>
+            <p>{POLICY_STATED_LIMIT_NOTICE}</p><em>From {limit.citation.policyName}, page {limit.citation.pageStart}: “{limit.quote.length>200?limit.quote.slice(0,197)+"…":limit.quote}”</em>
+          </div>)}</div>:null}
           {message.answer?.claimItems.length?<div className="claim-results">{message.answer.claimItems.map((item,i)=><div className={"claim-result "+item.status} key={i}>
-            <div className="claim-result-head"><strong>{item.title}</strong><span>{statusCopy[item.status]}</span></div>{item.amountText?<div className="claim-amount"><small>{item.amountLabel??"Potential amount"}</small><strong>{item.amountText}</strong><em className={`estimate-basis ${item.estimateBasis??"estimated"}`}>{item.estimateBasis==="confirmed"?"From your own schedule and the policy wording · estimated, subject to the insurer's assessment":item.estimateBasis==="indicative"?"Indicative — DearPolicy read this rate from a table heading. Confirm it on the Benefits page.":"Estimated, subject to the insurer's assessment"}</em></div>:null}<p>{item.reason}</p>
+            <div className="claim-result-head"><strong>{item.title}</strong><span>{statusCopy[item.status]}</span></div>{item.preliminaryStatus?<span className="preliminary-status">{preliminaryStatusCopy[item.preliminaryStatus]}</span>:null}<p>{item.reason}</p>
             {item.conditions.length?<details className="claim-conditions"><summary>{item.conditions.length===1?"1 condition":item.conditions.length+" conditions"}</summary><ul>{item.conditions.map((c,j)=><li key={j}>{c}</li>)}</ul></details>:null}
           </div>)}</div>:null}
           {message.answer?.composition?<div className="claim-composition">
-            <div className="composition-totals"><small>Potential policy-based estimate · subject to the insurer's assessment · not a guarantee of payment</small>
+            <div className="composition-totals"><small>Indicative estimate · from reviewed evidence · the insurer decides</small>
               <div>{message.answer.composition.totalsByCurrency.length?message.answer.composition.totalsByCurrency.map(t=><strong key={t.currency}>{t.amountText}</strong>):<strong>No amount calculated yet</strong>}</div>
               <p>{message.answer.composition.disclaimer}</p>
             </div>

@@ -4,7 +4,10 @@ import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { askDearPolicy } from "@/lib/rag/chat";
+// Live chat goes straight to the contextual workflow: never through
+// lib/rag/chat.ts, which also carries the legacy orchestrator path
+// (scripts/live-chat-monetary-boundary-regressions.ts enforces this).
+import { askContextualDearPolicy as askDearPolicy } from "@/lib/chat/workflow";
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 
