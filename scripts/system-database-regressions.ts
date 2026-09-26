@@ -518,7 +518,7 @@ async function main(){
       const text=answer.details.join(" ");
       assert.match(text,/The guaranteed maturity value is SGD 100000\./);
       assert.match(text,/The projected non-guaranteed maturity value is SGD 120000\./);
-      assert.doesNotMatch(text,/guaranteed maturity value is SGD 120000/,"A projected value is never presented as guaranteed");
+      assert.doesNotMatch(text,/(?<!non-)guaranteed maturity value is SGD 120000/,"A projected value is never presented as guaranteed");
       assert.equal(answer.questions.length,0);
       assert.equal(answer.mode,"answer");
       assert.notEqual(answer.assessmentKind,"preliminary","A policy-information answer is not framed as a claim assessment");
