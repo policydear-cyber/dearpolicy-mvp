@@ -438,7 +438,7 @@ async function main(){
       assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
       assert.equal(flight!.amountText,null,"No flight-delay estimate before claim evidence review");
       assert.equal(flight!.status,"likely_applicable");
-      assert.equal(flight!.estimateBasis,"confirmed");
+      assert.equal(flight!.preliminaryStatus,"reviewer_assessment_needed");
       assert.match(flight!.reason,/verified against the page by a second read/i);
       assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
     });
@@ -461,7 +461,7 @@ async function main(){
       assert.equal(item?.amountText,null,"No reimbursement estimate before claim evidence review");
       assert.equal(item?.status,"likely_applicable");
       assert.notEqual(item?.amountLabel,"Calculated reimbursement (internal)");
-      assert.equal(item?.aggregation,"reimbursement");
+      assert.equal(item?.aggregation,undefined);
       assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });
     await test("The active API resolves Charmaine before loading personal policies",async()=>{
@@ -825,11 +825,11 @@ async function main(){
       assert.equal(readingCalls-readsBefore,0,"Stored rules mean the documents are never re-read");
       assert.equal(explanationCalls-narrationsBefore,1,"It should still speak like an assistant, not print a table");
       assert.ok(Date.now()-started<4000,"A catalogued answer must be effectively instant");
-      assert.equal(answer.potentialPayoutTotals?.[0].amountText,"S$350,000");
+      assert.equal(answer.potentialPayoutTotals?.length??0,0);
       assert.equal(answer.claimItems.length,1,"Only benefits the event can trigger: "+JSON.stringify(answer.claimItems.map(i=>i.title)));
       assert.match(answer.claimItems[0].title,/Major Critical Illness/);
       assert.match(answer.claimItems[0].reason,/page 7/);
-      assert.match(answer.summary,/S\$350,000/);
+      assert.doesNotMatch(answer.summary,/S\$350,000/);
     });
     await test("A document whose conditions were never read has them read without being asked",async()=>{
       const fixture=await seedReviewFixture(2);
@@ -953,7 +953,7 @@ async function main(){
       // And the money actually answered with follows the correction.
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
       const answer=data.answer as ChatAnswer;
-      assert.equal(answer.claimItems[0].amountText,"S$175,000","The corrected rule is what the claim is calculated from");
+      assert.equal(answer.claimItems[0].amountText,null,"The corrected rule must not become a pre-review payout");
     });
     await test("A rule DearPolicy could not compute is refused in plain language",async()=>{
       const fixture=await seedReviewFixture(1);
@@ -1199,7 +1199,7 @@ async function main(){
         [account,fixture.rows[0].id,"Review Fixture Critical Illness"]);
       const started=Date.now();
       const after=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      assert.match(after.summary,/S\$350,000/);
+      assert.doesNotMatch(after.summary,/S\$350,000/);
       assert.ok(Date.now()-started<4000,"Nothing is re-read, so a second question is immediate");
     });
     await test("A what-if question is answered from the stored benefits, with figures and a question back",async()=>{
@@ -1220,9 +1220,9 @@ async function main(){
       assert.match(titles,/Ambulance Cost/);
       // The rule itself is the answer when the amount depends on what happens.
       const ambulance=answer.claimItems.find(item=>/Ambulance/.test(item.title))!;
-      assert.match(ambulance.amountText??"",/S\$500/,"A reimbursement limit is still a figure the person can act on");
+      assert.equal(ambulance.amountText,null,"No pre-review reimbursement figure");
       const fracture=answer.claimItems.find(item=>/Fracture/.test(item.title))!;
-      assert.equal(fracture.amountText,"S$1,250");
+      assert.equal(fracture.amountText,null);
       // It asks the one thing that turns a rule into a number.
       assert.equal(answer.questions.length,1,"One question, not an interrogation");
       assert.match(answer.questions[0].text,/hospital|bill|ambulance/i);
@@ -1278,7 +1278,7 @@ async function main(){
         // Rerouting reading does not move the other jobs with it.
         const readsBefore=explanationCalls;
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null);
         assert.equal(explanationCalls-readsBefore,1,"Chat narration stays on the model its own setting names");
       }finally{
         delete process.env.READING_MODEL_PROVIDER;delete process.env.GROQ_API_KEY;
@@ -1339,8 +1339,8 @@ async function main(){
       const titles=three.claimItems.map(item=>item.title);
       assert.equal(titles.length,1,"One card per benefit per person, even when two documents state it: "+titles.join(" | "));
       assert.match(titles[0],/Daily Hospital Cash/);
-      assert.equal(three.claimItems[0].amountText,"S$120.00","4 nights × S$30, from the stored rule");
-      assert.equal(three.potentialPayoutTotals?.[0]?.amountText,"S$120.00");
+      assert.equal(three.claimItems[0].amountText,null,"Stored duration rule does not permit a pre-review payout");
+      assert.equal(three.potentialPayoutTotals?.length??0,0);
     });
     await test("When the cause is unknown, it is asked rather than assumed",async()=>{
       const fixture=await seedReviewFixture(1);
@@ -1354,7 +1354,7 @@ async function main(){
       const second=(await send("An accident",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
       const two=second.answer as ChatAnswer;
       assert.equal(two.mode,"claim_assessment");
-      assert.equal(two.claimItems[0]?.amountText,"S$250.00");
+      assert.equal(two.claimItems[0]?.amountText,null);
     });
     await test("A death benefit that sits in a sentence, not a table, is read into the ledger and answered",async()=>{
       // The only rule on file is an accident-hospital row. A death benefit sits
@@ -1369,7 +1369,7 @@ async function main(){
       const {data}=await send("Desmond was murdered in Thailand",people[0].id);
       const answer=data.answer as ChatAnswer;
       assert.equal(answer.questions.length,0,"A death is not answered with a question about hospital admission: "+JSON.stringify(answer.questions));
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText==="S$350,000"),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
+      assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText===null),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
       assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
       assert.ok(answer.details.some(d=>/Coverage Ledger/.test(d)),"…because the sentence was read into the ledger: "+answer.details.join(" / "));
     });
@@ -1447,9 +1447,9 @@ async function main(){
       assert.equal(added.row.status,"confirmed");
       const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const afterItem=after.claimItems.find(i=>/Group Term Life/.test(i.title));
-      assert.equal(afterItem?.estimateBasis,"confirmed");assert.equal(afterItem?.status,"likely_applicable");
-      assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText==="S$70,000"),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
-      assert.equal(after.potentialPayoutTotals?.[0]?.amountText,"S$1,070,000");
+      assert.equal(afterItem?.estimateBasis,undefined);assert.equal(afterItem?.status,"likely_applicable");
+      assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText===null),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
+      assert.equal(after.potentialPayoutTotals?.length??0,0);
       const again=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       assert.equal((again.rows as LRow[]).some(r=>r.id===tpd!.id),false,"A rejected row is not shown");
       // Re-seeding after a new upload adds nothing twice and never touches a confirmed row.
@@ -1512,7 +1512,7 @@ async function main(){
       const titles=three.claimItems.map(i=>i.title).join(" | ");
       assert.equal(/Ambulance|Cancer|Day surgery/.test(titles),false,titles);
       assert.match(titles,/Daily Hospital Cash/);
-      assert.equal(three.claimItems[0].amountText,"S$90.00");
+      assert.equal(three.claimItems[0].amountText,null);
       assert.equal(/took a taxi/.test(three.summary),false,"The person's own words are never handed back as the answer");
     });
     await test("Every model call is on the ledger, priced, and the plan can be checked against it",async()=>{
@@ -1580,7 +1580,7 @@ async function main(){
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         const answer=data.answer as ChatAnswer;
-        assert.equal(answer.claimItems[0]?.amountText,"S$350,000","The claim is answered");
+        assert.equal(answer.claimItems[0]?.amountText,null,"The benefit is found without a pre-review payout");
         assert.ok(anthropicCalls>=2,"Interpretation, relevance and narration went to Claude");
         assert.ok(modelsUsed.has("claude-sonnet-5"),"Judgement on the mid tier: "+[...modelsUsed].join(","));
         assert.ok(cached,"The system prompt is marked for prompt caching");
@@ -1625,7 +1625,7 @@ async function main(){
       process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null);
         assert.ok(googleCalls>=2);
         assert.deepEqual([...hosts],["generativelanguage.googleapis.com"],"The Gemini API by default");
       }finally{
@@ -1687,7 +1687,7 @@ async function main(){
       process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000","The chat still produced the right answer despite the pricier tier being down");
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null,"The benefit is found despite the pricier tier being down");
         assert.ok(flashCalls>=1,"The primary judgement tier was tried first");
         assert.ok(flashLiteCalls>=1,"...and every judgement call fell back to the tier that is not rate-limited");
         const usage=(await db.query("SELECT model,ok FROM model_usage WHERE account_id=$1 AND role='judgement' ORDER BY at",[account])).rows as {model:string;ok:boolean}[];
@@ -1760,7 +1760,7 @@ async function main(){
         const item=answer.claimItems.find(c=>/broken forearm/i.test(c.title));
         assert.ok(item,"The quoted percentage clause must be promoted into a claim item, not left as prose the household has to work out itself: "+JSON.stringify(answer.claimItems));
         assert.equal(item!.calculatedAmount,70000,"20% of the verified S$350,000 Sum Insured");
-        assert.equal(item!.amountText,"S$70,000");
+        assert.equal(item!.amountText,null);
       }finally{
         globalThis.fetch=inner;
       }
