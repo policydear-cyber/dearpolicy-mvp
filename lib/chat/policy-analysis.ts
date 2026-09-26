@@ -6,7 +6,8 @@ import { query } from "@/lib/db/client";
 import { canonicalProduct } from "@/lib/coverage/facts";
 import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
 import { formatMoney,normalizeCurrencyCode } from "@/lib/format/currency";
-import type { ChatCitation,ClaimItem,PotentialPayoutTotal } from "@/types";
+import type { ChatCitation,ClaimItem,PolicyStatedLimit,PotentialPayoutTotal } from "@/types";
+import { isValidPolicyStatedLimit,POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE } from "./monetary-boundary";
 import { hasQuote,knownValue,normalText } from "./facts";
 import { calculateHospitalCash } from "@/lib/claims/calculators/hospital-cash";
 import type { PolicyAnalysis,PolicyBenefit,PolicyFormula,PolicyObservation,PolicyRequirement,PolicySource,ScenarioClassification,ScenarioTrait,SourceQuote,SubjectFacts } from "./types";
@@ -380,6 +381,39 @@ export function evaluateRequirement(requirement:PolicyRequirement,facts:SubjectF
   }
   void now;return "review" as const;
 }
+/** The ONLY producer of a PolicyStatedLimit (see lib/chat/monetary-boundary.ts).
+ * Returns null -- no figure at all -- unless every condition holds:
+ *  - ownership is proven by a personal schedule/certificate (not declared);
+ *  - the amount is a fixed benefit or cap written in the policy wording, or a
+ *    sum insured written on the personal schedule -- never computed from, or
+ *    alterable by, anything the family reported;
+ *  - the cited clause text itself contains that number AND an explicit
+ *    currency, and any separately extracted currency agrees with it;
+ *  - the clause has a page citation.
+ * User facts are deliberately not a parameter. */
+export function policyStatedLimitFor(args:{benefit:PolicyBenefit;contract:PolicyContract;sources:PolicySource[]}):PolicyStatedLimit|null{
+  if(!args.contract.confirmed||args.contract.ownershipBasis!=="evidence")return null;
+  const f=args.benefit.formula;
+  const coverage=args.contract.coverages.find(c=>c.id===args.benefit.coverageId);
+  let amount:number|null=null,extracted:string|null=null,quote="",citation:ChatCitation|null=null;
+  if((f.kind==="fixed"||f.kind==="expense_cap")&&f.value!=null&&f.evidence){
+    const source=args.sources.find(s=>s.id===f.evidence!.sourceId);
+    if(!source||source.policyId!==source.citation.policyId)return null;
+    amount=f.value;extracted=f.currency;quote=f.evidence.quote;citation=source.citation;
+  }else if(f.kind==="sum_insured"&&coverage&&coverage.amount!=null&&coverage.evidenceText&&coverage.sourcePage!=null
+    &&(coverage.documentRole==="personal_schedule"||coverage.documentRole==="certificate")&&coverage.currencyVerified===true){
+    amount=coverage.amount;extracted=coverage.currency;quote=coverage.evidenceText;
+    citation={chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,policyName:coverage.productName??args.contract.name,insurer:coverage.insurer??undefined,
+      pageStart:coverage.sourcePage,pageEnd:coverage.sourcePage,documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"};
+  }
+  if(amount==null||!(amount>0)||!quote||!citation)return null;
+  const written=explicitCurrency(quote);
+  if(!written||(extracted&&extracted.toUpperCase()!==written))return null;
+  if(!numberInQuote(quote,amount))return null;
+  const limit:PolicyStatedLimit={kind:"policy_stated_limit",label:POLICY_STATED_LIMIT_LABEL,notice:POLICY_STATED_LIMIT_NOTICE,
+    benefitTitle:args.benefit.title,ownerName:args.contract.ownerName??null,amount,currency:written,amountText:formatMoney(amount,written),quote,citation};
+  return isValidPolicyStatedLimit(limit)?limit:null;
+}
 export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:PolicyContract;sources:PolicySource[];facts:SubjectFacts;now:Date;
   scenarios?:ScenarioClassification[];
   /** What kind of claim this is. A benefit read live out of a booklet gets the
@@ -426,7 +460,7 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
     status:wrongEvent||notMet||((calculation?.amount??1)===0&&args.benefit.formula.kind==="daily")?"not_applicable":
       canShowCalculation?"potentially_applicable":"needs_document",
     amountText:canShowCalculation?formatMoney(calculation.amount,calculation.currency):wrongEvent?null:ownershipOnly?confirmedAmount:null,
-    amountLabel:canShowCalculation?(args.benefit.formula.kind==="expense_cap"?"Potential reimbursement":"Potential payout"):
+    amountLabel:canShowCalculation?(args.benefit.formula.kind==="expense_cap"?"Calculated reimbursement (internal)":"Calculated benefit (internal)"):
       ownershipOnly&&confirmedAmount?"Confirmed cover amount — payout rule not yet verified":undefined,
     ...(canShowCalculation?{estimateBasis:confirmedCalculation?"confirmed" as const:"indicative" as const,
       calculatedAmount:calculation.amount,currency:calculation.currency,
@@ -443,6 +477,10 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
       "The uploaded wording contains this potentially relevant benefit. Its amount or outstanding conditions still need checking.",
     conditions:[...new Set(conditions)],
   };
+  if(!wrongEvent&&!notMet){
+    const limit=policyStatedLimitFor({benefit:args.benefit,contract:args.contract,sources:args.sources});
+    if(limit)item.policyStatedLimit=limit;
+  }
   const citations:ChatCitation[]=[];
   for(const q of [...args.benefit.evidence,...args.benefit.conditions.map(c=>c.evidence),...args.benefit.requirements.map(r=>r.evidence),...(args.benefit.formula.evidence?[args.benefit.formula.evidence]:[])]){
     const source=args.sources.find(s=>s.id===q.sourceId);if(source&&!citations.some(c=>c.chunkId===source.citation.chunkId))citations.push(source.citation);

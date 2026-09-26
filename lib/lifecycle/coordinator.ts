@@ -129,11 +129,18 @@ export async function requestPolicyDocumentDeletion(args: {
   // readIncludingDeletedForInternalUse() exists to name and document
   // rather than silently omit the active predicate.
   readIncludingDeletedForInternalUse("deletion_coordinator", "must read a policy document regardless of its current lifecycle state to validate/transition/retry a deletion request");
+  // FOR NO KEY UPDATE, never FOR UPDATE, in every deletion transaction in
+  // this file: the audit write below goes through the SERVICE pool (a
+  // different connection), and its foreign key to this row takes FOR KEY
+  // SHARE, which FOR UPDATE blocks. With FOR UPDATE the request waits on its
+  // own second connection forever (an application-level deadlock Postgres
+  // cannot detect) while holding the row lock. FOR NO KEY UPDATE still
+  // serialises concurrent deletions/updates of the row.
   const result = await args.client.query<PolicyDocumentRow>(
     `SELECT id, storage_key, original_filename, lifecycle_state
        FROM policies
       WHERE id=$1 AND account_id=$2
-      FOR UPDATE`,
+      FOR NO KEY UPDATE`,
     [args.policyId, args.accountId],
   );
   const policy = result.rows[0];
@@ -545,7 +552,7 @@ export async function requestClaimEvidenceDeletion(args: {
     `SELECT id, family_member_id, claim_session_id, original_filename, storage_key, lifecycle_state
        FROM claim_evidence_documents
       WHERE id=$1 AND account_id=$2
-      FOR UPDATE`,
+      FOR NO KEY UPDATE`,
     [args.evidenceDocumentId, args.accountId],
   );
   const doc = result.rows[0];
@@ -733,7 +740,7 @@ export async function requestPolicyDeletion(args: {
   const { rows: lockedRows } = await args.client.query<PolicyChainLockedRow>(
     `SELECT id, family_member_id, original_filename, lifecycle_state
        FROM policies WHERE id=ANY($1::uuid[]) AND account_id=$2
-       FOR UPDATE`,
+       FOR NO KEY UPDATE`,
     [orderedIds, args.accountId],
   );
 
@@ -946,7 +953,7 @@ export async function requestFamilyMemberDeletion(args: {
     `SELECT id, relationship, display_name, lifecycle_state
        FROM family_members
       WHERE id=$1 AND account_id=$2
-      FOR UPDATE`,
+      FOR NO KEY UPDATE`,
     [args.familyMemberId, args.accountId],
   );
   const member = result.rows[0];
@@ -960,14 +967,19 @@ export async function requestFamilyMemberDeletion(args: {
     // handler computed, now the coordinator's own precondition rather
     // than a route-level check that bypassed the lifecycle machinery.
     // Only `policies` carries its own lifecycle_state among these
-    // tables, so it is the only count scoped by activePredicate(); the
-    // others (policy_members, chat_conversations, claim_sessions,
+    // tables, so it is scoped by activePredicate() -- both directly and
+    // through policy_members (a link to a policy that has already been
+    // deleted is not "linked activity": otherwise a person who deletes the
+    // only document linked to a profile can never delete that profile,
+    // and the UI offers nothing left to remove). The
+    // others (chat_conversations, claim_sessions,
     // coverage_rules, premium_records) have no lifecycle column of
     // their own and are counted as-is, exactly matching prior behavior.
     const usage = await args.client.query<{ n: number }>(
       `SELECT (
           (SELECT count(*) FROM policies WHERE family_member_id=$1 AND ${activePredicate()})
-        + (SELECT count(*) FROM policy_members WHERE family_member_id=$1)
+        + (SELECT count(*) FROM policy_members pm JOIN policies p ON p.id=pm.policy_id AND p.account_id=pm.account_id
+            WHERE pm.family_member_id=$1 AND ${activePredicate("p")})
         + (SELECT count(*) FROM chat_conversations WHERE family_member_id=$1)
         + (SELECT count(*) FROM claim_sessions WHERE family_member_id=$1)
         + (SELECT count(*) FROM coverage_rules WHERE family_member_id=$1)

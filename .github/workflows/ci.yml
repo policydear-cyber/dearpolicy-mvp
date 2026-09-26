@@ -98,8 +98,34 @@ jobs:
       - name: Travel-claims engine regression suite
         run: npm run claims:travel-test
 
+      - name: Safe processing-failure storage (no raw provider/pipeline errors in household-readable tables; diagnostics service-only)
+        run: npm run security:processing-failure-storage-test
+
+      - name: Bounded automatic scan retry (durable, idempotent, fail-closed)
+        run: npm run security:scan-retry-test
+
+      - name: Processing-failure migration procedure rehearsal (runbook pre/post checks, single-transaction apply, Supabase-style default grants)
+        run: npm run security:processing-failure-migration-procedure-test
+
+      - name: Live-chat monetary boundary (policy-stated limits vs preliminary assessment; no pre-review payout figures; import/rendering boundaries)
+        run: npm run security:live-chat-monetary-boundary-test
+
+      - name: Cross-product currency provenance (no default or inferred currency)
+        run: npm run security:cross-product-currency-test
+
+      - name: Deterministic claim fact-finding (six categories; no amount before review)
+        run: npm run claims:fact-finding-test
+
+      - name: Deterministic model stand-in cannot run in production
+        run: npm run security:deterministic-model-guard-test
+
+      - name: Indicative estimate only after reviewer decision; currencies separate; stale answers invalidated
+        run: npm run claims:indicative-estimate-test
+
       - name: Cross-product claim-quality golden dataset
         run: npm run eval:claim-quality
+      - name: Claim-answer pipeline adversarial evaluation (assess -> monetary gate -> composition -> rendered view, plus the live chat gate; positive controls, 5x determinism)
+        run: npm run eval:claim-answer-pipeline
 
       - name: Launch-hardening security regression suite
         run: npm run security:test

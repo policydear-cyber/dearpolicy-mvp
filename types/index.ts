@@ -9,13 +9,38 @@ export type StructuredCoverageFact = {
   insurer:string|null; policyName:string|null; policyNumber:string|null; documentRole:string|null;
 };
 export type ChatCitation = { chunkId:string; policyId:string; policyName:string; insurer?:string; pageStart:number; pageEnd:number; documentRole?:string|null; personalEvidence?:boolean; evidenceLabel?:string };
+/** A benefit or maximum amount copied deterministically from the current
+ * active policy's own wording, with its page cited and its currency written
+ * in that wording. It is NOT an estimate of what the insurer will pay for an
+ * event and never enters a claim estimate or total (lib/chat/monetary-boundary.ts). */
+export type PolicyStatedLimit = {
+  kind:"policy_stated_limit";
+  label:"Policy-stated coverage limit";
+  notice:string;
+  benefitTitle:string;
+  ownerName:string|null;
+  amount:number;
+  currency:string;
+  amountText:string;
+  /** Verbatim clause text the amount and currency were read from. */
+  quote:string;
+  citation:ChatCitation;
+};
+/** Where a claim-related benefit stands before any claim evidence has been
+ * reviewed (a preliminary claim assessment never carries an event amount). */
+export type PreliminaryClaimStatus = "information_needed"|"evidence_needed"|"reviewer_assessment_needed"|"policy_condition_unresolved"|"not_applicable";
 export type ClaimItem = {
   title:string;
+  /** Set only by lib/chat/policy-analysis.ts when every policy-stated-limit
+   * condition holds; lib/chat/monetary-boundary.ts moves it to
+   * ChatAnswer.policyStatedLimits and strips every other amount. */
+  policyStatedLimit?:PolicyStatedLimit;
+  preliminaryStatus?:PreliminaryClaimStatus;
   status:"likely_applicable"|"potentially_applicable"|"not_applicable"|"needs_document";
   amountText:string|null;
   /** Human-readable distinction between a calculated payout and a schedule
    * amount whose payout rule has not yet been verified. */
-  amountLabel?:"Potential payout"|"Potential reimbursement"|"Confirmed cover amount — payout rule not yet verified"
+  amountLabel?:"Calculated benefit (internal)"|"Calculated reimbursement (internal)"|"Confirmed cover amount — payout rule not yet verified"
     |"Amount printed in the policy document — not yet confirmed against your own schedule"
     |"What this benefit pays";
   /** How far the figure can be trusted, and it is always stated next to it.
@@ -111,7 +136,9 @@ export type CompositionBenefitView = {
   currency:string;
   rawAmount:number;
   payableAmount:number;
-  payableAmountText:string;
+  /** Null unless status is "included": a benefit that is blocked, excluded,
+   * not selected or still waiting on evidence is never rendered as "$0". */
+  payableAmountText:string|null;
   compositionType:"independent_additive"|"alternative_highest"|"alternative_selected"|"accelerated_from_base"|"additional_to_base"|"shared_policy_cap"|"shared_event_cap"|"informational_only"|"unknown";
   compositionGroupId:string|null;
   status:"included"|"excluded"|"blocked"|"needs_document"|"needs_review";
@@ -146,6 +173,17 @@ export type ClaimCompositionView = {
   disclaimer:string;
 };
 
+export type FactFindingPlanView = {
+  subjectId:string;subjectName?:string;
+  category:"accidental_death"|"critical_illness"|"disability_tpd"|"medical_reimbursement"|"hospital_cash"|"travel";
+  label:string;
+  status:"information_needed"|"evidence_needed"|"reviewer_assessment_needed"|"policy_condition_unresolved"|"ready_for_evidence_gated_estimate";
+  nextQuestions:{id:string;factKey:string;text:string;type:"text"|"date"|"yes_no"|"choice";options?:string[];why:string}[];
+  missingFacts:string[];staleFacts:string[];conflictingFacts:string[];uncertainFacts:string[];
+  missingDocuments:string[];reviewerRequirements:string[];reportedAmountsIgnored:string[];
+  readyForEvidenceGatedEstimate:boolean;blockedReasons:string[];
+};
+
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -160,6 +198,19 @@ export type ChatAnswer = {
   knownFacts:string[];
   missingFacts:string[];
   potentialPayoutTotals?:PotentialPayoutTotal[];
+  /** Policy-stated coverage limits: typed, cited, currency-verified, and
+   * structurally separate from any claim estimate (never totalled). */
+  policyStatedLimits?:PolicyStatedLimit[];
+  /** Deterministic fact-finding plan per family member and claim category
+   * (lib/claims/fact-finding.ts). Never carries an amount. */
+  factFinding?:FactFindingPlanView[];
+  /** Set when a saved answer is re-served after a policy it relied on was
+   * deleted (lib/chat/stale-answers.ts): it no longer describes cover. */
+  invalidated?:{reason:"policy_deleted"};
+  /** "preliminary": no reviewed claim evidence, so no event amount at all.
+   * "indicative": an amount produced by the evidence-gated deterministic
+   * composition path. Absent for ordinary policy questions. */
+  assessmentKind?:"preliminary"|"indicative";
   scenarioClassifications?:{subjectName:string;label:string;family:string;traits:string[]}[];
   resolvedFamilyMemberId?:string;
   personContextMessage?:string;

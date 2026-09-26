@@ -83,6 +83,9 @@ function coverage(overrides: Partial<OwnedCoverage> = {}): OwnedCoverage {
     id: COVERAGE, policyId: POLICY, familyMemberId: FM, category: "Hospitalisation", amount: null, currency: CCY,
     productName: "Hospitalisation Plan", sourcePage: 1, evidenceText: null, insurer: "Great Eastern", policyName: "Hospitalisation Plan",
     policyNumber: "H-001", groupPolicyNumber: null, documentRole: "certificate", effectiveDate: "2020-01-01", renewalOrExpiryDate: null,
+    // The certificate writes its currency (see OwnedCoverage.currencyVerified);
+    // scripts/cross-product-currency-regressions.ts covers the unverified case.
+    currencyVerified: true,
     ...overrides,
   };
 }

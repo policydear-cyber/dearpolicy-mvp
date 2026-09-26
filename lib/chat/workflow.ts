@@ -15,6 +15,8 @@ import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTrai
 import { loadCoverConditions,readWhateverIsStillUnread } from "@/lib/policies/condition-catalog";
 import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
+import { enforceLiveChatMonetaryBoundary, liveClaimContext } from "./monetary-boundary";
+import { applyFactFinding } from "./fact-finding-chat";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
@@ -29,6 +31,7 @@ import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnaly
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
+
 
 export type ChatRequest={
   accountId:string;familyMemberId:string|null;scope?:"member"|"family";
@@ -494,7 +497,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
+              applyFactFinding(answer,state,context.people);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             // A row that only says "as stated in the plan" is not yet an answer;
@@ -515,15 +518,15 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(whatIf&&looked.question)answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:"It is what turns the rule above into an actual amount."}];
               await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
               warnAboutInconsistentSchedules(answer,contracts);
-          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:true});
           answer.potentialPayoutTotals=settleOverlaps(answer);
               const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
               const count=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
               const unconfirmed=answer.claimItems.filter(item=>item.conditions.some(c=>c.startsWith("Not yet verified")||c.startsWith("Assumes the standard"))).length;
-              answer.summary=(lead?lead+" ":"")+(whatIf?"If that happened, this is what your cover would pay. ":"")+(totals
-                ?"Estimated claim amount"+(whatIf?"":" so far")+": "+totals+" across "+count+" benefit"+(count===1?"":"s")+", calculated from your Coverage Ledger and subject to the insurer's assessment."
-                :"These benefits respond to what "+(whatIf?"you described":"happened")+", but none can be put into a figure yet — each card says what is still needed.");
-              if(unconfirmed)answer.details.push(unconfirmed+" of these figure"+(unconfirmed===1?" is":"s are")+" an estimate: "+(answer.claimItems.some(i=>i.conditions.some(c=>c.startsWith("Assumes the standard")))?"the plan's own wording has not been read, so the standard rule for that kind of plan is assumed. Upload the policy wording or benefit summary and the actual clause takes over.":"the second read could not fully verify it against the page."));
+              void totals;void count;
+              answer.summary=(lead?lead+" ":"")+(whatIf?"If that happened, these benefits could be relevant. ":"")+
+                "This is a preliminary claim assessment: DearPolicy does not estimate what the insurer "+(whatIf?"would":"will")+" pay until claim evidence has been reviewed. Each card says what is still needed.";
+              if(unconfirmed)answer.details.push(unconfirmed+" of these benefit"+(unconfirmed===1?" rests":"s rest")+" on an assumption, not the plan's confirmed wording: "+(answer.claimItems.some(i=>i.conditions.some(c=>c.startsWith("Assumes the standard")))?"the plan's own wording has not been read, so the standard rule for that kind of plan is assumed. Upload the policy wording or benefit summary and the actual clause takes over.":"the second read could not fully verify it against the page."));
               const indicative=answer.claimItems.filter(item=>item.estimateBasis==="indicative"&&item.amountText);
               if(indicative.length)answer.details.push(indicative.length+" benefit"+(indicative.length===1?"":"s")+" below "+(indicative.length===1?"shows an indicative amount that is":"show indicative amounts that are")+" not included in the total: the rate was read from a table heading rather than the row.");
               if(looked.ruledOut.length)answer.details.push("Not applicable here: "+looked.ruledOut.slice(0,3).join(". ")+".");
@@ -537,7 +540,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                     facts:state.subjects[person.id]??{},eventSummary:(lead||request.question).slice(0,300),
                     items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
                   state.claimSessionId=recorded.id;answer.claimSessionId=recorded.id;
-                  answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the figures, the pages they came from, and what to attach.");
+                  answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.");
                   answer.nextSteps.push("Gather: "+recorded.attach.slice(2,6).join("; ")+".");
                 }catch{/* The answer stands without the record. */}
               }
@@ -557,7 +560,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
+              applyFactFinding(answer,state,context.people);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             }
@@ -586,11 +589,12 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           answer.mode="claim_assessment";
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
-          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:true});
           answer.potentialPayoutTotals=settleOverlaps(answer);
           const totals=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
+          void totals;
           answer.summary=answer.claimItems.length
-            ?"If that happened, these benefits in your policies would respond"+(totals?", and the ones that can already be calculated come to "+totals:"")+". Every figure is an estimate from the wording quoted on the page shown, and the insurer decides the final amount."
+            ?"If that happened, these benefits in your policies could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay before claim evidence is reviewed, and the insurer decides eligibility and any amount."
             :"None of the benefit rules DearPolicy has read respond to what you described. That is only as complete as the documents you have uploaded.";
           answer.confidence=claimConfidence(answer.claimItems);
           // The facts that would turn a rule into a figure, asked one at a time.
@@ -612,7 +616,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
+          applyFactFinding(answer,state,context.people);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
         // Carried into the reading path when the rules on file have nothing to
@@ -798,14 +802,14 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
             answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
             await check();
-            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
+            applyFactFinding(answer,state,context.people);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
             return {answer,retrieved:[]};
           }
           delete state.pending;
           answer.mode="claim_assessment";
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
-          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:true});
           answer.potentialPayoutTotals=settleOverlaps(answer);
           // Put the claim on record so the pack can be printed and the Claims
           // page shows it, and say what to do next — the last thing a person
@@ -817,7 +821,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                 facts:state.subjects[person.id]??{},eventSummary:(claimEventLead(context.people,state)||request.question).slice(0,300),
                 items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
               state.claimSessionId=recorded.id;answer.claimSessionId=recorded.id;
-              answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the figures, the pages they came from, and what to attach.");
+              answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.");
               answer.nextSteps.push("Gather: "+recorded.attach.slice(2,6).join("; ")+".");
             }catch{/* The answer stands without the record. */}
           }
@@ -828,9 +832,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           const indicative=answer.claimItems.filter(item=>item.estimateBasis==="indicative"&&item.amountText);
           if(indicative.length)answer.details.push(indicative.length+" benefit"+(indicative.length===1?"":"s")+" below "+(indicative.length===1?"shows an indicative amount that is":"show indicative amounts that are")+" not included in the total above: DearPolicy read the rate from a table heading rather than the row. Confirm "+(indicative.length===1?"it":"them")+" on the Benefits page and "+(indicative.length===1?"it counts":"they count")+" from then on.");
           const lead=claimEventLead(context.people,state);
-          answer.summary=(lead?lead+" ":"")+(answer.potentialPayoutTotals.length
-            ?"Estimated claim amount so far: "+totals+" across "+answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0)+" evidence-supported benefit"+(answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0)===1?"":"s")+". Each amount is calculated by DearPolicy from your schedule and the quoted clause, and remains subject to the insurer's assessment."
-            :matched?"I found "+matched+" benefit"+(matched===1?"":"s")+" that can respond to what happened, but each still needs a fact or a document before an amount can be calculated."
+          answer.summary=(lead?lead+" ":"")+(matched?"I found "+matched+" benefit"+(matched===1?"":"s")+" that can respond to what happened. This is a preliminary claim assessment: each still needs facts, documents and reviewed claim evidence before DearPolicy can give an indicative estimate."
             :"None of the benefit rules on file respond to what you described. That is based on the rules captured from your uploaded documents, so it is only as complete as those documents.");
           answer.confidence=verdict?claimConfidence(answer.claimItems):"partial_match";
           if(staleContracts.length)answer.nextSteps.push("Upload the latest premium receipt or renewal notice for "+[...new Set(staleContracts.map(c=>c.ownerName+" · "+c.name))].slice(0,4).join("; ")+" so the active status can be verified. Ownership is already confirmed and is unaffected.");
@@ -854,7 +856,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
+          applyFactFinding(answer,state,context.people);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
           }
         }
@@ -1038,7 +1040,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         const eventLead=claimEventLead(context.people,state);
         await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
         warnAboutInconsistentSchedules(answer,contracts);
-          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});
+          answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)});
           answer.potentialPayoutTotals=settleOverlaps(answer);
         const totalItems=answer.potentialPayoutTotals.reduce((sum,total)=>sum+total.itemCount,0);
         const totalText=answer.potentialPayoutTotals.map(total=>total.amountText).join(" and ");
@@ -1052,8 +1054,11 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // below are what a person can already guess.
         answer.payoutQualifiers=[...new Set([...(answer.payoutQualifiers??[]),...payoutQualifiers]
           .map(q=>q.length>180?q.slice(0,177).trimEnd()+"…":q))].slice(0,4);
-        answer.summary=(eventLead?eventLead+" ":"")+(answer.potentialPayoutTotals.length?"Potential payout identified so far: "+totalText+" across "+totalItems+" evidence-supported benefit"+(totalItems===1?"":"s")+". "+(answer.payoutQualifiers.length?"The final settled amount can differ because "+answer.payoutQualifiers.join("; ")+".":"Each figure remains conditional on the listed policy terms and claim evidence."):
-          answer.claimItems.length?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+", but the retrieved evidence did not support a payout calculation for them yet. Confirmed cover amounts are labelled separately from payouts.":
+        void totalText;void totalItems;
+        answer.summary=(eventLead?eventLead+" ":"")+(
+          answer.claimItems.length?(liveClaimContext(state.intent,answer,request.question)
+            ?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+". This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until the claim evidence has been reviewed. Any amount shown is a policy-stated coverage limit, not an estimate for this event."
+            :"These are the relevant parts of your policy documents, cited below. This is policy information, not a claim assessment."):
           observations.length?"The uploaded passages support the policy details below.":
           contracts.length?"I searched the uploaded personal policies but couldn’t verify a matching benefit from the retrieved sections. "+
             (negativeConclusionPermitted(answer.reviewCoverage)?"Every processed page was read, so the remaining gap is missing wording or evidence rather than an unsearched section.":"This is an incomplete review, so it doesn’t establish that the event is uninsured."):
@@ -1099,7 +1104,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   }
   answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
   await check();
-  await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer,jobId:options?.jobId});
+  applyFactFinding(answer,state,context.people);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
   return {answer,retrieved:[]};
 }
 

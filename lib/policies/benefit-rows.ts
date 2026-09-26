@@ -16,7 +16,9 @@ import type { CatalogFormulaKind } from "./benefit-catalog";
 export type ParsedBenefitValue={
   kind:Exclude<CatalogFormulaKind,"none">;
   value:number;
-  currency:string;
+  /** Only a currency written in the cell/heading itself; null when none is
+   * (never defaulted to SGD). */
+  currency:string|null;
   /** Set when a percentage was applied to a limit printed in the same cell, so
    * the reasoning can be shown back to the user. */
   basis?:string;
@@ -45,7 +47,12 @@ function amount(raw:string|undefined){
  * Only a heading-shaped cell counts, and it applies only to rows BELOW it, so a
  * sentence mentioning the sum insured never turns every stray percentage on the
  * page into a payout, and two tables on one page keep their own bases. */
-export type PercentageBasis={kind:"sum_insured"}|{kind:"limit";amount:number;currency:string};
+/** The currency code written in `text`, or null when none is. */
+function statedCode(text:string):string|null{const q=explicitCurrency(text);return q?normalizeCurrencyCode(q):null;}
+/** An amount with its stated currency; without one, the figure is labelled as
+ * having no stated currency rather than being given a guessed one. */
+function moneyLabel(currency:string|null,value:number){return currency?currency+" "+value.toLocaleString("en-SG"):value.toLocaleString("en-SG")+" (currency not stated)";}
+export type PercentageBasis={kind:"sum_insured"}|{kind:"limit";amount:number;currency:string|null};
 const OF_SUM_INSURED=/^\(?\s*(?:in\s+|as\s+a\s+)?(?:%|percent(?:age)?s?)\s*(?:of|based on)\s*(?:the\s+)?(?:sum\s+(?:insured|assured)|insured\s+amount|principal\s+sum|benefit\s+amount)\s*\)?[.:]?$/i;
 const OF_LIMIT=new RegExp(String.raw`^\(?\s*(?:in\s+|as\s+a\s+)?(?:%|percent(?:age)?s?)\s*(?:of|based on)\s*(?:the\s+)?`+MONEY+String.raw`\s*\)?[.:]?$`,"i");
 function headingBasis(cell:string):PercentageBasis|null{
@@ -54,7 +61,7 @@ function headingBasis(cell:string):PercentageBasis|null{
   if(OF_SUM_INSURED.test(text))return {kind:"sum_insured"};
   const limit=text.match(OF_LIMIT);
   const value=amount(limit?.[1]);
-  if(value!=null&&value>0)return {kind:"limit",amount:value,currency:normalizeCurrencyCode(explicitCurrency(text),"SGD")};
+  if(value!=null&&value>0)return {kind:"limit",amount:value,currency:statedCode(text)};
   return null;
 }
 /** Every basis heading on the page, with the line it appears on.
@@ -85,7 +92,7 @@ export function basisForRow(bases:{index:number;basis:PercentageBasis}[],rowInde
 export function parseBenefitValue(cell:string,options?:{percentageBasis?:PercentageBasis|null}):ParsedBenefitValue|null{
   const text=(cell??"").replace(/\s+/g," ").trim();
   if(!text||text.length>80)return null;
-  const currency=normalizeCurrencyCode(explicitCurrency(text),"SGD");
+  const currency=statedCode(text);
   const lower=text.toLowerCase();
   // Never treat a deduction or a range as a payout rule.
   if(/\b(?:less|minus|after deducting|co-?insurance|deductible|excess of|to\s+\$)\b/.test(lower))return null;
@@ -106,7 +113,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
     const percent=amount(ofLimit[1]),limit=amount(ofLimit[2]);
     if(percent!=null&&limit!=null&&percent<=100)
       return {kind:"fixed",value:Math.round(limit*(percent/100)*100)/100,currency,
-        basis:ofLimit[1]+"% of the "+currency+" "+limit.toLocaleString("en-SG")+" limit printed in the schedule"};
+        basis:ofLimit[1]+"% of the "+moneyLabel(currency,limit)+" limit printed in the schedule"};
   }
   // "100% of the Sum Insured" — needs the person's own schedule to become money.
   const ofSum=text.match(new RegExp(String.raw`^(${NUMBER})\s*%\s*of\s*(?:the\s+)?(?:relevant\s+|applicable\s+|full\s+)?(?:sum\s+(?:insured|assured)|coverage\s+amount|benefit\s+amount|insured\s+amount)`,"i"));
@@ -124,14 +131,14 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
         return {kind:"sum_insured",value:percent/100,currency,inferred:true,
           basis:bare![1]+"% of the sum insured, from the heading of the schedule this row sits in"};
       return {kind:"fixed",value:Math.round(heading.amount*(percent/100)*100)/100,currency:heading.currency,inferred:true,
-        basis:bare![1]+"% of the "+heading.currency+" "+heading.amount.toLocaleString("en-SG")+" limit stated in the heading of this schedule"};
+        basis:bare![1]+"% of the "+moneyLabel(heading.currency,heading.amount)+" limit stated in the heading of this schedule"};
     }
   }
   // "Up to S$500 per incident" — a reimbursement ceiling, never a payout.
   const cap=text.match(new RegExp(String.raw`^(?:up\s+to|max(?:imum)?(?:\s+of)?|not\s+exceed(?:ing)?|limited\s+to|subject\s+to\s+a?\s*(?:limit\s+of)?)\s*`+MONEY,"i"));
   if(cap){
     const limit=amount(cap[1]);
-    if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+currency+" "+limit.toLocaleString("en-SG")+" limit"};
+    if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+moneyLabel(currency,limit)+" limit"};
   }
   // "S$30 per day" / "$689/month"
   const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(day|night|week|month|year)`,"i"));
@@ -139,8 +146,8 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
     const rate=amount(periodic[1]);
     const unit=periodic[2].toLowerCase()==="night"?"day":periodic[2].toLowerCase() as ParsedBenefitValue["period"];
     if(rate!=null)return unit==="day"
-      ?{kind:"daily",value:rate,currency,period:"day",basis:currency+" "+rate.toLocaleString("en-SG")+" for each day"}
-      :{kind:"fixed",value:rate,currency,period:unit,basis:currency+" "+rate.toLocaleString("en-SG")+" each "+unit};
+      ?{kind:"daily",value:rate,currency,period:"day",basis:moneyLabel(currency,rate)+" for each day"}
+      :{kind:"fixed",value:rate,currency,period:unit,basis:moneyLabel(currency,rate)+" each "+unit};
   }
   // A bare figure in the limit column.
   const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+[a-z ]{3,20})?$`,"i"));

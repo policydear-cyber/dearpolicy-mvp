@@ -37,7 +37,7 @@ export function runSystemRegressions(){
   const coverage=(override:Partial<OwnedCoverage>={}):OwnedCoverage=>({
     id:"cover-a",policyId:"schedule",familyMemberId:person,category:"Other",amount:350000,currency:"SGD",productName:"Flexible Plan",
     sourcePage:1,evidenceText:"Verified cover",insurer:"Example Insurer",policyName:"Flexible Plan",policyNumber:"P-100",groupPolicyNumber:null,
-    documentRole:"personal_schedule",effectiveDate:"2022-01-01",renewalOrExpiryDate:null,...override});
+    documentRole:"personal_schedule",effectiveDate:"2022-01-01",renewalOrExpiryDate:null, currencyVerified: true,...override});
   const contract:PolicyContract={id:"contract",ownerId:person,ownerName:"Person A",name:"Flexible Plan",insurer:"Example Insurer",
     documents:[document()],references:[document({id:"wording",personal_coverage_confirmed:false,document_role:"policy_wording"})],
     coverages:[coverage()],confirmed:true,effectiveDate:"2022-01-01",ownershipBasis:"evidence"};
@@ -303,7 +303,7 @@ export function runSystemRegressions(){
     const valid=validateAnalysis({benefits:[b],observations:[],nextSteps:[]},[source(b.evidence[0].quote)],contract);
     const assessment=assessmentFromBenefit({benefit:valid.benefits[0],contract,sources:[source(b.evidence[0].quote)],facts:{medicalDefinitionConfirmed:fact(true)},now});
     assert.equal(assessment.checks[0].result,"document");assert.equal(assessment.item.status,"potentially_applicable");
-    assert.equal(assessment.item.amountText,"S$350,000");assert.equal(assessment.item.amountLabel,"Potential payout");
+    assert.equal(assessment.item.amountText,"S$350,000");assert.equal(assessment.item.amountLabel,"Calculated benefit (internal)");
   });
   test("A reported homicide requires documentary accidental-death classification",()=>{
     const r={factKey:"accidentalDeath",operator:"equals" as const,value:true,question:"Was this accidental?",why:"Accidental death wording",evidence:{sourceId:"source-a",quote:"Death due to Accident"}};
@@ -325,9 +325,9 @@ export function runSystemRegressions(){
   });
   test("Potential totals add independent lump sums but do not treat reimbursement as freely additive",()=>{
     const totals=aggregatePotentialPayouts([
-      {title:"Life",status:"potentially_applicable",amountText:"S$1,000,000",amountLabel:"Potential payout",calculatedAmount:1_000_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[]},
-      {title:"PA",status:"potentially_applicable",amountText:"S$600,000",amountLabel:"Potential payout",calculatedAmount:600_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[]},
-      {title:"Medical",status:"potentially_applicable",amountText:"S$2,000",amountLabel:"Potential reimbursement",calculatedAmount:2_000,currency:"SGD",calculationKind:"expense_cap",aggregation:"reimbursement",reason:"",conditions:[]},
+      {title:"Life",status:"potentially_applicable",amountText:"S$1,000,000",amountLabel:"Calculated benefit (internal)",calculatedAmount:1_000_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[]},
+      {title:"PA",status:"potentially_applicable",amountText:"S$600,000",amountLabel:"Calculated benefit (internal)",calculatedAmount:600_000,currency:"SGD",calculationKind:"sum_insured",aggregation:"additive",reason:"",conditions:[]},
+      {title:"Medical",status:"potentially_applicable",amountText:"S$2,000",amountLabel:"Calculated reimbursement (internal)",calculatedAmount:2_000,currency:"SGD",calculationKind:"expense_cap",aggregation:"reimbursement",reason:"",conditions:[]},
     ]);
     assert.deepEqual(totals,[{currency:"SGD",amount:1_600_000,amountText:"S$1,600,000",itemCount:2}]);
   });
@@ -830,7 +830,7 @@ export function runSystemRegressions(){
     const withSchedule=assessCatalogBenefit({benefit:share,coverage:coverage({amount:350000,currency:"SGD"}),ownerName:"Person A",facts:{}});
     assert.equal(withSchedule.item.amountText,"S$350,000");
     assert.equal(withSchedule.item.aggregation,"additive");
-    assert.equal(withSchedule.item.amountLabel,"Potential payout");
+    assert.equal(withSchedule.item.amountLabel,"Calculated benefit (internal)");
   });
   test("A two-column page is read down each column, not across both",()=>{
     // Left and right columns share baselines, which is exactly what made the
@@ -891,25 +891,28 @@ export function runSystemRegressions(){
     assert.deepEqual(lineFrom([at("a",10,700,5),at("b",90,700,5)]).cells,["a","b"],"A wide gap is a cell break");
   });
   test("A schedule cell states its own payout rule, parsed without a model",()=>{
-    const cases:[string,string,number][]=[
+    // Currency is only what the cell writes: a share of the sum insured is
+    // paid in the cover's own (separately verified) currency, and a bare "$"
+    // names no currency -- neither is defaulted to SGD.
+    const cases:[string,string,number,string|null][]=[
       // The exact MINDEF/MHA fixture: both halves are printed in the one cell,
       // so the figure is computable with no schedule and no model.
-      ["25% of S$5,000","fixed",1250],
-      ["50% of S$1,200.50","fixed",600.25],
-      ["100% of the Sum Insured","sum_insured",1],
-      ["150% of Sum Insured","sum_insured",1.5],
-      ["Up to S$500 per incident","expense_cap",500],
-      ["maximum of S$10,000","expense_cap",10000],
-      ["S$30 per day","daily",30],
-      ["$689/month","fixed",689],
-      ["S$5,000","fixed",5000],
+      ["25% of S$5,000","fixed",1250,"SGD"],
+      ["50% of S$1,200.50","fixed",600.25,"SGD"],
+      ["100% of the Sum Insured","sum_insured",1,null],
+      ["150% of Sum Insured","sum_insured",1.5,null],
+      ["Up to S$500 per incident","expense_cap",500,"SGD"],
+      ["maximum of S$10,000","expense_cap",10000,"SGD"],
+      ["S$30 per day","daily",30,"SGD"],
+      ["$689/month","fixed",689,null],
+      ["S$5,000","fixed",5000,"SGD"],
     ];
-    for(const [cell,kind,value] of cases){
+    for(const [cell,kind,value,currency] of cases){
       const parsed=parseBenefitValue(cell);
       assert.ok(parsed,"should parse: "+cell);
       assert.equal(parsed!.kind,kind,cell);
       assert.equal(parsed!.value,value,cell);
-      assert.equal(parsed!.currency,"SGD",cell);
+      assert.equal(parsed!.currency,currency,cell);
     }
     // The same cell must always give the same rule.
     assert.deepEqual(parseBenefitValue("25% of S$5,000"),parseBenefitValue("25% of S$5,000"));
@@ -1580,7 +1583,7 @@ export function runSystemRegressions(){
     // counted twice, once from the booklet and once from the certificate.
     const item=(title:string,amount:number,basis:"confirmed"|"estimated",cover:string,
       kind:"sum_insured"|"fixed"="sum_insured"):ClaimItem=>({
-      title,status:"likely_applicable",amountText:"S$"+amount.toLocaleString("en-SG"),amountLabel:"Potential payout",
+      title,status:"likely_applicable",amountText:"S$"+amount.toLocaleString("en-SG"),amountLabel:"Calculated benefit (internal)",
       estimateBasis:basis,calculatedAmount:amount,currency:"SGD",calculationKind:kind,aggregation:"additive",
       calculationId:title,coverKey:cover,payingEvent:"death",reason:"",conditions:[]});
     const items=[

@@ -43,14 +43,14 @@ async function main() {
   const h = await startReviewerHarness();
   const reviewer = fixedUuid("c6000000", 1), suspendedReviewer = fixedUuid("c6000000", 2), unassignedReviewer = fixedUuid("c6000000", 3);
 
-  async function world(f: BenefitCategoryFixture, n: number, pages = f.policy.pages): Promise<World> {
+  async function world(f: BenefitCategoryFixture, n: number, pages = f.policy.pages, cover: { coverageEvidenceText?: string | null; sourcePage?: number | null } = {}): Promise<World> {
     const owner = fixedUuid("b6000000", n);
     const household = await h.createHousehold(fixedUuid("a6000000", n), owner);
     const member = await h.createMember(household, fixedUuid("d6000000", n), "Tan Yi Chuen Desmond");
     const otherMember = await h.createMember(household, fixedUuid("d6000000", n + 1), "Casey Tan", "spouse");
     const claim = await h.createClaim(household, member, fixedUuid("e6000000", n), f.claimEventType);
     const otherClaim = await h.createClaim(household, member, fixedUuid("e6000000", n + 1), f.claimEventType);
-    const { policyId, coverageId } = await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f6000000", n), coverageId: fixedUuid("f7000000", n), ...f.policy, pages });
+    const { policyId, coverageId } = await h.createPolicy({ accountId: household, memberId: member, policyId: fixedUuid("f6000000", n), coverageId: fixedUuid("f7000000", n), ...f.policy, pages, ...cover });
     const other = await h.createPolicy({ accountId: household, memberId: otherMember, policyId: fixedUuid("f6000000", n + 1), coverageId: fixedUuid("f7000000", n + 1), ...f.policy, pages });
     const document = await h.uploadEvidence({ accountId: household, ownerUserId: owner, memberId: member, claimId: claim, ...f.evidence });
     return { household, owner, member, otherMember, claim, otherClaim, policyId, coverageId, otherPolicyId: other.policyId, otherCoverageId: other.coverageId, document };
@@ -194,6 +194,35 @@ async function main() {
       assert.equal(res.status, 200, await res.clone().text());
       assert.equal(f.otherCurrencyBehaviour, "blocks");
       await assertNoAmount(f, wc, "currency differs from the verified cover");
+    });
+
+    // Currency provenance (Phase 3): the stored policy_coverages.currency is
+    // defaulted to SGD at ingestion when a document states none, so it is
+    // never proof. Only a currency WRITTEN in the cover's own evidence -- the
+    // certificate line, or the cited certificate page -- verifies it.
+    await testAsync(`${f.category}: a stored currency the certificate never writes (no currency, or a bare "$") yields no amount; a written currency on the cited page restores it`, async () => {
+      const figure = f.policy.amount == null ? "as scheduled" : f.policy.amount.toLocaleString("en-US");
+      const certificatePage = (text: string) => [...f.policy.pages, { pageNumber: 50, text: `Certificate of insurance. Insured person: Tan Yi Chuen Desmond. ${text}` }];
+      const cases = [
+        { label: "no currency written anywhere", evidence: `${f.policy.productName} sum insured: ${figure}`, page: `Sum insured: ${figure}.`, amount: false },
+        { label: "bare dollar sign only", evidence: `${f.policy.productName} sum insured: $${figure}`, page: `Sum insured: $${figure}.`, amount: false },
+        { label: "certificate line has no currency, but the cited certificate page writes it (positive control)", evidence: `${f.policy.productName} sum insured: ${figure}`, page: `Currency of this cover: ${f.policy.currency}. Sum insured: ${figure}.`, amount: true },
+      ];
+      let k = 0;
+      for (const c of cases) {
+        const wc = await world(f, n + 70 + 2 * k++, certificatePage(c.page), { coverageEvidenceText: c.evidence, sourcePage: 50 });
+        const a = await assign(reviewer, wc);
+        const res = await hh.decide(f.route, reviewer, wc.document, body(f, a, wc));
+        assert.equal(res.status, 200, await res.clone().text());
+        if (c.amount) await assertAmount(f, wc, c.label);
+        else {
+          await assertNoAmount(f, wc, c.label);
+          const { item } = await itemOf(f, wc);
+          assert.ok(item, `${f.category} / ${c.label}: the benefit stays visible`);
+          assert.equal(item!.amountText, null, `${f.category} / ${c.label}: never shown as $0 or in a guessed currency`);
+          assert.ok(item!.conditions.some((x) => /policy schedule or certificate page/.test(x)), `${f.category} / ${c.label}: asks for the page that states the currency`);
+        }
+      }
     });
 
     await testAsync(`${f.category}: reviewer without assignment, suspended, expired or revoked -- and non-"matches" results -- yield nothing`, async () => {

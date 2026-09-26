@@ -44,7 +44,7 @@ DECLARE
     'household_exports', 'household_export_audit_log',
     'storage_cleanup_locks', 'storage_cleanup_audit_log',
     'model_executions', 'model_usage',
-    'scan_provider_events',
+    'scan_provider_events', 'processing_failure_diagnostics',
     'claim_reviewers', 'claim_review_assignments', 'claim_reviewer_audit_log'
   ];
 BEGIN

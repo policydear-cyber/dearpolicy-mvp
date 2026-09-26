@@ -73,7 +73,7 @@ function makeCoverage(overrides: Partial<OwnedCoverage> & { id: string; policyId
   return {
     familyMemberId: "fam-1", category: "Death", amount: null, currency: "SGD", productName: "Group Term Life",
     sourcePage: null, evidenceText: null, insurer: "Singlife", policyName: "Group Term Life", policyNumber: overrides.policyId.toUpperCase(),
-    groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: null, renewalOrExpiryDate: null,
+    groupPolicyNumber: "G007500", documentRole: "certificate", effectiveDate: null, renewalOrExpiryDate: null, currencyVerified: true,
     ...overrides,
   };
 }
@@ -153,8 +153,8 @@ function runPureTests() {
 
   test("a renewed policy version not in force at the event date is excluded, and the current version is not double counted", () => {
     const coverages = [
-      makeCoverage({ id: "cov-old", policyId: "P-OLD", insurer: "Singlife", policyNumber: "POL-RENEW", effectiveDate: "2022-01-01", renewalOrExpiryDate: "2023-12-31" }),
-      makeCoverage({ id: "cov-new", policyId: "P-NEW", insurer: "Singlife", policyNumber: "POL-RENEW", effectiveDate: "2024-01-01", renewalOrExpiryDate: "2024-12-31" }),
+      makeCoverage({ id: "cov-old", policyId: "P-OLD", insurer: "Singlife", policyNumber: "POL-RENEW", effectiveDate: "2022-01-01", renewalOrExpiryDate: "2023-12-31" , currencyVerified: true}),
+      makeCoverage({ id: "cov-new", policyId: "P-NEW", insurer: "Singlife", policyNumber: "POL-RENEW", effectiveDate: "2024-01-01", renewalOrExpiryDate: "2024-12-31" , currencyVerified: true}),
     ];
     const assessments = [
       makeAssessment({ id: "gtl-death", coverageId: "cov-old", calculatedAmount: 80000, currency: "SGD" }),
@@ -169,8 +169,8 @@ function runPureTests() {
 
   test("two genuinely overlapping 'current' versions of one policy are ambiguous, not guessed between", () => {
     const coverages = [
-      makeCoverage({ id: "cov-x", policyId: "P-X", insurer: "Singlife", policyNumber: "POL-CONFLICT", effectiveDate: "2023-01-01", renewalOrExpiryDate: "2025-01-01" }),
-      makeCoverage({ id: "cov-y", policyId: "P-Y", insurer: "Singlife", policyNumber: "POL-CONFLICT", effectiveDate: "2023-06-01", renewalOrExpiryDate: "2025-06-01" }),
+      makeCoverage({ id: "cov-x", policyId: "P-X", insurer: "Singlife", policyNumber: "POL-CONFLICT", effectiveDate: "2023-01-01", renewalOrExpiryDate: "2025-01-01" , currencyVerified: true}),
+      makeCoverage({ id: "cov-y", policyId: "P-Y", insurer: "Singlife", policyNumber: "POL-CONFLICT", effectiveDate: "2023-06-01", renewalOrExpiryDate: "2025-06-01" , currencyVerified: true}),
     ];
     const decisions = resolvePolicyVersions(coverages, "2024-06-01");
     const pxDecision = decisions.get("P-X");
@@ -457,7 +457,7 @@ function runPureTests() {
   // --- Point-in-time validity --------------------------------------------
 
   test("a policy version that does not cover the claim-event date is excluded, never counted toward the total", () => {
-    const coverages = [makeCoverage({ id: "cov-a", policyId: "P1", effectiveDate: "2025-01-01", renewalOrExpiryDate: "2026-01-01" })];
+    const coverages = [makeCoverage({ id: "cov-a", policyId: "P1", effectiveDate: "2025-01-01", renewalOrExpiryDate: "2026-01-01" , currencyVerified: true})];
     const assessments = [makeAssessment({ id: "gtl-death", coverageId: "cov-a", calculatedAmount: 100000, currency: "SGD" })];
     const result = compose({ coverages, assessments }); // event date (facts default) is 2024-06-01, before this cover starts
     assert.equal(result.totalsByCurrency.length, 0);

@@ -22,7 +22,7 @@ const coverage: OwnedCoverage = {
   groupPolicyNumber: null,
   documentRole: "certificate",
   effectiveDate: "2025-01-01",
-  renewalOrExpiryDate: "2035-01-01",
+  renewalOrExpiryDate: "2035-01-01", currencyVerified: true,
 };
 
 const facts: ClaimFacts = {
@@ -135,7 +135,7 @@ export function runMonetaryGateRegressions() {
     title: "Avery · Hospital cash",
     status: "likely_applicable",
     amountText: "S$300",
-    amountLabel: "Potential payout",
+    amountLabel: "Calculated benefit (internal)",
     estimateBasis: "confirmed",
     calculatedAmount: 300,
     currency: "SGD",

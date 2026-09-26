@@ -24,7 +24,18 @@ import { virusTotalFileScanAdapter } from "./adapters/virustotal";
  * equivalent to "clean". */
 export type FileScanStatus = "clean" | "infected" | "scan_unavailable";
 
-export type FileScanResult = { status: FileScanStatus; detail?: string };
+/** Why a scan did not complete, when that reason is TRANSIENT -- set only by
+ * a real adapter, only on "scan_unavailable". Its presence is what makes a
+ * document eligible for a bounded automatic retry (lib/scanning/retry.ts);
+ * its absence (no scanner configured, a misconfiguration) means the
+ * document stays on hold until a person acts. `retryAfterSeconds` is the
+ * provider's own retry metadata when it sent any -- never a guess. */
+export type ScanRetryHint = {
+  reason: "rate_limited" | "provider_timeout" | "provider_unavailable" | "analysis_pending";
+  retryAfterSeconds?: number | null;
+};
+
+export type FileScanResult = { status: FileScanStatus; detail?: string; retry?: ScanRetryHint };
 
 export interface FileScanAdapter {
   readonly name: string;

@@ -413,15 +413,23 @@ async function main(){
       const result=await send("Desmond was murdered in Thailand");
       assert.equal(result.response.status,200,JSON.stringify(result.data));
       const answer=result.data.answer as ChatAnswer;
-      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.match(answer.summary,/S\$1,000,000/);
-      assert.deepEqual(answer.potentialPayoutTotals,[{currency:"SGD",amount:1_000_000,amountText:"S$1,000,000",itemCount:1}]);
-      assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText==="S$1,000,000"),answer.claimItems.map(i=>i.title).join(" | "));
+      assert.match(answer.summary,/reported death/i);assert.match(answer.summary,/Thailand/i);assert.doesNotMatch(answer.summary,/S\$1,000,000/);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
+      assert.ok(answer.claimItems.some(item=>/Death/.test(item.title)&&item.amountText===null),answer.claimItems.map(i=>i.title).join(" | "));
       assert.ok(answer.claimItems.some(item=>/Accidental death|Personal Accident/i.test(item.title)&&item.amountText===null&&item.status==="needs_document"),answer.claimItems.map(i=>i.title).join(" | "));
       assert.ok(answer.scenarioClassifications?.some(item=>item.traits.includes("violent")&&item.traits.includes("external")));
       assert.equal(new Set(answer.details).size,answer.details.length);
       const saved=(await getConversation(account,answer.conversationId!))!.state,state=saved.subjects[people[0].id];
       assert.equal(state.death.value,true);assert.equal(state.causeOfDeath.value,"murdered");assert.equal(state.eventLocation.value,"Thailand");
       assert.equal(state.accidentalDeath,undefined);assert.ok(saved.scenarios?.[people[0].id]?.length);
+      // Deterministic fact-finding: what is still needed, never an amount,
+      // and no question about a fact the family already gave.
+      const plan=answer.factFinding?.find(p=>p.category==="accidental_death"&&p.subjectId===people[0].id);
+      assert.ok(plan,JSON.stringify(answer.factFinding));
+      assert.equal(plan!.readyForEvidenceGatedEstimate,false);
+      assert.ok(plan!.missingDocuments.includes("Death certificate"));
+      assert.ok(!plan!.nextQuestions.some(q=>q.factKey==="causeOfDeath"||q.factKey==="eventLocation"),"known facts are not asked again");
+      assert.doesNotMatch(JSON.stringify(answer.factFinding),/S\$|SGD|US\$/);
     });
     // Reading a travel rule into the ledger checks it twice before trusting
     // it: the quote and every number must be on the cited page (deterministic,
@@ -431,17 +439,16 @@ async function main(){
     // anything; they can look" (lib/ledger/extract.ts) -- so once both checks
     // pass, the figure is shown with confidence, not held back a third time
     // for a human to re-approve what two independent reads already verified.
-    await test("A travel rule confirmed by a second, independent read is shown with a figure",async()=>{
+    await test("A travel rule is found without a pre-review payout figure",async()=>{
       const result=await send("Desmond's flight was delayed for eight hours.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const flight=answer.claimItems.find(item=>item.title.includes("Flight delay"));
       assert.ok(flight,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(flight!.amountText,"S$300.00");
+      assert.equal(flight!.amountText,null,"No flight-delay estimate before claim evidence review");
       assert.equal(flight!.status,"likely_applicable");
-      assert.equal(flight!.estimateBasis,"confirmed");
+      assert.equal(flight!.preliminaryStatus,"policy_condition_unresolved");
       assert.match(flight!.reason,/verified against the page by a second read/i);
-      assert.equal(answer.potentialPayoutTotals?.length,1);
-      assert.equal(answer.potentialPayoutTotals?.[0].amount,300);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
       const result=await send("Desmond's flight was delayed for three hours.");
@@ -454,15 +461,15 @@ async function main(){
     // repair bill is priced against it. A reimbursement is still never
     // summed into a lump-sum household total, which is the separate
     // invariant this test also protects.
-    await test("A motor reimbursement confirmed by a second, independent read is priced, but never summed into a lump-sum total",async()=>{
+    await test("A motor reimbursement is found without a pre-review payout or total",async()=>{
       const result=await send("Desmond's car was damaged in a collision. The vehicle repair bill is SGD 4,000.");
       assert.equal(result.response.status,200,JSON.stringify(result.data));const answer=result.data.answer as ChatAnswer;
       const item=answer.claimItems.find(value=>value.title.includes("Vehicle damage"));
       assert.ok(item,JSON.stringify(answer.claimItems.map(i=>[i.title,i.amountText,i.status])));
-      assert.equal(item?.amountText,"S$4,000");
+      assert.equal(item?.amountText,null,"No reimbursement estimate before claim evidence review");
       assert.equal(item?.status,"likely_applicable");
-      assert.equal(item?.amountLabel,"Potential reimbursement");
-      assert.equal(item?.aggregation,"reimbursement");
+      assert.notEqual(item?.amountLabel,"Calculated reimbursement (internal)");
+      assert.equal(item?.aggregation,undefined);
       assert.equal(answer.potentialPayoutTotals?.length,0,"A reimbursement is never added to a lump-sum household total");
     });
     await test("The active API resolves Charmaine before loading personal policies",async()=>{
@@ -491,7 +498,7 @@ async function main(){
     await test("A completed stay updates memory and permits the independent daily calculation",async()=>{
       const result=await send("She was discharged after twelve nights.",people[1].id,ongoingAnswer.conversationId,ongoingAnswer.conversationRevision);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText==="S$60.00"&&/applicable/.test(item.status)));
+      const answer=result.data.answer as ChatAnswer;assert.ok(answer.claimItems.some(item=>item.title.includes("Daily hospital")&&item.amountText===null&&/applicable/.test(item.status)));
       const row=await getConversation(account,answer.conversationId!);assert.equal(row?.state.subjects[people[1].id].hospitalNights.value,12);
     });
     await test("Automatic context retains a named reported condition when model facts are empty",async()=>{
@@ -508,11 +515,35 @@ async function main(){
       assert.equal(result.data.answer.portfolioItems.length,90);assert.equal(result.data.answer.policyReview.length,90);
       assert.ok(maxModelUserCharacters<11000,"Maximum model input: "+maxModelUserCharacters);
     });
-    await test("Savings questions separate guaranteed and projected values",async()=>{
+    // A maturity question asks what the policy document states. It is policy
+    // information, not a claim assessment: the cited guaranteed and projected
+    // values are explained separately, while no claim card carries an amount
+    // and nothing is totalled.
+    await test("Savings questions are policy information: cited guaranteed and projected values stay separate",async()=>{
       const result=await send("What happens when my endowment plan matures?",people[1].id);
       assert.equal(result.response.status,200,JSON.stringify(result.data));
-      const text=result.data.answer.details.join(" ");assert.match(text,/guaranteed maturity value is SGD 100000/);
-      assert.match(text,/projected non-guaranteed maturity value is SGD 120000/);assert.equal(result.data.answer.questions.length,0);
+      const answer=result.data.answer as ChatAnswer;
+      const text=answer.details.join(" ");
+      assert.match(text,/The guaranteed maturity value is SGD 100000\./);
+      assert.match(text,/The projected non-guaranteed maturity value is SGD 120000\./);
+      assert.doesNotMatch(text,/(?<!non-)guaranteed maturity value is SGD 120000/,"A projected value is never presented as guaranteed");
+      assert.equal(answer.questions.length,0);
+      assert.equal(answer.mode,"answer");
+      assert.notEqual(answer.assessmentKind,"preliminary","A policy-information answer is not framed as a claim assessment");
+      assert.equal(answer.potentialPayoutTotals?.length??0,0);
+      assert.ok(answer.claimItems.every(item=>item.amountText===null&&item.calculatedAmount===undefined));
+      assert.ok(answer.citations.length>0,"Policy-stated values are explained from cited wording");
+    });
+    // Negative control for the same wording: once the question asks what can
+    // be claimed, the pre-review claim boundary applies and no figure is shown.
+    await test("A claim-money question about the same plan stays inside the pre-review boundary",async()=>{
+      const result=await send("My endowment plan matured. How much can I claim?",people[1].id);
+      assert.equal(result.response.status,200,JSON.stringify(result.data));
+      const answer=result.data.answer as ChatAnswer;
+      const prose=[answer.summary,...answer.details,...answer.nextSteps].join(" ");
+      assert.doesNotMatch(prose,/SGD 100000|SGD 120000|100,000|120,000/);
+      assert.equal(answer.potentialPayoutTotals?.length??0,0);
+      assert.ok(answer.claimItems.every(item=>item.amountText===null));
     });
     await test("Async analysis returns actual progress and a saved final answer",async()=>{
       const result=await send("What policies does my family have?",null,undefined,undefined,true);
@@ -826,11 +857,11 @@ async function main(){
       assert.equal(readingCalls-readsBefore,0,"Stored rules mean the documents are never re-read");
       assert.equal(explanationCalls-narrationsBefore,1,"It should still speak like an assistant, not print a table");
       assert.ok(Date.now()-started<4000,"A catalogued answer must be effectively instant");
-      assert.equal(answer.potentialPayoutTotals?.[0].amountText,"S$350,000");
+      assert.equal(answer.potentialPayoutTotals?.length??0,0);
       assert.equal(answer.claimItems.length,1,"Only benefits the event can trigger: "+JSON.stringify(answer.claimItems.map(i=>i.title)));
       assert.match(answer.claimItems[0].title,/Major Critical Illness/);
       assert.match(answer.claimItems[0].reason,/page 7/);
-      assert.match(answer.summary,/S\$350,000/);
+      assert.doesNotMatch(answer.summary,/S\$350,000/);
     });
     await test("A document whose conditions were never read has them read without being asked",async()=>{
       const fixture=await seedReviewFixture(2);
@@ -954,7 +985,7 @@ async function main(){
       // And the money actually answered with follows the correction.
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
       const answer=data.answer as ChatAnswer;
-      assert.equal(answer.claimItems[0].amountText,"S$175,000","The corrected rule is what the claim is calculated from");
+      assert.equal(answer.claimItems[0].amountText,null,"The corrected rule must not become a pre-review payout");
     });
     await test("A rule DearPolicy could not compute is refused in plain language",async()=>{
       const fixture=await seedReviewFixture(1);
@@ -1064,8 +1095,9 @@ async function main(){
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(bytes)).map(page=>page.text).join(" ").replace(/\s+/g," ");
       assert.match(printed,/Tan Yi Chuen Desmond/);
-      assert.match(printed,/S\$1,250/);
-      assert.match(printed,/page 14/,"The insurer can check the figure against the wording");
+      assert.doesNotMatch(printed,/S\$1,250/,"Preliminary claim pack must not print a proposed payout");
+      assert.match(printed,/page 14/,"The insurer can check the policy wording");
+      assert.doesNotMatch(printed,/the an amount/,"Redaction must leave readable prose");
       assert.match(printed,/Hospital discharge summary/,"The checklist follows the reported event");
       const pending=await getClaimPack(new NextRequest("http://localhost/api/claims/"+unassessed+"/pack"),{params:Promise.resolve({id:unassessed})});
       assert.equal(pending.status,409);
@@ -1200,7 +1232,7 @@ async function main(){
         [account,fixture.rows[0].id,"Review Fixture Critical Illness"]);
       const started=Date.now();
       const after=(await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id)).data.answer as ChatAnswer;
-      assert.match(after.summary,/S\$350,000/);
+      assert.doesNotMatch(after.summary,/S\$350,000/);
       assert.ok(Date.now()-started<4000,"Nothing is re-read, so a second question is immediate");
     });
     await test("A what-if question is answered from the stored benefits, with figures and a question back",async()=>{
@@ -1221,9 +1253,9 @@ async function main(){
       assert.match(titles,/Ambulance Cost/);
       // The rule itself is the answer when the amount depends on what happens.
       const ambulance=answer.claimItems.find(item=>/Ambulance/.test(item.title))!;
-      assert.match(ambulance.amountText??"",/S\$500/,"A reimbursement limit is still a figure the person can act on");
+      assert.equal(ambulance.amountText,null,"No pre-review reimbursement figure");
       const fracture=answer.claimItems.find(item=>/Fracture/.test(item.title))!;
-      assert.equal(fracture.amountText,"S$1,250");
+      assert.equal(fracture.amountText,null);
       // It asks the one thing that turns a rule into a number.
       assert.equal(answer.questions.length,1,"One question, not an interrogation");
       assert.match(answer.questions[0].text,/hospital|bill|ambulance/i);
@@ -1279,7 +1311,7 @@ async function main(){
         // Rerouting reading does not move the other jobs with it.
         const readsBefore=explanationCalls;
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null);
         assert.equal(explanationCalls-readsBefore,1,"Chat narration stays on the model its own setting names");
       }finally{
         delete process.env.READING_MODEL_PROVIDER;delete process.env.GROQ_API_KEY;
@@ -1340,8 +1372,8 @@ async function main(){
       const titles=three.claimItems.map(item=>item.title);
       assert.equal(titles.length,1,"One card per benefit per person, even when two documents state it: "+titles.join(" | "));
       assert.match(titles[0],/Daily Hospital Cash/);
-      assert.equal(three.claimItems[0].amountText,"S$120.00","4 nights × S$30, from the stored rule");
-      assert.equal(three.potentialPayoutTotals?.[0]?.amountText,"S$120.00");
+      assert.equal(three.claimItems[0].amountText,null,"Stored duration rule does not permit a pre-review payout");
+      assert.equal(three.potentialPayoutTotals?.length??0,0);
     });
     await test("When the cause is unknown, it is asked rather than assumed",async()=>{
       const fixture=await seedReviewFixture(1);
@@ -1355,7 +1387,7 @@ async function main(){
       const second=(await send("An accident",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
       const two=second.answer as ChatAnswer;
       assert.equal(two.mode,"claim_assessment");
-      assert.equal(two.claimItems[0]?.amountText,"S$250.00");
+      assert.equal(two.claimItems[0]?.amountText,null);
     });
     await test("A death benefit that sits in a sentence, not a table, is read into the ledger and answered",async()=>{
       // The only rule on file is an accident-hospital row. A death benefit sits
@@ -1370,7 +1402,7 @@ async function main(){
       const {data}=await send("Desmond was murdered in Thailand",people[0].id);
       const answer=data.answer as ChatAnswer;
       assert.equal(answer.questions.length,0,"A death is not answered with a question about hospital admission: "+JSON.stringify(answer.questions));
-      assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText==="S$350,000"),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
+      assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText===null),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
       assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
       assert.ok(answer.details.some(d=>/Coverage Ledger/.test(d)),"…because the sentence was read into the ledger: "+answer.details.join(" / "));
     });
@@ -1448,9 +1480,9 @@ async function main(){
       assert.equal(added.row.status,"confirmed");
       const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const afterItem=after.claimItems.find(i=>/Group Term Life/.test(i.title));
-      assert.equal(afterItem?.estimateBasis,"confirmed");assert.equal(afterItem?.status,"likely_applicable");
-      assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText==="S$70,000"),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
-      assert.equal(after.potentialPayoutTotals?.[0]?.amountText,"S$1,070,000");
+      assert.equal(afterItem?.estimateBasis,undefined);assert.equal(afterItem?.status,"likely_applicable");
+      assert.ok(after.claimItems.some(i=>/DPS/.test(i.title)&&i.amountText===null),"A row entered by the person is answered from: "+after.claimItems.map(i=>i.title).join(" | "));
+      assert.equal(after.potentialPayoutTotals?.length??0,0);
       const again=await (await getLedger(new NextRequest("http://localhost/api/ledger?familyMemberId="+people[0].id))).json();
       assert.equal((again.rows as LRow[]).some(r=>r.id===tpd!.id),false,"A rejected row is not shown");
       // Re-seeding after a new upload adds nothing twice and never touches a confirmed row.
@@ -1477,7 +1509,8 @@ async function main(){
       assert.equal(pack.status,200,"The pack can be printed straight from a chat answer");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
       const printed=(await extractPdfPages(new Uint8Array(await pack.arrayBuffer()))).map(page=>page.text).join(" ").replace(/\s+/g," ");
-      assert.match(printed,/S\$350,000/);
+      assert.doesNotMatch(printed,/S\$350,000/,"A preliminary pack does not state a payout");
+      assert.doesNotMatch(printed,/verified an amount/,"Redaction keeps the explanation readable");
       assert.match(printed,/page 7/);
       // It appears on the Claims page for this person.
       const listed=await (await db.query("SELECT status,decision_packet FROM claim_sessions WHERE id=$1",[answer.claimSessionId])).rows[0] as {status:string;decision_packet:{ready:boolean}};
@@ -1513,7 +1546,7 @@ async function main(){
       const titles=three.claimItems.map(i=>i.title).join(" | ");
       assert.equal(/Ambulance|Cancer|Day surgery/.test(titles),false,titles);
       assert.match(titles,/Daily Hospital Cash/);
-      assert.equal(three.claimItems[0].amountText,"S$90.00");
+      assert.equal(three.claimItems[0].amountText,null);
       assert.equal(/took a taxi/.test(three.summary),false,"The person's own words are never handed back as the answer");
     });
     await test("Every model call is on the ledger, priced, and the plan can be checked against it",async()=>{
@@ -1581,7 +1614,7 @@ async function main(){
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         const answer=data.answer as ChatAnswer;
-        assert.equal(answer.claimItems[0]?.amountText,"S$350,000","The claim is answered");
+        assert.equal(answer.claimItems[0]?.amountText,null,"The benefit is found without a pre-review payout");
         assert.ok(anthropicCalls>=2,"Interpretation, relevance and narration went to Claude");
         assert.ok(modelsUsed.has("claude-sonnet-5"),"Judgement on the mid tier: "+[...modelsUsed].join(","));
         assert.ok(cached,"The system prompt is marked for prompt caching");
@@ -1626,7 +1659,7 @@ async function main(){
       process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000");
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null);
         assert.ok(googleCalls>=2);
         assert.deepEqual([...hosts],["generativelanguage.googleapis.com"],"The Gemini API by default");
       }finally{
@@ -1688,7 +1721,7 @@ async function main(){
       process.env.MODEL_PRESET="gemini";process.env.GEMINI_API_KEY="AQ.test-key";
       try{
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
-        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,"S$350,000","The chat still produced the right answer despite the pricier tier being down");
+        assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null,"The benefit is found despite the pricier tier being down");
         assert.ok(flashCalls>=1,"The primary judgement tier was tried first");
         assert.ok(flashLiteCalls>=1,"...and every judgement call fell back to the tier that is not rate-limited");
         const usage=(await db.query("SELECT model,ok FROM model_usage WHERE account_id=$1 AND role='judgement' ORDER BY at",[account])).rows as {model:string;ok:boolean}[];
@@ -1732,7 +1765,7 @@ async function main(){
         delete process.env.RAG_EVIDENCE_WINDOW_CHARACTERS;globalThis.fetch=inner;
       }
     });
-    await test("A percentage-of-Sum-Insured clause the model only quoted as prose is still promoted into a computable claim",async()=>{
+    await test("A percentage-of-Sum-Insured clause quoted as prose is promoted into a preliminary benefit",async()=>{
       const fixture=await seedReviewFixture(1);
       const fractureText="For accidental fracture of a limb, compensation is provided for a broken forearm at 20% of the Sum Insured.";
       await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)",[account,fixture.referenceId,fractureText]);
@@ -1760,8 +1793,8 @@ async function main(){
         const answer=data.answer as ChatAnswer;
         const item=answer.claimItems.find(c=>/broken forearm/i.test(c.title));
         assert.ok(item,"The quoted percentage clause must be promoted into a claim item, not left as prose the household has to work out itself: "+JSON.stringify(answer.claimItems));
-        assert.equal(item!.calculatedAmount,70000,"20% of the verified S$350,000 Sum Insured");
-        assert.equal(item!.amountText,"S$70,000");
+        assert.equal(item!.calculatedAmount,undefined,"Pre-review chat must not expose a computed payout");
+        assert.equal(item!.amountText,null);
       }finally{
         globalThis.fetch=inner;
       }
@@ -1786,7 +1819,7 @@ async function main(){
       // S$70,000 percentage-of-whole-sum reading can never leak through.
       assert.equal(answer.claimItems[0].amountText,null);
       assert.equal(answer.claimItems[0].status,"needs_document");
-      assert.equal(answer.claimItems[0].estimateBasis,"indicative","…and it is still marked as read from a heading");
+      assert.equal(answer.claimItems[0].estimateBasis,undefined,"Pre-review cards do not expose an estimate basis");
       assert.ok(answer.claimItems[0].conditions.some(c=>/heading above the row/.test(c)),"The condition names the actual cause: a heading-read rate, not the row itself");
       assert.equal(/S\$70,000/.test(JSON.stringify(answer)),false,"S$70,000 for a forearm never appears anywhere");
     });

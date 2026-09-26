@@ -5,6 +5,7 @@ import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { evaluateAggregateEvidenceAuthority, type EvidenceAuthorityReasonCode } from "./evidence-authority";
+import { statedCurrency } from "./currency-evidence";
 
 export type MonetaryBlockReason =
   | "STATUS_NOT_ELIGIBLE"
@@ -75,6 +76,22 @@ export function evaluateMonetaryEligibility(args: {
       status: "blocked",
       reasonCode: "UNRESOLVED_COVERAGE_MAPPING",
       message: "The benefit is not explicitly mapped to this family member's verified cover.",
+    };
+  }
+
+  // Cross-product currency choke point (lib/claims/currency-evidence.ts). A
+  // figure's currency must come from policy evidence: the cover's own
+  // verified currency, or -- for a benefit whose amount the wording quotes --
+  // the currency written in that quoted clause. A stored or defaulted currency
+  // is never enough, and a figure is never relabelled into another currency.
+  const coverageCurrency = coverage.currencyVerified === true ? (coverage.currency ?? "").trim().toUpperCase() : null;
+  const currencyFromWording = item.currencyEvidence?.benefitCurrency === item.currency
+    || item.evidenceTerms.some((term) => statedCurrency(term) === item.currency);
+  if (coverageCurrency ? item.currency !== coverageCurrency : !currencyFromWording) {
+    return {
+      status: "blocked",
+      reasonCode: "INVALID_CURRENCY",
+      message: "The calculation's currency is not verified from the policy evidence.",
     };
   }
 

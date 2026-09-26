@@ -107,22 +107,30 @@ export async function startReviewerHarness() {
    * coverage row. */
   async function createPolicy(args: {
     accountId: string; memberId: string; policyId: string; coverageId: string; insurer: string; productName: string;
-    groupPolicyNumber?: string | null; category: string; amount: number | null; currency: string; pages: { pageNumber: number; text: string }[];
+    groupPolicyNumber?: string | null; policyNumber?: string | null; category: string; amount: number | null; currency: string; pages: { pageNumber: number; text: string }[];
     effectiveDate?: string;
     /** Defaults model a complete personal certificate: the coverage row
      * states its currency on page 1 of a known document version. */
     coverageCurrency?: string | null; sourcePage?: number | null; fileHash?: string | null;
+    /** The certificate line DearPolicy read for this cover. Defaults to one
+     * that writes the cover's currency and amount, as a real schedule does;
+     * pass null (or a line without a currency) to model a certificate that
+     * states no currency. A stored currency alone never verifies it. */
+    coverageEvidenceText?: string | null;
   }) {
     await pool.query(
-      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash,quarantine_status)
-       VALUES($1,$2,$3,$4,$5,$6,'certificate',true,'ready',$7,'k',90,$8,$9,'scan_clean')`,
+      `INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,group_policy_number,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,document_authority,effective_date,file_hash,quarantine_status,policy_number)
+       VALUES($1,$2,$3,$4,$5,$6,'certificate',true,'ready',$7,'k',90,$8,$9,'scan_clean',$10)`,
       [args.policyId, args.accountId, args.memberId, args.insurer, args.productName, args.groupPolicyNumber ?? null, `${args.productName}.pdf`, args.effectiveDate ?? "2020-01-01",
-        args.fileHash === undefined ? `sha256:policy-${args.policyId}` : args.fileHash]);
+        args.fileHash === undefined ? `sha256:policy-${args.policyId}` : args.fileHash, args.policyNumber ?? null]);
     for (const p of args.pages) await pool.query(`INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)`, [args.accountId, args.policyId, p.pageNumber, p.text]);
     await pool.query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source) VALUES($1,$2,$3,'upload')`, [args.policyId, args.memberId, args.accountId]);
-    await pool.query(`INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name,source_page)
-       VALUES($1,$2,$3,$4,$5,$6,$7,true,true,$8,$9)`, [args.coverageId, args.accountId, args.policyId, args.memberId, args.category, args.amount,
-        args.coverageCurrency === undefined ? args.currency : args.coverageCurrency, args.productName, args.sourcePage === undefined ? 1 : args.sourcePage]);
+    const coverageCurrency = args.coverageCurrency === undefined ? args.currency : args.coverageCurrency;
+    const evidenceText = args.coverageEvidenceText !== undefined ? args.coverageEvidenceText
+      : coverageCurrency ? `${args.productName} sum insured: ${coverageCurrency} ${args.amount == null ? "as scheduled" : args.amount.toLocaleString("en-US")}` : null;
+    await pool.query(`INSERT INTO policy_coverages(id,account_id,policy_id,family_member_id,category,amount,currency,confirmed,evidence_verified,product_name,source_page,evidence_text)
+       VALUES($1,$2,$3,$4,$5,$6,$7,true,true,$8,$9,$10)`, [args.coverageId, args.accountId, args.policyId, args.memberId, args.category, args.amount,
+        coverageCurrency, args.productName, args.sourcePage === undefined ? 1 : args.sourcePage, evidenceText]);
     return { policyId: args.policyId, coverageId: args.coverageId };
   }
 

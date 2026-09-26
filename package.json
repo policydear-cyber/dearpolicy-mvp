@@ -39,6 +39,7 @@
     "claims:disability-test": "node --import tsx scripts/claim-disability-regressions.ts",
     "claims:travel-test": "node --import tsx scripts/claim-travel-regressions.ts",
     "eval:claim-quality": "node --import tsx scripts/claim-quality-eval.ts",
+    "eval:claim-answer-pipeline": "node --import tsx scripts/claim-answer-pipeline-eval.ts",
     "security:test": "node --import tsx scripts/security-regressions.ts",
     "security:tls-test": "node --import tsx scripts/tls-config-regressions.ts",
     "security:launch-guard-test": "node --import tsx scripts/launch-guard-regressions.ts",
@@ -94,7 +95,17 @@
     "jobs:dead-letter": "node --import tsx scripts/dead-letter.ts",
     "reviewer:admin": "node --import tsx scripts/claim-reviewer-admin.ts",
     "e2e:full-household-test": "node --import tsx scripts/full-household-e2e-regressions.ts",
-    "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs"
+    "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs",
+    "security:scan-retry-test": "node --import tsx scripts/scan-retry-regressions.ts",
+    "security:processing-failure-storage-test": "node --import tsx scripts/processing-failure-storage-regressions.ts",
+    "security:processing-failure-migration-procedure-test": "node --import tsx scripts/processing-failure-migration-procedure-regressions.ts",
+    "security:live-chat-monetary-boundary-test": "node --import tsx scripts/live-chat-monetary-boundary-regressions.ts",
+    "security:deterministic-model-guard-test": "node --import tsx scripts/deterministic-model-guard-regressions.ts",
+    "claims:indicative-estimate-test": "node --import tsx scripts/indicative-estimate-regressions.ts",
+    "claims:fact-finding-test": "node --import tsx scripts/fact-finding-regressions.ts",
+    "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
+    "e2e:browser": "playwright test -c e2e/playwright.config.ts",
+    "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -109,6 +120,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.15",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
     "@types/react": "^19.2.0",

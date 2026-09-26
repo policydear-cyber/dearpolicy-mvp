@@ -36,7 +36,7 @@ export async function runClaimWorkflowRegressions() {
     if (/FROM claim_sessions WHERE id/.test(sql)) { assert.equal(params[1], account); const row = sessions.get(String(params[0])); return { rows: row?.family_member_id === params[2] ? [row] : [] }; }
     if (/FROM policy_coverages pc/.test(sql)) {
       assert.equal(params[0], account); assert.equal(params[1], expectedMember, "Only the named person's policies may be loaded");
-      const base = { policy_id: "certificate", family_member_id: expectedMember, currency: "SGD", source_page: 1, evidence_text: "personal certificate", insurer: "Singapore Life Ltd", policy_name: "MINDEF & MHA Group Insurance", policy_number: "personal", group_policy_number: "G007500", document_role: "certificate", effective_date: "2022-10-06", renewal_or_expiry_date: null };
+      const base = { policy_id: "certificate", family_member_id: expectedMember, currency: "SGD", source_page: 1, evidence_text: "personal certificate (amounts in SGD)", insurer: "Singapore Life Ltd", policy_name: "MINDEF & MHA Group Insurance", policy_number: "personal", group_policy_number: "G007500", document_role: "certificate", effective_date: "2022-10-06", renewal_or_expiry_date: null };
       return { rows: [{ ...base, id: "gtl", category: "Death", amount: "1000000", coverage_product_name: "Group Term Life" }, { ...base, id: "gpa", category: "Personal Accident", amount: "600000", coverage_product_name: "Group Personal Accident" }] };
     }
     if (/FROM premium_records pr/.test(sql)) { assert.equal(params[0], account); assert.equal(params[1], expectedMember); return { rows: [{ latest: null }] }; }

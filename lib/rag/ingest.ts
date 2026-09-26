@@ -1,3 +1,4 @@
+import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
 import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { readPolicyFile } from "@/lib/storage";
@@ -455,11 +456,14 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     });
     return { pages: pages.length, chunks: chunks.length, extraction, detectedPeople: detected, needsReview };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown processing error";
+    // policies.processing_error is household-readable (RLS SELECT): store the
+    // fixed message only; the raw error goes to the service-only diagnostics
+    // table (lib/diagnostics/processing-failures.ts).
+    await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PROCESSING_FAILED", error });
     await query(
       `UPDATE policies SET processing_status='failed',processing_stage='failed',processing_message='Analysis stopped',processing_error=$1,
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,
-      [message, args.policyId, args.accountId],
+      [POLICY_PROCESSING_FAILED_MESSAGE, args.policyId, args.accountId],
     ).catch(() => undefined);
     void recordErrorEvent({
       name: "rag.policy_ingest.failed",

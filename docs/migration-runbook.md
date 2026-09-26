@@ -369,3 +369,143 @@ While telemetry is intentionally disabled:
 - **no operational alert can fire**: scan failures, stuck quarantine, dead-letter jobs, failed exports or deletions, rejected monetary calculations, reviewer-assignment expiry, model/provenance staleness and authorization failures all go unobserved;
 - label every internal test session as running without operational telemetry, and check job, quarantine and dead-letter state manually (`npm run jobs:dead-letter -- list`, and the section 5 queries) at least daily;
 - never use this setting with real users. Before any wider rollout, wire a real adapter, set `TELEMETRY_PRODUCTION_ADAPTER_CONFIGURED=true` and remove `TELEMETRY_INTENTIONALLY_DISABLED`.
+
+## 13. Internal-testing operations (current state)
+
+This is the exact procedure for **controlled internal testing** of the prototype. It is not a production operating procedure, and DearPolicy is not production-ready.
+
+### 13.1 Current state (2026-09-26)
+- **No operational telemetry.** `TELEMETRY_INTENTIONALLY_DISABLED=true`: no alert can fire for scan failures, stuck quarantine, dead letters, failed exports or deletions, rejected calculations or authorization failures (§12). Every check below is manual. Label every test session **"running without operational telemetry"**.
+- **Malware scanning:** VirusTotal, through `MALWARE_SCANNER_PROVIDER` and `VIRUSTOTAL_API_KEY` (Production only, Sensitive). No synthetic file has yet been observed going through it in production.
+- **Background jobs:** processed only by `GET /api/internal/jobs/run` (`docs/production-job-topology.md`). It needs `CRON_SECRET` (Production, Sensitive; **not set** as of 2026-09-26; production refuses to start without it once the runner is merged). The project is on **Vercel Hobby**, so `vercel.json` can only schedule a **once-daily** backstop (`0 3 * * *`). Until Vercel Pro or an approved external scheduler is in place, **every test upload must be followed by a manual run** (13.3).
+
+### 13.2 Synthetic data rules
+- Only synthetic data. Never a real policy, medical or identity document, and never upload any real document to VirusTotal.
+- Name everything with the prefix `SYNTHETIC-DPTEST-<yyyymmdd>-<initials>-`: household name, family members (for example `SYNTHETIC-DPTEST-20260926-DC-Parent`), uploaded file names, claim descriptions. Synthetic test accounts use an email alias you control containing `+dptest`.
+- Synthetic PDFs contain only the prefix, a fictitious insurer name and made-up benefit wording. No personal, medical or real policy data.
+- Never open, edit, reprocess or delete the six pre-existing policy records. Every query below aggregates counts only and never reads document contents.
+
+### 13.3 Running the job runner by hand (Hobby only)
+Preferred: as the project owner, run `vercel crons run /api/internal/jobs/run` (Vercel CLI, logged in and linked to `dearpolicy-mvp`), or use the equivalent control on the project's Cron Jobs settings page. Vercel triggers the deployed cron itself and sends the `CRON_SECRET` header, so nobody handles the secret.
+
+Fallback, only for an operator who already holds `CRON_SECRET` (a Sensitive variable cannot be read back from Vercel):
+```bash
+read -rs CRON_SECRET   # paste; not echoed, not saved in shell history
+curl -sS -H "Authorization: Bearer $CRON_SECRET" https://dearpolicy-mvp.vercel.app/api/internal/jobs/run
+unset CRON_SECRET
+```
+Deployment Protection may block direct calls to `*.vercel.app` URLs; if so, use `vercel crons run` instead. Never paste the secret into chat, tickets or a third-party scheduler without the owner's explicit approval.
+
+**Expected result:** HTTP 200 with a counts-only body, for example `{"ok":true,"claimed":2,"byType":{"policy_processing":{"succeeded":2,"failed":0}},"recoveredLeases":0,"deadLetteredLeases":0,"stoppedBy":"empty"}`. `401` means the header is wrong. `503` means `CRON_SECRET` is not configured. `500` means the batch failed; check the Vercel function log (it logs the error class only). Repeat until `stoppedBy` is `"empty"`.
+
+### 13.4 Checking that the trigger ran and the queue drained
+1. **Invocation:** Vercel dashboard, then Settings, Cron Jobs (last run), or Logs filtered to `/api/internal/jobs/run`. Confirm a 200 at the expected time: 03:00 UTC daily, or right after a manual run.
+2. **Queue drain** (read-only, as the `DATABASE_URL` role or in the SQL editor):
+```sql
+-- Anything queued or retrying for more than 15 minutes after a run means the runner is not working.
+SELECT job_type, status, count(*), min(created_at) AS oldest
+  FROM background_jobs WHERE status IN ('queued','failed_retryable','processing') GROUP BY 1,2 ORDER BY oldest;
+```
+Pass condition: after a manual run returns `stoppedBy: "empty"`, no `queued` rows older than the run, and no `processing` rows.
+
+### 13.5 Leases and dead letters
+```sql
+-- Expired leases (a run killed mid-job). The next run returns them to failed_retryable or dead_letter.
+SELECT job_type, count(*) FROM background_jobs WHERE status='processing' AND lease_expires_at < now() GROUP BY 1;
+-- Dead letters.
+SELECT job_type, count(*), max(updated_at) FROM background_jobs WHERE status='dead_letter' GROUP BY 1;
+```
+Inspect with `npm run jobs:dead-letter -- list`. Retry one job only after reading its error category: `npm run jobs:dead-letter -- retry --job=<id>`.
+
+### 13.6 Stuck quarantine
+```sql
+SELECT quarantine_status, count(*), min(updated_at) FROM policies
+  WHERE quarantine_status IN ('uploaded','quarantined','scan_pending') GROUP BY 1;
+SELECT status, scan_status, count(*) FROM claim_evidence_documents
+  WHERE status IN ('uploaded','quarantined') GROUP BY 1,2;
+```
+Nothing re-scans these automatically. A synthetic document stuck at `scan_pending` is re-scanned by reprocessing it from the app and then running the job runner (13.3). It must never reach processing without a clean verdict.
+
+### 13.7 VirusTotal quota and timeouts
+- Check the VirusTotal account's API usage page before and after each session. The free tier allows about 4 requests a minute and 500 a day.
+- Upload at most 3 synthetic files per minute.
+- A quota error, a timeout or an exhausted 60 s poll budget leaves the file on hold and shows "On hold: malware scan did not complete" (once PR #22 is merged). It is never released. Count these in 13.6.
+
+### 13.8 Failed exports and deletions
+```sql
+SELECT status, count(*) FROM household_exports WHERE status IN ('pending','running','failed') GROUP BY 1;
+SELECT resource_type, lifecycle_state, count(*) FROM deletion_requests WHERE completed_at IS NULL GROUP BY 1,2;
+-- Reviewer assignments past expiry that were never revoked.
+SELECT count(*) FROM claim_review_assignments WHERE expires_at < now() AND revoked_at IS NULL;
+```
+Review each failed export or unfinished deletion by hand before the next session. Do not retry a deletion by editing rows.
+
+### 13.9 Weekly
+- `npm run ai:model-execution-staleness-check`: enqueues an audit, which then needs a runner pass (13.3).
+- `npm run storage:audit-orphans` (read-only). Run `npm run storage:cleanup` only after reviewing its dry run.
+
+### 13.10 Synthetic cleanup after every session
+1. Delete each synthetic household from the app (Settings, then Delete household), then run the job runner (13.3) so deletion jobs execute.
+2. Confirm no rows remain, using counts only:
+```sql
+SELECT count(*) FROM accounts WHERE name LIKE 'SYNTHETIC-DPTEST-%';
+SELECT count(*) FROM family_members WHERE display_name LIKE 'SYNTHETIC-DPTEST-%';
+SELECT count(*) FROM policies WHERE original_filename LIKE 'SYNTHETIC-DPTEST-%';
+```
+3. Run `npm run storage:audit-orphans` and confirm no orphaned objects.
+4. Revoke any synthetic reviewer assignment (Operators only, through the authorised reviewer tooling).
+
+### 13.11 Stop conditions
+**Internal testing must stop if the worker does not run reliably, quarantine can be bypassed, synthetic cleanup fails, or any unsupported positive claim amount appears.**
+
+Also stop if any of these happen:
+- a document reaches processing without a clean scan;
+- a blocked benefit is shown as `$0`, or amounts in different currencies are combined;
+- data from one household is visible to another;
+- dead letters or stuck-quarantine counts keep growing between sessions;
+- a real (non-synthetic) document is uploaded by mistake. Delete it immediately, and do not reprocess it.
+
+### 13.12 Rollback
+- **Code:** in the Vercel dashboard, go to Deployments, pick the previous production deployment, then Promote. Environment variables are not rolled back.
+- **Pause background processing:** disable the job in Settings, then Cron Jobs, and stop manual runs. Jobs then stay queued (fail closed).
+- **Do not remove `CRON_SECRET` to pause.** Once the runner is merged, production refuses to start without it.
+- **Database:** no migration in this branch. Never roll back by editing rows.
+
+## 14. `processing-failure-diagnostics.sql` (PR #28): application procedure
+
+**Not applied to any live database.** Applying it needs the owner's explicit authorization. It is a data migration as well as DDL: its backfill **rewrites existing rows** of `policies`, `policy_document_audit_log`, `claim_evidence_documents` and `claim_evidence_audit_log` that hold raw failure text. That can include the existing live policy records, so the owner must approve that change specifically; the counts from P3 below show how many rows it would touch, without reading their contents.
+
+### 14.1 What it does
+- Creates the service-only `processing_failure_diagnostics` table (and its `bigserial` sequence and index).
+- Copies raw failure detail into it, then replaces every household-readable copy with fixed text (`policies.processing_error`, `policies.scan_result_detail`, `claim_evidence_documents.processing_error`, the `processing_failed` reasons in `claim_evidence_audit_log`, the `scan_attempt_failed` reasons in `policy_document_audit_log`).
+- Idempotent: every step touches only rows that still hold something other than the fixed text.
+
+### 14.2 Order and coupling
+- **Requires** 1–17 of §3 (it reads the audit logs and evidence tables) and PR #22's code (#28 is stacked on #22). Merge order: **#22 → #28 → #30**.
+- **Must be applied in the same transaction as the updated `infrastructure-rls.sql` from the same commit.** Supabase's default privileges grant `anon`/`authenticated` on every new table in `public`, so between `CREATE TABLE` and the `REVOKE` in `infrastructure-rls.sql` the raw detail would be browser-readable. The CI rehearsal proves both the window (negative control) and that the single transaction closes it.
+- Code vs schema: `recordProcessingFailure()` never throws, so a build deployed **before** the migration loses diagnostics but still stores only fixed text. A migration applied **before** the deploy leaves the old build writing raw text into household-readable columns until the new build is live. Therefore: apply → deploy → **re-run the same transaction once** to scrub anything written in between (a no-op if nothing was).
+
+### 14.3 Steps (owner, staging first)
+1. §1 prerequisites and §2 backup/recovery point. Record the PITR timestamp.
+2. Pre-checks, read-only, counts and catalog facts only:
+   `psql -v ON_ERROR_STOP=1 -f sql/checks/processing-failure-diagnostics-pre.sql`
+   Expected: P1 all `t`; P2 `f`; P3 five non-negative counts (record them; these rows will be rewritten); P4 shows the default ACL (for the ticket).
+3. Apply both files atomically, as the table owner:
+   `psql -v ON_ERROR_STOP=1 --single-transaction -f sql/processing-failure-diagnostics.sql -f sql/infrastructure-rls.sql`
+4. Post-checks: `psql -v ON_ERROR_STOP=1 -f sql/checks/processing-failure-diagnostics-post.sql`
+   Expected: Q1 and Q2 every column `t`; Q3 every count `0`; Q4 `diagnostics_rows` ≥ the sum of P3.
+5. Browser-role probe (rolled back): `BEGIN; SET LOCAL ROLE authenticated; SELECT count(*) FROM processing_failure_diagnostics; ROLLBACK;` must fail with `permission denied`.
+6. Deploy the build, then repeat step 3 once and step 4 (Q3 must still be 0).
+7. Staging only: trigger one synthetic failure (a synthetic PDF that fails processing) and confirm the household sees only the fixed message while one new diagnostics row exists.
+
+### 14.4 Abort conditions
+- P1 has any `f`, or P2 is `t` with a different shape: stop.
+- Any error during step 3: the single transaction rolls back completely; nothing changed. Stop and investigate.
+- Q2 has any `f`: run `sql/infrastructure-rls.sql` again immediately (it only removes browser privileges), then re-check.
+
+### 14.5 Rollback
+- The table: `DROP TABLE processing_failure_diagnostics;` is safe only while nothing depends on its contents (it is diagnostics only). Keep it unless it causes harm.
+- The backfill is **not reversible from the database alone**: the fixed text replaced the raw text in household-readable columns, and the only copy of the raw text is in the diagnostics table (restorable by joining on `resource_id`) or in the §2 backup. Do not copy raw text back into household-readable columns; that re-opens the leak this migration closes. Full rollback = PITR to the §2 recovery point.
+
+### 14.6 Rehearsed in CI
+`npm run security:processing-failure-migration-procedure-test` (`scripts/processing-failure-migration-procedure-regressions.ts`) runs these exact pre/post SQL files on a PGlite database with every earlier migration applied, Supabase-style default grants and synthetic raw-text rows, applies both files in one transaction, re-applies it (no-op), and shows that applying the migration alone leaves the table readable by `authenticated` (negative control). PGlite is not Supabase; the live run is still required and is not done.

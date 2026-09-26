@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
+import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
+import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail } from "@/lib/policies/quarantine/ui";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -19,6 +21,7 @@ type PolicyRow = {
 export async function GET(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
+    scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
     const url = new URL(request.url);
     const familyMemberId = url.searchParams.get("familyMemberId");
     if (familyMemberId && !isUuid(familyMemberId)) return NextResponse.json({ policies: [] });
@@ -45,7 +48,17 @@ export async function GET(request: NextRequest) {
       );
       return result.rows;
     });
-    return NextResponse.json({ policies });
+    // scan_result_detail is operator-facing (it can hold a scanner's analysis
+    // id and engine counts); only a fixed, category-level string is returned.
+    // processing_error holds the raw pipeline error for operators; the UI only
+    // needs to know that analysis stopped, so a fixed string is returned.
+    return NextResponse.json({
+      policies: policies.map((p) => ({
+        ...p,
+        scan_result_detail: userFacingScanResultDetail(p),
+        processing_error: p.processing_error ? POLICY_PROCESSING_STOPPED_MESSAGE : null,
+      })),
+    });
   } catch (error) {
     return routeErrorResponse(error);
   }
