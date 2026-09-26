@@ -23,6 +23,7 @@ import { processPolicy, type ProcessPolicyArgs } from "@/lib/rag/ingest";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { heartbeatJob } from "@/lib/jobs/queue";
 import {
+import { activePredicate } from "@/lib/lifecycle/scopes";
   isScanRetryPayload, MAX_SCAN_RETRY_ATTEMPTS, SCAN_RETRY_EXHAUSTED_ERROR, SCAN_RETRY_EXHAUSTED_MESSAGE, countScanRetries,
 } from "./retry";
 
@@ -39,7 +40,7 @@ async function policyArgs(accountId: string, policyId: string, jobHeartbeat?: ()
   );
   const payload = job.rows[0]?.payload ?? null;
   const row = await query<{ family_member_id: string | null; storage_key: string }>(
-    `SELECT family_member_id::text, storage_key FROM policies WHERE id=$1 AND account_id=$2`, [policyId, accountId],
+    `SELECT family_member_id::text, storage_key FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [policyId, accountId],
   );
   const familyMemberId = typeof payload?.familyMemberId === "string" ? payload.familyMemberId : row.rows[0]?.family_member_id;
   const storageKey = typeof payload?.storageKey === "string" ? payload.storageKey : row.rows[0]?.storage_key;
