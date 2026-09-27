@@ -710,11 +710,14 @@ function checkMalwareScanningConfiguration() {
     return;
   }
   if (result.ok) {
-    // Only reachable via MALWARE_SCANNING_INTENTIONALLY_DISABLED -- an
-    // operator's explicit, acknowledged choice, not a code gap (a real
-    // adapter IS registered; this environment has simply chosen not to
-    // select one). Genuinely external configuration: the code is
-    // complete, the operator's own env var says so.
+    // Only reachable via MALWARE_SCANNING_INTENTIONALLY_DISABLED -- the
+    // prototype document-safety mode: uploads proceed to reading/extraction
+    // WITHOUT a malware scan and are recorded as not_scanned_prototype,
+    // never as clean. An operator's explicit, acknowledged choice, not a
+    // code gap (a real adapter IS registered; this environment has simply
+    // chosen not to select one). Deliberately never "ready": launch
+    // readiness stays blocked by this external configuration until a real
+    // scanner is selected, even though startup is allowed.
     report(
       "malware_scanning_configuration",
       "blocked_by_external_configuration",

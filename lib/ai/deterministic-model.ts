@@ -142,6 +142,38 @@ export function syntheticExtractionFrom(text: string): unknown | null {
   try { return JSON.parse(Buffer.from(encoded, "base64").toString("utf8")); } catch { return null; }
 }
 
+/** Deterministic transcript for the hosted document-reading (OCR) path, so
+ * synthetic browser journeys can upload IMAGES (which always need OCR) and
+ * exercise the full normalize -> OCR -> store -> extract -> cite pipeline
+ * without a real provider. Returns a fixed synthetic policy-wording
+ * transcript parameterized by the run id -- it deliberately does NOT read
+ * the page pixels (no model does here); what it proves in CI is the
+ * plumbing, with the real transcription quality owned by the production
+ * reading model. Enabled under exactly the same triple guard as everything
+ * else in this file. */
+export function deterministicHostedDocumentText(args: { system: string; user: string; pdfBase64: string }): {
+  text: string; truncated: boolean; usage: { input: number; output: number }; resolved: { resolvedModel: string; providerRequestId: string | null; finishReason: string | null; region: string | null };
+} {
+  const runId = (process.env.E2E_RUN_ID ?? "").replace(/[^A-Za-z0-9]/g, "").slice(-12);
+  const pageNumbers = (args.user.match(/in this order: ([0-9, ]+)/)?.[1] ?? "1")
+    .split(",").map((n) => parseInt(n.trim(), 10)).filter((n) => Number.isInteger(n) && n > 0);
+  const product = `SYNTHETIC-DPTEST-${runId} Scanned Care`;
+  const pageText = (pageNumber: number) => [
+    `${product} Policy Wording`,
+    "Terms and Conditions",
+    "SYNTHETIC TEST DOCUMENT - NOT A REAL INSURANCE POLICY",
+    `Deterministic OCR transcript of scanned page ${pageNumber}.`,
+    "Section 1 - Critical Illness Benefit: We will pay 100% of the Sum Insured upon diagnosis of a covered critical illness.",
+    "Section 2 - Waiting period: A waiting period of 90 days applies to the Critical Illness Benefit from the cover start date.",
+  ].join("\n");
+  const content = JSON.stringify({ pages: (pageNumbers.length ? pageNumbers : [1]).map((n) => ({ pageNumber: n, text: pageText(n) })) });
+  return {
+    text: content, truncated: false,
+    usage: { input: Math.ceil(args.pdfBase64.length / 2000), output: Math.ceil(content.length / 4) },
+    resolved: { resolvedModel: DETERMINISTIC_MODEL_ID, providerRequestId: `det-ocr-${pageNumbers.join("-") || "1"}`, finishReason: "stop", region: null },
+  };
+}
+
 /** Provider-shaped reply for one structured completion. */
 export function deterministicHostedReply(args: { system: string; user: string }): HostedReply {
   let payload: Record<string, unknown> = {};
@@ -152,6 +184,15 @@ export function deterministicHostedReply(args: { system: string; user: string })
   else if (/^You extract structured facts from/.test(args.system)) {
     value = syntheticExtractionFrom(args.user);
     if (value == null) throw new DeterministicModelUnavailableError("extraction of a document without a synthetic extraction");
+  } else if (args.system.startsWith("You are DearPolicy's conservative insurance-document extraction engine")) {
+    // Policy-document structured extraction: the synthetic test document
+    // carries its own extraction on its first page (the same
+    // DPTEST-EXTRACTION marker mechanism claim evidence uses), so the
+    // browser journey can upload a personalised certificate and exercise
+    // classification, verification and family linking through the REAL
+    // pipeline. A document without the marker yields nothing.
+    value = syntheticExtractionFrom(args.user);
+    if (value == null) throw new DeterministicModelUnavailableError("policy extraction of a document without a synthetic extraction");
   } else if (typeof payload.summary === "string" && "benefitCount" in payload || typeof payload.whatTheyTold === "string") {
     value = { summary: String(payload.summary ?? "").slice(0, 900), details: [] };
   } else throw new DeterministicModelUnavailableError("this prompt");

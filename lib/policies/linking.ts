@@ -76,7 +76,10 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
       const verified=Boolean(coverage.sourcePage && coverage.evidenceText && coverage.evidenceVerified);
       await query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,notes,source_page,authority,confirmed,evidence_text,evidence_verified)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'personal_document',$10,$11,$12)`,[
-        args.accountId,args.sourcePolicyId,args.familyMemberId,category,coverage.amount,normalizeCurrencyCode(coverage.currency,"SGD"),coverage.productName,
+        args.accountId,args.sourcePolicyId,args.familyMemberId,category,coverage.amount,
+        // Missing information stays missing: a coverage whose document does
+        // not state a currency is stored WITHOUT one, never defaulted to SGD.
+        coverage.currency?normalizeCurrencyCode(coverage.currency):null,coverage.productName,
         [coverage.productName,coverage.notes].filter(Boolean).join(" · ")||null,coverage.sourcePage,verified,coverage.evidenceText,verified,
       ]);
     }
@@ -88,7 +91,7 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
     await query(`INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_document_id,source_page,notes)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,[
       args.accountId,targetPolicyId,args.familyMemberId,payment.insurer??args.extraction.insurer,payment.productName??args.extraction.productName,payment.policyNumber??args.extraction.policyNumber,
-      payment.amount,normalizeCurrencyCode(payment.currency,"SGD"),payment.frequency,payment.paymentDate||null,payment.periodStart||null,payment.periodEnd||null,args.sourcePolicyId,payment.sourcePage,payment.notes,
+      payment.amount,payment.currency?normalizeCurrencyCode(payment.currency):null,payment.frequency,payment.paymentDate||null,payment.periodStart||null,payment.periodEnd||null,args.sourcePolicyId,payment.sourcePage,payment.notes,
     ]);
   }
 }

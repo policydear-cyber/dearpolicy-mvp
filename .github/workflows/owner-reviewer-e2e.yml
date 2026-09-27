@@ -1,0 +1,77 @@
+name: Owner/reviewer browser journey (synthetic data, real sessions)
+
+# Manual only: this documents the exact stack of the owner/reviewer journey
+# (e2e/playwright.auth.config.ts) and can be run on demand. It never runs on
+# push or pull request. Real Chromium, real Next.js WITHOUT the development
+# identity, real PostgreSQL, the real job worker, the real VirusTotal adapter
+# against a LOCAL fake, and the TEST-ONLY Supabase Auth/Admin stand-in
+# (e2e/support/fake-auth.mjs), which refuses to start in production and which
+# a production server refuses to start with (lib/launch/guards.ts).
+# No production URL, database, secret or real document is used.
+on:
+  workflow_dispatch:
+
+jobs:
+  owner-reviewer-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dearpolicy
+          POSTGRES_PASSWORD: dearpolicy
+          POSTGRES_DB: dearpolicy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      DATABASE_SSL: "off"
+      E2E_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.e2e-storage
+      MALWARE_SCANNER_PROVIDER: virustotal
+      VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
+      VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      VIRUSTOTAL_POLL_BUDGET_MS: "3000"
+      VIRUSTOTAL_POLL_INTERVAL_MS: "500"
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
+      DEARPOLICY_TEST_AUTH_ADAPTER: fake-gotrue
+      SUPABASE_URL: http://127.0.0.1:4020
+      SUPABASE_ANON_KEY: synthetic-e2e-anon-key
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:4020
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-e2e-anon-key
+      NEXT_TELEMETRY_DISABLED: "1"
+      E2E_AUTH_BASE_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Apply the repository schema to the local CI database
+        run: node --import tsx e2e/support/apply-schema.ts
+      - name: Start the fake VirusTotal API, the test-only Auth stand-in, the job worker and the app (no development identity)
+        run: |
+          mkdir -p "$LOCAL_STORAGE_DIR" logs
+          nohup node e2e/support/fake-services.mjs > logs/fake.log 2>&1 &
+          nohup node e2e/support/fake-auth.mjs > logs/fake-auth.log 2>&1 &
+          DEARPOLICY_WORKER_POLL_INTERVAL_MS=500 nohup npm run jobs:worker > logs/worker.log 2>&1 &
+          nohup npx next dev -p 3100 > logs/app.log 2>&1 &
+          for url in http://127.0.0.1:4010/__health http://127.0.0.1:4020/__health http://localhost:3100/api/health; do
+            for i in $(seq 1 120); do curl -sf -o /dev/null "$url" && break; sleep 2; done
+            curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
+          done
+          for p in /login /signup / /family /policies /household /claims /chat /reviewer /api/family /api/policies /api/household /api/household/members /api/household/invitations /api/household/export /api/claims /api/chat/history /api/reviewer/assignments; do
+            curl -s -o /dev/null --max-time 300 "http://localhost:3100$p" || true
+          done
+      - name: Run the owner/reviewer journey (desktop, phone, keyboard-only)
+        timeout-minutes: 45
+        run: npx playwright test -c e2e/playwright.auth.config.ts
+      - name: Service logs on failure (synthetic data only)
+        if: failure()
+        run: for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done

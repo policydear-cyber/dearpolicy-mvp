@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { readPolicyFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
+import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
@@ -129,18 +130,43 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     const file = await readPolicyFile(args.storageKey);
     await progress(args, "reading_pdf", 7, "Reading pages and extracting text…", "extracting");
 
-    let lastReportedPage = 0;
+    // The ORIGINAL uploaded bytes are what is stored; every supported
+    // non-PDF format is normalized from them here, at processing time
+    // (images become a one-page-per-frame PDF for the ordinary scanned-page
+    // OCR path; .docx text is split into stored pages) -- see
+    // lib/documents/formats.ts.
     const fileBytes = new Uint8Array(file);
-    let pages = await extractPdfPages(fileBytes, args.pdfPassword, async (completed, total) => {
-      // Avoid a database write for every page in very large PDFs.
-      if (completed === total || completed - lastReportedPage >= Math.max(1, Math.ceil(total / 12))) {
-        lastReportedPage = completed;
-        const pct = 7 + (completed / Math.max(total, 1)) * 18;
-        await progress(args, "reading_pdf", pct, `Reading PDF page ${completed} of ${total}…`, "extracting");
+    const sniffed = sniffFileFormat(fileBytes);
+    if (!sniffed.ok) {
+      throw new Error(`This stored file is not in a supported format. ${ACCEPTED_FORMATS_MESSAGE}`);
+    }
+    let pages;
+    // The bytes the OCR step reads pages from: the original PDF, the PDF
+    // built from the uploaded image, or null for a .docx (pure text; there
+    // is nothing to OCR).
+    let ocrSourceBytes: Uint8Array | null = null;
+    if (sniffed.format === "docx") {
+      await progress(args, "reading_pdf", 12, "Reading the Word document's text…", "extracting");
+      pages = await docxToPages(fileBytes);
+    } else {
+      let pdfBytes = fileBytes;
+      if (sniffed.format !== "pdf") {
+        await progress(args, "reading_pdf", 10, "Preparing the image for reading…", "extracting");
+        pdfBytes = new Uint8Array(await imageToPdf(fileBytes, sniffed.format));
       }
-    });
+      ocrSourceBytes = pdfBytes;
+      let lastReportedPage = 0;
+      pages = await extractPdfPages(pdfBytes, args.pdfPassword, async (completed, total) => {
+        // Avoid a database write for every page in very large PDFs.
+        if (completed === total || completed - lastReportedPage >= Math.max(1, Math.ceil(total / 12))) {
+          lastReportedPage = completed;
+          const pct = 7 + (completed / Math.max(total, 1)) * 18;
+          await progress(args, "reading_pdf", pct, `Reading page ${completed} of ${total}…`, "extracting");
+        }
+      });
+    }
 
-    const ocrPageNumbers = pagesNeedingOcr(pages);
+    const ocrPageNumbers = ocrSourceBytes ? pagesNeedingOcr(pages) : [];
     if (ocrPageNumbers.length) {
       await progress(
         args,
@@ -151,7 +177,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       );
       pages = await completePdfPagesWithOcr({
         accountId: args.accountId,
-        bytes: fileBytes,
+        bytes: ocrSourceBytes as Uint8Array,
         password: args.pdfPassword,
         pages,
         pageNumbers: ocrPageNumbers,
@@ -159,7 +185,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     }
 
     if (pages.reduce((sum, p) => sum + p.text.length, 0) < 100) {
-      throw new Error("DearPolicy could not obtain enough readable text from this PDF, even after checking its text layer and available OCR.");
+      throw new Error("DearPolicy could not obtain enough readable text from this document, even after checking its text layer and available OCR.");
     }
 
     const ocrCount = pages.filter((page) => page.extractionMethod === "ocr").length;
@@ -248,19 +274,19 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       if (!extraction.personalCoverageConfirmed && !["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "")) continue;
       const dedupeKey = premiumRecordDedupeKey([
         "payment", paymentIndex, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
-        payment.policyNumber ?? extraction.policyNumber, payment.amount, normalizeCurrencyCode(payment.currency, "SGD"), payment.frequency,
+        payment.policyNumber ?? extraction.policyNumber, payment.amount, payment.currency ? normalizeCurrencyCode(payment.currency) : null, payment.frequency,
         payment.paymentDate || null, payment.periodStart || null, payment.periodEnd || null, payment.sourcePage,
       ]);
       await query(
         `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_document_id,source_page,notes,dedupe_key)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-         ON CONFLICT (source_document_id,dedupe_key) DO UPDATE SET
+         ON CONFLICT (source_document_id,dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE SET
            family_member_id=EXCLUDED.family_member_id, insurer=EXCLUDED.insurer, product_name=EXCLUDED.product_name,
            policy_number=EXCLUDED.policy_number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, frequency=EXCLUDED.frequency,
            payment_date=EXCLUDED.payment_date, period_start=EXCLUDED.period_start, period_end=EXCLUDED.period_end,
            source_page=EXCLUDED.source_page, notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
-          payment.policyNumber ?? extraction.policyNumber, payment.amount, normalizeCurrencyCode(payment.currency,"SGD"), payment.frequency, payment.paymentDate || null,
+          payment.policyNumber ?? extraction.policyNumber, payment.amount, payment.currency ? normalizeCurrencyCode(payment.currency) : null, payment.frequency, payment.paymentDate || null,
           payment.periodStart || null, payment.periodEnd || null, args.policyId, payment.sourcePage,
           [payment.notes, matchedIds.length > 1 ? "Shared/aggregate payment across linked insured people" : null].filter(Boolean).join(" · ") || null,
           dedupeKey],
@@ -270,17 +296,17 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const target = matchedIds.length === 1 ? matchedIds[0] : null;
       const dedupeKey = premiumRecordDedupeKey([
         "current_premium", target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
-        normalizeCurrencyCode(extraction.premium.currency, "SGD"), extraction.premium.frequency,
+        extraction.premium.currency ? normalizeCurrencyCode(extraction.premium.currency) : null, extraction.premium.frequency,
       ]);
       await query(
         `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,source_document_id,notes,dedupe_key)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         ON CONFLICT (source_document_id,dedupe_key) DO UPDATE SET
+         ON CONFLICT (source_document_id,dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE SET
            family_member_id=EXCLUDED.family_member_id, insurer=EXCLUDED.insurer, product_name=EXCLUDED.product_name,
            policy_number=EXCLUDED.policy_number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, frequency=EXCLUDED.frequency,
            notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
-          normalizeCurrencyCode(extraction.premium.currency,"SGD"), extraction.premium.frequency, args.policyId,
+          extraction.premium.currency ? normalizeCurrencyCode(extraction.premium.currency) : null, extraction.premium.frequency, args.policyId,
           target ? "Extracted current premium from personalised policy document" : "Shared/aggregate premium across linked insured people",
           dedupeKey],
       );

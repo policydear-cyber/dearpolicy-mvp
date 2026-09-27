@@ -56,6 +56,22 @@ export async function requireActiveClaimReviewer(): Promise<ActiveClaimReviewer>
   return { userId: user.id, reviewerIdentity: reviewerIdentity(user.id), displayLabel: rows[0].display_label };
 }
 
+/** True for a DearPolicy staff reviewer account that belongs to no
+ * household. Signing in must not create a household for such an account:
+ * a reviewer only ever sees the claims assigned to them, through
+ * /reviewer, and never holds household membership of their own. Anyone who
+ * already belongs to a household keeps the ordinary household sign-in. */
+export async function isReviewerOnlyAccount(userId: string): Promise<boolean> {
+  if (!isUuid(userId)) return false;
+  await ensureClaimReviewerSchema();
+  const { rows } = await query<{ reviewer_only: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM claim_reviewers WHERE user_id=$1 AND status='active')
+        AND NOT EXISTS (SELECT 1 FROM household_members WHERE user_id=$1) AS reviewer_only`,
+    [userId],
+  );
+  return Boolean(rows[0]?.reviewer_only);
+}
+
 export type AssignedClaimReview = ActiveClaimReviewer & {
   assignmentId: string;
   accountId: string;

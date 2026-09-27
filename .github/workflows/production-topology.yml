@@ -39,6 +39,11 @@ jobs:
       VIRUSTOTAL_POLL_BUDGET_MS: "3000"
       VIRUSTOTAL_POLL_INTERVAL_MS: "300"
       TOPOLOGY_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      # Declares this a LOCAL production-mode proof: the loopback fake scanner
+      # and Auth URLs are allowed only because DATABASE_URL is also local and
+      # this is not Vercel-hosted (lib/launch/guards.ts
+      # checkTestAdaptersNotInProduction). Never relaxes the test Auth adapter.
+      DEARPOLICY_LOCAL_PRODUCTION_PROOF: synthetic-topology
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +78,27 @@ jobs:
           echo "health status without CRON_SECRET: $code"
           grep -q "CRON_SECRET is missing" missing-secret.log || { echo "expected the CRON_SECRET startup refusal"; tail -40 missing-secret.log; exit 1; }
           [ "$code" != "200" ] || { echo "server must not serve without CRON_SECRET"; exit 1; }
+      - name: Production start is refused with a test-only adapter enabled
+        env:
+          NODE_ENV: production
+          SUPABASE_URL: http://127.0.0.1:4010/synthetic-supabase
+          SUPABASE_SERVICE_ROLE_KEY: synthetic-topology-service-role
+          SUPABASE_ANON_KEY: synthetic-topology-anon
+          TELEMETRY_PSEUDONYM_SECRET: synthetic-topology-pseudonym-secret-0000000000
+          TELEMETRY_INTENTIONALLY_DISABLED: "true"
+        run: |
+          set +e
+          for variant in auth-adapter hosted-loopback; do
+            if [ "$variant" = auth-adapter ]; then extra="DEARPOLICY_TEST_AUTH_ADAPTER=fake-gotrue"; else extra="DEARPOLICY_LOCAL_PRODUCTION_PROOF= SUPABASE_URL=http://127.0.0.1:4020"; fi
+            env $extra timeout 60 npx next start -p 3102 > "adapter-$variant.log" 2>&1 &
+            pid=$!
+            for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:3102/api/health && break; sleep 1; done
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3102/api/health)
+            kill $pid 2>/dev/null; wait $pid 2>/dev/null
+            echo "health status with test adapter ($variant): $code"
+            grep -q "A test-only adapter is configured" "adapter-$variant.log" || { echo "expected the test-adapter startup refusal ($variant)"; tail -40 "adapter-$variant.log"; exit 1; }
+            [ "$code" != "200" ] || { echo "server must not serve with a test adapter ($variant)"; exit 1; }
+          done
       - name: Start the fake VirusTotal API and the production server
         env:
           NODE_ENV: production
@@ -93,4 +119,4 @@ jobs:
         run: node --import tsx scripts/topology/prove.ts
       - name: Service logs on failure (synthetic data only)
         if: failure()
-        run: for f in logs/*.log missing-secret.log; do [ -f "$f" ] && { echo "===== $f"; tail -n 200 "$f"; }; done
+        run: for f in logs/*.log missing-secret.log adapter-*.log; do [ -f "$f" ] && { echo "===== $f"; tail -n 200 "$f"; }; done

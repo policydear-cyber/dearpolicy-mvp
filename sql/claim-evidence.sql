@@ -157,6 +157,14 @@ CREATE INDEX IF NOT EXISTS idx_claim_evidence_audit_occurred
 -- reviewer's decision rested on. Rows written before these columns existed
 -- keep NULL, which every monetary gate treats as missing provenance and
 -- therefore fails closed.
+-- Prototype document-safety mode (MALWARE_SCANNING_INTENTIONALLY_DISABLED):
+-- scan_status gains not_scanned_prototype -- an honest "deliberately not
+-- scanned" record, never clean. Idempotent constraint swap, picked up by
+-- ensureClaimEvidenceSchema() exactly like the ADD COLUMN lines below.
+ALTER TABLE claim_evidence_documents DROP CONSTRAINT IF EXISTS claim_evidence_documents_scan_status_check;
+ALTER TABLE claim_evidence_documents ADD CONSTRAINT claim_evidence_documents_scan_status_check
+  CHECK (scan_status IN ('pending_scan','clean','infected','scan_unavailable','not_scanned_prototype'));
+
 ALTER TABLE claim_evidence_extractions ADD COLUMN IF NOT EXISTS model_execution jsonb;
 ALTER TABLE claim_cause_definition_matches ADD COLUMN IF NOT EXISTS evidence_provenance jsonb;
 

@@ -5,6 +5,7 @@
  * GET /analyses/{id}. Verdicts are decided by synthetic text markers only:
  *   SYNTHETIC-DPTEST-MALICIOUS-VERDICT-MARKER    -> completed, malicious=3
  *   SYNTHETIC-DPTEST-SCAN-NEVER-COMPLETES-MARKER -> stays "queued" forever
+ *   SYNTHETIC-DPTEST-SCAN-PROVIDER-ERROR-MARKER  -> the submission fails (HTTP 500)
  *   anything else                                -> completed, clean
  * Requires the synthetic API key; records every call so the browser suite
  * can prove the adapter was actually exercised (GET /__stats).
@@ -14,7 +15,7 @@ import http from "node:http";
 const PORT = Number(process.env.FAKE_SERVICES_PORT ?? 4010);
 const KEY = process.env.FAKE_VIRUSTOTAL_KEY ?? "synthetic-e2e-virustotal-key";
 const analyses = new Map();
-const stats = { submissions: 0, analysisPolls: 0, rejectedAuth: 0, verdicts: { clean: 0, malicious: 0, pending: 0 } };
+const stats = { submissions: 0, analysisPolls: 0, rejectedAuth: 0, providerErrors: 0, verdicts: { clean: 0, malicious: 0, pending: 0 } };
 let seq = 0;
 
 function send(res, status, body) {
@@ -34,6 +35,10 @@ const server = http.createServer((req, res) => {
       if (req.method === "POST" && url.pathname === "/vt/files") {
         stats.submissions++;
         const body = Buffer.concat(chunks).toString("latin1");
+        if (body.includes("SYNTHETIC-DPTEST-SCAN-PROVIDER-ERROR-MARKER")) {
+          stats.providerErrors++;
+          return send(res, 500, { error: { code: "InternalError", message: "synthetic provider failure" } });
+        }
         const verdict = body.includes("SYNTHETIC-DPTEST-MALICIOUS-VERDICT-MARKER") ? "malicious"
           : body.includes("SYNTHETIC-DPTEST-SCAN-NEVER-COMPLETES-MARKER") ? "pending" : "clean";
         const id = `syn-${verdict}-${++seq}`;

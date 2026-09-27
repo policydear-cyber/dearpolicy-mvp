@@ -76,7 +76,7 @@ jobs:
             curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
           done
           # Warm up next dev's on-demand compilation so the first test is not a compile timeout.
-          for p in / /chat /family /policies /household /api/family /api/policies /api/household; do
+          for p in / /chat /family /policies /household /claims /reviewer /api/family /api/policies /api/household /api/household/members /api/household/invitations /api/household/export /api/claims /api/chat/history; do
             curl -s -o /dev/null --max-time 180 "http://localhost:3000$p" || true
             curl -s -o /dev/null --max-time 180 "http://localhost:3001$p" || true
           done

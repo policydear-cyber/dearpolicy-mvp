@@ -7,9 +7,10 @@ import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { savePolicyFile } from "@/lib/storage";
 import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
-import { looksLikePdf } from "@/lib/claims/evidence/validation";
+import { probeImageDecodes, validateDocumentUpload } from "@/lib/documents/formats";
 import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
 import { isUuid, pool } from "@/lib/db/client";
+import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 
 export const runtime = "nodejs";
@@ -44,21 +45,21 @@ export async function POST(request: NextRequest) {
     const supersedesPolicyIdRaw = String(form.get("supersedesPolicyId") ?? "");
     const supersedesPolicyId = isUuid(supersedesPolicyIdRaw) ? supersedesPolicyIdRaw : null;
 
-    if (!(file instanceof File)) return NextResponse.json({ error: "PDF file is required." }, { status: 400 });
-    if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
-      return NextResponse.json({ error: "DearPolicy currently accepts PDF files only." }, { status: 400 });
-    }
-    if (file.size > 50 * 1024 * 1024) return NextResponse.json({ error: "PDF exceeds the 50 MB upload limit." }, { status: 400 });
+    if (!(file instanceof File)) return NextResponse.json({ error: "A document file is required." }, { status: 400 });
 
     const policyId = randomUUID();
     const bytes = new Uint8Array(await file.arrayBuffer());
-    // The extension/MIME checks above only look at client-supplied labels --
-    // trivial to spoof (a renamed file, a doctored form field). This checks
-    // the actual bytes for a PDF's own magic header, the same check the
-    // claim-evidence upload path already applies (see
-    // lib/claims/evidence/validation.ts) before anything not genuinely a
-    // PDF reaches storage or the PDF-parsing pipeline downstream.
-    if (!looksLikePdf(bytes)) return NextResponse.json({ error: "The uploaded file is not a valid PDF." }, { status: 400 });
+    // Size, real file-signature sniffing, and extension/MIME/signature
+    // agreement all live in lib/documents/formats.ts -- a renamed file, a
+    // doctored form field, an executable, an archive or an unsupported
+    // format is rejected here with a message naming what IS accepted,
+    // before anything reaches storage or the processing pipeline.
+    const validation = validateDocumentUpload({ filename: file.name, mimeType: file.type, byteSize: file.size, bytes, maxBytes: 50 * 1024 * 1024 });
+    if (!validation.valid) return NextResponse.json({ error: validation.message, reasonCode: validation.reasonCode }, { status: 400 });
+    // A corrupted image fails NOW with a way forward, not minutes later in
+    // the background job.
+    const imageProblem = await probeImageDecodes(bytes, validation.format);
+    if (imageProblem) return NextResponse.json({ error: imageProblem, reasonCode: "CORRUPTED_FILE" }, { status: 400 });
     const fileHash = createHash("sha256").update(bytes).digest("hex");
 
     // Every check below (family-member ownership, duplicate-hash lookup, the
@@ -111,8 +112,12 @@ export async function POST(request: NextRequest) {
       // pre-set by a client.
       await pool.query(
         `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,supersedes_id)
-         VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting to be analysed…',$7)`,
-        [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash, outcome.verifiedSupersedesId],
+         VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,$7,$8)`,
+        [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash,
+          // Prototype document-safety mode acknowledges receipt without any
+          // scan language; the normal mode keeps its existing wording.
+          malwareScanningIntentionallyDisabled() ? "Document received — reading and extracting information." : "Waiting to be analysed…",
+          outcome.verifiedSupersedesId],
       );
       if (outcome.verifiedSupersedesId) {
         await supersedePolicyDocument({ accountId: ctx.householdId, oldPolicyId: outcome.verifiedSupersedesId, newPolicyId: policyId });

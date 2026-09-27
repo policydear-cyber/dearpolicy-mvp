@@ -5,10 +5,10 @@
  * (lib/rag/ingest.ts), reused rather than duplicated here (see this
  * module's other files for why). */
 export type PolicyQuarantineStatus =
-  | "uploaded" | "quarantined" | "scan_pending" | "scan_clean" | "scan_rejected" | "deleted";
+  | "uploaded" | "quarantined" | "scan_pending" | "scan_clean" | "scan_rejected" | "not_scanned_prototype" | "deleted";
 
 export const POLICY_QUARANTINE_STATUSES: PolicyQuarantineStatus[] = [
-  "uploaded", "quarantined", "scan_pending", "scan_clean", "scan_rejected", "deleted",
+  "uploaded", "quarantined", "scan_pending", "scan_clean", "scan_rejected", "not_scanned_prototype", "deleted",
 ];
 
 /** Runtime validation for a value read back from the database -- a

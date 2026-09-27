@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS premium_records (
   product_name text,
   policy_number text,
   amount numeric NOT NULL,
-  currency text NOT NULL DEFAULT 'SGD',
+  currency text,
   frequency text,
   payment_date date,
   period_start date,
@@ -219,8 +219,10 @@ ALTER TABLE policies ADD COLUMN IF NOT EXISTS renewal_or_expiry_date date;
 -- Currency normalization / crash-safety backfill.
 -- Older AI extractions may have stored display symbols that Intl.NumberFormat
 -- rejects as currency codes (for example S$). Keep persisted data canonical.
-UPDATE policy_coverages SET currency='SGD' WHERE currency IS NULL OR btrim(currency)='' OR upper(replace(currency,' ','')) IN ('S$','SG$','$S','$');
-UPDATE premium_records SET currency='SGD' WHERE currency IS NULL OR btrim(currency)='' OR upper(replace(currency,' ','')) IN ('S$','SG$','$S','$');
+-- Missing information stays missing: a NULL currency means the document did
+-- not state one, and is never coerced to SGD.
+UPDATE policy_coverages SET currency='SGD' WHERE upper(replace(coalesce(currency,''),' ','')) IN ('S$','SG$','$S','$');
+UPDATE premium_records SET currency='SGD' WHERE upper(replace(coalesce(currency,''),' ','')) IN ('S$','SG$','$S','$');
 UPDATE policy_coverages SET currency='USD' WHERE upper(replace(currency,' ','')) IN ('US$','USD$');
 UPDATE premium_records SET currency='USD' WHERE upper(replace(currency,' ','')) IN ('US$','USD$');
 UPDATE policy_coverages SET currency='MYR' WHERE upper(replace(currency,' ',''))='RM';
@@ -353,6 +355,15 @@ CREATE INDEX IF NOT EXISTS idx_policy_reference_coverages_policy_id ON policy_re
 -- pending, timed-out, missing or malformed verdict leaves a document here
 -- indefinitely, never silently promoted to scan_clean. `deleted` is
 -- reachable from every other state and is terminal.
+-- not_scanned_prototype (prototype document-safety mode,
+-- MALWARE_SCANNING_INTENTIONALLY_DISABLED=true): the document was
+-- deliberately NOT scanned and proceeds to reading/extraction. Distinct
+-- from scan_clean by design; scanned_at stays NULL for these rows.
+-- premium_records.currency predates the missing-stays-missing rule; make it
+-- nullable (idempotent) so an unstated currency is stored as NULL.
+ALTER TABLE premium_records ALTER COLUMN currency DROP NOT NULL;
+ALTER TABLE premium_records ALTER COLUMN currency DROP DEFAULT;
+
 ALTER TABLE policies ADD COLUMN IF NOT EXISTS quarantine_status text;
 ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_provider text;
 ALTER TABLE policies ADD COLUMN IF NOT EXISTS scan_result_detail text;
@@ -387,7 +398,7 @@ ALTER TABLE policies ALTER COLUMN quarantine_status SET NOT NULL;
 
 ALTER TABLE policies DROP CONSTRAINT IF EXISTS policies_quarantine_status_check;
 ALTER TABLE policies ADD CONSTRAINT policies_quarantine_status_check
-  CHECK (quarantine_status IN ('uploaded','quarantined','scan_pending','scan_clean','scan_rejected','deleted'));
+  CHECK (quarantine_status IN ('uploaded','quarantined','scan_pending','scan_clean','scan_rejected','not_scanned_prototype','deleted'));
 
 -- Re-scoped to exclude superseded rows so a re-upload of byte-identical
 -- content as a new VERSION (supersedes_id pointing at the old row,

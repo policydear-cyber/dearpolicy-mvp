@@ -126,4 +126,8 @@ export async function middleware(request: NextRequest) {
   return withCorrelationId(NextResponse.redirect(url));
 }
 
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png).*)"] };
+// Static files in public/ (the logo, icons) are served to signed-out pages
+// too: without this, the sign-in and sign-up pages' own logo was redirected to
+// /login and never displayed. Never applies under /api/: every API path keeps
+// the CSRF Origin check and the session requirement below.
+export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|(?!api/)[^?]*\\.(?:png|jpg|jpeg|gif|svg|webp|ico)$).*)"] };

@@ -25,7 +25,8 @@ SELECT
   (SELECT count(*) FROM policies WHERE scan_result_detail IS NOT NULL AND scan_result_detail NOT IN (
     'No malware-scanning adapter is configured in this environment.',
     'The malware scan did not complete. The document stays on hold until it is scanned successfully.',
-    'This file was flagged by malware scanning and cannot be processed.'))::int         AS rewrite_policies_scan_result_detail,
+    'This file was flagged by malware scanning and cannot be processed.',
+       'Not scanned: malware scanning is intentionally disabled in this prototype build.'))::int         AS rewrite_policies_scan_result_detail,
   (SELECT count(*) FROM claim_evidence_documents WHERE processing_error IS NOT NULL
     AND processing_error <> 'Processing stopped. DearPolicy kept the uploaded document; it can be processed again.')::int AS rewrite_evidence_processing_error,
   (SELECT count(*) FROM claim_evidence_audit_log WHERE action='processing_failed' AND reason IS NOT NULL

@@ -727,3 +727,83 @@ table { font-variant-numeric: tabular-nums; }
   .detected-row { grid-template-columns: 1fr; }
   .detected-row select { min-width: 0; width: 100%; }
 }
+
+/* Sign-out sits beside the appearance toggle: in the sidebar footer on wide
+   screens and in the top bar on phones (the sidebar footer is hidden there). */
+.mobile-bar-actions { display: flex; align-items: center; gap: 8px; }
+.theme-toggle.sign-out { justify-content: center; }
+
+/* Document details / review panel (prototype ingestion review screen) */
+.detail-panel {
+  margin-top: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border, #d8d8e0);
+  border-radius: 10px;
+  background: var(--surface-muted, #fafafc);
+}
+.detail-panel h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.detail-grid dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted, #5c5c6b);
+  margin: 0;
+}
+.detail-grid dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+.detail-section {
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border, #d8d8e0);
+}
+.detail-section h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+}
+.detail-section ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+.detail-section li {
+  margin: 0.2rem 0;
+  font-size: 0.9rem;
+}
+.detail-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  border: 1px solid var(--border, #c9c9d4);
+  background: #fff;
+  color: var(--text-muted, #5c5c6b);
+}
+.detail-correct {
+  margin-top: 0.7rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border, #d8d8e0);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.detail-correct select,
+.detail-correct input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border, #c9c9d4);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  max-width: 100%;
+}

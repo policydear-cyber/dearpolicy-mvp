@@ -223,7 +223,7 @@ export type ChatAnswer = {
   payoutQualifiers?:string[];
   reviewCoverage?:AnswerReviewCoverage;
   policyReview?:{id:string;ownerId:string;ownerName:string;policyName:string;status:string;documentCount:number;coverage?:ReviewCoverage;currentness?:PolicyCurrentness}[];
-  portfolioItems?:{id:string;ownerName:string;policyName:string;confirmed:boolean;currentness?:PolicyCurrentness;coverages:{category:string;amount:number|null;currency:string;productName:string|null}[]}[];
+  portfolioItems?:{id:string;ownerName:string;policyName:string;confirmed:boolean;currentness?:PolicyCurrentness;coverages:{category:string;amount:number|null;currency:string|null;productName:string|null}[]}[];
 
   /** Deterministic, code-computed claim-composition result for this turn
    * (never present unless lib/claims/composition/engine.ts actually ran).

@@ -228,7 +228,10 @@ export function calculatePolicyFormula(args:{benefit:PolicyBenefit;contract:Poli
   const quote=normalText(formula.evidence.quote);
   const value=formula.value;
   if(value==null||!Number.isFinite(value)||value<0)return null;
-  const currency=normalizeCurrencyCode(formula.currency??coverage.currency,coverage.currency);
+  // Missing stays missing: with no currency stated by the formula or the
+  // cover, no currency is inferred -- SGD is never assumed.
+  const currency=formula.currency?normalizeCurrencyCode(formula.currency):coverage.currency;
+  if(!currency)return null;
   const quotedCurrency=explicitCurrency(formula.evidence.quote);
   if(quotedCurrency&&quotedCurrency!==currency)return null;
   if(!quotedCurrency&&currency!==coverage.currency)return null;

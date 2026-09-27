@@ -136,6 +136,9 @@ jobs:
       - name: Production launch-guard regression suite (gate.ts/devAccountId() production-disable, launch guards)
         run: npm run security:launch-guard-test
 
+      - name: Test-only adapters (fake Auth/Admin, fake scanner) can never start in production
+        run: npm run security:test-adapter-test
+
       - name: Row Level Security regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:rls-test
 
@@ -171,6 +174,9 @@ jobs:
 
       - name: Policy-document quarantine gate regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:policy-quarantine-test
+
+      - name: Prototype document-safety mode (intentionally-disabled scanning) regression suite
+        run: npm run security:prototype-scan-mode-test
 
       - name: Scan-provider callback authentication regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:scan-callback-test

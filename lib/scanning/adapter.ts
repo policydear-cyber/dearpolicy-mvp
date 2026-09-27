@@ -79,6 +79,28 @@ export function selectedFileScanAdapterName(env: NodeJS.ProcessEnv = process.env
   return env.MALWARE_SCANNER_PROVIDER?.trim() || "null";
 }
 
+/** Prototype document-safety mode: malware scanning is INTENTIONALLY
+ * disabled and uploads proceed to reading/extraction without a scan,
+ * recorded as `not_scanned_prototype` -- never as scanned or clean.
+ * Exactly one mode may be active (a configured scanner, or this flag);
+ * checkFileScannerConfigured() below refuses the ambiguous and the
+ * unacknowledged configurations at production startup. At runtime a
+ * selected real scanner always wins, so this returns true only when the
+ * flag is set AND no real scanner is selected. */
+export const MALWARE_SCANNING_DISABLED_FLAG = "MALWARE_SCANNING_INTENTIONALLY_DISABLED";
+
+export function malwareScanningIntentionallyDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return truthy(env[MALWARE_SCANNING_DISABLED_FLAG]) && selectedFileScanAdapterName(env) === "null";
+}
+
+/** Fixed, privacy-safe operator warning logged whenever a document is let
+ * through unscanned in prototype mode. Never includes ids, filenames or
+ * environment values. */
+export const PROTOTYPE_SCANNING_DISABLED_WARNING =
+  "[dearpolicy] MALWARE SCANNING IS INTENTIONALLY DISABLED (" + MALWARE_SCANNING_DISABLED_FLAG + "=true). " +
+  "Uploaded documents proceed to reading/extraction WITHOUT a malware scan and are recorded as not_scanned_prototype, " +
+  "never as scanned or clean. Prototype/internal testing only -- launch readiness stays blocked until a real scanner is configured.";
+
 /** Checkpoint 14h (claude/v1-launch-hardening): the real registry's own
  * key list -- what scripts/launch-check.ts's malware_scanning_configuration
  * verifier now inspects directly, instead of trusting a static comment
@@ -102,27 +124,40 @@ export function currentFileScanAdapter(env: NodeJS.ProcessEnv = process.env): Fi
  * every pipeline that reads from this registry (see this module's own
  * comment above for why that centralization matters). */
 export function checkFileScannerConfigured(env: NodeJS.ProcessEnv = process.env): { ok: boolean; message: string } {
+  const name = selectedFileScanAdapterName(env);
+  const disabled = truthy(env[MALWARE_SCANNING_DISABLED_FLAG]);
+  // Exactly one document-safety mode may be active. Both at once is refused
+  // in EVERY environment: it is never clear which one the operator meant.
+  if (name !== "null" && disabled) {
+    return {
+      ok: false,
+      message:
+        `Ambiguous document-safety configuration: MALWARE_SCANNER_PROVIDER selects a real scanner ("${name}") AND ` +
+        `${MALWARE_SCANNING_DISABLED_FLAG} is set. Exactly one mode may be active -- remove ${MALWARE_SCANNING_DISABLED_FLAG} ` +
+        "to scan uploads, or remove MALWARE_SCANNER_PROVIDER to run the prototype without scanning.",
+    };
+  }
   if (!isProduction(env)) {
     return { ok: true, message: "Not production; malware-scanner configuration check skipped." };
   }
-  const name = selectedFileScanAdapterName(env);
   if (name !== "null") {
     return { ok: true, message: `Malware scanner "${name}" is configured for production.` };
   }
-  if (truthy(env.MALWARE_SCANNING_INTENTIONALLY_DISABLED)) {
+  if (disabled) {
     return {
       ok: true,
       message:
-        "No malware scanner is configured, but MALWARE_SCANNING_INTENTIONALLY_DISABLED=true explicitly acknowledges " +
-        "this -- every claim-evidence and policy-document upload will remain quarantined indefinitely until a real scanner is configured.",
+        `Malware scanning is INTENTIONALLY DISABLED (${MALWARE_SCANNING_DISABLED_FLAG}=true): uploads are NOT scanned; ` +
+        "they proceed straight to reading/extraction and are recorded as not_scanned_prototype, never as scanned or clean. " +
+        "Prototype/internal testing only -- launch readiness remains blocked until a real scanner is configured.",
     };
   }
   return {
     ok: false,
     message:
       "No malware scanner is configured in production (MALWARE_SCANNER_PROVIDER is unset) and " +
-      "MALWARE_SCANNING_INTENTIONALLY_DISABLED has not been set to acknowledge it. Every claim-evidence and " +
-      "policy-document upload will be stuck in quarantine with no operator aware why. Configure a real scanner via " +
-      "MALWARE_SCANNER_PROVIDER, or set MALWARE_SCANNING_INTENTIONALLY_DISABLED=true if this is intentional.",
+      `${MALWARE_SCANNING_DISABLED_FLAG} has not been set to acknowledge it. Exactly one document-safety mode must be active: ` +
+      "configure a real scanner via MALWARE_SCANNER_PROVIDER, or set " +
+      `${MALWARE_SCANNING_DISABLED_FLAG}=true to run the prototype with document ingestion and no malware scanning.`,
   };
 }

@@ -26,8 +26,9 @@ import { query } from "@/lib/db/client";
 import { readClaimEvidenceFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
-import { looksLikePdf } from "./validation";
 import { currentScanAdapter } from "./scan-adapter";
+import { malwareScanningIntentionallyDisabled, PROTOTYPE_SCANNING_DISABLED_WARNING } from "@/lib/scanning/adapter";
+import { imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { extractClaimEvidence } from "./extract";
 import { evaluateClaimEvidenceIdentity } from "./identity";
 import { appendClaimEvidenceAudit } from "./audit";
@@ -144,6 +145,20 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
 
   try {
     // --- uploaded -> quarantined --------------------------------------
+    // Prototype document-safety mode: the operator explicitly disabled
+    // malware scanning, so the document is recorded distinctly as NOT
+    // scanned (never clean, never scanned) and proceeds to reading and
+    // extraction. Fixed, privacy-safe warning only.
+    if (current.status === "uploaded" && malwareScanningIntentionallyDisabled()) {
+      console.warn(PROTOTYPE_SCANNING_DISABLED_WARNING);
+      const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "uploaded", to: "quarantined", scanStatus: "not_scanned_prototype" });
+      if (moved) {
+        current = moved;
+        await appendClaimEvidenceAudit(args.accountId, { actor: "system", action: "status_transition", evidenceDocumentId: current.id, claimSessionId: current.claim_session_id, previousValue: { status: "uploaded" }, newValue: { status: "quarantined", scanStatus: "not_scanned_prototype" }, reasonCode: "NOT_SCANNED_PROTOTYPE" });
+      } else {
+        current = (await getEvidenceDocument(args.accountId, args.documentId)) ?? current;
+      }
+    }
     if (current.status === "uploaded") {
       const bytes = await readClaimEvidenceFile(current.storage_key);
       const scan = await currentScanAdapter().scanFile(bytes);
@@ -209,7 +224,12 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
     // document on every queue pass must not spam the audit log; the one
     // audit event recorded above already captures the scan outcome.
     if (current.status === "quarantined") {
-      if (current.scan_status !== "clean") return;
+      // Either a real scanner recorded an explicit clean verdict, or
+      // prototype mode explicitly recorded that no scan happened
+      // (not_scanned_prototype) -- nothing else may proceed. A document held
+      // as scan_unavailable/pending_scan from before prototype mode was
+      // enabled stays held; it is never silently relabelled.
+      if (current.scan_status !== "clean" && current.scan_status !== "not_scanned_prototype") return;
       const moved = await transitionEvidenceStatus({ accountId: args.accountId, id: current.id, from: "quarantined", to: "processing" });
       if (moved) {
         current = moved;
@@ -224,12 +244,19 @@ export async function processClaimEvidence(args: ProcessClaimEvidenceArgs): Prom
 
     // --- processing: read, OCR, extract, verify identity ----------------
     const bytes = await readClaimEvidenceFile(current.storage_key);
-    if (!looksLikePdf(bytes)) throw Object.assign(new Error("Stored claim-evidence file is not a valid PDF."), { code: "NOT_A_PDF" });
+    // Original bytes are stored as uploaded; supported photo formats are
+    // normalized into a PDF here at processing time so the ordinary
+    // scanned-page OCR path applies (lib/documents/formats.ts).
+    const sniffed = sniffFileFormat(bytes);
+    if (!sniffed.ok || sniffed.format === "docx") {
+      throw Object.assign(new Error("Stored claim-evidence file is not in a supported format."), { code: "UNSUPPORTED_FORMAT" });
+    }
+    const readableBytes = sniffed.format === "pdf" ? bytes : new Uint8Array(await imageToPdf(bytes, sniffed.format));
 
-    let pages = await extractPdfPages(bytes);
+    let pages = await extractPdfPages(readableBytes);
     const ocrPageNumbers = pagesNeedingOcr(pages);
     if (ocrPageNumbers.length) {
-      pages = await completePdfPagesWithOcr({ accountId: args.accountId, bytes, pages, pageNumbers: ocrPageNumbers });
+      pages = await completePdfPagesWithOcr({ accountId: args.accountId, bytes: readableBytes, pages, pageNumbers: ocrPageNumbers });
     }
     if (pages.reduce((sum, p) => sum + p.text.length, 0) < 20) {
       throw Object.assign(new Error("Could not obtain enough readable text from this document."), { code: "UNREADABLE_DOCUMENT" });

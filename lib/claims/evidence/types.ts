@@ -62,7 +62,7 @@ export type ClaimEvidenceStatus =
  * and "scan_unavailable" keep it held, and "infected" rejects it. A value of
  * "clean" or "infected" is only ever set by a real adapter, never assumed.
  * Held evidence is not re-scanned automatically. */
-export type ClaimEvidenceScanStatus = "pending_scan" | "clean" | "infected" | "scan_unavailable";
+export type ClaimEvidenceScanStatus = "pending_scan" | "clean" | "infected" | "scan_unavailable" | "not_scanned_prototype";
 
 export type ClaimEvidenceIdentityStatus = "pending" | "confirmed" | "needs_review" | "mismatch";
 

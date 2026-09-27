@@ -26,4 +26,11 @@ export async function register() {
       throw new Error(`Refusing to start: unsafe production configuration detected.\n  - ${scannerCheck.message}`);
     }
   }
+  // Prototype document-safety mode: loud, fixed, content-free banner in
+  // every environment where it is active, so no run of this server can be
+  // mistaken for one whose uploads are malware-scanned.
+  const { malwareScanningIntentionallyDisabled, PROTOTYPE_SCANNING_DISABLED_WARNING } = await import("./lib/scanning/adapter");
+  if (malwareScanningIntentionallyDisabled()) {
+    console.warn(`\n${"=".repeat(78)}\n${PROTOTYPE_SCANNING_DISABLED_WARNING}\n${"=".repeat(78)}\n`);
+  }
 }

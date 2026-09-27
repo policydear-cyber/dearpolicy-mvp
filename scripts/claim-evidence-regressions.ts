@@ -54,41 +54,53 @@ async function testAsync(name: string, fn: () => Promise<void>) {
 // ---------------------------------------------------------------------
 
 function runPureTests() {
+  const pdfBytes = new TextEncoder().encode("%PDF-1.4 synthetic body long enough to sniff");
+  const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const exeBytes = new TextEncoder().encode("MZ\u0090\u0000 synthetic executable header");
   test("rejects an unsupported document type", () => {
-    const r = validateEvidenceUpload({ documentType: "brochure", filename: "x.pdf", mimeType: "application/pdf", byteSize: 100 });
+    const r = validateEvidenceUpload({ documentType: "brochure", filename: "x.pdf", mimeType: "application/pdf", byteSize: pdfBytes.length, bytes: pdfBytes });
     assert.equal(r.valid, false);
     if (!r.valid) assert.equal(r.reasonCode, "UNSUPPORTED_DOCUMENT_TYPE");
   });
-  test("rejects an unsupported MIME type", () => {
-    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "image/png", byteSize: 100 });
+  test("rejects a declared MIME type that does not match the real bytes", () => {
+    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "image/png", byteSize: pdfBytes.length, bytes: pdfBytes });
     assert.equal(r.valid, false);
-    if (!r.valid) assert.equal(r.reasonCode, "UNSUPPORTED_MIME_TYPE");
+    if (!r.valid) assert.equal(r.reasonCode, "MIME_EXTENSION_MISMATCH");
   });
-  test("rejects an unsupported extension", () => {
-    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.docx", mimeType: "application/pdf", byteSize: 100 });
+  test("rejects an extension that does not match the real bytes", () => {
+    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.png", mimeType: "application/pdf", byteSize: pdfBytes.length, bytes: pdfBytes });
     assert.equal(r.valid, false);
-    if (!r.valid) assert.equal(r.reasonCode, "UNSUPPORTED_EXTENSION");
+    if (!r.valid) assert.equal(r.reasonCode, "SIGNATURE_MISMATCH");
   });
-  test("rejects a MIME/extension mismatch even when each looks fine alone", () => {
-    // application/pdf declared, but the filename claims something else --
-    // caught by the extension check before the mismatch check even runs,
-    // which is itself the correct fail-closed outcome.
-    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf.exe", mimeType: "application/pdf", byteSize: 100 });
+  test("rejects a Word document as claim evidence (policy-side only)", () => {
+    const docx = new TextEncoder().encode("PK\u0003\u0004 word/document.xml synthetic zip entry listing");
+    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", byteSize: docx.length, bytes: docx });
     assert.equal(r.valid, false);
+    if (!r.valid) assert.equal(r.reasonCode, "UNSUPPORTED_FORMAT");
+  });
+  test("rejects an executable whatever it is called", () => {
+    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "application/pdf", byteSize: exeBytes.length, bytes: exeBytes });
+    assert.equal(r.valid, false);
+    if (!r.valid) assert.equal(r.reasonCode, "EXECUTABLE_FILE");
   });
   test("rejects an oversized file", () => {
-    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "application/pdf", byteSize: 26 * 1024 * 1024 });
+    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "application/pdf", byteSize: 26 * 1024 * 1024, bytes: pdfBytes });
     assert.equal(r.valid, false);
     if (!r.valid) assert.equal(r.reasonCode, "FILE_TOO_LARGE");
   });
   test("rejects an empty file", () => {
-    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "application/pdf", byteSize: 0 });
+    const r = validateEvidenceUpload({ documentType: "death_certificate", filename: "x.pdf", mimeType: "application/pdf", byteSize: 0, bytes: new Uint8Array(0) });
     assert.equal(r.valid, false);
     if (!r.valid) assert.equal(r.reasonCode, "EMPTY_FILE");
   });
   test("accepts a well-formed PDF upload", () => {
-    const r = validateEvidenceUpload({ documentType: "police_report", filename: "report.pdf", mimeType: "application/pdf", byteSize: 12_000 });
+    const r = validateEvidenceUpload({ documentType: "police_report", filename: "report.pdf", mimeType: "application/pdf", byteSize: pdfBytes.length, bytes: pdfBytes });
     assert.equal(r.valid, true);
+  });
+  test("accepts a phone photo (PNG) as claim evidence", () => {
+    const r = validateEvidenceUpload({ documentType: "hospital_bill", filename: "bill.png", mimeType: "image/png", byteSize: pngBytes.length, bytes: pngBytes });
+    assert.equal(r.valid, true);
+    if (r.valid) assert.equal(r.format, "png");
   });
   test("looksLikePdf checks real magic bytes, not the filename", () => {
     assert.equal(looksLikePdf(new TextEncoder().encode("%PDF-1.4 rest")), true);

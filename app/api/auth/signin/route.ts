@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { clientKey } from "@/lib/http/rate-limit";
 import { createDbRateLimiter } from "@/lib/http/db-rate-limit";
+import { isReviewerOnlyAccount } from "@/lib/claims/reviewers/boundary";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "public" as const;
@@ -37,6 +38,12 @@ export async function POST(request: Request) {
   // Idempotent -- a pre-existing household is returned untouched; this only
   // does real work for an account that somehow reached sign-in without one
   // (e.g. it was provisioned before this code existed).
+  //
+  // A DearPolicy staff reviewer who belongs to no household is sent to the
+  // reviewer area instead, and never gets a household of their own.
+  if (await isReviewerOnlyAccount(data.user.id)) {
+    return NextResponse.json({ ok: true, destination: "/reviewer" });
+  }
   await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, destination: null });
 }

@@ -165,7 +165,7 @@ export default function HouseholdPage() {
           <section className="section">
             <div className="section-heading"><div><div className="eyebrow">NAME</div><h2>Household name</h2></div></div>
             <form onSubmit={saveName} className="profile-add-grid">
-              <div className="field"><label>Name</label><input value={nameInput} onChange={(e) => setNameInput(e.target.value)} maxLength={200} required disabled={!isOwner} /></div>
+              <div className="field"><label htmlFor="hh-name">Name</label><input id="hh-name" value={nameInput} onChange={(e) => setNameInput(e.target.value)} maxLength={200} required disabled={!isOwner} /></div>
               {isOwner && <button className="button primary" type="submit" disabled={!nameInput.trim() || nameInput.trim() === householdName}>Save name</button>}
             </form>
             {!isOwner && <p className="lead" style={{ marginTop: 8 }}>Only the household owner can rename it.</p>}
@@ -208,8 +208,8 @@ export default function HouseholdPage() {
             <section className="section">
               <div className="section-heading"><div><div className="eyebrow">INVITATIONS</div><h2>Invite someone</h2></div></div>
               <form onSubmit={createInvitation} className="profile-add-grid">
-                <div className="field"><label>Email</label><input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@example.com" required /></div>
-                <div className="field"><label>Role</label><select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "owner")}><option value="member">Member</option><option value="owner">Owner</option></select></div>
+                <div className="field"><label htmlFor="hh-invite-email">Email</label><input id="hh-invite-email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="name@example.com" required /></div>
+                <div className="field"><label htmlFor="hh-invite-role">Role</label><select id="hh-invite-role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "owner")}><option value="member">Member</option><option value="owner">Owner</option></select></div>
                 <button className="button primary" type="submit" disabled={!inviteEmail.trim()}>Send invitation</button>
               </form>
               {inviteError && <div className="document-warning" style={{ marginTop: 12 }}>{inviteError}</div>}
@@ -253,7 +253,7 @@ export default function HouseholdPage() {
                 To confirm, type the household&apos;s exact name (<strong>{householdName}</strong>) below.
               </p>
               <div className="profile-add-grid">
-                <div className="field"><label>Household name</label><input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={householdName ?? ""} /></div>
+                <div className="field"><label htmlFor="hh-delete-confirm">Household name</label><input id="hh-delete-confirm" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={householdName ?? ""} /></div>
                 <button className="button secondary" style={{ borderColor: "var(--critical-line)", color: "var(--critical)" }} disabled={confirmName.trim() !== householdName || deleting} onClick={deleteHousehold}>
                   {deleting ? "Deleting…" : "Permanently delete household"}
                 </button>

@@ -1,13 +1,17 @@
 import { CLAIM_EVIDENCE_DOCUMENT_TYPES, type ClaimEvidenceDocumentType } from "./types";
+import {
+  FORMAT_EXTENSIONS, FORMAT_MIME_TYPES, sniffFileFormat, validateDocumentUpload,
+  type SupportedUploadFormat,
+} from "@/lib/documents/formats";
 
-/** PDF only for V1, mirroring app/api/policies/upload/route.ts exactly --
- * this pipeline reuses the same PDF text/OCR extraction path
- * (lib/documents/pdf.ts, lib/documents/ocr.ts) as policy documents, and
- * that path only understands PDFs. A phone photo of a death certificate
- * needs to be saved or exported as a PDF before upload; this is a known
- * limitation, not an oversight -- see the PR description. */
-const ALLOWED_MIME_TYPES = new Set(["application/pdf"]);
-const ALLOWED_EXTENSIONS = new Set([".pdf"]);
+/** Claim evidence accepts PDFs and photos/scans (JPEG/PNG/WebP/TIFF) --
+ * bills, memos and certificates are very often phone photos. Word documents
+ * are policy-side only; evidence stays image/PDF so every stored page is a
+ * faithful picture of the source. Validation and normalization both live in
+ * lib/documents/formats.ts, shared with the policy-document path. */
+export const EVIDENCE_UPLOAD_FORMATS: SupportedUploadFormat[] = ["pdf", "jpeg", "png", "webp", "tiff"];
+export const EVIDENCE_ACCEPTED_FORMATS_MESSAGE =
+  "Claim evidence can be a PDF or a photo/scan as JPEG, PNG, WebP or TIFF.";
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB -- claim evidence is a handful of pages, well under the 50 MB policy-document ceiling.
 
 export type EvidenceUploadRejection =
@@ -15,66 +19,61 @@ export type EvidenceUploadRejection =
   | "UNSUPPORTED_MIME_TYPE"
   | "UNSUPPORTED_EXTENSION"
   | "MIME_EXTENSION_MISMATCH"
+  | "SIGNATURE_MISMATCH"
+  | "EXECUTABLE_FILE"
+  | "ARCHIVE_FILE"
+  | "UNSUPPORTED_FORMAT"
+  | "CORRUPTED_FILE"
   | "FILE_TOO_LARGE"
   | "EMPTY_FILE";
 
 export type EvidenceUploadValidation =
-  | { valid: true }
+  | { valid: true; format: SupportedUploadFormat }
   | { valid: false; reasonCode: EvidenceUploadRejection; message: string };
-
-function extensionOf(filename: string) {
-  const match = /\.[a-z0-9]+$/i.exec(filename.trim());
-  return match ? match[0].toLowerCase() : "";
-}
 
 export function isSupportedDocumentType(value: unknown): value is ClaimEvidenceDocumentType {
   return typeof value === "string" && (CLAIM_EVIDENCE_DOCUMENT_TYPES as string[]).includes(value);
 }
 
-/** Validates everything about an upload that can be checked BEFORE the
- * bytes are read for content -- MIME type, extension, extension-vs-MIME
- * agreement (a renamed .exe wearing a .pdf name, or a form field lying
- * about the MIME type, must not slip through on either check alone), size,
- * and that the file is not empty. Fails closed: an unrecognised or
- * unsupported combination is always rejected, never defaulted through. */
+/** Validates everything about an evidence upload: the declared document
+ * type, size, the REAL file signature, and extension/MIME/signature
+ * agreement. Fails closed: an unrecognised or unsupported combination is
+ * always rejected with a message naming what is accepted, never defaulted
+ * through. */
 export function validateEvidenceUpload(args: {
   documentType: unknown;
   filename: string;
   mimeType: string;
   byteSize: number;
+  bytes: Uint8Array;
 }): EvidenceUploadValidation {
   if (!isSupportedDocumentType(args.documentType)) {
     return { valid: false, reasonCode: "UNSUPPORTED_DOCUMENT_TYPE", message: "That is not a supported claim-evidence document type." };
   }
-  if (args.byteSize <= 0) {
-    return { valid: false, reasonCode: "EMPTY_FILE", message: "The uploaded file is empty." };
+  const result = validateDocumentUpload({ filename: args.filename, mimeType: args.mimeType, byteSize: args.byteSize, bytes: args.bytes, maxBytes: MAX_BYTES });
+  if (!result.valid) {
+    return { valid: false, reasonCode: result.reasonCode, message: `${result.message.split(" DearPolicy accepts")[0]} ${EVIDENCE_ACCEPTED_FORMATS_MESSAGE}`.trim() };
   }
-  if (args.byteSize > MAX_BYTES) {
-    return { valid: false, reasonCode: "FILE_TOO_LARGE", message: `Claim evidence files must be ${Math.floor(MAX_BYTES / (1024 * 1024))} MB or smaller.` };
+  if (!EVIDENCE_UPLOAD_FORMATS.includes(result.format)) {
+    return { valid: false, reasonCode: "UNSUPPORTED_FORMAT", message: EVIDENCE_ACCEPTED_FORMATS_MESSAGE };
   }
-  const mime = (args.mimeType || "").toLowerCase().split(";")[0].trim();
-  if (!ALLOWED_MIME_TYPES.has(mime)) {
-    return { valid: false, reasonCode: "UNSUPPORTED_MIME_TYPE", message: "DearPolicy currently accepts PDF claim-evidence documents only." };
-  }
-  const extension = extensionOf(args.filename);
-  if (!ALLOWED_EXTENSIONS.has(extension)) {
-    return { valid: false, reasonCode: "UNSUPPORTED_EXTENSION", message: "DearPolicy currently accepts .pdf claim-evidence documents only." };
-  }
-  // The browser/client supplies both the MIME type and the filename
-  // separately; a script or a renamed file can make them disagree even
-  // when each one alone looks acceptable.
-  if (mime === "application/pdf" && extension !== ".pdf") {
-    return { valid: false, reasonCode: "MIME_EXTENSION_MISMATCH", message: "The file's extension does not match its declared type." };
-  }
-  return { valid: true };
+  return { valid: true, format: result.format };
+}
+
+/** Canonical MIME type for a validated evidence upload, stored on the row
+ * (never the client-declared string). */
+export function canonicalMimeType(format: SupportedUploadFormat): string {
+  return FORMAT_MIME_TYPES[format][0];
+}
+
+export function evidenceAcceptAttribute(): string {
+  return EVIDENCE_UPLOAD_FORMATS.flatMap((f) => FORMAT_MIME_TYPES[f].slice(0, 1).concat(FORMAT_EXTENSIONS[f])).join(",");
 }
 
 /** A PDF's own magic bytes ("%PDF-"), checked against the ACTUAL uploaded
- * bytes rather than trusting the client-declared MIME type or filename --
- * closes the gap those two checks cannot close on their own (a file that
- * simply isn't a PDF at all, renamed and mislabelled to pass both). */
+ * bytes rather than trusting the client-declared MIME type or filename.
+ * Kept for the call sites that genuinely require a PDF specifically. */
 export function looksLikePdf(bytes: Uint8Array): boolean {
-  if (bytes.length < 5) return false;
-  const header = Buffer.from(bytes.subarray(0, 5)).toString("latin1");
-  return header === "%PDF-";
+  const sniffed = sniffFileFormat(bytes);
+  return sniffed.ok && sniffed.format === "pdf";
 }

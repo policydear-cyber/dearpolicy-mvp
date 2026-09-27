@@ -15,10 +15,10 @@
  */
 import { query, pool } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { currentFileScanAdapter } from "@/lib/scanning/adapter";
+import { currentFileScanAdapter, malwareScanningIntentionallyDisabled, PROTOTYPE_SCANNING_DISABLED_WARNING } from "@/lib/scanning/adapter";
 import { assertValidPolicyQuarantineTransition } from "./state-machine";
 import { appendPolicyDocumentAudit } from "./audit";
-import { persistableScanResultDetail } from "./ui";
+import { persistableScanResultDetail, PROTOTYPE_NOT_SCANNED_DETAIL } from "./ui";
 import { recordProcessingFailure, SCAN_ATTEMPT_FAILED_MESSAGE } from "@/lib/diagnostics/processing-failures";
 import { isPolicyQuarantineStatus, type PolicyQuarantineRow, type PolicyQuarantineStatus, type PolicyScanResultOutcome } from "./types";
 import type { ScanRetryHint } from "@/lib/scanning/adapter";
@@ -68,7 +68,12 @@ async function transitionQuarantineStatus(args: {
  * the row rather than trusting a caller-supplied flag, so a resumed or
  * retried call re-checks the real persisted state every time. */
 export function isPolicyProcessingAllowed(row: Pick<PolicyQuarantineRow, "quarantine_status">): boolean {
-  return isPolicyQuarantineStatus(row.quarantine_status) && row.quarantine_status === "scan_clean";
+  return (
+    isPolicyQuarantineStatus(row.quarantine_status) &&
+    // Either a real scanner explicitly cleared it, or prototype mode
+    // explicitly recorded that it was NOT scanned (never implied clean).
+    (row.quarantine_status === "scan_clean" || row.quarantine_status === "not_scanned_prototype")
+  );
 }
 
 export class PolicyNotClearedForProcessingError extends Error {
@@ -123,7 +128,7 @@ export function assertPolicyDownloadable(row: Pick<PolicyQuarantineRow, "quarant
  *    "already decided". -> "not_found"
  */
 export async function recordPolicyScanResult(args: {
-  accountId: string; policyId: string; status: "scan_clean" | "scan_rejected";
+  accountId: string; policyId: string; status: "scan_clean" | "scan_rejected" | "not_scanned_prototype";
   scanProvider: string; scanResultDetail?: string | null; scanEventId?: string | null;
 }): Promise<PolicyScanResultOutcome> {
   // Provider-internal detail (an analysis id, engine counts) is logged for
@@ -132,15 +137,24 @@ export async function recordPolicyScanResult(args: {
   const applied = await transitionQuarantineStatus({
     accountId: args.accountId, policyId: args.policyId, from: "scan_pending", to: args.status,
     scanProvider: args.scanProvider,
-    scanResultDetail: persistableScanResultDetail(args.status === "scan_rejected" ? "infected" : "clean", args.scanResultDetail),
-    scanEventId: args.scanEventId, markScanned: true,
+    scanResultDetail: persistableScanResultDetail(
+      args.status === "scan_rejected" ? "infected" : args.status === "not_scanned_prototype" ? "not_scanned_prototype" : "clean",
+      args.scanResultDetail,
+    ),
+    scanEventId: args.scanEventId,
+    // A document that was deliberately NOT scanned never gets a scanned_at
+    // timestamp -- nothing may ever make it look malware-scanned.
+    markScanned: args.status !== "not_scanned_prototype",
   });
   if (applied) {
     await appendPolicyDocumentAudit(args.accountId, {
-      actor: "system", action: "scan_result_recorded", policyId: args.policyId,
+      actor: "system",
+      action: args.status === "not_scanned_prototype" ? "scan_skipped_prototype" : "scan_result_recorded",
+      policyId: args.policyId,
       previousValue: { quarantineStatus: "scan_pending" },
       newValue: { quarantineStatus: args.status, scanProvider: args.scanProvider, scanEventId: args.scanEventId ?? null },
-      reasonCode: args.status === "scan_rejected" ? "MALWARE_DETECTED" : undefined,
+      reason: args.status === "not_scanned_prototype" ? PROTOTYPE_NOT_SCANNED_DETAIL : undefined,
+      reasonCode: args.status === "scan_rejected" ? "MALWARE_DETECTED" : args.status === "not_scanned_prototype" ? "NOT_SCANNED_PROTOTYPE" : undefined,
     });
     return "applied";
   }
@@ -216,10 +230,12 @@ export async function runPolicyQuarantineGate(args: {
     }
   }
 
+  let freshlyEnteredScanPending = false;
   if (row.quarantine_status === "quarantined") {
     const moved = await transitionQuarantineStatus({ accountId: args.accountId, policyId: args.policyId, from: "quarantined", to: "scan_pending" });
     if (moved) {
       row = moved;
+      freshlyEnteredScanPending = true;
       await appendPolicyDocumentAudit(args.accountId, {
         actor: "system", action: "scan_started", policyId: args.policyId,
         previousValue: { quarantineStatus: "quarantined" }, newValue: { quarantineStatus: "scan_pending" },
@@ -239,6 +255,22 @@ export async function runPolicyQuarantineGate(args: {
     // uploaded/quarantined starting point, never on a resume that finds
     // the document already sitting at scan_pending from a previous call.
     const scannedJustNow = row.scanned_at == null;
+    // Prototype mode releases ONLY a document that entered scan_pending in
+    // THIS cascade (a fresh upload). A document already resting here from
+    // an earlier scan attempt -- unavailable verdict, thrown scanner, a
+    // pending provider -- stays held: enabling prototype mode never
+    // relabels documents that were awaiting a real scan.
+    if (scannedJustNow && freshlyEnteredScanPending && malwareScanningIntentionallyDisabled()) {
+      // Prototype document-safety mode: no scanner is configured and the
+      // operator explicitly acknowledged it. The document proceeds to
+      // reading/extraction, recorded distinctly as not_scanned_prototype --
+      // never as scanned or clean, with no scanned_at timestamp. Fixed,
+      // privacy-safe warning only; nothing about the document is logged.
+      console.warn(PROTOTYPE_SCANNING_DISABLED_WARNING);
+      await recordPolicyScanResult({ accountId: args.accountId, policyId: args.policyId, status: "not_scanned_prototype", scanProvider: "none" });
+      row = (await getPolicyQuarantineRow(args.accountId, args.policyId)) ?? row;
+      return { cleared: isPolicyProcessingAllowed(row), row };
+    }
     if (scannedJustNow) {
       const adapter = currentFileScanAdapter();
       let result: Awaited<ReturnType<typeof adapter.scanFile>> | null = null;

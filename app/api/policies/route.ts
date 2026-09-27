@@ -3,7 +3,8 @@ import { isUuid } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
-import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail } from "@/lib/policies/quarantine/ui";
+import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail, type DocumentSafetyMode } from "@/lib/policies/quarantine/ui";
+import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -46,13 +47,39 @@ export async function GET(request: NextRequest) {
                   p.needs_review DESC,p.personal_coverage_confirmed DESC,p.document_authority DESC,p.created_at DESC`,
         params,
       );
-      return result.rows;
+      // Overlay the newest household correction per field (append-only log;
+      // the policies row itself keeps the AI-extracted original).
+      const corrected = await client.query<{ policy_id: string; field_name: string; corrected_value: unknown }>(
+        `SELECT DISTINCT ON (policy_id, field_name) policy_id, field_name, corrected_value
+           FROM policy_corrections WHERE account_id=$1 ORDER BY policy_id, field_name, created_at DESC`,
+        [ctx.householdId],
+      );
+      const overlays = new Map<string, Record<string, string>>();
+      for (const row of corrected.rows) {
+        if (typeof row.corrected_value !== "string") continue;
+        const entry = overlays.get(row.policy_id) ?? {};
+        entry[row.field_name] = row.corrected_value;
+        overlays.set(row.policy_id, entry);
+      }
+      return result.rows.map((row) => {
+        const overlay = overlays.get(row.id);
+        if (!overlay) return row;
+        return {
+          ...row,
+          insurer: overlay.insurer ?? row.insurer,
+          product_name: overlay.product_name ?? row.product_name,
+          policy_number: overlay.policy_number ?? row.policy_number,
+          policy_type: overlay.policy_type ?? row.policy_type,
+        };
+      });
     });
     // scan_result_detail is operator-facing (it can hold a scanner's analysis
     // id and engine counts); only a fixed, category-level string is returned.
     // processing_error holds the raw pipeline error for operators; the UI only
     // needs to know that analysis stopped, so a fixed string is returned.
+    const documentSafetyMode: DocumentSafetyMode = malwareScanningIntentionallyDisabled() ? "not_scanned_prototype" : "malware_scan";
     return NextResponse.json({
+      documentSafetyMode,
       policies: policies.map((p) => ({
         ...p,
         scan_result_detail: userFacingScanResultDetail(p),

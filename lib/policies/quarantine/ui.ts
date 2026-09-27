@@ -7,6 +7,16 @@
  */
 export type PolicyQuarantineUiInput = { quarantine_status: string; scan_result_detail: string | null };
 
+/** Which document-safety mode this deployment is running: a real malware
+ * scanner, or the prototype mode where scanning is intentionally disabled
+ * and documents are recorded as not scanned. The policies API reports it so
+ * the UI never shows malware-scan language in prototype mode. */
+export type DocumentSafetyMode = "malware_scan" | "not_scanned_prototype";
+
+/** The prototype UI's only acknowledgement wording. It deliberately claims
+ * nothing about safety, scanning or approval. */
+export const PROTOTYPE_RECEIVED_MESSAGE = "Document received — reading and extracting information.";
+
 const HOLD_STATUSES = new Set(["uploaded", "quarantined", "scan_pending"]);
 
 export function isPolicyQuarantineHeld(policy: PolicyQuarantineUiInput): boolean {
@@ -17,8 +27,11 @@ export function isPolicyScanRejected(policy: PolicyQuarantineUiInput): boolean {
   return policy.quarantine_status === "scan_rejected";
 }
 
-export function policyQuarantineLabel(policy: PolicyQuarantineUiInput): string {
+export function policyQuarantineLabel(policy: PolicyQuarantineUiInput, mode: DocumentSafetyMode = "malware_scan"): string {
   if (policy.quarantine_status === "scan_rejected") return "Rejected by malware scan";
+  // Prototype mode: a held document is simply queued for reading -- no
+  // malware-scan language, and never any claim that a scan passed.
+  if (mode === "not_scanned_prototype") return PROTOTYPE_RECEIVED_MESSAGE;
   if (policy.quarantine_status === "scan_pending" && policy.scan_result_detail?.toLowerCase().includes("no malware-scanning adapter")) {
     return "On hold: malware scanning unavailable";
   }
@@ -41,10 +54,14 @@ export function policyQuarantineLabel(policy: PolicyQuarantineUiInput): string {
 export const NO_SCANNER_CONFIGURED_DETAIL = "No malware-scanning adapter is configured in this environment.";
 export const SCAN_DID_NOT_COMPLETE_DETAIL = "The malware scan did not complete. The document stays on hold until it is scanned successfully.";
 export const SCAN_REJECTED_DETAIL = "This file was flagged by malware scanning and cannot be processed.";
+/** Prototype document-safety mode: the honest record that no scan happened.
+ * Never phrased as safe, clean, scanned or approved. */
+export const PROTOTYPE_NOT_SCANNED_DETAIL = "Not scanned: malware scanning is intentionally disabled in this prototype build.";
 
 export function userFacingScanResultDetail(policy: PolicyQuarantineUiInput): string | null {
   const raw = policy.scan_result_detail;
   if (policy.quarantine_status === "scan_rejected") return SCAN_REJECTED_DETAIL;
+  if (policy.quarantine_status === "not_scanned_prototype") return PROTOTYPE_NOT_SCANNED_DETAIL;
   if (policy.quarantine_status !== "scan_pending" || !raw) return null;
   if (raw.toLowerCase().includes("no malware-scanning adapter")) return NO_SCANNER_CONFIGURED_DETAIL;
   return SCAN_DID_NOT_COMPLETE_DETAIL;
@@ -59,8 +76,9 @@ export function userFacingScanResultDetail(policy: PolicyQuarantineUiInput): str
  * the server log instead (lib/policies/quarantine/store.ts), which only
  * operators can read.
  */
-export function persistableScanResultDetail(outcome: "clean" | "infected" | "scan_unavailable", raw: string | null | undefined): string | null {
+export function persistableScanResultDetail(outcome: "clean" | "infected" | "scan_unavailable" | "not_scanned_prototype", raw: string | null | undefined): string | null {
   if (outcome === "infected") return SCAN_REJECTED_DETAIL;
+  if (outcome === "not_scanned_prototype") return PROTOTYPE_NOT_SCANNED_DETAIL;
   if (outcome === "clean") return null;
   if (raw && raw.toLowerCase().includes("no malware-scanning adapter")) return NO_SCANNER_CONFIGURED_DETAIL;
   return SCAN_DID_NOT_COMPLETE_DETAIL;

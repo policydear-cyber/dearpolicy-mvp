@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type ServiceState = { ok: boolean; label: string; detail: string; fix?: string };
@@ -39,6 +39,29 @@ const nav: { href: string; label: string; icon: IconName }[] = [
   { href: "/usage", label: "Usage", icon: "usage" },
   { href: "/household", label: "Household", icon: "household" },
 ];
+
+/** Pages a signed-out person uses; no sign-out control there. */
+const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password"]);
+
+/** Ends the Supabase session on the server (which clears the session
+ * cookie), then leaves for the sign-in page. Navigates even if the request
+ * fails, so the person is never left looking at a page they believe they
+ * have left; the next request re-checks the session regardless. */
+function SignOutButton() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const signOut = async () => {
+    setBusy(true);
+    try { await fetch("/api/auth/signout", { method: "POST" }); } catch { /* navigate anyway */ }
+    router.push("/login");
+    router.refresh();
+  };
+  return (
+    <button type="button" className="theme-toggle sign-out" onClick={signOut} disabled={busy} aria-busy={busy}>
+      {busy ? "Signing out…" : "Sign out"}
+    </button>
+  );
+}
 
 type Theme = "light" | "dark";
 function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
@@ -90,6 +113,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // The internal reviewer area is a DearPolicy staff tool, not part of any
   // household: it gets its own single-item navigation, never the household's.
   const reviewerArea = pathname.startsWith("/reviewer");
+  const signedOutPage = SIGNED_OUT_PATHS.has(pathname);
   const items = reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : nav;
   return (
     <div className="app-shell">
@@ -110,6 +134,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="sidebar-footer">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          {!signedOutPage && <SignOutButton />}
           <div className="service-status" aria-live="polite">
             {services.map((s) => (
               <div className={`service-row ${s.ok ? "ok" : "down"}`} key={s.label} title={s.detail}>
@@ -131,7 +156,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="main-content">
         <div className="mobile-bar">
           <Link href="/" aria-label="DearPolicy home"><img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} /></Link>
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <div className="mobile-bar-actions">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            {!signedOutPage && <SignOutButton />}
+          </div>
         </div>
         {children}
       </main>

@@ -32,7 +32,7 @@ function LoginForm() {
         setError(data.error || "Could not sign in.");
         return;
       }
-      router.push(params.get("next") || "/");
+      router.push(sameSitePath(params.get("next")) ?? sameSitePath(data.destination) ?? "/");
       router.refresh();
     } catch {
       setError("Could not sign in. Please try again.");
@@ -80,6 +80,12 @@ function LoginForm() {
       </p>
     </div>
   );
+}
+
+/** Only ever navigate within this app after sign-in: `next` comes from the
+ * query string and could otherwise point anywhere. */
+function sameSitePath(value: unknown): string | null {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : null;
 }
 
 export default function LoginPage() {

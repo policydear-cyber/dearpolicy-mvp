@@ -164,6 +164,65 @@ export function checkDeterministicModelNotInProduction(env: NodeJS.ProcessEnv = 
   return { ok: true, message: "The deterministic model stand-in is not configured in production." };
 }
 
+/** Name and only accepted value of the flag that lets the test-only Auth
+ * stand-in (e2e/support/fake-auth.mjs) run. */
+export const TEST_AUTH_ADAPTER_FLAG = "DEARPOLICY_TEST_AUTH_ADAPTER";
+
+function isLoopbackUrl(value: string | undefined): boolean {
+  const raw = (value ?? "").trim();
+  if (!raw) return false;
+  try {
+    const host = new URL(raw).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return host === "localhost" || host.endsWith(".localhost") || host === "::1" || host === "0.0.0.0" || /^127\./.test(host);
+  } catch {
+    return false;
+  }
+}
+
+/** Declares a LOCAL production-mode proof run (the production-topology
+ * workflow builds the app and runs `next start` with NODE_ENV=production
+ * against a local Postgres and a local fake scanner). Honoured only off
+ * Vercel and only when the database itself is on a loopback address, so it
+ * can never relax a hosted deployment. Never relaxes the test Auth adapter
+ * flag. */
+export const LOCAL_PRODUCTION_PROOF_FLAG = "DEARPOLICY_LOCAL_PRODUCTION_PROOF";
+export const LOCAL_PRODUCTION_PROOF_VALUE = "synthetic-topology";
+
+/** Test-only adapters (the fake Supabase Auth/Admin server, the fake
+ * VirusTotal API, the deterministic model) exist for synthetic local and CI
+ * journeys. A production or Vercel-hosted server must never start with any of
+ * them wired in: not the test Auth adapter flag (refused everywhere NODE_ENV
+ * is production or the server is Vercel-hosted, without exception), and not
+ * an Auth or scanner endpoint on a loopback address -- only ever a local
+ * stand-in -- unless this is a declared local production-mode proof whose
+ * database is itself local and which is not Vercel-hosted. Reports variable
+ * NAMES only, never their values. */
+export function checkTestAdaptersNotInProduction(env: NodeJS.ProcessEnv = process.env): GuardResult {
+  const vercelHosted = (env.VERCEL ?? "").trim() !== "" || (env.VERCEL_ENV ?? "").trim() !== "";
+  if (!isProduction(env) && !vercelHosted) return { ok: true, message: "Not production; test-adapter check skipped." };
+  const offending: string[] = [];
+  if ((env[TEST_AUTH_ADAPTER_FLAG] ?? "").trim() !== "") offending.push(TEST_AUTH_ADAPTER_FLAG);
+  const localProof =
+    !vercelHosted &&
+    (env[LOCAL_PRODUCTION_PROOF_FLAG] ?? "").trim() === LOCAL_PRODUCTION_PROOF_VALUE &&
+    isLoopbackUrl(env.DATABASE_URL);
+  if (!localProof) {
+    for (const name of ["SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "VIRUSTOTAL_API_BASE_URL"]) {
+      if (isLoopbackUrl(env[name])) offending.push(`${name} (loopback address)`);
+    }
+  }
+  if (vercelHosted && (env[LOCAL_PRODUCTION_PROOF_FLAG] ?? "").trim() !== "") offending.push(LOCAL_PRODUCTION_PROOF_FLAG);
+  if (offending.length > 0) {
+    return {
+      ok: false,
+      message:
+        `A test-only adapter is configured in a production or Vercel-hosted environment: ${offending.join(", ")}. ` +
+        "The fake Auth/Admin and scanner stand-ins are for synthetic local tests only. Remove them from this environment's configuration.",
+    };
+  }
+  return { ok: true, message: "No test-only adapter is configured in production." };
+}
+
 /** Minimum CRON_SECRET length; shorter values are treated as not configured.
  * Shared with lib/jobs/cron-runner.ts's authorizeJobRunner() so the startup
  * guard and the endpoint agree on what "configured" means. */
@@ -190,6 +249,7 @@ export function checkCronSecretConfigured(env: NodeJS.ProcessEnv = process.env):
 
 export const PRODUCTION_STARTUP_GUARDS: Guard[] = [
   checkDeterministicModelNotInProduction,
+  checkTestAdaptersNotInProduction,
   checkDevAuthNotInProduction,
   checkDevAccountIdNotInProduction,
   checkDatabaseTlsIsSecure,

@@ -1,0 +1,64 @@
+name: document-ingestion-e2e
+# Document-ingestion browser journey in PROTOTYPE document-safety mode
+# (MALWARE_SCANNING_INTENTIONALLY_DISABLED=true, no scanner configured, no
+# standalone jobs worker -- processing advances only through the bounded
+# request drain that status polling triggers). GitHub-hosted runners are not
+# available for this repository, so this workflow documents the exact steps;
+# the suite is run locally with the same commands and reported as local
+# verification.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  ingestion-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_USER: dearpolicy, POSTGRES_PASSWORD: dearpolicy, POSTGRES_DB: dearpolicy }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      DATABASE_SSL: "off"
+      E2E_RUN_ID: gh${{ github.run_id }}
+      E2E_USER_A: 7e2e0000-0000-4000-8000-00000000000a
+      E2E_USER_B: 7e2e0000-0000-4000-8000-00000000000b
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.e2e-storage
+      # Prototype document-safety mode: intentionally disabled, no scanner,
+      # and no VIRUSTOTAL_* variables at all.
+      MALWARE_SCANNING_INTENTIONALLY_DISABLED: "true"
+      DEV_AUTH_ENABLED: "true"
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
+      NEXT_TELEMETRY_DISABLED: "1"
+      E2E_BASE_URL_A: http://localhost:3000
+      E2E_BASE_URL_B: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Apply schema and provision synthetic households
+        run: |
+          node --import tsx e2e/support/apply-schema.ts
+          node --import tsx e2e/support/provision.ts
+      - name: Start both household apps (NO jobs worker -- request drain only)
+        run: |
+          mkdir -p logs .e2e-storage
+          DEV_ACCOUNT_ID=$E2E_USER_A nohup npx next dev -p 3000 > logs/app-a.log 2>&1 &
+          rm -rf ../app-b && mkdir -p ../app-b
+          tar --exclude=./node_modules --exclude=./.git --exclude=./.next --exclude=./logs -cf - . | (cd ../app-b && tar -xf -)
+          cp -al $PWD/node_modules ../app-b/node_modules
+          (cd ../app-b && DEV_ACCOUNT_ID=$E2E_USER_B nohup npx next dev -p 3001 > $GITHUB_WORKSPACE/logs/app-b.log 2>&1 &)
+          for url in http://localhost:3000/api/health http://localhost:3001/api/health; do
+            for i in $(seq 1 120); do curl -sf -o /dev/null "$url" && break; sleep 2; done
+            curl -sf -o /dev/null "$url"
+          done
+      - name: Prototype-mode banner is logged at startup
+        run: grep -qi "MALWARE SCANNING IS INTENTIONALLY DISABLED" logs/app-a.log
+      - name: Document-ingestion browser journey
+        run: npx playwright test -c e2e/playwright.ingestion.config.ts

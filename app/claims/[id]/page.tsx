@@ -49,6 +49,10 @@ export default function ClaimEvidencePage() {
   const [docType, setDocType] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Deleting is two clicks: "Delete document" asks, "Confirm delete" acts.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     const claimRes = await fetch(`/api/claims/${claimSessionId}`).then((r) => r.json());
@@ -97,6 +101,26 @@ export default function ClaimEvidencePage() {
     await load();
   }
 
+  async function handleDelete(doc: EvidenceDoc) {
+    if (!claim) return;
+    if (confirmDeleteId !== doc.id) { setConfirmDeleteId(doc.id); setNotice(""); return; }
+    setDeletingId(doc.id);
+    setNotice("");
+    try {
+      const query = new URLSearchParams({ familyMemberId: claim.family_member_id, claimSessionId });
+      const res = await fetch(`/api/claims/evidence/${doc.id}?${query}`, { method: "DELETE", headers: { "Idempotency-Key": `delete:${doc.id}` } });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || "Could not delete this document. Please try again.");
+      setNotice(`${doc.original_filename} was deleted. Anything estimated from it has been removed.`);
+      setConfirmDeleteId(null);
+      await load();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Could not delete this document. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (error) return <div className="page"><div className="alert error" role="alert"><strong>{error}</strong></div></div>;
   if (!claim) return <div className="page"><div className="empty-card">Loading claim…</div></div>;
 
@@ -124,7 +148,7 @@ export default function ClaimEvidencePage() {
               ? <p className="muted"><b>{group.label}:</b> {group.guidance} {option.description}</p>
               : <p className="muted">Pick the closest match. Death records, medical evidence and bills are each read differently.</p>;
           })()}
-          <label>PDF file<input type="file" name="file" accept="application/pdf" required /></label>
+          <label>Document file<input type="file" name="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff" required /></label>
           {uploadError && <div className="alert error" role="alert">{uploadError}</div>}
           <button className="button primary" type="submit" disabled={busy || !docType}>{busy ? "Uploading…" : "Upload"}</button>
         </form>
@@ -138,6 +162,7 @@ export default function ClaimEvidencePage() {
 
       <section className="section">
         <h2>Documents</h2>
+        {notice && <p className="upload-status evidence-status" role="status">{notice}</p>}
         {documents.length === 0 ? <div className="empty-card">No claim-evidence documents uploaded yet.</div> : documents.map((doc) => (
           <div key={doc.id} className="action-card" style={{ gridTemplateColumns: "1fr", marginBottom: 12 }}>
             <div>
@@ -191,8 +216,20 @@ export default function ClaimEvidencePage() {
                   : <p className="muted">DearPolicy has not confirmed this document is about this family member, so its bill details cannot be reviewed yet.</p>
               )}
 
-              {["needs_review", "extracted", "uploaded", "quarantined", "processing", "matched", "failed"].includes(doc.status) && (
-                <button className="button secondary compact" style={{ marginTop: 8 }} onClick={() => handleReject(doc.id)}>Reject document</button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                {["needs_review", "extracted", "uploaded", "quarantined", "processing", "matched", "failed"].includes(doc.status) && (
+                  <button className="button secondary compact" onClick={() => handleReject(doc.id)}>Reject document</button>
+                )}
+                <button className="button secondary compact danger" disabled={!!deletingId} onClick={() => handleDelete(doc)}
+                  aria-label={confirmDeleteId === doc.id ? `Confirm delete ${doc.original_filename}` : `Delete ${doc.original_filename}`}>
+                  {deletingId === doc.id ? "Deleting…" : confirmDeleteId === doc.id ? "Confirm delete" : "Delete document"}
+                </button>
+                {confirmDeleteId === doc.id && !deletingId && (
+                  <button className="button secondary compact" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+                )}
+              </div>
+              {confirmDeleteId === doc.id && !deletingId && (
+                <p className="muted" role="note">Deleting removes this document and anything DearPolicy read or estimated from it. This cannot be undone.</p>
               )}
             </div>
           </div>

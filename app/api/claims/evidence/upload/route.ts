@@ -7,7 +7,8 @@ import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { getClaimSession } from "@/lib/claims/session";
 import { saveClaimEvidenceFile } from "@/lib/storage";
-import { validateEvidenceUpload, looksLikePdf } from "@/lib/claims/evidence/validation";
+import { canonicalMimeType, validateEvidenceUpload } from "@/lib/claims/evidence/validation";
+import { probeImageDecodes } from "@/lib/documents/formats";
 import { createEvidenceDocument, getScopedEvidenceDocument, supersedeEvidenceDocument, EvidenceAlreadySupersededError } from "@/lib/claims/evidence/store";
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { enqueueClaimEvidenceProcessing } from "@/lib/claims/evidence/queue";
@@ -57,9 +58,10 @@ export async function POST(request: NextRequest) {
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const validation = validateEvidenceUpload({ documentType, filename: file.name, mimeType: file.type, byteSize: bytes.byteLength });
+    const validation = validateEvidenceUpload({ documentType, filename: file.name, mimeType: file.type, byteSize: bytes.byteLength, bytes });
     if (!validation.valid) return NextResponse.json({ error: validation.message, reasonCode: validation.reasonCode }, { status: 400 });
-    if (!looksLikePdf(bytes)) return NextResponse.json({ error: "The uploaded file is not a valid PDF.", reasonCode: "NOT_A_PDF" }, { status: 400 });
+    const imageProblem = await probeImageDecodes(bytes, validation.format);
+    if (imageProblem) return NextResponse.json({ error: imageProblem, reasonCode: "CORRUPTED_FILE" }, { status: 400 });
 
     const documentId = randomUUID();
     const fileHash = createHash("sha256").update(bytes).digest("hex");
@@ -68,7 +70,7 @@ export async function POST(request: NextRequest) {
     const { document, created } = await createEvidenceDocument({
       accountId: ctx.householdId, familyMemberId, claimSessionId,
       documentType: documentType as ClaimEvidenceDocumentType,
-      originalFilename: file.name, storageKey, mimeType: "application/pdf", byteSize: bytes.byteLength, fileHash,
+      originalFilename: file.name, storageKey, mimeType: canonicalMimeType(validation.format), byteSize: bytes.byteLength, fileHash,
     });
 
     if (!created) {

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       // lib/rag/ingest.ts's own gate no-op it a moment later with no
       // feedback to the person who asked for it.
       const quarantine = await getPolicyQuarantineRow(ctx.householdId, body.policyId);
-      if (!quarantine || quarantine.quarantine_status !== "scan_clean") throw new NotClearedForProcessing();
+      if (!quarantine || (quarantine.quarantine_status !== "scan_clean" && quarantine.quarantine_status !== "not_scanned_prototype")) throw new NotClearedForProcessing();
 
       return row;
     });
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const requeued = await query(
       `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
        processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
-       WHERE id=$1 AND account_id=$2 AND processing_status NOT IN ('queued','extracting','indexing') AND quarantine_status='scan_clean'`,
+       WHERE id=$1 AND account_id=$2 AND processing_status NOT IN ('queued','extracting','indexing') AND quarantine_status IN ('scan_clean','not_scanned_prototype')`,
       [body.policyId, ctx.householdId],
     );
     if (!requeued.rowCount) throw new AlreadyProcessing();

@@ -43,6 +43,7 @@
     "security:test": "node --import tsx scripts/security-regressions.ts",
     "security:tls-test": "node --import tsx scripts/tls-config-regressions.ts",
     "security:launch-guard-test": "node --import tsx scripts/launch-guard-regressions.ts",
+    "security:test-adapter-test": "node --import tsx scripts/test-adapter-production-refusal-regressions.ts",
     "security:rls-test": "node --import tsx scripts/rls-regressions.ts",
     "launch:check": "node --expose-gc --import tsx scripts/launch-check.ts",
     "security:authz-client-test": "node --import tsx scripts/authz-client-regressions.ts",
@@ -57,6 +58,7 @@
     "security:csrf-test": "node --import tsx scripts/csrf-regressions.ts",
     "security:launch-check-test": "node --import tsx scripts/launch-check-regressions.ts",
     "security:launch-check-verifier-test": "node scripts/launch-check-verifier-regressions.mjs",
+    "security:prototype-scan-mode-test": "node --import tsx scripts/prototype-scan-mode-regressions.ts",
     "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts",
     "security:scan-callback-test": "node --import tsx scripts/scan-callback-regressions.ts",
     "security:malware-scanning-virustotal-test": "node --import tsx scripts/malware-scanning-virustotal-regressions.ts",
@@ -94,6 +96,7 @@
     "jobs:worker": "node --import tsx scripts/worker.ts",
     "jobs:dead-letter": "node --import tsx scripts/dead-letter.ts",
     "reviewer:admin": "node --import tsx scripts/claim-reviewer-admin.ts",
+    "live-assist:pack": "node --import tsx scripts/live-assist/synthetic-pdf-pack.ts",
     "e2e:full-household-test": "node --import tsx scripts/full-household-e2e-regressions.ts",
     "e2e:full-journey-test": "node scripts/full-household-e2e-orchestrator.mjs",
     "security:scan-retry-test": "node --import tsx scripts/scan-retry-regressions.ts",
@@ -110,12 +113,14 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
+    "mammoth": "^1.13.0",
     "next": "^16.0.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "6.2.108",
     "pg": "^8.16.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "sharp": "^0.35.4",
     "zod": "^4.1.0"
   },
   "devDependencies": {
@@ -125,6 +130,7 @@
     "@types/pg": "^8.15.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
+    "jszip": "^3.10.2",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   }

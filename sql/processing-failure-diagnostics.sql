@@ -38,16 +38,19 @@ INSERT INTO processing_failure_diagnostics(account_id, resource_type, resource_i
    WHERE scan_result_detail IS NOT NULL
      AND scan_result_detail NOT IN ('No malware-scanning adapter is configured in this environment.',
        'The malware scan did not complete. The document stays on hold until it is scanned successfully.',
-       'This file was flagged by malware scanning and cannot be processed.');
+       'This file was flagged by malware scanning and cannot be processed.',
+       'Not scanned: malware scanning is intentionally disabled in this prototype build.');
 UPDATE policies SET scan_result_detail = CASE
     WHEN quarantine_status = 'scan_rejected' THEN 'This file was flagged by malware scanning and cannot be processed.'
+    WHEN quarantine_status = 'not_scanned_prototype' THEN 'Not scanned: malware scanning is intentionally disabled in this prototype build.'
     WHEN lower(scan_result_detail) LIKE '%no malware-scanning adapter%' THEN 'No malware-scanning adapter is configured in this environment.'
     WHEN quarantine_status = 'scan_pending' THEN 'The malware scan did not complete. The document stays on hold until it is scanned successfully.'
     ELSE NULL END
   WHERE scan_result_detail IS NOT NULL
     AND scan_result_detail NOT IN ('No malware-scanning adapter is configured in this environment.',
       'The malware scan did not complete. The document stays on hold until it is scanned successfully.',
-      'This file was flagged by malware scanning and cannot be processed.');
+      'This file was flagged by malware scanning and cannot be processed.',
+       'Not scanned: malware scanning is intentionally disabled in this prototype build.');
 
 DO $$
 BEGIN

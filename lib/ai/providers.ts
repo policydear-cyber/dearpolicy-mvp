@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { deterministicHostedReply, deterministicModelEnabled } from "./deterministic-model";
+import { deterministicHostedDocumentText, deterministicHostedReply, deterministicModelEnabled } from "./deterministic-model";
 
 /** Which model does which job, as three settings.
  *
@@ -418,6 +418,9 @@ async function geminiDocumentText(choice: ModelChoice, args: { system: string; u
  * text. Throws a clear error for providers that do not support document
  * input yet rather than guessing. */
 export async function hostedDocumentToText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
+  // Synthetic browser/CI journeys only; impossible in production (see
+  // lib/ai/deterministic-model.ts and lib/launch/guards.ts).
+  if (deterministicModelEnabled()) return deterministicHostedDocumentText(args);
   if (choice.provider === "anthropic") return anthropicDocumentText(choice, args);
   if (choice.provider === "gemini") return geminiDocumentText(choice, args);
   throw new Error(describeChoice(choice) + " does not support reading scanned PDF pages yet. Use an Anthropic or Gemini preset for MODEL_PRESET/READING_MODEL, or run local PaddleOCR instead.");

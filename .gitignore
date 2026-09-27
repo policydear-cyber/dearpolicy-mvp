@@ -15,3 +15,5 @@ logs
 .e2e-state.json
 .topology-seed.json
 .topology-storage/
+.e2e-auth-seed.json
+.e2e-auth-households

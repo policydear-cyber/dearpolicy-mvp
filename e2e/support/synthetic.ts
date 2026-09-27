@@ -11,6 +11,8 @@ export const name = (label: string) => `${PREFIX}-${label}`;
 export const SYNTHETIC_MALWARE_MARKER = "SYNTHETIC-DPTEST-MALICIOUS-VERDICT-MARKER";
 /** Marker the fake VirusTotal API never finishes analysing (poll budget). */
 export const SYNTHETIC_PENDING_MARKER = "SYNTHETIC-DPTEST-SCAN-NEVER-COMPLETES-MARKER";
+/** Marker the fake VirusTotal API answers with a provider error (HTTP 500). */
+export const SYNTHETIC_PROVIDER_ERROR_MARKER = "SYNTHETIC-DPTEST-SCAN-PROVIDER-ERROR-MARKER";
 
 /** A small synthetic "policy wording" PDF. The wording/terms-and-conditions
  * phrasing makes DearPolicy classify it deterministically (no model call);
@@ -30,6 +32,6 @@ export async function syntheticWordingPdf(label: string, extraLines: string[] = 
   // pdf-lib compresses page content, so a scan marker drawn on the page is
   // not visible in the raw bytes a scanner receives. Scanner markers are
   // therefore also appended as a trailing PDF comment (valid PDF).
-  const markers = extraLines.filter((l) => l === SYNTHETIC_MALWARE_MARKER || l === SYNTHETIC_PENDING_MARKER);
+  const markers = extraLines.filter((l) => l === SYNTHETIC_MALWARE_MARKER || l === SYNTHETIC_PENDING_MARKER || l === SYNTHETIC_PROVIDER_ERROR_MARKER);
   return markers.length ? Buffer.concat([bytes, Buffer.from(markers.map((m) => `\n%${m}\n`).join(""), "latin1")]) : bytes;
 }

@@ -119,7 +119,7 @@ export type EvidenceUploadFormResult = { ok: true; form: FormData } | { ok: fals
 export function buildEvidenceUploadForm(args: { file: Blob | null | undefined; fileName?: string; familyMemberId: string; claimSessionId: string; documentType: string }): EvidenceUploadFormResult {
   if (!args.documentType) return { ok: false, message: "Choose what kind of document this is before uploading." };
   if (!isUploadableDocumentType(args.documentType)) return { ok: false, message: "That document type is not supported." };
-  if (!args.file) return { ok: false, message: "Choose a PDF file to upload." };
+  if (!args.file) return { ok: false, message: "Choose a PDF or photo to upload." };
   const form = new FormData();
   if (args.fileName) form.set("file", args.file, args.fileName);
   else form.set("file", args.file);
@@ -135,6 +135,8 @@ export type EvidenceStatusDisplay = { label: string; tone: EvidenceStatusTone; d
 const SAFE_FAILURE_DETAIL: Record<string, string> = {
   MALWARE_DETECTED: "This file was flagged by the security scan and was not processed. Please upload a clean copy.",
   NOT_A_PDF: "This file could not be opened as a PDF. Please upload it again as a PDF.",
+  UNSUPPORTED_FORMAT: "This file is not in a supported format. Upload it as a PDF or a JPEG/PNG/WebP/TIFF photo or scan.",
+  CORRUPTED_FILE: "This file could not be read -- it may be corrupted. Re-export or re-photograph the document and upload it again.",
   UNREADABLE_DOCUMENT: "DearPolicy could not read enough text from this file. A clearer scan or the original PDF may help.",
   FAMILY_MEMBER_NOT_FOUND: "The family member this document belongs to is no longer on file.",
 };
@@ -146,8 +148,17 @@ const SAFE_FAILURE_DETAIL: Record<string, string> = {
 export function evidenceStatusDisplay(doc: { status: string; scan_status: string; processing_error_code?: string | null }): EvidenceStatusDisplay {
   switch (doc.status) {
     case "uploaded":
+      // Prototype document-safety mode never shows scan language: the file
+      // is simply queued for reading. It is never described as scanned,
+      // clean or safe -- in either mode.
+      if (doc.scan_status === "not_scanned_prototype") {
+        return { label: "Received", tone: "pending", detail: "Document received — reading and extracting information." };
+      }
       return { label: "Waiting for security scan", tone: "pending", detail: "The file is saved and will be scanned before anything reads it." };
     case "quarantined":
+      if (doc.scan_status === "not_scanned_prototype") {
+        return { label: "Received", tone: "pending", detail: "Document received — reading and extracting information." };
+      }
       return doc.scan_status === "scan_unavailable"
         ? { label: "On hold", tone: "pending", detail: "Security scanning is not available right now, so this file will not be processed until it is." }
         : { label: "Waiting for security scan", tone: "pending", detail: "This file is waiting for its security scan to finish before it can be processed." };

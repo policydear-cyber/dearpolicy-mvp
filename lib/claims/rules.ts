@@ -175,15 +175,23 @@ export function nextClaimQuestion(facts: ClaimFacts, coverages: OwnedCoverage[],
   return null;
 }
 
-function amountText(amount: number | null, currency = "SGD") { return amount == null ? null : formatMoney(amount,currency); }
+function amountText(amount: number | null, currency?: string | null) {
+  // Missing stays missing: without a stated currency no figure is shown --
+  // never a bare number and never one relabelled as SGD. The hard-coded
+  // G007500 schedule benefits below pass "SGD" explicitly because their
+  // amounts are quoted in S$ by the same embedded scheme wording (S$5,000
+  // simple-fracture limit, S$500 ambulance, S$30/day hospital cash); that
+  // restates the rule's own wording rather than defaulting extracted data.
+  return amount == null || !currency ? null : formatMoney(amount, currency);
+}
 /** A cover amount named in explanatory text. It is printed only when its
  * currency is verified from the cover's own policy evidence. Without a
  * verified currency no figure is shown at all -- never a bare number and never
  * relabelled as SGD -- only that an amount exists whose currency is unstated. */
 export const UNSTATED_CURRENCY_AMOUNT_TEXT = "an amount whose currency the policy evidence does not state (not shown)";
-function coverAmountText(coverage: { amount: number | null; currency: string; currencyVerified?: boolean }) {
+function coverAmountText(coverage: { amount: number | null; currency: string | null; currencyVerified?: boolean }) {
   if (coverage.amount == null) return null;
-  return coverage.currencyVerified === true ? formatMoney(coverage.amount, coverage.currency) : UNSTATED_CURRENCY_AMOUNT_TEXT;
+  return coverage.currencyVerified === true && coverage.currency ? formatMoney(coverage.amount, coverage.currency) : UNSTATED_CURRENCY_AMOUNT_TEXT;
 }
 
 function g007500(coverages: OwnedCoverage[]) {
@@ -323,25 +331,25 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
       const pct = fracturePct(facts.fractureBodyPart);
       if (pct != null) {
         const amount = 5000 * pct;
-        items.push({id:"gpa-fracture",title:`${facts.fractureBodyPart?.replace(/^./,c=>c.toUpperCase())} fracture benefit`,status:"likely_applicable",amountText:amountText(amount),reason:`The policy's simple-fracture limit is S$5,000 and the schedule pays ${Math.round(pct*100)}% for this body part.`,conditions:["The fracture must meet the policy's simple-fracture definition and be caused by the accident."],evidenceTerms:["Simple Fracture Benefit Limit","Schedule Compensation"],productName:"Group Personal Accident"});
+        items.push({id:"gpa-fracture",title:`${facts.fractureBodyPart?.replace(/^./,c=>c.toUpperCase())} fracture benefit`,status:"likely_applicable",amountText:amountText(amount,"SGD"),reason:`The policy's simple-fracture limit is S$5,000 and the schedule pays ${Math.round(pct*100)}% for this body part.`,conditions:["The fracture must meet the policy's simple-fracture definition and be caused by the accident."],evidenceTerms:["Simple Fracture Benefit Limit","Schedule Compensation"],productName:"Group Personal Accident"});
       }
       if (facts.ambulanceUsed === true && facts.ambulanceBill != null) {
         const amount = Math.min(facts.ambulanceBill,500);
-        items.push({id:"gpa-ambulance",title:"Ambulance reimbursement",status:"likely_applicable",amountText:amountText(amount),reason:`Your reported ambulance bill is ${amountText(facts.ambulanceBill)} and the policy limit is S$500 per incident.`,conditions:["Keep the ambulance invoice/receipt and accident medical records."],evidenceTerms:["Ambulance Cost","Up to S$500 per incident"],productName:"Group Personal Accident"});
+        items.push({id:"gpa-ambulance",title:"Ambulance reimbursement",status:"likely_applicable",amountText:amountText(amount,"SGD"),reason:`Your reported ambulance bill is ${amountText(facts.ambulanceBill,"SGD")} and the policy limit is S$500 per incident.`,conditions:["Keep the ambulance invoice/receipt and accident medical records."],evidenceTerms:["Ambulance Cost","Up to S$500 per incident"],productName:"Group Personal Accident"});
       }
       if (facts.hospitalised === true) {
         items.push({id:"gpa-hospital-recovery",title:"Accidental hospital recuperation",status:"likely_applicable",amountText:"S$250",reason:"The uploaded Personal Accident summary lists a S$250 accidental hospital recuperation benefit.",conditions:["The hospital admission must satisfy the policy's accident-related admission conditions."],evidenceTerms:["Accidental Hospital Recuperation Benefit","S$250"],productName:"Group Personal Accident"});
       }
       if ((facts.permanentImpairment === true || facts.uncertainFacts.includes("permanent_impairment")) && gpa.amount != null && !disabilityTPDCoverageIds.has(gpa.id)) {
         const amount = gpa.amount * 1.5;
-        items.push({id:"gpa-tpd",title:"Accidental Total & Permanent Disability",status:"needs_document",amountText:`Up to ${amountText(amount,gpa.currency)}`,reason:facts.permanentImpairment===true?"Your Personal Accident cover is confirmed and the wording pays 150% of Sum Insured for qualifying accidental TPD.":"Permanent impairment is still uncertain, but this high-value benefit should be checked if doctors suspect lasting loss of function.",conditions:["A medical assessment must satisfy the policy's Total & Permanent Disability definition.","The disability must result from the accident."],evidenceTerms:["Total and Permanent Disablement","150% of Sum Insured"],productName:"Group Personal Accident"});
+        items.push({id:"gpa-tpd",title:"Accidental Total & Permanent Disability",status:"needs_document",amountText:gpa.currency?`Up to ${amountText(amount,gpa.currency)}`:null,reason:facts.permanentImpairment===true?"Your Personal Accident cover is confirmed and the wording pays 150% of Sum Insured for qualifying accidental TPD.":"Permanent impairment is still uncertain, but this high-value benefit should be checked if doctors suspect lasting loss of function.",conditions:["A medical assessment must satisfy the policy's Total & Permanent Disability definition.","The disability must result from the accident."],evidenceTerms:["Total and Permanent Disablement","150% of Sum Insured"],productName:"Group Personal Accident"});
       }
     }
 
     const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
     if (gtl && isG007500 && facts.hospitalised === true && facts.hospitalNights != null && dateBefore(facts.eventDate,gtl.effectiveDate) !== true) {
       const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
-      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30),reason:`Your ${facts.hospitalNights}-night stay gives ${payableDays} payable day${payableDays===1?"":"s"} after the first 10 days, at S$30 per day.`,conditions:["The hospitalisation must not fall under an exclusion for this benefit."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
+      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30,"SGD"),reason:`Your ${facts.hospitalNights}-night stay gives ${payableDays} payable day${payableDays===1?"":"s"} after the first 10 days, at S$30 per day.`,conditions:["The hospitalisation must not fall under an exclusion for this benefit."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
       else items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"not_applicable",amountText:null,reason:`This benefit starts only after the 10th day of a continuous hospital stay. The reported stay was ${facts.hospitalNights} night${facts.hospitalNights===1?"":"s"}.`,conditions:[],evidenceTerms:["Daily Hospital Cash Benefit","after the 10th day"],productName:"Group Term Life"});
     }
   }
@@ -367,7 +375,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
     const gtl = bestCoverage(coverages,"group term life","Death") ?? bestCoverage(coverages,"group term life");
     if (gtl && isG007500 && facts.hospitalised === true && facts.hospitalNights != null) {
       const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
-      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30),reason:`The reported hospital stay produces ${payableDays} payable day${payableDays===1?"":"s"} at S$30 per day after day 10.`,conditions:["The admission must satisfy the policy conditions and exclusions."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
+      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30,"SGD"),reason:`The reported hospital stay produces ${payableDays} payable day${payableDays===1?"":"s"} at S$30 per day after day 10.`,conditions:["The admission must satisfy the policy conditions and exclusions."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
     }
   }
 
@@ -400,7 +408,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
     const medicalAssessedCoverageIds = new Set(medicalAssessments.map((i) => i.coverageId));
     if (gtl && isG007500 && facts.hospitalNights != null && !medicalAssessedCoverageIds.has(gtl.id)) {
       const payableDays = Math.max(0, Math.min(30, facts.hospitalNights - 10));
-      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30),reason:`The policy pays S$30 per day from day 11, for up to 30 payable days.`,conditions:["The reason for admission must not be excluded."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
+      if (payableDays > 0) items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"likely_applicable",amountText:amountText(payableDays*30,"SGD"),reason:`The policy pays S$30 per day from day 11, for up to 30 payable days.`,conditions:["The reason for admission must not be excluded."],evidenceTerms:["Daily Hospital Cash Benefit","$30 per day"],productName:"Group Term Life"});
       else items.push({id:"gtl-hospital-cash",title:"Daily Hospital Cash",status:"not_applicable",amountText:null,reason:`The reported ${facts.hospitalNights}-night stay does not pass the 10-day waiting period for this hospital cash benefit.`,conditions:[],evidenceTerms:["after the 10th day"],productName:"Group Term Life"});
     }
     items.push(...medicalAssessments);
@@ -417,7 +425,7 @@ export function assessClaim(facts: ClaimFacts, coverages: OwnedCoverage[], death
   // not yet converted into an insurer-specific deterministic rule catalogue.
   if (facts.eventType !== "death" && hasReimbursementMedicalCover(coverages) && facts.hospitalBill != null) {
     const med = coverages.find((c)=>["Hospitalisation","Outpatient"].includes(c.category));
-    if (med && !items.some((i)=>i.productName===med.productName)) items.push({id:"medical-reimbursement-review",title:med.productName ?? med.category,status:"needs_document",amountText:null,reason:`You reported a medical bill of ${amountText(facts.hospitalBill)}. DearPolicy has confirmed you own this medical cover, but this plan's reimbursement rules have not yet been converted into a deterministic calculator.`,conditions:["DearPolicy should check the plan's deductible, co-insurance, panel/network and eligible-expense wording before estimating reimbursement."],evidenceTerms:[],productName:med.productName});
+    if (med && !items.some((i)=>i.productName===med.productName)) items.push({id:"medical-reimbursement-review",title:med.productName ?? med.category,status:"needs_document",amountText:null,reason:`You reported a medical bill of ${amountText(facts.hospitalBill,"SGD")}. DearPolicy has confirmed you own this medical cover, but this plan's reimbursement rules have not yet been converted into a deterministic calculator.`,conditions:["DearPolicy should check the plan's deductible, co-insurance, panel/network and eligible-expense wording before estimating reimbursement."],evidenceTerms:[],productName:med.productName});
   }
 
   return items;

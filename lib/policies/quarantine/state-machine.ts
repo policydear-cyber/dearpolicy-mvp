@@ -4,6 +4,7 @@ import type { PolicyQuarantineStatus } from "./types";
  * Deterministic state machine for a policy document's quarantine gate:
  *
  *   uploaded -> quarantined -> scan_pending -> scan_clean | scan_rejected
+ *                                          | not_scanned_prototype  (prototype mode only)
  *
  * "processing"/"processed" from the checkpoint-3 specification are NOT
  * separate values of THIS state machine -- they are the pre-existing
@@ -31,9 +32,16 @@ import type { PolicyQuarantineStatus } from "./types";
 const ALLOWED_TRANSITIONS: Record<PolicyQuarantineStatus, PolicyQuarantineStatus[]> = {
   uploaded: ["quarantined", "deleted"],
   quarantined: ["scan_pending", "deleted"],
-  scan_pending: ["scan_clean", "scan_rejected", "deleted"],
+  scan_pending: ["scan_clean", "scan_rejected", "not_scanned_prototype", "deleted"],
   scan_clean: ["deleted"],
   scan_rejected: ["deleted"],
+  // Prototype document-safety mode (MALWARE_SCANNING_INTENTIONALLY_DISABLED):
+  // the document was deliberately NOT scanned and proceeds to processing.
+  // Distinct from scan_clean by design -- it never claims a scan happened --
+  // and terminal except for deletion, so re-enabling a real scanner later
+  // never rewrites documents uploaded while scanning was off (they keep
+  // their honest not_scanned_prototype state; only NEW uploads are scanned).
+  not_scanned_prototype: ["deleted"],
   deleted: [],
 };
 
