@@ -145,7 +145,10 @@ export default function PoliciesPage() {
   }
 
   async function reprocess(policy: Policy) {
-    if (isProcessing(policy)) return;
+    // A stalled document (in-flight status, but its background job died) is
+    // exactly what Re-analyse recovers -- only a genuinely live analysis
+    // blocks the request.
+    if (isProcessing(policy) && !policy.processing_stalled) return;
     setReprocessingId(policy.id);
     setStatus(`Queued ${policy.product_name ?? policy.original_filename} for re-analysis.`);
     try {
