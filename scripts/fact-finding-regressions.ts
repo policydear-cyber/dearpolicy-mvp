@@ -3,7 +3,7 @@
  * Every blocked state has a positive control; every scenario is run repeatedly.
  */
 import assert from "node:assert/strict";
-import { categoriesFor, FACT_FINDING_SPECS, planFactFinding, type FactFindingCategory } from "@/lib/claims/fact-finding";
+import { categoriesFor, conditionDrivenQuestions, FACT_FINDING_SPECS, planFactFinding, type FactFindingCategory } from "@/lib/claims/fact-finding";
 import { applyFactFinding } from "@/lib/chat/fact-finding-chat";
 import type { ConversationFact, ConversationState, SubjectFacts } from "@/lib/chat/types";
 import type { ChatAnswer } from "@/types";
@@ -91,16 +91,58 @@ test("travel: the delay question is asked only for a delay, and the event date g
   const moved = plan("travel", { ...base, tripStartDate: fact("2026-08-02", 5) });
   assert.ok(moved.staleFacts.includes("eventDate"));
 });
-test("chat: several family members each get their own plans; an ordinary policy question gets none", () => {
-  const state: ConversationState = { intent: "claim", subjects: { a: { deathDate: fact("2026-08-01") }, b: { admissionDate: fact("2026-08-02") } },
-    scenarios: { a: [{ label: "death", family: "death", traits: ["death", "accident"] }], b: [{ label: "stay", family: "hospitalisation", traits: ["hospitalisation"] }] } } as unknown as ConversationState;
-  const answer = { mode: "claim_assessment", summary: "", details: [], claimItems: [], nextSteps: [], questions: [], missingFacts: [] } as unknown as ChatAnswer;
-  applyFactFinding(answer, state, [{ id: "a", display_name: "A" }, { id: "b", display_name: "B" }]);
-  const plans = answer.factFinding ?? [];
-  assert.deepEqual(plans.map((p) => `${p.subjectName}:${p.category}`), ["A:accidental_death", "B:medical_reimbursement", "B:hospital_cash"]);
-  assert.ok(!plans[0].nextQuestions.some((q) => q.factKey === "deathDate"), "A's date of death is known");
-  const policyQuestion = { ...answer, mode: "answer" } as ChatAnswer;
-  applyFactFinding(policyQuestion, { ...state, intent: "policy_question" }, [{ id: "a", display_name: "A" }]);
-  assert.equal(policyQuestion.factFinding, undefined);
+test("condition-driven questions come only from the household's own stored exclusions", () => {
+  const conditions = [
+    { kind: "exclusion", cause: "alcohol_or_drugs", appliesToEvents: ["death"] },
+    { kind: "exclusion", cause: "racing", appliesToEvents: [] },
+    { kind: "exclusion", cause: "pregnancy", appliesToEvents: ["death"] }, // no question mapped
+    { kind: "exclusion", cause: "suicide", appliesToEvents: ["death"] }, // sensitive: never asked, the coroner's report answers it
+    { kind: "waiting_period", cause: "alcohol_or_drugs", appliesToEvents: ["death"] }, // not an exclusion
+    { kind: "exclusion", cause: "hazardous_sport", appliesToEvents: ["travel"] }, // different event scope
+  ];
+  const qs = conditionDrivenQuestions({ category: "accidental_death", conditions, facts: {} });
+  assert.deepEqual(qs.map((q) => q.factKey).sort(), ["alcoholOrDrugsInvolved", "hazardousActivity"]);
+  assert.ok(qs.every((q) => q.type === "yes_no"));
+  assert.ok(!JSON.stringify(qs).includes("suicide"), "sensitive causes are never turned into questions");
+  assert.doesNotMatch(JSON.stringify(qs), MONEY);
 });
-console.log(`fact-finding regressions passed: ${cases} cases (each run 3 times).`);
+test("a condition question already answered is not asked again; no exclusions means no questions", () => {
+  const conditions = [{ kind: "exclusion", cause: "alcohol_or_drugs", appliesToEvents: ["death"] }];
+  const answered = conditionDrivenQuestions({ category: "accidental_death", conditions, facts: { alcoholOrDrugsInvolved: fact(false) } });
+  assert.deepEqual(answered, []);
+  assert.deepEqual(conditionDrivenQuestions({ category: "accidental_death", conditions: [], facts: {} }), []);
+});
+test("accidental death now requires where it happened, alongside cause and circumstances", () => {
+  const p = plan("accidental_death", { deathDate: fact("2026-08-01") });
+  assert.deepEqual(p.nextQuestions.map((q) => q.factKey).sort(), ["accidentCircumstances", "causeOfDeath", "eventLocation"]);
+  assert.ok(p.nextQuestions.find((q) => q.factKey === "eventLocation")!.text.includes("Singapore"));
+});
+
+async function atest(name: string, fn: () => Promise<void>) { try { for (let i = 0; i < 3; i++) await fn(); cases++; } catch (e) { throw new Error(name, { cause: e }); } }
+async function chatCases() {
+  await atest("chat: several family members each get their own plans; an ordinary policy question gets none", async () => {
+    const state: ConversationState = { intent: "claim", subjects: { a: { deathDate: fact("2026-08-01") }, b: { admissionDate: fact("2026-08-02") } },
+      scenarios: { a: [{ label: "death", family: "death", traits: ["death", "accident"] }], b: [{ label: "stay", family: "hospitalisation", traits: ["hospitalisation"] }] } } as unknown as ConversationState;
+    const answer = { mode: "claim_assessment", summary: "", details: [], claimItems: [], nextSteps: [], questions: [], missingFacts: [] } as unknown as ChatAnswer;
+    await applyFactFinding(answer, state, [{ id: "a", display_name: "A" }, { id: "b", display_name: "B" }]);
+    const plans = answer.factFinding ?? [];
+    assert.deepEqual(plans.map((p) => `${p.subjectName}:${p.category}`), ["A:accidental_death", "B:medical_reimbursement", "B:hospital_cash"]);
+    assert.ok(!plans[0].nextQuestions.some((q) => q.factKey === "deathDate"), "A's date of death is known");
+    const policyQuestion = { ...answer, mode: "answer" } as ChatAnswer;
+    await applyFactFinding(policyQuestion, { ...state, intent: "policy_question" }, [{ id: "a", display_name: "A" }], { question: "What is the waiting period for critical illness?" });
+    assert.equal(policyQuestion.factFinding, undefined);
+  });
+  await atest("chat: a message that DESCRIBES an event gets the questions even when the intent classifier missed it", async () => {
+    const state: ConversationState = { intent: "policy_question", subjects: { a: {} },
+      scenarios: { a: [{ label: "death", family: "death", traits: ["death", "accident"] }] } } as unknown as ConversationState;
+    const answer = { mode: "answer", summary: "", details: [], claimItems: [], nextSteps: [], questions: [], missingFacts: [] } as unknown as ChatAnswer;
+    await applyFactFinding(answer, state, [{ id: "a", display_name: "A" }], { question: "Desmond died in a car accident, what can be claimed?" });
+    const plans = answer.factFinding ?? [];
+    assert.equal(plans[0]?.category, "accidental_death");
+    assert.ok(plans[0].nextQuestions.length > 0, "the deciding questions are asked");
+  });
+}
+
+chatCases().then(() => {
+  console.log(`fact-finding regressions passed: ${cases} cases (each run 3 times).`);
+}).catch((error) => { console.error(error); process.exitCode = 1; });

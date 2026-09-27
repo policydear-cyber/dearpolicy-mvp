@@ -116,7 +116,11 @@ export async function POST(request: NextRequest) {
         WHERE account_id=$1 AND file_hash=$2
           AND (superseded_at IS NOT NULL OR lifecycle_state<>'active')`,
       [ctx.householdId, fileHash],
-    );
+    ).catch((error) => {
+      // Hygiene must never fail an upload: if the release cannot run the
+      // worst case is the pre-existing behaviour (a 409 on the insert).
+      console.warn("stale file_hash release failed:", error instanceof Error ? error.message : error);
+    });
 
     try {
       // Written on the trusted server connection: every value here is

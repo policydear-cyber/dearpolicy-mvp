@@ -58,7 +58,7 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
       { key: "deathDate", aliases: ["dateOfDeath", "death_date"], question: "On what date did they pass away?", type: "date", why: DATE_WHY, group: 1, required: true },
       { key: "causeOfDeath", aliases: ["cause", "cause_of_death"], question: "What does the death certificate give as the cause of death?", type: "text", why: "An accidental death benefit depends on the cause matching the policy's own definition.", group: 2, required: true, dependsOn: ["deathDate"] },
       { key: "accidentCircumstances", aliases: ["howItHappened", "accidentDescription", "circumstances"], question: "Briefly, how did it happen?", type: "text", why: "Exclusions (for example hazardous activities) depend on the circumstances.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
-      { key: "eventLocation", aliases: ["location", "country"], question: "Where did it happen?", type: "text", why: "Some policies limit cover by country or activity.", group: 3, required: false },
+      { key: "eventLocation", aliases: ["location", "country"], question: "Where did it happen — in Singapore or overseas? If overseas, which country?", type: "text", why: "Some benefits and exclusions apply only in certain places, and an overseas death usually needs extra documents.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
     ],
     documents: [
       { type: "death_certificate", label: "Death certificate", required: true },
@@ -244,6 +244,62 @@ export function planFactFinding(input: FactFindingInput): FactFindingPlan {
     missingDocuments, reviewerRequirements, reportedAmountsIgnored,
     readyForEvidenceGatedEstimate: status === "ready_for_evidence_gated_estimate", blockedReasons,
   };
+}
+
+/** Questions the household's OWN uploaded policies make relevant.
+ *
+ * The catalogue pass stores every exclusion a policy states (cause, quote,
+ * source page). When a reported event opens a claim category, each stored
+ * exclusion that could silence its benefit is turned into one pointed
+ * question -- asked only because THIS household's wording contains it, never
+ * from a generic checklist. A family that answers them up front learns
+ * immediately whether an exclusion is in play instead of discovering it at
+ * the insurer. Sensitive causes (suicide, self-inflicted, criminal acts)
+ * are deliberately not asked here: the required police/coroner's report
+ * answers them without making the family type it. */
+const CONDITION_QUESTION_BY_CAUSE: Record<string, { factKey: string; question: string; why: (count: number) => string }> = {
+  alcohol_or_drugs: { factKey: "alcoholOrDrugsInvolved", question: "Was alcohol or drug use involved in the incident?",
+    why: (n) => `${n === 1 ? "An uploaded policy states" : n + " uploaded policies state"} an exclusion for events arising from alcohol or drug use.` },
+  racing: { factKey: "hazardousActivity", question: "Did it happen during motor racing or speed trials?",
+    why: (n) => `${n === 1 ? "An uploaded policy states" : n + " uploaded policies state"} an exclusion for racing.` },
+  hazardous_sport: { factKey: "hazardousActivity", question: "Did it happen during a hazardous sport or activity (for example diving, climbing, motor sports)?",
+    why: (n) => `${n === 1 ? "An uploaded policy states" : n + " uploaded policies state"} an exclusion for hazardous activities.` },
+  aviation: { factKey: "aviationInvolved", question: "Was it an aviation incident (other than as a fare-paying passenger on a commercial flight)?",
+    why: (n) => `${n === 1 ? "An uploaded policy states" : n + " uploaded policies state"} an exclusion for aviation.` },
+};
+const CATEGORY_EVENTS: Partial<Record<FactFindingCategory, string[]>> = {
+  accidental_death: ["death", "accidental_injury"],
+  disability_tpd: ["total_permanent_disability", "accidental_injury"],
+  medical_reimbursement: ["medical_expense", "hospitalisation", "accidental_injury"],
+  hospital_cash: ["hospitalisation"],
+  travel: ["travel"],
+};
+export function conditionDrivenQuestions(input: {
+  category: FactFindingCategory;
+  conditions: { kind: string; cause: string | null; appliesToEvents: string[] }[];
+  facts: SubjectFacts;
+}): FactFindingQuestion[] {
+  const events = CATEGORY_EVENTS[input.category];
+  if (!events) return [];
+  const counts = new Map<string, number>();
+  for (const condition of input.conditions) {
+    if (condition.kind !== "exclusion" && condition.kind !== "time_bar_from_inception") continue;
+    if (!condition.cause || !(condition.cause in CONDITION_QUESTION_BY_CAUSE)) continue;
+    if (condition.appliesToEvents.length && !condition.appliesToEvents.some((event) => events.includes(event))) continue;
+    counts.set(condition.cause, (counts.get(condition.cause) ?? 0) + 1);
+  }
+  const out: FactFindingQuestion[] = [];
+  const seenKeys = new Set<string>();
+  for (const [cause, count] of counts) {
+    const spec = CONDITION_QUESTION_BY_CAUSE[cause];
+    if (seenKeys.has(spec.factKey)) continue;
+    const known = input.facts[spec.factKey];
+    if (known?.state === "known" && known.value !== null && known.value !== "") continue;
+    seenKeys.add(spec.factKey);
+    out.push({ id: `cond-${input.category}-${spec.factKey}`, factKey: spec.factKey, type: "yes_no", why: spec.why(count), text: spec.question });
+    if (out.length >= 3) break;
+  }
+  return out;
 }
 
 /** Which categories a reported situation opens, from the conversation's own
