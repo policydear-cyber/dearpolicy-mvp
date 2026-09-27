@@ -31,6 +31,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "security:launch-check-test",
   "security:policy-quarantine-test",
   "security:prototype-scan-mode-test",
+  "security:catalog-checkpoint-test",
   "security:scan-callback-test",
   "security:storage-cleanup-test",
   "security:household-export-test",

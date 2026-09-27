@@ -4,6 +4,7 @@ import path from "node:path";
 import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { structuredCompletion } from "@/lib/ai/llm";
+import { clearCatalogCheckpoint,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { hasQuote } from "@/lib/chat/facts";
 import type { ClaimEventType } from "@/lib/insurance/claim-events";
 import type { CoverCondition,CoverConditionKind,ExcludedCause } from "@/lib/insurance/cover-conditions";
@@ -146,12 +147,21 @@ export function conditionsFromExtraction(args:{page:{page_number:number;text:str
 export async function catalogueConditions(args:{accountId:string;policyId:string;productName:string|null;
   pages:{page_number:number;text:string}[];report?:(page:number,total:number)=>void}){
   const pages=args.pages.filter(page=>page.text.trim().length>40);
-  const conditions:Omit<CoverCondition,"id"|"policyId">[]=[];
+  const scope={accountId:args.accountId,policyId:args.policyId,stage:"conditions" as const};
+  const resumed=await readCatalogCheckpoint<Omit<CoverCondition,"id"|"policyId">>(scope,pages);
+  const conditions:Omit<CoverCondition,"id"|"policyId">[]=resumed?.items??[];
+  const startIndex=resumed?.nextIndex??0;
   for(const [index,page] of pages.entries()){
+    if(index<startIndex)continue;
     args.report?.(index+1,pages.length);
     conditions.push(...await readPageConditions(page,args.productName));
+    // Checkpoint after every page so a cut-off drain window resumes here on
+    // the retry instead of restarting the whole pass.
+    await writeCatalogCheckpoint(scope,pages,{nextIndex:index+1,items:conditions,seenKeys:[]});
   }
-  return replaceConditionCatalog(args.accountId,args.policyId,conditions);
+  const stored=await replaceConditionCatalog(args.accountId,args.policyId,conditions);
+  await clearCatalogCheckpoint(scope);
+  return stored;
 }
 
 function conditionKey(condition:Omit<CoverCondition,"id"|"policyId">){

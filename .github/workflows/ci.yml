@@ -177,6 +177,8 @@ jobs:
 
       - name: Prototype document-safety mode (intentionally-disabled scanning) regression suite
         run: npm run security:prototype-scan-mode-test
+      - name: Catalogue-pass checkpoint/resume regression suite (bounded-drain cut-off recovery)
+        run: npm run security:catalog-checkpoint-test
 
       - name: Scan-provider callback authentication regression suite (real Postgres via PGlite, no live DB needed)
         run: npm run security:scan-callback-test

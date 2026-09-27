@@ -59,6 +59,7 @@
     "security:launch-check-test": "node --import tsx scripts/launch-check-regressions.ts",
     "security:launch-check-verifier-test": "node scripts/launch-check-verifier-regressions.mjs",
     "security:prototype-scan-mode-test": "node --import tsx scripts/prototype-scan-mode-regressions.ts",
+    "security:catalog-checkpoint-test": "node --import tsx scripts/catalog-checkpoint-regressions.ts",
     "security:policy-quarantine-test": "node --import tsx scripts/policy-quarantine-regressions.ts",
     "security:scan-callback-test": "node --import tsx scripts/scan-callback-regressions.ts",
     "security:malware-scanning-virustotal-test": "node --import tsx scripts/malware-scanning-virustotal-regressions.ts",

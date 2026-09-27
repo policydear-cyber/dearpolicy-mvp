@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { structuredCompletion } from "@/lib/ai/llm";
+import { clearCatalogCheckpoint,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
 import { benefitRowsFromText } from "@/lib/documents/layout";
@@ -84,15 +85,28 @@ async function categoriseRows(rows:{index:number;label:string;value:string}[]){
 
 export async function catalogueDocument(args:{accountId:string;policyId:string;productName:string|null;
   pages:{page_number:number;text:string}[];products?:string[];report?:(page:number,total:number)=>void}){
-  const benefits:Omit<CatalogBenefit,"id"|"policyId">[]=[];
-  const seen=new Set<string>();
   const pages=args.pages.filter(page=>page.text.trim().length>40);
+  const scope={accountId:args.accountId,policyId:args.policyId,stage:"benefits" as const};
+  const resumed=await readCatalogCheckpoint<Omit<CatalogBenefit,"id"|"policyId">>(scope,pages);
+  const benefits:Omit<CatalogBenefit,"id"|"policyId">[]=resumed?.items??[];
+  const seen=new Set<string>(resumed?.seenKeys??[]);
+  const startIndex=resumed?.nextIndex??0;
   // One booklet often covers several products. Tracking which product section
   // each page belongs to stops a rule from one product being attached to a
   // different product's insured amount.
   const scopes=pageProductScopes(args.pages,[...new Set([args.productName,...(args.products??[])].filter((name):name is string=>!!name))]);
   for(const [index,page] of pages.entries()){
+    if(index<startIndex)continue;
     args.report?.(index+1,pages.length);
+    // Checkpoint after every page so a cut-off drain window resumes here on
+    // the retry instead of restarting the whole pass (a long document could
+    // otherwise never finish). The page body is a block-scoped function so
+    // its early exits (`return`) skip to the checkpoint write exactly as
+    // `continue` used to skip to the next page.
+    await catalogueOnePage();
+    await writeCatalogCheckpoint(scope,pages,{nextIndex:index+1,items:benefits,seenKeys:[...seen]});
+    // eslint-disable-next-line no-inner-declarations
+    async function catalogueOnePage(){
     const section=scopes.get(page.page_number)?.[0]??args.productName;
     // Table rows first. A schedule row states its own rule, so it is parsed in
     // plain code — faster, identical every time, and it leaves the model only
@@ -129,7 +143,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       parsedHere++;
     }
     // A page whose schedule was read needs no model pass at all.
-    if(parsedHere>=2)continue;
+    if(parsedHere>=2)return;
     let extraction;
     try{
       extraction=await structuredCompletion({
@@ -142,7 +156,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
           tableRows:benefitRowsFromText(page.text).slice(0,12).map(row=>({label:row.label,amount:row.value})),
           text:page.text.slice(0,3200)}),
       });
-    }catch{continue;/* A page that cannot be read is skipped, never guessed. */}
+    }catch{return;/* A page that cannot be read is skipped, never guessed. */}
     for(const found of extraction.benefits){
       // The quote must be present on this page, verbatim.
       if(!hasQuote(page.text,found.quote))continue;
@@ -156,8 +170,10 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         conditions:found.conditions.filter(condition=>condition.trim().length>3),
         requirements:[],needsReview:formula.formulaKind==="none"});
     }
+    }
   }
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);
+  await clearCatalogCheckpoint(scope);
   return benefits.length;
 }
 export async function documentPages(accountId:string,policyId:string){
