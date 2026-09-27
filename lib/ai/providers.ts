@@ -64,7 +64,7 @@ export function modelPreset(){
  * answer nobody can explain. */
 const DEFAULT_MODEL:Record<ModelRole,string>={reading:"flash-lite",judgement:"flash",narration:"flash-lite",chat:"flash"};
 export function modelFor(role:ModelRole):ModelChoice{
-  const setting=role==="reading"?process.env.READING_MODEL:role==="judgement"?process.env.JUDGEMENT_MODEL:role==="narration"?process.env.NARRATION_MODEL:undefined;
+  const setting=role==="reading"?process.env.READING_MODEL:role==="judgement"?process.env.JUDGEMENT_MODEL:role==="narration"?process.env.NARRATION_MODEL:process.env.CHAT_MODEL;
   const chosen=parseChoice(setting);
   if(chosen)return chosen;
   const preset=modelPreset();
