@@ -28,6 +28,7 @@ type Policy = {
   original_filename: string;
   page_count: number | null;
   processing_error: string | null;
+  processing_stalled?: boolean;
   linked_people: LinkedPerson[];
   detected_people: DetectedPerson[];
 };
@@ -306,7 +307,7 @@ export default function PoliciesPage() {
             <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? `${pct}%` : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
           </div>
 
-          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button><button className="mini-button" disabled={processing || quarantineHeld || scanRejected || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button><button className="mini-button" disabled={(processing && !policy.processing_stalled) || quarantineHeld || scanRejected || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
           {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} onCorrected={() => void refresh()} />}
 
@@ -318,7 +319,7 @@ export default function PoliciesPage() {
           {processing && <div className="document-progress" aria-live="polite">
             <div className="document-progress-copy"><strong>{policy.processing_message ?? "Analysis in progress…"}</strong><span>{pct}%</span></div>
             <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(2, pct)}%` }}/></div>
-            <small>{policy.processing_status === "queued" ? "Waiting for the current analysis job to finish." : "DearPolicy saves each completed stage before moving to the next one."}</small>
+            <small>{policy.processing_stalled ? "Analysis stopped partway. Press Re-analyse \u2014 it continues from the last saved page instead of starting over." : policy.processing_status === "queued" ? "Waiting for the current analysis job to finish." : "DearPolicy saves each completed stage before moving to the next one."}</small>
           </div>}
 
           {!processing && policy.needs_review && <div className="accuracy-warning"><b>Needs review</b><span>{policy.review_reason ?? "Some extracted personal information could not be fully source-verified."}</span></div>}

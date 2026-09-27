@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isUuid } from "@/lib/db/client";
+import { isUuid,query } from "@/lib/db/client";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail, type DocumentSafetyMode } from "@/lib/policies/quarantine/ui";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
+import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -73,6 +74,27 @@ export async function GET(request: NextRequest) {
         };
       });
     });
+    // A document stuck in an in-flight status whose background job died
+    // permanently can only be recovered through Re-analyse, so the UI needs
+    // to know "stalled" from "being analysed". Jobs are service-only; this
+    // reads them on the trusted connection, scoped to the policies the RLS
+    // query above already authorised, and the 2-minute grace covers the
+    // window between a policy being marked queued and its job row landing.
+    const inFlightIds = policies.filter((p) => ["queued", "extracting", "indexing"].includes(p.processing_status)).map((p) => p.id);
+    const stalledIds = new Set<string>();
+    if (inFlightIds.length) {
+      const stalledRows = await query<{ id: string }>(
+        `SELECT p.id FROM policies p
+          WHERE p.account_id=$1 AND p.id=ANY($2::uuid[])
+            AND p.updated_at < now() - interval '2 minutes'
+            AND NOT EXISTS (SELECT 1 FROM background_jobs j
+                  WHERE j.job_type=$3 AND j.idempotency_key=p.id::text
+                    AND (j.status IN ('queued','failed_retryable')
+                         OR (j.status='processing' AND j.lease_expires_at > now())))`,
+        [ctx.householdId, inFlightIds, POLICY_PROCESSING_JOB_TYPE],
+      );
+      for (const stalledRow of stalledRows.rows) stalledIds.add(stalledRow.id);
+    }
     // scan_result_detail is operator-facing (it can hold a scanner's analysis
     // id and engine counts); only a fixed, category-level string is returned.
     // processing_error holds the raw pipeline error for operators; the UI only
@@ -83,6 +105,7 @@ export async function GET(request: NextRequest) {
       policies: policies.map((p) => ({
         ...p,
         scan_result_detail: userFacingScanResultDetail(p),
+        processing_stalled: stalledIds.has(p.id),
         processing_error: p.processing_error ? POLICY_PROCESSING_STOPPED_MESSAGE : null,
       })),
     });

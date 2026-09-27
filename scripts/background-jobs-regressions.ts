@@ -364,10 +364,47 @@ async function runDatabaseTests() {
       assert.deepEqual(rows.rows.map((r) => r.to_status), ["processing", "succeeded"]);
     });
 
+    await testAsync("resurrectTerminal revives a dead-lettered idempotency key back to queued with attempts reset", async () => {
+      const jobType = `t-${randomUUID()}`;
+      await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { v: 1 }, maxAttempts: 1 });
+      const claimed = await claimNextJob(pool, { jobType, workerId: "w1" });
+      await failJob(pool, { jobId: claimed!.id, workerId: "w1", errorMessage: "boom", errorCategory: "non_retryable" });
+      // Without the flag the terminal row simply comes back untouched.
+      const untouched = await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { v: 2 } });
+      assert.equal(untouched.created, false);
+      assert.equal(untouched.row.status, "dead_letter");
+      // With it, the row is atomically reset and carries the new payload.
+      const revived = await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { v: 3 }, resurrectTerminal: true });
+      assert.equal(revived.created, true);
+      assert.equal(revived.row.status, "queued");
+      assert.equal(revived.row.attempt_count, 0);
+      assert.equal((revived.row.payload as { v: number }).v, 3);
+      const audit = await pool.query<{ from_status: string | null; to_status: string }>(
+        `SELECT from_status, to_status FROM background_job_audit_log WHERE job_id=$1 ORDER BY id DESC LIMIT 1`,
+        [revived.row.id],
+      );
+      assert.deepEqual(audit.rows[0], { from_status: "dead_letter", to_status: "queued" });
+      const reclaimed = await claimNextJob(pool, { jobType, workerId: "w2" });
+      assert.equal(reclaimed?.id, revived.row.id);
+    });
+    await testAsync("resurrectTerminal never touches a live (queued or leased) row", async () => {
+      const jobType = `t-${randomUUID()}`;
+      const { row: first } = await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { v: 1 } });
+      const again = await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { v: 2 }, resurrectTerminal: true });
+      assert.equal(again.created, false);
+      assert.equal(again.row.id, first.id);
+      assert.equal((again.row.payload as { v: number }).v, 1, "live row keeps its original payload");
+      const claimed = await claimNextJob(pool, { jobType, workerId: "w1" });
+      assert.ok(claimed);
+      const leased = await enqueueJob(pool, { jobType, idempotencyKey: "doc", payload: { v: 3 }, resurrectTerminal: true });
+      assert.equal(leased.created, false);
+      assert.equal(leased.row.status, "processing");
+    });
+
     console.log(`background-jobs regressions passed: ${cases} cases (idempotent enqueue, claim/SKIP LOCKED exclusivity, heartbeat lease extension, ` +
       `completion, bounded transient retry matching computeBackoffMs(), immediate non_retryable dead-letter, lease-expiry recovery & the zombie-worker ` +
       `ownership CAS, dead-letter-on-recovery once max_attempts is exhausted, immediate and cooperative cancellation, idempotent cancel-of-terminal, ` +
-      `structural audit trail).`);
+      `structural audit trail, terminal-row resurrection for re-requested work).`);
   } finally {
     pool.query = originalQuery;
     pool.connect = originalConnect;

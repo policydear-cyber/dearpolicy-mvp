@@ -5,7 +5,7 @@ import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
+import { enqueuePolicyProcessing,POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
 import { runAfterResponse } from "@/lib/http/background";
 
@@ -30,13 +30,12 @@ export async function POST(request: NextRequest) {
       // Authorize the specific policy against this household before doing
       // anything else -- a client-supplied policyId for another household's
       // document must not even reveal whether it exists.
-      const result = await client.query<{ family_member_id: string; storage_key: string; processing_status: string }>(
-        `SELECT family_member_id,storage_key,processing_status FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
+      const result = await client.query<{ family_member_id: string; storage_key: string; processing_status: string; updated_at: string }>(
+        `SELECT family_member_id,storage_key,processing_status,updated_at FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
         [body.policyId, ctx.householdId],
       );
       const row = result.rows[0];
       if (!row) return null;
-      if (["queued", "extracting", "indexing"].includes(row.processing_status)) throw new AlreadyProcessing();
 
       // Re-check the PERSISTED quarantine/scan state here, on every
       // reprocess request -- never assume a document that was clean once
@@ -52,6 +51,27 @@ export async function POST(request: NextRequest) {
 
     if (!policy) return NextResponse.json({ error: "Document not found" }, { status: 404 });
 
+    // A document can sit in an in-flight status forever if its background
+    // job died permanently: a lease expiry dead-letters the JOB, but nothing
+    // marks the POLICY failed. In-flight therefore only blocks a re-analyse
+    // while a live job actually backs it; otherwise the document is stalled
+    // and re-queueing it IS the recovery path. The short grace covers the
+    // enqueue-after-response window where the policy row is already queued
+    // but its job row has not been inserted yet.
+    let stalled = false;
+    if (["queued", "extracting", "indexing"].includes(policy.processing_status)) {
+      const live = await query(
+        `SELECT 1 FROM background_jobs
+          WHERE job_type=$1 AND idempotency_key=$2
+            AND (status IN ('queued','failed_retryable')
+                 OR (status='processing' AND lease_expires_at > now()))`,
+        [POLICY_PROCESSING_JOB_TYPE, body.policyId],
+      );
+      const stalledByAge = Date.now() - new Date(policy.updated_at).getTime() > 2 * 60_000;
+      if (live.rows.length || !stalledByAge) throw new AlreadyProcessing();
+      stalled = true;
+    }
+
     // Processing state is server-owned: written on the trusted connection
     // (browser sessions cannot update it -- sql/household-rls.sql), only
     // after the RLS-scoped authorization and clean-scan check above, and
@@ -59,8 +79,8 @@ export async function POST(request: NextRequest) {
     const requeued = await query(
       `UPDATE policies SET processing_status='queued',processing_stage='queued',processing_progress=1,
        processing_message='Waiting to be analysed…',processing_error=NULL,processing_started_at=NULL,processing_completed_at=NULL,updated_at=now()
-       WHERE id=$1 AND account_id=$2 AND processing_status NOT IN ('queued','extracting','indexing') AND quarantine_status IN ('scan_clean','not_scanned_prototype')`,
-      [body.policyId, ctx.householdId],
+       WHERE id=$1 AND account_id=$2 AND (processing_status NOT IN ('queued','extracting','indexing') OR $3::boolean) AND quarantine_status IN ('scan_clean','not_scanned_prototype')`,
+      [body.policyId, ctx.householdId, stalled],
     );
     if (!requeued.rowCount) throw new AlreadyProcessing();
 

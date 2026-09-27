@@ -50,6 +50,11 @@ export async function enqueuePolicyProcessing(args: ProcessPolicyArgs): Promise<
     jobType: POLICY_PROCESSING_JOB_TYPE,
     idempotencyKey: args.policyId,
     accountId: args.accountId,
+    // Re-analyse of a document whose previous job already finished (or died
+    // in dead_letter) must actually run again: revive the terminal row
+    // instead of returning it untouched. Safe here because processing is
+    // idempotent -- every stage replaces its own output.
+    resurrectTerminal: true,
     payload: {
       policyId: args.policyId,
       familyMemberId: args.familyMemberId,

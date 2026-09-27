@@ -159,6 +159,11 @@ export async function enqueueJob(
     maxAttempts?: number;
     availableAt?: Date;
     correlationId?: string | null;
+    /** Revive a terminal (succeeded/dead_letter/cancelled) row for this
+     * idempotency key back to queued instead of returning it untouched.
+     * Only for callers whose work is safe to run again (policy processing);
+     * exactly-once callers (deletion coordinators) must not pass this. */
+    resurrectTerminal?: boolean;
   },
 ): Promise<{ row: BackgroundJobRow; created: boolean }> {
   const inserted = await db.query<BackgroundJobRow>(
@@ -177,6 +182,42 @@ export async function enqueueJob(
     ],
   );
   if (inserted.rows[0]) return { row: inserted.rows[0], created: true };
+
+  // A terminal row for this idempotency key would otherwise block the work
+  // forever: ON CONFLICT DO NOTHING returns the old succeeded/dead_letter row
+  // and nothing ever runs again -- exactly wrong for a job the user is
+  // explicitly asking for again (Re-analyse after a dead-letter, re-read of a
+  // document already read once). Opted-in callers get the existing row
+  // atomically reset to queued (attempt_count 0, fresh payload, errors
+  // cleared -- the same reset lib/jobs/dead-letter.ts's retryDeadLetterJob()
+  // performs), CAS-guarded on the terminal status so a live row is never
+  // touched and the audit trail records the transition.
+  if (params.resurrectTerminal) {
+    const bColumns = COLUMNS.split(", ").map((column) => "b." + column).join(", ");
+    const resurrected = await db.query<BackgroundJobRow & { previous_status: JobStatus }>(
+      `WITH previous AS (
+         SELECT id, status FROM background_jobs
+          WHERE job_type=$1 AND idempotency_key=$2 AND status IN ('succeeded','dead_letter','cancelled')
+          FOR UPDATE
+       )
+       UPDATE background_jobs b
+          SET status='queued', attempt_count=0, payload=$3::jsonb,
+              correlation_id=COALESCE($4, b.correlation_id),
+              available_at=$5, lease_owner=NULL, lease_expires_at=NULL, last_heartbeat_at=NULL,
+              last_error_message=NULL, last_error_category=NULL, cancel_requested=false,
+              completed_at=NULL, updated_at=now()
+         FROM previous p
+        WHERE b.id=p.id
+        RETURNING ${bColumns}, p.status AS previous_status`,
+      [params.jobType, params.idempotencyKey, JSON.stringify(params.payload ?? {}), params.correlationId ?? null, params.availableAt ?? new Date()],
+    );
+    const revived = resurrected.rows[0];
+    if (revived) {
+      await appendJobAudit(db, revived, "queued", { fromStatus: revived.previous_status });
+      await recordJobEvent(revived, "job.terminal_reenqueued", { status: "in_progress", previousStatus: revived.previous_status });
+      return { row: revived, created: true };
+    }
+  }
 
   const existing = await db.query<BackgroundJobRow>(
     `SELECT ${COLUMNS} FROM background_jobs WHERE job_type=$1 AND idempotency_key=$2`,
