@@ -16,7 +16,10 @@
  *  1. A run cut off mid-document leaves a checkpoint recording exactly the
  *     pages already read.
  *  2. The retry resumes at the first unread page -- it never re-reads page 1
- *     -- and a completed pass clears its checkpoint.
+ *     -- and a completed pass keeps a done marker so the NEXT retry of the
+ *     same job skips the whole stage (the pipeline re-runs every stage per
+ *     attempt; without the marker a retry that only needed the later stage
+ *     would re-read this one from scratch and burn its window).
  *  3. A checkpoint written over different page text is ignored: the pass
  *     restarts from page 1 rather than resuming over the wrong document.
  *
@@ -116,23 +119,34 @@ async function main() {
         assert.ok(row, "checkpoint row written");
         assert.equal(row.nextIndex, 4, "pages 1-4 completed before the cut-off");
       });
-      await testAsync(`${stage}: the retry resumes at the first unread page and clears the checkpoint`, async () => {
+      await testAsync(`${stage}: the retry resumes at the first unread page and a completed pass keeps its marker`, async () => {
         const reported: number[] = [];
         await run({ accountId: account, policyId: policy, productName: null, pages,
           report: (page) => { reported.push(page); } });
         assert.equal(reported[0], 5, "resumed, not restarted");
         assert.deepEqual(reported, [5, 6, 7, 8]);
-        assert.equal(await checkpointRow(stage), null, "completed pass cleared its checkpoint");
+        const done = (await checkpointRow(stage)) as { nextIndex: number } | null;
+        assert.equal(done?.nextIndex, pages.length, "completed pass keeps a done marker");
+      });
+      await testAsync(`${stage}: a retry after completion skips the whole pass instead of re-reading it`, async () => {
+        const reported: number[] = [];
+        await run({ accountId: account, policyId: policy, productName: null, pages,
+          report: (page) => { reported.push(page); } });
+        assert.deepEqual(reported, [], "no page re-read after the stage completed");
       });
       await testAsync(`${stage}: changed page text restarts from page 1 instead of resuming`, async () => {
-        await assert.rejects(run({ accountId: account, policyId: policy, productName: null, pages,
+        // The done marker above covers the ORIGINAL text; revised text must
+        // be read afresh (and can itself be cut off and resumed).
+        const revised = pages.map((page) => ({ ...page, text: page.text + " (revised wording)" }));
+        await assert.rejects(run({ accountId: account, policyId: policy, productName: null, pages: revised,
           report: (page) => { if (page === 3) throw new Error("drain window cut off"); } }));
-        const changed = pages.map((page, i) => i === 5 ? { ...page, text: page.text + " changed" } : page);
+        const changed = revised.map((page, i) => i === 5 ? { ...page, text: page.text + " changed" } : page);
         const reported: number[] = [];
         await run({ accountId: account, policyId: policy, productName: null, pages: changed,
           report: (page) => { reported.push(page); } });
         assert.equal(reported[0], 1, "a stale checkpoint over different text is ignored");
-        assert.equal(await checkpointRow(stage), null);
+        const done = (await checkpointRow(stage)) as { nextIndex: number } | null;
+        assert.equal(done?.nextIndex, changed.length, "done marker recorded for the new text");
       });
     }
 

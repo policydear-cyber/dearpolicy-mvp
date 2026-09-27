@@ -16,7 +16,11 @@ import { query } from "@/lib/db/client";
  * key/value table, so no schema change -- and records the next page index to
  * read, the items collected so far and the dedupe keys already seen, guarded
  * by a fingerprint of the page list so a resumed run never continues over
- * different text. Every read and write here is best-effort: a checkpoint
+ * different text. A COMPLETED pass's checkpoint (nextIndex == pages.length)
+ * is deliberately kept, not cleared: the ingest pipeline re-runs every stage
+ * on each retry, and without the marker a retry that only needed the second
+ * stage would re-read the whole first stage again and burn its window on
+ * work already done. Every read and write here is best-effort: a checkpoint
  * failure degrades to the old restart-from-scratch behaviour, never to a
  * failed document. */
 export type CatalogCheckpoint<T> = {
@@ -87,11 +91,16 @@ export async function writeCatalogCheckpoint<T>(
   }
 }
 
-export async function clearCatalogCheckpoint(scope: CatalogCheckpointScope) {
+/** Removes BOTH stages' checkpoints for a policy. Called when a person asks
+ * for a genuine re-read of a document that is not stalled: the completed
+ * markers below would otherwise short-circuit the passes. A stalled
+ * document's Re-analyse keeps its checkpoints -- resuming them is the whole
+ * point. */
+export async function clearCatalogCheckpoints(accountId: string, policyId: string) {
   try {
-    await query("DELETE FROM policy_analysis_cache WHERE account_id=$1 AND cache_key=$2", [
-      scope.accountId,
-      cacheKey(scope),
+    await query("DELETE FROM policy_analysis_cache WHERE account_id=$1 AND cache_key=ANY($2::text[])", [
+      accountId,
+      [`catalog-progress:benefits:${policyId}`, `catalog-progress:conditions:${policyId}`],
     ]);
   } catch {
     /* A stale row is invalidated by the fingerprint on the next read. */

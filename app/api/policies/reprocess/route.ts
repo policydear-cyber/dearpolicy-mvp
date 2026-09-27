@@ -7,6 +7,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { enqueuePolicyProcessing,POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { getPolicyQuarantineRow } from "@/lib/policies/quarantine/store";
+import { clearCatalogCheckpoints } from "@/lib/policies/catalog-checkpoint";
 import { runAfterResponse } from "@/lib/http/background";
 
 export const runtime = "nodejs";
@@ -83,6 +84,11 @@ export async function POST(request: NextRequest) {
       [body.policyId, ctx.householdId, stalled],
     );
     if (!requeued.rowCount) throw new AlreadyProcessing();
+
+    // A deliberate re-read of a finished (or failed) document starts from a
+    // clean slate; a stalled document keeps its checkpoints so the new run
+    // resumes the pages already read instead of repeating them.
+    if (!stalled) await clearCatalogCheckpoints(ctx.householdId, body.policyId);
 
     // after() keeps this alive past the response instead of racing the
     // serverless instance being frozen the instant "queued" is returned.

@@ -4,7 +4,7 @@ import path from "node:path";
 import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { structuredCompletion } from "@/lib/ai/llm";
-import { clearCatalogCheckpoint,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
+import { readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { hasQuote } from "@/lib/chat/facts";
 import type { ClaimEventType } from "@/lib/insurance/claim-events";
 import type { CoverCondition,CoverConditionKind,ExcludedCause } from "@/lib/insurance/cover-conditions";
@@ -159,8 +159,9 @@ export async function catalogueConditions(args:{accountId:string;policyId:string
     // the retry instead of restarting the whole pass.
     await writeCatalogCheckpoint(scope,pages,{nextIndex:index+1,items:conditions,seenKeys:[]});
   }
+  // The completed checkpoint (nextIndex==pages.length) stays: a retried job
+  // re-enters this function and must skip straight past a stage already done.
   const stored=await replaceConditionCatalog(args.accountId,args.policyId,conditions);
-  await clearCatalogCheckpoint(scope);
   return stored;
 }
 

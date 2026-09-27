@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { query } from "@/lib/db/client";
 import { structuredCompletion } from "@/lib/ai/llm";
-import { clearCatalogCheckpoint,readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
+import { readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
 import { benefitRowsFromText } from "@/lib/documents/layout";
@@ -173,7 +173,8 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     }
   }
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);
-  await clearCatalogCheckpoint(scope);
+  // The completed checkpoint (nextIndex==pages.length) stays: a retried job
+  // re-enters this function and must skip straight past a stage already done.
   return benefits.length;
 }
 export async function documentPages(accountId:string,policyId:string){
