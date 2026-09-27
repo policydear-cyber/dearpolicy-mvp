@@ -1,4 +1,5 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
+import { USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError } from "@/lib/documents/processing-errors";
 import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { readPolicyFile } from "@/lib/storage";
@@ -486,10 +487,14 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // fixed message only; the raw error goes to the service-only diagnostics
     // table (lib/diagnostics/processing-failures.ts).
     await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PROCESSING_FAILED", error });
+    // A reason the person can act on (missing/wrong PDF password) is stored
+    // verbatim so the UI can say what to do; every other failure keeps the
+    // fixed message and its raw detail stays in the diagnostics table.
+    const userReason = error instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS.has(error.message) ? error.message : null;
     await query(
       `UPDATE policies SET processing_status='failed',processing_stage='failed',processing_message='Analysis stopped',processing_error=$1,
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,
-      [POLICY_PROCESSING_FAILED_MESSAGE, args.policyId, args.accountId],
+      [userReason ?? POLICY_PROCESSING_FAILED_MESSAGE, args.policyId, args.accountId],
     ).catch(() => undefined);
     void recordErrorEvent({
       name: "rag.policy_ingest.failed",

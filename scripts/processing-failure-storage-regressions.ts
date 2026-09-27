@@ -96,11 +96,21 @@ async function main() {
       await recordProcessingFailure({ accountId: HOUSEHOLD, resourceType: "policy_document", resourceId: POLICY, failureCode: "X", error: "x" });
       pool.query = broken;
     });
-    await t("every failure writer stores the fixed message, not error.message", async () => {
+    await t("every failure writer stores the fixed message (or an allowlisted user-actionable reason), never the raw error", async () => {
       const ingest = await readFile(path.resolve("lib/rag/ingest.ts"), "utf8");
       const pipeline = await readFile(path.resolve("lib/claims/evidence/pipeline.ts"), "utf8");
       const store = await readFile(path.resolve("lib/policies/quarantine/store.ts"), "utf8");
-      assert.match(ingest, /\[POLICY_PROCESSING_FAILED_MESSAGE, args\.policyId, args\.accountId\]/);
+      // The ONLY exception to the fixed message is the explicit allowlist of
+      // user-actionable reasons (a PDF password the person can supply);
+      // ingest must gate on BOTH the typed error and allowlist membership,
+      // so no raw error text can ever ride in on a thrown message.
+      const { USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, PDF_PASSWORD_REQUIRED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE } = await import("@/lib/documents/processing-errors");
+      assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(PDF_PASSWORD_REQUIRED_MESSAGE));
+      assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(PDF_PASSWORD_INCORRECT_MESSAGE));
+      assert.equal(USER_ACTIONABLE_PROCESSING_ERRORS.size, 2, "the allowlist stays deliberate and small");
+      assert.ok(new UserActionableProcessingError(PDF_PASSWORD_REQUIRED_MESSAGE) instanceof Error);
+      assert.match(ingest, /instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS\.has\(error\.message\)/);
+      assert.match(ingest, /\[userReason \?\? POLICY_PROCESSING_FAILED_MESSAGE, args\.policyId, args\.accountId\]/);
       assert.match(pipeline, /markFailed\(args\.accountId, args\.documentId, current\.status, code, EVIDENCE_PROCESSING_FAILED_MESSAGE\)/);
       assert.match(store, /reason: SCAN_ATTEMPT_FAILED_MESSAGE/);
       for (const [name, src] of [["ingest", ingest], ["pipeline", pipeline]] as const) assert.ok(!/processing_error=\$1[^\n]*\n[^\n]*\[message,/.test(src), `${name} no longer writes the raw message`);

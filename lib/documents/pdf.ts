@@ -1,3 +1,4 @@
+import { PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UserActionableProcessingError } from "@/lib/documents/processing-errors";
 import { renderPageLayout, type PageLine } from "./layout";
 
 export type PdfPage = {
@@ -68,9 +69,9 @@ export async function extractPdfPages(
     const message = anyError?.message ?? "";
     if (anyError?.name === "PasswordException" || anyError?.code === 1 || anyError?.code === 2 || /password/i.test(message)) {
       if (!password || anyError?.code === 1 || /no password|need password/i.test(message)) {
-        throw new Error("This PDF is password protected. Enter the PDF password and try again.");
+        throw new UserActionableProcessingError(PDF_PASSWORD_REQUIRED_MESSAGE);
       }
-      throw new Error("The PDF password appears to be incorrect. Please check it and try again.");
+      throw new UserActionableProcessingError(PDF_PASSWORD_INCORRECT_MESSAGE);
     }
     throw error;
   }

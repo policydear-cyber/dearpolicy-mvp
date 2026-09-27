@@ -338,7 +338,7 @@ export default function PoliciesPage() {
             {!!referenceLinks.length && <small>Also available as matching wording for {referenceLinks.map((p) => p.name).join(", ")}.</small>}
           </div></div> : null}
 
-          {!processing && policy.processing_error && <div className="row-error processing-error"><strong>Analysis stopped</strong><span>DearPolicy hit a problem reading this document.</span><small>DearPolicy kept the uploaded PDF. Use Re-analyse after resolving the issue; you do not need to upload it again.</small></div>}
+          {!processing && policy.processing_error && <div className="row-error processing-error"><strong>Analysis stopped</strong><span>{/password/i.test(policy.processing_error) ? policy.processing_error : "DearPolicy hit a problem reading this document."}</span><small>{/password/i.test(policy.processing_error) ? "Delete this document, then upload the same file again with the password typed into the \u201CPDF password\u201D field above." : "DearPolicy kept the uploaded PDF. Use Re-analyse after resolving the issue; you do not need to upload it again."}</small></div>}
         </div>;
       })}{!shown.length && <div className="empty-card">No documents in this view.</div>}</div>
     </section>

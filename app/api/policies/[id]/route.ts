@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isUuid } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { userFacingScanResultDetail, POLICY_PROCESSING_STOPPED_MESSAGE } from "@/lib/policies/quarantine/ui";
+import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import {
@@ -224,7 +225,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         personalCoverageConfirmed: p.personal_coverage_confirmed, needsReview: p.needs_review, reviewReason: p.review_reason,
         pageCount: p.page_count, effectiveDate: p.effective_date, renewalOrExpiryDate: p.renewal_or_expiry_date,
         processingStatus: p.processing_status, processingStage: p.processing_stage, processingMessage: p.processing_message,
-        processingError: p.processing_error ? POLICY_PROCESSING_STOPPED_MESSAGE : null,
+        processingError: p.processing_error ? (USER_ACTIONABLE_PROCESSING_ERRORS.has(String(p.processing_error)) ? String(p.processing_error) : POLICY_PROCESSING_STOPPED_MESSAGE) : null,
         quarantineStatus: p.quarantine_status,
         scanResultDetail: userFacingScanResultDetail({ quarantine_status: String(p.quarantine_status), scan_result_detail: (p.scan_result_detail as string | null) ?? null }),
         uploadedAt: p.created_at, updatedAt: p.updated_at,

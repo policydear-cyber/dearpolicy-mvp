@@ -6,6 +6,7 @@ import { createUserSupabaseClient } from "@/lib/db/authz-client";
 import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail, type DocumentSafetyMode } from "@/lib/policies/quarantine/ui";
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
+import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
         ...p,
         scan_result_detail: userFacingScanResultDetail(p),
         processing_stalled: stalledIds.has(p.id),
-        processing_error: p.processing_error ? POLICY_PROCESSING_STOPPED_MESSAGE : null,
+        processing_error: p.processing_error ? (USER_ACTIONABLE_PROCESSING_ERRORS.has(p.processing_error) ? p.processing_error : POLICY_PROCESSING_STOPPED_MESSAGE) : null,
       })),
     });
   } catch (error) {
