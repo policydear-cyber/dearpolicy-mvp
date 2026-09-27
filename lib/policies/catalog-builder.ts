@@ -95,18 +95,29 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // each page belongs to stops a rule from one product being attached to a
   // different product's insured amount.
   const scopes=pageProductScopes(args.pages,[...new Set([args.productName,...(args.products??[])].filter((name):name is string=>!!name))]);
-  for(const [index,page] of pages.entries()){
-    if(index<startIndex)continue;
-    args.report?.(index+1,pages.length);
-    // Checkpoint after every page so a cut-off drain window resumes here on
-    // the retry instead of restarting the whole pass (a long document could
-    // otherwise never finish). The page body is a block-scoped function so
-    // its early exits (`return`) skip to the checkpoint write exactly as
-    // `continue` used to skip to the next page.
-    await catalogueOnePage();
-    await writeCatalogCheckpoint(scope,pages,{nextIndex:index+1,items:benefits,seenKeys:[...seen]});
-    // eslint-disable-next-line no-inner-declarations
-    async function catalogueOnePage(){
+  // Pages are independent reads, so a small chunk of them runs concurrently:
+  // strictly sequential reading made a 39-page booklet take most of an hour.
+  // The checkpoint is written once per COMPLETED chunk, so a cut-off drain
+  // window resumes at the last chunk boundary instead of restarting the pass
+  // (a long document could otherwise never finish). `seen` and `benefits`
+  // are shared across a chunk; single-threaded JS keeps each check-then-add
+  // dedupe atomic. The page body is a function so its early exits (`return`)
+  // end that one page exactly as `continue` used to.
+  const concurrentPages=Math.max(1,Number(process.env.READING_CONCURRENCY||4)||4);
+  for(let start=startIndex;start<pages.length;start+=concurrentPages){
+    const end=Math.min(start+concurrentPages,pages.length);
+    const launched:Promise<void>[]=[];
+    let launchError:unknown;
+    for(let index=start;index<end;index++){
+      try{args.report?.(index+1,pages.length);}catch(error){launchError=error;break;}
+      launched.push(catalogueOnePage(pages[index]));
+    }
+    await Promise.all(launched);
+    if(launchError!==undefined)throw launchError;
+    await writeCatalogCheckpoint(scope,pages,{nextIndex:end,items:benefits,seenKeys:[...seen]});
+  }
+  // eslint-disable-next-line no-inner-declarations
+  async function catalogueOnePage(page:{page_number:number;text:string}){
     const section=scopes.get(page.page_number)?.[0]??args.productName;
     // Table rows first. A schedule row states its own rule, so it is parsed in
     // plain code — faster, identical every time, and it leaves the model only
@@ -169,7 +180,6 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         sourcePage:page.page_number,quote:found.quote,
         conditions:found.conditions.filter(condition=>condition.trim().length>3),
         requirements:[],needsReview:formula.formulaKind==="none"});
-    }
     }
   }
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);

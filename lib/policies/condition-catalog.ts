@@ -151,13 +151,24 @@ export async function catalogueConditions(args:{accountId:string;policyId:string
   const resumed=await readCatalogCheckpoint<Omit<CoverCondition,"id"|"policyId">>(scope,pages);
   const conditions:Omit<CoverCondition,"id"|"policyId">[]=resumed?.items??[];
   const startIndex=resumed?.nextIndex??0;
-  for(const [index,page] of pages.entries()){
-    if(index<startIndex)continue;
-    args.report?.(index+1,pages.length);
-    conditions.push(...await readPageConditions(page,args.productName));
-    // Checkpoint after every page so a cut-off drain window resumes here on
-    // the retry instead of restarting the whole pass.
-    await writeCatalogCheckpoint(scope,pages,{nextIndex:index+1,items:conditions,seenKeys:[]});
+  // Pages are independent reads, so a small chunk runs concurrently (see
+  // catalog-builder.ts for the reasoning). The checkpoint is written once
+  // per completed chunk, so a cut-off drain window resumes at the last chunk
+  // boundary instead of restarting the pass; results are appended in page
+  // order to keep the stored catalogue deterministic.
+  const concurrentPages=Math.max(1,Number(process.env.READING_CONCURRENCY||4)||4);
+  for(let start=startIndex;start<pages.length;start+=concurrentPages){
+    const end=Math.min(start+concurrentPages,pages.length);
+    const launched:Promise<Omit<CoverCondition,"id"|"policyId">[]>[]=[];
+    let launchError:unknown;
+    for(let index=start;index<end;index++){
+      try{args.report?.(index+1,pages.length);}catch(error){launchError=error;break;}
+      launched.push(readPageConditions(pages[index],args.productName));
+    }
+    const results=await Promise.all(launched);
+    if(launchError!==undefined)throw launchError;
+    for(const found of results)conditions.push(...found);
+    await writeCatalogCheckpoint(scope,pages,{nextIndex:end,items:conditions,seenKeys:[]});
   }
   // The completed checkpoint (nextIndex==pages.length) stays: a retried job
   // re-enters this function and must skip straight past a stage already done.
