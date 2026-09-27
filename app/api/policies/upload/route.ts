@@ -103,6 +103,21 @@ export async function POST(request: NextRequest) {
     // policyId, never from anything the client named directly.
     const storageKey = await savePolicyFile({ accountId: ctx.householdId, familyMemberId: outcome.familyMemberId, policyId, filename: file.name, bytes });
 
+    // A document the household deleted (pending its daily purge) or
+    // superseded still holds its content hash, and the unique index on
+    // (account_id,file_hash) would block re-uploading the same file until
+    // the purge runs -- a trap: the library no longer shows the document,
+    // but the upload insists it already exists. Deleted and superseded rows
+    // have no claim on the hash (the duplicate pre-check above already
+    // ignores them; the purge finds rows by id, never by hash), so release
+    // it here on the trusted connection before inserting the new row.
+    await pool.query(
+      `UPDATE policies SET file_hash=NULL, updated_at=now()
+        WHERE account_id=$1 AND file_hash=$2
+          AND (superseded_at IS NOT NULL OR lifecycle_state<>'active')`,
+      [ctx.householdId, fileHash],
+    );
+
     try {
       // Written on the trusted server connection: every value here is
       // server-derived (ids authorized in the RLS-scoped transaction above,
