@@ -125,6 +125,8 @@ async function runDatabaseTests() {
   await db.exec(await readFile(path.resolve("sql/disability.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/coverage-ledger.sql"), "utf8"));
   await db.exec(await readFile(path.resolve("sql/lifecycle.sql"), "utf8"));
+  await db.exec(await readFile(path.resolve("sql/chat-upgrade.sql"), "utf8"));
+  await db.exec(await readFile(path.resolve("sql/background-jobs.sql"), "utf8"));
 
   let tail = Promise.resolve();
   const acquire = async () => {
@@ -351,6 +353,36 @@ async function runDatabaseTests() {
 
       const remaining = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM premium_records WHERE account_id=$1`, [accountId]);
       assert.equal(remaining.rows[0].n, "0");
+    });
+
+    await testAsync("deleting a document sweeps its analysis cache and scrubs the job payload's PDF password", async () => {
+      const accountId = await seedAccount(pool);
+      const memberId = await seedFamilyMember(pool, accountId);
+      const policyId = await seedPolicy(pool, accountId, memberId);
+      await pool.query(
+        `INSERT INTO policy_analysis_cache(account_id,cache_key,analysis_json) VALUES ($1,$2,'{}'::jsonb),($1,$3,'{}'::jsonb)`,
+        [accountId, `catalog-progress:benefits:${policyId}`, `chat-analysis:${policyId}:q1`],
+      );
+      await pool.query(
+        `INSERT INTO background_jobs(account_id,job_type,idempotency_key,payload) VALUES ($1,'policy_processing',$2,$3::jsonb)`,
+        [accountId, policyId, JSON.stringify({ policyId, storageKey: "k", pdfPassword: "a-password" })],
+      );
+
+      await requestPolicyDeletion({
+        client: fakeScopedClient,
+        accountId,
+        actorUserId: randomUUID(),
+        policyId,
+        reasonCategory: "user_requested",
+        idempotencyKey: "side-channels",
+      });
+
+      const cache = await pool.query<{ n: string }>(`SELECT count(*)::text AS n FROM policy_analysis_cache WHERE account_id=$1`, [accountId]);
+      assert.equal(cache.rows[0].n, "0", "no analysis-cache rows for the deleted document survive");
+      const job = await pool.query<{ payload: { pdfPassword?: string }; cancel_requested: boolean }>(
+        `SELECT payload, cancel_requested FROM background_jobs WHERE account_id=$1 AND idempotency_key=$2`, [accountId, policyId]);
+      assert.equal(job.rows[0].payload.pdfPassword, undefined, "the PDF password is scrubbed from the job payload");
+      assert.equal(job.rows[0].cancel_requested, true, "any in-flight processing is asked to stop");
     });
 
     await testAsync("requestPolicyDeletion is idempotent across the whole chain: a retry returns the same request without duplicating audit rows", async () => {

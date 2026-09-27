@@ -56,6 +56,45 @@ import { appendDeletionAudit, createOrGetDeletionRequest, transitionDeletionRequ
 import { appendClaimEvidenceAudit } from "@/lib/claims/evidence/audit";
 import { appendPolicyDocumentAudit } from "@/lib/policies/quarantine/audit";
 import { recordEvent } from "@/lib/telemetry";
+
+/** Deleting a document must not leave side-channel traces of it behind.
+ *
+ * Two stores are keyed by the document's id rather than FK-linked to it, so
+ * nothing else ever cleans them: policy_analysis_cache (chat analysis and
+ * catalogue checkpoints for the document) and the document's durable
+ * background_jobs row, whose payload can hold the PDF password the person
+ * typed at upload. This sweep deletes the cache rows, strips the password
+ * from the job payload immediately and asks any in-flight run to stop
+ * (cooperative cancel); the job row itself stays, password-free, as part of
+ * the operational record. It runs on the TRUSTED connection because both
+ * tables are service-only (browser roles cannot touch them -- see
+ * scripts/infrastructure-table-permissions-regressions.ts), and it is
+ * best-effort: hygiene must never fail a deletion the person asked for.
+ * The to_regclass pre-check exists for regression databases that load only
+ * a schema subset; live databases always have both tables. */
+async function sweepDeletedDocumentSideChannels(accountId: string, policyId: string) {
+  try {
+    const present = await pool.query<{ kv: boolean; jobs: boolean }>(
+      `SELECT to_regclass('public.policy_analysis_cache') IS NOT NULL AS kv,
+              to_regclass('public.background_jobs') IS NOT NULL AS jobs`,
+    );
+    if (present.rows[0]?.kv) {
+      await pool.query(
+        `DELETE FROM policy_analysis_cache WHERE account_id=$1 AND cache_key LIKE '%'||$2||'%'`,
+        [accountId, policyId],
+      );
+    }
+    if (present.rows[0]?.jobs) {
+      await pool.query(
+        `UPDATE background_jobs SET payload=payload-'pdfPassword', cancel_requested=true, updated_at=now()
+          WHERE account_id=$1 AND job_type='policy_processing' AND idempotency_key=$2`,
+        [accountId, policyId],
+      );
+    }
+  } catch (error) {
+    console.warn(`side-channel sweep failed for deleted policy ${policyId}:`, error instanceof Error ? error.message : error);
+  }
+}
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
@@ -169,6 +208,7 @@ export async function requestPolicyDocumentDeletion(args: {
       `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR policy_id=$2)`,
       [args.accountId, args.policyId],
     );
+    await sweepDeletedDocumentSideChannels(args.accountId, args.policyId);
 
     // The audit trail has one writer, the trusted server connection
     // (sql/household-rls.sql: browser sessions may only read it).
@@ -774,6 +814,7 @@ export async function requestPolicyDeletion(args: {
       `DELETE FROM premium_records WHERE account_id=$1 AND (source_document_id=$2 OR policy_id=$2)`,
       [args.accountId, row.id],
     );
+    await sweepDeletedDocumentSideChannels(args.accountId, row.id);
 
     await appendPolicyDocumentAudit(args.accountId, {
       actor: "system", action: "deleted", previousValue: { quarantineStatus: null }, newValue: { quarantineStatus: "deleted" }, policyId: row.id,
