@@ -1,0 +1,101 @@
+{
+  "usage": [
+    {
+      "operation": "benefit_extraction",
+      "resolved_provider": "gemini",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 12,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "catalog_building",
+      "resolved_provider": "gemini",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 18,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "chat_fact_finding",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 23,
+      "input_tokens": 4888,
+      "output_tokens": 1097,
+      "cost_usd": 0.015564,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "chat_fact_finding",
+      "resolved_provider": "openai",
+      "model": "gpt-5-mini",
+      "status": "failed",
+      "calls": 1,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "chat_reply",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 1,
+      "input_tokens": 330,
+      "output_tokens": 7,
+      "cost_usd": 0.000117,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "coverage_extraction",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 23,
+      "input_tokens": 7075,
+      "output_tokens": 276,
+      "cost_usd": 0.002815,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "hosted_ocr",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 1,
+      "input_tokens": 31,
+      "output_tokens": 116,
+      "cost_usd": 0,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "policy_extraction",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 15,
+      "input_tokens": 8423,
+      "output_tokens": 3639,
+      "cost_usd": 0.011625,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    }
+  ],
+  "jobs": []
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { customerMessage } from "@/components/customer-text";
 
 type Member = {
   id: string; display_name: string; relationship: string; date_of_birth: string | null;
@@ -31,14 +32,14 @@ export default function FamilyPage() {
     event.preventDefault(); setStatus("");
     const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob || null, preferredName: preferred || null }) });
     const payload = await response.json();
-    if (!response.ok) return setStatus(payload.error || "Could not add this profile. Please try again in a moment.");
+    if (!response.ok) return setStatus(customerMessage(payload.error, "Could not add this profile. Please try again in a moment."));
     setName(""); setDob(""); setPreferred(""); setStatus("Profile added."); await refresh();
   }
 
   async function save(member: Member) {
     const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes }) });
     const payload = await response.json();
-    setStatus(response.ok ? `Saved ${member.display_name}.` : (payload.error || "Could not save this profile. Please try again in a moment."));
+    setStatus(response.ok ? `Saved ${member.display_name}.` : (customerMessage(payload.error, "Could not save this profile. Please try again in a moment.")));
     if (response.ok) await refresh();
   }
 
@@ -62,7 +63,7 @@ export default function FamilyPage() {
     setConfirmId(null);
     const response = await fetch(`/api/family/${member.id}`, { method: "DELETE" });
     const payload = await response.json().catch(() => ({}));
-    setStatus(response.ok ? `Removed ${member.display_name}.` : (payload.error || "Could not remove this profile. Please try again in a moment."));
+    setStatus(response.ok ? `Removed ${member.display_name}.` : (customerMessage(payload.error, "Could not remove this profile. Please try again in a moment.")));
     if (response.ok) await refresh();
   }
 

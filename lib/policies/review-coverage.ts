@@ -64,13 +64,16 @@ export function summarizeReviewCoverage(coverages:ReviewCoverage[]):AnswerReview
   const pagesTotal=total(c=>c.pagesTotal),pagesRead=total(c=>c.pagesRead);
   const windowsFailed=total(c=>c.windowsFailed);
   const complete=contractsTotal>0&&contractsFullyReviewed===contractsTotal&&documentsNotProcessed===0&&windowsFailed===0;
-  const scope=plural(pagesTotal,"processed page")+" across "+plural(documentsTotal,"document")+" in "+plural(contractsTotal,"contract");
-  const statement=!contractsTotal?"No confirmed personal policy contract was available to review, so nothing here establishes that a benefit is absent.":
-    complete?"Complete review: every one of the "+scope+" was read for this answer.":
-    "Partial review: "+pagesRead+" of "+scope+" "+(pagesRead===1?"was":"were")+" read for this answer"+
-      (documentsNotProcessed?", and "+plural(documentsNotProcessed,"document")+" "+(documentsNotProcessed===1?"is":"are")+" still processing":"")+
-      (windowsFailed?", and "+plural(windowsFailed,"evidence batch")+" could not be finished":"")+
-      ". An unread section is an incomplete review, not proof that the event is uninsured.";
+  // Household text: what the review means, in plain words. The counts stay in
+  // the numeric fields above; "N of M processed pages" is DearPolicy's own
+  // reading progress, and "not found yet" must never read as "not covered".
+  void plural;
+  const statement=!contractsTotal?"No confirmed personal policy was available to check, so nothing here shows that a benefit is missing.":
+    complete?"Complete review: every page of the documents on file was read for this answer.":
+    "Partial review: not every part of the documents on file was read for this answer"+
+      (documentsNotProcessed?", and "+(documentsNotProcessed===1?"a document is":"some documents are")+" still being processed":"")+
+      (windowsFailed?", and some sections could not be read":"")+
+      ". Something not found so far may still be in the parts not yet read.";
   return {contractsTotal,contractsFullyReviewed,documentsTotal,documentsNotProcessed,pagesTotal,pagesRead,windowsFailed,complete,statement};
 }
 /** "Not covered" requires a completely reviewed authoritative record. */

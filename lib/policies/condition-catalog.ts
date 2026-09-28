@@ -6,6 +6,8 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { structuredCompletion } from "@/lib/ai/llm";
 import { readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { hasQuote } from "@/lib/chat/facts";
+import { benefitRowsFromText } from "@/lib/documents/layout";
+import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,readingModelIdentity } from "@/lib/documents/evidence";
 import type { ClaimEventType } from "@/lib/insurance/claim-events";
 import type { CoverCondition,CoverConditionKind,ExcludedCause } from "@/lib/insurance/cover-conditions";
 
@@ -88,22 +90,112 @@ const SYSTEM="List the CONDITIONS this policy page places on what it pays. Not t
   "productName: the cover the condition governs exactly as the page names it, or null when the page states it for everything. "+
   "carveOut: copy the words that take the condition back off again, such as 'unless caused solely and directly by an Accident'. Copy them; do not summarise them. "+
   "amount with amountBasis fixed for a dollar ceiling, or sum_insured_fraction with 0.15 for 15% of the sum insured. "+
-  "Every condition needs ONE quote (under 250 characters) copied exactly from this page that states it. Never invent a condition, never turn a benefit into one, and never state a period the page does not print. An empty list is correct for a page that places no conditions.";
+  "Every condition needs ONE quote (under 250 characters) copied exactly from this page that states it. Never invent a condition, never turn a benefit into one, and never state a period the page does not print. An empty list is correct for a page that places no conditions."+UNTRUSTED_DOCUMENT_NOTICE;
+/** Exported for the prompt-safety regressions. */
+export const CONDITION_SYSTEM_PROMPT=SYSTEM;
+
+// ---------------------------------------------------------------------------
+// Conditions read in plain code
+// ---------------------------------------------------------------------------
+/** Words that mean a line may restrict what is paid. A page with none of
+ * them has no conditions to read, and is never sent to a model. */
+export const CONDITION_LANGUAGE=/\b(?:exclu\w*|waiting\s+period|not\s+(?:be\s+)?(?:payable|paid|covered)|no\s+benefit|shall\s+not|will\s+not\s+pay|does\s+not\s+cover|unless|except|surviv\w*|notif\w*|submitted\s+within|within\s+\d+\s+days|aggregate|sub-?limit|only\s+the\s+higher|whichever\s+is|pre-?existing|terminat\w*|ceases?)\b/i;
+const CAUSE_WORDS:[RegExp,ExcludedCause][]=[
+  [/\bsuicide\b/i,"suicide"],[/self[-\s]?inflicted/i,"self_inflicted"],[/pre-?existing/i,"pre_existing"],[/\bwar\b|\binvasion\b/i,"war"],
+  [/terroris/i,"terrorism"],[/aviation|aircraft|flying/i,"aviation"],[/\bracing\b/i,"racing"],[/hazardous|professional\s+sports?|extreme\s+sports?/i,"hazardous_sport"],
+  [/\bhiv\b|\baids\b/i,"hiv"],[/pregnan|childbirth/i,"pregnancy"],[/alcohol|drugs?\b|intoxicat/i,"alcohol_or_drugs"],[/criminal|illegal|unlawful/i,"criminal_act"],
+  [/nuclear|radioactiv/i,"nuclear"],[/mental|psychiatric/i,"mental_health"],
+];
+function causeOf(text:string):ExcludedCause{return CAUSE_WORDS.find(([pattern])=>pattern.test(text))?.[1]??"other";}
+function eventsOf(text:string):ClaimEventType[]{
+  if(/critical\s+illness/i.test(text))return ["critical_illness"];
+  if(/\b(?:illness|sickness|disease)\b/i.test(text))return ["hospitalisation","surgery","medical_expense"];
+  return [];
+}
+function sentenceWith(line:string,pattern:RegExp){
+  const sentences=line.split(/(?<=[.;])\s+/);
+  return (sentences.find(sentence=>pattern.test(sentence))??line).trim().slice(0,260);
+}
+/** The conditions a page states in the few shapes that need no model:
+ * a waiting period in days, an "Exclusions:" list, an alternative-benefits
+ * rule, a notice period and a survival period. Every row quotes the page
+ * verbatim. `consumed` are the lines fully read this way. */
+export function deterministicConditions(page:{page_number:number;text:string},productName:string|null){
+  const conditions:Omit<CoverCondition,"id"|"policyId">[]=[];
+  const consumed=new Set<string>();
+  const base={productName,cause:null as ExcludedCause|null,appliesToEvents:[] as ClaimEventType[],conditionNames:[] as string[],days:null as number|null,
+    amount:null,amountBasis:null,scope:null,carveOut:null as string|null,sourcePage:page.page_number,needsReview:false};
+  for(const raw of String(page.text??"").split("\n")){
+    const line=raw.replace(/\t/g," ").replace(/\s+/g," ").trim();
+    if(!line)continue;
+    let read=false;
+    const waiting=/waiting\s+period/i.test(line)?line.match(/(\d{1,4})[\s-]*days?\b/i):null;
+    if(waiting){
+      conditions.push({...base,kind:"waiting_period",days:Number(waiting[1]),appliesToEvents:eventsOf(line),quote:sentenceWith(line,/waiting\s+period|\d+[\s-]*days?/i)});
+      read=true;
+    }
+    const list=line.match(/^(?:general\s+|specific\s+|major\s+)?exclusions?\s*[:\-]\s*(.+)$/i);
+    if(list){
+      for(const item of list[1].split(/\s*[;\u2022]\s*/).map(part=>part.replace(/\.$/,"").trim()).filter(part=>part.length>=3)){
+        const carve=item.match(/\b(?:unless|except)\b.*$/i)?.[0]??null;
+        conditions.push({...base,kind:"exclusion",cause:causeOf(item),carveOut:carve,conditionNames:[item.replace(/\s*\b(?:unless|except)\b.*$/i,"").slice(0,60)],quote:item.slice(0,260)});
+      }
+      read=true;
+    }
+    if(/only\s+the\s+higher|whichever\s+is\s+(?:the\s+)?(?:higher|greater)|not\s+both\b|only\s+one\s+of\s+(?:these|the)/i.test(line)){
+      conditions.push({...base,kind:"payment_precondition",quote:sentenceWith(line,/only\s+the\s+higher|whichever|not\s+both|only\s+one\s+of/i)});
+      read=true;
+    }
+    const notice=line.match(/\b(?:claims?|notice|notif\w*)\b[^.]{0,60}?\bwithin\s+(\d{1,4})\s+days\b/i);
+    if(notice&&!waiting){
+      conditions.push({...base,kind:"notice_period",days:Number(notice[1]),quote:sentenceWith(line,/within\s+\d+\s+days/i)});
+      read=true;
+    }
+    const survival=line.match(/surviv\w*[^.]{0,40}?\b(\d{1,4})\s+days\b/i);
+    if(survival){
+      conditions.push({...base,kind:"survival_period",days:Number(survival[1]),appliesToEvents:eventsOf(line),quote:sentenceWith(line,/surviv/i)});
+      read=true;
+    }
+    if(read)consumed.add(line.toLowerCase());
+  }
+  // Every quote must be on the page, exactly as printed.
+  return {conditions:conditions.filter(condition=>hasQuote(page.text,condition.quote)),consumed};
+}
+/** Lines that may state a condition and that neither a schedule row nor the
+ * plain-code reader has already accounted for. Only these justify a model
+ * read of the page. */
+export function unreadConditionLines(pageText:string,consumed:Set<string>,tableLines:Set<string>){
+  return String(pageText??"").split("\n").map(raw=>raw.replace(/\t/g," ").replace(/\s+/g," ").trim())
+    .filter(line=>line&&CONDITION_LANGUAGE.test(line)&&!consumed.has(line.toLowerCase())&&!tableLines.has(line.toLowerCase()));
+}
 
 /** `owner` ties the model call to its household and document in the
- * model_executions provenance record. */
+ * model_executions provenance record.
+ *
+ * V1.1 ($5/month budget): the plain-code reader runs first; the model is
+ * asked only when the page has condition language that neither a schedule
+ * row nor that reader accounts for. A page with no condition language costs
+ * nothing. */
 export async function readPageConditions(page:{page_number:number;text:string},productName:string|null,owner?:{accountId:string;policyId:string}){
+  const direct=deterministicConditions(page,productName);
+  const tableLines=new Set(benefitRowsFromText(page.text).map(row=>row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().toLowerCase()));
+  if(!unreadConditionLines(page.text,direct.consumed,tableLines).length)return direct.conditions;
+  return [...direct.conditions,...await readPageConditionsWithModel(page,productName,owner)];
+}
+async function readPageConditionsWithModel(page:{page_number:number;text:string},productName:string|null,owner?:{accountId:string;policyId:string}){
   let extraction;
+  const payload={page:page.page_number,text:page.text.slice(0,3600)};
   try{
-    extraction=await structuredCompletion({
+    // Cached by the exact page read (never re-paid on a retry or re-upload).
+    extraction=await cachedReading(owner,"condition_page",{payload,prompt:SYSTEM},await readingModelIdentity(),()=>structuredCompletion({
       role:"reading",
       operation:"condition_catalog_extraction",
       householdId:owner?.accountId,resourceId:owner?.policyId,
       schema:ConditionExtractionSchema,coerce:coerceConditions,
       temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
       system:SYSTEM,
-      user:JSON.stringify({page:page.page_number,text:page.text.slice(0,3600)}),
-    });
+      user:JSON.stringify(payload),
+    }));
   }catch{return [] as Omit<CoverCondition,"id"|"policyId">[];}
   return conditionsFromExtraction({page,productName,raw:extraction});
 }
@@ -179,19 +271,21 @@ export async function catalogueConditions(args:{accountId:string;policyId:string
   return stored;
 }
 
+/** Two exclusions of the same (or an unlisted) cause from one list are two
+ * conditions, so the printed passage is part of the identity. */
 function conditionKey(condition:Omit<CoverCondition,"id"|"policyId">){
   return [condition.kind,condition.cause??"",condition.productName?.toLowerCase().replace(/[^a-z0-9]/g,"")??"",
-    condition.days??"",condition.amount??""].join("|");
+    condition.days??"",condition.amount??"",String(condition.quote??"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,120)].join("|");
 }
 export async function replaceConditionCatalog(accountId:string,policyId:string,
   conditions:Omit<CoverCondition,"id"|"policyId">[]){
   await ensureConditionSchema();
-  const reviewed=await query<{condition_kind:string;cause:string|null;product_name:string|null;days:number|null;amount:string|null}>(
-    "SELECT condition_kind,cause,product_name,days,amount::text FROM policy_cover_conditions WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NOT NULL",
+  const reviewed=await query<{condition_kind:string;cause:string|null;product_name:string|null;days:number|null;amount:string|null;quote:string|null}>(
+    "SELECT condition_kind,cause,product_name,days,amount::text,quote FROM policy_cover_conditions WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NOT NULL",
     [accountId,policyId]);
   const kept=new Set(reviewed.rows.map(row=>conditionKey({kind:row.condition_kind as CoverConditionKind,
     cause:row.cause as ExcludedCause|null,productName:row.product_name,days:row.days,
-    amount:row.amount==null?null:Number(row.amount)} as Omit<CoverCondition,"id"|"policyId">)));
+    amount:row.amount==null?null:Number(row.amount),quote:row.quote??""} as Omit<CoverCondition,"id"|"policyId">)));
   await query("DELETE FROM policy_cover_conditions WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NULL",[accountId,policyId]);
   const seen=new Set<string>();
   let stored=0;

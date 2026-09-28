@@ -188,7 +188,7 @@ function amountText(amount: number | null, currency?: string | null) {
  * currency is verified from the cover's own policy evidence. Without a
  * verified currency no figure is shown at all -- never a bare number and never
  * relabelled as SGD -- only that an amount exists whose currency is unstated. */
-export const UNSTATED_CURRENCY_AMOUNT_TEXT = "an amount whose currency the policy evidence does not state (not shown)";
+export const UNSTATED_CURRENCY_AMOUNT_TEXT = "an amount in a currency the policy doesn't state, so it isn't shown";
 function coverAmountText(coverage: { amount: number | null; currency: string | null; currencyVerified?: boolean }) {
   if (coverage.amount == null) return null;
   return coverage.currencyVerified === true && coverage.currency ? formatMoney(coverage.amount, coverage.currency) : UNSTATED_CURRENCY_AMOUNT_TEXT;

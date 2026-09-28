@@ -1,0 +1,715 @@
+[
+  {
+    "step": "factual question",
+    "qid": "Q01",
+    "user": "What policies does Charmaine have?",
+    "answer": "DearPolicy\n\nI found 6 personal policy contracts across 1 family profile. The table separates confirmed cover from records that still need review.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPersonal policy inventory\nFamily member\tPolicy\tConfirmed cover\tActive status\nCharmaine Tan Hui Min\tSYNTHETIC-DPTEST-v11f5j-JetSure\t\nSYNTHETIC-DPTEST-v11f5j-JetSure\n\tActive status not recently verified\nCharmaine Tan Hui Min\tSYNTHETIC-DPTEST-v11f5j-HospitalShield\t\nSYNTHETIC-DPTEST-v11f5j-HospitalShield\n\tActive status not recently verified\nCharmaine Tan Hui Min\tSYNTHETIC-DPTEST-v11f5j-DisabilityCare\t\nSYNTHETIC-DPTEST-v11f5j-DisabilityCare · S$200,000\n\tActive status not recently verified\nCharmaine Tan Hui Min\tSYNTHETIC-DPTEST-v11f5j-AccidentGuard\t\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard · S$100,000\n\tActive status not recently verified\nCharmaine Tan Hui Min\tSYNTHETIC-DPTEST-v11f5j-CritiCare\t\nSYNTHETIC-DPTEST-v11f5j-CritiCare · S$120,000\n\tActive status not recently verified\nCharmaine Tan Hui Min\tSYNTHETIC-DPTEST-v11f5j-GroupTermLife\t\nSYNTHETIC-DPTEST-v11f5j-GroupTermLife\n\tActive status not recently verified\n\nSchedules, amendments and supporting documents are grouped by insured person, insurer and policy number where available. An insured amount is a coverage amount, not a universal claim payout.\n\n6 contracts show ownership but no recent payment or renewal evidence, so the active status is not recently verified. Ownership is unchanged.\n\nNEXT STEP\n\nUpload the latest premium receipt or renewal notice for Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-JetSure; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-HospitalShield; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-DisabilityCare; Charmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-AccidentGuard so current status can be verified separately from ownership.\n\nSOURCES\nSYNTHETIC-DPTEST-v11f5j-JetSure\nVerified personal cover\nPage 1\nSYNTHETIC-DPTEST-v11f5j-HospitalShield\nVerified personal cover\nPage 1\nSYNTHETIC-DPTEST-v11f5j-DisabilityCare\nVerified personal cover\nPage 1\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard\nVerified personal cover\nPage 1\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard\nVerified personal cover\nPage 1\nSYNTHETIC-DPTEST-v11f5j-CritiCare\nVerified personal cover\nPage 1\nSYNTHETIC-DPTEST-v11f5j-GroupTermLife\nVerified personal cover\nPage 1\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "travelExpired",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-JetSure",
+        "page": 1
+      },
+      {
+        "doc": "hosp2025",
+        "alt": [
+          "hosp2022"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-HospitalShield",
+        "page": 1
+      },
+      {
+        "doc": "disability",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-DisabilityCare",
+        "page": 1
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 1
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 1
+      },
+      {
+        "doc": "criticalIllness",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-CritiCare",
+        "page": 1
+      },
+      {
+        "doc": "groupLife",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-GroupTermLife",
+        "page": 1
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 7948,
+    "screenshot": "e2e-results/v11-journey/turn-01.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q02",
+    "user": "What is Charmaine's hospital room and board benefit?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPolicy-stated coverage limitS$800Charmaine · Daily room and board\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-HospitalShield, page 2: “Daily room and board S$800 per day, maximum 120 days”\n\nSYNTHETIC-DPTEST-v11f5j-HospitalShield — Daily room and board: S$800 per day, maximum 120 days (page 2, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-HospitalShield\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "hosp2025",
+        "alt": [
+          "hosp2022"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-HospitalShield",
+        "page": 2
+      },
+      {
+        "doc": "hosp2025",
+        "alt": [
+          "hosp2022"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-HospitalShield",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2389,
+    "screenshot": "e2e-results/v11-journey/turn-02.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q03",
+    "user": "Does Charmaine have a fracture benefit?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state about accident cover. Each line shows the page it comes from. SYNTHETIC-DPTEST-v11f5j-AccidentGuard states different figures for fracture of arm: S$1,200 on page 1 and S$1,000 on page 2. DearPolicy can’t tell which one applies, so it has not picked one; the insurer can confirm. One of them comes from an endorsement to the policy. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPolicy-stated coverage limitS$1,500Charmaine · Fracture of leg\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-AccidentGuard, page 2: “Fracture of leg S$1,500”\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of leg: S$1,500 (page 2, document dated 1 Jan 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm: S$1,200 (page 1, document dated 1 Jan 2026).\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm: S$1,000 (page 2, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nYour policy document\nPage 2\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nYour policy document\nPage 1\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 1
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2367,
+    "screenshot": "e2e-results/v11-journey/turn-03.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q04",
+    "user": "What is the waiting period for critical illness on Charmaine's CritiCare plan?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Mar 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\n\nSYNTHETIC-DPTEST-v11f5j-CritiCare — Waiting period: 90 days from the effective date for any critical illness. (page 3, document dated 1 Mar 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-CritiCare\nYour policy document\nPage 3\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "criticalIllness",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-CritiCare",
+        "page": 3
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 924,
+    "screenshot": "e2e-results/v11-journey/turn-04.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q05",
+    "user": "Does Charmaine's hospital plan cover dental treatment?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\n\nSYNTHETIC-DPTEST-v11f5j-HospitalShield — Exclusions: cosmetic surgery; dental treatment unless caused by an accident; self-inflicted injury. (page 3, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-HospitalShield\nYour policy document\nPage 3\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "hosp2025",
+        "alt": [
+          "hosp2022"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-HospitalShield",
+        "page": 3
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2001,
+    "screenshot": "e2e-results/v11-journey/turn-05.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q06",
+    "user": "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard — Alternative benefits: where a Fracture benefit and a Permanent Disablement benefit arise from the same accident, only the higher amount is payable. (page 3, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nYour policy document\nPage 3\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 3
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1788,
+    "screenshot": "e2e-results/v11-journey/turn-06.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q07",
+    "user": "What does Charmaine's group life policy pay if she dies?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state about death cover. Each line shows the page it comes from.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPolicy-stated coverage limitS$150,000Charmaine · Death (any cause)\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-GroupTermLife, page 2: “Death (any cause) S$150,000”\nPolicy-stated coverage limitS$50,000Charmaine · Additional accidental death benefit\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-GroupTermLife, page 2: “Additional accidental death benefit S$50,000”\n\nSYNTHETIC-DPTEST-v11f5j-GroupTermLife — Death (any cause): S$150,000 (page 2, document dated 1 Jan 2026).\n\nSYNTHETIC-DPTEST-v11f5j-GroupTermLife — Additional accidental death benefit: S$50,000 (page 2, document dated 1 Jan 2026).\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-GroupTermLife\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "groupLife",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-GroupTermLife",
+        "page": 2
+      },
+      {
+        "doc": "groupLife",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-GroupTermLife",
+        "page": 2
+      },
+      {
+        "doc": "groupLife",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-GroupTermLife",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2158,
+    "screenshot": "e2e-results/v11-journey/turn-07.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q08",
+    "user": "What is Charmaine covered for if she dies in an accident?",
+    "answer": "DearPolicy\n\nIf that happened, these benefits could be relevant. This is a preliminary claim assessment: DearPolicy does not estimate what the insurer would pay until claim evidence has been reviewed. Each card says what is still needed.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPreliminary claim assessment\n\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.\n\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-GroupTermLife — Death (any cause)\nLIKELY APPLICABLE\nPolicy condition unresolved\n\nan amount that is only shown after claim evidence has been reviewed lump sum. Read from your policy wording (page 2) and checked against the page.\n\n2 conditions\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Accidental death\nLIKELY APPLICABLE\nPolicy condition unresolved\n\n100% of an amount that is only shown after claim evidence has been reviewed. Read from your policy wording (page 2) and checked against the page.\n\n2 conditions\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-GroupTermLife — Additional accidental death benefit\nLIKELY APPLICABLE\nPolicy condition unresolved\n\nan amount that is only shown after claim evidence has been reviewed lump sum. Read from your policy wording (page 2) and checked against the page.\n\n2 conditions\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\n\nThis is a what-if. Nothing here has been recorded as a claim, and no facts from this question have been saved against anyone's profile.\n\nThe Coverage page shows where each of these came from in your documents, and whether it was verified.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-GroupTermLife\nPolicy wording, read when the document was uploaded\nPage 2\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nPolicy wording, read when the document was uploaded\nPage 2\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.",
+    "citations": [
+      {
+        "doc": "groupLife",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-GroupTermLife",
+        "page": 2
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1795,
+    "screenshot": "e2e-results/v11-journey/turn-08.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q09",
+    "user": "What is Charmaine's maternity coverage?",
+    "answer": "DearPolicy\n\nDearPolicy didn’t find maternity cover in the parts of Charmaine’s policies read so far. That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\n\n6 policy contracts still need wording, processing or further review. See the policy review list.\n\nDearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.\n\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": null,
+    "ms": 2209,
+    "screenshot": "e2e-results/v11-journey/turn-09.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q10",
+    "user": "Does Charmaine have travel insurance?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state about travel cover. Each line shows the page it comes from. SYNTHETIC-DPTEST-v11f5j-JetSure expired on 2024-12-31 (page 1), so its terms may no longer apply.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPolicy-stated coverage limitS$100,000Charmaine · Overseas medical expenses\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-JetSure, page 2: “Overseas medical expenses S$100,000”\nPolicy-stated coverage limitS$3,000Charmaine · Trip cancellation\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-JetSure, page 2: “Trip cancellation S$3,000”\n\nSYNTHETIC-DPTEST-v11f5j-JetSure — Overseas medical expenses: S$100,000 (page 2, document dated 1 Jan 2024; expired).\n\nSYNTHETIC-DPTEST-v11f5j-JetSure — Trip cancellation: S$3,000 (page 2, document dated 1 Jan 2024; expired).\n\nSYNTHETIC-DPTEST-v11f5j-JetSure — Expiry date: 2024-12-31 (page 1; this policy has expired).\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-JetSure\nYour policy document\nPage 2\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-JetSure\nYour policy document\nPage 1\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "travelExpired",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-JetSure",
+        "page": 2
+      },
+      {
+        "doc": "travelExpired",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-JetSure",
+        "page": 1
+      },
+      {
+        "doc": "travelExpired",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-JetSure",
+        "page": 2
+      },
+      {
+        "doc": "travelExpired",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-JetSure",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1779,
+    "screenshot": "e2e-results/v11-journey/turn-10.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q11",
+    "user": "Charmaine broke her arm.",
+    "answer": "DearPolicy\n\nI’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWas this caused by an accident, or an illness?\nSome of these benefits only pay for accidents, so this decides which ones apply.\nAn accident\nAn illness\nNot sure\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Information needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nFracture: arm\nInjuries: broke her arm\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "Was this caused by an accident, or an illness?",
+    "ms": 2008,
+    "screenshot": "e2e-results/v11-journey/turn-11.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q12",
+    "user": "An accident.",
+    "answer": "DearPolicy\n\nI’m sorry Charmaine is dealing with this. A broken arm may relate to accident medical reimbursement, medical reimbursement, hospitalisation, fracture or hospital cash benefits in Charmaine’s policies, depending on the answers. It is not the same as permanent loss of a limb, so I won’t count permanent-disability schedule amounts from the information available.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWhere did the accident happen?\nSome benefits apply only in certain places, and treatment overseas usually needs extra documents.\nSingapore\nOverseas\nNot sure\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Information needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nInjuries: broke her arm\nFracture: arm\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "Where did the accident happen?",
+    "ms": 2162,
+    "screenshot": "e2e-results/v11-journey/turn-12.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q13.1",
+    "user": "Singapore",
+    "answer": "DearPolicy\n\nThanks, noted.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWhen did it happen?\nIt decides which policy version applies and whether waiting periods or cover dates are met.\nNot sure\nAnswer\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Information needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nInjuries: broke her arm\nFracture: arm\nEvent Location: Singapore\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "When did it happen?",
+    "ms": 1426,
+    "screenshot": "e2e-results/v11-journey/turn-13.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q13.2",
+    "user": "2026-09-20",
+    "answer": "DearPolicy\n\nThanks, noted.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWas the fracture confirmed by a doctor or on an X-ray or scan?\nFracture benefits usually need the break confirmed by a doctor or imaging.\nYes\nNo\nNot sure\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Information needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nInjuries: broke her arm\nEvent Location: Singapore\nFracture: arm\nEvent Date: 2026-09-20\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "Was the fracture confirmed by a doctor or on an X-ray or scan?",
+    "ms": 1972,
+    "screenshot": "e2e-results/v11-journey/turn-14.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q13.3",
+    "user": "Yes",
+    "answer": "DearPolicy\n\nThanks, noted.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWhat treatment was given?\nEmergency, inpatient and outpatient treatment are paid under different benefits.\nEmergency department\nAdmitted to hospital\nOutpatient or clinic\nNot sure\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Information needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nInjuries: broke her arm\nEvent Date: 2026-09-20\nEvent Location: Singapore\nFracture: arm\nFracture Confirmed: yes\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "What treatment was given?",
+    "ms": 1532,
+    "screenshot": "e2e-results/v11-journey/turn-15.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q13.4",
+    "user": "Emergency department",
+    "answer": "DearPolicy\n\nBefore I put figures on this, a few quick questions — 2 at most.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWas surgery performed?\nSurgical benefits pay only when an operation took place.\nYes\nNo\nNot sure\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Evidence needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nInjuries: broke her arm\nEvent Date: 2026-09-20\nEvent Location: Singapore\nFracture: arm\nFracture Confirmed: yes\nTreatment Type: Emergency department\nHospitalised: no\n\nThis may relate to accident medical reimbursement or fracture benefits, depending on the answers.\n\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "Was surgery performed?",
+    "ms": 2138,
+    "screenshot": "e2e-results/v11-journey/turn-16.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q13.5",
+    "user": "No",
+    "answer": "DearPolicy\n\nBefore I put figures on this, one question.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nHow much did the treatment cost?\nIt is reimbursed up to the policy's limit.\nNot sure\nAnswer\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Evidence needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nInjuries: broke her arm\nEvent Date: 2026-09-20\nHospitalised: no\nEvent Location: Singapore\nTreatment Type: Emergency department\nFracture: arm\nFracture Confirmed: yes\nSurgery: no\n\nThis may relate to accident medical reimbursement or fracture benefits, depending on the answers.\n\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "How much did the treatment cost?",
+    "ms": 2020,
+    "screenshot": "e2e-results/v11-journey/turn-17.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q13.6",
+    "user": "Not sure",
+    "answer": "DearPolicy\n\nThanks — that’s what I need for now. For the broken arm, Charmaine’s policies have possible benefits: SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm (page 2) and SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.\n\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Evidence needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nSurgery: no\nInjuries: broke her arm\nEvent Date: 2026-09-20\nHospitalised: no\nEvent Location: Singapore\nTreatment Type: Emergency department\nFracture: arm\nFracture Confirmed: yes\nOut Of Pocket: not yet known\nPreliminary claim assessment\n\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.\n\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm\nLIKELY APPLICABLE\nPolicy condition unresolved\n\nListed in the policy on page 2. It may respond to the broken arm; whether it pays depends on the claim documents and the insurer’s assessment.\n\n2 conditions\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Accident medical reimbursement\nNEEDS CHECKING\nInformation needed\n\nListed in the policy on page 2. It may respond to the broken arm; whether it pays depends on the claim documents and the insurer’s assessment.\n\n3 conditions\nStill needed: the actual cost\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nDownload the claim pack (PDF)\nNEXT STEP\n\nSend these documents for the claim: Doctor's report (or X-ray or scan report) describing the injury; Police or accident report, if one was made.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nPolicy wording, read when the document was uploaded\nPage 2\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.",
+    "citations": [
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2295,
+    "screenshot": "e2e-results/v11-journey/turn-18.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q15",
+    "user": "Which of her policies could pay for the broken arm?",
+    "answer": "DearPolicy\n\nHere is the fracture cover in Charmaine’s policies, from the benefit schedules on file, each with the page it is on. Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.\n\nCHARMAINE TAN HUI MIN · INJURY · 1 MORE QUESTION AFTER THIS\nHas any other insurer or the employer already paid part of the bill?\nReimbursement is coordinated so the same bill is not paid twice.\nYes\nNo\nNot sure\nShow full assessment\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Evidence needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nSurgery: no\nInjuries: broke her arm\nEvent Date: 2026-09-20\nOut Of Pocket: not yet known\nHospitalised: no\nEvent Location: Singapore\nTreatment Type: Emergency department\nFracture: arm\nFracture Confirmed: yes\nPolicy-stated coverage limitS$1,200Charmaine Tan Hui Min · Fracture of arm\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-AccidentGuard, page 1: “Fracture of arm S$1,200”\nPolicy-stated coverage limitS$1,500Charmaine Tan Hui Min · Fracture of leg\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-AccidentGuard, page 2: “Fracture of leg S$1,500”\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm (page 1)\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of leg (page 2)\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nBenefit schedule, read when the document was uploaded\nPage 1\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nBenefit schedule, read when the document was uploaded\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 1
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 1
+      },
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      }
+    ],
+    "nextQuestion": "Has any other insurer or the employer already paid part of the bill?",
+    "ms": 804,
+    "screenshot": "e2e-results/v11-journey/turn-19.png"
+  },
+  {
+    "step": "claim interview",
+    "qid": "Q16",
+    "user": "How much can she claim?",
+    "answer": "DearPolicy\n\nHere is where this claim stands. For the broken arm, Charmaine’s policies have possible benefits: SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm (page 2) and SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Accident medical reimbursement (page 2). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.\n\nUpload documents for this claim — Doctor's report (or X-ray or scan report) describing the injury →\nWhat DearPolicy still needs\nCharmaine Tan Hui Min · Injury Evidence needed\n\nDocuments: Doctor's report (or X-ray or scan report) describing the injury\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nInjured: yes\nSurgery: no\nInjuries: broke her arm\nEvent Date: 2026-09-20\nOut Of Pocket: not yet known\nHospitalised: no\nEvent Location: Singapore\nTreatment Type: Emergency department\nFracture: arm\nFracture Confirmed: yes\nPreliminary claim assessment\n\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.\n\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Fracture of arm\nLIKELY APPLICABLE\nPolicy condition unresolved\n\nListed in the policy on page 2. It may respond to the broken arm; whether it pays depends on the claim documents and the insurer’s assessment.\n\n2 conditions\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nCharmaine Tan Hui Min · SYNTHETIC-DPTEST-v11f5j-AccidentGuard — Accident medical reimbursement\nNEEDS CHECKING\nInformation needed\n\nListed in the policy on page 2. It may respond to the broken arm; whether it pays depends on the claim documents and the insurer’s assessment.\n\n3 conditions\nStill needed: the actual cost\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nDownload the claim pack (PDF)\nNEXT STEP\n\nSend these documents for the claim: Doctor's report (or X-ray or scan report) describing the injury; Police or accident report, if one was made.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard\nPolicy wording, read when the document was uploaded\nPage 2\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.",
+    "citations": [
+      {
+        "doc": "accident",
+        "alt": [
+          "accidentEndorsement"
+        ],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1227,
+    "screenshot": "e2e-results/v11-journey/turn-20.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q18",
+    "user": "What does Marcus's travel policy cover overseas?",
+    "answer": "DearPolicy\n\nHere is what Marcus’s documents state about travel cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jun 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\nPolicy-stated coverage limitUS$250,000Marcus · Overseas medical expenses\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-WanderSafe, page 2: “Overseas medical expenses US$250,000”\nPolicy-stated coverage limitUS$500,000Marcus · Emergency medical evacuation\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-WanderSafe, page 2: “Emergency medical evacuation USD 500,000”\nPolicy-stated coverage limitS$5,000Marcus · Trip cancellation\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-WanderSafe, page 2: “Trip cancellation S$5,000”\nPolicy-stated coverage limitS$200Marcus · Baggage delay\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-WanderSafe, page 2: “Baggage delay S$200 for every 6 hours, maximum S$1,000”\n\nSYNTHETIC-DPTEST-v11f5j-WanderSafe — Overseas medical expenses: US$250,000 (page 2, document dated 1 Jun 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-WanderSafe — Emergency medical evacuation: USD 500,000 (page 2, document dated 1 Jun 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-WanderSafe — Trip cancellation: S$5,000 (page 2, document dated 1 Jun 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-WanderSafe — Baggage delay: S$200 for every 6 hours, maximum S$1,000 (page 2, document dated 1 Jun 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-WanderSafe\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      },
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      },
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      },
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      },
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1976,
+    "screenshot": "e2e-results/v11-journey/turn-21.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q19",
+    "user": "What is the baggage delay benefit on Marcus's travel policy?",
+    "answer": "DearPolicy\n\nHere is what Marcus’s documents state about travel cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jun 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\nPolicy-stated coverage limitS$200Marcus · Baggage delay\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-WanderSafe, page 2: “Baggage delay S$200 for every 6 hours, maximum S$1,000”\n\nSYNTHETIC-DPTEST-v11f5j-WanderSafe — Baggage delay: S$200 for every 6 hours, maximum S$1,000 (page 2, document dated 1 Jun 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-WanderSafe\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      },
+      {
+        "doc": "travel",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-WanderSafe",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1898,
+    "screenshot": "e2e-results/v11-journey/turn-22.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q20",
+    "user": "How much hospital cash does Marcus get per day?",
+    "answer": "DearPolicy\n\nHere is what Marcus’s documents state about hospital cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\n\nSYNTHETIC-DPTEST-v11f5j-DailyCash — Hospital cash: 150 per day, maximum 60 days (no currency is printed for this amount) (page 2, document dated 1 Jan 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-DailyCash — Intensive care cash: 300 per day, maximum 10 days (no currency is printed for this amount) (page 2, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-DailyCash\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "hospitalCashNoCurrency",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-DailyCash",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2404,
+    "screenshot": "e2e-results/v11-journey/turn-23.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q21",
+    "user": "What is Marcus's death benefit on his TermGuard policy?",
+    "answer": "DearPolicy\n\nHere is what Marcus’s documents state about death cover. Each line shows the page it comes from. SYNTHETIC-DPTEST-v11f5j-TermGuard states different figures for death benefit: US$350,000 on page 2 and S$300,000 on page 1. DearPolicy can’t tell which one applies, so it has not picked one; the insurer can confirm. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\n\nSYNTHETIC-DPTEST-v11f5j-TermGuard — Terminal illness benefit: Advance of the death benefit (page 2, document dated 1 Jan 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-TermGuard — Death benefit: US$350,000 (page 2, document dated 1 Jan 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-TermGuard — Death sum insured: S$300,000 (page 1, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-TermGuard\nYour policy document\nPage 2\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-TermGuard\nYour policy document\nPage 1\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "termContradictory",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-TermGuard",
+        "page": 2
+      },
+      {
+        "doc": "termContradictory",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-TermGuard",
+        "page": 1
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1733,
+    "screenshot": "e2e-results/v11-journey/turn-24.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q22",
+    "user": "Is Marcus covered for dental treatment?",
+    "answer": "DearPolicy\n\nDearPolicy didn’t find dental cover in the parts of your policies read so far. That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\n\n6 policy contracts still need wording, processing or further review. See the policy review list.\n\nDearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.\n\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": null,
+    "ms": 2142,
+    "screenshot": "e2e-results/v11-journey/turn-25.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q23",
+    "user": "What happens when Marcus's endowment plan matures?",
+    "answer": "DearPolicy\n\nHere is what Marcus’s documents state about maturity or surrender value. Each line shows the page it comes from. Some of this comes from a document dated 1 Jun 2020, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\nPolicy-stated coverage limitS$50,000Marcus · Guaranteed maturity benefit\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-FutureSaver, page 2: “Guaranteed maturity benefit S$50,000 payable on 2040-06-01”\n\nSYNTHETIC-DPTEST-v11f5j-FutureSaver — Guaranteed maturity benefit: S$50,000 payable on 2040-06-01 (page 2, document dated 1 Jun 2020; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-FutureSaver\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "endowment",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-FutureSaver",
+        "page": 2
+      },
+      {
+        "doc": "endowment",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-FutureSaver",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 1638,
+    "screenshot": "e2e-results/v11-journey/turn-26.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q24",
+    "user": "Does Marcus have a fracture benefit?",
+    "answer": "DearPolicy\n\nHere is what Marcus’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\nPolicy-stated coverage limitS$500Marcus · Fracture of arm\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-AccidentGuard-M, page 2: “Fracture of arm S$500”\nPolicy-stated coverage limitS$750Marcus · Fracture of leg\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-AccidentGuard-M, page 2: “Fracture of leg S$750”\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard-M — Fracture of arm: S$500 (page 2, document dated 1 Jan 2025; not confirmed current).\n\nSYNTHETIC-DPTEST-v11f5j-AccidentGuard-M — Fracture of leg: S$750 (page 2, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard-M\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "accidentMarcus",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-AccidentGuard-M",
+        "page": 2
+      },
+      {
+        "doc": "accidentMarcus",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard-M",
+        "page": 2
+      },
+      {
+        "doc": "accidentMarcus",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-AccidentGuard-M",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 796,
+    "screenshot": "e2e-results/v11-journey/turn-27.png"
+  },
+  {
+    "step": "factual question",
+    "qid": "Q25",
+    "user": "Does Marcus have car insurance?",
+    "answer": "DearPolicy\n\nYou have no motor policy on file, so there is nothing in your documents to answer this from. The policies on file are: SYNTHETIC-DPTEST-v11f5j-HealthPlusRider, SYNTHETIC-DPTEST-v11f5j-WanderSafe, SYNTHETIC-DPTEST-v11f5j-FutureSaver. If there is a motor policy, upload it and ask again.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\n\n6 policy contracts still need wording, processing or further review. See the policy review list.\n\nDearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.\n\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": null,
+    "ms": 2239,
+    "screenshot": "e2e-results/v11-journey/turn-28.png"
+  },
+  {
+    "step": "evidence review: claim question",
+    "qid": null,
+    "user": "SYNTHETIC-DPTEST-v11f5j-Patient was diagnosed with Malignant neoplasm of the colon on 2026-06-01. How much can we claim?",
+    "answer": "DearPolicy\n\nI’m sorry SYNTHETIC-DPTEST-v11f5j-Patient is dealing with this. To check SYNTHETIC-DPTEST-v11f5j-Patient’s policies for a diagnosis, I need a few details first, one at a time.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWas the diagnosis made by a specialist (for example an oncologist or cardiologist)?\nMost definitions require a specialist's diagnosis.\nYes\nNo\nNot sure\nUpload documents for this claim — Specialist's diagnosis report; Histopathology or test results confirming the diagnosis →\nShow full assessment\nWhat DearPolicy still needs\nSYNTHETIC-DPTEST-v11f5j-Patient · Critical illness Information needed\n\nDocuments: Specialist's diagnosis report; Histopathology or test results confirming the diagnosis\n\nFACTS AND UNCERTAINTIES\nSYNTHETIC-DPTEST-v11f5j-Patient\nDiagnosis: Malignant neoplasm of the colon\nDiagnosis Date: 2026-06-01\nEvent Date: 2026-06-01\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "Was the diagnosis made by a specialist (for example an oncologist or cardiologist)?",
+    "ms": 4620,
+    "screenshot": "e2e-results/v11-journey/turn-29.png"
+  },
+  {
+    "step": "evidence review: claim interview",
+    "qid": null,
+    "user": "Yes",
+    "answer": "DearPolicy\n\nThanks, noted.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nIs the insured person still alive today?\nMany plans require the insured to survive a period after diagnosis.\nYes\nNo\nNot sure\nUpload documents for this claim — Specialist's diagnosis report; Histopathology or test results confirming the diagnosis →\nShow full assessment\nWhat DearPolicy still needs\nSYNTHETIC-DPTEST-v11f5j-Patient · Critical illness Information needed\n\nDocuments: Specialist's diagnosis report; Histopathology or test results confirming the diagnosis\n\nFACTS AND UNCERTAINTIES\nSYNTHETIC-DPTEST-v11f5j-Patient\nDiagnosis: Malignant neoplasm of the colon\nEvent Date: 2026-06-01\nDiagnosis Date: 2026-06-01\nDiagnosed By Specialist: yes\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": "Is the insured person still alive today?",
+    "ms": 2131,
+    "screenshot": "e2e-results/v11-journey/turn-30.png"
+  },
+  {
+    "step": "evidence review: claim interview",
+    "qid": null,
+    "user": "Not sure",
+    "answer": "DearPolicy\n\nI recorded SYNTHETIC-DPTEST-v11f5j-Patient’s reported condition as “Malignant neoplasm of the colon”. Thanks — that’s what I need for now. For the diagnosis of Malignant neoplasm of the colon, SYNTHETIC-DPTEST-v11f5j-Patient’s policies have possible benefits: Living Care (Critical Illness) — critical illness benefit (page 1) and Major Critical Illness (page 4). This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed.\n\nUpload documents for this claim — Specialist's diagnosis report; Histopathology or test results confirming the diagnosis →\nWhat DearPolicy still needs\nSYNTHETIC-DPTEST-v11f5j-Patient · Critical illness Evidence needed\n\nDocuments: Specialist's diagnosis report; Histopathology or test results confirming the diagnosis\n\nFACTS AND UNCERTAINTIES\nSYNTHETIC-DPTEST-v11f5j-Patient\nDiagnosis: Malignant neoplasm of the colon\nEvent Date: 2026-06-01\nDiagnosis Date: 2026-06-01\nDiagnosed By Specialist: yes\nSurvived Survival Period: not sure\nPreliminary claim assessment\n\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.\n\nSYNTHETIC-DPTEST-v11f5j-Patient · Living Care (Critical Illness) — critical illness benefit\nNEEDS CHECKING\nInformation needed\n\nListed in the policy on page 1. It may respond to the diagnosis of Malignant neoplasm of the colon; whether it pays depends on the claim documents and the insurer’s assessment.\n\n4 conditions\nStill needed: the policy page that states the currency of this benefit (DearPolicy never assumes one)\nSubject to the insurer's assessment and the plan's own terms and exclusions.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nThe payout rule or personal cover amount has not been fully verified.\nSYNTHETIC-DPTEST-v11f5j-Patient · Major Critical Illness\nLIKELY APPLICABLE\nReviewer assessment needed\n\nListed in the policy on page 4. It may respond to the diagnosis of Malignant neoplasm of the colon; whether it pays depends on the claim documents and the insurer’s assessment.\n\n3 conditions\nPayable only if the diagnosis meets the definition in your policy's own schedule of critical illnesses. DearPolicy checks against the standard Singapore list, and a policy may define fewer conditions than that list contains.\nThis comes from your policy's own rule for this benefit and the facts you gave; DearPolicy has not yet checked it against what happened.\nActive status not recently verified: DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.\nDownload the claim pack (PDF)\n\nA DearPolicy reviewer checks the diagnosis against the policy's critical-illness definition.\n\nNEXT STEP\n\nSend these documents for the claim: Specialist's diagnosis report; Histopathology or test results confirming the diagnosis; Specialist's medical report stating the diagnosis and the date it was made; Histology, biopsy or scan report supporting the diagnosis.\n\nSOURCES\nSinglife · Living Care\nVerified personal cover\nPage 1\nSinglife · Living Care\nPolicy wording, read when the document was uploaded\nPage 4\nSinglife · Living Care\nVerified personal cover\nPage 1\nSinglife · Living Care\nVerified personal cover\nPage 1\nPreliminary claim assessment: DearPolicy has not reviewed claim evidence for this event, so it does not estimate what the insurer will pay. It lists the benefits that may be relevant, their conditions, and the facts and documents still needed.",
+    "citations": [
+      {
+        "doc": null,
+        "alt": [],
+        "policyName": "Singlife · Living Care",
+        "page": 1
+      },
+      {
+        "doc": null,
+        "alt": [],
+        "policyName": "Singlife · Living Care",
+        "page": 4
+      },
+      {
+        "doc": null,
+        "alt": [],
+        "policyName": "Singlife · Living Care",
+        "page": 1
+      },
+      {
+        "doc": null,
+        "alt": [],
+        "policyName": "Singlife · Living Care",
+        "page": 1
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2149,
+    "screenshot": "e2e-results/v11-journey/turn-31.png"
+  },
+  {
+    "step": "final answer after evidence review",
+    "qid": null,
+    "user": "How much can we claim now?",
+    "answer": "DearPolicy\n\nI recorded SYNTHETIC-DPTEST-v11f5j-Patient’s reported condition as “Malignant neoplasm of the colon”. The claim documents reviewed so far give an indicative estimate for the diagnosis of Malignant neoplasm of the colon under SYNTHETIC-DPTEST-v11f5j-Patient’s policies, shown below per currency (amounts in different currencies are not added together). It is indicative only: the insurer decides eligibility and the final amount.\n\nFACTS AND UNCERTAINTIES\nSYNTHETIC-DPTEST-v11f5j-Patient\nDiagnosis: Malignant neoplasm of the colon\nEvent Date: 2026-06-01\nDiagnosis Date: 2026-06-01\nDiagnosed By Specialist: yes\nSurvived Survival Period: not sure\nINDICATIVE ESTIMATE · FROM REVIEWED EVIDENCE · THE INSURER DECIDES\nUS$100,000\nS$200,000\n\nIndicative estimate based on the policies, facts and reviewed evidence currently on file. The insurer determines eligibility and the final amount after assessment.\n\nLiving Care\nUS$100,000\nCritical Illness\nUS$100,000\nINCLUDED IN TOTAL\nMajor Critical Illness wording · page 4\nLiving Care\nS$200,000\nCritical Illness\nS$200,000\nINCLUDED IN TOTAL\nMajor Critical Illness wording · page 4\n\nMajor Critical Illness (Living Care), USD cover, policy SYNTHETIC-DPTEST-v11f5j-LC-USD, wording page 4: a reviewer matched the reviewed medical evidence to this policy’s definition.\n\nMajor Critical Illness (Living Care), SGD cover, policy SYNTHETIC-DPTEST-v11f5j-LC-SGD, wording page 4: a reviewer matched the reviewed medical evidence to this policy’s definition.\n\nThe policy doesn’t state the currency for Major Critical Illness (Living Care) under policy SYNTHETIC-DPTEST-v11f5j-LC-NOCCY, so no amount is shown for it.\n\nNo amount is shown yet for Living Care critical illness: it has not been matched against reviewed evidence.\n\nNEXT STEP\n\nOpen this claim on the Claims page to see the reviewed documents and the same indicative estimate.\n\nSOURCES\nLiving Care\nYour uploaded document\nPage 4\nLiving Care\nYour uploaded document\nPage 4\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": null,
+        "alt": [],
+        "policyName": "Living Care",
+        "page": 4
+      },
+      {
+        "doc": null,
+        "alt": [],
+        "policyName": "Living Care",
+        "page": 4
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 2228,
+    "screenshot": "e2e-results/v11-journey/turn-32.png"
+  },
+  {
+    "step": "after deletion",
+    "qid": "Q26",
+    "user": "Does Marcus have a fracture benefit?",
+    "answer": "DearPolicy\n\nDearPolicy didn’t find fracture cover in the parts of your policies read so far. That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.\n\nFACTS AND UNCERTAINTIES\nMarcus Lim Wei Jie\n\n5 policy contracts still need wording, processing or further review. See the policy review list.\n\nDearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.\n\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [],
+    "nextQuestion": null,
+    "ms": 4499,
+    "screenshot": "e2e-results/v11-journey/turn-33.png"
+  },
+  {
+    "step": "household B",
+    "qid": "Q28",
+    "user": "Does Charmaine have a fracture benefit?",
+    "answer": "DearPolicy\n\nHere is what Charmaine’s documents state about accident cover. Each line shows the page it comes from. Some of this comes from a document dated 1 Jan 2025, so it may not reflect the current terms.\n\nFACTS AND UNCERTAINTIES\nCharmaine Tan Hui Min\nPolicy-stated coverage limitS$3,500Charmaine · Fracture of arm\n\nThis is the maximum or benefit amount stated in the policy. It is not an estimate of what the insurer will pay for this event.\n\nFrom SYNTHETIC-DPTEST-v11f5j-OtherHouseholdPA, page 2: “Fracture of arm S$3,500”\n\nSYNTHETIC-DPTEST-v11f5j-OtherHouseholdPA — Fracture of arm: S$3,500 (page 2, document dated 1 Jan 2025; not confirmed current).\n\nNEXT STEP\n\nUpload the latest renewal notice or premium receipt to confirm the policy is current.\n\nSOURCES\nSynthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-OtherHouseholdPA\nYour policy document\nPage 2\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+    "citations": [
+      {
+        "doc": "otherHouseholdAccident",
+        "alt": [],
+        "policyName": "Synthetic Test Assurance (fictitious) · SYNTHETIC-DPTEST-v11f5j-OtherHouseholdPA",
+        "page": 2
+      },
+      {
+        "doc": "otherHouseholdAccident",
+        "alt": [],
+        "policyName": "SYNTHETIC-DPTEST-v11f5j-OtherHouseholdPA",
+        "page": 2
+      }
+    ],
+    "nextQuestion": null,
+    "ms": 4626,
+    "screenshot": "e2e-results/v11-journey/turn-34.png"
+  }
+]

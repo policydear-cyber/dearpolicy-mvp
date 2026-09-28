@@ -6,6 +6,9 @@ export type PdfPage = {
   text: string;
   imageCount?: number;
   extractionMethod?: "native" | "ocr";
+  /** OCR was needed and the reader returned nothing for this page even after
+   * a retry: anything printed only here is not available. */
+  unreadable?: boolean;
   /** Lines and cells recovered from the page geometry. A benefit schedule is a
    * table, and this is what makes it readable as one. */
   lines?: PageLine[];

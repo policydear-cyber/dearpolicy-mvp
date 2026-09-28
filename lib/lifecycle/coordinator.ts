@@ -1472,6 +1472,13 @@ export async function requestHouseholdDeletion(args: {
   });
 
   await deleteHousehold(args.actorUserId, args.householdId);
+  // model_usage keys its rows by account_id with no foreign key, so the
+  // cascade above leaves them behind. They are the household's own usage
+  // records; remove them too (best-effort -- a missing table in a partial
+  // environment must not fail an already-completed deletion).
+  await pool.query("DELETE FROM model_usage WHERE account_id=$1", [args.householdId]).catch((error: unknown) => {
+    console.warn("model_usage cleanup after household deletion failed:", error instanceof Error ? error.message : String(error));
+  });
   // The accounts row -- and with it, via ON DELETE CASCADE, the
   // deletion_requests row created above and the deletion_audit_log row
   // just written -- no longer exists past this point. See this

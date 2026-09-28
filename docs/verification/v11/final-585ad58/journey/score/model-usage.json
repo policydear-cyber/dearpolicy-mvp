@@ -1,0 +1,102 @@
+{
+  "since": "2026-09-28T20:30:12Z",
+  "households": [
+    "d6751f74-850e-4e62-aea7-331f0b85acdc",
+    "0a34e380-d7e5-4368-9782-114268c4f423"
+  ],
+  "scope": "this run's households",
+  "total": {
+    "calls": 106,
+    "cost": 0.033084
+  },
+  "rows": [
+    {
+      "operation": "benefit_extraction",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 22,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "catalog_building",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 18,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "chat_fact_finding",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 25,
+      "input_tokens": 5257,
+      "output_tokens": 1439,
+      "cost_usd": 0.018683,
+      "avg_latency_ms": 4,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "chat_reply",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 1,
+      "input_tokens": 327,
+      "output_tokens": 7,
+      "cost_usd": 0.000116,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "coverage_extraction",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 23,
+      "input_tokens": 6972,
+      "output_tokens": 276,
+      "cost_usd": 0.002783,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "hosted_ocr",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 1,
+      "input_tokens": 31,
+      "output_tokens": 115,
+      "cost_usd": 0,
+      "avg_latency_ms": 24,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "policy_extraction",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 15,
+      "input_tokens": 8350,
+      "output_tokens": 3598,
+      "cost_usd": 0.011502,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "relevance_judging",
+      "model": "flash",
+      "status": "failed",
+      "calls": 1,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    }
+  ]
+}

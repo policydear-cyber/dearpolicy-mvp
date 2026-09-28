@@ -57,7 +57,7 @@ async function main() {
   // cover-conditions.sql (runbook step 3) and coverage-ledger.sql (step 4), so
   // apply those, then re-run household-rls.sql and infrastructure-rls.sql in
   // runbook order (16, 17) exactly as a production migration would.
-  for (const file of ["sql/cover-conditions.sql", "sql/coverage-ledger.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql"]) {
+  for (const file of ["sql/cover-conditions.sql", "sql/coverage-ledger.sql", "sql/v11-ingestion-evidence.sql", "sql/household-rls.sql", "sql/infrastructure-rls.sql"]) {
     if (existsSync(path.resolve(file))) await db.exec(await readFile(path.resolve(file), "utf8"));
   }
 

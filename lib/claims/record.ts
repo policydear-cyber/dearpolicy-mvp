@@ -1,6 +1,8 @@
-import { EMPTY_CLAIM_FACTS,type ClaimAssessmentItem,type ClaimDecisionPacket,type ClaimFacts } from "./types";
+import { EMPTY_CLAIM_FACTS,type ClaimAssessmentItem,type ClaimDecisionPacket,type ClaimFacts,type ClaimQuestion } from "./types";
 import { createClaimSession,getClaimSession,saveClaimSession } from "./session";
 import { documentsToAttach } from "./claim-pack";
+import { looksLikeInterviewReply } from "./event-name";
+import { query } from "@/lib/db/client";
 import { knownValue } from "@/lib/chat/facts";
 import type { SubjectFacts } from "@/lib/chat/types";
 import type { ChatCitation,ClaimItem } from "@/types";
@@ -46,21 +48,70 @@ function assessmentFromItem(item:ClaimItem,index:number,citations:ChatCitation[]
     ...(evidence&&evidence.pageStart!=null&&evidence.pageEnd!=null?{ruleEvidence:{...evidence,pageStart:evidence.pageStart,pageEnd:evidence.pageEnd}}:{}),
   };
 }
-/** Writes (or updates) the claim session for an assessment and returns its id. */
+/** Additive: which conversation a claim event belongs to (so repeated turns
+ * of one conversation update ONE event), and the claim's category (so its
+ * status and requested documents follow what happened). */
+let claimRecordSchemaReady:Promise<void>|null=null;
+export function ensureClaimRecordSchema(){
+  claimRecordSchemaReady??=query("ALTER TABLE claim_sessions ADD COLUMN IF NOT EXISTS conversation_id uuid; ALTER TABLE claim_sessions ADD COLUMN IF NOT EXISTS claim_category text")
+    .then(()=>undefined).catch(error=>{claimRecordSchemaReady=null;throw error;});
+  return claimRecordSchemaReady;
+}
+async function findClaimFor(args:{accountId:string;familyMemberId:string;existingId?:string|null;conversationId?:string|null}){
+  let session=args.existingId?await getClaimSession(args.accountId,args.familyMemberId,args.existingId):null;
+  if(!session&&args.conversationId){
+    const same=(await query<{id:string}>("SELECT id FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2 AND conversation_id=$3 ORDER BY created_at LIMIT 1",
+      [args.accountId,args.familyMemberId,args.conversationId])).rows[0];
+    if(same)session=await getClaimSession(args.accountId,args.familyMemberId,same.id);
+  }
+  return session;
+}
+/** The event name to store: the proposed one, unless it is reply-shaped and
+ * the event already has a proper name (which then stays). */
+function eventNameToStore(proposed:string,existing:string|null|undefined){
+  if(!looksLikeInterviewReply(proposed))return proposed;
+  if(existing&&!looksLikeInterviewReply(existing))return existing;
+  return proposed;
+}
+/** Keeps the claim event in step with an interview that is still open: the
+ * claim this conversation is about is "fact_finding" with the question the
+ * chat is waiting on, so the Claims list says "Questions to answer" -- not
+ * "Documents needed" -- while the chat is still asking. Created on the
+ * first question (so the event is there to pick up), reopened when an
+ * earlier final answer's interview is reopened. The last final answer's
+ * decision packet is kept; recordClaim replaces it at the next final. */
+export async function recordClaimProgress(args:{accountId:string;familyMemberId:string;existingId?:string|null;conversationId:string;
+  facts:SubjectFacts;eventSummary:string;claimCategory:string|null;pendingQuestion:ClaimQuestion}){
+  const facts=claimFactsFromSubject(args.facts);
+  await ensureClaimRecordSchema();
+  const session=await findClaimFor(args)??await createClaimSession(args.accountId,args.familyMemberId);
+  await query(`UPDATE claim_sessions SET status='fact_finding',event_type=$1,event_summary=$2,facts=$3::jsonb,pending_question=$4::jsonb,completed_at=NULL,updated_at=now(),
+      conversation_id=COALESCE(conversation_id,$5),claim_category=COALESCE($6,claim_category)
+    WHERE id=$7 AND account_id=$8 AND family_member_id=$9`,
+    [facts.eventType,eventNameToStore(args.eventSummary,session.event_summary),JSON.stringify(facts),JSON.stringify(args.pendingQuestion),
+      args.conversationId,args.claimCategory,session.id,args.accountId,args.familyMemberId]);
+  return session.id;
+}
+/** Writes (or updates) the claim session for an assessment and returns its id.
+ * One conversation is one claim event: without an id in hand, the event this
+ * conversation already recorded is updated rather than a new one created. */
 export async function recordClaim(args:{accountId:string;familyMemberId:string;existingId?:string|null;
   facts:SubjectFacts;eventSummary:string;items:ClaimItem[];citations:ChatCitation[];knownFacts:string[];missingFacts:string[];
-  complete:boolean;nextSteps:string[]}){
+  complete:boolean;nextSteps:string[];conversationId?:string|null;claimCategory?:string|null}){
   const facts=claimFactsFromSubject(args.facts);
-  let session=args.existingId?await getClaimSession(args.accountId,args.familyMemberId,args.existingId):null;
-  if(!session)session=await createClaimSession(args.accountId,args.familyMemberId);
+  await ensureClaimRecordSchema();
+  const session=await findClaimFor(args)??await createClaimSession(args.accountId,args.familyMemberId);
+  const eventSummary=eventNameToStore(args.eventSummary,session.event_summary);
   const packet:ClaimDecisionPacket={
-    sessionId:session.id,eventSummary:args.eventSummary,facts,knownFacts:args.knownFacts,missingFacts:args.missingFacts,
+    sessionId:session.id,eventSummary,facts,knownFacts:args.knownFacts,missingFacts:args.missingFacts,
     relevantOwnedProducts:[...new Set(args.items.map(item=>item.title.split(" · ")[0]))],
     assessments:args.items.map((item,index)=>assessmentFromItem(item,index,args.citations)),
-    nextSteps:args.nextSteps,ready:args.complete,
+    nextSteps:args.nextSteps,ready:args.complete,claimCategory:args.claimCategory??null,
   };
   await saveClaimSession({accountId:args.accountId,familyMemberId:args.familyMemberId,id:session.id,
-    status:args.complete?"complete":"fact_finding",facts,pendingQuestion:null,eventSummary:args.eventSummary,
+    status:args.complete?"complete":"fact_finding",facts,pendingQuestion:null,eventSummary,
     decisionPacket:args.complete?packet:null});
+  await query("UPDATE claim_sessions SET conversation_id=COALESCE(conversation_id,$1),claim_category=COALESCE($2,claim_category) WHERE id=$3 AND account_id=$4",
+    [args.conversationId??null,args.claimCategory??null,session.id,args.accountId]);
   return {id:session.id,attach:documentsToAttach(facts)};
 }

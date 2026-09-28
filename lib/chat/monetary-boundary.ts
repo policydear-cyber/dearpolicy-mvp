@@ -61,6 +61,8 @@ export function containsForbiddenPhrase(text: string | null | undefined): boolea
   return !!text && FORBIDDEN_MONETARY_PHRASES.some((p) => p.test(text));
 }
 
+function moneyKey(text: string) { return text.replace(/\s+/g, "").replace(/\.00$/, "").toUpperCase(); }
+
 export function scrubMonetaryText(text: string): string {
   let out = text.replace(new RegExp(MONEY_PATTERN.source, "gi"), WITHHELD_AMOUNT_TEXT);
   out = out.replace(new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "gi"), (_m, cue: string, gap: string) => `${cue}${gap}${WITHHELD_AMOUNT_TEXT}`);
@@ -107,10 +109,21 @@ export function isValidPolicyStatedLimit(limit: PolicyStatedLimit | undefined | 
 const POLICY_VALUE_QUESTION = /\b(?:matur\w*|endowment|surrender\w*|cash values?|survival benefits?|premiums?)\b/i;
 const CLAIM_MONEY_QUESTION = /\b(?:claim\w*|payouts?|pay\s*out|compensat\w*|reimburs\w*|entitled|settlement)\b/i;
 const CLAIM_EVENT = /\b(?:die[sd]?|death|dead|passed away|diagnos\w*|hospital\w*|admitted|accident\w*|injur\w*|cancer|illness|disab\w*|fractur\w*|surgery|operation|delay\w*|damage\w*|stolen|theft|collision|crash\w*|murder\w*|killed)\b/i;
-export function liveClaimContext(intent: string | undefined, answer: Pick<ChatAnswer, "mode" | "claimItems">, question = ""): boolean {
+/** V1.1: an answer built only from policy facts that lib/chat/assertions.ts
+ * verified against their cited passages (set by lib/chat/policy-answer.ts).
+ * Honoured only for a plain answer: no claim items, no composition. */
+function verifiedPolicyFactAnswer(answer: Pick<ChatAnswer, "mode" | "claimItems"> & Partial<Pick<ChatAnswer, "verifiedPolicyFactsOnly" | "composition">>) {
+  return answer.verifiedPolicyFactsOnly === true && answer.mode === "answer" && answer.claimItems.length === 0 && !answer.composition;
+}
+export function liveClaimContext(intent: string | undefined, answer: Pick<ChatAnswer, "mode" | "claimItems"> & Partial<Pick<ChatAnswer, "verifiedPolicyFactsOnly" | "composition">>, question = ""): boolean {
   const mode: string = answer.mode;
   if (intent === "claim" || mode !== "answer") return true;
-  if (CLAIM_MONEY_QUESTION.test(question) || CLAIM_EVENT.test(question)) return true;
+  if (CLAIM_MONEY_QUESTION.test(question)) return true;
+  // "What is her hospital coverage?" names an event word but asks what the
+  // documents state. A verified policy-fact answer states the printed figure;
+  // "How much can she claim?" (above) and every claim turn stay scrubbed.
+  if (verifiedPolicyFactAnswer(answer)) return false;
+  if (CLAIM_EVENT.test(question)) return true;
   if (intent === "policy_question" && POLICY_VALUE_QUESTION.test(question)) return false;
   return answer.claimItems.length > 0;
 }
@@ -138,6 +151,8 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
   if (answer.composition) answer.assessmentKind = "indicative";
   else if (claimContext && answer.claimItems.length) answer.assessmentKind = "preliminary";
   if (claimContext) {
+    // A claim turn never carries the policy-fact exemption forward.
+    delete answer.verifiedPolicyFactsOnly; delete answer.verifiedPolicyFigures;
     answer.summary = scrubMonetaryText(answer.summary);
     answer.details = answer.details.map(scrubMonetaryText);
     answer.nextSteps = answer.nextSteps.map(scrubMonetaryText);
@@ -145,6 +160,17 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
     if (answer.assessmentKind === "preliminary") answer.disclaimer = PRELIMINARY_ASSESSMENT_NOTICE;
   } else {
     answer.summary = answer.summary.replace(/potential payouts?/gi, "possible benefit");
+    // A verified policy-fact answer may show only the figures its verified
+    // assertions state; anything else in its text is withheld.
+    if (verifiedPolicyFactAnswer(answer)) {
+      const allowed = new Set((answer.verifiedPolicyFigures ?? []).map(moneyKey));
+      const keep = (text: string) => text
+        .replace(new RegExp(MONEY_PATTERN.source, "gi"), (m) => allowed.has(moneyKey(m)) ? m : WITHHELD_AMOUNT_TEXT)
+        .replace(new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "gi"), (_m, cue: string, gap: string) => `${cue}${gap}${WITHHELD_AMOUNT_TEXT}`);
+      answer.summary = keep(answer.summary);
+      answer.details = answer.details.map(keep);
+      answer.nextSteps = answer.nextSteps.map(keep);
+    }
   }
   if (answer.composition) answer.composition = { ...answer.composition, disclaimer: INDICATIVE_ESTIMATE_NOTICE };
   return answer;

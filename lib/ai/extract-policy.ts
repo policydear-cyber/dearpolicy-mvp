@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { structuredCompletion } from "./llm";
 import type { PdfPage } from "@/lib/documents/pdf";
+import { UNTRUSTED_DOCUMENT_NOTICE, cachedReading, delimitDocument, readingModelIdentity } from "@/lib/documents/evidence";
 
 const CoverageSchema = z.object({
   category: z.string(),
@@ -180,7 +181,8 @@ function compactSample(pages: PdfPage[], maxChars: number, perPageChars: number)
   return output.trim();
 }
 
-const systemPrompt = `You are DearPolicy's conservative insurance-document extraction engine. Accuracy is more important than completeness.
+/** Exported for the prompt-safety regressions. */
+export const POLICY_EXTRACTION_SYSTEM_PROMPT = `You are DearPolicy's conservative insurance-document extraction engine. Accuracy is more important than completeness.
 Unknown scalar fields must be null. Unknown lists must be []. Never invent names, ownership, amounts, dates, policy numbers or premiums.
 
 PERSON DETECTION
@@ -197,7 +199,10 @@ personal_schedule = personalised policy schedule; certificate = personalised cer
 CATEGORIES
 Use Hospitalisation; Hospital Cash; Death; Total Permanent Disability; Critical Illness; Early Critical Illness; Personal Accident; Disability Income; Outpatient; Long-term Care; Travel; Home; Motor; Savings; Investment; Other.
 Group Term Life may create separate Death and TPD items when personally confirmed. Do not call a daily hospital cash benefit Hospitalisation; use Hospital Cash. Group Personal Accident => Personal Accident. Living Care => Critical Illness. Living Care Plus => Early Critical Illness.
-Generic rate tables are never a personal premium.`;
+Generic rate tables are never a personal premium.
+
+DOCUMENT TEXT
+The selected pages arrive between <document> and </document>.${UNTRUSTED_DOCUMENT_NOTICE}`;
 
 function isTransientModelError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -214,36 +219,40 @@ export async function extractPolicyStructure(pages: PdfPage[], owner?: { account
   // thousands of characters into Qwen3, causing long stalls / model-process
   // resets on 8 GB GPUs. The full PDF is still indexed separately for RAG.
   const primarySample = compactSample(pages, 7_500, 2_200);
+  // Cached by the exact sample read (derived from the document's own text),
+  // so a retried job or a re-upload of identical bytes never pays for the
+  // same extraction twice.
+  const model = await readingModelIdentity();
   try {
-    return await structuredCompletion({
+    return await cachedReading(owner, "policy_extraction", { sample: primarySample, prompt: POLICY_EXTRACTION_SYSTEM_PROMPT }, model, () => structuredCompletion({
       role: "reading",
       operation: "policy_extraction",
       householdId: owner?.accountId,
       resourceId: owner?.policyId,
-      system: systemPrompt,
-      user: `Extract only facts supported by these selected pages. The complete document will be indexed separately.\n\n${primarySample}`,
+      system: POLICY_EXTRACTION_SYSTEM_PROMPT,
+      user: `Extract only facts supported by these selected pages. The complete document will be indexed separately.\n\n${delimitDocument(primarySample)}`,
       schema: PolicyExtractionSchema,
       temperature: 0,
       timeoutMs: 240_000,
       attempts: 1,
-      });
+      }));
   } catch (error) {
     if (!isTransientModelError(error)) throw error;
 
     // One deliberate smaller fallback is more useful than retrying the same
     // oversized request three times. This keeps total failure time bounded.
     const fallbackSample = compactSample(pages, 4_200, 1_350);
-    return structuredCompletion({
+    return cachedReading(owner, "policy_extraction_fallback", { sample: fallbackSample, prompt: POLICY_EXTRACTION_SYSTEM_PROMPT }, model, () => structuredCompletion({
       role: "reading",
       operation: "policy_extraction",
       householdId: owner?.accountId,
       resourceId: owner?.policyId,
-      system: systemPrompt,
-      user: `Retry with a minimal evidence sample. Extract only clearly visible facts; use null/[] for everything else.\n\n${fallbackSample}`,
+      system: POLICY_EXTRACTION_SYSTEM_PROMPT,
+      user: `Retry with a minimal evidence sample. Extract only clearly visible facts; use null/[] for everything else.\n\n${delimitDocument(fallbackSample)}`,
       schema: PolicyExtractionSchema,
       temperature: 0,
       timeoutMs: 180_000,
       attempts: 1,
-      });
+      }));
   }
 }

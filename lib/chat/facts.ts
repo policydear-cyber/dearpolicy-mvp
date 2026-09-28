@@ -3,6 +3,7 @@ import { structuredCompletion } from "@/lib/ai/llm";
 import { claimDateInFuture, resolveClaimDate } from "@/lib/claims/dates";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ConversationFact, ConversationState, FactValue, ScenarioClassification, ScenarioFamily, ScenarioTrait, SubjectFacts } from "./types";
+import { refreshDependentsOnFirstAnswer } from "@/lib/claims/fact-finding";
 
 const ValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean(), z.array(z.string().max(120)).max(12), z.null()]);
 const ScenarioFamilySchema=z.enum(["death","injury","illness","hospitalisation","disability","property","motor","travel","liability","savings","life_event","other"]);
@@ -385,9 +386,11 @@ export function mergeInterpretation(args: {
     // A deterministic fracture report is not downgraded by a vaguer model value
     // ("injured arm", injuryKind "injury") unless the user negates the fracture.
     if(!fractureNegated&&fractureLocked(oldFacts)&&!keepsFracture(fact.key,value,oldFacts))continue;
+    const previousFact = next.subjects[fact.subjectId]?.[fact.key];
     (next.subjects[fact.subjectId] ??= {})[fact.key] = {
       value, state: fact.state, quote: fact.quote, source, recordedAt: args.now.toISOString(),
     };
+    if (fact.state === "known") refreshDependentsOnFirstAnswer(next.subjects[fact.subjectId], fact.key, previousFact, args.now);
   }
   for (const id of args.subjectIds) {
     const facts = next.subjects[id] ??= {};

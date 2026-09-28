@@ -1,3 +1,4 @@
+import { FACT_FINDING_SPECS, type FactFindingCategory } from "./fact-finding";
 import { PDFDocument,StandardFonts,rgb } from "pdf-lib";
 import { PRELIMINARY_ASSESSMENT_NOTICE,scrubMonetaryText } from "@/lib/chat/monetary-boundary";
 import type { ClaimDecisionPacket,ClaimFacts } from "./types";
@@ -68,6 +69,31 @@ export function documentsToAttach(facts:ClaimFacts){
     documents.push("Original receipts for every amount being claimed");
   return [...new Set(documents)];
 }
+/** The claim's category, from what happened (not from which benefit matched). */
+export function claimCategoryFromFacts(facts:ClaimFacts&Record<string,unknown>,eventType?:string|null,stored?:string|null):FactFindingCategory|null{
+  if(stored&&stored in FACT_FINDING_SPECS)return stored as FactFindingCategory;
+  const type=String(eventType??facts.eventType??"");
+  if(facts.death===true||type==="death")return "accidental_death";
+  if(facts.injured===true||facts.fractureBodyPart||facts.injuryKind||(Array.isArray(facts.injuries)&&facts.injuries.length)||type==="accident")return "accidental_injury";
+  if(facts.diagnosis||type==="diagnosis")return "critical_illness";
+  if(facts.disabled===true||type==="disability")return "disability_tpd";
+  if(facts.flightDelayHours!=null||facts.tripStartDate||type==="travel_disruption")return "travel";
+  if(facts.hospitalised===true||facts.hospitalNights!=null||type==="hospitalisation")return "medical_reimbursement";
+  return null;
+}
+/** Every document this claim needs, in one list: the insurer's form and the
+ * schedule, the category's required documents (a doctor's or X-ray report for
+ * a fracture, a death certificate only for a death), and what the reported
+ * facts add. The claim pack, the claims list, the claim page and the chat's
+ * final answer all read this, so they never disagree. */
+export function claimDocuments(facts:ClaimFacts,category:FactFindingCategory|null){
+  const own=category?FACT_FINDING_SPECS[category].documents.filter(d=>d.required).map(d=>d.label):[];
+  const stay=category==="medical_reimbursement"||(category==="accidental_injury"&&(facts.hospitalised||facts.hospitalNights!=null))
+    ?FACT_FINDING_SPECS.medical_reimbursement.documents.filter(d=>d.required).map(d=>d.label):[];
+  const all=[...documentsToAttach(facts).slice(0,2),...own,...stay,...documentsToAttach(facts).slice(2)];
+  const seen=new Set<string>();
+  return all.filter(d=>{const key=d.toLowerCase().replace(/[^a-z]+/g," ").trim();if(seen.has(key))return false;seen.add(key);return true;});
+}
 export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:string;relationship?:string|null;generatedOn?:Date}){
   const {packet}=args;
   const generated=args.generatedOn??new Date();
@@ -101,7 +127,7 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
     heading:"Still needed before this is submitted",
     lines:packet.missingFacts.map(fact=>"• "+fact),
   });
-  sections.push({heading:"Documents to attach",lines:documentsToAttach(packet.facts).map(document=>"• "+document)});
+  sections.push({heading:"Documents to attach",lines:claimDocuments(packet.facts,claimCategoryFromFacts(packet.facts as ClaimFacts&Record<string,unknown>,null,packet.claimCategory??null)).map(document=>"• "+document)});
   if(packet.nextSteps.length)sections.push({heading:"Next steps",lines:packet.nextSteps.map((step,index)=>index+1+". "+step)});
   return {
     title:"Claim summary",

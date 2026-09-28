@@ -1,46 +1,36 @@
 "use client";
+import Link from "next/link";
 import { useEffect,useState } from "react";
 
-/** What this household costs to run, this month, against its plan.
+/** Plan usage, for a household: how much of this month's plan has been used.
  *
- * A subscription price is a bet on this number. The page shows the bet being
- * checked: tokens and dollars per job, questions and documents against the
- * plan's allowance, and which model is doing which job. */
-type Role={role:string;calls:number;inputTokens:number;outputTokens:number;costUsd:number};
-type Usage={month:string;calls:number;inputTokens:number;outputTokens:number;costUsd:number;unpricedCalls:number;byRole:Role[];
-  chatTurns:number;documentsRead:number;plan:{name:string;priceUsd:number;includedChatTurns:number;includedDocuments:number;hardStopUsd:number};warnings:string[]};
-type Routing={role:string;model:string;hosted:boolean;price:string};
-const ROLE_COPY:Record<string,string>={reading:"Reading documents",judgement:"Understanding questions and deciding what applies",narration:"Wording the answer",chat:"Chat (unrouted)"};
-const money=(v:number)=>"$"+v.toFixed(v<0.1?4:2);
-export default function UsagePage(){
-  const [usage,setUsage]=useState<Usage|null>(null);const [routing,setRouting]=useState<Routing[]>([]);const [error,setError]=useState("");
-  useEffect(()=>{void fetch("/api/usage").then(r=>r.json()).then(p=>{if(p.error)throw new Error(p.error);setUsage(p.usage);setRouting(p.routing??[]);}).catch(e=>setError(e.message));},[]);
+ * V1.1: no models, tokens, provider prices, routing or spending limits here
+ * -- that operational view (by operation and model, against the owner's
+ * provider budget) is in the operator area (/operator). This page is not in
+ * household navigation; it is linked from the Household page. */
+type Usage={month:string;chatTurns:number;documentsRead:number;plan:{name:string;includedChatTurns:number;includedDocuments:number}};
+
+function Meter({label,used,included,testId}:{label:string;used:number;included:number;testId:string}){
+  const pct=included>0?Math.min(100,Math.round(used/included*100)):0;
+  return <div className="plan-meter" data-testid={testId}>
+    <div className="plan-meter-head"><strong>{label}</strong><span>{used} of {included} included</span></div>
+    <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={included} aria-valuenow={Math.min(used,included)} aria-label={label}><div className="progress-fill" style={{width:Math.max(used?2:0,pct)+"%"}}/></div>
+  </div>;
+}
+
+export default function PlanUsagePage(){
+  const [usage,setUsage]=useState<Usage|null>(null);const [error,setError]=useState(false);
+  useEffect(()=>{void fetch("/api/usage",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok||p.error||!p.usage)throw new Error("load");setUsage(p.usage);}).catch(()=>setError(true));},[]);
   const plan=usage?.plan;
-  const pct=(n:number,d:number)=>Math.min(100,Math.round(n/Math.max(1,d)*100));
   return <div className="page">
-    <header className="page-header compact"><div><div className="eyebrow">USAGE & COST</div><h1>What this household costs to run.</h1><p className="lead">Every model call is counted — hosted or local — so the plan price is checked against real numbers, not a guess. Local calls cost nothing but are counted as what a hosted bill would be.</p></div></header>
-    {error&&<div className="alert error"><strong>Usage could not be loaded.</strong><span>Please try refreshing in a moment — if this keeps happening, contact support.</span></div>}
-    {usage&&plan&&<>
-      {!!usage.warnings.length&&<div className="usage-warnings">{usage.warnings.map((w,i)=><p key={i}>{w}</p>)}</div>}
-      <section className="schedule-summary">
-        <div><strong>{money(usage.costUsd)}</strong><span>model cost, {usage.month}</span></div>
-        <div><strong>{money(plan.priceUsd)}</strong><span>{plan.name} plan, per month</span></div>
-        <div className={usage.chatTurns>=plan.includedChatTurns?"warn":""}><strong>{usage.chatTurns}<small> / {plan.includedChatTurns}</small></strong><span>questions this month</span></div>
-        <div className={usage.documentsRead>=plan.includedDocuments?"warn":""}><strong>{usage.documentsRead}<small> / {plan.includedDocuments}</small></strong><span>documents read this month</span></div>
-      </section>
-      <section className="section"><div className="section-heading"><div><div className="eyebrow">AGAINST THE PLAN</div><h2>Where the money goes</h2></div><small>Hard stop at {money(plan.hardStopUsd)} — {pct(usage.costUsd,plan.hardStopUsd)}% used</small></div>
-        <div className="progress-track"><div className="progress-fill" style={{width:pct(usage.costUsd,plan.hardStopUsd)+"%"}}/></div>
-        <div className="schedule-table-scroll"><table className="schedule-table"><thead><tr><th>Job</th><th>Calls</th><th>Tokens in</th><th>Tokens out</th><th>Cost</th></tr></thead><tbody>
-          {usage.byRole.map(r=><tr key={r.role}><td><strong>{ROLE_COPY[r.role]??r.role}</strong></td><td>{r.calls}</td><td>{r.inputTokens.toLocaleString()}</td><td>{r.outputTokens.toLocaleString()}</td><td className="pays-cell">{money(r.costUsd)}</td></tr>)}
-          {!usage.byRole.length&&<tr><td colSpan={5}><em>No model calls yet this month.</em></td></tr>}
-        </tbody></table></div>
-      </section>
-      <section className="section"><div className="section-heading"><div><div className="eyebrow">WHICH MODEL DOES WHAT</div><h2>Routing</h2></div><small>Which model handles each job, and what it costs</small></div>
-        <div className="schedule-table-scroll"><table className="schedule-table"><thead><tr><th>Job</th><th>Model</th><th>Where</th><th>List price</th></tr></thead><tbody>
-          {routing.map(r=><tr key={r.role}><td><strong>{ROLE_COPY[r.role]??r.role}</strong></td><td>{r.model}</td><td>{r.hosted?"Hosted":"This computer"}</td><td>{r.price}</td></tr>)}
-        </tbody></table></div>
-        <p className="unclaimed-lead" style={{marginTop:10}}>Rule of thumb from the numbers above: reading is a one-off per document, questions are a few thousand tokens each. A typical household costs well under a dollar a month on hosted models when reading goes to the cheap tier and only the judgement goes to the mid tier.</p>
-      </section>
-    </>}
+    <header className="page-header compact"><div><div className="eyebrow">YOUR PLAN</div><h1>Plan usage this month</h1>
+      <p className="lead">How much of your plan your household has used this month. Answers from documents DearPolicy has already read are always available.</p></div>
+      <Link href="/household" className="button secondary">← Household</Link></header>
+    {error&&<div className="alert error" role="alert"><strong>Your plan usage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
+    {usage&&plan&&<section className="section">
+      <div className="section-heading"><div><div className="eyebrow">{usage.month}</div><h2>{plan.name} plan</h2></div></div>
+      <Meter label="Questions asked" used={usage.chatTurns} included={plan.includedChatTurns} testId="plan-questions" />
+      <Meter label="Documents read" used={usage.documentsRead} included={plan.includedDocuments} testId="plan-documents" />
+    </section>}
   </div>;
 }

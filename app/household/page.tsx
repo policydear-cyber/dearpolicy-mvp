@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { HouseholdExportPanel } from "./export-panel";
+import { customerMessage } from "@/components/customer-text";
 
 type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string };
 type Invitation = { id: string; household_id: string; email: string; role: "owner" | "member"; invited_by: string; created_at: string; expires_at: string };
@@ -67,7 +68,7 @@ export default function HouseholdPage() {
       body: JSON.stringify({ name: nameInput }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return setStatus(payload.error || "Could not rename the household. Please try again in a moment.");
+    if (!response.ok) return setStatus(customerMessage(payload.error, "Could not rename the household. Please try again in a moment."));
     setStatus("Household name saved.");
     await refresh();
   }
@@ -83,7 +84,7 @@ export default function HouseholdPage() {
     const isSelf = member.userId === callerUserId;
     setStatus(response.ok
       ? (isSelf ? "You left the household." : "Member removed.")
-      : (payload.error || "Could not complete this action. Please try again in a moment."));
+      : (customerMessage(payload.error, "Could not complete this action. Please try again in a moment.")));
     if (response.ok) await refresh();
   }
 
@@ -97,7 +98,7 @@ export default function HouseholdPage() {
       body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) return setInviteError(payload.error || "Could not create this invitation. Please try again in a moment.");
+    if (!response.ok) return setInviteError(customerMessage(payload.error, "Could not create this invitation. Please try again in a moment."));
     // createInvitation() only ever returns the plaintext token once -- it
     // is never retrievable again after this response, so the link is
     // shown here for the owner to copy and send themselves (there is no
@@ -114,7 +115,7 @@ export default function HouseholdPage() {
     setStatus("");
     const response = await fetch(`/api/household/invitations/${invitation.id}`, { method: "DELETE" });
     const payload = await response.json().catch(() => ({}));
-    setStatus(response.ok ? `Invitation to ${invitation.email} revoked.` : (payload.error || "Could not revoke this invitation. Please try again in a moment."));
+    setStatus(response.ok ? `Invitation to ${invitation.email} revoked.` : (customerMessage(payload.error, "Could not revoke this invitation. Please try again in a moment.")));
     if (response.ok) await refresh();
   }
 
@@ -134,7 +135,7 @@ export default function HouseholdPage() {
       }
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setDeleteError(payload.error || "Could not delete this household. Please try again in a moment.");
+        setDeleteError(customerMessage(payload.error, "Could not delete this household. Please try again in a moment."));
         return;
       }
       // Everything this household owned -- including this page's own data
@@ -242,6 +243,11 @@ export default function HouseholdPage() {
               )}
             </section>
           )}
+
+          <section className="section">
+            <div className="section-heading"><div><div className="eyebrow">PLAN</div><h2>Plan usage</h2></div></div>
+            <p className="lead">See how much of this month&apos;s plan your household has used. <Link className="text-link" href="/usage">Plan usage →</Link></p>
+          </section>
 
           {isOwner && <HouseholdExportPanel />}
 

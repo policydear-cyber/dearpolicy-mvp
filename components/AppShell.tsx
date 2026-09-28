@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type ServiceState = { ok: boolean; label: string; detail: string; fix?: string };
 
 const icon = {
   home: <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
@@ -36,8 +35,18 @@ const nav: { href: string; label: string; icon: IconName }[] = [
   { href: "/schedule", label: "Benefits", icon: "benefits" },
   { href: "/claims", label: "Claims", icon: "claims" },
   { href: "/chat", label: "Ask DearPolicy", icon: "ask" },
-  { href: "/usage", label: "Usage", icon: "usage" },
   { href: "/household", label: "Household", icon: "household" },
+];
+
+/** DearPolicy's operator area (diagnostics, extraction review, model usage
+ * and cost). Never part of household navigation; the area itself refuses
+ * anyone who is not an active DearPolicy staff account (app/operator/layout.tsx). */
+const operatorNav: { href: string; label: string; icon: IconName }[] = [
+  { href: "/operator", label: "Overview", icon: "usage" },
+  { href: "/operator/documents", label: "Document processing", icon: "documents" },
+  { href: "/operator/benefits", label: "Benefit extraction", icon: "benefits" },
+  { href: "/operator/coverage", label: "Coverage rows", icon: "ledger" },
+  { href: "/", label: "Back to household", icon: "home" },
 ];
 
 /** Pages a signed-out person uses; no sign-out control there. */
@@ -90,31 +99,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute("data-theme", next);
     try { localStorage.setItem("dearpolicy-theme", next); } catch {}
   };
-  // DearPolicy runs either on this computer or on a server the person
-  // controls. When something is down the person can fix it in a minute — if
-  // they are told which thing and how, in words that match where it runs.
-  const [services, setServices] = useState<ServiceState[]>([]);
-  const [hosted, setHosted] = useState(false);
+  // Households are never shown database, search, model or queue status: that
+  // is the operator's view (/operator). The only thing a household needs to
+  // know is whether DearPolicy can be reached at all.
+  const [unreachable, setUnreachable] = useState(false);
+  const [hosted, setHosted] = useState(true);
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
       try {
-        const payload = await (await fetch("/api/health")).json();
-        if (!cancelled) { setServices(payload.services ?? []); setHosted(!!payload.hosted); }
+        const response = await fetch("/api/health", { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!cancelled) { setUnreachable(false); if (typeof payload.hosted === "boolean") setHosted(payload.hosted); }
       } catch {
-        if (!cancelled) setServices([{ ok: false, label: "DearPolicy", detail: "The app server is not answering", fix: "Refresh the page, or try again in a minute." }]);
+        if (!cancelled) setUnreachable(true);
       }
     };
     void check();
-    const timer = setInterval(() => void check(), 30_000);
+    const timer = setInterval(() => void check(), 60_000);
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
-  const down = services.filter((s) => !s.ok);
   // The internal reviewer area is a DearPolicy staff tool, not part of any
   // household: it gets its own single-item navigation, never the household's.
   const reviewerArea = pathname.startsWith("/reviewer");
   const signedOutPage = SIGNED_OUT_PATHS.has(pathname);
-  const items = reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : nav;
+  const operatorArea = pathname === "/operator" || pathname.startsWith("/operator/");
+  const items = reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : operatorArea ? operatorNav : nav;
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -123,8 +133,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         <nav className="nav">
           {reviewerArea && <div className="eyebrow">Reviewer area</div>}
+          {operatorArea && <div className="eyebrow">Operator area</div>}
           {items.map((item) => {
-            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const active = item.href === "/" || item.href === "/operator" ? pathname === item.href : pathname.startsWith(item.href);
             return (
               <Link className={`nav-item ${active ? "active" : ""}`} href={item.href} key={item.href} aria-current={active ? "page" : undefined}>
                 <span className="nav-icon"><NavIcon name={item.icon} /></span>{item.label}
@@ -135,22 +146,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="sidebar-footer">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           {!signedOutPage && <SignOutButton />}
-          <div className="service-status" aria-live="polite">
-            {services.map((s) => (
-              <div className={`service-row ${s.ok ? "ok" : "down"}`} key={s.label} title={s.detail}>
-                <i /><span>{s.label}</span><small>{s.detail}</small>
-              </div>
-            ))}
-          </div>
-          {down.length > 0 && (
-            <div className="service-fix">
-              {down.map((s) => <p key={s.label}><b>{s.label}:</b> {s.detail}{s.fix ? ` — ${s.fix}` : ""}</p>)}
+          {unreachable && (
+            <div className="service-fix" role="status">
+              <p>DearPolicy can&rsquo;t be reached right now. Check your connection, then refresh the page.</p>
             </div>
           )}
           <div className="privacy-pill">{hosted ? "Hosted & encrypted" : "Local-first"}</div>
           <p>{hosted
-            ? "Your documents and questions are kept private to your account and processed on DearPolicy\u2019s hosted servers."
-            : "Your documents and questions stay on this computer. Only the one-time reading of each document uses the reading model."}</p>
+            ? "Your documents and questions are kept private to your household."
+            : "Your documents and questions stay on this computer."}</p>
         </div>
       </aside>
       <main className="main-content">

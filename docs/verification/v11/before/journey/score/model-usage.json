@@ -1,0 +1,69 @@
+{
+  "since": "2026-09-28T16:10:52Z",
+  "households": [
+    "b5a79b34-aeff-4374-bcf0-ffffcb788792",
+    "58847dc1-047d-41f3-b54a-bfdb2c75c1ce"
+  ],
+  "scope": "this run's households",
+  "total": {
+    "calls": 269,
+    "cost": 0
+  },
+  "rows": [
+    {
+      "operation": "benefit_extraction",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 144,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "catalog_building",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 53,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "condition_catalog_extraction",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 56,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "hosted_ocr",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 1,
+      "input_tokens": 31,
+      "output_tokens": 116,
+      "cost_usd": 0,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "policy_extraction",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 15,
+      "input_tokens": 8364,
+      "output_tokens": 3652,
+      "cost_usd": 0,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    }
+  ]
+}

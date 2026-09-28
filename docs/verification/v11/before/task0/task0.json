@@ -1,0 +1,64 @@
+{
+  "commit": "60b8ac8",
+  "run": "v11t0before2",
+  "checks": [
+    {
+      "id": "T0-1",
+      "defect": "\"Charmaine broke her arm\" produced an assessment and a permanent-loss schedule",
+      "pass": true,
+      "detail": "mode=fact_finding; first question=\"Was this caused by an accident, or an illness?\"; permanent-loss text=none; claim items with amounts=0",
+      "evidence": "I’m sorry Charmaine is dealing with this. A broken arm can involve several kinds of cover, so I need a few details before I check Charmaine’s policies.\nWas this caused by an accident, or an illness?\nSome of these benefits only pay for accidents, so this decides which ones apply."
+    },
+    {
+      "id": "T0-2",
+      "defect": "a factual question took roughly 40 seconds",
+      "pass": true,
+      "detail": "5 stored-fact answers in-process: 33, 31, 19, 18, 30 ms (p95 33 ms; target <= 8000). In-process with the stand-in: excludes network/provider latency -- the browser journey measures the page."
+    },
+    {
+      "id": "T0-3",
+      "defect": "the endowment question exposed a raw OpenAI quota error and organisation identifier",
+      "pass": true,
+      "detail": "HTTP 200 in 2026 ms; provider calls=1 (bound 3); provider text=none; leaks=none",
+      "evidence": "I couldn’t read your message just now: DearPolicy’s reading service is busy right now; it usually clears in under a minute. Your message is saved.\nSend the message again — a retry usually succeeds.\nIf it fails twice, split it into two shorter messages and DearPolicy will keep the facts from both."
+    },
+    {
+      "id": "T0-4",
+      "defect": "the claims list said \"Assessment ready\" while the detail page said \"No estimate yet\"",
+      "pass": false,
+      "detail": "list \"Assessment ready\" (claims page rule status==='complete') vs detail hasEstimate=false; event \"Has a doctor said the injury will leave any lasting impairment: No\"",
+      "evidence": [
+        {
+          "summary": "Has a doctor said the injury will leave any lasting impairment: No",
+          "status": "complete",
+          "listLabel": "Assessment ready",
+          "hasEstimate": false,
+          "requestedDocuments": null
+        }
+      ]
+    },
+    {
+      "id": "T0-5",
+      "defect": "a fracture claim's list action described death documents",
+      "pass": false,
+      "detail": "lib/claims/status.ts claimDisplayStatus does not exist at this commit; the claims list renders a fixed 'Manage claim evidence (death certificate, police report, coroner's report)' action for every claim (app/claims/page.tsx) -- confirmed on the rendered page by e2e/tests/v11-journey.spec.ts (Task 0 page checks)"
+    },
+    {
+      "id": "T0-7",
+      "defect": "usage said no model calls despite model activity, and showed a different hard stop than the owner's $5 API budget",
+      "pass": false,
+      "detail": "model_executions for this household this run=57; model_usage rows=0; /api/usage calls=0, byRole=0; hard stop shown=14.97 (owner's provider cap: $5/month)",
+      "evidence": {
+        "calls": 0,
+        "roles": 0,
+        "plan": {
+          "name": "Individual",
+          "priceUsd": 4.99,
+          "includedChatTurns": 150,
+          "includedDocuments": 12,
+          "hardStopUsd": 14.97
+        }
+      }
+    }
+  ]
+}

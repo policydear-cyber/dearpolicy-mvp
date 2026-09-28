@@ -1,0 +1,285 @@
+{
+  "prefix": "SYNTHETIC-DPTEST-v11final2",
+  "started": "2026-09-28T19:49:35.548Z",
+  "householdA": "9b869bdc-5440-4e98-8663-434e5df449f8",
+  "member:charmaine": "2c7b1ec0-5763-442f-9820-51931c16f0b5",
+  "member:marcus": "aeefd710-0eea-4ecd-8d96-5fab8ed5b403",
+  "uploads": [
+    {
+      "key": "hosp2022",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-HospitalShield-2022.pdf",
+      "ms": 11397,
+      "states": [
+        "scan_clean/extracting",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "hosp2025",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-HospitalShield-2025.pdf",
+      "ms": 2138,
+      "states": [
+        "uploaded/queued",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "accident",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-AccidentGuard.pdf",
+      "ms": 4986,
+      "states": [
+        "scan_clean/extracting",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "accidentEndorsement",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-AccidentGuard-Endorsement-1.pdf",
+      "ms": 3273,
+      "states": [
+        "uploaded/queued",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "disability",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-DisabilityCare.pdf",
+      "ms": 2501,
+      "states": [
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "groupLife",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-GroupTermLife.pdf",
+      "ms": 2868,
+      "states": [
+        "uploaded/queued",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "criticalIllness",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-CritiCare.pdf",
+      "ms": 2986,
+      "states": [
+        "scan_clean/indexing",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "travelExpired",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-JetSure.pdf",
+      "ms": 3376,
+      "states": [
+        "uploaded/queued",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "travel",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-WanderSafe.pdf",
+      "ms": 2811,
+      "states": [
+        "uploaded/queued",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "accidentMarcus",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-AccidentGuard-M.pdf",
+      "ms": 3027,
+      "states": [
+        "scan_clean/indexing",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "endowment",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-FutureSaver.pdf",
+      "ms": 1900,
+      "states": [
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "hospitalCashNoCurrency",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-DailyCash.pdf",
+      "ms": 3048,
+      "states": [
+        "scan_clean/extracting",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "termContradictory",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-TermGuard.pdf",
+      "ms": 1507,
+      "states": [
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "maliciousRider",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-HealthPlusRider.pdf",
+      "ms": 1775,
+      "states": [
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "unreadable",
+      "format": "corrupt-pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-DentalCare-scan.pdf",
+      "ms": 1628,
+      "states": [
+        "scan_clean/failed"
+      ],
+      "attempts": 1,
+      "status": "failed",
+      "message": "Analysis stopped",
+      "error": "This file could not be opened as a document, so none of its contents are available. It may be damaged; the original file would let DearPolicy read it.",
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "scannedPage",
+      "format": "png",
+      "file": "SYNTHETIC-DPTEST-v11final2-ScannedWording.png",
+      "ms": 5247,
+      "states": [
+        "uploaded/queued",
+        "scan_clean/extracting",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "linked": true,
+      "ownerAction": "none"
+    },
+    {
+      "key": "otherHouseholdAccident",
+      "format": "pdf",
+      "file": "SYNTHETIC-DPTEST-v11final2-OtherHouseholdPA.pdf",
+      "ms": 5368,
+      "states": [
+        "scan_clean/extracting",
+        "scan_clean/ready"
+      ],
+      "attempts": 1,
+      "status": "ready",
+      "household": "B"
+    }
+  ],
+  "claimsList": "",
+  "claimPageEstimate": "Indicative estimate based on the policies, facts and reviewed evidence currently on file. The insurer determines eligibility and the final amount after assessment.\n\nLiving Care critical illness No Amount\nYour personal certificate confirms an amount whose currency the policy evidence does not state (not shown) of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.\nMajor Critical Illness (Living Care) No Amount\nPotential policy-based estimate: a Major Critical Illness benefit may apply under this cover, but DearPolicy has not included an amount because reviewed medical evidence has not yet been matched against this policy's own definition. This is not a diagnosis, claim approval, or guarantee of payment.\nPolicy wording: Living Care, page 4\nMajor Critical Illness (Living Care) US$100,000\nPotential policy-based estimate: the uploaded evidence appears consistent with this policy's definition of Major Critical Illness. The matching clause pays 100% of the verified sum insured. Medical or insurer review is still required. This is not a diagnosis, claim approval, or guarantee of payment.\nPolicy wording: Living Care, page 4\nMajor Critical Illness (Living Care) S$200,000\nPotential policy-based estimate: the uploaded evidence appears consistent with this policy's definition of Major Critical Illness. The matching clause pays 100% of the verified sum insured. Medical or insurer review is still required. This is not a diagnosis, claim approval, or guarantee of payment.\nPolicy wording: Living Care, page 4\nIndicative total, per currency (currencies are never added together)\nUSD: US$100,000\nSGD: S$200,000",
+  "finalAnswer": "DearPolicy\n\nI recorded SYNTHETIC-DPTEST-v11final2-Patient’s reported condition as “Malignant neoplasm of the colon”. The claim documents reviewed so far give an indicative estimate for the diagnosis of Malignant neoplasm of the colon under SYNTHETIC-DPTEST-v11final2-Patient’s policies, shown below per currency (amounts in different currencies are not added together). It is indicative only: the insurer decides eligibility and the final amount.\n\nUpload documents for this claim — Specialist's diagnosis report; Histopathology or test results confirming the diagnosis →\nWhat DearPolicy still needs\nSYNTHETIC-DPTEST-v11final2-Patient · Critical illness Evidence needed\n\nDocuments: Specialist's diagnosis report; Histopathology or test results confirming the diagnosis\n\nFACTS AND UNCERTAINTIES\nSYNTHETIC-DPTEST-v11final2-Patient\nDiagnosis: Malignant neoplasm of the colon\nEvent Date: 2026-06-01\nDiagnosis Date: 2026-06-01\nDiagnosed By Specialist: yes\nSurvived Survival Period: not sure\nSYNTHETIC-DPTEST-v11final2-Patient · Living Care critical illness\nNEEDS CHECKING\nPolicy condition unresolved\n\nYour personal certificate confirms an amount whose currency the policy evidence does not state (not shown) of Living Care cover, and the uploaded wording includes Major Cancer and other severe critical illnesses.\n\n3 conditions\nThe diagnosis must satisfy the policy's defined critical illness.\nA 30-day survival period applies.\nThe diagnosis date appears to be outside the 90-day waiting period.\nSYNTHETIC-DPTEST-v11final2-Patient · Major Critical Illness (Living Care)\nNEEDS CHECKING\nReviewer assessment needed\n\nPotential policy-based estimate: a Major Critical Illness benefit may apply under this cover, but DearPolicy has not included an amount because reviewed medical evidence has not yet been matched against this policy's own definition. This is not a diagnosis, claim approval, or guarantee of payment.\n\n2 conditions\nUpload the specialist memo, medical report, or other supporting medical evidence for this diagnosis.\nMedical or insurer review is still required.\nSYNTHETIC-DPTEST-v11final2-Patient · Major Critical Illness (Living Care)\nLIKELY APPLICABLE\nReviewer assessment needed\n\nPotential policy-based estimate: the uploaded evidence appears consistent with this policy's definition of Major Critical Illness. The matching clause pays 100% of the verified sum insured. Medical or insurer review is still required. This is not a diagnosis, claim approval, or guarantee of payment.\n\n2 conditions\nThe diagnosis must satisfy this policy's own defined critical illness, as reviewed against the uploaded medical evidence.\nMedical or insurer review is still required.\nSYNTHETIC-DPTEST-v11final2-Patient · Major Critical Illness (Living Care)\nLIKELY APPLICABLE\nReviewer assessment needed\n\nPotential policy-based estimate: the uploaded evidence appears consistent with this policy's definition of Major Critical Illness. The matching clause pays 100% of the verified sum insured. Medical or insurer review is still required. This is not a diagnosis, claim approval, or guarantee of payment.\n\n2 conditions\nThe diagnosis must satisfy this policy's own defined critical illness, as reviewed against the uploaded medical evidence.\nMedical or insurer review is still required.\nINDICATIVE ESTIMATE · FROM REVIEWED EVIDENCE · THE INSURER DECIDES\nUS$100,000\nS$200,000\n\nIndicative estimate based on the policies, facts and reviewed evidence currently on file. The insurer determines eligibility and the final amount after assessment.\n\nLiving Care\nUS$100,000\nCritical Illness\nUS$100,000\nINCLUDED IN TOTAL\nMajor Critical Illness wording · page 4\nLiving Care\nS$200,000\nCritical Illness\nS$200,000\nINCLUDED IN TOTAL\nMajor Critical Illness wording · page 4\nDownload the claim pack (PDF)\n\n2 benefits have no amount yet; each says what is still needed.\n\nNEXT STEP\n\nOpen this claim on the Claims page to see the reviewed documents and the same indicative estimate.\n\nSOURCES\nLiving Care\nYour uploaded document\nPage 4\nLiving Care\nYour uploaded document\nPage 4\nAnswers come from the documents you uploaded. The insurer decides eligibility and the final amount.",
+  "householdB": "097c6ac3-b5c5-436b-a6c5-ab316d8299fa",
+  "member:charmaineB": "868c0ae6-6ecf-41f3-86e6-269ab4231937",
+  "finished": "2026-09-28T19:56:13.189Z",
+  "ids": {
+    "householdA": "9b869bdc-5440-4e98-8663-434e5df449f8",
+    "householdB": "097c6ac3-b5c5-436b-a6c5-ab316d8299fa"
+  },
+  "failures": []
+}

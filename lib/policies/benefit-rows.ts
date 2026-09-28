@@ -162,7 +162,10 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
     if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+moneyLabel(currency,limit)+" limit"};
   }
   // "S$30 per day" / "$689/month"
-  const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(day|night|week|month|year)`,"i"));
+  // A rate printed with no currency at all ("150 per day") is still the rate
+  // the schedule states; it is kept with currency null -- never given one.
+  const periodic=text.match(new RegExp("^"+MONEY+String.raw`\s*(?:per|/|a)\s*(day|night|week|month|year)`,"i"))
+    ??text.match(new RegExp(String.raw`^(${NUMBER})\s*(?:per|/|a)\s*(day|night|week|month|year)\b`,"i"));
   if(periodic){
     const rate=amount(periodic[1]);
     const unit=periodic[2].toLowerCase()==="night"?"day":periodic[2].toLowerCase() as ParsedBenefitValue["period"];
@@ -171,7 +174,9 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
       :{kind:"fixed",value:rate,currency,period:unit,basis:moneyLabel(currency,rate)+" each "+unit};
   }
   // A bare figure in the limit column.
-  const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+[a-z ]{3,20})?$`,"i"));
+  // "S$50,000 payable on 2040-06-01" / "payable at maturity": the figure is
+  // the benefit; when it is paid stays in the quoted row.
+  const flat=text.match(new RegExp("^"+MONEY+String.raw`(?:\s*(?:per|each)\s+[a-z ]{3,20}|,?\s*(?:payable|paid)\s+(?:on|at|upon)\s+(?:the\s+)?(?:maturity(?:\s+date)?|death|expiry|\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4}))?$`,"i"));
   if(flat){
     const value=amount(flat[1]);
     if(value!=null)return {kind:"fixed",value,currency,basis:"the amount printed in the schedule"};

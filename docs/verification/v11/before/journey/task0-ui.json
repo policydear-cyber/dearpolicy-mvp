@@ -1,0 +1,27 @@
+[
+  {
+    "id": "T0-8",
+    "pass": true,
+    "detail": "signed in with one click in 801 ms"
+  },
+  {
+    "id": "T0-4",
+    "pass": false,
+    "detail": "list: \"! Has a doctor said the injury will leave any lasting impairment: No Charmaine Tan Hui Min · spouse 11 facts saved · Updated 9/28/2026, 4:14:10 PM ASSESSMENT RE\" / detail data-has-estimate=no (\"No estimate yet: the evidence on file does not yet support an amount for any benefit.\")"
+  },
+  {
+    "id": "T0-5",
+    "pass": false,
+    "detail": "the fracture claim's list action says: \"Manage claim evidence (death certificate, police report, coroner's report)\""
+  },
+  {
+    "id": "T0-6",
+    "pass": false,
+    "detail": "Coverage: \"here a figure came from, purely so you can see the working; fix a row only if you know something the document doesn't say.\""
+  },
+  {
+    "id": "T0-7",
+    "pass": false,
+    "detail": "Usage in household navigation: yes; page says \"No model calls yet\": true; hard stop shown: $14.97 (owner's provider cap $5/month); page text: \"USAGE & COST What this household costs to run. Every model call is counted — hosted or local — so the plan price is checked against real numbers, not a guess. Local calls cost nothing but are counted as what a hosted bill would be. 20 of 12 included documents read this month. $0.0000 model cost, 2026-09 $4.99 Individual plan, per month 33 / 150 questions this month 20 / 12 documents read this mont\""
+  }
+]

@@ -444,7 +444,9 @@ export function runSystemRegressions(){
     assert.equal(negativeConclusionPermitted(summarizeReviewCoverage([full,partial])),false);
     assert.equal(negativeConclusionPermitted(summarizeReviewCoverage([])),false);
     assert.equal(negativeConclusionPermitted(undefined),false);
-    assert.match(summarizeReviewCoverage([full,partial]).statement,/^Partial review: 2 of 9 processed pages/);
+    // V1.1: page counts are internal reading progress, not household text (eval internal_text); the counts stay on the numeric fields.
+    assert.match(summarizeReviewCoverage([full,partial]).statement,/^Partial review: not every part/);
+    assert.deepEqual([summarizeReviewCoverage([full,partial]).pagesRead,summarizeReviewCoverage([full,partial]).pagesTotal],[2,9]);
     assert.match(summarizeReviewCoverage([full]).statement,/^Complete review/);
   });
   test("Multi-page passages count every page they span",()=>{

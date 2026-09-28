@@ -1,0 +1,65 @@
+{
+  "usage": [
+    {
+      "operation": "benefit_extraction",
+      "resolved_provider": "gemini",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 106,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "catalog_building",
+      "resolved_provider": "gemini",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 53,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "condition_catalog_extraction",
+      "resolved_provider": "gemini",
+      "model": "flash-lite",
+      "status": "failed",
+      "calls": 49,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "hosted_ocr",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 1,
+      "input_tokens": 31,
+      "output_tokens": 116,
+      "cost_usd": 0,
+      "avg_latency_ms": 1,
+      "max_attempt_index": 0
+    },
+    {
+      "operation": "policy_extraction",
+      "resolved_provider": "gemini",
+      "model": "dearpolicy-deterministic-e2e-v1",
+      "status": "succeeded",
+      "calls": 15,
+      "input_tokens": 8364,
+      "output_tokens": 3652,
+      "cost_usd": 0,
+      "avg_latency_ms": 0,
+      "max_attempt_index": 0
+    }
+  ],
+  "jobs": []
+}

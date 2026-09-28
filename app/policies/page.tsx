@@ -2,6 +2,15 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
+import { customerError } from "@/components/customer-text";
+
+/* V1.1: the household library shows what each document is, whose it is and
+ * whether it is ready -- never processing stages, page counts, search-index
+ * state, raw processing errors, confidence scores or a Re-analyse button.
+ * Those, with field corrections, are in the operator area
+ * (/operator/documents). Processing failures are retried automatically; a
+ * document that stays unreadable gets one plain sentence about what is
+ * unavailable and what the person can do. */
 
 type Member = { id: string; display_name: string; relationship: string; policy_count: number };
 type LinkedPerson = { id: string; name: string; relationship: string; source: string };
@@ -32,7 +41,7 @@ type Policy = {
   linked_people: LinkedPerson[];
   detected_people: DetectedPerson[];
 };
-type Filter = "all" | "personal" | "reference" | "review";
+type Filter = "all" | "personal" | "reference";
 
 const ACTIVE_STATUSES = new Set(["queued", "uploaded", "extracting", "indexing"]);
 function isProcessing(policy: Policy) { return ACTIVE_STATUSES.has(policy.processing_status); }
@@ -40,11 +49,10 @@ const isQuarantineHeld = isPolicyQuarantineHeld;
 const isScanRejected = isPolicyScanRejected;
 const quarantineLabel = policyQuarantineLabel;
 function roleLabel(role: string | null) { return (role ?? "document").replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase()); }
-function stageLabel(stage: string | null, status: string) {
-  if (status === "failed") return "Analysis stopped";
+function stageLabel(_stage: string | null, status: string) {
+  if (status === "failed") return "Could not be read";
   if (status === "ready") return "Ready";
-  const value = stage || status || "queued";
-  return value.replaceAll("_", " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  return "Reading";
 }
 
 export default function PoliciesPage() {
@@ -60,13 +68,10 @@ export default function PoliciesPage() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
-  const [searchIndex, setSearchIndex] = useState<{ enabled: boolean; total: number; indexed: number; pending: number } | null>(null);
-  const [indexing, setIndexing] = useState(false);
 
   async function refresh() {
     const [f, p] = await Promise.all([
@@ -76,11 +81,6 @@ export default function PoliciesPage() {
     setFamily(f.family ?? []);
     setPolicies(p.policies ?? []);
     if (p.documentSafetyMode === "not_scanned_prototype" || p.documentSafetyMode === "malware_scan") setDocumentSafetyMode(p.documentSafetyMode);
-    // Semantic search is a separate store from the database, so a document can
-    // be fully analysed and still be invisible to it -- every document read
-    // before Pinecone was connected is. Ask, rather than assume.
-    const search = await fetch("/api/policies/reindex", { cache: "no-store" }).then((r) => r.json()).catch(() => null);
-    setSearchIndex(search && typeof search.pending === "number" ? search : null);
   }
 
   useEffect(() => { void refresh(); }, []);
@@ -103,7 +103,7 @@ export default function PoliciesPage() {
   useEffect(() => {
     if (previousActiveCount.current > 0 && activeCount === 0) {
       const failed = policies.filter((p) => p.processing_status === "failed").length;
-      setStatus(failed ? "Processing finished. A document needs attention below." : "Analysis complete. Your insurance library and portfolio have been updated.");
+      setStatus(failed ? "Finished. One document could not be read — see below." : "Your documents are ready. Your portfolio has been updated.");
     }
     previousActiveCount.current = activeCount;
   }, [activeCount, policies]);
@@ -133,37 +133,14 @@ export default function PoliciesPage() {
       // for a generic "Upload failed" hid exactly the information a person
       // needs to fix the problem themselves.
       if (!response.ok) throw new Error(payload.error || "Upload failed");
-      setStatus("Upload received. DearPolicy is analysing it in the background; live progress appears below.");
+      setStatus("Upload received. DearPolicy is reading it now — you can keep using the app.");
       setFile(null);
       setPdfPassword("");
       await refresh();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Upload failed");
+      setStatus(customerError(err, "The upload did not go through. Please try again."));
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function reprocess(policy: Policy) {
-    // A stalled document (in-flight status, but its background job died) is
-    // exactly what Re-analyse recovers -- only a genuinely live analysis
-    // blocks the request.
-    if (isProcessing(policy) && !policy.processing_stalled) return;
-    setReprocessingId(policy.id);
-    setStatus(`Queued ${policy.product_name ?? policy.original_filename} for re-analysis.`);
-    try {
-      const response = await fetch("/api/policies/reprocess", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ policyId: policy.id }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Re-analysis failed");
-      await refresh();
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Re-analysis failed. Password-protected PDFs should be uploaded again with the password.");
-    } finally {
-      setReprocessingId(null);
     }
   }
 
@@ -181,7 +158,7 @@ export default function PoliciesPage() {
       setStatus(`Saved — this policy is ${who}'s. Its benefits will now be used in answers. Upload a schedule or statement when you have one to confirm the amounts.`);
       await refresh();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not save that. Please try again in a moment.");
+      setStatus(customerError(error, "Could not save that. Please try again in a moment."));
     }
   }
 
@@ -197,7 +174,7 @@ export default function PoliciesPage() {
       setStatus(`Linked ${detectedName} to the selected family profile.`);
       await refresh();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not link person. Please try again in a moment.");
+      setStatus(customerError(error, "Could not link that person. Please try again in a moment."));
     }
   }
 
@@ -221,45 +198,19 @@ export default function PoliciesPage() {
       setStatus(`${label} was deleted. The portfolio has been recalculated.`);
       await refresh();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not delete document");
+      setStatus(customerError(error, "Could not delete that document. Please try again in a moment."));
     } finally {
       setDeletingId(null);
     }
   }
 
-  // No model is called and nothing already extracted is touched: this only
-  // sends passages the database already holds. Re-analysing would cost a
-  // hosted model call per page and could disturb benefit rows that are right.
-  async function indexForSearch() {
-    setIndexing(true);
-    setStatus("Adding your documents to semantic search\u2026");
-    try {
-      const response = await fetch("/api/policies/reindex", { method: "POST" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Could not build the search index");
-      const done = payload.indexed?.length ?? 0;
-      const failed = payload.failed?.length ?? 0;
-      setStatus(failed
-        ? `${done} document${done === 1 ? "" : "s"} added to semantic search. ${failed} could not be added: ${payload.failed.map((f: { label: string }) => f.label).join(", ")}.`
-        : done
-          ? `${done} document${done === 1 ? "" : "s"} added to semantic search. Questions can now match wording rather than exact keywords.`
-          : "Every document was already in semantic search.");
-      await refresh();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not build the search index");
-    } finally {
-      setIndexing(false);
-    }
-  }
-
   const shown = useMemo(
-    () => policies.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || filter === "review" && p.needs_review),
+    () => policies.filter((p) => filter === "all" || filter === "personal" && p.personal_coverage_confirmed || filter === "reference" && !p.personal_coverage_confirmed || false),
     [policies, filter],
   );
   const counts = {
     personal: policies.filter((p) => p.personal_coverage_confirmed).length,
     reference: policies.filter((p) => !p.personal_coverage_confirmed).length,
-    review: policies.filter((p) => p.needs_review).length,
   };
 
   return <div className="page">
@@ -268,9 +219,7 @@ export default function PoliciesPage() {
     <section className="trust-strip"><div><b>1</b><span><strong>Classify</strong><small>Certificate, schedule, wording, summary, receipt…</small></span></div><div><b>2</b><span><strong>Verify</strong><small>Named people, source page and evidence text</small></span></div><div><b>3</b><span><strong>Organise</strong><small>One upload can cover several family members</small></span></div></section>
 
     {pollingPaused && <div className="processing-banner"><div><strong>Still processing in the background.</strong><small> Automatic updates paused after ten minutes — <button className="mini-button" onClick={() => { pollingSince.current = Date.now(); setPollingPaused(false); void refresh(); }}>Check again</button></small></div></div>}
-    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is working on {activeCount} document{activeCount === 1 ? "" : "s"}</strong><small>Progress updates automatically. You can continue using the app while local processing runs.</small></div></div>}
-
-    {!!searchIndex?.enabled && searchIndex.pending > 0 && activeCount === 0 && <div className="processing-banner"><div><strong>{searchIndex.pending} of your {searchIndex.total} document{searchIndex.total === 1 ? " is" : "s are"} not in semantic search yet</strong><small>They were read before semantic search was connected, so questions about them match keywords only &mdash; &ldquo;hospital&rdquo; but not &ldquo;admitted for three nights&rdquo;. Adding them uses text DearPolicy already has: no re-reading, no cost, and nothing already extracted changes.</small></div><button className="button secondary" disabled={indexing || busy} onClick={indexForSearch}>{indexing ? "Adding\u2026" : "Add to semantic search"}</button></div>}
+    {activeCount > 0 && !pollingPaused && <div className="processing-banner"><span className="processing-spinner"/><div><strong>DearPolicy is reading your {activeCount === 1 ? "document" : "documents"}</strong><small>This page updates on its own. You can keep using the app.</small></div></div>}
 
 
     <section className="upload-panel">
@@ -286,7 +235,7 @@ export default function PoliciesPage() {
 
     <section className="section">
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
-      <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{policies.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button><button className={filter === "review" ? "active" : ""} onClick={() => setFilter("review")}>Needs review <b>{counts.review}</b></button></div>
+      <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{policies.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button></div>
 
       <div className="document-list">{shown.map((policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
@@ -307,12 +256,12 @@ export default function PoliciesPage() {
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
             <div className="document-title"><strong>{policy.product_name ?? policy.original_filename}</strong><span>{policy.insurer ?? "Insurer pending"} · {processing ? stageLabel(policy.processing_stage, policy.processing_status) : roleLabel(policy.document_role)}</span></div>
-            <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? `${pct}%` : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
+            <div className={`document-authority ${processing ? "processing" : policy.personal_coverage_confirmed ? "confirmed" : "reference"}`}>{processing ? "Reading" : policy.document_authority_label ?? (policy.personal_coverage_confirmed ? "Personal proof" : "Reference")}</div>
           </div>
 
-          <div className="document-meta"><span>{policy.page_count ? `${policy.page_count} pages` : "—"}</span>{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span><button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button><button className="mini-button" disabled={(processing && !policy.processing_stalled) || quarantineHeld || scanRejected || busy || !!deletingId || !!reprocessingId} onClick={() => reprocess(policy)}>{reprocessingId === policy.id ? "Queuing…" : "Re-analyse"}</button><button className="mini-button danger" disabled={processing || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
+          <div className="document-meta">{policy.policy_number && <span>Policy {policy.policy_number}</span>}{policy.group_policy_number && <span>Group {policy.group_policy_number}</span>}<span className={`status ${policy.processing_status}`}>{stageLabel(policy.processing_stage, policy.processing_status)}</span>{!processing && policy.processing_status === "ready" && <button className="mini-button" onClick={() => setDetailsId(detailsId === policy.id ? null : policy.id)}>{detailsId === policy.id ? "Hide details" : "Details"}</button>}<button className="mini-button danger" disabled={(processing && !policy.processing_stalled) || busy || !!deletingId} onClick={() => deleteDocument(policy)}>{deletingId === policy.id ? "Deleting…" : confirmDeleteId === policy.id ? "Confirm delete" : "Delete"}</button>{confirmDeleteId === policy.id && <button className="mini-button" onClick={() => setConfirmDeleteId(null)}>Cancel</button>}</div>
 
-          {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} onCorrected={() => void refresh()} />}
+          {detailsId === policy.id && <PolicyDetailsPanel policyId={policy.id} />}
 
           {(quarantineHeld || scanRejected) && <div className={`accuracy-warning ${scanRejected ? "danger" : ""}`}>
             <b>{scanRejected ? "Rejected" : documentSafetyMode === "not_scanned_prototype" ? "Received" : "Scanning"}</b>
@@ -320,12 +269,12 @@ export default function PoliciesPage() {
           </div>}
 
           {processing && <div className="document-progress" aria-live="polite">
-            <div className="document-progress-copy"><strong>{policy.processing_message ?? "Analysis in progress…"}</strong><span>{pct}%</span></div>
-            <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(2, pct)}%` }}/></div>
-            <small>{policy.processing_stalled ? "Analysis stopped partway. Press Re-analyse \u2014 it continues from the last saved page instead of starting over." : policy.processing_status === "queued" ? "Waiting for the current analysis job to finish." : "DearPolicy saves each completed stage before moving to the next one."}</small>
+            <div className="document-progress-copy"><strong>{policy.processing_stalled ? "Taking longer than usual" : "Reading this document…"}</strong></div>
+            <div className="progress-track"><div className="progress-fill" style={{ width: `${Math.max(4, pct)}%` }}/></div>
+            <small>{policy.processing_stalled ? "DearPolicy will keep trying on its own. Nothing is lost, and you do not need to upload it again." : "You can keep using the app while this finishes."}</small>
           </div>}
 
-          {!processing && policy.needs_review && <div className="accuracy-warning"><b>Needs review</b><span>{policy.review_reason ?? "Some extracted personal information could not be fully source-verified."}</span></div>}
+          {!processing && policy.needs_review && !policy.processing_error && <div className="accuracy-warning"><b>Not fully confirmed</b><span>Some details in this document could not be matched to the page they came from, so DearPolicy does not use them in answers yet.</span></div>}
 
           {!processing && policy.personal_coverage_confirmed ? <>
             {!!personalLinks.length && <div className="linked-people"><b>Personal coverage linked to</b>{personalLinks.map((p) => <span key={p.id} className="person-tag">{p.name}</span>)}</div>}
@@ -338,7 +287,7 @@ export default function PoliciesPage() {
             {!!referenceLinks.length && <small>Also available as matching wording for {referenceLinks.map((p) => p.name).join(", ")}.</small>}
           </div></div> : null}
 
-          {!processing && policy.processing_error && <div className="row-error processing-error"><strong>Analysis stopped</strong><span>{/password/i.test(policy.processing_error) ? policy.processing_error : "DearPolicy hit a problem reading this document."}</span><small>{/password/i.test(policy.processing_error) ? "Delete this document, then upload the same file again with the password typed into the \u201CPDF password\u201D field above." : "DearPolicy kept the uploaded PDF. Use Re-analyse after resolving the issue; you do not need to upload it again."}</small></div>}
+          {!processing && policy.processing_error && <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{/password/i.test(policy.processing_error) ? "It is password-protected." : "Its benefits and amounts are not available for answers."}</span><small>{/password/i.test(policy.processing_error) ? "Delete it, then upload the same file again with its password in the \u201CPDF password\u201D field above." : "If you have a clearer copy, delete this one and upload that instead."}</small></div>}
         </div>;
       })}{!shown.length && <div className="empty-card">No documents in this view.</div>}</div>
     </section>
@@ -366,73 +315,43 @@ function reviewAmount(amount: number | string | null, currency: string | null): 
 }
 const showValue = (value: unknown) => (value == null || value === "" ? "Not stated in this document" : String(value));
 
-/** The document review screen (prototype flow step 4-5): everything
- * DearPolicy detected and extracted for one document, with page citations,
- * verified/needs-review indicators and a correction control. */
-function PolicyDetailsPanel({ policyId, onCorrected }: { policyId: string; onCorrected: () => void }) {
+/** What one document establishes, for the household: its identity, whose it
+ * is, the cover it confirms (with page and whether the amount was checked
+ * against that page) and its conditions. Extraction internals -- confidence
+ * scores, stored page counts, field corrections -- are operator-only
+ * (/operator/documents). */
+function PolicyDetailsPanel({ policyId }: { policyId: string; onCorrected?: () => void }) {
   const [data, setData] = useState<PolicyDetailsPayload | null>(null);
   const [error, setError] = useState("");
-  const [field, setField] = useState("insurer");
-  const [value, setValue] = useState("");
-  const [note, setNote] = useState("");
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/policies/${policyId}`, { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Could not load the document details.");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error);
       setData(payload);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not load the document details."); }
+    } catch (err) { setError(customerError(err, "The details of this document could not be loaded. Please try again.")); }
   }, [policyId]);
   useEffect(() => { void load(); }, [load]);
   if (error) return <div className="detail-panel"><span className="row-error">{error}</span></div>;
-  if (!data) return <div className="detail-panel">Loading details…</div>;
+  if (!data) return <div className="detail-panel">Loading…</div>;
   const d = data.document as Record<string, string | number | boolean | null>;
-  async function correct(e: React.FormEvent) {
-    e.preventDefault();
-    setNote("");
-    const response = await fetch(`/api/policies/${policyId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ field, value }) });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) { setNote(payload.error || "Could not save the correction."); return; }
-    setNote("Correction saved.");
-    setValue("");
-    await load();
-    onCorrected();
-  }
+  const conditions = [...data.extracted.waitingPeriods, ...data.extracted.keyExclusions, ...data.extracted.deductiblesAndCoinsurance];
   return (
     <div className="detail-panel" data-testid="policy-details">
       <div className="detail-grid">
-        <div><label>Detected type</label><span>{showValue(d.documentRole)}{d.policyType ? ` · ${d.policyType}` : ""}</span></div>
         <div><label>Insurer</label><span data-testid="detail-insurer">{showValue(d.insurer)}</span></div>
         <div><label>Product</label><span data-testid="detail-product">{showValue(d.productName)}</span></div>
         <div><label>Policy number</label><span data-testid="detail-policy-number">{showValue(d.policyNumber)}</span></div>
         <div><label>Effective date</label><span>{showValue(d.effectiveDate)}</span></div>
         <div><label>Expiry / renewal</label><span data-testid="detail-expiry">{showValue(d.renewalOrExpiryDate)}</span></div>
-        <div><label>Authority</label><span>{showValue(d.authorityLabel)}</span></div>
-        <div><label>Pages stored</label><span>{showValue(d.pageCount)}</span></div>
+        <div><label>What it is</label><span>{showValue(d.authorityLabel ?? d.documentRole)}</span></div>
       </div>
-      {Boolean(d.needsReview) && <p className="row-error">Needs review: {showValue(d.reviewReason)}</p>}
-      {!!data.linkedMembers.length && <div className="detail-section"><b>Linked family members</b>{data.linkedMembers.map((m) => <div key={m.id + m.source}>{m.display_name} <small>({m.source.replace(/_/g, " ")}{m.confidence != null ? ` · confidence ${Number(m.confidence).toFixed(2)}` : ""})</small></div>)}</div>}
-      {!!data.detectedPeople.length && <div className="detail-section"><b>People named in this document</b>{data.detectedPeople.map((p) => <div key={p.detected_name}>{p.detected_name} <small>{p.matched_family_member_id ? `matched · confidence ${Number(p.confidence ?? 0).toFixed(2)}` : "not matched to a profile yet"}</small></div>)}</div>}
-      {!!data.coverages.length && <div className="detail-section"><b>Confirmed personal cover</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {reviewAmount(c.amount, c.currency)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="row-error"> · not source-verified</small>}</div>)}</div>}
-      {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits described (reference)</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
-      {!!data.premiums.length && <div className="detail-section"><b>Premium records</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${p.payment_date}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
-      {!!data.extracted.waitingPeriods.length && <div className="detail-section"><b>Waiting periods</b>{data.extracted.waitingPeriods.map((w, i) => <div key={i}>{w}</div>)}</div>}
-      {!!data.extracted.keyExclusions.length && <div className="detail-section"><b>Key exclusions</b>{data.extracted.keyExclusions.map((w, i) => <div key={i}>{w}</div>)}</div>}
-      {!!data.extracted.deductiblesAndCoinsurance.length && <div className="detail-section"><b>Deductibles & co-insurance</b>{data.extracted.deductiblesAndCoinsurance.map((w, i) => <div key={i}>{w}</div>)}</div>}
+      {!!data.linkedMembers.length && <div className="detail-section"><b>Whose cover</b>{[...new Map(data.linkedMembers.map((m) => [m.id, m] as const)).values()].map((m) => <div key={m.id}>{m.display_name}</div>)}</div>}
+      {!!data.coverages.length && <div className="detail-section"><b>Cover this document confirms</b>{data.coverages.map((c, i) => <div key={i} data-testid="detail-coverage">{c.member_name}: {c.category} · {reviewAmount(c.amount, c.currency)}{c.source_page ? <small> · page {c.source_page}</small> : null}{c.evidence_verified ? <small className="matched"> · source-verified</small> : <small className="muted"> · amount not yet confirmed against the page</small>}</div>)}</div>}
+      {!!data.referenceCoverages.length && <div className="detail-section"><b>Benefits it describes</b>{data.referenceCoverages.map((c, i) => <div key={i}>{c.category}{c.product_name ? ` · ${c.product_name}` : ""}{c.source_page ? <small> · page {c.source_page}</small> : null}</div>)}</div>}
+      {!!data.premiums.length && <div className="detail-section"><b>Premiums</b>{data.premiums.map((p, i) => <div key={i}>{reviewAmount(p.amount, p.currency)}{p.frequency ? ` · ${p.frequency}` : ""}{p.payment_date ? ` · ${p.payment_date}` : ""}{p.source_page ? <small> · page {p.source_page}</small> : null}</div>)}</div>}
       {!!data.extracted.riders.length && <div className="detail-section"><b>Riders</b>{data.extracted.riders.map((w, i) => <div key={i}>{w}</div>)}</div>}
-      <form onSubmit={correct} className="detail-correct">
-        <b>Correct a detected field</b>
-        <div>
-          <select value={field} onChange={(e) => setField(e.target.value)} aria-label="Field to correct">
-            <option value="insurer">Insurer</option><option value="product_name">Product name</option>
-            <option value="policy_number">Policy number</option><option value="policy_type">Policy type</option>
-          </select>
-          <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="Corrected value" aria-label="Corrected value" />
-          <button className="mini-button" type="submit" disabled={!value.trim()}>Save correction</button>
-        </div>
-        {note && <small role="status">{note}</small>}
-        {!!data.corrections.length && <small>{data.corrections.length} correction{data.corrections.length === 1 ? "" : "s"} recorded.</small>}
-      </form>
+      {!!conditions.length && <details className="detail-section source-details"><summary>Waiting periods, exclusions and deductibles</summary>{conditions.map((w, i) => <div key={i}>{w}</div>)}</details>}
     </div>
   );
 }

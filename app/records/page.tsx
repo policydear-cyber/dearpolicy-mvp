@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
+import { customerError, customerMessage } from "@/components/customer-text";
 
 type Member = { id: string; display_name: string; relationship: string };
 type RecordRow = { id: string; family_member_name: string | null; insurer: string | null; product_name: string | null; policy_number: string | null; amount: string; currency: string; frequency: string | null; payment_date: string | null; period_start: string | null; notes: string | null };
@@ -24,11 +25,11 @@ export default function RecordsPage() {
     try {
       const form = new FormData(); form.set("file",file); if(memberId) form.set("familyMemberId",memberId); if(password) form.set("pdfPassword",password);
       const response = await fetch("/api/policies/upload",{method:"POST",body:form}); const payload=await response.json();
-      if(!response.ok) throw new Error(payload.error || "Upload failed");
+      if(!response.ok) throw new Error(customerMessage(payload.error, "The upload did not go through. Please try again."));
       const role=payload.result?.extraction?.documentRole ?? "document"; const count=payload.result?.extraction?.paymentRecords?.length ?? 0;
-      setStatus(`Processed as ${String(role).replaceAll("_"," ")}. Found ${count} explicit payment record${count===1?"":"s"}.`);
+      setStatus(count?`Read. Found ${count} payment${count===1?"":"s"} in ${String(role).replaceAll("_"," ")}.`:"Read. No payment amounts were found in this document.");
       setFile(null); setPassword(""); await refresh();
-    } catch(e){ setStatus(e instanceof Error?e.message:"Upload failed"); } finally { setBusy(false); }
+    } catch(e){ setStatus(customerError(e, "The upload did not go through. Please try again.")); } finally { setBusy(false); }
   }
 
   return (

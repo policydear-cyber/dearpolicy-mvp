@@ -273,6 +273,10 @@ CREATE TABLE IF NOT EXISTS claim_sessions (
   completed_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS idx_claim_sessions_member ON claim_sessions(account_id,family_member_id,updated_at DESC);
+-- V1.1: one claim event per chat conversation, and the claim's category
+-- (decides its status text and requested documents). Additive, nullable.
+ALTER TABLE claim_sessions ADD COLUMN IF NOT EXISTS conversation_id uuid;
+ALTER TABLE claim_sessions ADD COLUMN IF NOT EXISTS claim_category text;
 
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS claim_session_id uuid REFERENCES claim_sessions(id) ON DELETE SET NULL;
 

@@ -47,7 +47,13 @@ const TERMINAL_STATUSES: BackgroundJobRow["status"][] = ["succeeded", "dead_lett
  * an error that will never stop happening. */
 export function classifyPipelineError(error: unknown): ErrorCategory {
   const message = error instanceof Error ? error.message : String(error);
-  return /\b429\b|rate.?limit|ECONNRESET|ETIMEDOUT|EAI_AGAIN|fetch failed|network|timeout/i.test(message)
+  // V1.1: an exhausted provider quota, a billing stop or DearPolicy's own
+  // spend cap will not clear on a retry minutes later -- fail cleanly and
+  // promptly instead of burning attempts. Checked first so a quota error
+  // that also says "429" is not retried.
+  if (/insufficient_quota|quota|billing|spend.?cap|SpendCapReached/i.test(message)
+    || (error instanceof Error && error.constructor?.name === "SpendCapReached")) return "non_retryable";
+  return /\b429\b|rate.?limit|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network|timeout|timed out|\b50[0234]\b|overloaded|temporarily unavailable|service unavailable/i.test(message)
     ? "transient"
     : "non_retryable";
 }

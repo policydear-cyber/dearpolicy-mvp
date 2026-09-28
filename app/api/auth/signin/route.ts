@@ -19,10 +19,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json().catch(() => ({}));
+  // V1.1 (UX): the sign-in form also posts natively (method=post) so a
+  // submit made before the page's scripts load still signs in, with a
+  // redirect instead of JSON. The JSON contract used by the page's script is
+  // unchanged.
+  const contentType = request.headers.get("content-type") ?? "";
+  const nativeForm = /application\/x-www-form-urlencoded|multipart\/form-data/i.test(contentType);
+  let body: Record<string, unknown> = {};
+  if (nativeForm) {
+    const form = await request.formData().catch(() => null);
+    body = { email: form?.get("email"), password: form?.get("password"), next: form?.get("next") };
+  } else {
+    body = await request.json().catch(() => ({}));
+  }
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const next = typeof body.next === "string" && body.next.startsWith("/") && !body.next.startsWith("//") && !body.next.startsWith("/\\") ? body.next : null;
+  const formRedirect = (path: string) => NextResponse.redirect(new URL(path, request.url), 303);
+  const backToLogin = (error: string) => formRedirect(`/login?error=${error}${next ? `&next=${encodeURIComponent(next)}` : ""}`);
   if (!email || !password) {
+    if (nativeForm) return backToLogin("missing_credentials");
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
 
@@ -32,6 +48,7 @@ export async function POST(request: Request) {
     // One generic message for "no such account" and "wrong password" alike
     // -- distinguishing them would let an attacker enumerate registered
     // emails one guess at a time.
+    if (nativeForm) return backToLogin("invalid_credentials");
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
 
@@ -42,8 +59,10 @@ export async function POST(request: Request) {
   // A DearPolicy staff reviewer who belongs to no household is sent to the
   // reviewer area instead, and never gets a household of their own.
   if (await isReviewerOnlyAccount(data.user.id)) {
+    if (nativeForm) return formRedirect("/reviewer");
     return NextResponse.json({ ok: true, destination: "/reviewer" });
   }
   await ensureDefaultHousehold(data.user.id, `${email.split("@")[0]}'s household`);
+  if (nativeForm) return formRedirect(next ?? "/");
   return NextResponse.json({ ok: true, destination: null });
 }

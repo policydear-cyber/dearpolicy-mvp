@@ -151,6 +151,36 @@ export function costUsd(choice:ModelChoice,usage:{input:number;output:number;cac
 export type ResolvedModelIdentity={resolvedModel:string|null;providerRequestId:string|null;finishReason:string|null;region:string|null};
 export type HostedReply={content:string;truncated:boolean;usage:{input:number;output:number;cached?:number};resolved:ResolvedModelIdentity};
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
+/** The provider account has run out of paid quota or credit (OpenAI
+ * "insufficient_quota", a billing hard limit, Google's daily quota). Unlike a
+ * per-minute rate limit this does not clear by waiting, so it is never
+ * retried, never re-sent to another model on the same account, and its raw
+ * provider text (which carries organisation identifiers and billing links)
+ * is never part of the message. */
+export class ProviderQuotaExhausted extends Error{
+  readonly status:number;
+  constructor(status:number){super("Model provider quota exhausted ("+status+")");this.name="ProviderQuotaExhausted";this.status=status;}
+}
+const QUOTA_EXHAUSTED=/insufficient_quota|exceeded your current quota|billing[_ ]hard[_ ]limit|billing details|credit balance is too low|out of credits|quota exceeded for quota metric.*per ?day|PerDay/i;
+export function isQuotaExhaustedBody(status:number,bodyText:string){return (status===429||status===402||status===403)&&QUOTA_EXHAUSTED.test(bodyText);}
+/** Provider text with account identifiers, links and keys removed. Used for
+ * every provider message that can end up in an Error (and so in a log line
+ * or, by mistake, a response). */
+export function sanitizeProviderText(text:string){
+  return text
+    .replace(/https?:\/\/\S+/gi,"[link]")
+    .replace(/\borg[-_][A-Za-z0-9]{6,}\b/g,"[organisation]")
+    .replace(/\b(?:in )?organi[sz]ation\s+\S+\s*/gi,"")
+    .replace(/\bproj(?:ect)?[-_ ]?[A-Za-z0-9]{8,}\b/gi,"[project]")
+    .replace(/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}\b/g,"[key]")
+    .replace(/\bAIza[0-9A-Za-z_-]{20,}\b/g,"[key]")
+    .replace(/\b[\w.+-]+@[\w-]+\.[\w.]+\b/g,"[email]")
+    .replace(/\s+/g," ").trim();
+}
+/** Wall-clock ceiling for all retries of one call. A household waiting on
+ * chat gets an answer or a clean failure inside 30 seconds; retries must not
+ * quietly spend that. */
+const RETRY_WINDOW_MS=Math.max(1_000,Number(process.env.MODEL_RETRY_WINDOW_MS??20_000)||20_000);
 // maxAttempts defaults to 8 (existing behaviour for every caller that does
 // not name it). A caller that DOES pass one -- like judgeRelevance's
 // attempts:1 -- was silently ignored here before: this hardcoded loop always
@@ -164,6 +194,7 @@ const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 // to avoid.
 async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeoutMs:number,maxAttempts=8):Promise<Response>{
   let lastError:Error|null=null;
+  const started=Date.now();
   for(let n=0;n<maxAttempts;n++){
     const controller=new AbortController();
     // Cleared on every path: a live timer keeps a process alive long after
@@ -173,9 +204,14 @@ async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeo
       const response=await attempt(controller.signal);
       if(response.status===429||response.status>=500){
         const retryAfter=Number(response.headers.get("retry-after"));
-        const detail=providerMessage(await response.text().catch(()=>"")).slice(0,300);
+        const body=await response.text().catch(()=>"");
+        // Exhausted paid quota does not clear by waiting: fail now, cleanly.
+        if(isQuotaExhaustedBody(response.status,body))throw new ProviderQuotaExhausted(response.status);
+        const detail=providerMessage(body).slice(0,300);
         lastError=new Error("Model service is busy ("+response.status+")"+(detail?": "+detail:""));
         const wait=Number.isFinite(retryAfter)&&retryAfter>0?retryAfter*1000:Math.min(20_000,2_000*2**n);
+        // Never retry past the window: a clean failure beats a dead spinner.
+        if(Date.now()-started+wait>RETRY_WINDOW_MS)throw lastError;
         // A provider saying "come back later" for longer than a serverless
         // invocation can live is a terminal answer for THIS call, not a
         // sleep: honouring a long retry-after burned the whole function
@@ -186,7 +222,7 @@ async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeo
       }
       return response;
     }catch(error){
-      if(error instanceof Error&&error.name==="AbortError"){lastError=new Error("Model request timed out after "+Math.round(timeoutMs/1000)+"s");continue;}
+      if(error instanceof Error&&error.name==="AbortError"){lastError=new Error("Model request timed out after "+Math.round(timeoutMs/1000)+"s");if(Date.now()-started>RETRY_WINDOW_MS)throw lastError;continue;}
       throw error;
     }finally{clearTimeout(timer);}
   }
@@ -249,9 +285,9 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
       if("max_tokens" in params&&/max_tokens/i.test(text)){learn("max_tokens");params.max_completion_tokens=params.max_tokens;delete params.max_tokens;continue;}
       if("response_format" in params&&/response_format/i.test(text)){learn("response_format");delete params.response_format;continue;}
     }
-    throw new Error("Model request failed ("+response.status+"): "+providerMessage(text));
+    throw failedResponse(response.status,text);
   }
-  if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
+  if(!response.ok)throw failedResponse(response.status,await response.text());
   const payload=OpenAIShape.parse(await response.json());
   return {content:payload.choices[0].message.content??"",truncated:payload.choices[0].finish_reason==="length",
     usage:{input:payload.usage?.prompt_tokens??0,output:payload.usage?.completion_tokens??0,cached:payload.usage?.prompt_tokens_details?.cached_tokens},
@@ -278,7 +314,7 @@ export async function anthropicMessages(choice:ModelChoice,args:{system:string;u
   });
   const response=await withRetries((signal)=>fetch((process.env.ANTHROPIC_BASE_URL??"https://api.anthropic.com").replace(/\/$/,"")+"/v1/messages",{method:"POST",signal,
       headers:{"content-type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01"},body}),timeoutMs,args.attempts);
-  if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
+  if(!response.ok)throw failedResponse(response.status,await response.text());
   const payload=AnthropicShape.parse(await response.json());
   const text=payload.content.filter(block=>block.type==="text").map(block=>block.text??"").join("");
   // The model may wrap the object in a code fence; the object is what counts.
@@ -361,7 +397,7 @@ export async function geminiGenerate(choice:ModelChoice,args:{system:string;user
   const endpoint=geminiEndpoint(model,key)+"?key="+encodeURIComponent(key);
   const response=await withRetries((signal)=>fetch(endpoint,{method:"POST",signal,
       headers:{"content-type":"application/json","x-goog-api-key":key},body}),timeoutMs,args.attempts);
-  if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
+  if(!response.ok)throw failedResponse(response.status,await response.text());
   const payload=GeminiShape.parse(await response.json());
   if(payload.promptFeedback?.blockReason)throw new Error("The model declined this page: "+payload.promptFeedback.blockReason);
   const candidate=payload.candidates?.[0];
@@ -378,8 +414,14 @@ export function providerMessage(bodyText:string){
     const parsed=JSON.parse(bodyText) as {error?:{message?:string;status?:string;details?:{reason?:string}[]};message?:string};
     const reason=parsed.error?.details?.map(d=>d.reason).filter(Boolean).join(", ");
     const message=parsed.error?.message??parsed.message??bodyText;
-    return (message+(reason?" ["+reason+"]":"")).replace(/[{}]/g,"").slice(0,400);
-  }catch{return bodyText.replace(/[{}]/g,"").slice(0,400);}
+    return sanitizeProviderText((message+(reason?" ["+reason+"]":"")).replace(/[{}]/g,"")).slice(0,400);
+  }catch{return sanitizeProviderText(bodyText.replace(/[{}]/g,"")).slice(0,400);}
+}
+/** A failed (non-OK) provider response as an Error: exhausted quota is its
+ * own type; everything else carries only sanitized provider text. */
+function failedResponse(status:number,bodyText:string){
+  if(isQuotaExhaustedBody(status,bodyText))return new ProviderQuotaExhausted(status);
+  return new Error("Model request failed ("+status+"): "+providerMessage(bodyText));
 }
 export async function hostedStructuredCompletion(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}){
   // Synthetic browser/CI journeys only; impossible in production (see
@@ -427,7 +469,7 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
   const response = await withRetries((signal) => fetch((process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com").replace(/\/$/, "") + "/v1/messages", {
     method: "POST", signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body,
   }), timeoutMs);
-  if (!response.ok) throw new Error("Model request failed (" + response.status + "): " + providerMessage(await response.text()));
+  if (!response.ok) throw failedResponse(response.status, await response.text());
   const payload = AnthropicShape.parse(await response.json());
   const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
   return { text, truncated: payload.stop_reason === "max_tokens", usage: { input: payload.usage?.input_tokens ?? 0, output: payload.usage?.output_tokens ?? 0, cached: payload.usage?.cache_read_input_tokens },
@@ -446,7 +488,7 @@ async function geminiDocumentText(choice: ModelChoice, args: { system: string; u
   });
   const endpoint = geminiEndpoint(model, key) + "?key=" + encodeURIComponent(key);
   const response = await withRetries((signal) => fetch(endpoint, { method: "POST", signal, headers: { "content-type": "application/json", "x-goog-api-key": key }, body }), timeoutMs);
-  if (!response.ok) throw new Error("Model request failed (" + response.status + "): " + providerMessage(await response.text()));
+  if (!response.ok) throw failedResponse(response.status, await response.text());
   const payload = GeminiShape.parse(await response.json());
   if (payload.promptFeedback?.blockReason) throw new Error("The model declined this page: " + payload.promptFeedback.blockReason);
   const candidate = payload.candidates?.[0];

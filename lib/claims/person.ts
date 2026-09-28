@@ -37,6 +37,9 @@ function subjectName(text: string) {
   if (!subject) return null;
   const name = subject.replace(/^(?:today|yesterday)\s+/i, "").replace(/\s+(?:has|was|is|had|been|just|recently)(?:\s+(?:been|just|recently))*$/i, "");
   if (/^(i|i am|i['’]m|we|he|she|they|someone|a person|my (?:mother|father|mum|mom|dad|sister|brother|wife|husband|son|daughter|parent|child|spouse|sibling))$/i.test(name)) return null;
+  // The chat's own question, sent back with its answer ("On what date was it
+  // diagnosed: Not sure"), names no one: a question is not a subject.
+  if (/^(?:on |at |in |from |since )?(?:what|when|where|which|who|whom|how|why)\b/i.test(name) || /\b(?:it|this|that)$/i.test(name)) return null;
   return name;
 }
 

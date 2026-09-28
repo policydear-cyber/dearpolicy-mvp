@@ -8,7 +8,11 @@ export type StructuredCoverageFact = {
   id:string; policyId:string; category:string; amount:number|null; currency:string|null; productName:string|null; sourcePage:number|null; evidenceText:string|null;
   insurer:string|null; policyName:string|null; policyNumber:string|null; documentRole:string|null;
 };
-export type ChatCitation = { chunkId:string; policyId:string; policyName:string; insurer?:string; pageStart:number|null; pageEnd:number|null; documentRole?:string|null; personalEvidence?:boolean; evidenceLabel?:string };
+export type ChatCitation = { chunkId:string; policyId:string; policyName:string; insurer?:string; pageStart:number|null; pageEnd:number|null; documentRole?:string|null; personalEvidence?:boolean; evidenceLabel?:string;
+  /** Additive (V1.1): the short supporting passage, verbatim from the cited page. */
+  excerpt?:string;
+  /** Additive (V1.1): the document's printed date, and whether it is outdated. */
+  documentDate?:string|null; notConfirmedCurrent?:boolean };
 /** A benefit or maximum amount copied deterministically from the current
  * active policy's own wording, with its page cited and its currency written
  * in that wording. It is NOT an estimate of what the insurer will pay for an
@@ -201,6 +205,13 @@ export type ChatAnswer = {
   /** Policy-stated coverage limits: typed, cited, currency-verified, and
    * structurally separate from any claim estimate (never totalled). */
   policyStatedLimits?:PolicyStatedLimit[];
+  /** Additive (V1.1): set only by lib/chat/policy-answer.ts. The answer is
+   * made solely of policy facts verified against their cited passages, and
+   * verifiedPolicyFigures lists every money figure its text may show. The
+   * live monetary boundary honours it only for a non-claim turn with no
+   * claim items; any other figure is still withheld. */
+  verifiedPolicyFactsOnly?:boolean;
+  verifiedPolicyFigures?:string[];
   /** Deterministic fact-finding plan per family member and claim category
    * (lib/claims/fact-finding.ts). Never carries an amount. */
   factFinding?:FactFindingPlanView[];

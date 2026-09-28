@@ -44,12 +44,64 @@ export function lineFrom(items:TextItem[],cellGap=10):PageLine{
   if(current.trim())cells.push(current.trim());
   return {cells,text:cells.join("\t"),y:ordered[0]?.y??0};
 }
+/** A label/amount table with nothing spanning the page ("Fracture of arm" …
+ * "S$1,000") has an empty vertical strip between its columns, exactly like a
+ * two-column page. Read as two columns, every label was separated from its
+ * amount and the whole schedule was lost. Two neighbouring bands are one
+ * table when the right band is mostly amount cells that sit on the same
+ * baselines as lines in the left band. */
+function mergeTableBands(bands:{left:number;right:number}[],items:TextItem[]){
+  const out=[...bands];
+  const baselines=(band:{left:number;right:number})=>{
+    const rows=new Map<number,TextItem[]>();
+    for(const item of items){
+      const middle=item.x+item.w/2;
+      if(middle<band.left||middle>=band.right)continue;
+      const key=Math.round(item.y/4)*4;
+      rows.set(key,[...(rows.get(key)??[]),item]);
+    }
+    return rows;
+  };
+  // The label column may not be the band immediately to the left: a stray
+  // item (a centred page number) can open a narrow band in between. The
+  // amounts band joins the nearest band to its left whose lines it sits on,
+  // taking in anything between them.
+  for(let i=1;i<out.length;){
+    const right=baselines(out[i]);
+    const rightLines=[...right.entries()].map(([y,row])=>({y,text:lineFrom(row).cells.join(" ")}));
+    const valueLines=rightLines.filter(line=>isValueCell(line.text));
+    // A short table ("Death benefit  US$350,000" / "Terminal illness benefit
+    // Advance of the death benefit") has too few amounts to go by: it is
+    // still a table when every right-hand cell is short and sits beside a
+    // label. Two columns of prose have long lines.
+    const shortCells=rightLines.length>0&&rightLines.every(line=>line.text.length<=32);
+    let merged=false;
+    if(valueLines.length>=1&&(valueLines.length>=2&&valueLines.length/rightLines.length>=0.6||shortCells)){
+      for(let j=i-1;j>=0;j--){
+        const left=baselines(out[j]);
+        const beside=(line:{y:number})=>left.has(line.y)||left.has(line.y-4)||left.has(line.y+4);
+        // Only the amounts need a label beside them; a stray page number in
+        // the same band does not. A short-cell table needs every cell beside one.
+        // Lines above or below the whole label column (a page number in the
+        // footer) are not cells of the table.
+        const ys=[...left.keys()],top=Math.max(...ys)+4,bottom=Math.min(...ys)-4;
+        const within=rightLines.filter(line=>line.y<=top&&line.y>=bottom);
+        const aligned=valueLines.length>=2&&valueLines.length/rightLines.length>=0.6
+          ?valueLines.filter(beside).length/valueLines.length>=0.8
+          :within.length>0&&within.some(line=>isValueCell(line.text))&&within.every(beside);
+        if(aligned){out.splice(j,i-j+1,{left:out[j].left,right:out[i].right});i=j+1;merged=true;break;}
+      }
+    }
+    if(!merged)i++;
+  }
+  return out;
+}
 export function renderPageLayout(items:TextItem[],pageWidth:number):PageLayout{
   const usable=items.filter(item=>item.text.trim().length>0);
   if(!usable.length)return {text:"",lines:[]};
   const lines:PageLine[]=[];
   // Read each column top to bottom before moving right, the way a person does.
-  for(const band of columnBands(usable,pageWidth)){
+  for(const band of mergeTableBands(columnBands(usable,pageWidth),usable)){
     const inBand=usable.filter(item=>{
       const middle=item.x+item.w/2;
       return middle>=band.left&&middle<band.right;
@@ -81,7 +133,10 @@ const VALUE_START=new RegExp(String.raw`^(?:${CURRENCY_MARKER}\s?\d|\d)`);
 /** Limits are rarely bare figures. "Up to S$500 per incident" and "25% of the
  * Sum Insured" are both value cells; a paragraph that happens to mention a
  * dollar figure is not. Length is what separates a cell from prose. */
+/** "150 per day": a rate whose currency the document does not print. */
+const BARE_RATE=/^\d[\d,]*(?:\.\d{1,2})?\s*(?:per|\/|a)\s*(?:day|night|week|month|year)\b/i;
 function isValueCell(cell:string){
+  if(cell.length<=80&&BARE_RATE.test(cell))return true;
   if(!AMOUNT.test(cell)||cell.length>80)return false;
   return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from)\b/i.test(cell);
 }

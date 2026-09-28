@@ -162,7 +162,8 @@ export const POLICY_STATE_COLUMNS: Record<"policies" | "policy_coverages", Recor
     insurer: "extraction_provenance", product_name: "extraction_provenance", policy_number: "extraction_provenance", policy_type: "extraction_provenance",
     document_role: "extraction_provenance", group_policy_number: "extraction_provenance", document_authority: "extraction_provenance",
     document_authority_label: "extraction_provenance", extracted_json: "extraction_provenance", effective_date: "extraction_provenance",
-    renewal_or_expiry_date: "extraction_provenance",
+    renewal_or_expiry_date: "extraction_provenance", document_date: "extraction_provenance",
+    reading_cache: "server_processing",
     personal_coverage_confirmed: "verification", needs_review: "verification", review_reason: "verification",
     lifecycle_state: "lifecycle_route_only", lifecycle_version: "lifecycle_route_only", updated_at: "lifecycle_route_only",
   },
@@ -171,6 +172,8 @@ export const POLICY_STATE_COLUMNS: Record<"policies" | "policy_coverages", Recor
     category: "extraction_provenance", amount: "extraction_provenance", currency: "extraction_provenance", product_name: "extraction_provenance",
     notes: "extraction_provenance", source_page: "extraction_provenance", authority: "extraction_provenance", evidence_text: "extraction_provenance",
     confirmed: "verification", evidence_verified: "verification",
+    source_text_start: "extraction_provenance", source_text_end: "extraction_provenance", extraction_method: "extraction_provenance",
+    passage_verified: "verification", conflict_note: "verification", amended_by_policy_id: "verification", amendment_note: "verification",
   },
 };
 

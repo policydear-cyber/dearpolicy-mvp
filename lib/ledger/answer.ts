@@ -80,8 +80,8 @@ function whyText(row:LedgerRow,basis:"confirmed"|"estimated"|"indicative"){
   if(row.origin==="schedule")return "Your schedule or certificate states this cover"+where+". The plan's own wording has not been read yet, so this assumes the standard rule for this kind of plan: "+(row.note??"it pays as stated")+". Upload the policy wording or benefit summary and DearPolicy replaces the assumption with the actual clause.";
   if(basis==="indicative")return "Read from a table heading rather than the row itself"+where+", so it is shown but not added to the total.";
   return basis==="confirmed"
-    ?"Read from your policy wording"+where+" and verified against the page by a second read."
-    :"Read from your policy wording"+where+"; the second read could not fully verify it, so it is shown as an estimate.";
+    ?"Read from your policy wording"+where+" and checked against the page."
+    :"Read from your policy wording"+where+"; it could not yet be fully checked against the page, so it is shown as an estimate.";
 }
 
 export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Record<string,SubjectFacts>;hints?:Record<string,string[]>;whatIfText?:string}):LedgerAnswer{

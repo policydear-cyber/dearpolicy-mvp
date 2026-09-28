@@ -292,8 +292,26 @@ runStage("03-chat-claim-flow", async ({ pool, step }) => {
         }),
       );
       if (res.status !== 200) throw new Error(`expected a real synchronous claim answer, got ${res.status}: ${await res.text()}`);
-      const body = await res.json();
-      const answer = body.answer;
+      let answer = (await res.json()).answer;
+      // V1.1: a reported event is fact-found one decision-changing question at
+      // a time before any benefit is assessed. Walk the interview the way the
+      // chat's own question card does ("Not sure" moves it on), asserting one
+      // question per turn and no claim cards meanwhile.
+      for (let turn = 0; turn < 12 && answer.mode === "fact_finding" && answer.questions?.length; turn++) {
+        assert.equal(answer.questions.length, 1, "exactly one question per interview turn");
+        assert.equal(answer.claimItems.length, 0, "no claim cards while the interview is open");
+        const q = answer.questions[0];
+        const reply = q.options?.includes("Not sure") ? "Not sure" : q.options?.[0] ?? "Not sure";
+        const next = await postChat(
+          requestFor("http://localhost/api/chat", {
+            household: householdId,
+            method: "POST",
+            body: { familyMemberId: selfMemberId, question: String(q.text).replace(/\?\s*$/, "") + ": " + reply, conversationId: answer.conversationId, conversationRevision: answer.conversationRevision, asynchronous: false },
+          }),
+        );
+        if (next.status !== 200) throw new Error(`interview turn ${turn + 1} failed: ${next.status}: ${await next.text()}`);
+        answer = (await next.json()).answer;
+      }
       assert.ok(Array.isArray(answer.claimItems) && answer.claimItems.length > 0, "the seeded benefit's traits (illness, diagnosis) directly overlap the reported event, so a real claim item must be calculated even with the relevance-judge call mocked to fail");
       assert.ok(typeof answer.claimSessionId === "string" && answer.claimSessionId.length > 0, "a real claim assessment with claim items must really call recordClaim() and carry back its real claimSessionId -- this is the real route's own output, not a value this stage invented");
       claimSessionId = answer.claimSessionId;

@@ -328,7 +328,9 @@ async function main() {
   });
   // 3 policy question: fracture benefit exists?
   await turn("T3", "Does she have a fracture benefit?", CHARMAINE, c, "policy_question / what-if", (a, f) => {
-    checkCommon(a, f, { claimContext: true });
+    // V1.1 Task 2: a verified policy-fact answer states the printed figure (as S3,
+    // the same question, already allows); a claim/fact-finding answer stays scrubbed.
+    checkCommon(a, f, { claimContext: a.mode !== "answer" || a.claimItems.length > 0 || !a.verifiedPolicyFactsOnly });
     if ((a as any).portfolioItems?.length) f.push("answered the portfolio question again");
     if (!cites(a, "accident", 2)) f.push("does not cite Guardian Personal Accident wording page 2 (fracture benefit)");
     const text = visibleText(a);

@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { customerMessage } from "@/components/customer-text";
 
 function InviteForm() {
   const router = useRouter();
@@ -26,7 +27,7 @@ function InviteForm() {
         return;
       }
       if (!response.ok) {
-        setError(payload.error || "Could not accept this invitation.");
+        setError(customerMessage(payload.error, "Could not accept this invitation."));
         return;
       }
       router.push("/household");

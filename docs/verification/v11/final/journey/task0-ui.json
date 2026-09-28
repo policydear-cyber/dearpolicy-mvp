@@ -1,0 +1,27 @@
+[
+  {
+    "id": "T0-8",
+    "pass": true,
+    "detail": "signed in with one click in 676 ms"
+  },
+  {
+    "id": "T0-4",
+    "pass": true,
+    "detail": "list: \"! Charmaine: broken arm Charmaine Tan Hui Min · spouse Updated 9/28/2026 DOCUMENTS NEEDED › Send: Doctor's report (or X-ray or scan report) describing the injur\" / detail data-has-estimate=no (\"No estimate yet.\")"
+  },
+  {
+    "id": "T0-5",
+    "pass": true,
+    "detail": "no death documents in the fracture claim's list entry"
+  },
+  {
+    "id": "T0-6",
+    "pass": true,
+    "detail": "no repair instructions on the Benefits, Coverage and Documents pages"
+  },
+  {
+    "id": "T0-7",
+    "pass": true,
+    "detail": "Usage in household navigation: no; page says \"No model calls yet\": false; hard stop shown: none (owner's provider cap $5/month); page text: \"YOUR PLAN Plan usage this month How much of your plan your household has used this month. Answers from documents DearPolicy has already read are always available. ← Household\""
+  }
+]

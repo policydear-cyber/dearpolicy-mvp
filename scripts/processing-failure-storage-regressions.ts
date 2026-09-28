@@ -107,7 +107,8 @@ async function main() {
       const { USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, PDF_PASSWORD_REQUIRED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE } = await import("@/lib/documents/processing-errors");
       assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(PDF_PASSWORD_REQUIRED_MESSAGE));
       assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(PDF_PASSWORD_INCORRECT_MESSAGE));
-      assert.equal(USER_ACTIONABLE_PROCESSING_ERRORS.size, 2, "the allowlist stays deliberate and small");
+      // V1.1 Task 1 requires an unreadable document to tell the household what is unavailable: three fixed, internals-free sentences join the allowlist.
+      assert.equal(USER_ACTIONABLE_PROCESSING_ERRORS.size, 5, "the allowlist stays deliberate and small");
       assert.ok(new UserActionableProcessingError(PDF_PASSWORD_REQUIRED_MESSAGE) instanceof Error);
       assert.match(ingest, /instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS\.has\(error\.message\)/);
       assert.match(ingest, /\[userReason \?\? POLICY_PROCESSING_FAILED_MESSAGE, args\.policyId, args\.accountId\]/);

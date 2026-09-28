@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { customerMessage } from "@/components/customer-text";
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -20,7 +21,7 @@ export default function UpdatePasswordPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(data.error || "Could not update your password. The link may have expired -- request a new one.");
+        setError(customerMessage(data.error, "Could not update your password. The link may have expired -- request a new one."));
         return;
       }
       router.push("/");

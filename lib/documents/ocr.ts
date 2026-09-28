@@ -44,6 +44,8 @@ export function mergeOcrPages(pages: PdfPage[], ocrPages: BridgePage[]) {
  * between two environments. */
 export async function completePdfPagesWithOcr(args: {
   accountId: string;
+  /** The document being read: provenance and the reading cache. */
+  resourceId?: string;
   bytes: Uint8Array;
   password?: string;
   pages: PdfPage[];
@@ -53,5 +55,5 @@ export async function completePdfPagesWithOcr(args: {
   const pageNumbers = args.pageNumbers ?? pagesNeedingOcr(args.pages);
   if (!pageNumbers.length) return args.pages;
   if (!supportsHostedDocumentReading(modelFor("reading").provider)) return args.pages;
-  return completePdfPagesWithHostedOcr({ accountId: args.accountId, bytes: args.bytes, pages: args.pages, pageNumbers });
+  return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages: args.pages, pageNumbers });
 }

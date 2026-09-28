@@ -9,8 +9,13 @@ import { BILL_REVIEW_NOTICE, billReviewDraftFrom, buildBillReviewRequest, type B
 import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceDocumentType } from "@/lib/claims/evidence/types";
 import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE, type HouseholdReviewStatus } from "@/lib/claims/reviewers/copy";
 import { IndicativeEstimatePanel } from "./indicative-panel";
+import { customerError, customerMessage } from "@/components/customer-text";
 
-type Claim = { id: string; family_member_id: string; status: string; event_summary: string | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
+/** claimDisplayStatus() output (lib/claims/status.ts), attached by the claims
+ * API -- the ONLY source of this page's status line and "what to send" list,
+ * shared with the claims list. */
+type ClaimDisplay = { label: string; tone: "info" | "waiting" | "ready"; hasEstimate: boolean; requestedDocuments: string[]; detail?: string };
+type Claim = { id: string; family_member_id: string; status: string; event_summary: string | null; display?: ClaimDisplay | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
 type ExtractedFields = {
   deceasedName: string | null; otherNamesMentioned: string[]; personIdentifiers: { label: string; value: string }[];
   dateOfDeath: string | null; statedCauseOfDeath: string | null; mannerOfDeath: string | null; issuingAuthority: string | null;
@@ -56,7 +61,7 @@ export default function ClaimEvidencePage() {
 
   const load = useCallback(async () => {
     const claimRes = await fetch(`/api/claims/${claimSessionId}`).then((r) => r.json());
-    if (claimRes.error) { setError(claimRes.error); return; }
+    if (claimRes.error || !claimRes.claim) { setError(customerMessage(claimRes.error, "This claim could not be loaded.")); return; }
     setClaim(claimRes.claim);
     setDocType((current) => current || defaultDocumentTypeFor(claimRes.claim.facts?.eventType));
     const familyMemberId = claimRes.claim.family_member_id;
@@ -90,7 +95,7 @@ export default function ClaimEvidencePage() {
     setBusy(true);
     const res = await fetch("/api/claims/evidence/upload", { method: "POST", body: built.form }).then((r) => r.json());
     setBusy(false);
-    if (res.error) { setUploadError(res.error); return; }
+    if (res.error) { setUploadError(customerMessage(res.error, "The upload did not go through. Please try again.")); return; }
     fileInput.value = "";
     await load();
   }
@@ -115,7 +120,7 @@ export default function ClaimEvidencePage() {
       setConfirmDeleteId(null);
       await load();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : "Could not delete this document. Please try again.");
+      setNotice(customerError(err, "Could not delete this document. Please try again."));
     } finally {
       setDeletingId(null);
     }
@@ -126,7 +131,15 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload the documents for this claim -- death records, medical evidence, or bills and receipts -- and review what DearPolicy read from them. Nothing here is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div></header>
+      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload the documents for this claim and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div></header>
+
+      <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
+        <div className="eyebrow">STATUS</div>
+        <h2 data-testid="claim-display-label">{claim.display?.label ?? "Open"}</h2>
+        {claim.display?.detail && <p>{claim.display.detail}</p>}
+        {claim.display?.tone === "info" && <p><a className="text-link" href={`/chat?member=${claim.family_member_id}&claim=${claim.id}`}>Continue answering questions →</a></p>}
+        {claim.display && claim.display.requestedDocuments.length > 0 ? <div data-testid="claim-requested-documents"><strong>What to send</strong><ul>{claim.display.requestedDocuments.map((d) => <li key={d}>{d}</li>)}</ul></div> : null}
+      </section>
 
       <section className="section">
         <h2>Upload a document</h2>
@@ -155,7 +168,7 @@ export default function ClaimEvidencePage() {
       </section>
 
       <section className="section">
-        <h2>Claim assessment</h2>
+        <h2>Indicative estimate</h2>
         <p className="muted">{INDICATIVE_ESTIMATE_NOTICE}</p>
         <IndicativeEstimatePanel claimSessionId={claimSessionId} refreshKey={documents.map((d) => `${d.id}:${d.status}:${d.reviewStatus ?? ""}`).join("|")} />
       </section>
@@ -171,7 +184,7 @@ export default function ClaimEvidencePage() {
                 return (<>
                   <strong>{doc.original_filename}</strong> <span className={`status ${doc.status}`}>{display.label}</span>{" "}
                   <span className="status">{documentTypeLabel(doc.document_type)}</span>{" "}
-                  <span className="status">identity: {doc.identity_status.replace(/_/g, " ")}</span>
+                  <span className="status">{doc.identity_status === "confirmed" ? "Name matches" : doc.identity_status === "mismatch" ? "Name does not match this person" : doc.identity_status === "needs_review" ? "Name could not be matched automatically" : "Name not checked yet"}</span>
                   <p><em>{display.detail}</em></p>
                 </>);
               })()}

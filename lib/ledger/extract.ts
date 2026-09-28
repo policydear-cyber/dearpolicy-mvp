@@ -21,6 +21,9 @@ import { ensureLedgerSchema } from "@/lib/ledger/store";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,readingModelIdentity } from "@/lib/documents/evidence";
+import { annotateLedgerEvidence,markConflicts } from "@/lib/documents/evidence-store";
+import { unparsedBenefitLines } from "@/lib/policies/catalog-builder";
 
 /** The ISO code of the currency a ledger row's amount is printed in: the
  * model's answer when it is a real code or symbol (US$ -> USD, RM -> MYR),
@@ -72,10 +75,10 @@ export const LEDGER_SYSTEM=
 "paysKind: lump_sum (a stated sum), percent_of_sum (amount is the fraction, e.g. 0.25 for 25%; sumBasis is the sum insured it applies to when the document states it), per_day (amount per day; offsetDays waiting period; maximumDays cap), per_month, reimbursement_cap (amount is the limit), stated (the document names the benefit but gives no figure); "+
 "amount as a plain number with no symbols; currency as an ISO code; conditions as short quoted restrictions that change eligibility or the amount; minimum when the benefit starts only at a threshold, as {factKey: flightDelayHours|hospitalNights|icuNights, value}; sourcePage as the page the quote is on; quote as an exact sentence or table row copied from that page that states the rule. "+
 "Skip premiums, premium tables, age bands, exclusions lists, deductibles and co-insurance percentages, and any figure that is a cost to the person rather than a payment to them. "+
-"Return JSON {\"rows\":[...]}.";
+"Return JSON {\"rows\":[...]}."+UNTRUSTED_DOCUMENT_NOTICE;
 
 export const VERIFY_SYSTEM=
-"Check coverage ledger rows against the insurance document page they cite. For each row, answer supported=true only if the page states that exact benefit, for that event, with that amount and pay kind, and the row's insured person is either named on the page or the page does not restrict the benefit to a named person. Answer supported=false if any number, event, cause or condition in the row is not what the page says. Return JSON {\"verdicts\":[{\"index\",\"supported\",\"why\"}]}.";
+"Check coverage ledger rows against the insurance document page they cite. For each row, answer supported=true only if the page states that exact benefit, for that event, with that amount and pay kind, and the row's insured person is either named on the page or the page does not restrict the benefit to a named person. Answer supported=false if any number, event, cause or condition in the row is not what the page says. Return JSON {\"verdicts\":[{\"index\",\"supported\",\"why\"}]}."+UNTRUSTED_DOCUMENT_NOTICE;
 
 type Page={page_number:number;text:string};
 function pageText(pages:Page[],n:number){return pages.find(p=>p.page_number===n)?.text??"";}
@@ -117,13 +120,23 @@ export type LedgerExtraction={rows:(ExtractedRow&{status:"confirmed"|"proposed";
 
 export async function extractLedgerRows(args:{accountId:string;policyId:string;pages:Page[];
   members:{id:string;names:string[]}[];planName:string|null;insurer:string|null;report?:(stage:string)=>void}):Promise<LedgerExtraction>{
-  const pages=args.pages.filter(p=>p.text.trim().length>40);
+  // V1.1 ($5/month budget): schedule rows are already in the benefit
+  // catalogue (and seeded into the ledger from it without a model); only
+  // pages with text that no plain-code reader accounted for are read here,
+  // and a document whose every rule is in a schedule costs nothing.
+  const pages=args.pages.filter(p=>p.text.trim().length>40&&unparsedBenefitLines(p.text).length>0);
   const out:LedgerExtraction={rows:[],read:pages.length,dropped:0};
   if(!pages.length||!args.members.length)return out;
   const memberNames=args.members.flatMap(m=>m.names.map(name=>({id:m.id,name})));
   for(const [index,batch] of batches(pages).entries()){
     args.report?.("Reading pages "+batch[0].page_number+"–"+batch[batch.length-1].page_number);
-    const extraction=await structuredCompletion({
+    const owner={accountId:args.accountId,policyId:args.policyId};
+    const model=await readingModelIdentity();
+    const readInput={document:{plan:args.planName,insurer:args.insurer,part:index+1},
+      familyMembers:[...new Set(memberNames.map(m=>m.name))],
+      pages:batch.map(p=>({page:p.page_number,text:p.text}))};
+    // Cached by the exact pages and names read: never re-paid on a retry.
+    const extraction=await cachedReading(owner,"ledger_read",{readInput,prompt:LEDGER_SYSTEM},model,()=>structuredCompletion({
       role:"reading",operation:"benefit_extraction",householdId:args.accountId,resourceId:args.policyId,schema:ExtractionSchema,temperature:0,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         const rows=Array.isArray(source.rows)?source.rows:[];
@@ -134,10 +147,8 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
           if(row.conditions&&!Array.isArray(row.conditions))row.conditions=[String(row.conditions)];
           return row;}).filter(row=>RowSchema.safeParse(row).success)};},
       system:LEDGER_SYSTEM,
-      user:JSON.stringify({document:{plan:args.planName,insurer:args.insurer,part:index+1},
-        familyMembers:[...new Set(memberNames.map(m=>m.name))],
-        pages:batch.map(p=>({page:p.page_number,text:p.text}))}),
-    });
+      user:JSON.stringify(readInput),
+    }));
     // Deterministic checks: the quote is on the page and the numbers are on the page.
     const kept:ExtractedRow[]=[];
     for(const row of extraction.rows){
@@ -150,14 +161,15 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
     let supported=new Set<number>();
     try{
       args.report?.("Checking what was read");
-      const verdict=await structuredCompletion({
+      const verifyInput={rows:kept.map((row,i)=>({index:i,insuredName:row.insuredName??null,planName:row.planName,eventType:row.eventType,detail:row.detail??null,cause:row.cause??null,
+            paysKind:row.paysKind,amount:row.amount??null,sumBasis:row.sumBasis??null,offsetDays:row.offsetDays??null,maximumDays:row.maximumDays??null,quote:row.quote,page:row.sourcePage})),
+          pages:[...new Set(kept.map(r=>r.sourcePage))].map(n=>({page:n,text:pageText(pages,n)}))};
+      const verdict=await cachedReading(owner,"ledger_verify",{verifyInput,prompt:VERIFY_SYSTEM},model,()=>structuredCompletion({
         role:"reading",operation:"benefit_extraction",householdId:args.accountId,resourceId:args.policyId,schema:VerifySchema,temperature:0,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
         coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;return {verdicts:Array.isArray(source.verdicts)?source.verdicts:[]};},
         system:VERIFY_SYSTEM,
-        user:JSON.stringify({rows:kept.map((row,i)=>({index:i,insuredName:row.insuredName??null,planName:row.planName,eventType:row.eventType,detail:row.detail??null,cause:row.cause??null,
-            paysKind:row.paysKind,amount:row.amount??null,sumBasis:row.sumBasis??null,offsetDays:row.offsetDays??null,maximumDays:row.maximumDays??null,quote:row.quote,page:row.sourcePage})),
-          pages:[...new Set(kept.map(r=>r.sourcePage))].map(n=>({page:n,text:pageText(pages,n)}))}),
-      });
+        user:JSON.stringify(verifyInput),
+      }));
       supported=new Set(verdict.verdicts.filter(v=>v.supported).map(v=>v.index));
     }catch{/* Unverified rows stay proposals. */}
     kept.forEach((row,i)=>{
@@ -193,6 +205,14 @@ export async function readDocumentIntoLedger(args:{accountId:string;policyId:str
     [args.accountId,args.policyId]).catch(()=>({rows:[] as {currency:string}[]}))).rows.map(r=>r.currency);
   const documentCurrency=documentCurrencies.length===1?documentCurrencies[0]:null;
   let added=0,skippedNoCurrency=0;
+  // Idempotent per document version: this read replaces the previous read's
+  // model rows for this document, so a retried or repeated read never leaves
+  // duplicates or stale figures behind. A row a person has since changed
+  // (updated after it was written) is kept; its seed key then keeps the new
+  // read from writing it twice.
+  await query(
+    `DELETE FROM coverage_rules WHERE account_id=$1 AND policy_id=$2 AND origin='wording' AND seed_key LIKE $3 AND updated_at=created_at`,
+    [args.accountId,args.policyId,"ai:"+args.policyId+":%"]);
   for(const row of extraction.rows){
     // coverage_rules.currency is NOT NULL (DEFAULT 'SGD') in the live schema,
     // and writing a currency the document never printed would put a guessed
@@ -210,6 +230,10 @@ export async function readDocumentIntoLedger(args:{accountId:string;policyId:str
     added+=r.rows.length;
   }
   await query("UPDATE policies SET ledger_read_at=now() WHERE id=$1 AND account_id=$2",[args.policyId,args.accountId]);
+  try{
+    await annotateLedgerEvidence(args.accountId,args.policyId);
+    await markConflicts(args.accountId,args.policyId);
+  }catch(error){console.warn("Ledger evidence could not be written for policy "+args.policyId+":",error instanceof Error?error.message:error);}
   return {added,read:extraction.read,dropped:extraction.dropped+skippedNoCurrency};
 }
 

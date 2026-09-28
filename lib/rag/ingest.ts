@@ -1,5 +1,8 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
-import { USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
+import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears } from "@/lib/documents/evidence";
+import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
+import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { readPolicyFile } from "@/lib/storage";
@@ -34,7 +37,24 @@ export type ProcessPolicyArgs = {
   // or a direct call from a regression suite), which simply gets no
   // heartbeat -- exactly today's (pre-fix) behavior.
   jobHeartbeat?: () => Promise<void>;
+  /** V1.1: which attempt of the durable job this is (attempt_count is
+   * incremented when the job is claimed). A temporary failure with attempts
+   * left is shown as "still reading" and retried automatically; only the
+   * last attempt records a failure the household sees. */
+  attempt?: { number: number; max: number };
 };
+
+/** V1.1 cross-check: a policy number or date the extraction reports is kept
+ * only when it is printed in the document. What is not printed is not
+ * usable; it becomes a document note instead of a fact. */
+export function crossCheckPrintedFacts<T extends { policyNumber: string | null; startDate: string | null; renewalOrExpiryDate: string | null; documentNotes: string[] }>(extraction: T, pages: { text: string }[]): T {
+  const notes = [...extraction.documentNotes];
+  let { policyNumber, startDate, renewalOrExpiryDate } = extraction;
+  if (policyNumber && !policyNumberAppears(pages, policyNumber)) { notes.push("A policy number was reported that is not printed in this document; it was not kept."); policyNumber = null; }
+  if (startDate && !printedDateAppears(pages, startDate)) { notes.push("A start date was reported that is not printed in this document; it was not kept."); startDate = null; }
+  if (renewalOrExpiryDate && !printedDateAppears(pages, renewalOrExpiryDate)) { notes.push("An expiry date was reported that is not printed in this document; it was not kept."); renewalOrExpiryDate = null; }
+  return { ...extraction, policyNumber, startDate, renewalOrExpiryDate, documentNotes: notes };
+}
 
 function normalizeEvidence(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
 
@@ -120,6 +140,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
   if (!gate.cleared) return; // Still quarantined/scan_pending, rejected, deleted, or superseded -- the gate itself already recorded why.
 
   try {
+    await ensureEvidenceSchema();
     await query(
       `UPDATE policies SET processing_status='extracting',processing_stage='opening',processing_progress=3,
        processing_message='Opening PDF…',processing_error=NULL,processing_started_at=now(),processing_completed_at=NULL,updated_at=now()
@@ -138,32 +159,45 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     const fileBytes = new Uint8Array(file);
     const sniffed = sniffFileFormat(fileBytes);
     if (!sniffed.ok) {
-      throw new Error(`This stored file is not in a supported format. ${ACCEPTED_FORMATS_MESSAGE}`);
+      console.warn(`Stored file is not in a supported format for policy ${args.policyId}. ${ACCEPTED_FORMATS_MESSAGE}`);
+      throw new UserActionableProcessingError(UNOPENABLE_DOCUMENT_MESSAGE);
     }
     let pages;
     // The bytes the OCR step reads pages from: the original PDF, the PDF
     // built from the uploaded image, or null for a .docx (pure text; there
     // is nothing to OCR).
     let ocrSourceBytes: Uint8Array | null = null;
+    // Opening the file is local work on the stored bytes: if it fails, the
+    // file itself cannot be opened (damaged, not really that format), which
+    // no retry will change. The household is told what is unavailable; the
+    // parser's own error goes to the diagnostics table only.
+    const opening = async <R>(work: () => Promise<R>): Promise<R> => {
+      try { return await work(); } catch (error) {
+        if (error instanceof UserActionableProcessingError) throw error;
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "DOCUMENT_UNOPENABLE", error }).catch(() => undefined);
+        throw new UserActionableProcessingError(UNOPENABLE_DOCUMENT_MESSAGE);
+      }
+    };
     if (sniffed.format === "docx") {
       await progress(args, "reading_pdf", 12, "Reading the Word document's text…", "extracting");
-      pages = await docxToPages(fileBytes);
+      pages = await opening(() => docxToPages(fileBytes));
     } else {
       let pdfBytes = fileBytes;
       if (sniffed.format !== "pdf") {
         await progress(args, "reading_pdf", 10, "Preparing the image for reading…", "extracting");
-        pdfBytes = new Uint8Array(await imageToPdf(fileBytes, sniffed.format));
+        pdfBytes = new Uint8Array(await opening(() => imageToPdf(fileBytes, sniffed.format)));
       }
       ocrSourceBytes = pdfBytes;
       let lastReportedPage = 0;
-      pages = await extractPdfPages(pdfBytes, args.pdfPassword, async (completed, total) => {
-        // Avoid a database write for every page in very large PDFs.
+      pages = await opening(() => extractPdfPages(pdfBytes, args.pdfPassword, async (completed, total) => {
+        // Avoid a database write for every page in very large PDFs. Progress
+        // is cosmetic: its failure never fails (or misclassifies) the read.
         if (completed === total || completed - lastReportedPage >= Math.max(1, Math.ceil(total / 12))) {
           lastReportedPage = completed;
           const pct = 7 + (completed / Math.max(total, 1)) * 18;
-          await progress(args, "reading_pdf", pct, `Reading page ${completed} of ${total}…`, "extracting");
+          await progress(args, "reading_pdf", pct, `Reading page ${completed} of ${total}…`, "extracting").catch(() => undefined);
         }
-      });
+      }));
     }
 
     const ocrPageNumbers = ocrSourceBytes ? pagesNeedingOcr(pages) : [];
@@ -177,6 +211,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       );
       pages = await completePdfPagesWithOcr({
         accountId: args.accountId,
+        resourceId: args.policyId,
         bytes: ocrSourceBytes as Uint8Array,
         password: args.pdfPassword,
         pages,
@@ -185,8 +220,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     }
 
     if (pages.reduce((sum, p) => sum + p.text.length, 0) < 100) {
-      throw new Error("DearPolicy could not obtain enough readable text from this document, even after checking its text layer and available OCR.");
+      console.warn(`Policy ${args.policyId}: not enough readable text after the text layer and OCR.`);
+      throw new UserActionableProcessingError(UNREADABLE_DOCUMENT_MESSAGE);
     }
+    // Pages the reader could not transcribe even after its own retry: the
+    // rest of the document is used, and the household is told which pages
+    // are missing.
+    const unreadableNote = unreadablePagesNote(pages.filter((p) => p.unreadable).map((p) => p.pageNumber));
 
     const ocrCount = pages.filter((page) => page.extractionMethod === "ocr").length;
     await progress(
@@ -197,13 +237,20 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       "extracting",
     );
     await query("DELETE FROM policy_pages WHERE policy_id=$1 AND account_id=$2", [args.policyId, args.accountId]);
+    const withMethod = evidenceColumnsReady("policy_pages");
     for (const page of pages) {
       await query(
-        `INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)
-         ON CONFLICT(policy_id,page_number) DO UPDATE SET text=EXCLUDED.text`,
-        [args.accountId, args.policyId, page.pageNumber, page.text],
+        withMethod
+          ? `INSERT INTO policy_pages(account_id,policy_id,page_number,text,extraction_method) VALUES($1,$2,$3,$4,$5)
+             ON CONFLICT(policy_id,page_number) DO UPDATE SET text=EXCLUDED.text,extraction_method=EXCLUDED.extraction_method`
+          : `INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)
+             ON CONFLICT(policy_id,page_number) DO UPDATE SET text=EXCLUDED.text`,
+        withMethod
+          ? [args.accountId, args.policyId, page.pageNumber, page.text, page.unreadable ? "unreadable" : page.extractionMethod ?? "native"]
+          : [args.accountId, args.policyId, page.pageNumber, page.text],
       );
     }
+    const evidencePages = pages.map((p) => ({ page_number: p.pageNumber, text: p.text, extraction_method: p.extractionMethod ?? "native" }));
 
     const quickReferenceRole = detectHighConfidenceReferenceRole(pages);
     if (quickReferenceRole) {
@@ -215,7 +262,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const raw = await extractPolicyStructure(pages, { accountId: args.accountId, policyId: args.policyId });
     await progress(args, "verifying", 56, "Verifying extracted facts against the original PDF text…", "extracting");
-    const extraction = verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages);
+    const extraction = crossCheckPrintedFacts(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages);
+    const documentDate = documentDateFrom(pages, [extraction.startDate]);
     const authority = documentAuthority(extraction.documentRole, extraction.personalCoverageConfirmed);
 
     await query(
@@ -230,6 +278,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         pages.length, JSON.stringify(extraction), args.policyId, args.accountId,
       ],
     );
+    if (evidenceColumnsReady("policies")) {
+      await query(`UPDATE policies SET document_date=$3 WHERE id=$1 AND account_id=$2`, [args.policyId, args.accountId, documentDate]);
+    }
 
     // Clear generated data before rebuilding. Preserve explicit manual/upload links.
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
@@ -294,6 +345,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       }
     }
 
+    // Evidence for each coverage row: the passage, and whether the insured
+    // person's printed name, the amount and the currency are all in it.
+    try {
+      const printedNames = new Map(detected.filter((d) => d.matchedMemberId).map((d) => [d.matchedMemberId as string, d.name]));
+      await annotateCoverageEvidence(args.accountId, args.policyId, evidencePages, printedNames);
+    } catch (error) { console.warn("Coverage evidence could not be written for policy " + args.policyId + ":", error instanceof Error ? error.message : error); }
     const matchedIds = [...new Set(detected.map((d) => d.matchedMemberId).filter((id): id is string => Boolean(id)))];
     const unnamedPaymentTarget = matchedIds.length === 1 ? matchedIds[0] : (args.linkUploadMember && isPaymentDocument ? args.familyMemberId : null);
     for (const [paymentIndex, payment] of extraction.paymentRecords.filter((p) => p.amount != null && !p.insuredPersonName).entries()) {
@@ -421,7 +478,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const { catalogueDocument } = await import("@/lib/policies/catalog-builder");
       const stored = await catalogueDocument({
         accountId: args.accountId, policyId: args.policyId, productName: extraction.productName ?? null,
-        pages: pages.map(page => ({ page_number: page.pageNumber, text: page.text })),
+        pages: evidencePages,
         products: extraction.productsMentioned ?? [],
         report: (page, total) => { void progress(args, "benefits", 82 + Math.round((page / Math.max(1, total)) * 14),
           "Reading the benefit rules — page " + page + " of " + total + "…", "indexing"); },
@@ -471,7 +528,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
        processing_message=$3,
        processing_error=NULL,processing_completed_at=now(),updated_at=now()
        WHERE id=$1 AND account_id=$2`,
-      [args.policyId, args.accountId, benefitSummary ? "Ready. " + benefitSummary : "Analysis complete"],
+      // V1.1: the household sees that the document is ready and, when some
+      // pages could not be read, what is unavailable -- not counts of
+      // internal rules or tasks to confirm them (benefitSummary stays in
+      // the progress history above for operators).
+      [args.policyId, args.accountId, unreadableNote ? "Ready. " + unreadableNote : "Ready."],
     );
     // The Coverage Ledger gains this document's rows the moment it is ready,
     // so the next payout question is a lookup rather than a read.
@@ -496,6 +557,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       });
       const { seedLedger } = await import("@/lib/ledger/store");
       await seedLedger(args.accountId);
+      // Rows seeded from the benefit catalogue get the same evidence columns
+      // (and inherit any conflict) as the rows they came from.
+      await annotateLedgerEvidence(args.accountId, args.policyId);
+      await markConflicts(args.accountId, args.policyId);
     } catch (error) {
       console.warn("Coverage ledger update failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
@@ -521,10 +586,28 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // fixed message only; the raw error goes to the service-only diagnostics
     // table (lib/diagnostics/processing-failures.ts).
     await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "PROCESSING_FAILED", error });
+    // V1.1: a temporary failure (provider timeout, rate limit, network) with
+    // job attempts left is retried automatically by the durable queue
+    // (lib/jobs/pipeline-worker.ts classifyPipelineError, bounded by
+    // background_jobs.max_attempts). The household sees that reading
+    // continues -- not a failure, and nothing to click. Every stage replaces
+    // its own output, and model readings are cached by content, so the retry
+    // neither duplicates facts nor pays for work already done.
+    const willRetry = !(error instanceof UserActionableProcessingError)
+      && classifyPipelineError(error) === "transient"
+      && !!args.attempt && args.attempt.number < args.attempt.max;
+    if (willRetry) {
+      await query(
+        `UPDATE policies SET processing_status='queued',processing_stage='retrying',processing_message=$1,processing_error=NULL,updated_at=now() WHERE id=$2 AND account_id=$3`,
+        [DOCUMENT_READING_RETRY_MESSAGE, args.policyId, args.accountId],
+      ).catch(() => undefined);
+      void recordErrorEvent({ name: "rag.policy_ingest.retrying", correlationId: resolveCorrelationId(undefined), householdRef: pseudonymizeId(args.accountId), resourceRef: pseudonymizeId(args.policyId), error });
+      throw error;
+    }
     // A reason the person can act on (missing/wrong PDF password) is stored
     // verbatim so the UI can say what to do; every other failure keeps the
     // fixed message and its raw detail stays in the diagnostics table.
-    const userReason = error instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS.has(error.message) ? error.message : null;
+    const userReason = error instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS.has(error.message) ? error.message : DOCUMENT_READING_FAILED_MESSAGE;
     await query(
       `UPDATE policies SET processing_status='failed',processing_stage='failed',processing_message='Analysis stopped',processing_error=$1,
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,

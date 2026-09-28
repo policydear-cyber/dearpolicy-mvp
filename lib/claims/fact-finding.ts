@@ -450,7 +450,14 @@ function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: 
 const QUANTITY_KEY = /(?:Bill|Cost|Expense|Amount|Nights|Days|Hours|Count)$|^outOfPocket$/;
 /** Keys the application itself asks about (the coverage ledger's gates and
  * quantities). A key only a model ever proposed is left to the interpreter. */
-const APP_ASKED_KEYS = new Set<string>([...Object.values(GATES).map((g) => g.factKey), ...Object.values(QUANTITY_FACT).map((q) => q!.factKey)]);
+// Built on first use, not at module load: lib/chat/facts -> this module ->
+// lib/ledger/events -> lib/chat/facts is an import cycle, and reading GATES
+// while the cycle is still initialising threw "Cannot access 'GATES' before
+// initialization" for any entry point that loads lib/chat/facts first.
+let appAskedKeys: Set<string> | null = null;
+function APP_ASKED_KEYS_GET(): Set<string> {
+  return appAskedKeys ??= new Set<string>([...Object.values(GATES).map((g) => g.factKey), ...Object.values(QUANTITY_FACT).map((q) => q!.factKey)]);
+}
 function undeclaredAnswer(pending: { factKey: string; type?: string; options?: string[] }, raw: string): { value: string | number | boolean | null; uncertain: boolean } | null {
   const said = bare(raw);
   if (!said) return null;
@@ -467,6 +474,28 @@ function undeclaredAnswer(pending: { factKey: string; type?: string; options?: s
   }
   const option = (pending.options ?? []).find((o) => o.toLowerCase() === said.toLowerCase());
   return option ? { value: option, uncertain: false } : null;
+}
+/** A fact given for the FIRST time (or replacing "not sure") is not a change:
+ * answers that depend on it and were already given stay current. Only a
+ * known value replaced by a different one makes its dependents stale. Without
+ * this, answering "On what date did they pass away?" re-asked the cause of
+ * death and the place the family had already given, and a "Not sure" to
+ * those overwrote what they had said. */
+export function refreshDependentsOnFirstAnswer(facts: SubjectFacts, key: string, previous: { value: unknown; state: string } | undefined, now: Date) {
+  const hadValue = previous?.state === "known" && previous.value != null && !(typeof previous.value === "string" && UNCERTAIN_ANSWER.test(previous.value.trim()));
+  if (hadValue) return;
+  const recordedAt = now.toISOString();
+  // Transitively: the cause depends on the date, the place on the cause.
+  const queue = [key], seen = new Set<string>([key]);
+  while (queue.length) {
+    const current = queue.shift()!;
+    for (const spec of Object.values(FACT_FINDING_SPECS)) for (const f of spec.facts) {
+      if (!(f.dependsOn ?? []).includes(current) || seen.has(f.key)) continue;
+      seen.add(f.key);
+      const dependent = facts[f.key];
+      if (dependent?.state === "known" && dependent.recordedAt < recordedAt) { facts[f.key] = { ...dependent, recordedAt }; queue.push(f.key); }
+    }
+  }
 }
 export function recordDirectFactAnswer(args: {
   message: string;
@@ -491,7 +520,7 @@ export function recordDirectFactAnswer(args: {
     match = questionIndex().get(asked);
     raw = message.slice(colon + 1).trim();
   }
-  if (!match && args.pending && !questionForKey(args.pending.factKey) && (APP_ASKED_KEYS.has(args.pending.factKey) || QUANTITY_KEY.test(args.pending.factKey))
+  if (!match && args.pending && !questionForKey(args.pending.factKey) && (APP_ASKED_KEYS_GET().has(args.pending.factKey) || QUANTITY_KEY.test(args.pending.factKey))
     && message.length <= 160 && !message.includes("?")) {
     // Bare ("Yes") or in the question card's own form ("Was surgery
     // performed: Yes"): the answer is what follows the colon.
@@ -499,9 +528,11 @@ export function recordDirectFactAnswer(args: {
     const target = args.pending.subjectId && args.subjectIds.includes(args.pending.subjectId) ? args.pending.subjectId
       : args.subjectIds.length === 1 ? args.subjectIds[0] : undefined;
     if (!answer || !target) return false;
+    const before = args.subjects[target]?.[args.pending.factKey];
     (args.subjects[target] ??= {})[args.pending.factKey] = answer.uncertain
       ? { value: null, state: "pending", quote: args.message, recordedAt: args.now.toISOString(), source: "user" }
       : { value: answer.value, state: "known", quote: args.message, recordedAt: args.now.toISOString(), source: "user" };
+    refreshDependentsOnFirstAnswer(args.subjects[target], args.pending.factKey, before, args.now);
     return true;
   }
   if (!match && args.pending && message.length <= 60 && !message.includes("?")) {
@@ -521,7 +552,9 @@ export function recordDirectFactAnswer(args: {
   const value = answerValue(match, raw, args.now, strict);
   if (value === null || value === "") return false;
   const facts = (args.subjects[target] ??= {});
+  const before = facts[match.factKey];
   facts[match.factKey] = { value, state: "known", quote: args.message, recordedAt: args.now.toISOString(), source: "user" };
+  refreshDependentsOnFirstAnswer(facts, match.factKey, before, args.now);
   // The kind of treatment settles whether there was an admission, so the
   // hospital-admission question is never asked straight after it.
   if (match.factKey === "treatmentType" && typeof value === "string" && value !== "not sure" && facts.hospitalised?.state !== "known")

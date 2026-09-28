@@ -79,4 +79,12 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "claims:injury-compatibility-test",
   "claims:injury-sequencing-test",
   "claims:injury-adversarial-test",
+  "v1:ingestion-test",
+  "v1:retrieval-test",
+  "v1:chat-contract-test",
+  "v1:chat-fix-test",
+  "v11:ingestion-test",
+  "v11:answer-test",
+  "v11:claims-test",
+  "v11:customer-screens-test",
 ];

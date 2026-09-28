@@ -128,6 +128,30 @@ jobs:
       - name: Injury chat -- independent adversarial cases A-J
         run: npm run claims:injury-adversarial-test
 
+      - name: V1 ingestion (pure part; DB part needs the local synthetic stack)
+        run: npm run v1:ingestion-test
+
+      - name: V1 retrieval & citation (superseded, isolation, pages, currency)
+        run: npm run v1:retrieval-test
+
+      - name: V1 chat contract (10-turn journey against the chat API)
+        run: npm run v1:chat-contract-test
+
+      - name: V1 chat fixes (follow-ups, coverage answers, loops, leaks)
+        run: npm run v1:chat-fix-test
+
+      - name: V1.1 evidence, conflicts, retry, cache, unreadable, injection (pure part)
+        run: npm run v11:ingestion-test
+
+      - name: V1.1 source-verified answers, quota failure, usage attribution
+        run: npm run v11:answer-test
+
+      - name: V1.1 claim interviews through the final answer; one claim status
+        run: npm run v11:claims-test
+
+      - name: V1.1 no system work on household screens
+        run: npm run v11:customer-screens-test
+
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
 

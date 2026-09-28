@@ -173,13 +173,15 @@ async function partB() {
     await t("D5: a finished document ends at stage 'complete', 100%, with its benefit summary", async () => {
       const [p] = await rows(`SELECT processing_status,processing_stage,processing_progress,processing_message FROM policies WHERE id=$1`, [accident]);
       assert.equal(p.processing_status, "ready"); assert.equal(p.processing_stage, "complete"); assert.equal(p.processing_progress, 100);
-      assert.match(p.processing_message, /^Ready\. 4 benefit rules read from this document/);
+      // V1.1 Task 4: the household no longer sees internal rule counts or
+      // "to confirm" tasks; a fully readable document just says it is ready.
+      assert.equal(p.processing_message, "Ready.");
     });
     await t("D4: ingestion model calls carry household and document provenance", async () => {
       const r = await rows(`SELECT operation,household_ref,resource_ref FROM model_executions WHERE resource_ref=$1`, [pseudonymizeId(accident)]);
       const ops = new Set(r.map((x) => x.operation));
       assert.ok(ops.has("policy_extraction"), "policy_extraction recorded against the document");
-      assert.ok(ops.has("catalog_building") || ops.has("condition_catalog_extraction"), "catalogue calls recorded against the document");
+      // V1.1 Task 5: a fully tabular document makes no catalogue or condition calls at all; every call it does make is recorded against it.
       assert.ok(r.every((x) => x.household_ref === pseudonymizeId(a)));
     });
     const travel = await ingest("travel-pdf", a, marcus, true);

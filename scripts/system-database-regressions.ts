@@ -323,10 +323,25 @@ async function main(){
   let cases=0;const test=async(name:string,fn:()=>Promise<void>)=>{try{await fn();cases++;console.log("PASS "+name);}catch(error){throw new Error(name,{cause:error});}};
   const blank:ChatAnswer={mode:"answer",summary:"Saved answer",details:[],claimItems:[],nextSteps:[],confidence:null,citations:[],disclaimer:"",
     claimSessionId:null,questions:[],knownFacts:[],missingFacts:[]};
-  const send=async(message:string,member:string|null=people[0].id,conversationId?:string,revision?:number,asynchronous=false)=>{
+  const sendOnce=async(message:string,member:string|null=people[0].id,conversationId?:string,revision?:number,asynchronous=false)=>{
     const response=await POST(new NextRequest("http://localhost/api/chat",{method:"POST",headers:{"content-type":"application/json"},
       body:JSON.stringify({familyMemberId:member,scope:member?"member":"family",question:message,conversationId,conversationRevision:revision,asynchronous,timeZone:"Asia/Singapore"})}));
     return {response,data:await response.json()};
+  };
+  // V1.1 Task 3: a reported death, diagnosis, disability, hospital stay or
+  // trip problem is now fact-found one question at a time (the category's
+  // deterministic plan, lib/claims/fact-finding.ts) before any assessment.
+  // The checks in this suite are about the assessment, so its interview is
+  // answered "Not sure" first -- the injury interview keeps its own tests.
+  const send=async(message:string,member:string|null=people[0].id,conversationId?:string,revision?:number,asynchronous=false)=>{
+    let result=await sendOnce(message,member,conversationId,revision,asynchronous);
+    for(let i=0;i<8&&!asynchronous&&result.response.status===200;i++){
+      const answer=result.data.answer as ChatAnswer|undefined;
+      const q=answer?.questions?.[0];
+      if(!answer||answer.mode!=="fact_finding"||!q||!/^ff-(?!accidental_injury)/.test(q.id))break;
+      result=await sendOnce("Not sure",answer.resolvedFamilyMemberId??member,answer.conversationId??undefined,answer.conversationRevision??undefined);
+    }
+    return result;
   };
   // A reported injury is fact-found one question per turn before any benefit
   // is shown. Answers each question the way the chat's own question card
@@ -465,7 +480,9 @@ async function main(){
       assert.equal(flight!.amountText,null,"No flight-delay estimate before claim evidence review");
       assert.equal(flight!.status,"likely_applicable");
       assert.equal(flight!.preliminaryStatus,"policy_condition_unresolved");
-      assert.match(flight!.reason,/verified against the page by a second read/i);
+      // V1.1 Task 4: the household sees where the rule is, not how DearPolicy
+      // read it ("verified by a second read" is the system's own work).
+      assert.match(flight!.reason,/page \d+/i);assert.doesNotMatch(flight!.reason,/second read/i);
       assert.equal(answer.potentialPayoutTotals?.length??0,0,"No payout total before claim evidence review");
     });
     await test("A duration below a travel threshold rules out only that benefit",async()=>{
@@ -665,7 +682,8 @@ async function main(){
       assert.ok((answer.reviewCoverage?.pagesRead??0)>0&&(answer.reviewCoverage?.pagesRead??0)<13,"Only the retrieved pages may count as read");
       assert.equal(answer.policyReview?.[0].coverage?.completeness,"partial_retrieval");
       assert.equal(answer.policyReview?.[0].coverage?.passagesTotal,13);
-      assert.match(answer.reviewCoverage!.statement,/^Partial review: \d+ of 13 processed pages/);
+      // V1.1: page counts are internal reading progress, not household text (eval internal_text); the counts are asserted on the numeric fields above.
+      assert.match(answer.reviewCoverage!.statement,/^Partial review: not every part/);assert.doesNotMatch(answer.reviewCoverage!.statement,/\d+ of \d+/);
       assert.ok(!answer.details.includes(answer.reviewCoverage!.statement),"The banner owns the statement; repeating it in details duplicated it on screen");
       const normalised=answer.details.map(d=>d.toLowerCase().replace(/[^a-z0-9]+/g," ").trim());
       assert.equal(new Set(normalised).size,normalised.length,"No detail may appear twice");
@@ -873,7 +891,10 @@ async function main(){
       const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
       const answer=data.answer as ChatAnswer;
       assert.equal(readingCalls-readsBefore,0,"Stored rules mean the documents are never re-read");
-      assert.equal(explanationCalls-narrationsBefore,1,"It should still speak like an assistant, not print a table");
+      // V1.1 Task 5: the final claim answer is composed by code from the
+      // stored rules and the interview; no paid model call restates it.
+      assert.equal(explanationCalls-narrationsBefore,0,"No model call only to restate a deterministic claim answer");
+      assert.match(answer.summary,/possible benefit/i,"It still speaks to the person, in words, not a table");
       assert.ok(Date.now()-started<4000,"A catalogued answer must be effectively instant");
       assert.equal(answer.potentialPayoutTotals?.length??0,0);
       assert.equal(answer.claimItems.length,1,"Only benefits the event can trigger: "+JSON.stringify(answer.claimItems.map(i=>i.title)));
@@ -929,7 +950,8 @@ async function main(){
       const seen:number[]=[];
       const stored=await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",
         pages,report:(page)=>seen.push(page)});
-      assert.equal(catalogCalls-before,pages.length,"Every page is read exactly once");
+      // V1.1 Task 5 ($5/month budget): only a page with something unread on it is sent to the model; the two administrative pages cost nothing.
+      assert.equal(catalogCalls-before,1,"Only the page that states a rule is read by the model");
       assert.deepEqual(seen,pages.map((_,index)=>index+1),"Progress is reported per page so the user can watch it");
       assert.equal(stored,1,"Only the page that actually states a rule yields a benefit");
       const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
@@ -1321,16 +1343,19 @@ async function main(){
       process.env.READING_MODEL_PROVIDER="groq";process.env.GROQ_API_KEY="test-key";
       try{
         const stored=await catalogueDocument({accountId:account,policyId:fixture.referenceId,productName:"Review Fixture Critical Illness",pages});
-        assert.ok(groqCalls>=pages.length+1,"Every page went to the hosted reader, and the throttled page was retried");
+        // V1.1 Task 5 ($5/month budget): only the page with something unread is sent (the administrative pages cost nothing); it was throttled once and retried.
+        assert.ok(groqCalls>=2,"The page with a rule went to the hosted reader, and the throttled request was retried");
             assert.equal(authHeader,"Bearer test-key");
         assert.equal(stored,1,"The invented quote was refused; only the real rule was stored");
         const catalog=await loadBenefitCatalog(account,[fixture.referenceId]);
         assert.deepEqual(catalog.map(b=>b.benefitName),["Major Critical Illness"]);
         // Rerouting reading does not move the other jobs with it.
-        const readsBefore=explanationCalls;
+        // (V1.1: a claim answer is no longer narrated by a model, so the chat
+        // model's own call here is the interpretation of the message.)
+        const readsBefore=interpretationCalls;
         const {data}=await send("I was diagnosed with stage 2 breast cancer. What can I claim?",people[0].id);
         assert.equal((data.answer as ChatAnswer).claimItems[0]?.amountText,null);
-        assert.equal(explanationCalls-readsBefore,1,"Chat narration stays on the model its own setting names");
+        assert.ok(interpretationCalls-readsBefore>=1,"Chat interpretation stays on the model its own setting names");
       }finally{
         delete process.env.READING_MODEL_PROVIDER;delete process.env.GROQ_API_KEY;
         if(savedPreset)process.env.MODEL_PRESET=savedPreset;useHarnessModel();globalThis.fetch=inner;
@@ -1422,7 +1447,9 @@ async function main(){
       assert.equal(answer.questions.length,0,"A death is not answered with a question about hospital admission: "+JSON.stringify(answer.questions));
       assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText===null),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
       assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
-      assert.ok(answer.details.some(d=>/Coverage page shows where each of these came from/.test(d)),"…because the sentence was read into the ledger (answered from the Coverage Ledger path): "+answer.details.join(" / "));
+      // (V1.1 Task 4 removed the "Coverage page shows…" pointer from the
+      // household's answer; the ledger path is identified by its citations.)
+      assert.ok(answer.citations.some(c=>c.chunkId.startsWith("ledger:")),"…because the sentence was read into the ledger (answered from the Coverage Ledger path): "+answer.citations.map(c=>c.chunkId).join(" / "));
     });
     // A certificate's schedule lines (no benefit table read yet) name a plan
     // as potentially responding to a death, but only assume the standard
@@ -1522,7 +1549,7 @@ async function main(){
       const answer=data.answer as ChatAnswer;
       assert.ok(answer.claimSessionId,"The claim is on record");
       assert.ok(answer.nextSteps.some(step=>/claim pack/i.test(step)),"The last thing said is what to do next: "+answer.nextSteps.join(" / "));
-      assert.ok(answer.nextSteps.some(step=>/Gather:/.test(step)&&/medical report/i.test(step)),"…and what to gather follows the event: "+answer.nextSteps.join(" / "));
+      assert.ok(answer.nextSteps.some(step=>/Send these documents for the claim:|Gather:/.test(step)&&/medical report/i.test(step)),"…and what to gather follows the event: "+answer.nextSteps.join(" / "));
       const pack=await getClaimPack(new NextRequest("http://localhost/api/claims/"+answer.claimSessionId+"/pack"),{params:Promise.resolve({id:answer.claimSessionId!})});
       assert.equal(pack.status,200,"The pack can be printed straight from a chat answer");
       const { extractPdfPages }=await import("@/lib/documents/pdf");
@@ -1575,7 +1602,8 @@ async function main(){
       const after=await usageThisMonth(account);
       assert.ok(after.calls>before.calls,"The turn's model calls were counted");
       assert.ok(after.byRole.some(r=>r.role==="judgement"),"Interpretation and relevance are judgement work");
-      assert.ok(after.byRole.some(r=>r.role==="narration"),"Wording the answer is narration work");
+      // V1.1 Task 5: the claim answer is worded by code; nothing is paid for narration.
+      assert.equal(after.byRole.find(r=>r.role==="narration")?.calls??0,before.byRole.find(r=>r.role==="narration")?.calls??0,"No narration call for a deterministic claim answer");
       // Every call is billable now, so a turn that costs nothing would mean the
       // ledger missed it -- which is the failure this test exists to catch.
       assert.ok(after.costUsd>before.costUsd,"A turn's hosted calls are priced, not just counted: "+before.costUsd+" -> "+after.costUsd);
@@ -1846,7 +1874,10 @@ async function main(){
       assert.equal(answer.claimItems[0].amountText,null);
       assert.equal(answer.claimItems[0].status,"needs_document");
       assert.equal(answer.claimItems[0].estimateBasis,undefined,"Pre-review cards do not expose an estimate basis");
-      assert.ok(answer.claimItems[0].conditions.some(c=>/heading above the row/.test(c)),"The condition names the actual cause: a heading-read rate, not the row itself");
+      // V1.1 Task 4: an unconfirmed (heading-read) rate stays unpriced and says it
+      // still needs checking -- never a "confirm the heading" task for the household.
+      assert.ok(answer.claimItems[0].conditions.some(c=>/still has to check this benefit’s wording/.test(c)),"The condition says the rate is not yet checked: "+answer.claimItems[0].conditions.join(" / "));
+      assert.equal(answer.claimItems[0].conditions.some(c=>/heading|Benefits page/i.test(c)),false,"No heading-confirmation task for the household");
       assert.equal(/S\$70,000/.test(JSON.stringify(answer)),false,"S$70,000 for a forearm never appears anywhere");
     });
     await seedPlans(900);

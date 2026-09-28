@@ -76,6 +76,8 @@ export const processPolicyProcessingJob: JobProcessor = async (job) => {
     jobHeartbeat: async () => {
       await heartbeatJob(pool, { jobId: job.id, workerId });
     },
+    // attempt_count was incremented when this attempt claimed the job.
+    attempt: { number: job.attempt_count, max: job.max_attempts },
   };
   await processPolicy(args);
 };

@@ -1,0 +1,1004 @@
+{
+  "gate": {
+    "pass": true,
+    "count": 0
+  },
+  "documents": [
+    {
+      "key": "hosp2022",
+      "file": "SYNTHETIC-DPTEST-v11f5api-HospitalShield-2022.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 2851,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-HospitalShield",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-HOSPITAL-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Daily room and board",
+          "formula_kind": "daily",
+          "value": 500,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Surgical fees",
+          "formula_kind": "expense_cap",
+          "value": 15000,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Hospitalisation",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "hosp2025",
+      "file": "SYNTHETIC-DPTEST-v11f5api-HospitalShield-2025.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 193,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-HospitalShield",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-HOSPITAL-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 4,
+      "benefits": [
+        {
+          "benefit_name": "Daily room and board",
+          "formula_kind": "daily",
+          "value": 800,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Hospital cash",
+          "formula_kind": "daily",
+          "value": 100,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Intensive care unit",
+          "formula_kind": "daily",
+          "value": 1500,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Surgical fees",
+          "formula_kind": "expense_cap",
+          "value": 25000,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Hospitalisation",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "accident",
+      "file": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 117,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-ACCIDENT-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 4,
+      "benefits": [
+        {
+          "benefit_name": "Accident medical reimbursement",
+          "formula_kind": "expense_cap",
+          "value": 2000,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Accidental death",
+          "formula_kind": "sum_insured",
+          "value": 1,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Fracture of arm",
+          "formula_kind": "fixed",
+          "value": 1000,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Fracture of leg",
+          "formula_kind": "fixed",
+          "value": 1500,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Personal Accident",
+          "amount": 100000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "accidentEndorsement",
+      "file": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard-Endorsement-1.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 112,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "endorsement",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-ACCIDENT-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 2,
+      "benefits": [
+        {
+          "benefit_name": "Fracture of arm",
+          "formula_kind": "fixed",
+          "value": 1200,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Other",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "disability",
+      "file": "SYNTHETIC-DPTEST-v11f5api-DisabilityCare.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 136,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-DisabilityCare",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-DISABILITY-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Loss of arm at or above the elbow",
+          "formula_kind": "sum_insured",
+          "value": 1,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Loss of hand at or above the wrist",
+          "formula_kind": "sum_insured",
+          "value": 0.75,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Permanent total disablement",
+          "formula_kind": "sum_insured",
+          "value": 1,
+          "currency": null,
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Permanent Disability",
+          "amount": 200000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "groupLife",
+      "file": "SYNTHETIC-DPTEST-v11f5api-GroupTermLife.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 105,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "certificate",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-GroupTermLife",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-GROUPLIFE-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Additional accidental death benefit",
+          "formula_kind": "fixed",
+          "value": 50000,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Death (any cause)",
+          "formula_kind": "fixed",
+          "value": 150000,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Death",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "criticalIllness",
+      "file": "SYNTHETIC-DPTEST-v11f5api-CritiCare.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 108,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-CritiCare",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-CRITICALILLNESS-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 4,
+      "benefits": [
+        {
+          "benefit_name": "Critical illness benefit",
+          "formula_kind": "sum_insured",
+          "value": 1,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Early stage critical illness",
+          "formula_kind": "sum_insured",
+          "value": 0.25,
+          "currency": null,
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Critical Illness",
+          "amount": 120000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "travelExpired",
+      "file": "SYNTHETIC-DPTEST-v11f5api-JetSure.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 122,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-JetSure",
+      "policy_number": null,
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Overseas medical expenses",
+          "formula_kind": "fixed",
+          "value": 100000,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Trip cancellation",
+          "formula_kind": "fixed",
+          "value": 3000,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Travel",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "travel",
+      "file": "SYNTHETIC-DPTEST-v11f5api-WanderSafe.pdf",
+      "household": "A",
+      "person": "marcus",
+      "ms": 117,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-WanderSafe",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-TRAVEL-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Marcus",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Baggage delay",
+          "formula_kind": "none",
+          "value": null,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Emergency medical evacuation",
+          "formula_kind": "fixed",
+          "value": 500000,
+          "currency": "USD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Overseas medical expenses",
+          "formula_kind": "fixed",
+          "value": 250000,
+          "currency": "USD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Trip cancellation",
+          "formula_kind": "fixed",
+          "value": 5000,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Travel",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "accidentMarcus",
+      "file": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard-M.pdf",
+      "household": "A",
+      "person": "marcus",
+      "ms": 125,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard-M",
+      "policy_number": null,
+      "superseded": false,
+      "links": [
+        {
+          "who": "Marcus",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 4,
+      "benefits": [
+        {
+          "benefit_name": "Accident medical reimbursement",
+          "formula_kind": "expense_cap",
+          "value": 2000,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Accidental death",
+          "formula_kind": "sum_insured",
+          "value": 1,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Fracture of arm",
+          "formula_kind": "fixed",
+          "value": 500,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Fracture of leg",
+          "formula_kind": "fixed",
+          "value": 750,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Personal Accident",
+          "amount": 50000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "endowment",
+      "file": "SYNTHETIC-DPTEST-v11f5api-FutureSaver.pdf",
+      "household": "A",
+      "person": "marcus",
+      "ms": 106,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-FutureSaver",
+      "policy_number": "SYNTHETIC-DPTEST-v11f5api-ENDOWMENT-001",
+      "superseded": false,
+      "links": [
+        {
+          "who": "Marcus",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Death benefit",
+          "formula_kind": "sum_insured",
+          "value": 1,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Guaranteed maturity benefit",
+          "formula_kind": "fixed",
+          "value": 50000,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Savings",
+          "amount": 50000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "hospitalCashNoCurrency",
+      "file": "SYNTHETIC-DPTEST-v11f5api-DailyCash.pdf",
+      "household": "A",
+      "person": "marcus",
+      "ms": 86,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-DailyCash",
+      "policy_number": null,
+      "superseded": false,
+      "links": [
+        {
+          "who": "Marcus",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Hospital cash",
+          "formula_kind": "daily",
+          "value": 150,
+          "currency": null,
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Intensive care cash",
+          "formula_kind": "daily",
+          "value": 300,
+          "currency": null,
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Hospital Cash",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "termContradictory",
+      "file": "SYNTHETIC-DPTEST-v11f5api-TermGuard.pdf",
+      "household": "A",
+      "person": "marcus",
+      "ms": 103,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-TermGuard",
+      "policy_number": null,
+      "superseded": false,
+      "links": [
+        {
+          "who": "Marcus",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Death benefit",
+          "formula_kind": "fixed",
+          "value": 350000,
+          "currency": "USD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Death",
+          "amount": 300000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "maliciousRider",
+      "file": "SYNTHETIC-DPTEST-v11f5api-HealthPlusRider.pdf",
+      "household": "A",
+      "person": "marcus",
+      "ms": 107,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-HealthPlusRider",
+      "policy_number": null,
+      "superseded": false,
+      "links": [
+        {
+          "who": "Marcus",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Outpatient GP visit",
+          "formula_kind": "expense_cap",
+          "value": 30,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Outpatient",
+          "amount": null,
+          "currency": null,
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "unreadable",
+      "file": "SYNTHETIC-DPTEST-v11f5api-DentalCare-scan.pdf",
+      "household": "A",
+      "person": "charmaine",
+      "ms": 10,
+      "threw": "This file could not be opened as a document, so none of its contents are available. It may be damaged; the original file would let DearPolicy read it.",
+      "processing_status": "failed",
+      "processing_stage": "failed",
+      "processing_progress": 7,
+      "processing_message": "Analysis stopped",
+      "processing_error": "This file could not be opened as a document, so none of its contents are available. It may be damaged; the original file would let DearPolicy read it.",
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": null,
+      "personal_coverage_confirmed": false,
+      "product_name": null,
+      "policy_number": null,
+      "superseded": false,
+      "links": [],
+      "pages": 0,
+      "benefits": [],
+      "coverages": [],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "scannedPage",
+      "file": "SYNTHETIC-DPTEST-v11f5api-ScannedWording.png",
+      "household": "A",
+      "person": null,
+      "ms": 712,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "policy_wording",
+      "personal_coverage_confirmed": false,
+      "product_name": null,
+      "policy_number": null,
+      "superseded": false,
+      "links": [],
+      "pages": 1,
+      "benefits": [],
+      "coverages": [],
+      "terminalOk": true,
+      "linkOk": true
+    },
+    {
+      "key": "otherHouseholdAccident",
+      "file": "SYNTHETIC-DPTEST-v11f5api-OtherHouseholdPA.pdf",
+      "household": "B",
+      "person": "charmaineB",
+      "ms": 108,
+      "threw": null,
+      "processing_status": "ready",
+      "processing_stage": "complete",
+      "processing_progress": 100,
+      "processing_message": "Ready.",
+      "processing_error": null,
+      "needs_review": false,
+      "review_reason": null,
+      "document_role": "personal_schedule",
+      "personal_coverage_confirmed": true,
+      "product_name": "SYNTHETIC-DPTEST-v11f5api-OtherHouseholdPA",
+      "policy_number": null,
+      "superseded": false,
+      "links": [
+        {
+          "who": "Charmaine",
+          "source": "ai_name_match"
+        }
+      ],
+      "pages": 3,
+      "benefits": [
+        {
+          "benefit_name": "Accident medical reimbursement",
+          "formula_kind": "expense_cap",
+          "value": 9000,
+          "currency": "SGD",
+          "source_page": 2
+        },
+        {
+          "benefit_name": "Fracture of arm",
+          "formula_kind": "fixed",
+          "value": 3500,
+          "currency": "SGD",
+          "source_page": 2
+        }
+      ],
+      "coverages": [
+        {
+          "category": "Personal Accident",
+          "amount": 80000,
+          "currency": "SGD",
+          "source_page": 1
+        }
+      ],
+      "terminalOk": true,
+      "linkOk": true
+    }
+  ],
+  "userFacing": [
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard-Endorsement-1.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-HealthPlusRider.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-TermGuard.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-DailyCash.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-FutureSaver.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard-M.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-WanderSafe.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-JetSure.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-CritiCare.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-GroupTermLife.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-DisabilityCare.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-AccidentGuard.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-HospitalShield-2025.pdf",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-ScannedWording.png",
+      "status": "ready",
+      "message": "Ready.",
+      "error": null,
+      "review": null
+    },
+    {
+      "file": "SYNTHETIC-DPTEST-v11f5api-DentalCare-scan.pdf",
+      "status": "failed",
+      "message": "Analysis stopped",
+      "error": "This file could not be opened as a document, so none of its contents are available. It may be damaged; the original file would let DearPolicy read it.",
+      "review": null
+    }
+  ]
+}

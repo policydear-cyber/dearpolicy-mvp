@@ -5,19 +5,24 @@ import { useSearchParams } from "next/navigation";
 import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
+import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
+
+/* V1.1: an answer shows a direct answer, its sources (collapsed), any real
+ * uncertainty, and one next question or action. Internal working -- what the
+ * system classified the event as, per-contract page/passage counts, ruled-out
+ * benefits, reviewer routing, raw errors -- is not shown to households. */
+const ANSWER_FAILED="DearPolicy could not finish this answer. Your message is saved.";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 const CHAT_MAX_WAIT_MS=6*60_000;
 type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
-  information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"Reviewer assessment needed",
+  information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"A DearPolicy reviewer will check this",
   policy_condition_unresolved:"Policy condition unresolved",ready_for_evidence_gated_estimate:"Ready for an evidence-based estimate",
 };
 const preliminaryStatusCopy:Record<NonNullable<ClaimItem["preliminaryStatus"]>,string>={information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"Reviewer assessment needed",policy_condition_unresolved:"Policy condition unresolved",not_applicable:"Not applicable"};
 const statusCopy:Record<ClaimItem["status"],string>={likely_applicable:"Likely applicable",potentially_applicable:"Potentially applicable",not_applicable:"Not applicable",needs_document:"Needs checking"};
-const reviewCopy:Record<string,string>={searched:"Retrieved sections checked",missing_wording:"Matching wording needed",not_ready:"Document processing",no_matching_section:"No match in retrieved sections",needs_review:"Further review needed"};
-const completenessCopy:Record<string,string>={full_text_reviewed:"All processed pages read",partial_retrieval:"Part of the document read",no_wording:"No matching wording uploaded",not_processed:"Still processing"};
 /** Inline answer control for a promoted fact-finding question that has no
  * tappable options (a date or free text). Submits the question restated with
  * the answer so the conversation model records the right fact without the
@@ -28,10 +33,6 @@ function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:bool
     <input type={kind==="date"?"date":"text"} value={value} disabled={disabled} onChange={event=>setValue(event.target.value)} placeholder={kind==="date"?undefined:"Type your answer"} aria-label="Your answer" />
     <button type="submit" disabled={disabled||!value.trim()}>Answer</button>
   </form>;
-}
-function coverageText(coverage?:{pagesRead:number;pagesTotal:number;passagesRead:number;passagesTotal:number;completeness:string}){
-  if(!coverage)return "Not measured";
-  return (completenessCopy[coverage.completeness]??coverage.completeness)+" · "+coverage.pagesRead+"/"+coverage.pagesTotal+" pages · "+coverage.passagesRead+"/"+coverage.passagesTotal+" passages";
 }
 
 function ChatContent(){
@@ -103,7 +104,7 @@ function ChatContent(){
       if(["failed","cancelled"].includes(data.job.status))throw new Error(data.job.error??"Analysis stopped");
       if(version===requestVersion.current){
         const p=data.job.progress;
-        setProgress(p?.stage??"Waiting to read policy evidence");
+        setProgress(customerMessage(p?.stage,"Checking your policies…"));
         setProgressDetail(p?.total?{completed:p.completed,total:p.total}:null);
       }
       await new Promise<void>((resolve,reject)=>{
@@ -137,12 +138,12 @@ function ChatContent(){
           accept(await waitForJob(data.pendingJob.id,abort.signal,version),version);
         }catch(e){
           if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
-            const message=e instanceof Error?e.message:"Analysis stopped";
+            const message=customerError(e,ANSWER_FAILED);
             setMessages(previous=>previous.map(m=>m===pendingMessage?{...m,error:message}:m));
           }
         }
       }
-    }catch(e){if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError"))setError(e instanceof Error?e.message:"Could not open chat");}
+    }catch(e){if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError"))setError(customerError(e,"Could not open chat"));}
     finally{if(version===requestVersion.current){setBusy(false);controller.current=null;}}
   }
   async function olderMessages(){
@@ -154,7 +155,7 @@ function ChatContent(){
       if(version!==requestVersion.current)return;
       setMessages(previous=>[...data.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined})),...previous]);
       setMessageCursor(data.nextCursor??null);
-    }catch(e){setError(e instanceof Error?e.message:"Could not load messages");}
+    }catch(e){setError(customerError(e,"Could not load messages"));}
   }
   async function sendText(text:string,personChoiceId?:string){
     text=text.trim();if(!text||busy)return;
@@ -178,7 +179,7 @@ function ChatContent(){
       // never got a reply: the person can see exactly which of their
       // messages didn't go through, and why, right where they sent it.
       if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
-        const message=e instanceof Error?e.message:"Chat failed";
+        const message=customerError(e,ANSWER_FAILED);
         setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message}:m));
       }
     }
@@ -195,7 +196,7 @@ function ChatContent(){
       const response=await fetch("/api/chat/history",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({conversationId:id})});
       const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not delete chat");
       await refreshHistory();
-    }catch(e){setHistoryError(e instanceof Error?e.message:"Could not delete chat");}
+    }catch(e){setHistoryError(customerError(e,"Could not delete chat"));}
   }
   async function clearHistory(){
     if(!confirmClearHistory){setConfirmClearHistory(true);return;}
@@ -206,14 +207,14 @@ function ChatContent(){
         body:JSON.stringify({scope:"all"})});
       const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not clear history");
       await refreshHistory();
-    }catch(e){setHistoryError(e instanceof Error?e.message:"Could not clear history");}
+    }catch(e){setHistoryError(customerError(e,"Could not clear history"));}
   }
   useEffect(()=>{
     let live=true;
     fetch("/api/family").then(r=>r.json()).then(data=>{
       if(!live)return;const members=data.family??[];setFamily(members);
       const saved=params.get("conversation")??params.get("claim");if(saved)void restore(saved);
-    }).catch(e=>{if(live)setError(e.message);});
+    }).catch(e=>{if(live)setError(customerError(e,"Could not load your family profiles."));});
     return()=>{live=false;controller.current?.abort();requestVersion.current++;};
   },[]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{
@@ -221,7 +222,7 @@ function ChatContent(){
     fetch("/api/chat/history?scope=all",{signal:abort.signal,cache:"no-store"}).then(async response=>{
       const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not load history");
       if(!abort.signal.aborted){setHistory(data.conversations);setHistoryCursor(data.nextCursor??null);setHistoryError("");}
-    }).catch((e)=>{if(!abort.signal.aborted)setHistoryError(e instanceof Error?e.message:"Could not load your chat history.");});
+    }).catch((e)=>{if(!abort.signal.aborted)setHistoryError(customerError(e,"Could not load your chat history."));});
     return()=>abort.abort();
   },[]);
   useEffect(()=>{end.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages,busy]);
@@ -250,7 +251,7 @@ function ChatContent(){
       </div>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {messages.map((message,index)=><div className={"message "+message.role} key={message.id??index}>
-        <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body"><p>{message.content}</p>
+        <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body"><p>{message.role==="assistant"?customerAnswerText(message.content):message.content}</p>
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{q.text}</strong><small>{q.why}</small>
             <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
@@ -287,17 +288,15 @@ function ChatContent(){
           {message.answer?.factFinding?.length?<div className="fact-finding" data-testid="fact-finding"><small>What DearPolicy still needs</small>{message.answer.factFinding.map((plan,i)=><div className="fact-finding-plan" key={i} data-status={plan.status}>
             <strong>{plan.subjectName?plan.subjectName+" · ":""}{plan.label}</strong> <span className="fact-finding-status">{factFindingStatusCopy[plan.status]}</span>
             {plan.missingDocuments.length?<p className="fact-finding-documents">Documents: {plan.missingDocuments.join("; ")}</p>:null}
-            {plan.reviewerRequirements.length?<p className="fact-finding-reviewers">{plan.reviewerRequirements.join("; ")}</p>:null}
             {plan.reportedAmountsIgnored.length?<p className="fact-finding-reported">Any amount you mentioned is recorded as you reported it. It is not used as your cover or to work out a claim.</p>:null}
           </div>)}</div>:null}
           {message.answer?.knownFacts.length?<div className="known-facts"><strong>Facts and uncertainties</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{f}</span>)}</div></div>:null}
-          {message.answer?.scenarioClassifications?.length?<div className="scenario-check"><strong>What DearPolicy is checking against</strong><small>These guide which policy wording is matched; the wording and your evidence decide what you can actually claim.</small><div>{message.answer.scenarioClassifications.map((s,i)=>{const extra=s.traits.map(t=>t.replaceAll("_"," ")).filter(t=>t.toLowerCase()!==s.label.toLowerCase());return<span key={i}><b>{s.label}</b>{extra.length?" · "+extra.join(" · "):""}</span>;})}</div></div>:null}
           {message.answer?.assessmentKind==="preliminary"?<div className="preliminary-assessment" data-testid="preliminary-assessment"><small>Preliminary claim assessment</small><p>{PRELIMINARY_ASSESSMENT_NOTICE}</p></div>:null}
           {message.answer?.policyStatedLimits?.length?<div className="policy-stated-limits" data-testid="policy-stated-limits">{message.answer.policyStatedLimits.map((limit,i)=><div className="policy-stated-limit" key={i}>
             <small>{POLICY_STATED_LIMIT_LABEL}</small><strong>{limit.amountText}</strong><span>{limit.ownerName?limit.ownerName+" · ":""}{limit.benefitTitle}</span>
             <p>{POLICY_STATED_LIMIT_NOTICE}</p><em>From {limit.citation.policyName}, page {limit.citation.pageStart}: “{limit.quote.length>200?limit.quote.slice(0,197)+"…":limit.quote}”</em>
           </div>)}</div>:null}
-          {message.answer?.claimItems.length?<div className="claim-results">{message.answer.claimItems.map((item,i)=><div className={"claim-result "+item.status} key={i}>
+          {message.answer?.claimItems.some(item=>item.status!=="not_applicable")?<div className="claim-results">{message.answer.claimItems.filter(item=>item.status!=="not_applicable").map((item,i)=><div className={"claim-result "+item.status} key={i}>
             <div className="claim-result-head"><strong>{item.title}</strong><span>{statusCopy[item.status]}</span></div>{item.preliminaryStatus?<span className="preliminary-status">{preliminaryStatusCopy[item.preliminaryStatus]}</span>:null}<p>{item.reason}</p>
             {item.conditions.length?<details className="claim-conditions"><summary>{item.conditions.length===1?"1 condition":item.conditions.length+" conditions"}</summary><ul>{item.conditions.map((c,j)=><li key={j}>{c}</li>)}</ul></details>:null}
           </div>)}</div>:null}
@@ -320,16 +319,14 @@ function ChatContent(){
               </div>)}
             </div>)}
             {message.answer.composition.alternativeGroups.length?<div className="composition-alternatives"><strong>Alternative benefits · policy pays only one</strong>{message.answer.composition.alternativeGroups.map(g=><ul key={g.compositionGroupId}>{g.benefits.map(b=><li key={b.calculationId}>{b.benefitCategory} — {b.status==="included"&&b.payableAmountText?b.payableAmountText:"not counted in any total"}{b.calculationId===g.selectedBenefitCalculationId?" · selected (higher amount)":" · not selected"}</li>)}</ul>)}</div>:null}
-            {message.answer.composition.excludedBenefits.length?<details className="composition-excluded"><summary>Excluded or pending benefits · {message.answer.composition.excludedBenefits.length}</summary>{message.answer.composition.excludedBenefits.map(b=><div className="composition-excluded-item" key={b.calculationId}><strong>{b.benefitCategory}</strong><span>{b.status}</span>{b.blockedReasons.map((r,i)=><p key={i}>{r}</p>)}</div>)}</details>:null}
             {message.answer.composition.outstandingQuestions.length?<div className="composition-outstanding"><strong>Still needed to finish this calculation</strong><ul>{message.answer.composition.outstandingQuestions.map((q,i)=><li key={i}>{q}</li>)}</ul></div>:null}
           </div>:null}
           {message.answer?.claimSessionId&&message.answer.mode==="claim_assessment"&&message.answer.claimItems.length?<a className="claim-pack-link" href={`/api/claims/${message.answer.claimSessionId}/pack`}>Download the claim pack (PDF)</a>:null}
           {message.answer?.portfolioItems?.length?<div className="policy-table-scroll"><table className="chat-policy-table"><caption>Personal policy inventory</caption><thead><tr><th>Family member</th><th>Policy</th><th>Confirmed cover</th><th>Active status</th></tr></thead><tbody>{message.answer.portfolioItems.map(item=><tr key={item.id}><td>{item.ownerName}</td><td>{item.policyName}</td><td>{item.confirmed?item.coverages.map((c,i)=><div key={i}>{c.productName??c.category}{c.amount!=null?(c.currency?" · "+formatMoney(c.amount,c.currency):" · "+c.amount.toLocaleString()+" (currency not stated)"):""}</div>):"Personal evidence needs review"}</td><td title={item.currentness?.detail}>{item.currentness?.label??"Not checked"}</td></tr>)}</tbody></table></div>:null}
-          {message.answer?.details.map((detail,i)=><p key={i}>{detail}</p>)}
-          {message.answer?.reviewCoverage?<div className={"review-coverage "+(message.answer.reviewCoverage.complete?"complete":"partial")}><strong>{message.answer.reviewCoverage.complete?"Complete policy review":"Partial policy review"}</strong><p>{message.answer.reviewCoverage.statement}</p></div>:null}
-          {message.answer?.policyReview?.length?<details className="policy-review"><summary>Policy review · {message.answer.policyReview.length} contracts</summary><div className="policy-table-scroll"><table className="chat-policy-table"><thead><tr><th>Family member</th><th>Policy</th><th>Review</th><th>Evidence read</th><th>Active status</th></tr></thead><tbody>{message.answer.policyReview.map(item=><tr key={item.id}><td>{item.ownerName}</td><td>{item.policyName}</td><td>{reviewCopy[item.status]??item.status}</td><td>{coverageText(item.coverage)}</td><td title={item.currentness?.detail}>{item.currentness?.label??"Not checked"}</td></tr>)}</tbody></table></div></details>:null}
-          {message.answer?.nextSteps.length?<div className="next-steps"><strong>What to do next</strong><ol>{message.answer.nextSteps.map((step,i)=><li key={i}>{step}</li>)}</ol></div>:null}
-          {message.answer?.citations.length?<details className="citations"><summary>Why DearPolicy says this · {message.answer.citations.length} sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Uploaded policy evidence"}</small></span><b>{c.pageStart==null?"Page not recorded":<>Page {c.pageStart}{c.pageEnd!=null&&c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</>}</b></div>)}</details>:null}
+          {message.answer?.details.map((detail,i)=><p key={i}>{customerAnswerText(detail)}</p>)}
+          {message.answer?.reviewCoverage&&!message.answer.reviewCoverage.complete?<div className="review-coverage partial" data-testid="answer-uncertainty"><p>DearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.</p></div>:null}
+          {message.answer?.nextSteps.length&&!message.answer.questions.length&&!(message.answer.factFinding??[]).some(plan=>plan.nextQuestions.length)?<div className="next-steps" data-testid="next-step"><strong>Next step</strong><p>{message.answer.nextSteps[0]}</p></div>:null}
+          {message.answer?.citations.length?<details className="citations"><summary>Sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Your uploaded document"}</small></span><b>{c.pageStart==null?"Page not recorded":<>Page {c.pageStart}{c.pageEnd!=null&&c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</>}</b></div>)}</details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}
@@ -343,7 +340,7 @@ function ChatContent(){
           <div className={"thinking-bar "+(progressDetail?"determinate":"indeterminate")}>
             <span style={progressDetail?{width:Math.max(4,Math.round((progressDetail.completed/Math.max(1,progressDetail.total))*100))+"%"}:undefined}/>
           </div>
-          <small>{progressDetail?progressDetail.completed+" of "+progressDetail.total+" policy contracts read":"Reading your uploaded policy evidence"} · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
+          <small>Checking your policies · {elapsed<60?elapsed+"s":Math.floor(elapsed/60)+"m "+(elapsed%60)+"s"}</small>
         </div></div>:null}
       {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
     </div>

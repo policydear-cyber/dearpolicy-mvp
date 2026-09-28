@@ -1,0 +1,257 @@
+{
+  "violations": [],
+  "quality": [],
+  "perQuestion": [
+    {
+      "qid": "Q01",
+      "text": "What policies does Charmaine have?",
+      "ok": true,
+      "gates": [],
+      "ms": 137
+    },
+    {
+      "qid": "Q02",
+      "text": "What is Charmaine's hospital room and board benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 76
+    },
+    {
+      "qid": "Q03",
+      "text": "Does Charmaine have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 34
+    },
+    {
+      "qid": "Q04",
+      "text": "What is the waiting period for critical illness on Charmaine's CritiCare plan?",
+      "ok": true,
+      "gates": [],
+      "ms": 29
+    },
+    {
+      "qid": "Q05",
+      "text": "Does Charmaine's hospital plan cover dental treatment?",
+      "ok": true,
+      "gates": [],
+      "ms": 31
+    },
+    {
+      "qid": "Q06",
+      "text": "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?",
+      "ok": true,
+      "gates": [],
+      "ms": 24
+    },
+    {
+      "qid": "Q07",
+      "text": "What does Charmaine's group life policy pay if she dies?",
+      "ok": true,
+      "gates": [],
+      "ms": 32
+    },
+    {
+      "qid": "Q08",
+      "text": "What is Charmaine covered for if she dies in an accident?",
+      "ok": true,
+      "gates": [],
+      "ms": 63
+    },
+    {
+      "qid": "Q09",
+      "text": "What is Charmaine's maternity coverage?",
+      "ok": true,
+      "gates": [],
+      "ms": 78
+    },
+    {
+      "qid": "Q10",
+      "text": "Does Charmaine have travel insurance?",
+      "ok": true,
+      "gates": [],
+      "ms": 25
+    },
+    {
+      "qid": "Q11",
+      "text": "Charmaine broke her arm.",
+      "ok": true,
+      "gates": [],
+      "ms": 55
+    },
+    {
+      "qid": "Q12",
+      "text": "An accident.",
+      "ok": true,
+      "gates": [],
+      "ms": 54
+    },
+    {
+      "qid": "Q13",
+      "text": "claim interview (6 answers): When did it happen? → Was the fracture confirmed by a doctor or on an X-ray or scan? → What treatment was given? → Was surgery performed? → How much did the treatment cost?",
+      "ok": true,
+      "gates": [],
+      "ms": 320
+    },
+    {
+      "qid": "Q14",
+      "text": "(the final response once the interview has no question left)",
+      "ok": true,
+      "gates": [],
+      "ms": 93
+    },
+    {
+      "qid": "Q15",
+      "text": "Which of her policies could pay for the broken arm?",
+      "ok": true,
+      "gates": [],
+      "ms": 26
+    },
+    {
+      "qid": "Q16",
+      "text": "How much can she claim?",
+      "ok": true,
+      "gates": [],
+      "ms": 55
+    },
+    {
+      "qid": "Q17",
+      "text": "(reopen c-injury from history)",
+      "ok": true,
+      "gates": [],
+      "ms": 25
+    },
+    {
+      "qid": "Q18",
+      "text": "What does Marcus's travel policy cover overseas?",
+      "ok": true,
+      "gates": [],
+      "ms": 27
+    },
+    {
+      "qid": "Q19",
+      "text": "What is the baggage delay benefit on Marcus's travel policy?",
+      "ok": true,
+      "gates": [],
+      "ms": 23
+    },
+    {
+      "qid": "Q20",
+      "text": "How much hospital cash does Marcus get per day?",
+      "ok": true,
+      "gates": [],
+      "ms": 19
+    },
+    {
+      "qid": "Q21",
+      "text": "What is Marcus's death benefit on his TermGuard policy?",
+      "ok": true,
+      "gates": [],
+      "ms": 20
+    },
+    {
+      "qid": "Q22",
+      "text": "Is Marcus covered for dental treatment?",
+      "ok": true,
+      "gates": [],
+      "ms": 93
+    },
+    {
+      "qid": "Q23",
+      "text": "What happens when Marcus's endowment plan matures?",
+      "ok": true,
+      "gates": [],
+      "ms": 27
+    },
+    {
+      "qid": "Q24",
+      "text": "Does Marcus have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 19
+    },
+    {
+      "qid": "Q25",
+      "text": "Does Marcus have car insurance?",
+      "ok": true,
+      "gates": [],
+      "ms": 38
+    },
+    {
+      "qid": "Q26",
+      "text": "Does Marcus have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 57
+    },
+    {
+      "qid": "Q27",
+      "text": "What happens when Marcus's endowment plan matures?",
+      "ok": true,
+      "gates": [],
+      "ms": 9
+    },
+    {
+      "qid": "Q28",
+      "text": "Does Charmaine have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 17
+    }
+  ],
+  "gates": {
+    "unsupported_amount": {
+      "pass": true,
+      "count": 0
+    },
+    "unsupported_assertion": {
+      "pass": true,
+      "count": 0
+    },
+    "cross_scope": {
+      "pass": true,
+      "count": 0
+    },
+    "deleted_superseded": {
+      "pass": true,
+      "count": 0
+    },
+    "blocked_gap": {
+      "pass": true,
+      "count": 0
+    },
+    "positive_control": {
+      "pass": true,
+      "count": 0
+    },
+    "internal_text": {
+      "pass": true,
+      "count": 0
+    },
+    "fact_finding": {
+      "pass": true,
+      "count": 0
+    }
+  },
+  "timings": {
+    "factual": {
+      "n": 13,
+      "p50": 29,
+      "p95": 137
+    },
+    "interview": {
+      "n": 11,
+      "p50": 49,
+      "p95": 93
+    },
+    "all": {
+      "n": 32,
+      "p50": 38,
+      "p95": 93
+    }
+  },
+  "ingestionGate": {
+    "pass": true,
+    "count": 0
+  }
+}

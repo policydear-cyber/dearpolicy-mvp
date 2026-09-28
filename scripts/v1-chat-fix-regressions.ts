@@ -120,7 +120,9 @@ const contract = (name: string, category: string) => ({ id: name, name, ownerId:
 const charmaine = { id: C, display_name: "Ong Pei Lin Charmaine", preferred_name: "Charmaine", relationship: "spouse" };
 test("D5: 'not stated' only after a complete read with nothing stored; a partial read never asserts absence; no pronouns handed back", () => {
   const partial = notInDocuments({ question: "What is her dental coverage?", people: [charmaine], contracts: [contract("SafeCare Hospital Plan", "Hospital Cash")], complete: false, pagesRead: 6, pagesTotal: 9 });
-  assert.match(partial, /^DearPolicy didn’t find dental cover in the parts of Charmaine’s policy read so far \(6 of 9 pages\)\./);
+  // V1.1: page counts are DearPolicy's own reading progress, not household text (eval internal_text).
+  assert.match(partial, /^DearPolicy didn’t find dental cover in the parts of Charmaine’s policy read so far\./);
+  assert.doesNotMatch(partial, /\d+ of \d+/);
   assert.doesNotMatch(partial, /isn’t stated|not stated|her dental/);
   const complete = notInDocuments({ question: "What is her dental coverage?", people: [charmaine], contracts: [contract("SafeCare Hospital Plan", "Hospital Cash")], complete: true });
   assert.match(complete, /^Charmaine’s uploaded policy \(SafeCare Hospital Plan\) doesn’t mention dental cover\. Every page was read, so it isn’t stated in your documents/);

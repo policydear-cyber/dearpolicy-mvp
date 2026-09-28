@@ -32,6 +32,7 @@ import { loadDisabilityDefinitionMatchesForFacts } from "./evidence/disability-s
 import { composeClaim } from "./composition/engine";
 import { toClaimCompositionView } from "./composition/view";
 import { INDICATIVE_ESTIMATE_NOTICE } from "@/lib/chat/monetary-boundary";
+import type { ClaimCompositionView } from "@/types";
 
 export type IndicativeBenefitView = {
   title: string;
@@ -41,6 +42,14 @@ export type IndicativeBenefitView = {
   reason: string;
   conditions: string[];
   citations: { policyName: string; pageStart: number; pageEnd: number }[];
+  /** Additive (V1.1): which cover the benefit belongs to, and whether the only
+   * thing standing between it and an amount is a currency the policy evidence
+   * never states -- so the chat can say that once, plainly. */
+  coverageId?: string | null;
+  currencyNotStated?: boolean;
+  productName?: string | null;
+  /** The cover's policy number, where its certificate prints one. */
+  policyNumber?: string | null;
 };
 export type IndicativeEstimateView = {
   claimSessionId: string;
@@ -50,6 +59,9 @@ export type IndicativeEstimateView = {
   benefits: IndicativeBenefitView[];
   totalsByCurrency: { currency: string; amountText: string }[];
   outstandingQuestions: string[];
+  /** Additive (V1.1): the composition engine's own view, only when there is an
+   * estimate -- so the chat shows the SAME estimate as the claim page. */
+  composition?: ClaimCompositionView | null;
 };
 
 function citationsFor(item: ClaimAssessmentItem): IndicativeBenefitView["citations"] {
@@ -99,6 +111,7 @@ export async function computeIndicativeEstimate(accountId: string, claimSessionI
   const benefits: IndicativeBenefitView[] = assessments.filter((a) => a.status !== "not_applicable").map((a) => {
     const composed = a.calculationId ? byCalculation.get(a.calculationId) : undefined;
     const included = composed?.status === "included" && composed.payableAmount > 0;
+    const cover = a.coverageId ? coverages.find((c) => c.id === a.coverageId) : undefined;
     return {
       title: a.title,
       status: included ? "included" : "no_amount",
@@ -107,6 +120,12 @@ export async function computeIndicativeEstimate(accountId: string, claimSessionI
       reason: included ? a.reason : [a.reason, ...(composed?.blockedReasons ?? [])].filter(Boolean).join(" "),
       conditions: a.conditions,
       citations: citationsFor(a),
+      coverageId: a.coverageId ?? null,
+      currencyNotStated: !included && ((cover ? cover.currencyVerified !== true : false)
+        || /currency (?:the policy evidence does not state|is not stated|not stated)|never assumes one/i.test([a.reason, ...a.conditions].join(" "))
+        || (composed?.blockedReasonCodes ?? []).some((code) => /currency/i.test(code))),
+      productName: a.productName ?? cover?.productName ?? null,
+      policyNumber: cover?.policyNumber ?? cover?.groupPolicyNumber ?? null,
     };
   });
   const hasEstimate = benefits.some((b) => b.status === "included");
@@ -114,5 +133,6 @@ export async function computeIndicativeEstimate(accountId: string, claimSessionI
     claimSessionId, eventType: facts.eventType ?? null, notice: INDICATIVE_ESTIMATE_NOTICE, hasEstimate, benefits,
     totalsByCurrency: hasEstimate ? view.totalsByCurrency : [],
     outstandingQuestions: view.outstandingQuestions,
+    composition: hasEstimate ? view : null,
   };
 }

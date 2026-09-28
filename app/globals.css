@@ -816,3 +816,22 @@ table { font-variant-numeric: tabular-nums; }
 
 .inline-answer{display:flex;gap:.5rem;margin-top:.5rem}
 .inline-answer input{flex:1;min-width:0;padding:.45rem .6rem;border:1px solid var(--line, #d8cdbc);border-radius:8px;font:inherit;background:#fff}
+
+/* V1.1 customer answers: what the documents establish, sources collapsed. */
+.benefit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.benefit-item { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm, 10px); background: var(--surface); display: grid; gap: 4px; }
+.benefit-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.benefit-head small { color: var(--muted); }
+.benefit-item p { margin: 0; }
+.source-details > summary { cursor: pointer; font-size: var(--fs-xs, .8rem); color: var(--brand-ink); font-weight: 600; min-height: 24px; line-height: 1.6; }
+.source-details blockquote { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid var(--line-strong); background: var(--surface-2); font-size: var(--fs-sm, .9rem); overflow-wrap: anywhere; }
+.source-details ul { margin: 6px 0 0; padding-left: 18px; }
+.clarify-amount { display: grid; gap: 4px; }
+.plan-meter { display: grid; gap: 6px; margin-bottom: 16px; }
+.plan-meter-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.claim-status-panel ul { margin: 6px 0 0; padding-left: 18px; }
+.claim-status-panel[data-tone="ready"] h2 { color: var(--good-text); }
+.claim-status-panel[data-tone="waiting"] h2 { color: var(--warn-text); }
+.claim-session-status.tone-ready { color: var(--good-text); background: var(--good-tint); }
+.claim-session-status.tone-waiting { color: var(--warn-text); background: var(--warn-tint); }
+.claim-session-status.tone-info { color: var(--brand-ink); background: var(--brand-tint); }

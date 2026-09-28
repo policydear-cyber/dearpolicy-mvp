@@ -1,0 +1,145 @@
+{
+  "factual": {
+    "n": 20,
+    "p50": 2132,
+    "p95": 4178,
+    "max": 7870
+  },
+  "interview": {
+    "n": 12,
+    "p50": 2502,
+    "p95": 3919,
+    "max": 3919
+  },
+  "allChat": {
+    "n": 34,
+    "p50": 2330,
+    "p95": 4873,
+    "max": 7870
+  },
+  "uploadToTerminal": {
+    "n": 17,
+    "p50": 3464,
+    "p95": 12015,
+    "max": 12015
+  },
+  "steps": [
+    {
+      "step": "sign-up + confirmation",
+      "ms": 5499
+    },
+    {
+      "step": "sign-in",
+      "ms": 801,
+      "note": "1 click(s)"
+    },
+    {
+      "step": "family (2 people)",
+      "ms": 1995
+    },
+    {
+      "step": "upload pdf hosp2022",
+      "ms": 12131
+    },
+    {
+      "step": "upload pdf hosp2025",
+      "ms": 2171
+    },
+    {
+      "step": "upload pdf accident",
+      "ms": 8697
+    },
+    {
+      "step": "upload pdf accidentEndorsement",
+      "ms": 6575
+    },
+    {
+      "step": "upload pdf disability",
+      "ms": 3766
+    },
+    {
+      "step": "upload pdf groupLife",
+      "ms": 3307
+    },
+    {
+      "step": "upload pdf criticalIllness",
+      "ms": 2343
+    },
+    {
+      "step": "upload pdf travelExpired",
+      "ms": 2351
+    },
+    {
+      "step": "upload pdf travel",
+      "ms": 3453
+    },
+    {
+      "step": "upload pdf accidentMarcus",
+      "ms": 2474
+    },
+    {
+      "step": "upload pdf endowment",
+      "ms": 1939
+    },
+    {
+      "step": "upload pdf hospitalCashNoCurrency",
+      "ms": 3874
+    },
+    {
+      "step": "upload pdf termContradictory",
+      "ms": 3474
+    },
+    {
+      "step": "upload pdf maliciousRider",
+      "ms": 5186
+    },
+    {
+      "step": "upload corrupt-pdf unreadable",
+      "ms": 3483
+    },
+    {
+      "step": "upload png scannedPage",
+      "ms": 6575
+    },
+    {
+      "step": "restart app (before chat)",
+      "ms": 18329,
+      "note": "test-harness memory relief, not user time"
+    },
+    {
+      "step": "reopen conversation",
+      "ms": 8399
+    },
+    {
+      "step": "restart app (before evidence review)",
+      "ms": 16207,
+      "note": "test-harness memory relief, not user time"
+    },
+    {
+      "step": "evidence upload",
+      "ms": 7526
+    },
+    {
+      "step": "reviewer decisions",
+      "ms": 31151
+    },
+    {
+      "step": "restart app (before deletion and page checks)",
+      "ms": 15124,
+      "note": "test-harness memory relief, not user time"
+    },
+    {
+      "step": "delete AccidentGuard-M",
+      "ms": 10029
+    },
+    {
+      "step": "restart app (before household B)",
+      "ms": 14610,
+      "note": "test-harness memory relief, not user time"
+    },
+    {
+      "step": "household B",
+      "ms": 24923
+    }
+  ]
+}

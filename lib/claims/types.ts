@@ -244,6 +244,9 @@ export type ClaimDecisionPacket = {
   assessments: ClaimAssessmentItem[];
   nextSteps: string[];
   ready: boolean;
+  /** What happened, as a fact-finding category (death, injury, ...); decides
+   * which documents are requested. Absent on packets recorded before V1.1. */
+  claimCategory?: string | null;
   /** The deterministic claim-composition engine's result for this turn
    * (lib/claims/composition/engine.ts's composeClaim()) -- present only
    * when the event type has a wired composition path (death, currently).

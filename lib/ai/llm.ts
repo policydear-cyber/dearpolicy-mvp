@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, type ModelRole } from "./providers";
+import { costUsd, describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, ProviderQuotaExhausted, type ModelRole } from "./providers";
+import { currentModelHousehold } from "./usage";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
-function ledgerAccountId() { return process.env.DEV_ACCOUNT_ID ?? "00000000-0000-0000-0000-000000000001"; }
 
 type CompletionRuntimeOptions = {
   timeoutMs?: number;
@@ -114,10 +114,17 @@ export async function structuredCompletion<T>(args: {
     // cohort; with no subject at all (or no canary configured, the default
     // for every existing call site), this resolves to stable and `choice` is
     // exactly modelFor(role) -- unchanged behavior.
-    const rollout = resolveRollout(canaryConfigFor(operation), args.householdId ?? args.resourceId ?? null);
+    // The household this call is for: named by the caller, or set for the
+    // whole request by runWithModelHousehold() (lib/ai/usage.ts). Usage and
+    // the per-household spend limit are keyed to it -- never to a
+    // process-wide default account, which is how a real household's calls
+    // used to be booked to the development account and its usage screen
+    // said "No model calls yet".
+    const householdId = args.householdId ?? currentModelHousehold() ?? undefined;
+    const rollout = resolveRollout(canaryConfigFor(operation), householdId ?? args.resourceId ?? null);
     const choice = rollout.target ?? modelFor(role);
     const attemptGroupId = randomUUID();
-    await assertUnderSpendCap(ledgerAccountId());
+    if (householdId) await assertUnderSpendCap(householdId);
       const call = async (target: typeof choice, attemptIndex: number) => {
         const started = Date.now();
         const requestedAt = new Date();
@@ -127,22 +134,22 @@ export async function structuredCompletion<T>(args: {
           reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
             temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
           const durationMs = Date.now() - started;
-          await recordUsage({ role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
+          if (householdId) await recordUsage({ accountId: householdId, role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
           record = await recordModelExecution({
             correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
-            householdId: args.householdId, resourceId: args.resourceId,
+            householdId, resourceId: args.resourceId, costUsd: costUsd(target, reply.usage),
             requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
             requestedAt, resolved: reply.resolved, status: "succeeded",
             usage: reply.usage, latencyMs: durationMs,
           });
         } catch (error) {
           const durationMs = Date.now() - started;
-          await recordUsage({ role, choice: target, input: 0, output: 0, durationMs, ok: false });
+          if (householdId) await recordUsage({ accountId: householdId, role, choice: target, input: 0, output: 0, durationMs, ok: false });
           await recordModelExecution({
             correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
-            householdId: args.householdId, resourceId: args.resourceId,
+            householdId, resourceId: args.resourceId,
             requested: { provider: target.provider, model: target.model, capability: role, rollout: rollout.rolloutId, promptVersion: args.promptVersion ?? null, schemaVersion: args.schemaVersion ?? null },
-            requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
+            requestedAt, resolved: null, status: "failed", errorCategory: error instanceof ProviderQuotaExhausted ? "provider_quota" : "model_provider", latencyMs: durationMs,
           });
           throw error;
         }
@@ -178,7 +185,9 @@ export async function structuredCompletion<T>(args: {
         // question -- when a cheaper tier of the same provider exists for this
         // role, one attempt there beats surfacing "try again in a minute" for
         // a quota the fallback tier does not share.
-        const fallback = /\(429\)|busy|rate limit|quota/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
+        // Exhausted account quota is shared by every model on that account:
+        // a second model would fail the same way, only later.
+        const fallback = !(error instanceof ProviderQuotaExhausted) && /\(429\)|busy|rate limit/i.test(error instanceof Error ? error.message : String(error)) ? fallbackModelFor(role) : null;
         if (!fallback) throw error;
         usedChoice = fallback;
         ({ reply, record: usedRecord } = await call(fallback, 1));
@@ -204,7 +213,7 @@ export async function structuredCompletion<T>(args: {
         name: "ai.structured_completion.completed",
         correlationId: telemetryCorrelationId,
         status: "success",
-        householdRef: args.householdId ? pseudonymizeId(args.householdId) : null,
+        householdRef: householdId ? pseudonymizeId(householdId) : null,
         resourceRef: args.resourceId ? pseudonymizeId(args.resourceId) : null,
         resolvedModel: usedChoice.model,
         extra: { operation: args.operation ?? "chat_reply", role: args.role ?? "chat" },
@@ -244,8 +253,10 @@ export class TruncatedModelOutput extends Error {
  * provider or model names, no hosting or environment-variable advice, no
  * raw provider text. The operator-facing diagnosis is readableModelFailure,
  * which belongs in the logs. */
+export const PROVIDER_UNAVAILABLE_TEXT = "DearPolicy’s reading service is unavailable right now because of a problem on our side, not with your documents";
 export function householdModelFailure(error: unknown) {
   if (error instanceof SpendCapReached) return error.message;
+  if (error instanceof ProviderQuotaExhausted) return PROVIDER_UNAVAILABLE_TEXT;
   if (error instanceof TruncatedModelOutput)
     return error.truncated ? "the model ran out of room part-way through that section" : "the model’s answer for that section was not in the expected form";
   const message = error instanceof Error ? error.message : String(error);
@@ -258,6 +269,7 @@ export function householdModelFailure(error: unknown) {
 }
 export function readableModelFailure(error: unknown) {
   if (error instanceof SpendCapReached) return error.message;
+  if (error instanceof ProviderQuotaExhausted) return "the model provider refused the call (" + error.status + "): the provider account's quota or billing limit is exhausted (not retried)";
   if (error instanceof TruncatedModelOutput)
     return error.truncated ? "the model ran out of room part-way through that section" : "the model’s answer for that section was not in the expected form";
   const message = error instanceof Error ? error.message : String(error);

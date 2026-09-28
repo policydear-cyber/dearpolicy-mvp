@@ -28,14 +28,14 @@ export async function ensureLedgerSchema(){
 export function setLedgerAccount(accountId:string){(globalThis as LedgerGlobals).__dearpolicyLedgerAccount=accountId;}
 function ledgerAccount(){return (globalThis as LedgerGlobals).__dearpolicyLedgerAccount??process.env.DEV_ACCOUNT_ID??"00000000-0000-0000-0000-000000000001";}
 
-export async function recordUsage(args:{role:ModelRole;choice:ModelChoice;input:number;output:number;cached?:number;durationMs:number;ok:boolean}){
+export async function recordUsage(args:{accountId?:string;role:ModelRole;choice:ModelChoice;input:number;output:number;cached?:number;durationMs:number;ok:boolean}){
   try{
     await ensureLedgerSchema();
     const cost=costUsd(args.choice,{input:args.input,output:args.output,cached:args.cached});
     await query(
       `INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cached_tokens,cost_usd,priced,duration_ms,ok)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [ledgerAccount(),args.role,args.choice.provider,args.choice.model,args.input,args.output,args.cached??0,cost??0,cost!=null,args.durationMs,args.ok]);
+      [args.accountId??ledgerAccount(),args.role,args.choice.provider,args.choice.model,args.input,args.output,args.cached??0,cost??0,cost!=null,args.durationMs,args.ok]);
   }catch{/* The ledger never breaks the thing it is measuring. */}
 }
 
@@ -77,7 +77,7 @@ export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
   };
   if(summary.chatTurns>=plan.includedChatTurns*0.8)summary.warnings.push(summary.chatTurns+" of "+plan.includedChatTurns+" included questions used this month.");
   if(summary.documentsRead>=plan.includedDocuments*0.8)summary.warnings.push(summary.documentsRead+" of "+plan.includedDocuments+" included documents read this month.");
-  if(summary.costUsd>=plan.hardStopUsd*0.8)summary.warnings.push("Model spend this month is "+Math.round(summary.costUsd/plan.hardStopUsd*100)+"% of the hard stop ($"+plan.hardStopUsd.toFixed(2)+").");
+  if(summary.costUsd>=plan.hardStopUsd*0.8)summary.warnings.push("Model spend this month is "+Math.round(summary.costUsd/plan.hardStopUsd*100)+"% of DearPolicy’s monthly limit for this household ($"+plan.hardStopUsd.toFixed(2)+"); this is not your model provider budget.");
   if(summary.unpricedCalls)summary.warnings.push(summary.unpricedCalls+" call"+(summary.unpricedCalls===1?"":"s")+" used a model with no price on file, so the cost shown is low.");
   return summary;
 }

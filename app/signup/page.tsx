@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { customerMessage } from "@/components/customer-text";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export default function SignupPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(data.error || "Could not create your account.");
+        setError(customerMessage(data.error, "Could not create your account."));
         return;
       }
       if (data.needsEmailConfirmation) {

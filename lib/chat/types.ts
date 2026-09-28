@@ -42,6 +42,10 @@ export type ConversationState = {
   /** The injury fact-finding explanation already shown in this chat. It is
    * said once; later turns acknowledge the answer and ask the next question. */
   injuryExplained?: string;
+  /** The missing-wording question was asked in this conversation (asked once). */
+  askedWording?: boolean;
+  /** The claim interview reached its final answer in this conversation. */
+  claimConcluded?: boolean;
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

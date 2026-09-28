@@ -1,0 +1,445 @@
+{
+  "violations": [
+    {
+      "qid": "Q02",
+      "gate": "positive_control",
+      "detail": "missing: S$800 per day from the 2025 edition"
+    },
+    {
+      "qid": "Q03",
+      "gate": "positive_control",
+      "detail": "missing: states the policy's fracture-of-arm amount"
+    },
+    {
+      "qid": "Q04",
+      "gate": "positive_control",
+      "detail": "missing: 90 days"
+    },
+    {
+      "qid": "Q05",
+      "gate": "positive_control",
+      "detail": "missing: dental excluded unless caused by an accident"
+    },
+    {
+      "qid": "Q06",
+      "gate": "positive_control",
+      "detail": "missing: only the higher amount is payable"
+    },
+    {
+      "qid": "Q07",
+      "gate": "internal_text",
+      "detail": "model / reader status: \"by a second read\""
+    },
+    {
+      "qid": "Q07",
+      "gate": "positive_control",
+      "detail": "missing: S$150,000 death (any cause)"
+    },
+    {
+      "qid": "Q08",
+      "gate": "internal_text",
+      "detail": "model / reader status: \"by a second read\""
+    },
+    {
+      "qid": "Q09",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"13 of 23 pages\""
+    },
+    {
+      "qid": "Q09",
+      "gate": "unsupported_assertion",
+      "detail": "'not found' turned into 'not covered': \"is not covered\""
+    },
+    {
+      "qid": "Q10",
+      "gate": "unsupported_assertion",
+      "detail": "\"says it expired / gives its date\" stated without citing travelExpired p1"
+    },
+    {
+      "qid": "Q16",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"13 of 23 pages\""
+    },
+    {
+      "qid": "Q16",
+      "gate": "blocked_gap",
+      "detail": "the question itself treated as a benefit name: \"didn’t find How much\""
+    },
+    {
+      "qid": "Q16",
+      "gate": "blocked_gap",
+      "detail": "'not found' turned into 'not covered': is not covered"
+    },
+    {
+      "qid": "Q18",
+      "gate": "positive_control",
+      "detail": "missing: overseas medical US$250,000"
+    },
+    {
+      "qid": "Q18",
+      "gate": "positive_control",
+      "detail": "missing: evacuation USD 500,000"
+    },
+    {
+      "qid": "Q19",
+      "gate": "positive_control",
+      "detail": "missing: S$200 for every 6 hours"
+    },
+    {
+      "qid": "Q20",
+      "gate": "unsupported_amount",
+      "detail": "\"S$2,000\" is not an amount this answer may state"
+    },
+    {
+      "qid": "Q20",
+      "gate": "unsupported_amount",
+      "detail": "\"US$500,000\" is not an amount this answer may state"
+    },
+    {
+      "qid": "Q20",
+      "gate": "unsupported_amount",
+      "detail": "\"US$250,000\" is not an amount this answer may state"
+    },
+    {
+      "qid": "Q21",
+      "gate": "unsupported_assertion",
+      "detail": "chose 350,000 although the document also states 300,000"
+    },
+    {
+      "qid": "Q21",
+      "gate": "blocked_gap",
+      "detail": "the answer does not explain what could not be verified"
+    },
+    {
+      "qid": "Q22",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"11 of 19 pages\""
+    },
+    {
+      "qid": "Q22",
+      "gate": "blocked_gap",
+      "detail": "'not found' turned into 'not covered': is not covered"
+    },
+    {
+      "qid": "Q23",
+      "gate": "positive_control",
+      "detail": "missing: S$50,000 guaranteed maturity benefit"
+    },
+    {
+      "qid": "Q23",
+      "gate": "positive_control",
+      "detail": "missing: maturity date 2040-06-01"
+    },
+    {
+      "qid": "Q25",
+      "gate": "unsupported_assertion",
+      "detail": "'not found' turned into 'not covered': \"is not covered\""
+    },
+    {
+      "qid": "Q26",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"10 of 15 pages\""
+    },
+    {
+      "qid": "Q26",
+      "gate": "unsupported_assertion",
+      "detail": "'not found' turned into 'not covered': \"is not covered\""
+    }
+  ],
+  "quality": [
+    {
+      "qid": "Q20",
+      "gate": "expected_assertion_missing",
+      "detail": "missing: 150 per day, currency not stated"
+    },
+    {
+      "qid": "Q27",
+      "gate": "not_run",
+      "detail": "no answer recorded for this question"
+    }
+  ],
+  "perQuestion": [
+    {
+      "qid": "Q01",
+      "text": "What policies does Charmaine have?",
+      "ok": true,
+      "gates": [],
+      "ms": 6151
+    },
+    {
+      "qid": "Q02",
+      "text": "What is Charmaine's hospital room and board benefit?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 1776
+    },
+    {
+      "qid": "Q03",
+      "text": "Does Charmaine have a fracture benefit?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 2645
+    },
+    {
+      "qid": "Q04",
+      "text": "What is the waiting period for critical illness on Charmaine's CritiCare plan?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 2164
+    },
+    {
+      "qid": "Q05",
+      "text": "Does Charmaine's hospital plan cover dental treatment?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 2108
+    },
+    {
+      "qid": "Q06",
+      "text": "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 2229
+    },
+    {
+      "qid": "Q07",
+      "text": "What does Charmaine's group life policy pay if she dies?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "positive_control"
+      ],
+      "ms": 1870
+    },
+    {
+      "qid": "Q08",
+      "text": "What is Charmaine covered for if she dies in an accident?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 2324
+    },
+    {
+      "qid": "Q09",
+      "text": "What is Charmaine's maternity coverage?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "unsupported_assertion"
+      ],
+      "ms": 2279
+    },
+    {
+      "qid": "Q10",
+      "text": "Does Charmaine have travel insurance?",
+      "ok": false,
+      "gates": [
+        "unsupported_assertion"
+      ],
+      "ms": 2203
+    },
+    {
+      "qid": "Q11",
+      "text": "Charmaine broke her arm.",
+      "ok": true,
+      "gates": [],
+      "ms": 2550
+    },
+    {
+      "qid": "Q12",
+      "text": "An accident.",
+      "ok": true,
+      "gates": [],
+      "ms": 2029
+    },
+    {
+      "qid": "Q13",
+      "text": "claim interview (6 answers): When did it happen? → Was the fracture confirmed by a doctor or on an X-ray or scan? → What treatment was given? → Was surgery performed? → How much did the treatment cost?",
+      "ok": true,
+      "gates": [],
+      "ms": 10725
+    },
+    {
+      "qid": "Q14",
+      "text": "(the final response once the interview has no question left)",
+      "ok": true,
+      "gates": [],
+      "ms": 2345
+    },
+    {
+      "qid": "Q15",
+      "text": "Which of her policies could pay for the broken arm?",
+      "ok": true,
+      "gates": [],
+      "ms": 2330
+    },
+    {
+      "qid": "Q16",
+      "text": "How much can she claim?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "blocked_gap"
+      ],
+      "ms": 2242
+    },
+    {
+      "qid": "Q17",
+      "text": "(reopen c-injury from history)",
+      "ok": true,
+      "gates": [],
+      "ms": 5292
+    },
+    {
+      "qid": "Q18",
+      "text": "What does Marcus's travel policy cover overseas?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 2017
+    },
+    {
+      "qid": "Q19",
+      "text": "What is the baggage delay benefit on Marcus's travel policy?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 2516
+    },
+    {
+      "qid": "Q20",
+      "text": "How much hospital cash does Marcus get per day?",
+      "ok": false,
+      "gates": [
+        "unsupported_amount"
+      ],
+      "ms": 2083
+    },
+    {
+      "qid": "Q21",
+      "text": "What is Marcus's death benefit on his TermGuard policy?",
+      "ok": false,
+      "gates": [
+        "unsupported_assertion",
+        "blocked_gap"
+      ],
+      "ms": 1959
+    },
+    {
+      "qid": "Q22",
+      "text": "Is Marcus covered for dental treatment?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "blocked_gap"
+      ],
+      "ms": 1620
+    },
+    {
+      "qid": "Q23",
+      "text": "What happens when Marcus's endowment plan matures?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 1929
+    },
+    {
+      "qid": "Q24",
+      "text": "Does Marcus have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 836
+    },
+    {
+      "qid": "Q25",
+      "text": "Does Marcus have car insurance?",
+      "ok": false,
+      "gates": [
+        "unsupported_assertion"
+      ],
+      "ms": 2256
+    },
+    {
+      "qid": "Q26",
+      "text": "Does Marcus have a fracture benefit?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "unsupported_assertion"
+      ],
+      "ms": 4437
+    },
+    {
+      "qid": "Q28",
+      "text": "Does Charmaine have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 4106
+    }
+  ],
+  "gates": {
+    "unsupported_amount": {
+      "pass": false,
+      "count": 3
+    },
+    "unsupported_assertion": {
+      "pass": false,
+      "count": 5
+    },
+    "cross_scope": {
+      "pass": true,
+      "count": 0
+    },
+    "deleted_superseded": {
+      "pass": true,
+      "count": 0
+    },
+    "blocked_gap": {
+      "pass": false,
+      "count": 4
+    },
+    "positive_control": {
+      "pass": false,
+      "count": 11
+    },
+    "internal_text": {
+      "pass": false,
+      "count": 6
+    },
+    "fact_finding": {
+      "pass": true,
+      "count": 0
+    }
+  },
+  "timings": {
+    "factual": {
+      "n": 13,
+      "p50": 2108,
+      "p95": 6151
+    },
+    "interview": {
+      "n": 11,
+      "p50": 2129,
+      "p95": 2550
+    },
+    "all": {
+      "n": 31,
+      "p50": 2164,
+      "p95": 4437
+    }
+  }
+}

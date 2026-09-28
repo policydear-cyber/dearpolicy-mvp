@@ -1,0 +1,521 @@
+{
+  "violations": [
+    {
+      "qid": "Q02",
+      "gate": "positive_control",
+      "detail": "missing: S$800 per day from the 2025 edition"
+    },
+    {
+      "qid": "Q04",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"13 of 23 processed pages\""
+    },
+    {
+      "qid": "Q05",
+      "gate": "positive_control",
+      "detail": "missing: dental excluded unless caused by an accident"
+    },
+    {
+      "qid": "Q06",
+      "gate": "positive_control",
+      "detail": "missing: only the higher amount is payable"
+    },
+    {
+      "qid": "Q07",
+      "gate": "internal_text",
+      "detail": "model / reader status: \"by a second read\""
+    },
+    {
+      "qid": "Q07",
+      "gate": "positive_control",
+      "detail": "missing: S$150,000 death (any cause)"
+    },
+    {
+      "qid": "Q08",
+      "gate": "internal_text",
+      "detail": "model / reader status: \"by a second read\""
+    },
+    {
+      "qid": "Q09",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"13 of 23 pages\""
+    },
+    {
+      "qid": "Q10",
+      "gate": "unsupported_assertion",
+      "detail": "an expired policy's terms presented without its date (not identified as outdated)"
+    },
+    {
+      "qid": "Q13",
+      "gate": "internal_text",
+      "detail": "Q13.6: model / reader status: \"by a second read\""
+    },
+    {
+      "qid": "Q13",
+      "gate": "internal_text",
+      "detail": "Q13.7: model / reader status: \"by a second read\""
+    },
+    {
+      "qid": "Q13",
+      "gate": "internal_text",
+      "detail": "Q13.8: model / reader status: \"reader could not be reached\""
+    },
+    {
+      "qid": "Q14",
+      "gate": "internal_text",
+      "detail": "model / reader status: \"reader could not be reached\""
+    },
+    {
+      "qid": "Q14",
+      "gate": "unsupported_assertion",
+      "detail": "cites travelExpired (an expired overseas travel policy offered for an accident in Singapore)"
+    },
+    {
+      "qid": "Q16",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"13 of 23 pages\""
+    },
+    {
+      "qid": "Q16",
+      "gate": "blocked_gap",
+      "detail": "the question itself treated as a benefit name: \"didn’t find How much\""
+    },
+    {
+      "qid": "Q17",
+      "gate": "fact_finding",
+      "detail": "claims list says \"Assessment ready\" while the claim has no evidence-backed estimate"
+    },
+    {
+      "qid": "Q17",
+      "gate": "fact_finding",
+      "detail": "a claim event is named after an interview reply: \"Has a doctor said the injury will leave any lasting impairment: No\""
+    },
+    {
+      "qid": "Q19",
+      "gate": "positive_control",
+      "detail": "missing: S$200 for every 6 hours"
+    },
+    {
+      "qid": "Q19",
+      "gate": "positive_control",
+      "detail": "missing: maximum S$1,000 (cap)"
+    },
+    {
+      "qid": "Q20",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"11 of 19 processed pages\""
+    },
+    {
+      "qid": "Q21",
+      "gate": "unsupported_assertion",
+      "detail": "chose 350,000 although the document also states 300,000"
+    },
+    {
+      "qid": "Q21",
+      "gate": "blocked_gap",
+      "detail": "the answer does not explain what could not be verified"
+    },
+    {
+      "qid": "Q22",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"11 of 19 pages\""
+    },
+    {
+      "qid": "Q23",
+      "gate": "positive_control",
+      "detail": "missing: S$50,000 guaranteed maturity benefit"
+    },
+    {
+      "qid": "Q23",
+      "gate": "positive_control",
+      "detail": "missing: maturity date 2040-06-01"
+    },
+    {
+      "qid": "Q25",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"11 of 19 processed pages\""
+    },
+    {
+      "qid": "Q26",
+      "gate": "internal_text",
+      "detail": "rule/row/page counts: \"10 of 15 pages\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, AccidentGuard-Endorsement-1.pdf (message): rule/row/page counts: \"1 benefit rule\" in \"Ready. 1 benefit rule read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, HealthPlusRider.pdf (message): rule/row/page counts: \"1 benefit rule\" in \"Ready. 1 benefit rule read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, TermGuard.pdf (message): rule/row/page counts: \"1 benefit rule\" in \"Ready. 1 benefit rule read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, DailyCash.pdf (message): rule/row/page counts: \"0 benefit rules\" in \"Ready. 0 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, FutureSaver.pdf (message): rule/row/page counts: \"2 benefit rules\" in \"Ready. 2 benefit rules read from this document; 1 to confirm on the Benefits page.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, AccidentGuard-M.pdf (message): rule/row/page counts: \"4 benefit rules\" in \"Ready. 4 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, WanderSafe.pdf (message): rule/row/page counts: \"4 benefit rules\" in \"Ready. 4 benefit rules read from this document; 1 to confirm on the Benefits page.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, JetSure.pdf (message): rule/row/page counts: \"2 benefit rules\" in \"Ready. 2 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, CritiCare.pdf (message): rule/row/page counts: \"2 benefit rules\" in \"Ready. 2 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, GroupTermLife.pdf (message): rule/row/page counts: \"2 benefit rules\" in \"Ready. 2 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, DisabilityCare.pdf (message): rule/row/page counts: \"3 benefit rules\" in \"Ready. 3 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, AccidentGuard.pdf (message): rule/row/page counts: \"4 benefit rules\" in \"Ready. 4 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, HospitalShield-2025.pdf (message): rule/row/page counts: \"4 benefit rules\" in \"Ready. 4 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, ScannedWording.png (message): rule/row/page counts: \"0 benefit rules\" in \"Ready. 0 benefit rules read from this document.\""
+    },
+    {
+      "qid": "INGEST",
+      "gate": "internal_text",
+      "detail": "documents page, DentalCare-scan.pdf (error): routine repair task: \"Re-analyse\" in \"Analysis stopped. DearPolicy kept the uploaded PDF; use Re-analyse to try again.\""
+    }
+  ],
+  "quality": [
+    {
+      "qid": "Q10",
+      "gate": "expected_assertion_missing",
+      "detail": "missing: says it expired / gives its date"
+    }
+  ],
+  "perQuestion": [
+    {
+      "qid": "Q01",
+      "text": "What policies does Charmaine have?",
+      "ok": true,
+      "gates": [],
+      "ms": 166
+    },
+    {
+      "qid": "Q02",
+      "text": "What is Charmaine's hospital room and board benefit?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 38
+    },
+    {
+      "qid": "Q03",
+      "text": "Does Charmaine have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 31
+    },
+    {
+      "qid": "Q04",
+      "text": "What is the waiting period for critical illness on Charmaine's CritiCare plan?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 80
+    },
+    {
+      "qid": "Q05",
+      "text": "Does Charmaine's hospital plan cover dental treatment?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 22
+    },
+    {
+      "qid": "Q06",
+      "text": "If Charmaine had both a fracture and a permanent disablement from one accident, would both be paid?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 22
+    },
+    {
+      "qid": "Q07",
+      "text": "What does Charmaine's group life policy pay if she dies?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "positive_control"
+      ],
+      "ms": 100
+    },
+    {
+      "qid": "Q08",
+      "text": "What is Charmaine covered for if she dies in an accident?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 94
+    },
+    {
+      "qid": "Q09",
+      "text": "What is Charmaine's maternity coverage?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 50
+    },
+    {
+      "qid": "Q10",
+      "text": "Does Charmaine have travel insurance?",
+      "ok": false,
+      "gates": [
+        "unsupported_assertion"
+      ],
+      "ms": 19
+    },
+    {
+      "qid": "Q11",
+      "text": "Charmaine broke her arm.",
+      "ok": true,
+      "gates": [],
+      "ms": 51
+    },
+    {
+      "qid": "Q12",
+      "text": "An accident.",
+      "ok": true,
+      "gates": [],
+      "ms": 24
+    },
+    {
+      "qid": "Q13",
+      "text": "claim interview (8 answers): When did it happen? → Was the fracture confirmed by a doctor or on an X-ray or scan? → What treatment was given? → Was surgery performed? → How much did the treatment cost? → Has any other insurer or the employer already paid part of the bill? → Has a doctor said the injury will leave any lasting impairment?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 866
+    },
+    {
+      "qid": "Q14",
+      "text": "(the final response once the interview has no question left)",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "unsupported_assertion"
+      ],
+      "ms": 220
+    },
+    {
+      "qid": "Q15",
+      "text": "Which of her policies could pay for the broken arm?",
+      "ok": true,
+      "gates": [],
+      "ms": 18
+    },
+    {
+      "qid": "Q16",
+      "text": "How much can she claim?",
+      "ok": false,
+      "gates": [
+        "internal_text",
+        "blocked_gap"
+      ],
+      "ms": 62
+    },
+    {
+      "qid": "Q17",
+      "text": "(reopen c-injury from history)",
+      "ok": false,
+      "gates": [
+        "fact_finding"
+      ],
+      "ms": 133
+    },
+    {
+      "qid": "Q18",
+      "text": "What does Marcus's travel policy cover overseas?",
+      "ok": true,
+      "gates": [],
+      "ms": 28
+    },
+    {
+      "qid": "Q19",
+      "text": "What is the baggage delay benefit on Marcus's travel policy?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 25
+    },
+    {
+      "qid": "Q20",
+      "text": "How much hospital cash does Marcus get per day?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 51
+    },
+    {
+      "qid": "Q21",
+      "text": "What is Marcus's death benefit on his TermGuard policy?",
+      "ok": false,
+      "gates": [
+        "unsupported_assertion",
+        "blocked_gap"
+      ],
+      "ms": 13
+    },
+    {
+      "qid": "Q22",
+      "text": "Is Marcus covered for dental treatment?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 41
+    },
+    {
+      "qid": "Q23",
+      "text": "What happens when Marcus's endowment plan matures?",
+      "ok": false,
+      "gates": [
+        "positive_control"
+      ],
+      "ms": 21
+    },
+    {
+      "qid": "Q24",
+      "text": "Does Marcus have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 13
+    },
+    {
+      "qid": "Q25",
+      "text": "Does Marcus have car insurance?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 33
+    },
+    {
+      "qid": "Q26",
+      "text": "Does Marcus have a fracture benefit?",
+      "ok": false,
+      "gates": [
+        "internal_text"
+      ],
+      "ms": 28
+    },
+    {
+      "qid": "Q27",
+      "text": "What happens when Marcus's endowment plan matures?",
+      "ok": true,
+      "gates": [],
+      "ms": 2015
+    },
+    {
+      "qid": "Q28",
+      "text": "Does Charmaine have a fracture benefit?",
+      "ok": true,
+      "gates": [],
+      "ms": 11
+    }
+  ],
+  "gates": {
+    "unsupported_amount": {
+      "pass": true,
+      "count": 0
+    },
+    "unsupported_assertion": {
+      "pass": false,
+      "count": 3
+    },
+    "cross_scope": {
+      "pass": true,
+      "count": 0
+    },
+    "deleted_superseded": {
+      "pass": true,
+      "count": 0
+    },
+    "blocked_gap": {
+      "pass": false,
+      "count": 2
+    },
+    "positive_control": {
+      "pass": false,
+      "count": 8
+    },
+    "internal_text": {
+      "pass": false,
+      "count": 28
+    },
+    "fact_finding": {
+      "pass": false,
+      "count": 2
+    }
+  },
+  "timings": {
+    "factual": {
+      "n": 13,
+      "p50": 31,
+      "p95": 166
+    },
+    "interview": {
+      "n": 13,
+      "p50": 62,
+      "p95": 220
+    },
+    "all": {
+      "n": 34,
+      "p50": 38,
+      "p95": 220
+    }
+  },
+  "ingestionGate": {
+    "pass": true,
+    "count": 0
+  }
+}
