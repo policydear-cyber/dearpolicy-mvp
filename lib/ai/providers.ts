@@ -173,8 +173,15 @@ async function withRetries(attempt:(signal:AbortSignal)=>Promise<Response>,timeo
       const response=await attempt(controller.signal);
       if(response.status===429||response.status>=500){
         const retryAfter=Number(response.headers.get("retry-after"));
-        const wait=Number.isFinite(retryAfter)&&retryAfter>0?retryAfter*1000:Math.min(60_000,2_000*2**n);
-        lastError=new Error("Model service is busy ("+response.status+")");
+        const detail=providerMessage(await response.text().catch(()=>"")).slice(0,300);
+        lastError=new Error("Model service is busy ("+response.status+")"+(detail?": "+detail:""));
+        const wait=Number.isFinite(retryAfter)&&retryAfter>0?retryAfter*1000:Math.min(20_000,2_000*2**n);
+        // A provider saying "come back later" for longer than a serverless
+        // invocation can live is a terminal answer for THIS call, not a
+        // sleep: honouring a long retry-after burned the whole function
+        // window in silence and the person watched a spinner die. Fail fast
+        // with the provider's own sentence instead.
+        if(wait>20_000)throw lastError;
         await sleep(wait);continue;
       }
       return response;

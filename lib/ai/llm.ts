@@ -262,7 +262,10 @@ export function readableModelFailure(error: unknown) {
     return who + " rejected a request setting: " + said;
   }
   if (/\(404\)|not found|does not exist|unknown model|is not supported/i.test(message)) return who + " does not recognise the model name set in the hosting environment variables";
-  if (/\(429\)|busy|rate limit|quota/i.test(message)) return who + " is rate-limited right now; it usually clears in under a minute";
+  if (/\(429\)|busy|rate limit|quota/i.test(message)) {
+    const said = message.replace(/^Model request failed \(\d+\):\s*/, "").replace(/^Model service is busy \(\d+\):?\s*/, "").trim();
+    return who + " is rate-limited right now" + (said ? ": " + said : "; it usually clears in under a minute");
+  }
   if (/timed out/i.test(message)) return who + " timed out on that section";
   if (/invalid structured JSON/i.test(message)) return who + " did not return usable structured output for that section";
   if (/connection error|stopped responding|ECONNREFUSED|fetch failed/i.test(message)) return "the connection to " + who + " could not be made — check the internet connection";
