@@ -116,6 +116,18 @@ jobs:
       - name: Deterministic claim fact-finding (six categories; no amount before review)
         run: npm run claims:fact-finding-test
 
+      - name: Injury chat -- deterministic fracture facts (negation, hypotheticals, precedence)
+        run: npm run claims:injury-facts-test
+
+      - name: Injury chat -- a fracture never matches a permanent-loss schedule row
+        run: npm run claims:injury-compatibility-test
+
+      - name: Injury chat -- one question at a time, no amount while fact-finding
+        run: npm run claims:injury-sequencing-test
+
+      - name: Injury chat -- independent adversarial cases A-J
+        run: npm run claims:injury-adversarial-test
+
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
 

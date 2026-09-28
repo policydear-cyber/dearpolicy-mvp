@@ -75,4 +75,8 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "e2e:full-journey-test",
   "security:launch-check-verifier-test",
   "ai:model-execution-staleness-test",
+  "claims:injury-facts-test",
+  "claims:injury-compatibility-test",
+  "claims:injury-sequencing-test",
+  "claims:injury-adversarial-test",
 ];
