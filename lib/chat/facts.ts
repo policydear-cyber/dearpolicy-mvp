@@ -80,6 +80,92 @@ export function reportedConditionStatement(text:string){
   }
   return null;
 }
+/**
+ * Grammar fallback for a directly reported fracture ("Charmaine broke her arm",
+ * "fractured left wrist", "fracture of the elbow"). Body-part vocabulary follows
+ * lib/claims/facts.ts (fractureBodyPart, "ribs" normalised to "rib"). It never
+ * infers the cause (accident), severity, permanence or hospitalisation.
+ */
+const INJURY_BODY_PARTS="forearm|arm|wrist|hand|finger|thumb|leg|thigh|shin|ankle|foot|toe|knee|hip|ribs|rib|shoulder|collarbone|clavicle|jaw|nose|cheekbone|pelvis|skull|spine|neck|elbow|back";
+const INJURY_POSSESSIVE=String.raw`(?:(?:her|his|their|my|your|our|the|a|an|one|both)\s+)?`;
+const INJURY_SIDE=String.raw`(?:(left|right)\s+)?`;
+function bodyPartFromMatch(value:string){const part=value.toLowerCase();return part==="ribs"?"rib":part;}
+function injuryStatementRejected(text:string,index:number){
+  if(hypotheticalBefore(text,index)||text.slice(index).split(/[.!;\n]/,1)[0].includes("?"))return true;
+  const before=text.slice(Math.max(0,index-90),index).split(/[.!?;\n]/).at(-1)??"";
+  return /^\s*(?:does|do|is|are|am|can|could|would|will|should|shall|what|how|which)\b/i.test(before)||
+    /\b(?:such as|in case|for example|e\.g\.|say|hypothetically|in the event)\b/i.test(before);
+}
+export function reportedFractureStatement(text:string):{bodyPart:string;side:"left"|"right"|null;quote:string}|null{
+  const parts=`(${INJURY_BODY_PARTS})`;
+  const patterns=[
+    new RegExp(String.raw`\b(?:broke|breaks|broken|fractured|fractures|cracked|cracks|snapped)\s+${INJURY_POSSESSIVE}${INJURY_SIDE}${parts}\b`,"gi"),
+    new RegExp(String.raw`\bfractures?\s+(?:of|to|in|on)\s+${INJURY_POSSESSIVE}${INJURY_SIDE}${parts}\b`,"gi"),
+    new RegExp(String.raw`\b${INJURY_POSSESSIVE}${INJURY_SIDE}${parts}\s+(?:is|was|has\s+been|got|had\s+been)\s+(?:broken|fractured|cracked)\b`,"gi"),
+    new RegExp(String.raw`\b${INJURY_SIDE}${parts}\s+fracture\b`,"gi"),
+  ];
+  let best:{bodyPart:string;side:"left"|"right"|null;quote:string;index:number}|null=null;
+  for(const pattern of patterns)for(const match of text.matchAll(pattern)){
+    const index=match.index??0;
+    if(injuryStatementRejected(text,index))continue;
+    if(!best||index<best.index)best={bodyPart:bodyPartFromMatch(match[2]),side:(match[1]?.toLowerCase() as "left"|"right"|undefined)??null,quote:match[0].trim(),index};
+  }
+  return best?{bodyPart:best.bodyPart,side:best.side,quote:best.quote}:null;
+}
+/** A non-fracture injury statement ("hurt her arm"). It never sets injuryKind. */
+export function reportedInjuryStatement(text:string):{bodyPart:string;side:"left"|"right"|null;quote:string}|null{
+  const pattern=new RegExp(String.raw`\b(?:hurt|hurts|injured|injures|bruised|sprained|twisted|cut|burned|burnt)\s+${INJURY_POSSESSIVE}${INJURY_SIDE}(${INJURY_BODY_PARTS})\b`,"gi");
+  for(const match of text.matchAll(pattern)){
+    const index=match.index??0;
+    if(injuryStatementRejected(text,index))continue;
+    return {bodyPart:bodyPartFromMatch(match[2]),side:(match[1]?.toLowerCase() as "left"|"right"|undefined)??null,quote:match[0].trim()};
+  }
+  return null;
+}
+/** An explicit correction that the injury was not a fracture ("it wasn't broken, just bruised"). */
+export function fractureNegationStatement(text:string){
+  const pattern=/\b(?:(?:was|is|were|are)\s+not|wasn['’]?t|isn['’]?t|weren['’]?t|aren['’]?t|not)\s+(?:actually\s+|really\s+)?(?:broken|fractured|cracked|a\s+(?:fracture|break))\b|\bno\s+(?:fracture|break)s?\b|\b(?:did\s+not|didn['’]?t|never)\s+(?:actually\s+|really\s+)?(?:break|fracture|crack)\b/gi;
+  for(const match of text.matchAll(pattern)){
+    const before=text.slice(Math.max(0,(match.index??0)-70),match.index??0).split(/[.!?;\n]/).at(-1)??"";
+    if(/\b(?:if|what if|whether|suppose|assuming)\b/i.test(before)||text.slice(match.index??0).split(/[.!;\n]/,1)[0].includes("?"))continue;
+    return true;
+  }
+  return false;
+}
+/** An elliptical self-retraction later in the message ("No wait, she didn't.", "scratch that"). */
+export function injuryRetractionStatement(text:string){
+  return /\b(?:no\s+wait|wait\s+no|actually|sorry|correction|my\s+mistake|i\s+mean)\b[\s,:-]*(?:no\b[\s,]*)?(?:[a-z]+\s+)?(?:didn['’]?t|did\s+not|wasn['’]?t|was\s+not|hasn['’]?t|has\s+not|isn['’]?t|is\s+not|doesn['’]?t)\s*(?:[.!]|$)/im.test(text)||
+    /\b(?:scratch|ignore|disregard)\s+that\b/i.test(text);
+}
+const INJURY_MODEL_KEYS=new Set(["injured","injuryKind","fractureBodyPart","injuryBodyPart","injurySide","injuries","permanentImpairment"]);
+/** Model injury facts get the same screen as the deterministic detector. */
+function injuryModelFactAllowed(message:string,quote:string,key:string,value:FactValue,retracted:boolean,fractureNegated:boolean){
+  if(value===false||value==null)return true;
+  if(retracted)return false;
+  if(fractureNegated&&(key==="fractureBodyPart"||(typeof value==="string"&&FRACTURE_WORDS.test(value))||FRACTURE_WORDS.test(quote)))return false;
+  let index=message.toLowerCase().indexOf(quote.trim().toLowerCase());
+  if(index<0)index=Math.max(0,normalText(message).indexOf(normalText(quote)));
+  if(injuryStatementRejected(message,index))return false;
+  if(/^\s*(?:does|do|did|is|are|am|was|were|can|could|would|will|should|shall|what|how|which)\b/i.test(quote))return false;
+  return !/\b(?:not|never|no|if|whether|suppose|assuming|unless|might|may|could|would|possibly|perhaps|almost|nearly|such as|in case)\b|n['’]t\b/i.test(quote);
+}
+const FRACTURE_WORDS=/fractur|\bbr(?:oke|oken|eak)\b|\bcrack/i;
+function fractureLocked(facts:SubjectFacts){
+  return facts.injuryKind?.state==="known"&&facts.injuryKind.source==="system-derived"&&facts.injuryKind.value==="fracture";
+}
+/** Whether a model fact keeps (or refines) an established deterministic fracture. */
+function keepsFracture(key:string,value:FactValue,facts:SubjectFacts){
+  const contains=(k:string)=>typeof value==="string"&&normalText(value).includes(normalText(String(knownValue(facts,k)??"")));
+  switch(key){
+    case "injuryKind":return typeof value==="string"&&normalText(value)==="fracture";
+    case "fractureBodyPart":return contains("fractureBodyPart");
+    case "injuryBodyPart":return contains("injuryBodyPart");
+    case "injurySide":return knownValue(facts,"injurySide")==null?value==="left"||value==="right":value===knownValue(facts,"injurySide");
+    case "injuries":return typeof value==="string"&&FRACTURE_WORDS.test(value);
+    case "injured":return value===true;
+    default:return true;
+  }
+}
 function accidentalCauseStatement(text:string){
   const accident="(?:accident|crash|collision|fall|fell|road traffic incident|motorbike incident|motorcycle incident)";
   return new RegExp(String.raw`\b(?:died|passed away|was killed|were killed|death)\b[^.!?;\n]{0,90}\b(?:from|due to|because of|caused by|as (?:a )?result of)\b[^.!?;\n]{0,70}\b${accident}\b`,"i").test(text)||
@@ -201,17 +287,21 @@ export function mergeInterpretation(args: {
   const interpretation = args.interpretation;
   const homicideReport=reportedHomicide(args.message);
   const conditionReport=reportedConditionStatement(args.message);
+  const injuryRetracted=injuryRetractionStatement(args.message);
+  const fractureNegated=injuryRetracted||fractureNegationStatement(args.message);
+  const fractureReport=fractureNegated?null:reportedFractureStatement(args.message);
+  const injuryReport=fractureReport||fractureNegated?null:reportedInjuryStatement(args.message);
   const priorDiagnosis=args.subjectIds.length===1?knownValue(args.state.subjects[args.subjectIds[0]]??{},"diagnosis"):null;
   const conditionStartsTopic=!!conditionReport&&typeof priorDiagnosis==="string"&&normalText(priorDiagnosis)!==normalText(conditionReport.condition);
   const startsClaimTopic=interpretation.newTopic||conditionStartsTopic;
-  if (startsClaimTopic && (interpretation.intent === "claim" || homicideReport || conditionReport)) {
+  if (startsClaimTopic && (interpretation.intent === "claim" || homicideReport || conditionReport || fractureReport)) {
     for (const id of args.subjectIds){next.subjects[id] = {};next.scenarios![id]=[];}
     delete next.pending;
   }
   // An affirmative homicide report is an event even when the same message also
   // asks a policy question and the language model labels the turn as a question.
   // Hypotheticals and interrogative phrases are rejected by reportedHomicide.
-  const actualIntent = (homicideReport||conditionReport) && interpretation.intent!=="portfolio" ? "claim" :
+  const actualIntent = (homicideReport||conditionReport||fractureReport) && interpretation.intent!=="portfolio" ? "claim" :
     interpretation.intent === "follow_up" ? next.intent ?? "policy_question" : interpretation.intent;
   next.intent = actualIntent;
   if (!next.activeQuery || startsClaimTopic || (interpretation.intent !== "follow_up" && !(actualIntent==="claim"&&args.state.intent==="claim"))) next.activeQuery = args.message;
@@ -264,6 +354,10 @@ export function mergeInterpretation(args: {
       fact.key !== "eventType" && !hasQuote(fact.quote,value)) continue;
     if (fact.state !== "known") value = null;
     if (fact.state === "known" && value == null) continue;
+    if(INJURY_MODEL_KEYS.has(fact.key)&&!injuryModelFactAllowed(args.message,fact.quote,fact.key,value,injuryRetracted,fractureNegated))continue;
+    // A deterministic fracture report is not downgraded by a vaguer model value
+    // ("injured arm", injuryKind "injury") unless the user negates the fracture.
+    if(!fractureNegated&&fractureLocked(oldFacts)&&!keepsFracture(fact.key,value,oldFacts))continue;
     (next.subjects[fact.subjectId] ??= {})[fact.key] = {
       value, state: fact.state, quote: fact.quote, source, recordedAt: args.now.toISOString(),
     };
@@ -296,6 +390,34 @@ export function mergeInterpretation(args: {
         quote:conditionReport.quote,recordedAt:args.now.toISOString(),source:"system-derived"};
       const list=next.scenarios![id]??=[];
       if(!list.some(s=>normalText(s.label)===normalText(scenario.label)&&normalText(s.quote)===normalText(scenario.quote)))list.push(scenario);
+    }
+    if(args.subjectIds.length===1&&fractureNegated){
+      if(knownValue(facts,"injuryKind")==="fracture")delete facts.injuryKind;
+      delete facts.fractureBodyPart;
+      if(injuryRetracted)for(const key of ["injured","injuryBodyPart","injurySide","injuries"])if(facts[key]?.source==="system-derived"&&facts[key].value!==false)delete facts[key];
+      if(typeof knownValue(facts,"injuries")==="string"&&FRACTURE_WORDS.test(String(knownValue(facts,"injuries"))))delete facts.injuries;
+      if(next.scenarios![id])next.scenarios![id]=next.scenarios![id].filter(s=>!(s.source==="system-derived"&&s.label.startsWith("Reported fracture")));
+    }
+    if(args.subjectIds.length===1&&fractureReport&&knownValue(facts,"death")!==true){
+      const reported={state:"known" as const,quote:fractureReport.quote,source:"system-derived" as const,recordedAt:args.now.toISOString()};
+      const site=(fractureReport.side?fractureReport.side+" ":"")+fractureReport.bodyPart;
+      facts.injured={...reported,value:true};
+      facts.injuryKind={...reported,value:"fracture"};
+      facts.fractureBodyPart={...reported,value:site};
+      facts.injuryBodyPart={...reported,value:fractureReport.bodyPart};
+      if(fractureReport.side)facts.injurySide={...reported,value:fractureReport.side};
+      const injuries=knownValue(facts,"injuries");
+      if(!(typeof injuries==="string"&&FRACTURE_WORDS.test(injuries)))facts.injuries={...reported,value:fractureReport.quote};
+      const scenario:ScenarioClassification={subjectId:id,label:"Reported fracture: "+site,family:"injury",traits:["bodily_injury"],
+        quote:fractureReport.quote,recordedAt:args.now.toISOString(),source:"system-derived"};
+      const list=next.scenarios![id]??=[];
+      if(!list.some(s=>normalText(s.label)===normalText(scenario.label)&&normalText(s.quote)===normalText(scenario.quote)))list.push(scenario);
+    }
+    if(args.subjectIds.length===1&&injuryReport&&!fractureLocked(facts)&&knownValue(facts,"death")!==true){
+      const reported={state:"known" as const,quote:injuryReport.quote,source:"system-derived" as const,recordedAt:args.now.toISOString()};
+      facts.injured={...reported,value:true};
+      facts.injuryBodyPart={...reported,value:injuryReport.bodyPart};
+      if(injuryReport.side)facts.injurySide={...reported,value:injuryReport.side};
     }
     const ongoing = knownValue(facts, "hospitalStayOngoing") === true;
     if (ongoing && facts.hospitalNights) facts.hospitalNights = { ...facts.hospitalNights, value: null, state: "pending" };
@@ -336,9 +458,12 @@ export function applyExplicitDeferrals(state:ConversationState,message:string,su
   }
   return next;
 }
+const FACT_LABELS:Record<string,string>={fractureBodyPart:"Fracture",injuryKind:"Injury type",injuryBodyPart:"Injured body part",injurySide:"Side"};
 export function factLabels(facts: SubjectFacts): string[] {
-  return Object.entries(facts).filter(([key]) => key !== "eventType").map(([key, fact]) => {
-    const label = key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+  const fracture=facts.fractureBodyPart?.state==="known";
+  return Object.entries(facts).filter(([key]) => key !== "eventType" &&
+    !(fracture&&(key==="injuryBodyPart"||key==="injurySide"||(key==="injuryKind"&&knownValue(facts,"injuryKind")==="fracture")))).map(([key, fact]) => {
+    const label = FACT_LABELS[key] ?? key.replace(/([A-Z])/g, " $1").replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
     const value=key==="death"&&fact.value===true?"reported":typeof fact.value==="boolean"?(fact.value?"yes":"no"):
       Array.isArray(fact.value)?fact.value.join(", "):String(fact.value);
     return label + ": " + (fact.state === "known" ? value : fact.state === "pending" ? "not yet known" : "unknown");
