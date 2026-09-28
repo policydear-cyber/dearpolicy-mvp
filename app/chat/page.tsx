@@ -235,13 +235,10 @@ function ChatContent(){
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {messages.map((message,index)=><div className={"message "+message.role} key={message.id??index}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body"><p>{message.content}</p>
-          {message.answer?.knownFacts.length?<div className="known-facts"><strong>Facts and uncertainties</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{f}</span>)}</div></div>:null}
-          {message.answer?.scenarioClassifications?.length?<div className="scenario-check"><strong>What DearPolicy is checking against</strong><small>These guide which policy wording is matched; the wording and your evidence decide what you can actually claim.</small><div>{message.answer.scenarioClassifications.map((s,i)=>{const extra=s.traits.map(t=>t.replaceAll("_"," ")).filter(t=>t.toLowerCase()!==s.label.toLowerCase());return<span key={i}><b>{s.label}</b>{extra.length?" · "+extra.join(" · "):""}</span>;})}</div></div>:null}
+          {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{q.text}</strong><small>{q.why}</small>
             <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
           </div>)}
-          {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
-          {message.answer?.assessmentKind==="preliminary"?<div className="preliminary-assessment" data-testid="preliminary-assessment"><small>Preliminary claim assessment</small><p>{PRELIMINARY_ASSESSMENT_NOTICE}</p></div>:null}
           {message.answer?.factFinding?.length?<div className="fact-finding" data-testid="fact-finding"><small>What DearPolicy still needs</small>{message.answer.factFinding.map((plan,i)=><div className="fact-finding-plan" key={i} data-status={plan.status}>
             <strong>{plan.subjectName?plan.subjectName+" · ":""}{plan.label}</strong> <span className="fact-finding-status">{factFindingStatusCopy[plan.status]}</span>
             {plan.nextQuestions.length?<ul className="fact-finding-questions">{plan.nextQuestions.map(q=><li key={q.id}>{q.text}</li>)}</ul>:null}
@@ -249,6 +246,14 @@ function ChatContent(){
             {plan.reviewerRequirements.length?<p className="fact-finding-reviewers">{plan.reviewerRequirements.join("; ")}</p>:null}
             {plan.reportedAmountsIgnored.length?<p className="fact-finding-reported">Any amount you mentioned is recorded as you reported it. It is not used as your cover or to work out a claim.</p>:null}
           </div>)}</div>:null}
+          {/* When information is still needed, the questions above are the
+              whole point of the turn: everything else collapses behind one
+              toggle so they are never buried under the full assessment. Once
+              nothing is open, the assessment renders expanded as before. */}
+          {(awaiting=>{const detail=<>
+          {message.answer?.knownFacts.length?<div className="known-facts"><strong>Facts and uncertainties</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{f}</span>)}</div></div>:null}
+          {message.answer?.scenarioClassifications?.length?<div className="scenario-check"><strong>What DearPolicy is checking against</strong><small>These guide which policy wording is matched; the wording and your evidence decide what you can actually claim.</small><div>{message.answer.scenarioClassifications.map((s,i)=>{const extra=s.traits.map(t=>t.replaceAll("_"," ")).filter(t=>t.toLowerCase()!==s.label.toLowerCase());return<span key={i}><b>{s.label}</b>{extra.length?" · "+extra.join(" · "):""}</span>;})}</div></div>:null}
+          {message.answer?.assessmentKind==="preliminary"?<div className="preliminary-assessment" data-testid="preliminary-assessment"><small>Preliminary claim assessment</small><p>{PRELIMINARY_ASSESSMENT_NOTICE}</p></div>:null}
           {message.answer?.policyStatedLimits?.length?<div className="policy-stated-limits" data-testid="policy-stated-limits">{message.answer.policyStatedLimits.map((limit,i)=><div className="policy-stated-limit" key={i}>
             <small>{POLICY_STATED_LIMIT_LABEL}</small><strong>{limit.amountText}</strong><span>{limit.ownerName?limit.ownerName+" · ":""}{limit.benefitTitle}</span>
             <p>{POLICY_STATED_LIMIT_NOTICE}</p><em>From {limit.citation.policyName}, page {limit.citation.pageStart}: “{limit.quote.length>200?limit.quote.slice(0,197)+"…":limit.quote}”</em>
@@ -286,6 +291,9 @@ function ChatContent(){
           {message.answer?.policyReview?.length?<details className="policy-review"><summary>Policy review · {message.answer.policyReview.length} contracts</summary><div className="policy-table-scroll"><table className="chat-policy-table"><thead><tr><th>Family member</th><th>Policy</th><th>Review</th><th>Evidence read</th><th>Active status</th></tr></thead><tbody>{message.answer.policyReview.map(item=><tr key={item.id}><td>{item.ownerName}</td><td>{item.policyName}</td><td>{reviewCopy[item.status]??item.status}</td><td>{coverageText(item.coverage)}</td><td title={item.currentness?.detail}>{item.currentness?.label??"Not checked"}</td></tr>)}</tbody></table></div></details>:null}
           {message.answer?.nextSteps.length?<div className="next-steps"><strong>What to do next</strong><ol>{message.answer.nextSteps.map((step,i)=><li key={i}>{step}</li>)}</ol></div>:null}
           {message.answer?.citations.length?<details className="citations"><summary>Why DearPolicy says this · {message.answer.citations.length} sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Uploaded policy evidence"}</small></span><b>Page {c.pageStart}{c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</b></div>)}</details>:null}
+          </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
+            ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
+          )}
           {message.answer?.disclaimer?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
         </div>
         {message.error?<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error} Send it again when you&rsquo;re ready.</span></div>:null}
