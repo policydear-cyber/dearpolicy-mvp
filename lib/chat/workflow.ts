@@ -17,6 +17,7 @@ import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
 import { enforceLiveChatMonetaryBoundary, liveClaimContext } from "./monetary-boundary";
 import { applyFactFinding } from "./fact-finding-chat";
+import { recordDirectFactAnswer } from "@/lib/claims/fact-finding";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
 import { reportedClaimEvents } from "@/lib/insurance/claim-events";
@@ -355,6 +356,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
     try{interpretation=await interpretMessage({message:request.question,state,people:context.family,subjectIds,history});}
     catch(error){
       state=applyExplicitDeferrals(state,request.question,subjectIds,now);
+      // A "Question: answer" message from the chat's own question card is
+      // recorded deterministically -- the interpreter above may miss the
+      // mapping, and a missed answer re-asks the same question forever.
+      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now});
       const truncated=error instanceof TruncatedModelOutput;
       const cause=readableModelFailure(error);
       answer.summary=truncated
@@ -369,6 +374,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       state=mergeInterpretation({state,interpretation,message:request.question,subjectIds,
         subjectNames:Object.fromEntries(context.people.map(p=>[p.id,[p.display_name,p.preferred_name??""].filter(Boolean)])),now,timeZone:request.timeZone});
       state=applyExplicitDeferrals(state,request.question,subjectIds,now);
+      // A "Question: answer" message from the chat's own question card is
+      // recorded deterministically -- the interpreter above may miss the
+      // mapping, and a missed answer re-asks the same question forever.
+      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now});
       delete state.personContext;
       await check();
       await report({stage:"Loading personal policies and matching documents",completed:0,total:0});

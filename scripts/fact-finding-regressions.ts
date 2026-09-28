@@ -3,7 +3,7 @@
  * Every blocked state has a positive control; every scenario is run repeatedly.
  */
 import assert from "node:assert/strict";
-import { categoriesFor, conditionDrivenQuestions, FACT_FINDING_SPECS, planFactFinding, type FactFindingCategory } from "@/lib/claims/fact-finding";
+import { categoriesFor, conditionDrivenQuestions, FACT_FINDING_SPECS, planFactFinding, recordDirectFactAnswer, type FactFindingCategory } from "@/lib/claims/fact-finding";
 import { applyFactFinding } from "@/lib/chat/fact-finding-chat";
 import type { ConversationFact, ConversationState, SubjectFacts } from "@/lib/chat/types";
 import type { ChatAnswer } from "@/types";
@@ -116,6 +116,31 @@ test("accidental death now requires where it happened, alongside cause and circu
   const p = plan("accidental_death", { deathDate: fact("2026-08-01") });
   assert.deepEqual(p.nextQuestions.map((q) => q.factKey).sort(), ["accidentCircumstances", "causeOfDeath", "eventLocation"]);
   assert.ok(p.nextQuestions.find((q) => q.factKey === "eventLocation")!.text.includes("Singapore"));
+});
+
+test("a card answer in Question: answer form is recorded deterministically against its fact", () => {
+  const subjects: Record<string, ReturnType<typeof allFacts>> = { a: {} };
+  const scenarios = { a: [{ family: "death", traits: ["death", "accident"] }] };
+  const ok = recordDirectFactAnswer({ message: "What does the death certificate give as the cause of death: natural death",
+    subjects, subjectIds: ["a"], scenarios, now: new Date(Date.UTC(2026, 8, 1)) });
+  assert.equal(ok, true);
+  assert.equal(subjects.a.causeOfDeath?.value, "natural death");
+  assert.equal(subjects.a.causeOfDeath?.state, "known");
+  const p = plan("accidental_death", subjects.a);
+  assert.ok(!p.nextQuestions.some((q) => q.factKey === "causeOfDeath"), "an answered question is never asked again");
+});
+test("yes/no/not-sure card answers map to boolean or a tracked uncertainty; unknown text records nothing", () => {
+  const subjects: Record<string, ReturnType<typeof allFacts>> = { a: {} };
+  const scenarios = { a: [{ family: "death", traits: ["death"] }] };
+  const now = new Date(Date.UTC(2026, 8, 1));
+  assert.equal(recordDirectFactAnswer({ message: "Did it happen during motor racing or speed trials: No", subjects, subjectIds: ["a"], scenarios, now }), true);
+  assert.equal(subjects.a.hazardousActivity?.value, false);
+  assert.equal(recordDirectFactAnswer({ message: "Was alcohol or drug use involved in the incident: Not sure", subjects, subjectIds: ["a"], scenarios, now }), true);
+  assert.equal(subjects.a.alcoholOrDrugsInvolved?.value, "not sure");
+  assert.equal(recordDirectFactAnswer({ message: "An earlier answer changed, so please confirm again: On what date did they pass away: 2026-08-15", subjects, subjectIds: ["a"], scenarios, now }), true);
+  assert.equal(subjects.a.deathDate?.value, "2026-08-15");
+  assert.equal(recordDirectFactAnswer({ message: "my neighbour said something: hello", subjects, subjectIds: ["a"], scenarios, now }), false);
+  assert.equal(recordDirectFactAnswer({ message: "what can we claim?", subjects, subjectIds: ["a"], scenarios, now }), false);
 });
 
 async function atest(name: string, fn: () => Promise<void>) { try { for (let i = 0; i < 3; i++) await fn(); cases++; } catch (e) { throw new Error(name, { cause: e }); } }

@@ -265,17 +265,23 @@ function ChatContent(){
               :q.type==="choice"&&q.options?.length?<div className="quick-replies">{q.options.map(option=><button key={option} disabled={locked} onClick={()=>reply(option)}>{option}</button>)}</div>
               :<InlineAnswer kind={q.type==="date"?"date":"text"} disabled={locked} onSubmit={reply} />}
             </div>;})():null}
+          {/* Documents give the answer more to stand on than typed facts:
+              anything the family already holds (death certificate, police or
+              coroner's report, bills, receipts) uploads on the claim's own
+              evidence page, so the affordance is one clear link, not a
+              second uploader. */}
+          {message.answer?.claimSessionId&&(message.answer.factFinding??[]).some(plan=>plan.missingDocuments.length)?<a className="claim-pack-link evidence-upload-link" href={`/claims/${message.answer.claimSessionId}`}>Upload documents for this claim — {[...new Set((message.answer.factFinding??[]).flatMap(plan=>plan.missingDocuments))].slice(0,4).join("; ")} →</a>:null}
+          {/* When information is still needed, the questions above are the
+              whole point of the turn: everything else collapses behind one
+              toggle so they are never buried under the full assessment. Once
+              nothing is open, the assessment renders expanded as before. */}
+          {(awaiting=>{const detail=<>
           {message.answer?.factFinding?.length?<div className="fact-finding" data-testid="fact-finding"><small>What DearPolicy still needs</small>{message.answer.factFinding.map((plan,i)=><div className="fact-finding-plan" key={i} data-status={plan.status}>
             <strong>{plan.subjectName?plan.subjectName+" · ":""}{plan.label}</strong> <span className="fact-finding-status">{factFindingStatusCopy[plan.status]}</span>
             {plan.missingDocuments.length?<p className="fact-finding-documents">Documents: {plan.missingDocuments.join("; ")}</p>:null}
             {plan.reviewerRequirements.length?<p className="fact-finding-reviewers">{plan.reviewerRequirements.join("; ")}</p>:null}
             {plan.reportedAmountsIgnored.length?<p className="fact-finding-reported">Any amount you mentioned is recorded as you reported it. It is not used as your cover or to work out a claim.</p>:null}
           </div>)}</div>:null}
-          {/* When information is still needed, the questions above are the
-              whole point of the turn: everything else collapses behind one
-              toggle so they are never buried under the full assessment. Once
-              nothing is open, the assessment renders expanded as before. */}
-          {(awaiting=>{const detail=<>
           {message.answer?.knownFacts.length?<div className="known-facts"><strong>Facts and uncertainties</strong><div>{message.answer.knownFacts.map((f,i)=><span key={i}>{f}</span>)}</div></div>:null}
           {message.answer?.scenarioClassifications?.length?<div className="scenario-check"><strong>What DearPolicy is checking against</strong><small>These guide which policy wording is matched; the wording and your evidence decide what you can actually claim.</small><div>{message.answer.scenarioClassifications.map((s,i)=>{const extra=s.traits.map(t=>t.replaceAll("_"," ")).filter(t=>t.toLowerCase()!==s.label.toLowerCase());return<span key={i}><b>{s.label}</b>{extra.length?" · "+extra.join(" · "):""}</span>;})}</div></div>:null}
           {message.answer?.assessmentKind==="preliminary"?<div className="preliminary-assessment" data-testid="preliminary-assessment"><small>Preliminary claim assessment</small><p>{PRELIMINARY_ASSESSMENT_NOTICE}</p></div>:null}

@@ -302,6 +302,58 @@ export function conditionDrivenQuestions(input: {
   return out;
 }
 
+/** Records an answer sent in the chat UI's own "Question: answer" form
+ * directly against the fact it answers.
+ *
+ * The chat promotes one fact-finding question at a time and, on tap or
+ * inline submit, sends "<question without the question mark>: <answer>".
+ * Routing that through the free-text interpreter proved lossy -- the model
+ * could fail to map "What does the death certificate give as the cause of
+ * death: natural death" onto causeOfDeath, and the same question was asked
+ * again forever. Every question text is static (declared in the specs above
+ * or in CONDITION_QUESTION_BY_CAUSE), so a message in that exact shape is
+ * recorded deterministically: no model in the loop, no re-asking. "Not
+ * sure" is stored as a known-but-uncertain value so the interview moves on
+ * while the uncertainty stays tracked. Returns true when it recorded. */
+const QUESTION_PREFIX_STRIP = /^(?:You gave two different answers earlier\.\s*|An earlier answer changed, so please confirm again:\s*)/i;
+function questionIndex(): Map<string, { factKey: string; type: FactSpec["type"] }> {
+  const index = new Map<string, { factKey: string; type: FactSpec["type"] }>();
+  for (const spec of Object.values(FACT_FINDING_SPECS)) for (const fact of spec.facts) {
+    index.set(fact.question.replace(/\?\s*$/, "").toLowerCase(), { factKey: fact.key, type: fact.type });
+  }
+  for (const entry of Object.values(CONDITION_QUESTION_BY_CAUSE)) {
+    index.set(entry.question.replace(/\?\s*$/, "").toLowerCase(), { factKey: entry.factKey, type: "yes_no" });
+  }
+  return index;
+}
+export function recordDirectFactAnswer(args: {
+  message: string;
+  subjects: Record<string, SubjectFacts>;
+  subjectIds: string[];
+  scenarios?: Record<string, { traits: string[]; family: string }[] | undefined>;
+  now: Date;
+}): boolean {
+  const message = args.message.trim().replace(QUESTION_PREFIX_STRIP, "");
+  const colon = message.indexOf(":");
+  if (colon <= 0) return false;
+  const asked = message.slice(0, colon).trim().replace(/\?\s*$/, "").toLowerCase();
+  const raw = message.slice(colon + 1).trim();
+  if (!raw) return false;
+  const match = questionIndex().get(asked);
+  if (!match) return false;
+  const target = args.subjectIds.find((id) => (args.scenarios?.[id] ?? []).length) ?? args.subjectIds[0];
+  if (!target) return false;
+  let value: string | boolean = raw;
+  if (match.type === "yes_no") {
+    if (/^y(es)?\b/i.test(raw)) value = true;
+    else if (/^no?\b/i.test(raw)) value = false;
+    else value = "not sure";
+  }
+  const facts = (args.subjects[target] ??= {});
+  facts[match.factKey] = { value, state: "known", quote: args.message, recordedAt: args.now.toISOString(), source: "user" };
+  return true;
+}
+
 /** Which categories a reported situation opens, from the conversation's own
  * scenario traits and facts. Deterministic; nothing is inferred from a
  * model's opinion of eligibility. */
