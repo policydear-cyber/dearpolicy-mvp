@@ -43,7 +43,7 @@ export default function CoveragePage(){
   const [editing,setEditing]=useState<Row|null>(null);
   const [draft,setDraft]=useState<{paysKind:Row["paysKind"];amount:string;sumBasis:string;eventType:string;planName:string}|null>(null);
   const [adding,setAdding]=useState(false);
-  const [addDraft,setAddDraft]=useState({familyMemberId:"",planName:"",eventType:"death",paysKind:"lump_sum" as Row["paysKind"],amount:""});
+  const [addDraft,setAddDraft]=useState({familyMemberId:"",planName:"",eventType:"death",paysKind:"lump_sum" as Row["paysKind"],amount:"",currency:"SGD"});
   const [notice,setNotice]=useState<string|null>(null);
   const [reading,setReading]=useState<Reading>({pending:0,inProgress:false});
 
@@ -110,10 +110,10 @@ export default function CoveragePage(){
       const amount=amountText===""?null:Number(amountText);
       const res=await fetch("/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({familyMemberId:addDraft.familyMemberId||member||family[0]?.id,planName:addDraft.planName,eventType:addDraft.eventType,paysKind:addDraft.paysKind,
-          amount:addDraft.paysKind==="percent_of_sum"&&amount!=null?amount/100:amount})});
+          amount:addDraft.paysKind==="percent_of_sum"&&amount!=null?amount/100:amount,currency:addDraft.currency})});
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||"Could not add the row");
-      setAdding(false);setAddDraft({familyMemberId:"",planName:"",eventType:"death",paysKind:"lump_sum",amount:""});
+      setAdding(false);setAddDraft({familyMemberId:"",planName:"",eventType:"death",paysKind:"lump_sum",amount:"",currency:"SGD"});
       await load();
     }catch(e){setError(e instanceof Error?e.message:"Could not add the row");}
     finally{setBusy(null);}
@@ -151,7 +151,8 @@ export default function CoveragePage(){
         <div className="field"><label>Plan</label><input value={addDraft.planName} placeholder="e.g. DPS" onChange={e=>setAddDraft(d=>({...d,planName:e.target.value}))}/></div>
         <div className="field"><label>Event</label><select value={addDraft.eventType} onChange={e=>setAddDraft(d=>({...d,eventType:e.target.value}))}>{events.map(ev=><option key={ev.value} value={ev.value}>{ev.label}</option>)}</select></div>
         <div className="field"><label>Pays</label><select value={addDraft.paysKind} onChange={e=>setAddDraft(d=>({...d,paysKind:e.target.value as Row["paysKind"]}))}>{KINDS.map(k=><option key={k.value} value={k.value}>{k.label}</option>)}</select></div>
-        <div className="field"><label>Amount {addDraft.paysKind==="percent_of_sum"?"(%)":"(S$)"}</label><input inputMode="decimal" value={addDraft.amount} onChange={e=>setAddDraft(d=>({...d,amount:e.target.value}))}/></div>
+        <div className="field"><label>Amount {addDraft.paysKind==="percent_of_sum"?"(%)":"("+addDraft.currency+")"}</label><input inputMode="decimal" value={addDraft.amount} onChange={e=>setAddDraft(d=>({...d,amount:e.target.value}))}/></div>
+        {addDraft.paysKind!=="percent_of_sum"&&<div className="field"><label>Currency</label><select value={addDraft.currency} onChange={e=>setAddDraft(d=>({...d,currency:e.target.value}))}>{["SGD","USD","MYR","EUR","GBP","AUD","HKD","JPY"].map(c=><option key={c} value={c}>{c}</option>)}</select></div>}
         <button className="button primary" disabled={busy==="add"||!addDraft.planName.trim()} onClick={()=>void add()}>Save row</button>
       </div>
       <p className="note">For cover no document states, such as DPS. A row you enter is used as written.</p>

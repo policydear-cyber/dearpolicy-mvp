@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isUuid,query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { createUserSupabaseClient } from "@/lib/db/authz-client";
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
     if (inFlightIds.length) {
       const stalledRows = await query<{ id: string }>(
         `SELECT p.id FROM policies p
-          WHERE p.account_id=$1 AND p.id=ANY($2::uuid[])
+          WHERE p.account_id=$1 AND p.id=ANY($2::uuid[]) AND ${activePredicate("p")}
             AND p.updated_at < now() - interval '2 minutes'
             AND NOT EXISTS (SELECT 1 FROM background_jobs j
                   WHERE j.job_type=$3 AND j.idempotency_key=p.id::text

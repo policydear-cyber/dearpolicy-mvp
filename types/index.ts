@@ -8,7 +8,7 @@ export type StructuredCoverageFact = {
   id:string; policyId:string; category:string; amount:number|null; currency:string|null; productName:string|null; sourcePage:number|null; evidenceText:string|null;
   insurer:string|null; policyName:string|null; policyNumber:string|null; documentRole:string|null;
 };
-export type ChatCitation = { chunkId:string; policyId:string; policyName:string; insurer?:string; pageStart:number; pageEnd:number; documentRole?:string|null; personalEvidence?:boolean; evidenceLabel?:string };
+export type ChatCitation = { chunkId:string; policyId:string; policyName:string; insurer?:string; pageStart:number|null; pageEnd:number|null; documentRole?:string|null; personalEvidence?:boolean; evidenceLabel?:string };
 /** A benefit or maximum amount copied deterministically from the current
  * active policy's own wording, with its page cited and its currency written
  * in that wording. It is NOT an estimate of what the insurer will pay for an

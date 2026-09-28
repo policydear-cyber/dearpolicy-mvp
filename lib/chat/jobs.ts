@@ -127,8 +127,15 @@ export async function getChatJob(accountId:string,id:string){
       const healed=await query<{id:string}>(
         `UPDATE chat_analysis_jobs c SET status='failed',error=$3,updated_at=now()
           WHERE c.id=$1 AND c.account_id=$2 AND c.status IN ('queued','running')
-            AND EXISTS (SELECT 1 FROM background_jobs j
-              WHERE j.job_type=$4 AND j.account_id=c.account_id AND j.idempotency_key=c.id::text AND j.status='dead_letter')
+            AND (EXISTS (SELECT 1 FROM background_jobs j
+                  WHERE j.job_type=$4 AND j.account_id=c.account_id AND j.idempotency_key=c.id::text AND j.status='dead_letter')
+              -- No progress for 10 minutes and nothing left that could still
+              -- run it: the background job is missing (the enqueue failed
+              -- after this row was written) or already terminal.
+              OR (c.updated_at < now() - interval '10 minutes'
+                  AND NOT EXISTS (SELECT 1 FROM background_jobs j
+                    WHERE j.job_type=$4 AND j.account_id=c.account_id AND j.idempotency_key=c.id::text
+                      AND j.status IN ('queued','processing','failed_retryable'))))
           RETURNING id`,
         [id,accountId,STUCK_ANALYSIS_MESSAGE,CHAT_ANALYSIS_JOB_TYPE]);
       if(healed.rows.length)return {...row,status:"failed",error:STUCK_ANALYSIS_MESSAGE};

@@ -71,13 +71,19 @@ export function renderPageLayout(items:TextItem[],pageWidth:number):PageLayout{
   // exact-quote check keeps working against this text.
   return {text:lines.map(line=>line.text).join("\n"),lines};
 }
-const AMOUNT=/(?:S?\$\s?[\d,]+(?:\.\d{1,2})?|\d{1,3}(?:\.\d+)?\s?%)/;
+/** A printed currency marker in front of an amount: a dollar sign with its
+ * country prefix (S$, US$, HK$, A$ …), an ISO code (SGD, USD, EUR …), RM, € or
+ * £. Only "S$"-style cells used to count, so a travel schedule printing
+ * "US$250,000" or "USD 500,000" lost those rows without a trace. */
+export const CURRENCY_MARKER=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|RM|€|£|¥)`;
+const AMOUNT=new RegExp(String.raw`(?:${CURRENCY_MARKER}\s?[\d,]+(?:\.\d{1,2})?|\d{1,3}(?:\.\d+)?\s?%)`);
+const VALUE_START=new RegExp(String.raw`^(?:${CURRENCY_MARKER}\s?\d|\d)`);
 /** Limits are rarely bare figures. "Up to S$500 per incident" and "25% of the
  * Sum Insured" are both value cells; a paragraph that happens to mention a
  * dollar figure is not. Length is what separates a cell from prose. */
 function isValueCell(cell:string){
   if(!AMOUNT.test(cell)||cell.length>80)return false;
-  return /^(?:S?\$|\d)/.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from)\b/i.test(cell);
+  return VALUE_START.test(cell)||/^(?:up to|max(?:imum)?|not exceed(?:ing)?|limited to|per|from)\b/i.test(cell);
 }
 export type BenefitRow={label:string;value:string;line:string;
   /** Where this row sits in the page's lines, so a heading above it (for

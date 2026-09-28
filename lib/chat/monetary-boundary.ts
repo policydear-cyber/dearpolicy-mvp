@@ -90,7 +90,7 @@ function sameLimit(a: PolicyStatedLimit, b: PolicyStatedLimit) {
 export function isValidPolicyStatedLimit(limit: PolicyStatedLimit | undefined | null): limit is PolicyStatedLimit {
   if (!limit || limit.kind !== "policy_stated_limit" || limit.label !== POLICY_STATED_LIMIT_LABEL || limit.notice !== POLICY_STATED_LIMIT_NOTICE) return false;
   if (!Number.isFinite(limit.amount) || limit.amount <= 0 || !/^[A-Z]{3}$/.test(limit.currency)) return false;
-  if (!limit.citation?.policyId || !limit.citation.chunkId || !(limit.citation.pageStart > 0) || !limit.quote) return false;
+  if (!limit.citation?.policyId || !limit.citation.chunkId || !((limit.citation.pageStart ?? 0) > 0) || !limit.quote) return false;
   const digits = limit.quote.replace(/(\d),(?=\d{3}\b)/g, "$1");
   if (!new RegExp(`(^|[^\\d.])${String(limit.amount)}(?![\\d])`).test(digits) && !new RegExp(`(^|[^\\d.])${limit.amount.toLocaleString("en-US")}(?![\\d])`).test(limit.quote)) return false;
   const markers: Record<string, RegExp> = { SGD: /\bSGD\b|(?:^|[^A-Za-z])S\$/, USD: /\bUSD\b|US\$/, EUR: /\bEUR\b|€/, GBP: /\bGBP\b|£/, JPY: /\bJPY\b|¥/ };

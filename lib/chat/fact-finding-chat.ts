@@ -114,7 +114,9 @@ export function joinOr(items: string[], word = "or") {
   return items.length <= 1 ? items.join("") : items.slice(0, -1).join(", ") + " " + word + " " + items[items.length - 1];
 }
 
-type Person = { id: string; display_name: string; relationship?: string | null };
+type Person = { id: string; display_name: string; preferred_name?: string | null; relationship?: string | null };
+/** The name the family uses ("Charmaine"), not the full legal name on the policy. */
+const calledName = (person: Person) => person.preferred_name?.trim() || person.display_name;
 const known = (facts: SubjectFacts, key: string) => facts[key]?.state === "known" ? facts[key].value : null;
 
 /** The next open question of the injury plan, for the first person it applies
@@ -134,7 +136,7 @@ export function nextInjuryQuestion(state: ConversationState, people: Person[]): 
 
 function possessive(person: Person) {
   if (/^self$/i.test(person.relationship ?? "")) return "your";
-  return person.display_name + "’s";
+  return calledName(person) + "’s";
 }
 function injuryPhrase(facts: SubjectFacts) {
   const kind = known(facts, "injuryKind");
@@ -158,7 +160,7 @@ export function injuryFactFindingText(args: { person: Person; facts: SubjectFact
   const categories = benefitCategories(args.candidateNames).filter((c) =>
     c !== "accidental death" && c !== "death" && c !== "critical illness" && (c !== "permanent disability" || (lasting && !fracture)));
   const self = /^self$/i.test(person.relationship ?? "");
-  const lead = self ? "I’m sorry you’re dealing with this." : "I’m sorry " + person.display_name + " is dealing with this.";
+  const lead = self ? "I’m sorry you’re dealing with this." : "I’m sorry " + calledName(person) + " is dealing with this.";
   const phrase = injuryPhrase(facts);
   const labels = categories.map((c) => c === "fracture" ? "fracture" : c);
   // Until the cause is known, which benefits can respond is not known either

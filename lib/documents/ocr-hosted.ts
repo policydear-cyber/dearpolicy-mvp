@@ -23,13 +23,13 @@ async function subsetPdf(bytes: Uint8Array, pageNumbers: number[]) {
 
 const SYSTEM = "You transcribe scanned insurance-document pages exactly as printed. Reply with a single JSON object of the form "
   + '{"pages":[{"pageNumber":1,"text":"..."}]} and nothing else. Transcribe every line of visible text, in reading order, '
-  + "including numbers, dates and table rows. If a page is blank or unreadable, use an empty string for its text. Never summarise or omit content.";
+  + "including numbers, dates and table rows; on a table row, separate the columns with a single TAB character (\\t) so the row keeps its cells. If a page is blank or unreadable, use an empty string for its text. Never summarise or omit content.";
 
 /** One transcription attempt for a set of page numbers. Returns whatever the
  * model actually reported rather than throwing, so the caller can retry just
  * the pages it dropped instead of failing the whole document on one flaky
  * response. */
-async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pageNumbers: number[]; correlationId?: string }): Promise<BridgePage[]> {
+async function attemptHostedOcr(args: { accountId: string; resourceId?: string; bytes: Uint8Array; pageNumbers: number[]; correlationId?: string }): Promise<BridgePage[]> {
   const choice = modelFor("reading");
   await assertUnderSpendCap(args.accountId);
   const subset = await subsetPdf(args.bytes, args.pageNumbers);
@@ -58,6 +58,7 @@ async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pa
     await recordUsage({ role: "reading", choice, input: 0, output: 0, durationMs, ok: false });
     await recordModelExecution({
       correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
+      householdId: args.accountId, resourceId: args.resourceId ?? null,
       requested: { provider: choice.provider, model: choice.model, capability: "reading" },
       requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
     });
@@ -67,6 +68,7 @@ async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pa
   await recordUsage({ role: "reading", choice, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
   const record = await recordModelExecution({
     correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
+      householdId: args.accountId, resourceId: args.resourceId ?? null,
     requested: { provider: choice.provider, model: choice.model, capability: "reading" },
     requestedAt, resolved: reply.resolved, status: "succeeded", usage: reply.usage, latencyMs: durationMs,
   });
@@ -101,6 +103,9 @@ async function attemptHostedOcr(args: { accountId: string; bytes: Uint8Array; pa
  * cannot run at all. */
 export async function completePdfPagesWithHostedOcr(args: {
   accountId: string;
+  /** The document being read, for the provenance record (optional: callers
+   * that do not pass it still record the household). */
+  resourceId?: string;
   bytes: Uint8Array;
   pages: PdfPage[];
   pageNumbers: number[];
@@ -115,7 +120,7 @@ export async function completePdfPagesWithHostedOcr(args: {
   const correlationId = resolveCorrelationId(undefined);
   const householdRef = pseudonymizeId(args.accountId);
   try {
-    let returned = await attemptHostedOcr({ accountId: args.accountId, bytes: args.bytes, pageNumbers: args.pageNumbers });
+    let returned = await attemptHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pageNumbers: args.pageNumbers });
     let missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
     // A model dropping a page it was asked for is usually a one-off flake
     // (a truncated reply, a page it briefly balked at) rather than something
@@ -125,7 +130,7 @@ export async function completePdfPagesWithHostedOcr(args: {
     // further up the pipeline still catches a document that is genuinely
     // unreadable throughout.
     if (missing.length) {
-      const retried = await attemptHostedOcr({ accountId: args.accountId, bytes: args.bytes, pageNumbers: missing });
+      const retried = await attemptHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pageNumbers: missing });
       returned = returned.concat(retried);
       missing = args.pageNumbers.filter((n) => !returned.some((p) => p.pageNumber === n));
     }

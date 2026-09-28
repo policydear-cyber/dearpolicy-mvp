@@ -4,14 +4,47 @@ import { normalizeCoverageCategory, normalizePersonName } from "@/lib/insurance"
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 
+/** The ISO code of a currency the document printed, or null. Unlike
+ * normalizeCurrencyCode() on its own, a bare "$" or an unrecognised marker is
+ * NOT turned into SGD: missing information stays missing. */
+export function printedCurrencyCode(value: string | null | undefined): string | null {
+  if (!value || !value.trim()) return null;
+  const code = normalizeCurrencyCode(value, "");
+  return /^[A-Z]{3}$/.test(code) ? code : null;
+}
+
 export async function familyMembersForAccount(accountId: string) {
-  const result = await query<{ id: string; display_name: string }>(`SELECT id,display_name FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
+  const result = await query<{ id: string; display_name: string; preferred_name: string | null }>(`SELECT id,display_name,preferred_name FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId]);
   return result.rows;
 }
 
-export function findFamilyMatch(name: string, family: { id: string; display_name: string }[]) {
+type FamilyCandidate = { id: string; display_name: string; preferred_name?: string | null };
+function memberNames(member: FamilyCandidate) {
+  return [member.display_name, member.preferred_name].filter((n): n is string => !!n && !!n.trim());
+}
+
+/** Which family member a name printed on a document is.
+ *
+ * An exact (order-insensitive) match on the display or preferred name wins.
+ * Otherwise a profile whose every name word appears in the printed name
+ * matches -- "Charmaine" is the profile for "Charmaine Tan" -- but ONLY when
+ * exactly one profile fits that way: two profiles that could both be the
+ * printed person (two "Tan"s) is never guessed between. */
+export function findFamilyMatchWithKind<T extends FamilyCandidate>(name: string, family: T[]): { member: T; kind: "exact" | "partial" } | null {
   const normalized = normalizePersonName(name);
-  return family.find((member) => normalizePersonName(member.display_name) === normalized) ?? null;
+  if (!normalized) return null;
+  const exact = family.filter((member) => memberNames(member).some((n) => normalizePersonName(n) === normalized));
+  if (exact.length === 1) return { member: exact[0], kind: "exact" };
+  if (exact.length > 1) return null;
+  const printed = new Set(normalized.split(" "));
+  const partial = family.filter((member) => memberNames(member).some((n) => {
+    const words = normalizePersonName(n).split(" ").filter((w) => w.length >= 2);
+    return words.length > 0 && words.every((w) => printed.has(w));
+  }));
+  return partial.length === 1 ? { member: partial[0], kind: "partial" } : null;
+}
+export function findFamilyMatch<T extends FamilyCandidate>(name: string, family: T[]): T | null {
+  return findFamilyMatchWithKind(name, family)?.member ?? null;
 }
 
 async function resolveTargetPolicyId(accountId: string, sourcePolicyId: string, policyNumber?: string | null) {
@@ -61,12 +94,16 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
   );
 }
 
-export async function syncInsuredPersonToMember(args: { accountId:string; sourcePolicyId:string; familyMemberId:string; detectedName:string; extraction:PolicyExtraction; }) {
+export async function syncInsuredPersonToMember(args: { accountId:string; sourcePolicyId:string; familyMemberId:string; detectedName:string; extraction:PolicyExtraction;
+  /** How the person was linked: a name match (default, 0.95), or the member the
+   * uploader chose for a document naming one person no profile matched. */
+  link?: { source: "ai_name_match" | "upload_hint"; confidence: number }; }) {
   const person = args.extraction.insuredPeople.find((p)=>normalizePersonName(p.name)===normalizePersonName(args.detectedName));
   if (!person) return;
-  await query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,'ai_name_match',0.95)
-    ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source=EXCLUDED.source,confidence=EXCLUDED.confidence`,[args.sourcePolicyId,args.familyMemberId,args.accountId]);
-  await query(`UPDATE policy_detected_people SET matched_family_member_id=$1,confidence=0.95 WHERE account_id=$2 AND policy_id=$3 AND detected_name=$4`,[args.familyMemberId,args.accountId,args.sourcePolicyId,args.detectedName]);
+  const link = args.link ?? { source: "ai_name_match" as const, confidence: 0.95 };
+  await query(`INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence) VALUES($1,$2,$3,$4,$5)
+    ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source=EXCLUDED.source,confidence=EXCLUDED.confidence`,[args.sourcePolicyId,args.familyMemberId,args.accountId,link.source,link.confidence]);
+  await query(`UPDATE policy_detected_people SET matched_family_member_id=$1,confidence=$5 WHERE account_id=$2 AND policy_id=$3 AND detected_name=$4`,[args.familyMemberId,args.accountId,args.sourcePolicyId,args.detectedName,link.confidence]);
   await query(`DELETE FROM policy_coverages WHERE account_id=$1 AND policy_id=$2 AND family_member_id=$3`,[args.accountId,args.sourcePolicyId,args.familyMemberId]);
   await query(`DELETE FROM premium_records WHERE account_id=$1 AND source_document_id=$2 AND family_member_id=$3`,[args.accountId,args.sourcePolicyId,args.familyMemberId]);
 
@@ -79,7 +116,7 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
         args.accountId,args.sourcePolicyId,args.familyMemberId,category,coverage.amount,
         // Missing information stays missing: a coverage whose document does
         // not state a currency is stored WITHOUT one, never defaulted to SGD.
-        coverage.currency?normalizeCurrencyCode(coverage.currency):null,coverage.productName,
+        printedCurrencyCode(coverage.currency),coverage.productName,
         [coverage.productName,coverage.notes].filter(Boolean).join(" · ")||null,coverage.sourcePage,verified,coverage.evidenceText,verified,
       ]);
     }
@@ -91,7 +128,7 @@ export async function syncInsuredPersonToMember(args: { accountId:string; source
     await query(`INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,payment_date,period_start,period_end,source_document_id,source_page,notes)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,[
       args.accountId,targetPolicyId,args.familyMemberId,payment.insurer??args.extraction.insurer,payment.productName??args.extraction.productName,payment.policyNumber??args.extraction.policyNumber,
-      payment.amount,payment.currency?normalizeCurrencyCode(payment.currency):null,payment.frequency,payment.paymentDate||null,payment.periodStart||null,payment.periodEnd||null,args.sourcePolicyId,payment.sourcePage,payment.notes,
+      payment.amount,printedCurrencyCode(payment.currency),payment.frequency,payment.paymentDate||null,payment.periodStart||null,payment.periodEnd||null,args.sourcePolicyId,payment.sourcePage,payment.notes,
     ]);
   }
 }

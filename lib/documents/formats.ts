@@ -237,13 +237,38 @@ export async function imageToPdf(bytes: Uint8Array, format: SupportedUploadForma
 
 const DOCX_PAGE_CHARACTERS = 2800;
 
-/** Reads a .docx body as plain text (mammoth parses the XML; nothing embedded
- * is ever executed) and splits it into stored "pages" on paragraph
- * boundaries, so citations point at a stable page of the stored text. */
+/** Reads a .docx body as text, keeping the two things a benefit schedule
+ * needs: TABLE ROWS (each row one line, its cells joined by a tab -- the same
+ * shape the PDF layout reader stores, so the deterministic benefit-row parser
+ * reads a Word schedule exactly like a PDF one) and PRINTED PAGES (a hard page
+ * break, or the page break Word recorded when it last laid the document out,
+ * starts a new stored page, so a citation points at the page the person sees).
+ *
+ * The XML is scanned as text with JSZip; nothing embedded is ever executed.
+ * A document with no recorded page breaks falls back to splitting on
+ * paragraph boundaries every ~2,800 characters; a package this reader cannot
+ * make sense of falls back to mammoth's plain-text read. */
 export async function docxToPages(bytes: Uint8Array): Promise<PdfPage[]> {
-  const mammoth = await import("mammoth");
-  const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
-  const paragraphs = result.value.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  let structured: string[][] | null = null;
+  try {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(Buffer.from(bytes));
+    const xml = await zip.file("word/document.xml")?.async("string");
+    if (xml) structured = docxXmlToPageLines(xml);
+  } catch {
+    structured = null;
+  }
+  const hasText = structured?.some((page) => page.some((line) => line.trim()));
+  if (!structured || !hasText) {
+    const mammoth = await import("mammoth");
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
+    structured = [result.value.split(/\n+/)];
+  }
+  const printedPages = structured.map((lines) => lines.map((l) => l.replace(/[ \u00a0]+/g, " ").trim()).filter(Boolean)).filter((lines) => lines.length);
+  if (printedPages.length > 1) {
+    return printedPages.map((lines, index) => ({ pageNumber: index + 1, text: lines.join("\n"), imageCount: 0, extractionMethod: "native" as const }));
+  }
+  // No page breaks recorded: split on line boundaries, as before.
   const pages: PdfPage[] = [];
   let current: string[] = [];
   let currentLength = 0;
@@ -253,11 +278,73 @@ export async function docxToPages(bytes: Uint8Array): Promise<PdfPage[]> {
     current = [];
     currentLength = 0;
   };
-  for (const paragraph of paragraphs) {
-    if (currentLength + paragraph.length > DOCX_PAGE_CHARACTERS && current.length) flush();
-    current.push(paragraph);
-    currentLength += paragraph.length + 1;
+  for (const line of printedPages[0] ?? []) {
+    if (currentLength + line.length > DOCX_PAGE_CHARACTERS && current.length) flush();
+    current.push(line);
+    currentLength += line.length + 1;
   }
   flush();
+  return pages;
+}
+
+function decodeXmlText(value: string) {
+  return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+}
+
+/** word/document.xml -> pages of lines. Exported for regression tests. */
+export function docxXmlToPageLines(xml: string): string[][] {
+  const bodyStart = xml.indexOf("<w:body");
+  const body = bodyStart >= 0 ? xml.slice(bodyStart) : xml;
+  const pages: string[][] = [[]];
+  let breakPending = false;
+  const emit = (line: string) => {
+    if (!line.trim()) return;
+    if (breakPending && pages[pages.length - 1].length) pages.push([]);
+    breakPending = false;
+    pages[pages.length - 1].push(line);
+  };
+  let tableDepth = 0;
+  let paragraph = "";
+  let cell = "";
+  let cells: string[] = [];
+  let inText = false;
+  const token = /<(\/?)(w:tbl|w:tr|w:tc|w:p|w:t|w:tab|w:br|w:cr|w:lastRenderedPageBreak)(?=[\s/>])([^>]*?)(\/?)>|<[^>]*>|([^<]+)/g;
+  for (let m = token.exec(body); m; m = token.exec(body)) {
+    const [, closing, tag, attrs, selfClosing, text] = m;
+    if (text !== undefined) { if (inText) paragraph += decodeXmlText(text); continue; }
+    if (!tag) continue;
+    const open = !closing;
+    switch (tag) {
+      case "w:t": inText = open && !selfClosing; break;
+      // A run's <w:tab/> is a printed tab; a <w:tab w:val=… w:pos=…/> inside
+      // paragraph properties is only a tab-stop definition.
+      case "w:tab": if (open && !/w:val=/.test(attrs)) paragraph += tableDepth ? " " : "\t"; break;
+      case "w:cr": if (open) paragraph += " "; break;
+      case "w:br":
+      case "w:lastRenderedPageBreak": {
+        const isPage = tag === "w:lastRenderedPageBreak" || /w:type="page"/.test(attrs);
+        if (!isPage) { if (open) paragraph += " "; break; }
+        if (!tableDepth) { emit(paragraph); paragraph = ""; }
+        breakPending = true;
+        break;
+      }
+      case "w:p":
+        if (open && !selfClosing) paragraph = "";
+        else if (!open) {
+          if (tableDepth) cell += (cell && paragraph.trim() ? " " : "") + paragraph.trim();
+          else emit(paragraph);
+          paragraph = "";
+        }
+        break;
+      // Only the outermost table's rows and cells are structure; a table
+      // nested inside a cell flows into that cell's text.
+      case "w:tc": if (tableDepth !== 1) break; if (open) cell = ""; else cells.push(cell.trim()); break;
+      case "w:tr": if (tableDepth !== 1) break; if (open) cells = []; else emit(cells.filter(Boolean).join("\t")); break;
+      case "w:tbl": tableDepth += open ? 1 : -1; if (tableDepth < 0) tableDepth = 0; break;
+    }
+  }
   return pages;
 }

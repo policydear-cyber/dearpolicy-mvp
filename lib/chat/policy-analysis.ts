@@ -489,7 +489,7 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
     const source=args.sources.find(s=>s.id===q.sourceId);if(source&&!citations.some(c=>c.chunkId===source.citation.chunkId))citations.push(source.citation);
   }
   if(coverage)citations.unshift({chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,policyName:coverage.productName??args.contract.name,
-    insurer:coverage.insurer??undefined,pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"});
+    insurer:coverage.insurer??undefined,pageStart:coverage.sourcePage??null,pageEnd:coverage.sourcePage??null,documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"});
   return {item,citations,checks};
 }
 export function aggregatePotentialPayouts(items:ClaimItem[]):PotentialPayoutTotal[]{

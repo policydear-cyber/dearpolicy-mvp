@@ -240,6 +240,22 @@ export class TruncatedModelOutput extends Error {
  * Validation errors and raw model output must never reach the chat: the user is
  * not debugging a schema, and a JSON dump in an insurance answer destroys trust
  * in everything around it. */
+/** The same failure in words for the household reading the chat: no
+ * provider or model names, no hosting or environment-variable advice, no
+ * raw provider text. The operator-facing diagnosis is readableModelFailure,
+ * which belongs in the logs. */
+export function householdModelFailure(error: unknown) {
+  if (error instanceof SpendCapReached) return error.message;
+  if (error instanceof TruncatedModelOutput)
+    return error.truncated ? "the model ran out of room part-way through that section" : "the model’s answer for that section was not in the expected form";
+  const message = error instanceof Error ? error.message : String(error);
+  if (/has not been used in project|is disabled\. Enable it|\(40[134]\)|invalid.*api key|api key not valid|authentication|unsupported (?:value|parameter)|does not support|not found|does not exist|unknown model|is not supported/i.test(message))
+    return "DearPolicy’s reading service is unavailable because of a problem on our side, not with your documents";
+  if (/\(429\)|busy|rate limit|quota/i.test(message)) return "DearPolicy’s reading service is busy right now; it usually clears in under a minute";
+  if (/timed out/i.test(message)) return "DearPolicy’s reading service took too long on that section";
+  if (/connection error|stopped responding|ECONNREFUSED|fetch failed/i.test(message)) return "DearPolicy could not reach its reading service";
+  return "DearPolicy’s reading service could not finish that section";
+}
 export function readableModelFailure(error: unknown) {
   if (error instanceof SpendCapReached) return error.message;
   if (error instanceof TruncatedModelOutput)

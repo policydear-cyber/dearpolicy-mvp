@@ -1494,7 +1494,7 @@ async function main(){
       await patchLedger(new NextRequest("http://localhost/api/ledger",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:tpd!.id,status:"rejected"})}));
       // And DPS, which no document states, is entered by hand.
       const added=await (await postLedger(new NextRequest("http://localhost/api/ledger",{method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify({familyMemberId:people[0].id,planName:"DPS",eventType:"death",paysKind:"lump_sum",amount:70000})}))).json();
+        body:JSON.stringify({familyMemberId:people[0].id,planName:"DPS",eventType:"death",paysKind:"lump_sum",amount:70000,currency:"SGD"})}))).json();
       assert.equal(added.row.status,"confirmed");
       const after=(await send("Desmond was murdered in Thailand",people[0].id)).data.answer as ChatAnswer;
       const afterItem=after.claimItems.find(i=>/Group Term Life/.test(i.title));

@@ -15,7 +15,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
 import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
@@ -76,7 +76,7 @@ const SELECT="SELECT id,family_member_id,policy_id,plan_name,insurer,event_type,
 // subquery back to policies rather than an activePredicate() on this table
 // directly. A NULL policy_id (a standard-rule default not tied to any one
 // document, or a manually-added row) is never filtered out by this.
-const ACTIVE_POLICY_GUARD="(policy_id IS NULL OR EXISTS(SELECT 1 FROM policies p WHERE p.id=coverage_rules.policy_id AND "+activePredicate("p")+"))";
+const ACTIVE_POLICY_GUARD="(policy_id IS NULL OR EXISTS(SELECT 1 FROM policies p WHERE p.id=coverage_rules.policy_id AND p.account_id=coverage_rules.account_id AND p.superseded_at IS NULL AND "+activePredicate("p")+"))";
 
 export async function loadLedger(accountId:string,memberIds?:string[]):Promise<LedgerRow[]>{
   await ensureLedgerSchema();
@@ -105,11 +105,18 @@ export async function updateLedgerRow(accountId:string,id:string,patch:Partial<P
   await query("UPDATE coverage_rules SET "+sets.join(",")+",updated_at=now() WHERE account_id=$1 AND id=$2",values);
   return loadLedgerRow(accountId,id);
 }
+/** coverage_rules.currency is NOT NULL (DEFAULT 'SGD') in the live schema.
+ * A household row with no amount has no currency to state; the column still
+ * needs a value, and it is never shown because there is no figure to label. */
+const UNPRICED_ROW_CURRENCY="SGD";
 export async function addLedgerRow(accountId:string,row:{familyMemberId:string;policyId:string|null;planName:string;eventType:EventType;paysKind:PaysKind;amount:number|null;currency?:string;detail?:string|null;note?:string|null}){
   await ensureLedgerSchema();
+  const currency=statedCurrencyCode(row.currency);
+  // A percentage is not money; every other amount must say what currency it is in.
+  if(row.amount!=null&&row.paysKind!=="percent_of_sum"&&row.paysKind!=="stated"&&!currency)throw new Error("State the currency of this amount.");
   const r=await query<{id:string}>(
     "INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,event_type,detail,pays_kind,amount,currency,note,origin,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'person','confirmed') RETURNING id",
-    [accountId,row.familyMemberId,row.policyId,row.planName,row.eventType,row.detail??null,row.paysKind,row.amount,normalizeCurrencyCode(row.currency??"SGD")??"SGD",row.note??null]);
+    [accountId,row.familyMemberId,row.policyId,row.planName,row.eventType,row.detail??null,row.paysKind,row.amount,currency??UNPRICED_ROW_CURRENCY,row.note??null]);
   return loadLedgerRow(accountId,r.rows[0].id);
 }
 
@@ -127,7 +134,10 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
   for(const benefit of benefits){
     const {event,detail}=eventForBenefitName(benefit.benefitName);
     const coverage=coverageForBenefit(contract,benefit);
-    const currency=normalizeCurrencyCode(benefit.currency??coverage?.currency??"SGD")??"SGD";
+    // A rule whose currency is written nowhere is not seeded: the ledger
+    // cannot store an amount without labelling it, and SGD is never assumed.
+    const currency=statedCurrencyCode(benefit.currency??coverage?.currency);
+    if(!currency)continue;
     const kind:PaysKind=benefit.formulaKind==="sum_insured"?"percent_of_sum":benefit.formulaKind==="fixed"?"lump_sum":benefit.formulaKind==="expense_cap"?"reimbursement_cap":benefit.formulaKind==="daily"?"per_day":"stated";
     out.push({familyMemberId:contract.ownerId,policyId:benefit.policyId,planName:planLabel(contract,benefit.productName),insurer:contract.insurer,
       eventType:event,detail:detail??(event==="other"?benefit.benefitName:null),cause:causeForBenefit(benefit.benefitName,benefit.requires??[]),paysKind:kind,
@@ -153,7 +163,8 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
     const name=(coverage.category+" "+(coverage.productName??"")+" "+contract.name).trim();
     const kind=PRODUCT_DEFAULTS.find(d=>d.pattern.test(name)&&!(d.exclude&&d.exclude.test(name)));
     if(!kind)continue;
-    const currency=normalizeCurrencyCode(coverage.currency)??"SGD";
+    const currency=statedCurrencyCode(coverage.currency);
+    if(!currency)continue; // never assume SGD for a schedule line
     for(const ev of kind.events){
       if(eventsFromWording.has(ev.event))continue; // the wording already says what this pays
       out.push({familyMemberId:contract.ownerId,policyId:coverage.policyId,planName:planLabel(contract,coverage.productName,coverage.category),insurer:coverage.insurer??contract.insurer,

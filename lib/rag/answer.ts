@@ -144,7 +144,7 @@ export async function answerFromEvidence(args: {
   const citations = [
     ...parsed.sourceCoverageIds.filter((id) => coverageMap.has(id)).map((id) => {
       const c = coverageMap.get(id)!;
-      return { chunkId:`coverage:${c.id}`,policyId:c.policyId,policyName:c.productName ?? c.policyName ?? "Policy",insurer:c.insurer ?? undefined,pageStart:c.sourcePage ?? 1,pageEnd:c.sourcePage ?? 1,documentRole:c.documentRole,personalEvidence:true,evidenceLabel:"Personal cover" };
+      return { chunkId:`coverage:${c.id}`,policyId:c.policyId,policyName:c.productName ?? c.policyName ?? "Policy",insurer:c.insurer ?? undefined,pageStart:c.sourcePage??null,pageEnd:c.sourcePage??null,documentRole:c.documentRole,personalEvidence:true,evidenceLabel:"Personal cover" };
     }),
     ...parsed.sourceChunkIds.filter((id) => chunkMap.has(id)).map((id) => {
       const c = chunkMap.get(id)!;

@@ -110,7 +110,9 @@ export function candidateEvents(facts:SubjectFacts,hints:string[]=[]):EventCandi
   }
   if((accident||injured||illness||hospitalised)&&!propertyOnly){
     add("hospital_daily_cash",hospitalised?undefined:"hospitalised");
-    add("surgery",k("surgery")==null?"surgery":undefined);
+    // Always gated: "No" to the surgery question must rule the surgical rows
+    // out (dropping the gate once answered used to let them back in).
+    add("surgery","surgery");
     if(!causeKnown&&!accident&&!injured&&hospitalised){
       // A stay with no cause named: the cause decides the accident-only rows.
       add("accident_medical_expense","accident");
@@ -230,6 +232,9 @@ const BODY_PART_WORDS:Record<string,RegExp>={
 };
 export function fractureRowMatches(detail:string|null,bodyPart:string){
   if(!detail)return true; // A single fracture row applies to any fracture.
+  // "Fracture benefit" names no part of the body: it is the one fracture row,
+  // and it applies to any fracture -- not to none.
+  if(!Object.values(BODY_PART_WORDS).some(re=>re.test(detail))&&!/\b(?:limb|humer|radius|ulna|tibia|fibula|femur|clavic|vertebra|pelvi|skull|patell)/i.test(detail))return true;
   const part=bodyPart.toLowerCase().trim();
   const words=Object.entries(BODY_PART_WORDS).filter(([k])=>part.includes(k)).map(([,re])=>re);
   if(!words.length)return new RegExp("\\b"+part.replace(/[^a-z ]/g,"")+"\\b","i").test(detail);

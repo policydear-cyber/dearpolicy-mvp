@@ -30,7 +30,7 @@ export function IndicativeEstimatePanel({ claimSessionId, refreshKey }: { claimS
             <strong>{b.title}</strong>{" "}
             {b.status === "included" ? <span className="indicative-amount">{b.amountText}</span> : <span className="status">No amount</span>}
             <div className="muted">{b.reason}</div>
-            {b.citations.length > 0 && <div className="muted indicative-citation">Policy wording: {b.citations.map((c) => `${c.policyName}, page ${c.pageStart}${c.pageEnd !== c.pageStart ? `–${c.pageEnd}` : ""}`).join("; ")}</div>}
+            {b.citations.length > 0 && <div className="muted indicative-citation">Policy wording: {b.citations.map((c) => (c.pageStart == null ? `${c.policyName}, page not recorded` : `${c.policyName}, page ${c.pageStart}${c.pageEnd != null && c.pageEnd !== c.pageStart ? `–${c.pageEnd}` : ""}`)).join("; ")}</div>}
           </li>
         ))}
       </ul>

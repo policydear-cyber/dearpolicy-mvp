@@ -11,8 +11,7 @@ import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/li
 import { extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
 import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { normalizeCoverageCategory } from "@/lib/insurance";
-import { familyMembersForAccount, findFamilyMatch, linkRelatedReferenceDocuments, syncInsuredPersonToMember } from "@/lib/policies/linking";
-import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { familyMembersForAccount, findFamilyMatchWithKind, linkRelatedReferenceDocuments, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
@@ -214,7 +213,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       await progress(args, "ai_extraction", 42, "Reading a compact evidence sample from this document…", "extracting");
     }
 
-    const raw = await extractPolicyStructure(pages);
+    const raw = await extractPolicyStructure(pages, { accountId: args.accountId, policyId: args.policyId });
     await progress(args, "verifying", 56, "Verifying extracted facts against the original PDF text…", "extracting");
     const extraction = verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages);
     const authority = documentAuthority(extraction.documentRole, extraction.personalCoverageConfirmed);
@@ -242,6 +241,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         [args.policyId, args.familyMemberId, args.accountId],
       );
     }
+    // A personal document's upload-profile link is regenerated below from what
+    // this read found (it is only ever a fallback for an unmatched name), so a
+    // re-read never leaves a stale one behind. Payment documents keep theirs.
+    if (extraction.personalCoverageConfirmed) {
+      await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source='upload_hint'`, [args.policyId, args.accountId]);
+    }
     await query("DELETE FROM policy_detected_people WHERE policy_id=$1 AND account_id=$2", [args.policyId, args.accountId]);
     await query("DELETE FROM policy_coverages WHERE policy_id=$1 AND account_id=$2", [args.policyId, args.accountId]);
     await query("DELETE FROM policy_reference_coverages WHERE policy_id=$1 AND account_id=$2", [args.policyId, args.accountId]);
@@ -256,16 +261,36 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const family = await familyMembersForAccount(args.accountId);
     const detected: { name: string; matchedMemberId: string | null }[] = [];
-    for (const person of extraction.insuredPeople) {
-      const match = findFamilyMatch(person.name, family);
+    const uploadProfileLinks: string[] = [];
+    // A partial match ("Charmaine" for "Charmaine Tan") only stands when no
+    // other person printed on this document lands on the same profile: two
+    // printed Charmaines are never both folded into one profile.
+    const matches = extraction.insuredPeople.map((person) => findFamilyMatchWithKind(person.name, family));
+    const hitsPerMember = new Map<string, number>();
+    for (const found of matches) if (found) hitsPerMember.set(found.member.id, (hitsPerMember.get(found.member.id) ?? 0) + 1);
+    for (const [index, person] of extraction.insuredPeople.entries()) {
+      const candidate = matches[index];
+      const found = candidate && (candidate.kind === "exact" || hitsPerMember.get(candidate.member.id) === 1) ? candidate : null;
+      let match = found?.member ?? null;
+      let link: { source: "ai_name_match" | "upload_hint"; confidence: number } = found?.kind === "partial"
+        ? { source: "ai_name_match", confidence: 0.85 }
+        : { source: "ai_name_match", confidence: 0.95 };
+      // The printed name matched no profile, but the person uploaded this
+      // document to a profile they chose, and it names exactly ONE insured
+      // person: that choice is the link (flagged for review below). With
+      // several named people nothing is guessed.
+      if (!match && args.linkUploadMember && extraction.personalCoverageConfirmed && extraction.insuredPeople.length === 1) {
+        match = family.find((member) => member.id === args.familyMemberId) ?? null;
+        if (match) { link = { source: "upload_hint", confidence: 0.70 }; uploadProfileLinks.push(`${person.name} (linked to ${match.display_name}, the profile it was uploaded to)`); }
+      }
       await query(
         `INSERT INTO policy_detected_people(account_id,policy_id,detected_name,matched_family_member_id,confidence) VALUES($1,$2,$3,$4,$5)
          ON CONFLICT(policy_id,detected_name) DO UPDATE SET matched_family_member_id=EXCLUDED.matched_family_member_id,confidence=EXCLUDED.confidence`,
-        [args.accountId, args.policyId, person.name, match?.id ?? null, match ? 0.98 : 0.60],
+        [args.accountId, args.policyId, person.name, match?.id ?? null, match ? link.confidence : 0.60],
       );
       detected.push({ name: person.name, matchedMemberId: match?.id ?? null });
       if (match) {
-        await syncInsuredPersonToMember({ accountId: args.accountId, sourcePolicyId: args.policyId, familyMemberId: match.id, detectedName: person.name, extraction });
+        await syncInsuredPersonToMember({ accountId: args.accountId, sourcePolicyId: args.policyId, familyMemberId: match.id, detectedName: person.name, extraction, link });
       }
     }
 
@@ -275,7 +300,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       if (!extraction.personalCoverageConfirmed && !["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "")) continue;
       const dedupeKey = premiumRecordDedupeKey([
         "payment", paymentIndex, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
-        payment.policyNumber ?? extraction.policyNumber, payment.amount, payment.currency ? normalizeCurrencyCode(payment.currency) : null, payment.frequency,
+        payment.policyNumber ?? extraction.policyNumber, payment.amount, printedCurrencyCode(payment.currency), payment.frequency,
         payment.paymentDate || null, payment.periodStart || null, payment.periodEnd || null, payment.sourcePage,
       ]);
       await query(
@@ -287,7 +312,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
            payment_date=EXCLUDED.payment_date, period_start=EXCLUDED.period_start, period_end=EXCLUDED.period_end,
            source_page=EXCLUDED.source_page, notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
-          payment.policyNumber ?? extraction.policyNumber, payment.amount, payment.currency ? normalizeCurrencyCode(payment.currency) : null, payment.frequency, payment.paymentDate || null,
+          payment.policyNumber ?? extraction.policyNumber, payment.amount, printedCurrencyCode(payment.currency), payment.frequency, payment.paymentDate || null,
           payment.periodStart || null, payment.periodEnd || null, args.policyId, payment.sourcePage,
           [payment.notes, matchedIds.length > 1 ? "Shared/aggregate payment across linked insured people" : null].filter(Boolean).join(" · ") || null,
           dedupeKey],
@@ -297,7 +322,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const target = matchedIds.length === 1 ? matchedIds[0] : null;
       const dedupeKey = premiumRecordDedupeKey([
         "current_premium", target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
-        extraction.premium.currency ? normalizeCurrencyCode(extraction.premium.currency) : null, extraction.premium.frequency,
+        printedCurrencyCode(extraction.premium.currency), extraction.premium.frequency,
       ]);
       await query(
         `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,source_document_id,notes,dedupe_key)
@@ -307,7 +332,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
            policy_number=EXCLUDED.policy_number, amount=EXCLUDED.amount, currency=EXCLUDED.currency, frequency=EXCLUDED.frequency,
            notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
-          extraction.premium.currency ? normalizeCurrencyCode(extraction.premium.currency) : null, extraction.premium.frequency, args.policyId,
+          printedCurrencyCode(extraction.premium.currency), extraction.premium.frequency, args.policyId,
           target ? "Extracted current premium from personalised policy document" : "Shared/aggregate premium across linked insured people",
           dedupeKey],
       );
@@ -317,9 +342,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
     const unmatched = detected.filter((d) => !d.matchedMemberId).length;
-    const needsReview = Boolean(extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0));
+    const needsReview = Boolean(extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0));
     const reasons = [
       unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked to a family profile` : null,
+      uploadProfileLinks.length ? `The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: ${uploadProfileLinks.join("; ")}. Check this is the right person` : null,
       unverified ? `${unverified} extracted coverage item${unverified === 1 ? "" : "s"} could not be source-verified` : null,
     ].filter(Boolean).join("; ");
     await query(`UPDATE policies SET needs_review=$1,review_reason=$2 WHERE id=$3 AND account_id=$4`, [needsReview, reasons || null, args.policyId, args.accountId]);
@@ -387,6 +413,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Every later question is then answered from the stored table without
     // reading this document again. A failure here leaves the document fully
     // usable: questions fall back to reading it at question time.
+    // The benefit summary the finished document shows ("Ready. 4 benefit rules
+    // read…"). Kept here because later progress messages overwrite the column.
+    let benefitSummary: string | null = null;
     try {
       await progress(args, "benefits", 82, "Reading the benefit rules page by page. This is the slow part, and it only happens once…", "indexing");
       const { catalogueDocument } = await import("@/lib/policies/catalog-builder");
@@ -400,8 +429,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const attention = await query<{ count: number }>(
         `SELECT count(*)::int AS count FROM policy_benefits WHERE account_id=$1 AND policy_id=$2 AND (formula_kind='none' OR (basis_inferred AND reviewed_at IS NULL))`,
         [args.accountId, args.policyId]).then(r => Number(r.rows[0]?.count ?? 0)).catch(() => 0);
-      await progress(args, "benefits", 96, stored + " benefit rule" + (stored === 1 ? "" : "s") + " read from this document"
-        + (attention ? "; " + attention + " to confirm on the Benefits page" : "") + ".", "indexing");
+      benefitSummary = stored + " benefit rule" + (stored === 1 ? "" : "s") + " read from this document"
+        + (attention ? "; " + attention + " to confirm on the Benefits page" : "") + ".";
+      await progress(args, "benefits", 96, benefitSummary, "indexing");
       // The other half of the contract. The benefit pass answers "how much";
       // this answers "unless" -- the exclusions, waiting periods, survival
       // periods and caps that live in prose and that a table parser walks
@@ -438,10 +468,10 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     await progress(args, "finalising", 97, "Final checks and portfolio update…", "indexing");
     await query(
       `UPDATE policies SET processing_status='ready',processing_stage='complete',processing_progress=100,
-       processing_message=CASE WHEN processing_message LIKE '%benefit rule%' THEN 'Ready. '||processing_message ELSE 'Analysis complete' END,
+       processing_message=$3,
        processing_error=NULL,processing_completed_at=now(),updated_at=now()
        WHERE id=$1 AND account_id=$2`,
-      [args.policyId, args.accountId],
+      [args.policyId, args.accountId, benefitSummary ? "Ready. " + benefitSummary : "Analysis complete"],
     );
     // The Coverage Ledger gains this document's rows the moment it is ready,
     // so the next payout question is a lookup rather than a read.
@@ -455,7 +485,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // UI forever, even though the analysis and the ledger rows were both
       // already done. Omitting the status here leaves it at 'ready' via the
       // COALESCE in progress().
-      await progress(args, "finalising", 98, "Reading the document into your coverage ledger…");
+      // The document is already 'ready' with its final stage and message
+      // ("Ready. N benefit rules read…"); a progress() write here used to
+      // leave it at stage 'finalising', 98% and "Reading the document into
+      // your coverage ledger…" for good. Only keep the job lease alive.
+      if (args.jobHeartbeat) await args.jobHeartbeat().catch(() => undefined);
       const { readDocumentIntoLedger } = await import("@/lib/ledger/extract");
       await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
         console.warn("Ledger reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);

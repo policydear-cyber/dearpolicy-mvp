@@ -5,6 +5,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
+import { statedCurrencyCode } from "@/lib/format/currency";
 import { addLedgerRow,ledgerFor,loadLedgerRow,seedLedger,updateLedgerRow,type LedgerRow } from "@/lib/ledger/store";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { describePays } from "@/lib/ledger/answer";
@@ -91,7 +92,7 @@ const Add=z.object({
   amount:z.number().nonnegative().nullable(),
   currency:z.string().max(3).optional(),
   detail:z.string().max(200).nullable().optional(),
-});
+}).refine(add=>add.amount==null||add.paysKind==="percent_of_sum"||add.paysKind==="stated"||!!statedCurrencyCode(add.currency),{message:"State the currency of this amount.",path:["currency"]});
 export async function POST(request:NextRequest){
   try{
     const body=await request.json().catch(()=>({}));
@@ -113,7 +114,7 @@ export async function POST(request:NextRequest){
     const people=(await family(accountId)).rows;
     return NextResponse.json({row:row?shape(row,people):null});
   }catch(error){
-    if(error instanceof z.ZodError)return NextResponse.json({error:"Could not add the row"},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:error.issues.find(issue=>issue.path[0]==="currency")?.message??"Could not add the row"},{status:400});
     const authResponse=routeErrorResponse(error);
     if(authResponse.status===500)return NextResponse.json({error:"Could not add the row"},{status:400});
     return authResponse;

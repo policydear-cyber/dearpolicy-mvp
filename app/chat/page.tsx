@@ -7,6 +7,7 @@ import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESS
 import { formatMoney } from "@/lib/format/currency";
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
+const CHAT_MAX_WAIT_MS=6*60_000;
 type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
@@ -89,7 +90,11 @@ function ChatContent(){
   }
   async function waitForJob(id:string,signal:AbortSignal,version:number):Promise<ChatAnswer>{
     jobId.current=id;
+    // Never an endless spinner: after this long the turn is reported as not
+    // finished, with the message kept, whatever the server still says.
+    const giveUpAt=Date.now()+CHAT_MAX_WAIT_MS;
     for(;;){
+      if(Date.now()>giveUpAt){jobId.current=null;throw new Error("This is taking much longer than it should, so DearPolicy stopped waiting. Your message is saved.");}
       if(signal.aborted||version!==requestVersion.current)throw new DOMException("Cancelled","AbortError");
       const response=await fetch("/api/chat/jobs/"+id,{signal,cache:"no-store"});
       const data=await response.json();
@@ -324,7 +329,7 @@ function ChatContent(){
           {message.answer?.reviewCoverage?<div className={"review-coverage "+(message.answer.reviewCoverage.complete?"complete":"partial")}><strong>{message.answer.reviewCoverage.complete?"Complete policy review":"Partial policy review"}</strong><p>{message.answer.reviewCoverage.statement}</p></div>:null}
           {message.answer?.policyReview?.length?<details className="policy-review"><summary>Policy review · {message.answer.policyReview.length} contracts</summary><div className="policy-table-scroll"><table className="chat-policy-table"><thead><tr><th>Family member</th><th>Policy</th><th>Review</th><th>Evidence read</th><th>Active status</th></tr></thead><tbody>{message.answer.policyReview.map(item=><tr key={item.id}><td>{item.ownerName}</td><td>{item.policyName}</td><td>{reviewCopy[item.status]??item.status}</td><td>{coverageText(item.coverage)}</td><td title={item.currentness?.detail}>{item.currentness?.label??"Not checked"}</td></tr>)}</tbody></table></div></details>:null}
           {message.answer?.nextSteps.length?<div className="next-steps"><strong>What to do next</strong><ol>{message.answer.nextSteps.map((step,i)=><li key={i}>{step}</li>)}</ol></div>:null}
-          {message.answer?.citations.length?<details className="citations"><summary>Why DearPolicy says this · {message.answer.citations.length} sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Uploaded policy evidence"}</small></span><b>Page {c.pageStart}{c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</b></div>)}</details>:null}
+          {message.answer?.citations.length?<details className="citations"><summary>Why DearPolicy says this · {message.answer.citations.length} sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Uploaded policy evidence"}</small></span><b>{c.pageStart==null?"Page not recorded":<>Page {c.pageStart}{c.pageEnd!=null&&c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</>}</b></div>)}</details>:null}
           </>;return awaiting?<details className="assessment-details" data-testid="assessment-details"><summary>Show full assessment</summary>{detail}</details>:detail;})(
             ((message.answer?.questions.length??0)+(message.answer?.factFinding?.reduce((n,p)=>n+p.nextQuestions.length,0)??0))>0
           )}

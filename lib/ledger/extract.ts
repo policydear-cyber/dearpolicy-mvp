@@ -18,6 +18,25 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { normalText } from "@/lib/chat/facts";
 import { EVENTS,type EventType,type PaysKind } from "@/lib/ledger/events";
 import { ensureLedgerSchema } from "@/lib/ledger/store";
+import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
+import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+
+/** The ISO code of the currency a ledger row's amount is printed in: the
+ * model's answer when it is a real code or symbol (US$ -> USD, RM -> MYR),
+ * else what the quoted row itself prints. Never a default: a bare "$" or no
+ * marker at all is null. */
+export function ledgerRowCurrency(row:{currency?:string|null;quote:string;paysKind?:string;amount?:number|null},documentCurrency:string|null=null):string|null{
+  const given=row.currency?normalizeCurrencyCode(row.currency,""):"";
+  if(/^[A-Z]{3}$/.test(given))return given;
+  const printed=statedCurrencyCode(row.quote);
+  if(printed)return printed;
+  // A row that carries no money figure of its own ("100% of the Sum
+  // Insured", or a benefit named with no amount) takes the one currency this
+  // document states elsewhere, if it states exactly one. Never a default.
+  if(row.paysKind==="percent_of_sum"||row.amount==null)return documentCurrency;
+  return null;
+}
 
 const EVENT_LIST=Object.keys(EVENTS) as EventType[];
 const PAYS_LIST=["lump_sum","per_day","per_month","percent_of_sum","reimbursement_cap","stated"] as const;
@@ -105,7 +124,7 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
   for(const [index,batch] of batches(pages).entries()){
     args.report?.("Reading pages "+batch[0].page_number+"–"+batch[batch.length-1].page_number);
     const extraction=await structuredCompletion({
-      role:"reading",operation:"benefit_extraction",schema:ExtractionSchema,temperature:0,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
+      role:"reading",operation:"benefit_extraction",householdId:args.accountId,resourceId:args.policyId,schema:ExtractionSchema,temperature:0,maxOutputTokens:4000,timeoutMs:180_000,attempts:1,
       coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
         const rows=Array.isArray(source.rows)?source.rows:[];
         return {rows:rows.map(r=>{const row=(r&&typeof r==="object"?r:{}) as Record<string,unknown>;
@@ -132,7 +151,7 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
     try{
       args.report?.("Checking what was read");
       const verdict=await structuredCompletion({
-        role:"reading",operation:"benefit_extraction",schema:VerifySchema,temperature:0,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
+        role:"reading",operation:"benefit_extraction",householdId:args.accountId,resourceId:args.policyId,schema:VerifySchema,temperature:0,maxOutputTokens:1500,timeoutMs:180_000,attempts:1,
         coerce:(raw)=>{const source=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;return {verdicts:Array.isArray(source.verdicts)?source.verdicts:[]};},
         system:VERIFY_SYSTEM,
         user:JSON.stringify({rows:kept.map((row,i)=>({index:i,insuredName:row.insuredName??null,planName:row.planName,eventType:row.eventType,detail:row.detail??null,cause:row.cause??null,
@@ -159,26 +178,39 @@ function seedKeyFor(policyId:string,row:ExtractedRow,familyMemberId:string){
 /** Reads one document into the ledger. Additive; never touches an existing row. */
 export async function readDocumentIntoLedger(args:{accountId:string;policyId:string;report?:(stage:string)=>void}):Promise<{added:number;read:number;dropped:number}>{
   await ensureLedgerSchema();
-  const doc=(await query<{product_name:string|null;insurer:string|null}>(`SELECT product_name,insurer FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[args.policyId,args.accountId])).rows[0];
+  const doc=(await query<{product_name:string|null;insurer:string|null}>(`SELECT p.product_name,p.insurer FROM policies p WHERE p.id=$1 AND p.account_id=$2 AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}`,[args.policyId,args.accountId])).rows[0];
   if(!doc)return {added:0,read:0,dropped:0};
   const pages=(await query<Page>("SELECT page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id=$2 ORDER BY page_number",[args.accountId,args.policyId])).rows;
   const members=(await query<{id:string;display_name:string;preferred_name:string|null}>(
     `SELECT f.id,f.display_name,f.preferred_name FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND pm.policy_id=$2`,[args.accountId,args.policyId])).rows
     .map(m=>({id:m.id,names:[m.display_name,...(m.preferred_name?[m.preferred_name]:[])]}));
   const extraction=await extractLedgerRows({accountId:args.accountId,policyId:args.policyId,pages,members,planName:doc.product_name,insurer:doc.insurer,report:args.report});
-  let added=0;
+  // The one currency this document's stored figures are printed in, if they
+  // agree on exactly one.
+  const documentCurrencies=(await query<{currency:string}>(
+    `SELECT DISTINCT currency FROM (SELECT currency FROM policy_coverages WHERE account_id=$1 AND policy_id=$2
+       UNION ALL SELECT currency FROM policy_benefits WHERE account_id=$1 AND policy_id=$2) c WHERE currency IS NOT NULL`,
+    [args.accountId,args.policyId]).catch(()=>({rows:[] as {currency:string}[]}))).rows.map(r=>r.currency);
+  const documentCurrency=documentCurrencies.length===1?documentCurrencies[0]:null;
+  let added=0,skippedNoCurrency=0;
   for(const row of extraction.rows){
+    // coverage_rules.currency is NOT NULL (DEFAULT 'SGD') in the live schema,
+    // and writing a currency the document never printed would put a guessed
+    // unit next to a real amount. A row whose currency is not stated is left
+    // out of the ledger instead (its benefit stays on the Benefits page).
+    const currency=ledgerRowCurrency(row,documentCurrency);
+    if(!currency){skippedNoCurrency++;continue;}
     const r=await query<{id:string}>(
       `INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,pays_kind,amount,currency,sum_basis,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,seed_key,minimum_fact,minimum_value)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::text[],$16,$17,$18,'wording',false,$19,$20,$21,$22)
        ON CONFLICT (account_id,seed_key) WHERE seed_key IS NOT NULL DO NOTHING RETURNING id`,
       [args.accountId,row.familyMemberId,args.policyId,row.planName.slice(0,200),doc.insurer,row.eventType,row.detail?.slice(0,200)??null,row.cause??null,row.paysKind,
-       row.amount??null,(row.currency??"SGD").toUpperCase().slice(0,3),row.sumBasis??null,row.offsetDays??null,row.maximumDays??null,(row.conditions??[]).slice(0,6).map(c=>c.slice(0,240)),
+       row.amount??null,currency,row.sumBasis??null,row.offsetDays??null,row.maximumDays??null,(row.conditions??[]).slice(0,6).map(c=>c.slice(0,240)),
        (row.benefitName??row.detail)?.slice(0,200)??null,row.sourcePage,row.quote.slice(0,600),row.status,seedKeyFor(args.policyId,row,row.familyMemberId),row.minimum?.factKey??null,row.minimum?.value??null]);
     added+=r.rows.length;
   }
   await query("UPDATE policies SET ledger_read_at=now() WHERE id=$1 AND account_id=$2",[args.policyId,args.accountId]);
-  return {added,read:extraction.read,dropped:extraction.dropped};
+  return {added,read:extraction.read,dropped:extraction.dropped+skippedNoCurrency};
 }
 
 type ExtractGlobals=typeof globalThis&{__dearpolicyLedgerReading?:Map<string,Promise<{documents:number;added:number}>>};
@@ -192,7 +224,7 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
   const job=(async()=>{
     await ensureLedgerSchema();
     const pending=(await query<{id:string;original_filename:string}>(
-      `SELECT p.id,p.original_filename FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")}
+      `SELECT p.id,p.original_filename FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
          AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
          AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id) ORDER BY p.created_at`,[accountId])).rows;
     let added=0;
@@ -212,7 +244,7 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
 export async function pendingDocumentCount(accountId:string){
   await ensureLedgerSchema();
   const r=await query<{n:number}>(
-    `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")}
+    `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
        AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
        AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id)`,[accountId]);
   return Number(r.rows[0]?.n??0);

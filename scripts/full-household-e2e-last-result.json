@@ -2,8 +2,8 @@
   "passed": true,
   "stagesTotal": 9,
   "stagesPassed": 9,
-  "durationMs": 35800,
-  "verifiedAt": "2026-09-27T10:53:56.248Z",
+  "durationMs": 33830,
+  "verifiedAt": "2026-09-28T09:36:20.380Z",
   "substitutions": [
     "signup/sign-in uses the dev-auth identity path (DEV_AUTH_ENABLED/DEV_ACCOUNT_ID), not real Supabase Auth",
     "both uploads are short-circuited by a fake malware-scan adapter reporting \"infected\", not a real scanner"

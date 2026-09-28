@@ -146,6 +146,22 @@ export function applyPolicyAggregateCaps(items:ClaimItem[]):string[]{
     byCover.set(item.coverKey,[...(byCover.get(item.coverKey)??[]),item]);
   }
   for(const group of byCover.values()){
+    // The cap is one figure in one currency. A cover whose rows do not all
+    // state that same currency cannot be capped safely -- adding or capping
+    // across currencies is wrong, and skipping the cap would let the rows pay
+    // past the sum insured -- so every figure under it is withheld instead
+    // (fail closed) until the currency is confirmed.
+    const currencies=new Set(group.map(item=>item.currency??""));
+    if(currencies.size!==1||currencies.has("")){
+      for(const item of group){
+        delete (item as {calculatedAmount?:number}).calculatedAmount;
+        item.amountText=null;
+        item.status="needs_document";
+        item.conditions=[...new Set([...item.conditions,
+          "No amount is shown: the benefits under this cover do not all state the same currency, so they cannot be added up or held to the sum insured safely."])];
+      }
+      continue;
+    }
     const disability=group.find(item=>item.payingEvent==="total_permanent_disability");
     const schedule=group.filter(item=>item.scaleGroup);
     if(disability&&schedule.length){
@@ -192,17 +208,17 @@ export function applyPolicyAggregateCaps(items:ClaimItem[]):string[]{
       }
       if(amount>headroom){
         item.calculatedAmount=headroom;
-        item.amountText=formatMoney(headroom,item.currency??"SGD");
+        item.amountText=formatMoney(headroom,item.currency!);
         item.conditions=[...new Set([...item.conditions,
-          "Reduced from "+formatMoney(amount,item.currency??"SGD")+": your policy caps everything it pays for injuries from one accident at the sum insured of "
-          +formatMoney(cap,item.currency??"SGD")+"."])];
+          "Reduced from "+formatMoney(amount,item.currency!)+": your policy caps everything it pays for injuries from one accident at the sum insured of "
+          +formatMoney(cap,item.currency!)+"."])];
         running=cap;
         continue;
       }
       running+=amount;
     }
     notes.push("Everything your policy pays for injuries from one accident is capped at the sum insured, "
-      +formatMoney(cap,ordered[0].currency??"SGD")+", so the total is held there rather than added beyond it.");
+      +formatMoney(cap,ordered[0].currency!)+", so the total is held there rather than added beyond it.");
   }
   return notes;
 }
@@ -252,11 +268,12 @@ export function acceleratedBenefitWarnings(items:ClaimItem[]):string[]{
 export function describeCoverSplit(items:ClaimItem[]){
   const byCover=new Map<string,{amount:number;label:string;currency:string}>();
   for(const item of items){
-    if(typeof item.calculatedAmount!=="number"||!item.coverKey||item.aggregation!=="additive"||item.supersededBy)continue;
-    const existing=byCover.get(item.coverKey);
-    byCover.set(item.coverKey,{amount:(existing?.amount??0)+item.calculatedAmount,
+    if(typeof item.calculatedAmount!=="number"||!item.coverKey||item.aggregation!=="additive"||item.supersededBy||!item.currency)continue;
+    const key=item.coverKey+"|"+item.currency;
+    const existing=byCover.get(key);
+    byCover.set(key,{amount:(existing?.amount??0)+item.calculatedAmount,
       label:existing?.label??item.coverLabel??item.title.split(" \u00b7 ").slice(1).join(" \u00b7 "),
-      currency:item.currency??existing?.currency??"SGD"});
+      currency:item.currency});
   }
   if(byCover.size<2)return null;
   const parts=[...byCover.values()].sort((a,b)=>b.amount-a.amount)

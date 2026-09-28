@@ -4,6 +4,13 @@
  * Unknown values fall back to SGD in this Singapore-first local build so a bad
  * extraction can never crash the UI.
  */
+/** The currency a value actually states, or null. Never assumes SGD: an
+ * empty value or a bare "$" names no currency. Use this wherever a missing
+ * currency must stay missing (stored amounts, totals, seeds). */
+export function statedCurrencyCode(value: string | null | undefined): string | null {
+  return normalizeCurrencyCode(value, "") || null;
+}
+
 export function normalizeCurrencyCode(value: string | null | undefined, fallback = "SGD") {
   const raw = String(value ?? "").trim();
   if (!raw) return fallback;

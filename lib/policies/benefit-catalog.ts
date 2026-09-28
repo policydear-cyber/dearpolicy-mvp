@@ -87,9 +87,18 @@ export function questionTraits(text:string):ScenarioTrait[]{
   return [...new Set(traits)];
 }
 /** A question that describes a situation and asks what it pays. */
+/** "What is her hospital coverage?" and "What does Marcus's travel policy
+ * cover overseas?" ask what a policy says, not what an event would pay: the
+ * word cover alone names a kind of policy. It describes a situation only with
+ * something that happens -- a conditional, or an event word ("Could this
+ * cover a broken arm?"). */
+const COVERAGE_ONLY_CUE=/\b(?:claim\w*|payout|pay out|pays?|entitled|get back|reimburse\w*|what if|what happens if|if i|if my|suppose)\b/;
+const SCENARIO_CONDITION=/\b(?:if|when|after|suppose|supposing|in case|were to|should (?:she|he|i|they|we))\b/;
+const EVENT_WORD=/\b(?:broke|broken|breaks?|fractur\w*|injur\w*|hurt|dies?|died|death|dead|passed away|hospitali[sz]\w*|admitted|warded|diagnos\w*|crash\w*|collision|stolen|theft|delayed|cancell?ed|sick|falls?|fell)\b|\bin an accident\b|\baccidentally\b/;
 export function describesAScenario(text:string){
   const lower=(text??"").toLowerCase();
-  if(!/\b(?:claim\w*|payout|pay out|pays?|cover\w*|entitled|get back|reimburse\w*|what if|what happens if|if i|if my|suppose)\b/.test(lower))return false;
+  const cue=COVERAGE_ONLY_CUE.test(lower);
+  if(!cue&&!(/\bcover\w*\b/.test(lower)&&(SCENARIO_CONDITION.test(lower)||EVENT_WORD.test(lower))))return false;
   return questionTraits(lower).length>0;
 }
 /** What a benefit's own name says it is conditional on. Deterministic and
@@ -611,14 +620,14 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
       // shown, but never summed into a headline household total.
       aggregation:args.declaredOnly?"reimbursement" as const:aggregation,calculationId:benefit.id}:{}),
     reason:amount!=null?basis+". "+(args.declaredOnly
-        ?"This figure is the one printed on page "+(benefit.sourcePage??1)+" of the document you uploaded. Upload your schedule, certificate or statement to confirm it is the figure that applies to you."
+        ?"This figure is the one printed"+onPage(benefit.sourcePage)+" of the document you uploaded. Upload your schedule, certificate or statement to confirm it is the figure that applies to you."
         :estimateBasis==="indicative"
-        ?"Estimated from the quoted clause on page "+(benefit.sourcePage??1)+". DearPolicy read the rate from the heading above this row rather than from the row itself, so confirm it on the Benefits page before relying on it."
+        ?"Estimated from the quoted clause"+onPage(benefit.sourcePage)+". DearPolicy read the rate from the heading above this row rather than from the row itself, so confirm it on the Benefits page before relying on it."
         :estimateBasis==="estimated"
         ?(uncappedDaily
-          ?"Estimated from the rate quoted on page "+(benefit.sourcePage??1)+" and the number of days you reported. The row does not state a day limit, so check the full wording for one."
-          :"Estimated from the quoted clause on page "+(benefit.sourcePage??1)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate.")
-        :"Calculated from your policy schedule and the quoted clause on page "+(benefit.sourcePage??1)+".")+paidUnder
+          ?"Estimated from the rate quoted"+onPage(benefit.sourcePage)+" and the number of days you reported. The row does not state a day limit, so check the full wording for one."
+          :"Estimated from the quoted clause"+onPage(benefit.sourcePage)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate.")
+        :"Calculated from your policy schedule and the quoted clause"+onPage(benefit.sourcePage)+".")+paidUnder
       :"This benefit can respond to what happened, but "+(missing[0]??"its payout rule")+" is still needed before an amount can be calculated.",
     conditions:[...new Set(conditions)],
   };
@@ -694,7 +703,7 @@ export function repairStoredRules(benefits:CatalogBenefit[]):CatalogBenefit[]{
     .map(benefit=>{
       const read=ruleFromQuote(benefit);
       return read?{...benefit,...read,conditions:[...new Set([...benefit.conditions,
-        "DearPolicy read this rule from the sentence quoted on page "+(benefit.sourcePage??1)
+        "DearPolicy read this rule from the sentence quoted"+onPage(benefit.sourcePage)
         +" rather than from a table, and checked it against that sentence before using it."])]}:benefit;
     });
 }
@@ -964,6 +973,8 @@ function benefitKey(name:string){return name.toLowerCase().replace(/[^a-z0-9]/g,
 // ---------------------------------------------------------------------------
 import { productIdentity,type PolicyContract } from "@/lib/policies/inventory";
 import type { ChatCitation } from "@/types";
+/** Where a quoted clause sits, without inventing a page nobody recorded. */
+function onPage(page:number|null|undefined){return page!=null?" on page "+page:" on an unrecorded page";}
 
 /** Picks the insured amount this benefit is calculated from. A benefit is only
  * calculated against a coverage the person is actually proved to own. */
@@ -1145,7 +1156,7 @@ export function scheduleFallbackItems(args:{contract:PolicyContract;traits:Scena
         conditions:[...missing.map(m=>"Still needed: "+m),...(verifiedCurrency?[]:["Still needed: "+CATALOG_CURRENCY_MISSING]),"Subject to the insurer's assessment and the plan's own terms and exclusions."],
       });
       citations.push({chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,policyName:coverage.productName??args.contract.name,insurer:coverage.insurer??args.contract.insurer??undefined,
-        pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,personalEvidence:true,evidenceLabel:"Verified personal cover"});
+        pageStart:coverage.sourcePage??null,pageEnd:coverage.sourcePage??null,personalEvidence:true,evidenceLabel:"Verified personal cover"});
       break;
     }
   }
@@ -1196,7 +1207,7 @@ export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:Catalo
     items.push(item);
     citations.push({chunkId:"benefit:"+benefit.id,policyId:benefit.policyId,
       policyName:benefit.productName??args.contract.name,insurer:args.contract.insurer??undefined,
-      pageStart:benefit.sourcePage??1,pageEnd:benefit.sourcePage??1,
+      pageStart:benefit.sourcePage??null,pageEnd:benefit.sourcePage??null,
       evidenceLabel:"Policy wording, read when the document was uploaded"});
   }
   return {items,citations,needs,considered:mine.length};
@@ -1306,11 +1317,11 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
     items.push(item);
     citations.push({chunkId:"benefit:"+benefit.id,policyId:benefit.policyId,
       policyName:benefit.productName??args.contract.name,insurer:args.contract.insurer??undefined,
-      pageStart:benefit.sourcePage??1,pageEnd:benefit.sourcePage??1,
+      pageStart:benefit.sourcePage??null,pageEnd:benefit.sourcePage??null,
       evidenceLabel:"Policy wording, read when the document was uploaded"});
     if(coverage)citations.push({chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,
       policyName:coverage.productName??args.contract.name,insurer:coverage.insurer??undefined,
-      pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,
+      pageStart:coverage.sourcePage??null,pageEnd:coverage.sourcePage??null,
       documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"});
   }
   const excluded=ruledOutBenefits(screened.compatible,args.traits,events);

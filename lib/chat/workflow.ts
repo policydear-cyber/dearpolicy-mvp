@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
-import { readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
+import { householdModelFailure,readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
 import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
 import { enforceChatMonetarySafety, evaluateChatMonetaryEligibility } from "@/lib/claims/monetary-gate";
 import { analysisSources,loadPolicyInventory,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
@@ -11,12 +11,14 @@ import { allocateReadingWindows,candidateFromWindows,rankCandidates } from "@/li
 import { answerFromLedger } from "@/lib/ledger/answer";
 import { ledgerFor,seedLedger } from "@/lib/ledger/store";
 import { pendingDocumentCount,readPendingDocuments } from "@/lib/ledger/extract";
-import { assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTraits,loadBenefitCatalog,planClaimQuestions,questionTraits,scenarioFromCatalog,scheduleFallbackItems } from "@/lib/policies/benefit-catalog";
+import { type CatalogBenefit,assessContractFromCatalog,dedupeClaimItems,describesAScenario,eventTraits,loadBenefitCatalog,planClaimQuestions,questionTraits,scenarioFromCatalog,scheduleFallbackItems } from "@/lib/policies/benefit-catalog";
 import { loadCoverConditions,readWhateverIsStillUnread } from "@/lib/policies/condition-catalog";
 import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
-import { enforceLiveChatMonetaryBoundary, liveClaimContext } from "./monetary-boundary";
-import { applyFactFinding,applyInjuryFactFindingTurn,benefitCategories,joinOr,nextInjuryQuestion,PERMANENT_LOSS } from "./fact-finding-chat";
+import { enforceLiveChatMonetaryBoundary, isValidPolicyStatedLimit, liveClaimContext, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE } from "./monetary-boundary";
+import { explicitCurrency } from "./policy-analysis";
+import { formatMoney } from "@/lib/format/currency";
+import { applyFactFinding,applyInjuryFactFindingTurn,benefitCategories,joinOr,nextInjuryQuestion,PERMANENT_LOSS,questionOptions } from "./fact-finding-chat";
 import { recordDirectFactAnswer } from "@/lib/claims/fact-finding";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
@@ -24,7 +26,7 @@ import { reportedClaimEvents } from "@/lib/insurance/claim-events";
 import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency";
 import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
-import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem } from "@/types";
+import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem,PolicyStatedLimit } from "@/types";
 import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText } from "./facts";
 import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn,ChatConflict } from "./store";
@@ -218,7 +220,7 @@ async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknow
     // "we need a bit more time to review the remaining portions". Nothing is
     // still being reviewed; the deterministic summary says what was found.
     if(/\b(?:more time|bit more time|come back later|in due course|remaining portions|still reviewing|continue reviewing)\b/i.test(text))return false;
-    if(args.intent==="claim"&&/(?:approved|definitely|guaranteed|will receive|will pay|entitled)/i.test(text))return false;
+    if(args.intent==="claim"&&/\b(?:approved|definitely|guaranteed|will receive|will pay|entitled)\b/i.test(text))return false;
     answer.summary=args.eventLead&&!explanationCoversLead(explanation.summary,args.state,args.people)
       ?args.eventLead+" "+explanation.summary:explanation.summary;
     answer.details=mergeDetails(explanation.details,answer.details);
@@ -300,7 +302,16 @@ export function readingBudget(){
     perContractCap:maximumWindows,
   };
 }
-function addCitations(target:ChatCitation[],values:ChatCitation[]){for(const c of values)if(!target.some(v=>v.chunkId===c.chunkId))target.push(c);}
+/** One citation per document page and label: two passages of the same page
+ * are one source to the person reading, not two. */
+function sameSource(a:ChatCitation,b:ChatCitation){
+  return a.chunkId===b.chunkId||(a.policyId===b.policyId&&a.pageStart===b.pageStart&&a.pageEnd===b.pageEnd&&(a.evidenceLabel??"")===(b.evidenceLabel??""));
+}
+function addCitations(target:ChatCitation[],values:ChatCitation[]){for(const c of values)if(!target.some(v=>sameSource(v,c)))target.push(c);}
+function dedupeCitations(answer:ChatAnswer){
+  const kept:ChatCitation[]=[];for(const c of answer.citations??[])if(!kept.some(v=>sameSource(v,c)))kept.push(c);
+  answer.citations=kept;return answer;
+}
 function materialQuestion(requirement:{factKey:string;question:string;why:string;operator:string},contract:PolicyContract,state:ConversationState):ChatQuestion&{subjectId:string;factKey:string}{
   return {id:contract.ownerId+":"+requirement.factKey,text:requirement.question,why:requirement.why,
     type:"text",subjectId:contract.ownerId,factKey:requirement.factKey,options:["Not sure","Not yet known"]};
@@ -336,6 +347,161 @@ function dedupeNegativeRestatements(observations:PolicyObservation[]){
   const best=restatements.reduce((a,b)=>b.text.length>a.text.length?b:a);
   return observations.filter(o=>!isRestatement(o.text)||o===best);
 }
+/** The kind of policy a question names, when it names one. */
+const POLICY_KINDS:{kind:string;asked:RegExp;held:RegExp}[]=[
+  {kind:"travel",asked:/\b(?:travel\w*|trip|overseas|abroad)\b/i,held:/\b(?:travel\w*|trip|overseas)\b/i},
+  {kind:"hospital",asked:/\bhospital\w*\b/i,held:/\bhospital\w*|\bshield\b|medical/i},
+  {kind:"motor",asked:/\b(?:motor|car|vehicle)\b/i,held:/\b(?:motor|car|vehicle)\b/i},
+  {kind:"home",asked:/\b(?:home|household|contents)\b/i,held:/\b(?:home|household|contents)\b/i},
+  {kind:"critical illness",asked:/\bcritical illness\b/i,held:/\bcritical|\bcancer|\bdread/i},
+  {kind:"personal accident",asked:/\b(?:personal accident|accident (?:plan|policy|cover))\b/i,held:/\baccident/i},
+];
+function possessiveName(people:ClaimPerson[]){
+  if(people.length!==1)return "Your family’s";
+  const person=people[0];
+  if(/^self$/i.test(person.relationship??""))return "Your";
+  return (person.preferred_name||person.display_name)+"’s";
+}
+/** What a coverage question is about, and how a stored benefit row on that
+ * topic reads. The first matching topics win; the row patterns run over the
+ * row's own name and quoted wording. */
+/** A question about a term of the policy rather than what it covers. */
+const POLICY_TERMS:{label:string;asked:RegExp;row:RegExp}[]=[
+  {label:"a waiting period",asked:/\bwaiting periods?\b/i,row:/\bwaiting period/i},
+  {label:"any exclusions",asked:/\bexclu\w*\b/i,row:/\bexclu/i},
+  {label:"a deductible or co-payment",asked:/\b(?:deductibles?|co-?pay\w*|co-?insurance|excess)\b/i,row:/deductible|co-?pay|co-?insurance|\bexcess\b/i},
+  {label:"the premium",asked:/\bpremiums?\b/i,row:/\bpremium/i},
+  {label:"a grace period",asked:/\bgrace period\b/i,row:/grace period/i},
+];
+const COVERAGE_TOPICS:{label:string;asked:RegExp;row:RegExp;companion?:RegExp}[]=[
+  {label:"intensive care cover",asked:/\b(?:icu|intensive care)\b/i,row:/\bicu\b|intensive care/i},
+  {label:"surgical cover",asked:/\b(?:surg\w*|operations?)\b/i,row:/\bsurg\w*|\boperation/i},
+  {label:"hospital cover",asked:/\b(?:hospital\w*|ward|room and board|inpatient|admission)\b/i,
+    row:/\bhospital\w*|\bward\b|room (?:and|&) board|\bicu\b|intensive care|\binpatient|\bconfine\w*|\badmission/i,
+    // Surgical fees belong to hospital cover when they sit in a hospital schedule.
+    companion:/\bsurg\w*|\boperation/i},
+  {label:"fracture cover",asked:/\b(?:fractur\w*|broken bones?|broke\w*)\b/i,row:/\bfractur\w*|\bbroken bone/i},
+  {label:"travel and overseas cover",asked:/\b(?:travel\w*|overseas|abroad|trips?|evacuat\w*|baggage|luggage|flights?)\b/i,
+    row:/\boverseas|\btravel\w*|\btrip\b|evacuat|repatriat|baggage|luggage|\bflight/i},
+  {label:"dental cover",asked:/\b(?:dental|dentist\w*|teeth|tooth)\b/i,row:/\bdental|\bteeth|\btooth/i},
+  {label:"maternity cover",asked:/\b(?:maternity|pregnan\w*|childbirth|delivery)\b/i,row:/maternity|pregnan|childbirth/i},
+  {label:"critical illness cover",asked:/\b(?:critical illness\w*|cancer|heart attack|stroke|dread disease)\b/i,row:/critical|\bcancer|heart attack|\bstroke|dread/i},
+  {label:"death cover",asked:/\b(?:death|dies|die|died|life cover|funeral)\b/i,row:/\bdeath\b|funeral/i},
+  {label:"disability cover",asked:/\b(?:disab\w*|dismember\w*|tpd|loss of (?:an? )?(?:limb|arm|leg|hand|sight|eye))\b/i,row:/disab|dismember|\btpd\b|\bloss of\b/i},
+  {label:"outpatient cover",asked:/\b(?:outpatient|clinic|gp|specialist)\b/i,row:/outpatient|\bclinic|specialist/i},
+  {label:"maturity and surrender value",asked:/\b(?:matur\w*|surrender\w*|cash value|endowment)\b/i,row:/matur|surrender|survival/i},
+  {label:"accident cover",asked:/\baccident\w*\b/i,row:/\baccident/i},
+];
+export function coverageTopics(question:string){
+  const terms=POLICY_TERMS.filter(t=>t.asked.test(question));
+  if(terms.length)return terms;
+  const found=COVERAGE_TOPICS.filter(t=>t.asked.test(question));
+  // "hospital" in a question about ICU or surgery is context, not a second topic.
+  return found.some(t=>t.label!=="hospital cover")&&found.some(t=>t.label==="hospital cover")&&!/\bhospital\w*\s+(?:cover\w*|plan|polic\w*|benefits?)\b/i.test(question)
+    ?found.filter(t=>t.label!=="hospital cover"):found;
+}
+/** A coverage question about a person answered from the benefit rules stored
+ * when their documents were read: one plain line per matching row, each with
+ * its own document and page. A policy-stated limit is attached only where the
+ * row's own quoted wording prints the amount and currency (the same test the
+ * live monetary boundary applies); nothing is added up. */
+export function catalogueCoverageAnswer(args:{question:string;people:ClaimPerson[];contracts:PolicyContract[];catalog:CatalogBenefit[]}){
+  const topics=coverageTopics(args.question);
+  if(!topics.length)return null;
+  const owned=new Map<string,PolicyContract>();
+  for(const contract of args.contracts)if(args.people.some(p=>p.id===contract.ownerId))
+    for(const document of [...contract.documents,...contract.references])owned.set(document.id,contract);
+  const usable=args.catalog.filter(row=>owned.has(row.policyId)&&!/^\s*(?:table of contents|contents)\s*$/i.test(row.benefitName));
+  const text=(row:CatalogBenefit)=>row.benefitName+" "+row.quote;
+  const direct=usable.filter(row=>topics.some(t=>t.row.test(text(row))));
+  const hostContracts=new Set(direct.map(row=>owned.get(row.policyId)!.id));
+  const rows=usable.filter(row=>direct.includes(row)||(hostContracts.has(owned.get(row.policyId)!.id)&&
+    topics.some(t=>{const companion=(t as {companion?:RegExp}).companion;return !!companion&&companion.test(text(row));})));
+  const seen=new Set<string>();
+  const lines:string[]=[],citations:ChatCitation[]=[],limits:PolicyStatedLimit[]=[];
+  for(const row of rows){
+    const contract=owned.get(row.policyId)!;
+    const key=contract.id+"|"+normalText(row.benefitName);
+    if(seen.has(key))continue;seen.add(key);
+    const page=row.sourcePage;
+    const citation:ChatCitation={chunkId:"benefit:"+row.id,policyId:row.policyId,policyName:row.productName??contract.name,insurer:contract.insurer??undefined,
+      pageStart:page,pageEnd:page,evidenceLabel:"Benefit schedule, read when the document was uploaded"};
+    citations.push(citation);
+    const owner=args.people.length>1?(args.people.find(p=>p.id===contract.ownerId)?.preferred_name||contract.ownerName)+" · ":"";
+    lines.push(owner+(row.productName??contract.name)+" — "+row.benefitName+(page?" (page "+page+")":""));
+    if(contract.confirmed&&contract.ownershipBasis==="evidence"&&(row.formulaKind==="fixed"||row.formulaKind==="expense_cap")&&
+      row.formulaValue!=null&&row.formulaValue>0&&!row.needsConfirmation){
+      const written=explicitCurrency(row.quote);
+      if(written&&(!row.currency||row.currency.toUpperCase()===written)){
+        const limit:PolicyStatedLimit={kind:"policy_stated_limit",label:POLICY_STATED_LIMIT_LABEL,notice:POLICY_STATED_LIMIT_NOTICE,
+          benefitTitle:row.benefitName,ownerName:contract.ownerName??null,amount:row.formulaValue,currency:written,
+          amountText:formatMoney(row.formulaValue,written),quote:row.quote,citation};
+        if(isValidPolicyStatedLimit(limit))limits.push(limit);
+      }
+    }
+  }
+  return {topics:topics.map(t=>t.label),lines,citations,limits};
+}
+function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
+/** "her dental coverage" -> "dental cover": the thing asked about, not the
+ * person's own words handed back with their pronouns. */
+export function askedTopic(question:string){
+  const topics=coverageTopics(question);
+  if(topics.length)return topics.map(t=>t.label).join(" or ");
+  const topic=question.trim().replace(/[?.!\s]+$/,"")
+    .replace(/^(?:and\s+)?(?:what|which|how\s+(?:much|long|many))\s+(?:is|are|was|were|does|do)\s+/i,"")
+    .replace(/^(?:does|do|is|are|has|have)\s+(?:she|he|they|i|we|it|my|her|his|their)\s+(?:have|has|get|got)\s+(?:an?\s+)?/i,"")
+    .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(\w+)'s\b/g,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
+  return topic.length>=3&&topic.length<=100?topic:"this";
+}
+/** Said when a policy question finds nothing. "Not stated in your documents"
+ * only when nothing on the topic is stored AND every processed page was read;
+ * otherwise it is "not found in what was read so far", never an absence. */
+export function notInDocuments(args:{question:string;people:ClaimPerson[];contracts:PolicyContract[];complete:boolean;
+  pagesRead?:number|null;pagesTotal?:number|null}){
+  const whose=possessiveOf(args.people);
+  const lower=args.question.toLowerCase();
+  const plural=args.contracts.length===1?"policy":"policies";
+  const named=[...new Set(args.contracts.map(c=>c.name))].slice(0,3).join(", ");
+  for(const kind of POLICY_KINDS){
+    if(!kind.asked.test(lower))continue;
+    const held=args.contracts.some(c=>kind.held.test(c.name+" "+c.coverages.map(v=>(v.category??"")+" "+(v.productName??"")).join(" ")));
+    if(!held){
+      const who=whose==="Your"?"You have":whose==="Your family’s"?"Your family has":whose.replace(/’s$/,"")+" has";
+      return who+" no "+kind.kind+" policy on file, so there is nothing in your documents to answer this from. The "+plural+" on file "+(args.contracts.length===1?"is":"are")+": "+named+". If there is a "+kind.kind+" policy, upload it and ask again.";
+    }
+  }
+  const subject=askedTopic(args.question);
+  if(args.complete)
+    return whose+" uploaded "+plural+" ("+named+")"+(args.contracts.length===1?" doesn’t":" don’t")+" mention "+subject+
+      ". Every page was read, so it isn’t stated in your documents and DearPolicy can’t give a value for it. The insurer can confirm.";
+  const read=args.pagesTotal?" ("+(args.pagesRead??0)+" of "+args.pagesTotal+" pages)":"";
+  return "DearPolicy didn’t find "+subject+" in the parts of "+whose.replace(/^Your$/,"your").replace(/^Your family’s$/,"your family’s")+" "+plural+" read so far"+read+
+    ". That isn’t the same as it not being there. Ask again to let DearPolicy read further, check the Benefits page for what has been read, or ask the insurer.";
+}
+/** A passage quoted as an observation, fit to show a person: whitespace
+ * collapsed, page furniture and test-document markers removed, and cut at a
+ * sentence or word boundary instead of dumping a whole page. */
+export function readableObservation(text:string){
+  let out=text.replace(/\s+/g," ").replace(/\bPage \d+ of \d+\b/gi,"").replace(/SYNTHETIC(?:-[A-Z0-9-]+)? TEST DOCUMENT[^.]*?(?:POLICY|$)/gi,"")
+    .replace(/DPTEST[^\s]*/g,"").replace(/\s+/g," ").trim();
+  if(out.length>280){const cut=out.slice(0,280);const stop=Math.max(cut.lastIndexOf(". "),cut.lastIndexOf("; "));
+    out=(stop>120?cut.slice(0,stop+1):cut.slice(0,cut.lastIndexOf(" ")))+"…";}
+  return out.length>=12?out:"";
+}
+/** A new question asked while a claim question is still open ("What is her
+ * dental coverage?" in the middle of an injury interview) is answered on its
+ * own terms; the open question is then offered again, so the interview is
+ * neither swallowed by the new question nor lost to it. */
+function resumePendingClaimQuestion(answer:ChatAnswer,before:ConversationState,state:ConversationState){
+  const pending=before.pending;
+  if(before.intent!=="claim"||!pending||state.intent==="claim"||answer.questions.length||answer.mode!=="answer")return;
+  if(state.subjects[pending.subjectId]?.[pending.factKey])return; // answered or deferred this turn
+  state.intent="claim";state.pending=pending;
+  if(state.activeClaimQuery)state.activeQuery=state.activeClaimQuery;
+  const {subjectId:_subject,factKey:_key,...question}=pending;void _subject;void _key;
+  answer.questions=[question];
+}
 async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
   const {request,conversation}=context;
   const report=options?.report??(async()=>undefined);
@@ -369,14 +535,15 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       // mapping, and a missed answer re-asks the same question forever.
       recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
       const truncated=error instanceof TruncatedModelOutput;
-      const cause=readableModelFailure(error);
+      // The operator-facing cause (provider, model, configuration advice)
+      // goes to the log; the household sees plain words.
+      console.warn("[chat] interpretation failed:",readableModelFailure(error));
+      const cause=householdModelFailure(error);
       answer.summary=truncated
         ?"That message had a lot in it and the model ran out of room part-way through reading it. Nothing was lost — your message is saved. Send it again, or split it into two shorter messages (what happened, then the bills)."
         :"I couldn’t read your message just now: "+cause+". Your message is saved.";
-      answer.details=truncated?["Technical cause: the model's structured output was cut short. DearPolicy retried with a larger output budget and it was still incomplete."]:[];
-      answer.nextSteps=/Enable|API key|model name|internet/.test(cause)
-        ?["Fix the setting above, then send the message again — nothing needs to be re-uploaded."]
-        :["Send the message again — a retry usually succeeds.","If it fails twice, split it into two shorter messages and DearPolicy will keep the facts from both."];
+      answer.details=[];
+      answer.nextSteps=["Send the message again — a retry usually succeeds.","If it fails twice, split it into two shorter messages and DearPolicy will keep the facts from both."];
     }
     if(interpretation){
       state=mergeInterpretation({state,interpretation,message:request.question,subjectIds,
@@ -440,7 +607,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         }
         answer.confidence=contracts.some(c=>!c.confirmed)?"partial_match":contracts.length?"strong_match":"insufficient_evidence";
         for(const c of contracts)for(const coverage of c.coverages)addCitations(answer.citations,[{chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,policyName:coverage.productName??c.name,
-          pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,personalEvidence:true,evidenceLabel:"Verified personal cover"}]);
+          pageStart:coverage.sourcePage??null,pageEnd:coverage.sourcePage??null,personalEvidence:true,evidenceLabel:"Verified personal cover"}]);
       }else{
         const scenarioContext=state.intent==="claim"?modelScenarioContext(state,subjectIds):[];
         const eventContext=state.intent==="claim"?context.people.flatMap(p=>{
@@ -505,7 +672,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
         if(state.intent==="claim"||whatIf){
@@ -539,14 +706,14 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               answer.summary=(lead?lead+" ":"")+"Before I put figures on this, "+(looked.questionsLeft===1?"one question":"a few quick questions — "+looked.questionsLeft+" at most")+".";
               const kinds=benefitCategories(looked.candidates);
               if(kinds.length)answer.details.push("This may relate to "+joinOr(kinds)+" benefits, depending on the answers.");
-              answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:looked.question.why,options:looked.question.options}];
+              answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:looked.question.why,options:questionOptions(looked.question)}];
               state.pending={...answer.questions[0],subjectId:looked.question.subjectId,factKey:looked.question.factKey};
               answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
               answer.confidence="partial_match";
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+              await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             // A row that only says "as stated in the plan" is not yet an answer;
@@ -591,7 +758,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                     items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
                   state.claimSessionId=recorded.id;answer.claimSessionId=recorded.id;
                   answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.");
-                  answer.nextSteps.push("Gather: "+recorded.attach.slice(2,6).join("; ")+".");
+                  const gather=recorded.attach.slice(2,6);if(gather.length)answer.nextSteps.push("Gather: "+gather.join("; ")+".");
                 }catch{/* The answer stands without the record. */}
               }
               answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
@@ -611,7 +778,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
-              await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+              await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
               return {answer,retrieved:[]};
             }
             }
@@ -667,7 +834,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
         // Carried into the reading path when the rules on file have nothing to
@@ -851,7 +1018,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
             answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
             await check();
-            await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+            await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
             return {answer,retrieved:[]};
           }
           delete state.pending;
@@ -871,7 +1038,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                 items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
               state.claimSessionId=recorded.id;answer.claimSessionId=recorded.id;
               answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.");
-              answer.nextSteps.push("Gather: "+recorded.attach.slice(2,6).join("; ")+".");
+              const gather=recorded.attach.slice(2,6);if(gather.length)answer.nextSteps.push("Gather: "+gather.join("; ")+".");
             }catch{/* The answer stands without the record. */}
           }
           answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
@@ -906,8 +1073,36 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
-          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
+          }
+        }
+        // A question about what a person's policies cover is answered from
+        // the benefit rules stored when the documents were read -- the same
+        // rows every time, each with its own page -- before any passage is
+        // re-read. The reading path below is only for a topic the stored
+        // rules say nothing about.
+        if(state.intent!=="claim"&&!whatIf&&catalog.length){
+          const covered=catalogueCoverageAnswer({question:request.submittedQuestion??request.question,people:context.people,contracts,catalog});
+          if(covered&&covered.lines.length){
+            answer.mode="answer";
+            const whose=possessiveOf(context.people).replace(/^Your$/,"your").replace(/^Your family’s$/,"your family’s");
+            answer.summary="Here is the "+covered.topics.join(" and ")+" in "+whose+" "+(contracts.length===1?"policy":"policies")+
+              ", from the benefit schedule"+(covered.citations.length===1?"":"s")+" on file, each with the page it is on."+
+              (covered.limits.length?" Where the schedule prints an amount, it is shown below as the policy-stated limit, not as an estimate of any claim.":"");
+            answer.details=covered.lines;
+            addCitations(answer.citations,covered.citations);
+            answer.policyStatedLimits=covered.limits;
+            answer.confidence="partial_match";
+            delete state.pending;
+            answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
+            console.debug("[chat] answered coverage question from stored benefits",{lines:covered.lines.length});
+            if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
+            resumePendingClaimQuestion(answer,conversation.state,state);
+            answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
+            await check();
+            await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+            return {answer,retrieved:[]};
           }
         }
         const sources=await retrieveContractSources({accountId:request.accountId,contracts,question,searchTerms});
@@ -991,7 +1186,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(result.ok){analyses.push(result.analysis);readPassages.push(...result.window);continue;}
             failedWindows++;contractFailedWindows++;
             // Never surface validation output or raw model text to the user.
-            failureReasons.push(readableModelFailure(result.error));
+            console.warn("[chat] evidence batch failed:",readableModelFailure(result.error));
+            failureReasons.push(householdModelFailure(result.error));
             reviews.find(r=>r.id===contract.id)!.status="needs_review";
           }
 
@@ -1014,7 +1210,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(merged.conflicts)reviews.find(r=>r.id===contract.id)!.status="needs_review";
           if(!merged.benefits.length&&!merged.observations.length&&reviews.find(r=>r.id===contract.id)!.status==="searched")reviews.find(r=>r.id===contract.id)!.status="no_matching_section";
           for(const observation of dedupeNegativeRestatements(merged.observations)){
-            observations.push(contract.ownerName+" · "+contract.name+": "+observation.text);
+            const text=readableObservation(observation.text);
+            if(text)observations.push(contract.ownerName+" · "+contract.name+": "+text);
             addCitations(answer.citations,observation.evidence.flatMap(q=>analysisPassages.filter(p=>p.id===q.sourceId).map(p=>p.citation)));
           }
           for(const step of merged.nextSteps)answer.nextSteps.push(step.text);
@@ -1083,9 +1280,12 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             options:["I can upload it","I don’t have it"],
             text:"Do you have the policy wording or benefit summary for "+unwordedContracts.slice(0,2).map(c=>c.ownerName+" · "+c.name).join(" and ")+"?",
             why:"Your certificate proves what "+(unwordedContracts.length===1?unwordedContracts[0].ownerName+" owns":"these people own")+", but the payout rule can only be calculated from matching wording for the same contract."}];
-          else if(failedWindows)answer.nextSteps.unshift("Ask the same question again once the local model is responding. "+failedWindows+" evidence batch"+(failedWindows===1?"":"es")+" failed, so the sections that would prove a payout amount were never read.");
+          else if(failedWindows)answer.nextSteps.unshift("Ask the same question again in a minute. "+failedWindows+" evidence batch"+(failedWindows===1?"":"es")+" failed, so the sections that would prove a payout amount were never read.");
         }
-        const unresolved=reviews.filter(r=>r.status!=="searched").length;
+        // A contract whose wording was read and simply says nothing on this
+        // question is not "unresolved"; only missing wording, unprocessed
+        // documents and sections that need review are.
+        const unresolved=reviews.filter(r=>r.status!=="searched"&&r.status!=="no_matching_section").length;
         answer.confidence=answer.citations.length?"partial_match":"insufficient_evidence";
         const eventLead=claimEventLead(context.people,state);
         await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
@@ -1110,6 +1310,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             ?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+". This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until the claim evidence has been reviewed. Any amount shown is a policy-stated coverage limit, not an estimate for this event."
             :"These are the relevant parts of your policy documents, cited below. This is policy information, not a claim assessment."):
           observations.length?"The uploaded passages support the policy details below.":
+          contracts.length&&state.intent!=="claim"?notInDocuments({question:request.submittedQuestion??request.question,people:context.people,contracts,
+            complete:negativeConclusionPermitted(answer.reviewCoverage),pagesRead:answer.reviewCoverage?.pagesRead,pagesTotal:answer.reviewCoverage?.pagesTotal}):
           contracts.length?"I searched the uploaded personal policies but couldn’t verify a matching benefit from the retrieved sections. "+
             (negativeConclusionPermitted(answer.reviewCoverage)?"Every processed page was read, so the remaining gap is missing wording or evidence rather than an unsearched section.":"This is an incomplete review, so it doesn’t establish that the event is uninsured."):
           "I don’t have verified personalised policy evidence for the selected family profiles yet.");
@@ -1123,8 +1325,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           // holding a policy document, not a terminal, and the real fix is to
           // index the documents once so this path is not used at all.
           ". This review is incomplete rather than negative. DearPolicy answers instantly, and completely, from documents it has already read — open the Benefits page to see what it has read so far. If a document is missing from there, re-index it and ask again. Asking about one person or one policy at a time also lets it finish.");
-        if(unresolved)answer.details.push(unresolved+" policy contract"+(unresolved===1?"":"s")+" still need wording, processing or further review. See the policy review list.");
-        if(failedWindows)answer.details.push("The reading model could not finish "+failedWindows+" evidence batch"+(failedWindows===1?"":"es")+", so those sections were not read."+
+        if(unresolved)answer.details.push(unresolved+" policy contract"+(unresolved===1?" still needs":"s still need")+" wording, processing or further review. See the policy review list.");
+        if(failedWindows)answer.details.push("DearPolicy could not finish reading "+failedWindows+" evidence batch"+(failedWindows===1?"":"es")+", so those sections were not read."+
           (failureReasons.length?" Reported cause: "+[...new Set(failureReasons)].slice(0,2).join(" / ")+".":""));
         await check();
         await report({stage:"Explaining the evidence and remaining questions",completed:contracts.length,total:contracts.length});
@@ -1152,9 +1354,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
     }
     if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
   }
+  resumePendingClaimQuestion(answer,conversation.state,state);
   answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
   await check();
-  await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+  await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});dedupeCitations(answer);await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
   return {answer,retrieved:[]};
 }
 

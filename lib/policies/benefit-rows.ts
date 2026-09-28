@@ -31,7 +31,10 @@ export type ParsedBenefitValue={
   period?:"day"|"month"|"year"|"week";
 };
 const NUMBER=String.raw`\d[\d,]*(?:\.\d{1,2})?`;
-const MONEY=String.raw`(?:S?\$|SGD|USD)\s?(${NUMBER})`;
+// Any printed currency marker in front of the figure (S$, US$, HK$, SGD, USD,
+// EUR, RM, €, £ …). The marker only locates the number; the currency itself
+// is read by statedCode() from what is printed, never defaulted.
+const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|RM|€|£|¥)\s?(${NUMBER})`;
 function amount(raw:string|undefined){
   if(!raw)return null;
   const value=Number(raw.replace(/,/g,""));
@@ -48,7 +51,25 @@ function amount(raw:string|undefined){
  * sentence mentioning the sum insured never turns every stray percentage on the
  * page into a payout, and two tables on one page keep their own bases. */
 /** The currency code written in `text`, or null when none is. */
-function statedCode(text:string):string|null{const q=explicitCurrency(text);return q?normalizeCurrencyCode(q):null;}
+export function statedCurrencyCode(text:string):string|null{return statedCode(text);}
+function statedCode(text:string):string|null{
+  const q=explicitCurrency(text)??printedMarker(text);
+  if(!q)return null;
+  // No fallback: a marker that does not resolve to a real ISO code stays null.
+  const code=normalizeCurrencyCode(q,"");
+  return /^[A-Z]{3}$/.test(code)?code:null;
+}
+/** Markers explicitCurrency() does not know: RM, HK$, A$/AU$, SG$, NZ$, C$/CA$.
+ * A bare "$" is deliberately NOT a currency -- it stays null. */
+function printedMarker(text:string):string|null{
+  if(/(?:^|[^A-Za-z])RM\s?\d/.test(text))return "MYR";
+  if(/\bHK\$/i.test(text))return "HKD";
+  if(/\bAU?\$/.test(text))return "AUD";
+  if(/\bSG\$/i.test(text))return "SGD";
+  if(/\bNZ\$/i.test(text))return "NZD";
+  if(/\bCA?\$/.test(text))return "CAD";
+  return null;
+}
 /** An amount with its stated currency; without one, the figure is labelled as
  * having no stated currency rather than being given a guessed one. */
 function moneyLabel(currency:string|null,value:number){return currency?currency+" "+value.toLocaleString("en-SG"):value.toLocaleString("en-SG")+" (currency not stated)";}

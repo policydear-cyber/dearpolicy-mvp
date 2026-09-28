@@ -43,7 +43,7 @@ function assessmentFromItem(item:ClaimItem,index:number,citations:ChatCitation[]
     ...(item.aggregation?{aggregation:item.aggregation}:{}),
     ...(item.supersededBy?{supersededBy:item.supersededBy}:{}),
     ...(item.coverLabel?{coverLabel:item.coverLabel}:{}),
-    ...(evidence?{ruleEvidence:evidence}:{}),
+    ...(evidence&&evidence.pageStart!=null&&evidence.pageEnd!=null?{ruleEvidence:{...evidence,pageStart:evidence.pageStart,pageEnd:evidence.pageEnd}}:{}),
   };
 }
 /** Writes (or updates) the claim session for an assessment and returns its id. */

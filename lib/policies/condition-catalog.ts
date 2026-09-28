@@ -90,12 +90,15 @@ const SYSTEM="List the CONDITIONS this policy page places on what it pays. Not t
   "amount with amountBasis fixed for a dollar ceiling, or sum_insured_fraction with 0.15 for 15% of the sum insured. "+
   "Every condition needs ONE quote (under 250 characters) copied exactly from this page that states it. Never invent a condition, never turn a benefit into one, and never state a period the page does not print. An empty list is correct for a page that places no conditions.";
 
-export async function readPageConditions(page:{page_number:number;text:string},productName:string|null){
+/** `owner` ties the model call to its household and document in the
+ * model_executions provenance record. */
+export async function readPageConditions(page:{page_number:number;text:string},productName:string|null,owner?:{accountId:string;policyId:string}){
   let extraction;
   try{
     extraction=await structuredCompletion({
       role:"reading",
       operation:"condition_catalog_extraction",
+      householdId:owner?.accountId,resourceId:owner?.policyId,
       schema:ConditionExtractionSchema,coerce:coerceConditions,
       temperature:0,maxOutputTokens:900,timeoutMs:120_000,attempts:2,
       system:SYSTEM,
@@ -163,7 +166,7 @@ export async function catalogueConditions(args:{accountId:string;policyId:string
     let launchError:unknown;
     for(let index=start;index<end;index++){
       try{args.report?.(index+1,pages.length);}catch(error){launchError=error;break;}
-      launched.push(readPageConditions(pages[index],args.productName));
+      launched.push(readPageConditions(pages[index],args.productName,{accountId:args.accountId,policyId:args.policyId}));
     }
     const results=await Promise.all(launched);
     if(launchError!==undefined)throw launchError;

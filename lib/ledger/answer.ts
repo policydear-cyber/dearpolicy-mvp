@@ -226,8 +226,8 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
           conditions:[...new Set(conditions)],
         };
         out.items.push(item);
-        out.citations.push({chunkId:"ledger:"+row.id,policyId:row.policyId??"",policyName:row.planName,insurer:row.insurer??undefined,
-          pageStart:row.sourcePage??1,pageEnd:row.sourcePage??1,personalEvidence:row.origin!=="wording",
+        if(row.policyId)out.citations.push({chunkId:"ledger:"+row.id,policyId:row.policyId,policyName:row.planName,insurer:row.insurer??undefined,
+          pageStart:row.sourcePage??null,pageEnd:row.sourcePage??null,personalEvidence:row.origin!=="wording",
           evidenceLabel:row.origin==="schedule"?"Your schedule or certificate":row.origin==="person"?"Entered on the Coverage page":"Policy wording, read when the document was uploaded"});
       }
     }

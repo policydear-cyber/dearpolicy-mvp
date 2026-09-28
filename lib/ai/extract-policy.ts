@@ -204,7 +204,9 @@ function isTransientModelError(error: unknown) {
   return /fetch failed|connection error|timed out|temporarily unavailable|ECONNRESET|socket|aborted/i.test(message);
 }
 
-export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyExtraction> {
+/** `owner` (household + document) is recorded on the model_executions
+ * provenance row, so an extracted fact can be traced to the call that read it. */
+export async function extractPolicyStructure(pages: PdfPage[], owner?: { accountId: string; policyId: string }): Promise<PolicyExtraction> {
   const referenceRole = detectHighConfidenceReferenceRole(pages);
   if (referenceRole) return buildDeterministicReferenceExtraction(pages, referenceRole);
 
@@ -216,6 +218,8 @@ export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyEx
     return await structuredCompletion({
       role: "reading",
       operation: "policy_extraction",
+      householdId: owner?.accountId,
+      resourceId: owner?.policyId,
       system: systemPrompt,
       user: `Extract only facts supported by these selected pages. The complete document will be indexed separately.\n\n${primarySample}`,
       schema: PolicyExtractionSchema,
@@ -232,6 +236,8 @@ export async function extractPolicyStructure(pages: PdfPage[]): Promise<PolicyEx
     return structuredCompletion({
       role: "reading",
       operation: "policy_extraction",
+      householdId: owner?.accountId,
+      resourceId: owner?.policyId,
       system: systemPrompt,
       user: `Retry with a minimal evidence sample. Extract only clearly visible facts; use null/[] for everything else.\n\n${fallbackSample}`,
       schema: PolicyExtractionSchema,

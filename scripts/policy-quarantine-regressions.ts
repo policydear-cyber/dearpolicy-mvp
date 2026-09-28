@@ -381,7 +381,10 @@ async function runDatabaseTests() {
       }
       // The list route also returns a fixed string instead of the raw processing error.
       const routeSource = await readFile(path.join(process.cwd(), "app/api/policies/route.ts"), "utf8");
-      assert.match(routeSource, /processing_error:\s*p\.processing_error \? POLICY_PROCESSING_STOPPED_MESSAGE : null/);
+      // Only the two fixed, user-actionable PDF-password sentences may pass through
+      // (USER_ACTIONABLE_PROCESSING_ERRORS, size locked to 2 by processing-failure-storage-regressions);
+      // every other stored error, including raw scanner detail, becomes the generic stopped message.
+      assert.match(routeSource, /processing_error:\s*p\.processing_error \? \(USER_ACTIONABLE_PROCESSING_ERRORS\.has\(p\.processing_error\) \? p\.processing_error : POLICY_PROCESSING_STOPPED_MESSAGE\) : null/);
       delete process.env.MALWARE_SCANNER_PROVIDER;
     });
 

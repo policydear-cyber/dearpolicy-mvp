@@ -17,6 +17,7 @@
  */
 import type { SubjectFacts } from "@/lib/chat/types";
 import { claimLocalToday, resolveClaimDate } from "@/lib/claims/dates";
+import { GATES, QUANTITY_FACT } from "@/lib/ledger/events";
 
 export type FactFindingCategory =
   | "accidental_death" | "accidental_injury" | "critical_illness" | "disability_tpd" | "medical_reimbursement" | "hospital_cash" | "travel";
@@ -440,6 +441,33 @@ function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: 
   }
   return strict ? null : said;
 }
+/** A reply to an open question whose key no spec above declares -- the
+ * coverage ledger's own questions (outOfPocket, surgery, icuAdmitted, ...).
+ * Only unambiguous shapes are read: yes/no, a plain figure for a quantity,
+ * an exact option, or "Not sure". Anything else is left to the interpreter.
+ * Uncertainty is stored as a pending fact (never as a value), so the question
+ * is not asked again and no arithmetic ever sees it. */
+const QUANTITY_KEY = /(?:Bill|Cost|Expense|Amount|Nights|Days|Hours|Count)$|^outOfPocket$/;
+/** Keys the application itself asks about (the coverage ledger's gates and
+ * quantities). A key only a model ever proposed is left to the interpreter. */
+const APP_ASKED_KEYS = new Set<string>([...Object.values(GATES).map((g) => g.factKey), ...Object.values(QUANTITY_FACT).map((q) => q!.factKey)]);
+function undeclaredAnswer(pending: { factKey: string; type?: string; options?: string[] }, raw: string): { value: string | number | boolean | null; uncertain: boolean } | null {
+  const said = bare(raw);
+  if (!said) return null;
+  if (UNCERTAIN_ANSWER.test(said)) return { value: null, uncertain: true };
+  const yesNo = pending.type === "yes_no" || (pending.options ?? []).some((o) => /^yes$/i.test(o));
+  if (yesNo) {
+    if (/^y(?:es)?$/i.test(said)) return { value: true, uncertain: false };
+    if (/^no?$/i.test(said)) return { value: false, uncertain: false };
+    return null;
+  }
+  if (QUANTITY_KEY.test(pending.factKey)) {
+    const figure = said.replace(/,/g, "").match(/^(?:s\$|us\$|\$|sgd|usd)?\s*(\d+(?:\.\d+)?)\s*(?:sgd|usd|dollars?|nights?|days?|hours?)?$/i);
+    return figure ? { value: Number(figure[1]), uncertain: false } : null;
+  }
+  const option = (pending.options ?? []).find((o) => o.toLowerCase() === said.toLowerCase());
+  return option ? { value: option, uncertain: false } : null;
+}
 export function recordDirectFactAnswer(args: {
   message: string;
   subjects: Record<string, SubjectFacts>;
@@ -462,6 +490,19 @@ export function recordDirectFactAnswer(args: {
     const asked = message.slice(0, colon).trim().replace(/\?\s*$/, "").toLowerCase();
     match = questionIndex().get(asked);
     raw = message.slice(colon + 1).trim();
+  }
+  if (!match && args.pending && !questionForKey(args.pending.factKey) && (APP_ASKED_KEYS.has(args.pending.factKey) || QUANTITY_KEY.test(args.pending.factKey))
+    && message.length <= 160 && !message.includes("?")) {
+    // Bare ("Yes") or in the question card's own form ("Was surgery
+    // performed: Yes"): the answer is what follows the colon.
+    const answer = undeclaredAnswer(args.pending, colon > 0 ? message.slice(colon + 1) : message);
+    const target = args.pending.subjectId && args.subjectIds.includes(args.pending.subjectId) ? args.pending.subjectId
+      : args.subjectIds.length === 1 ? args.subjectIds[0] : undefined;
+    if (!answer || !target) return false;
+    (args.subjects[target] ??= {})[args.pending.factKey] = answer.uncertain
+      ? { value: null, state: "pending", quote: args.message, recordedAt: args.now.toISOString(), source: "user" }
+      : { value: answer.value, state: "known", quote: args.message, recordedAt: args.now.toISOString(), source: "user" };
+    return true;
   }
   if (!match && args.pending && message.length <= 60 && !message.includes("?")) {
     const declared = questionForKey(args.pending.factKey);

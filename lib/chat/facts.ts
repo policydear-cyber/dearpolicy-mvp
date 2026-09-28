@@ -278,13 +278,24 @@ export async function interpretMessage(args: {
     scenarioCandidates: interpretation.scenarioCandidates?.map(s => ({ ...s, subjectId: fromHandle(s.subjectId) })),
   };
 }
+const INTERROGATIVE_START=/^\s*(?:and\s+|so\s+|then\s+)?(?:what|which|who|whom|whose|when|where|why|how|does|do|did|is|are|was|were|am|can|could|would|will|should|shall|may|might|has|have|had)\b/i;
+/** A message made only of questions ("What does Marcus's travel policy cover
+ * overseas?"). It asks; it reports nothing. A "Question: answer" reply from
+ * the chat's own question card has no question mark and is never this. */
+export function onlyAsksQuestions(message:string){
+  if(!message.includes("?"))return false;
+  const sentences=message.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean);
+  return sentences.length>0&&sentences.every(s=>INTERROGATIVE_START.test(s));
+}
+/** Asking what an event already on file pays, rather than asking something new. */
+const CLAIM_MONEY_ASK=/\b(?:claim\w*|payouts?|pay\s*out|how much|reimburs\w*|entitled|get back|receive|compensat\w*|settle\w*)\b/i;
 export function mergeInterpretation(args: {
   state: ConversationState; interpretation: Interpretation; message: string; subjectIds: string[];
   subjectNames?:Record<string,string[]>;
   now: Date; timeZone?: string;
 }): ConversationState {
   const next: ConversationState = { ...args.state, subjects: structuredClone(args.state.subjects), scenarios:structuredClone(args.state.scenarios??{}) };
-  const interpretation = args.interpretation;
+  let interpretation = args.interpretation;
   const homicideReport=reportedHomicide(args.message);
   const conditionReport=reportedConditionStatement(args.message);
   const injuryRetracted=injuryRetractionStatement(args.message);
@@ -294,17 +305,33 @@ export function mergeInterpretation(args: {
   const priorDiagnosis=args.subjectIds.length===1?knownValue(args.state.subjects[args.subjectIds[0]]??{},"diagnosis"):null;
   const conditionStartsTopic=!!conditionReport&&typeof priorDiagnosis==="string"&&normalText(priorDiagnosis)!==normalText(conditionReport.condition);
   const startsClaimTopic=interpretation.newTopic||conditionStartsTopic;
-  if (startsClaimTopic && (interpretation.intent === "claim" || homicideReport || conditionReport || fractureReport)) {
+  // A message that only asks questions reports no event, whatever label the
+  // interpreter gave it or whatever it quoted from it. Mid-claim, asking what
+  // the claim pays stays on the claim; any other question is answered as a
+  // policy question in its own right instead of being swallowed by the open
+  // claim question (which the workflow offers again afterwards).
+  const asksOnly=!(homicideReport||conditionReport||fractureReport||injuryReport)&&onlyAsksQuestions(args.message);
+  const fullQuestion=asksOnly&&args.message.trim().split(/\s+/).length>=4;
+  let intent=interpretation.intent;
+  if(asksOnly&&(intent==="claim"||(intent==="follow_up"&&args.state.intent==="claim"))){
+    intent=args.state.intent==="claim"&&args.state.activeClaimQuery&&CLAIM_MONEY_ASK.test(args.message)?"claim":"policy_question";
+    if(interpretation.intent==="claim")interpretation={...interpretation,facts:[],scenarioCandidates:[]};
+  }
+  if (startsClaimTopic && (intent === "claim" || homicideReport || conditionReport || fractureReport)) {
     for (const id of args.subjectIds){next.subjects[id] = {};next.scenarios![id]=[];}
     delete next.pending;
   }
   // An affirmative homicide report is an event even when the same message also
   // asks a policy question and the language model labels the turn as a question.
   // Hypotheticals and interrogative phrases are rejected by reportedHomicide.
-  const actualIntent = (homicideReport||conditionReport||fractureReport) && interpretation.intent!=="portfolio" ? "claim" :
-    interpretation.intent === "follow_up" ? next.intent ?? "policy_question" : interpretation.intent;
+  // After a portfolio listing, a new full question is that question -- not
+  // another request for the same table.
+  if(intent==="follow_up"&&args.state.intent==="portfolio"&&fullQuestion)intent="policy_question";
+  const actualIntent = (homicideReport||conditionReport||fractureReport) && intent!=="portfolio" ? "claim" :
+    intent === "follow_up" ? next.intent ?? "policy_question" : intent;
   next.intent = actualIntent;
-  if (!next.activeQuery || startsClaimTopic || (interpretation.intent !== "follow_up" && !(actualIntent==="claim"&&args.state.intent==="claim"))) next.activeQuery = args.message;
+  if (!next.activeQuery || startsClaimTopic || (intent !== "follow_up" && !(actualIntent==="claim"&&args.state.intent==="claim")) ||
+    (intent==="follow_up"&&fullQuestion&&actualIntent!=="claim")) next.activeQuery = args.message;
   if(actualIntent==="claim"){
     if(!next.activeClaimQuery||startsClaimTopic)next.activeClaimQuery=
       !startsClaimTopic&&args.state.intent==="claim"&&args.state.activeQuery?args.state.activeQuery:args.message;
@@ -449,9 +476,20 @@ export function applyExplicitDeferrals(state:ConversationState,message:string,su
   const mark=(key:string,pending=false)=>{facts[key]={value:null,state:pending?"pending":"unknown",quote:message,source:"user",recordedAt:now.toISOString()};};
   const length=/nights?|duration|length of stay|how (?:long|many days)|warded for/i.test(message);
   const bill=/bills?|cost|invoice|receipt/i.test(message);
-  if(length)mark("hospitalNights",true);
-  if(bill)mark(/ambulance/i.test(message)?"ambulanceBill":"hospitalBill",true);
-  if(!length&&!bill&&next.pending)mark(next.pending.factKey);
+  // A short reply to the open question ("Not sure", "How much did the
+  // treatment cost: Not sure") defers THAT question, whatever its key --
+  // including ledger keys like outOfPocket or surgery -- so it is not asked
+  // again. The bill/nights heuristics are for longer free-text messages, or a
+  // reply that is plainly about a different quantity.
+  const key=next.pending?.factKey;
+  const reply=!!key&&message.trim().length<=100&&!message.includes("?");
+  const pendingIsNights=!!key&&/(?:Nights|Days)$/.test(key),pendingIsMoney=!!key&&/(?:Bill|Cost|Expense|Amount)$|^outOfPocket$/.test(key);
+  if(reply&&((!length&&!bill)||(length&&pendingIsNights)||(bill&&pendingIsMoney)))mark(key!,length||bill||pendingIsMoney||pendingIsNights);
+  else{
+    if(length)mark("hospitalNights",true);
+    if(bill)mark(/ambulance/i.test(message)?"ambulanceBill":"hospitalBill",true);
+    if(!length&&!bill&&next.pending)mark(next.pending.factKey);
+  }
   if(length&&/needs? to be warded|still (?:warded|in hospital|admitted)|no discharge|awaiting discharge/i.test(message)){
     facts.hospitalStayOngoing={value:true,state:"known",quote:message,source:"user",recordedAt:now.toISOString()};
     facts.hospitalised={value:true,state:"known",quote:message,source:"user",recordedAt:now.toISOString()};

@@ -44,7 +44,7 @@ export async function GET(request:NextRequest){
               p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,
               owners.names AS owner_names
          FROM policy_benefits b
-         JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id AND ${activePredicate("p")}
+         JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
          LEFT JOIN LATERAL (
               SELECT array_agg(f.display_name ORDER BY f.display_name) AS names
                 FROM policy_members pm
@@ -151,7 +151,7 @@ export async function GET(request:NextRequest){
         `SELECT c.id,c.policy_id,c.product_name,c.condition_kind,c.cause,c.condition_names,c.days,c.amount::text,
                 c.amount_basis,c.scope,c.carve_out,c.source_page,c.quote,c.needs_review,p.original_filename
            FROM policy_cover_conditions c
-           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id AND ${activePredicate("p")}
+           JOIN policies p ON p.id=c.policy_id AND p.account_id=c.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
           WHERE c.account_id=$1
             AND ($2::uuid IS NULL OR EXISTS (
                   SELECT 1 FROM policy_members pm
