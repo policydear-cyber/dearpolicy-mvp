@@ -16,9 +16,10 @@
  * which runs only when this plan reports `readyForEvidenceGatedEstimate`.
  */
 import type { SubjectFacts } from "@/lib/chat/types";
+import { claimLocalToday, resolveClaimDate } from "@/lib/claims/dates";
 
 export type FactFindingCategory =
-  | "accidental_death" | "critical_illness" | "disability_tpd" | "medical_reimbursement" | "hospital_cash" | "travel";
+  | "accidental_death" | "accidental_injury" | "critical_illness" | "disability_tpd" | "medical_reimbursement" | "hospital_cash" | "travel";
 
 export type FactFindingStatus =
   | "information_needed" | "evidence_needed" | "reviewer_assessment_needed" | "policy_condition_unresolved" | "ready_for_evidence_gated_estimate";
@@ -39,6 +40,9 @@ type FactSpec = {
   dependsOn?: string[];
   /** Only asked when this predicate holds on the current facts. */
   askWhen?: (facts: Readonly<Record<string, unknown>>) => boolean;
+  /** A stored value only answers this fact when it passes this check (for
+   * example a vague model label "injury" does not say what KIND of injury). */
+  accepts?: (value: unknown) => boolean;
 };
 type DocumentSpec = { type: string; label: string; required: boolean; when?: (facts: Readonly<Record<string, unknown>>) => boolean };
 type ReviewerSpec = { key: string; label: string };
@@ -50,6 +54,18 @@ export type CategorySpec = {
   reviewers: ReviewerSpec[];
 };
 
+/** The two question texts that also exist elsewhere (the benefit catalogue's
+ * accident gate uses the same words), so an answer is recognised whichever
+ * path asked it. */
+export const ACCIDENT_OR_ILLNESS_QUESTION = "Was this caused by an accident, or an illness?";
+export const INJURY_KIND_QUESTION = "What kind of injury was it — a broken bone, a cut or wound, a burn, or something else?";
+const UNCERTAIN_ANSWER = /^(?:not sure|unsure|unknown|don'?t know|do not know|not yet known)$/i;
+function specificInjuryKind(value: unknown) {
+  return typeof value === "string" && !/^(?:injury|injured|hurt|pain|harm|unspecified|other injury)$/i.test(value.trim());
+}
+function accidentOrIllness(value: unknown) {
+  return typeof value === "string" && (/accident|illness|diagnosis/i.test(value) || UNCERTAIN_ANSWER.test(value.trim()));
+}
 const DATE_WHY = "It decides which policy version applies and whether waiting periods or cover dates are met.";
 export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
   accidental_death: {
@@ -66,6 +82,39 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
       { type: "policy_schedule", label: "Policy schedule or certificate showing the cover", required: false },
     ],
     reviewers: [{ key: "cause_definition_match", label: "A reviewer checks the cause of death against the policy's accidental-death definition" }],
+  },
+  accidental_injury: {
+    category: "accidental_injury", label: "Injury",
+    // One question per group, in the order a claims handler would ask them.
+    // A fact already known (from the first message or an earlier answer) is
+    // skipped, so a reported fracture starts at "accident or illness" and a
+    // vague "hurt her arm" starts by asking what kind of injury it was.
+    facts: [
+      { key: "injuryKind", aliases: [], question: INJURY_KIND_QUESTION, type: "choice", options: ["A broken bone", "A cut or wound", "A burn", "Something else", "Not sure"],
+        why: "Different injuries are covered by different benefits, so this decides which ones to check.", group: 1, required: true, accepts: specificInjuryKind },
+      { key: "eventType", aliases: [], question: ACCIDENT_OR_ILLNESS_QUESTION, type: "choice", options: ["An accident", "An illness"],
+        why: "Some of these benefits only pay for accidents, so this decides which ones apply.", group: 2, required: true, accepts: accidentOrIllness },
+      { key: "eventLocation", aliases: ["location", "country", "eventCountry"], question: "Where did the accident happen?", type: "choice", options: ["Singapore", "Overseas", "Not sure"],
+        why: "Some benefits apply only in certain places, and treatment overseas usually needs extra documents.", group: 3, required: true, askWhen: (f) => f.eventType === "accident" },
+      { key: "eventLocation", aliases: ["location", "country", "eventCountry"], question: "Where did it happen?", type: "choice", options: ["Singapore", "Overseas", "Not sure"],
+        why: "Some benefits apply only in certain places, and treatment overseas usually needs extra documents.", group: 3, required: true, askWhen: (f) => f.eventType !== "accident" },
+      { key: "eventDate", aliases: ["accidentDate", "incidentDate", "injuryDate"], question: "When did it happen?", type: "date", why: DATE_WHY, group: 4, required: true },
+      { key: "fractureConfirmed", aliases: ["xrayConfirmed"], question: "Was the fracture confirmed by a doctor or on an X-ray or scan?", type: "yes_no",
+        why: "Fracture benefits usually need the break confirmed by a doctor or imaging.", group: 5, required: true, askWhen: (f) => f.injuryKind === "fracture" },
+      { key: "treatmentType", aliases: [], question: "What treatment was given?", type: "choice", options: ["Emergency department", "Admitted to hospital", "Outpatient or clinic", "Not sure"],
+        why: "Emergency, inpatient and outpatient treatment are paid under different benefits.", group: 6, required: true },
+      { key: "hospitalNights", aliases: ["hospitalNightsSoFar"], question: "How many nights in hospital?", type: "text", why: "Daily hospital cash is paid per night, after any waiting period.",
+        group: 7, required: true, askWhen: (f) => f.treatmentType === "Admitted to hospital" },
+      { key: "otherInsurancePaid", aliases: ["thirdPartyPaid", "employerPaid"], question: "Has any other insurer or the employer already paid part of the bill?", type: "yes_no",
+        why: "Reimbursement is coordinated so the same bill is not paid twice.", group: 8, required: false },
+      { key: "permanentImpairment", aliases: [], question: "Has a doctor said the injury will leave any lasting impairment?", type: "yes_no",
+        why: "Only a lasting impairment can bring permanent-disability benefits into play.", group: 9, required: false },
+    ],
+    documents: [
+      { type: "medical_report", label: "Doctor's report (or X-ray or scan report) describing the injury", required: true },
+      { type: "itemised_bill", label: "Itemised bills and receipts for the treatment", required: false },
+    ],
+    reviewers: [],
   },
   critical_illness: {
     category: "critical_illness", label: "Critical illness",
@@ -177,7 +226,7 @@ export type FactFindingInput = {
 
 function resolve(facts: SubjectFacts, spec: FactSpec) {
   const entries = [spec.key, ...spec.aliases].map((k) => ({ key: k, fact: facts[k] })).filter((e) => e.fact);
-  const known = entries.filter((e) => e.fact!.state === "known" && e.fact!.value !== null && e.fact!.value !== "");
+  const known = entries.filter((e) => e.fact!.state === "known" && e.fact!.value !== null && e.fact!.value !== "" && (!spec.accepts || spec.accepts(e.fact!.value)));
   const distinct = [...new Set(known.map((e) => JSON.stringify(e.fact!.value)))];
   const latest = known.sort((a, b) => (a.fact!.recordedAt < b.fact!.recordedAt ? 1 : -1))[0];
   return {
@@ -194,8 +243,13 @@ export function planFactFinding(input: FactFindingInput): FactFindingPlan {
   const resolved = new Map(spec.facts.map((f) => [f.key, resolve(input.facts, f)]));
   const values: Record<string, unknown> = Object.fromEntries([...resolved].map(([k, r]) => [k, r.value]));
   const staleFacts: string[] = [], conflictingFacts: string[] = [], uncertainFacts: string[] = [], missing: FactSpec[] = [];
+  const considered = new Set<string>();
   for (const f of spec.facts) {
     if (f.askWhen && !f.askWhen(values)) continue;
+    // A fact may be declared twice with different wording for different
+    // situations; only the variant that applies is considered.
+    if (considered.has(f.key)) continue;
+    considered.add(f.key);
     const r = resolved.get(f.key)!;
     const stale = r.known && (f.dependsOn ?? []).some((dep) => {
       const d = resolved.get(dep);
@@ -269,6 +323,7 @@ const CONDITION_QUESTION_BY_CAUSE: Record<string, { factKey: string; question: s
 };
 const CATEGORY_EVENTS: Partial<Record<FactFindingCategory, string[]>> = {
   accidental_death: ["death", "accidental_injury"],
+  accidental_injury: ["accidental_injury", "medical_expense", "hospitalisation"],
   disability_tpd: ["total_permanent_disability", "accidental_injury"],
   medical_reimbursement: ["medical_expense", "hospitalisation", "accidental_injury"],
   hospital_cash: ["hospitalisation"],
@@ -316,15 +371,74 @@ export function conditionDrivenQuestions(input: {
  * sure" is stored as a known-but-uncertain value so the interview moves on
  * while the uncertainty stays tracked. Returns true when it recorded. */
 const QUESTION_PREFIX_STRIP = /^(?:You gave two different answers earlier\.\s*|An earlier answer changed, so please confirm again:\s*)/i;
-function questionIndex(): Map<string, { factKey: string; type: FactSpec["type"] }> {
-  const index = new Map<string, { factKey: string; type: FactSpec["type"] }>();
+type IndexedQuestion = { factKey: string; type: FactSpec["type"]; options?: string[] };
+function questionIndex(): Map<string, IndexedQuestion> {
+  const index = new Map<string, IndexedQuestion>();
   for (const spec of Object.values(FACT_FINDING_SPECS)) for (const fact of spec.facts) {
-    index.set(fact.question.replace(/\?\s*$/, "").toLowerCase(), { factKey: fact.key, type: fact.type });
+    index.set(fact.question.replace(/\?\s*$/, "").toLowerCase(), { factKey: fact.key, type: fact.type, ...(fact.options ? { options: fact.options } : {}) });
   }
   for (const entry of Object.values(CONDITION_QUESTION_BY_CAUSE)) {
     index.set(entry.question.replace(/\?\s*$/, "").toLowerCase(), { factKey: entry.factKey, type: "yes_no" });
   }
   return index;
+}
+/** The declared question for a fact key, when one exists (first declaration wins). */
+function questionForKey(factKey: string): IndexedQuestion | null {
+  for (const spec of Object.values(FACT_FINDING_SPECS)) for (const fact of spec.facts)
+    if (fact.key === factKey) return { factKey, type: fact.type, ...(fact.options ? { options: fact.options } : {}) };
+  for (const entry of Object.values(CONDITION_QUESTION_BY_CAUSE)) if (entry.factKey === factKey) return { factKey, type: "yes_no" };
+  return null;
+}
+const bare = (text: string) => text.trim().replace(/[.!\s]+$/, "").trim();
+/** The stored value for a choice answer. Two facts are stored in the
+ * vocabulary the rest of the app reads (eventType "accident"/"illness",
+ * injuryKind "fracture"/...); every other choice keeps the option's words. */
+function choiceValue(factKey: string, raw: string, options: string[] = []): string | null {
+  const said = bare(raw).toLowerCase();
+  if (!said) return null;
+  if (UNCERTAIN_ANSWER.test(said)) return "not sure";
+  const option = options.find((o) => o.toLowerCase() === said)
+    ?? options.find((o) => said.length >= 4 && o.toLowerCase().replace(/^(?:an?|the)\s+/, "") === said.replace(/^(?:an?|the)\s+/, ""));
+  const text = (option ?? said).toLowerCase();
+  if (factKey === "eventType") {
+    if (/\baccident/.test(text)) return "accident";
+    if (/\billness|\bsick|\bdisease/.test(text)) return "illness";
+    return option ? option : null;
+  }
+  if (factKey === "injuryKind") {
+    if (/broken bone|\bbr(?:oke|oken|eak)\b|fractur|crack/.test(text)) return "fracture";
+    if (/\bcut\b|wound|lacerat/.test(text)) return "wound";
+    if (/\bburn/.test(text)) return "burn";
+    if (/something else|\bother\b/.test(text)) return "other";
+    return option ? option : null;
+  }
+  return option ?? null;
+}
+function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: boolean): string | boolean | number | null {
+  const said = bare(raw);
+  if (question.type === "yes_no") {
+    if (/^y(?:es)?\b/i.test(said)) return true;
+    if (/^no?\b/i.test(said)) return false;
+    return strict && !UNCERTAIN_ANSWER.test(said) ? null : "not sure";
+  }
+  if (question.type === "choice") {
+    // "It wasn't an accident" is not "An accident": a negated bare reply is
+    // left to the interpreter rather than matched on its keyword.
+    if (strict && !UNCERTAIN_ANSWER.test(said) && /\b(?:not|no|never)\b|n['’]t\b/i.test(said)) return null;
+    return choiceValue(question.factKey, said, question.options) ?? (strict ? null : said);
+  }
+  if (UNCERTAIN_ANSWER.test(said)) return "not sure";
+  if (question.type === "date") {
+    const date = resolveClaimDate(said, { now });
+    if (date && date.date <= claimLocalToday({ now })) return date.date;
+    return strict ? null : said;
+  }
+  if (question.factKey === "hospitalNights") {
+    const nights = said.match(/^(\d{1,3})\b/);
+    if (nights) return Number(nights[1]);
+    return strict ? null : said;
+  }
+  return strict ? null : said;
 }
 export function recordDirectFactAnswer(args: {
   message: string;
@@ -332,25 +446,45 @@ export function recordDirectFactAnswer(args: {
   subjectIds: string[];
   scenarios?: Record<string, { traits: string[]; family: string }[] | undefined>;
   now: Date;
+  /** The question the chat was waiting on before this message, if any. A
+   * short bare reply to it ("An accident.", "Singapore", "Not sure") is
+   * recorded against it deterministically; a longer message is left to the
+   * interpreter. */
+  pending?: { factKey: string; subjectId?: string; type?: string; options?: string[] } | null;
 }): boolean {
   const message = args.message.trim().replace(QUESTION_PREFIX_STRIP, "");
   const colon = message.indexOf(":");
-  if (colon <= 0) return false;
-  const asked = message.slice(0, colon).trim().replace(/\?\s*$/, "").toLowerCase();
-  const raw = message.slice(colon + 1).trim();
-  if (!raw) return false;
-  const match = questionIndex().get(asked);
-  if (!match) return false;
-  const target = args.subjectIds.find((id) => (args.scenarios?.[id] ?? []).length) ?? args.subjectIds[0];
-  if (!target) return false;
-  let value: string | boolean = raw;
-  if (match.type === "yes_no") {
-    if (/^y(es)?\b/i.test(raw)) value = true;
-    else if (/^no?\b/i.test(raw)) value = false;
-    else value = "not sure";
+  let match: IndexedQuestion | undefined;
+  let raw = "";
+  let target: string | undefined;
+  let strict = false;
+  if (colon > 0) {
+    const asked = message.slice(0, colon).trim().replace(/\?\s*$/, "").toLowerCase();
+    match = questionIndex().get(asked);
+    raw = message.slice(colon + 1).trim();
   }
+  if (!match && args.pending && message.length <= 60 && !message.includes("?")) {
+    const declared = questionForKey(args.pending.factKey);
+    const options = args.pending.options?.length ? [...new Set([...(declared?.options ?? []), ...args.pending.options])] : declared?.options;
+    if (declared) {
+      const type = ["text", "date", "yes_no", "choice"].includes(String(args.pending.type)) ? args.pending.type as FactSpec["type"] : declared.type;
+      match = { ...declared, type, ...(options ? { options } : {}) };
+      raw = message;
+      strict = true;
+      if (args.pending.subjectId && args.subjectIds.includes(args.pending.subjectId)) target = args.pending.subjectId;
+    }
+  }
+  if (!match || !raw) return false;
+  target ??= args.subjectIds.find((id) => (args.scenarios?.[id] ?? []).length) ?? args.subjectIds[0];
+  if (!target) return false;
+  const value = answerValue(match, raw, args.now, strict);
+  if (value === null || value === "") return false;
   const facts = (args.subjects[target] ??= {});
   facts[match.factKey] = { value, state: "known", quote: args.message, recordedAt: args.now.toISOString(), source: "user" };
+  // The kind of treatment settles whether there was an admission, so the
+  // hospital-admission question is never asked straight after it.
+  if (match.factKey === "treatmentType" && typeof value === "string" && value !== "not sure" && facts.hospitalised?.state !== "known")
+    facts.hospitalised = { value: value === "Admitted to hospital", state: "known", quote: args.message, recordedAt: args.now.toISOString(), source: "system-derived" };
   return true;
 }
 
@@ -362,6 +496,11 @@ export function categoriesFor(traits: ReadonlySet<string>, facts: SubjectFacts):
   const has = (k: string) => facts[k]?.state === "known" && facts[k].value !== null && facts[k].value !== false;
   if (traits.has("death") && (traits.has("accident") || traits.has("external") || traits.has("violent"))) out.push("accidental_death");
   else if (traits.has("death") || has("death")) out.push("accidental_death");
+  // An injury to a living person (a fracture, a cut, "hurt her arm"). A death
+  // is handled by the accidental-death plan instead.
+  const died = traits.has("death") || facts.death?.state === "known" && facts.death.value === true;
+  if (!died && (traits.has("bodily_injury") || facts.injured?.state === "known" && facts.injured.value === true ||
+    has("injuryKind") || has("fractureBodyPart") || has("injuryBodyPart"))) out.push("accidental_injury");
   if (traits.has("diagnosis") || (traits.has("illness") && has("diagnosis"))) out.push("critical_illness");
   if (traits.has("disability")) out.push("disability_tpd");
   if (traits.has("hospitalisation") || has("hospitalised") || has("admissionDate")) out.push("medical_reimbursement", "hospital_cash");

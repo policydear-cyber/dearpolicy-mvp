@@ -249,6 +249,9 @@ function ChatContent(){
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{q.text}</strong><small>{q.why}</small>
             <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
+            {/* A date or a free-text fact is answered in place: the reply
+                restates the question so the fact it answers is unambiguous. */}
+            {q.id!=="claim_person"&&(q.type==="date"||q.type==="text")?<InlineAnswer kind={q.type==="date"?"date":"text"} disabled={busy||index!==messages.length-1} onSubmit={value=>void sendText(q.text.replace(/\?\s*$/,"")+": "+value)} />:null}
           </div>)}
           {/* One question at a time, always answerable: when the turn asks
               nothing directly but the fact-finding plan still needs facts,

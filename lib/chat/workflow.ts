@@ -16,7 +16,7 @@ import { loadCoverConditions,readWhateverIsStillUnread } from "@/lib/policies/co
 import { applyCoverConditions } from "@/lib/insurance/cover-conditions";
 import { recordClaim } from "@/lib/claims/record";
 import { enforceLiveChatMonetaryBoundary, liveClaimContext } from "./monetary-boundary";
-import { applyFactFinding } from "./fact-finding-chat";
+import { applyFactFinding,applyInjuryFactFindingTurn,benefitCategories,joinOr,nextInjuryQuestion,PERMANENT_LOSS } from "./fact-finding-chat";
 import { recordDirectFactAnswer } from "@/lib/claims/fact-finding";
 import { judgeRelevance,type RelevanceCandidate } from "@/lib/policies/relevance-judge";
 import { definedConditionsFor,matchesPolicySchedule,paysOnDefinedCondition } from "@/lib/insurance/defined-conditions";
@@ -357,6 +357,9 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   }else{
     await report({stage:"Understanding your message and previous facts",completed:0,total:0});
     const history=await recentMessages(request.accountId,conversation.id);
+    // The question this chat was waiting on before this message. A short bare
+    // reply to it ("An accident.") is recorded against it deterministically.
+    const pendingBefore=state.pending?{factKey:state.pending.factKey,subjectId:state.pending.subjectId,type:state.pending.type,options:state.pending.options}:null;
     let interpretation;
     try{interpretation=await interpretMessage({message:request.question,state,people:context.family,subjectIds,history});}
     catch(error){
@@ -364,7 +367,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       // A "Question: answer" message from the chat's own question card is
       // recorded deterministically -- the interpreter above may miss the
       // mapping, and a missed answer re-asks the same question forever.
-      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now});
+      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
       const truncated=error instanceof TruncatedModelOutput;
       const cause=readableModelFailure(error);
       answer.summary=truncated
@@ -382,7 +385,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       // A "Question: answer" message from the chat's own question card is
       // recorded deterministically -- the interpreter above may miss the
       // mapping, and a missed answer re-asks the same question forever.
-      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now});
+      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
       delete state.personContext;
       await check();
       await report({stage:"Loading personal policies and matching documents",completed:0,total:0});
@@ -473,6 +476,38 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // when the ledger has anything to say. The older paths below remain
         // only for households whose ledger is still empty.
         const whatIf=!reportsAnEvent&&describesAScenario(asked);
+        // A reported injury is fact-found first, one question at a time, in
+        // a fixed order (lib/claims/fact-finding.ts, "accidental_injury").
+        // Until the facts that decide which benefits respond are in, the
+        // answer is the next question -- no claim items, no totals, no row
+        // titles -- with the categories of cover that actually exist among
+        // this person's compatible benefits named in plain words.
+        const injuryCandidate=state.intent==="claim"&&!whatIf?nextInjuryQuestion(state,context.people):null;
+        // Only for someone with cover on file; otherwise the usual paths say so.
+        const injuryNext=injuryCandidate&&contracts.some(c=>c.ownerId===injuryCandidate.subjectId)?injuryCandidate:null;
+        if(injuryNext){
+          const person=context.people.find(p=>p.id===injuryNext.subjectId)!;
+          const facts=state.subjects[person.id]??{};
+          const traits=eventTraits(facts,(state.scenarios?.[person.id]??[]).flatMap(s=>s.traits));
+          const events=reportedClaimEvents(facts,traits);
+          const candidateNames:string[]=[];let permanentLossOnFile=false;
+          for(const contract of contracts.filter(c=>c.ownerId===person.id)){
+            const ids=new Set([...contract.documents,...contract.references].map(d=>d.id));
+            if(catalog.some(entry=>ids.has(entry.policyId)&&PERMANENT_LOSS.test(entry.benefitName)))permanentLossOnFile=true;
+            try{
+              const assessed=assessContractFromCatalog({contract,catalog,facts,traits,events});
+              for(const match of assessed.matches)candidateNames.push(match.benefit.benefitName+" "+(match.benefit.productName??""));
+            }catch{/* Categories are a courtesy; the question is the point of the turn. */}
+          }
+          const text=applyInjuryFactFindingTurn({answer,state,person,next:injuryNext,candidateNames,permanentLossOnFile});
+          console.debug("[chat] injury fact-finding",{question:injuryNext.question.factKey,categories:text.categories,candidates:candidateNames.length,catalogRules:catalog.length});
+          answer.knownFacts=context.people.flatMap(p=>[p.display_name,...factLabels(state.subjects[p.id]??{})]);
+          if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
+          answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
+          await check();
+          await applyFactFinding(answer,state,context.people,{accountId:request.accountId,question:request.submittedQuestion??request.question});await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+          return {answer,retrieved:[]};
+        }
         if(state.intent==="claim"||whatIf){
           let ledger:Awaited<ReturnType<typeof ledgerFor>>=[];
           let stillReading=0;
@@ -502,8 +537,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               answer.mode="fact_finding";
               answer.claimItems=[];
               answer.summary=(lead?lead+" ":"")+"Before I put figures on this, "+(looked.questionsLeft===1?"one question":"a few quick questions — "+looked.questionsLeft+" at most")+".";
-              const names=looked.candidates.slice(0,6);
-              if(names.length)answer.details.push("Cover that may respond, depending on the answers: "+names.join("; ")+(looked.candidates.length>names.length?"; and "+(looked.candidates.length-names.length)+" more":"")+".");
+              const kinds=benefitCategories(looked.candidates);
+              if(kinds.length)answer.details.push("This may relate to "+joinOr(kinds)+" benefits, depending on the answers.");
               answer.questions=[{id:looked.question.id,type:looked.question.type,text:looked.question.text,why:looked.question.why,options:looked.question.options}];
               state.pending={...answer.questions[0],subjectId:looked.question.subjectId,factKey:looked.question.factKey};
               answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
@@ -543,7 +578,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(unconfirmed)answer.details.push(unconfirmed+" of these benefit"+(unconfirmed===1?" rests":"s rest")+" on an assumption, not the plan's confirmed wording: "+(answer.claimItems.some(i=>i.conditions.some(c=>c.startsWith("Assumes the standard")))?"the plan's own wording has not been read, so the standard rule for that kind of plan is assumed. Upload the policy wording or benefit summary and the actual clause takes over.":"the second read could not fully verify it against the page."));
               const indicative=answer.claimItems.filter(item=>item.estimateBasis==="indicative"&&item.amountText);
               if(indicative.length)answer.details.push(indicative.length+" benefit"+(indicative.length===1?"":"s")+" below "+(indicative.length===1?"shows an indicative amount that is":"show indicative amounts that are")+" not included in the total: the rate was read from a table heading rather than the row.");
-              if(looked.ruledOut.length)answer.details.push("Not applicable here: "+looked.ruledOut.slice(0,3).join(". ")+".");
+              // What was ruled out is internal tracing, not household text.
+              if(looked.ruledOut.length)console.debug("[chat] ledger ruled out",looked.ruledOut.length);
               if(whatIf)answer.details.push("This is a what-if. Nothing here has been recorded as a claim, and no facts from this question have been saved against anyone's profile.");
               const staleNames=[...new Set(contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent").map(c=>c.ownerName+" · "+c.name))];
               if(!whatIf&&staleNames.length)answer.nextSteps.push("Upload the latest premium receipt or renewal notice for "+staleNames.slice(0,4).join("; ")+" so the active status can be verified. Ownership is already confirmed and is unaffected.");
@@ -561,7 +597,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
               answer.scenarioClassifications=context.people.flatMap(person=>(state.scenarios?.[person.id]??[]).slice(-12).map(s=>({subjectName:person.display_name,label:s.label,family:s.family,traits:s.traits})));
               answer.confidence=claimConfidence(answer.claimItems);
-              answer.details.push("Answered from your Coverage Ledger — "+ledger.length+" row"+(ledger.length===1?"":"s")+" read from the documents you uploaded. The Coverage page shows every row, the page it came from, and whether it was verified.");
+              console.debug("[chat] answered from coverage ledger",{rows:ledger.length});
+              answer.details.push("The Coverage page shows where each of these came from in your documents, and whether it was verified.");
               if(stillReading)answer.details.push(stillReading+" document"+(stillReading===1?" is":"s are")+" still being read into the ledger. Ask again in a minute and anything found there is included.");
               await report({stage:"Putting the answer together",completed:contracts.length,total:contracts.length});
               await narrateAnswer({answer,intent:whatIf?"policy_question":"claim",eventLead:lead,state,people:context.people,permitsNegative:false,
@@ -768,14 +805,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           }
           for(const name of candidateNames)ruledOut.delete(name);
           answer.claimItems=dedupeClaimItems(answer.claimItems);
-          if(ruledOut.size){
-            const byReason=new Map<string,string[]>();
-            for(const [name,because] of ruledOut)byReason.set(because,[...(byReason.get(because)??[]),name]);
-            const groups=[...byReason.entries()].sort((a,b)=>b[1].length-a[1].length);
-            const shown=groups.slice(0,3).map(([because,names])=>names.slice(0,3).join(", ")+(names.length>3?" and "+(names.length-3)+" more":"")+" — "+because);
-            const rest=groups.slice(3).reduce((n,[,names])=>n+names.length,0);
-            answer.details.push("Not applicable here: "+shown.join(". ")+(rest?". And "+rest+" other benefit"+(rest===1?"":"s")+" that do not fit what happened":"")+".");
-          }
+          // Benefits ruled out are internal tracing only: a schedule row
+          // title with "not applicable" beside it reads as a verdict on cover
+          // the person never asked about.
+          if(ruledOut.size)console.debug("[chat] catalogue ruled out",{count:ruledOut.size,reasons:[...new Set(ruledOut.values())].slice(0,5)});
           // Nothing on file responds. The rules are only as complete as the
           // tables they were read from, and a certificate or a cover letter
           // rarely has one — a death benefit can sit in a sentence. So this is
@@ -786,7 +819,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             const unruled=perContract.filter(entry=>!entry.assessed.considered).map(entry=>entry.contract.ownerName+" · "+entry.contract.name);
             const ruled=perContract.filter(entry=>entry.assessed.considered).map(entry=>entry.contract.ownerName+" · "+entry.contract.name);
             if(unruled.length)catalogueNotes.push("No benefit table was found in "+[...new Set(unruled)].slice(0,4).join("; ")+" when "+(unruled.length===1?"it was":"they were")+" read, so DearPolicy read the document text for this question instead.");
-            if(ruled.length)catalogueNotes.push("None of the "+catalog.length+" benefit rules read from "+[...new Set(ruled)].slice(0,4).join("; ")+" respond to what happened.");
+            if(ruled.length)catalogueNotes.push("None of the benefits read from "+[...new Set(ruled)].slice(0,4).join("; ")+" respond to what happened.");
             answer.details=[];answer.claimItems=[];
             await report({stage:"No benefit rule responds — reading the documents",completed:0,total:contracts.length});
           }
@@ -801,8 +834,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             answer.mode="fact_finding";
             answer.claimItems=[];
             answer.summary=(lead?lead+" ":"")+"Before I put figures on this, "+(questionPlan.length===1?"one question":"a few quick questions — "+questionPlan.length+" at most")+".";
-            const names=[...candidateNames].slice(0,6);
-            if(names.length)answer.details.push("Benefits that may respond, depending on the answers: "+names.join("; ")+(candidateNames.size>names.length?"; and "+(candidateNames.size-names.length)+" more":"")+".");
+            // Categories, not schedule rows: nothing is decided yet, and a row
+            // title reads as a verdict.
+            const kinds=benefitCategories([...candidateNames]);
+            if(kinds.length)answer.details.push("This may relate to "+joinOr(kinds)+" benefits, depending on the answers.");
             answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
             answer.questions=[{id:"claim-"+next.factKey,type:next.type,text:next.text,why:next.why,
               options:next.type==="yes_no"?["Yes","No","Not sure"]:next.options?[...next.options,"Not sure"]:["Not sure","Not yet known"]}];
@@ -810,7 +845,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             await report({stage:"Putting the answer together",completed:contracts.length,total:contracts.length});
             await narrateAnswer({answer,intent:"claim",eventLead:lead,state,people:context.people,permitsNegative:false,
               packet:{whatTheyTold:request.question.slice(0,700),facts:modelFactContext(state,subjectIds,900),
-                potentialPayoutTotals:[],benefits:names.map(name=>({name,status:"potentially_applicable",amount:null,why:"depends on the answers",stillNeeded:[]})),
+                potentialPayoutTotals:[],benefits:kinds.map(kind=>({name:kind+" benefits",status:"potentially_applicable",amount:null,why:"depends on the answers",stillNeeded:[]})),
                 payoutQualifiers:[],activeStatusNotVerified:0,
                 reviewCoverage:{complete:false,note:"benefit rules read from the uploaded documents"},questionToAsk:answer.questions[0]}});
             if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
@@ -850,7 +885,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             :"None of the benefit rules on file respond to what you described. That is based on the rules captured from your uploaded documents, so it is only as complete as those documents.");
           answer.confidence=verdict?claimConfidence(answer.claimItems):"partial_match";
           if(staleContracts.length)answer.nextSteps.push("Upload the latest premium receipt or renewal notice for "+[...new Set(staleContracts.map(c=>c.ownerName+" · "+c.name))].slice(0,4).join("; ")+" so the active status can be verified. Ownership is already confirmed and is unaffected.");
-          answer.details.push("Answered from "+catalog.length+" benefit rule"+(catalog.length===1?"":"s")+" read from your documents. Anything uploaded since is read automatically; the Benefits page shows what has been read.");
+          console.debug("[chat] answered from benefit catalogue",{rules:catalog.length});
+          answer.details.push("Anything you upload is read automatically; the Benefits page shows what has been read from your documents.");
           // Ask for the single fact that would unlock the most, so the chat
           // stays a conversation rather than a verdict.
           // Anything still "needed" here is not a fact the person can supply

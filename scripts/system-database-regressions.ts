@@ -328,6 +328,24 @@ async function main(){
       body:JSON.stringify({familyMemberId:member,scope:member?"member":"family",question:message,conversationId,conversationRevision:revision,asynchronous,timeZone:"Asia/Singapore"})}));
     return {response,data:await response.json()};
   };
+  // A reported injury is fact-found one question per turn before any benefit
+  // is shown. Answers each question the way the chat's own question card
+  // does ("Question: answer"), asserting one question per turn, no claim
+  // cards meanwhile, and that no question is ever asked twice.
+  const answerInjuryInterview=async(first:ChatAnswer,member:string)=>{
+    const reply:Record<string,string>={eventType:"An accident",eventLocation:"Singapore",eventDate:"2026-09-01",fractureConfirmed:"Yes",treatmentType:"Outpatient or clinic",injuryKind:"A broken bone"};
+    const asked:string[]=[];let answer=first;
+    for(let turn=0;turn<8&&answer.mode==="fact_finding"&&answer.questions.length;turn++){
+      assert.equal(answer.questions.length,1,"Exactly one question at a time: "+JSON.stringify(answer.questions));
+      assert.equal(answer.claimItems.length,0,"No claim cards while facts are missing");
+      const q=answer.questions[0];const key=(q.id??"").replace(/^(?:claim-|ff-|q-)/,"");
+      const value=Object.entries(reply).find(([k])=>key.endsWith(k)||q.id===k)?.[1]??q.options?.[0]??"Not sure";
+      asked.push(q.text);
+      answer=(await send(q.text.replace(/\?\s*$/,"")+": "+value,member,answer.conversationId,answer.conversationRevision)).data.answer as ChatAnswer;
+    }
+    assert.equal(new Set(asked).size,asked.length,"No question is asked twice: "+JSON.stringify(asked));
+    return answer;
+  };
   const awaitJob=async(id:string)=>{
     for(let i=0;i<3000;i++){
       const response=await getJob(new NextRequest("http://localhost/api/chat/jobs/"+id),{params:Promise.resolve({id})});
@@ -1354,13 +1372,13 @@ async function main(){
       assert.equal(one.claimItems.length,0,"No figure before the facts are in");
       assert.equal(one.questions.length,1);
       assert.match(one.questions[0].text,/hospital admission/i,"The first question is the one that rules benefits in or out: "+one.questions[0].text);
-      const candidates=one.details.find(detail=>detail.startsWith("Benefits that may respond"))??"";
-      assert.equal(/Ambulance|Accidental/.test(candidates),false,"Dengue is an illness; accident-only benefits are not candidates: "+candidates);
-      assert.match(candidates,/Daily Hospital Cash/);
-      // …and the person is told why, rather than left to wonder whether they were missed.
-      const excluded=one.details.find(detail=>detail.startsWith("Not applicable here"))??"";
-      assert.match(excluded,/Ambulance Cost/);
-      assert.match(excluded,/only for an accident, and this was an illness/);
+      // Candidates are named as household-friendly categories, never as raw
+      // schedule rows, and what was ruled out is internal tracing only.
+      const candidates=one.details.find(detail=>detail.startsWith("This may relate to"))??"";
+      assert.equal(/ambulance|accident/i.test(candidates),false,"Dengue is an illness; accident-only benefits are not candidates: "+candidates);
+      assert.match(candidates,/hospital cash/i);
+      const visible=[one.summary,...one.details].join("\n");
+      assert.equal(/Not applicable here|Ambulance Cost|Daily Hospital Cash Benefit|benefit rules? read/i.test(visible),false,"No schedule dump, raw rows or rule counts: "+visible);
       const second=(await send("Yes",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
       const two=second.answer as ChatAnswer;
       assert.equal(two.mode,"fact_finding");
@@ -1404,7 +1422,7 @@ async function main(){
       assert.equal(answer.questions.length,0,"A death is not answered with a question about hospital admission: "+JSON.stringify(answer.questions));
       assert.ok(answer.claimItems.some(item=>item.title.includes("Death benefit")&&item.amountText===null),"The death benefit is found in the wording: "+answer.claimItems.map(i=>i.title+" "+i.amountText).join(" | "));
       assert.doesNotMatch(answer.summary,/None of the benefit rules on file respond/,"An empty rule list is not a verdict");
-      assert.ok(answer.details.some(d=>/Coverage Ledger/.test(d)),"…because the sentence was read into the ledger: "+answer.details.join(" / "));
+      assert.ok(answer.details.some(d=>/Coverage page shows where each of these came from/.test(d)),"…because the sentence was read into the ledger (answered from the Coverage Ledger path): "+answer.details.join(" / "));
     });
     // A certificate's schedule lines (no benefit table read yet) name a plan
     // as potentially responding to a death, but only assume the standard
@@ -1531,12 +1549,11 @@ async function main(){
       const first=(await send("Desmond caught dengue. What can he claim?",people[0].id)).data;
       const one=first.answer as ChatAnswer;
       assert.ok(relevanceCalls>before,"The shortlist was put to the reader");
-      const candidates=one.details.find(d=>d.startsWith("Benefits that may respond"))??"";
-      assert.equal(/Cancer|Day surgery/.test(candidates),false,"Rows the reader ruled out are not even named as candidates: "+candidates);
-      assert.match(candidates,/Daily Hospital Cash/);
-      const excluded=one.details.find(d=>d.startsWith("Not applicable here"))??"";
-      assert.match(excluded,/Cancer drug services/);
-      assert.match(excluded,/not a treatment for dengue/,"…and the reader's reason is shown: "+excluded);
+      const candidates=one.details.find(d=>d.startsWith("This may relate to"))??"";
+      assert.equal(/critical illness|cancer/i.test(candidates),false,"Rows the reader ruled out are not even named as candidates: "+candidates);
+      assert.match(candidates,/hospital cash/i);
+      const visible=[one.summary,...one.details].join("\n");
+      assert.equal(/Not applicable here|Cancer drug services|Day surgery|benefit rules? read/i.test(visible),false,"Ruled-out rows are internal tracing, never household text: "+visible);
       // Facts given in passing are heard: "no ambulance" ends the ambulance question for good.
       const second=(await send("Yes",people[0].id,first.answer.conversationId,first.answer.conversationRevision)).data;
       const third=(await send("3 nights, no ambulance, we took a taxi",people[0].id,second.answer.conversationId,second.answer.conversationRevision)).data;
@@ -1789,8 +1806,16 @@ async function main(){
           nextSteps:[]}));
       }) as typeof fetch;
       try{
+        // A reported fracture is fact-found first: one question per turn, no
+        // claim cards and no figures until the facts that decide which
+        // benefits respond are in. Answer each question as the chat's own
+        // question card would, then check the clause is promoted.
         const {data}=await send("He broke his left forearm playing basketball. What can he claim?",fixture.person.id);
-        const answer=data.answer as ChatAnswer;
+        let answer=data.answer as ChatAnswer;
+        assert.equal(answer.mode,"fact_finding","A fracture is fact-found before any benefit is shown");
+        assert.equal(answer.questions.length,1,"Exactly one question at a time: "+JSON.stringify(answer.questions));
+        assert.equal(answer.claimItems.length,0,"No claim cards while facts are missing");
+        answer=await answerInjuryInterview(answer,fixture.person.id);
         const item=answer.claimItems.find(c=>/broken forearm/i.test(c.title));
         assert.ok(item,"The quoted percentage clause must be promoted into a claim item, not left as prose the household has to work out itself: "+JSON.stringify(answer.claimItems));
         assert.equal(item!.calculatedAmount,undefined,"Pre-review chat must not expose a computed payout");
@@ -1809,9 +1834,10 @@ async function main(){
       await db.query("INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value,currency,source_page,quote,conditions,requirements,needs_review,basis_inferred) VALUES($1,$2,$3,'Arm , Elbow, Wrist or Ribs',ARRAY['accident','bodily_injury']::text[],ARRAY['accident']::text[],'fixed',1250,'SGD',13,'Arm , Elbow, Wrist or Ribs 25%','[]'::jsonb,'[]'::jsonb,true,true)",
         [account,fixture.policyId,product]);
       const {data}=await send("Desmond broke his forearm playing basketball",people[0].id);
-      const answer=data.answer as ChatAnswer;
+      assert.equal((data.answer as ChatAnswer).mode,"fact_finding","A fracture is fact-found before any benefit is shown");
+      const answer=await answerInjuryInterview(data.answer as ChatAnswer,people[0].id);
       const cards=answer.claimItems.map(item=>item.title+"="+item.amountText);
-      assert.equal(answer.claimItems.length,1,"One fracture benefit, not two versions of it: "+cards.join(" | "));
+      assert.equal(answer.claimItems.length,1,"One fracture benefit, not two versions of it: "+cards.join(" | ")+" [mode="+answer.mode+"; summary="+answer.summary+"; q="+JSON.stringify(answer.questions)+"; facts="+JSON.stringify(answer.knownFacts)+"]");
       assert.match(answer.claimItems[0].title,/Arm.*Elbow.*Wrist/,"The printed S$5,000 clause outranks the heading-inferred percentage, even while both stay unpriced: "+cards.join(" | "));
       // Both rates were read from a heading above their row, not the row
       // itself, so neither is trusted for a bare figure until a person

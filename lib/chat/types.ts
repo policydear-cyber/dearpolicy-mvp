@@ -39,6 +39,9 @@ export type ConversationState = {
   /** The claim on record for this conversation's event, once one exists. */
   claimSessionId?: string;
   personContext?: { message: string; recordedAt: string };
+  /** The injury fact-finding explanation already shown in this chat. It is
+   * said once; later turns acknowledge the answer and ask the next question. */
+  injuryExplained?: string;
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

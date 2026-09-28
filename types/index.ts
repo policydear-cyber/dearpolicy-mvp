@@ -175,7 +175,7 @@ export type ClaimCompositionView = {
 
 export type FactFindingPlanView = {
   subjectId:string;subjectName?:string;
-  category:"accidental_death"|"critical_illness"|"disability_tpd"|"medical_reimbursement"|"hospital_cash"|"travel";
+  category:"accidental_death"|"critical_illness"|"disability_tpd"|"medical_reimbursement"|"hospital_cash"|"travel"|"accidental_injury";
   label:string;
   status:"information_needed"|"evidence_needed"|"reviewer_assessment_needed"|"policy_condition_unresolved"|"ready_for_evidence_gated_estimate";
   nextQuestions:{id:string;factKey:string;text:string;type:"text"|"date"|"yes_no"|"choice";options?:string[];why:string}[];

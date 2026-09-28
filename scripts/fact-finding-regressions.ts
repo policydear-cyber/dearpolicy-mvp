@@ -14,7 +14,7 @@ const at = (minute: number) => new Date(Date.UTC(2026, 8, 1, 9, minute)).toISOSt
 const fact = (value: ConversationFact["value"], minute = 0, state: ConversationFact["state"] = "known"): ConversationFact => ({ value, state, quote: String(value), recordedAt: at(minute), source: "user" });
 const MONEY = /(?:S\$|US\$|SGD|USD|\$)\s?\d/;
 const plan = (category: FactFindingCategory, facts: SubjectFacts, extra: Partial<Parameters<typeof planFactFinding>[0]> = {}) => planFactFinding({ subjectId: "p1", category, facts, ...extra });
-const allFacts = (category: FactFindingCategory, minute = 0): SubjectFacts => Object.fromEntries(FACT_FINDING_SPECS[category].facts.map((f) => [f.key, fact(f.type === "yes_no" ? true : f.key === "travelEventType" ? "Flight delay" : f.type === "date" ? "2026-08-01" : "x", minute)]));
+const allFacts = (category: FactFindingCategory, minute = 0): SubjectFacts => Object.fromEntries(FACT_FINDING_SPECS[category].facts.map((f) => [f.key, fact(f.type === "yes_no" ? true : f.key === "travelEventType" ? "Flight delay" : f.key === "eventType" ? "accident" : f.type === "date" ? "2026-08-01" : "x", minute)]));
 const allDocs = (category: FactFindingCategory) => FACT_FINDING_SPECS[category].documents.map((d) => ({ type: d.type, reviewed: true }));
 const allMatches = (category: FactFindingCategory) => Object.fromEntries(FACT_FINDING_SPECS[category].reviewers.map((r) => [r.key, "matches" as const]));
 
