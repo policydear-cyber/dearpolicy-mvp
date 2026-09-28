@@ -558,7 +558,7 @@ export function runSystemRegressions(){
   test("Reading work per turn is bounded",()=>{
     for(const key of ["RAG_MAX_EVIDENCE_WINDOWS","RAG_ANALYSIS_BUDGET_MS"])delete process.env[key];
     assert.equal(readingBudget().maximumWindows,8);
-    assert.equal(readingBudget().millisecondBudget,300_000,"A turn cannot read for an unbounded time");
+    assert.equal(readingBudget().millisecondBudget,150_000,"A turn cannot read for an unbounded time: the default budget leaves headroom inside the 300s function window");
     process.env.RAG_MAX_EVIDENCE_WINDOWS="24";process.env.RAG_ANALYSIS_BUDGET_MS="60000";
     assert.equal(readingBudget().maximumWindows,24);
     assert.equal(readingBudget().millisecondBudget,60_000);
