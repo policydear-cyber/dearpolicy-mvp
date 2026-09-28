@@ -235,11 +235,12 @@ const cases:Case[]=[
     oneOf:{names:["11. Loss of or Permanent Total Loss of use of (a) Right Thumb",
       "11. Loss of or Permanent Total Loss of use of (c) One Phalanx of Right Thumb"],amount:"S$180,000"},
     pays:{},
-    never:["Death Benefit","Death","Death due to Accident","Group Living Care"],
-    // A fracture benefit is shown, because it is in the policy and the person
-    // should see what it pays -- but no fracture was described, so it carries
-    // no figure into the total.
-    notCounted:["Simple Fracture","14. Loss of or Permanent Total Loss of use of any other finger (a) Right hand"],
+    // A fracture row and a row for "any other finger" are not this injury: a
+    // lost thumb is neither a fracture nor another finger. Injury rows whose
+    // kind or scope disagree with what was reported are screened out before
+    // they become candidates, so they are never shown at all.
+    never:["Death Benefit","Death","Death due to Accident","Group Living Care",
+      "Simple Fracture","14. Loss of or Permanent Total Loss of use of any other finger (a) Right hand"],
     total:"S$180,000",
   },
   {

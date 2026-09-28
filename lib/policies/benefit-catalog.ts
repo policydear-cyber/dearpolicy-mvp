@@ -40,6 +40,10 @@ export type CatalogBenefit={
   needsConfirmation?:boolean;
   /** When a person confirmed or corrected this row. */
   reviewedAt?:string|null;
+  /** The title another document of the same plan gives this same benefit,
+   * carried only when it states the kind of injury this row's own title lost
+   * (set by preferStatedRules). Classification evidence only; never shown. */
+  kindEvidence?:string;
 };
 
 /** Which reported events can turn a benefit on.
@@ -162,7 +166,11 @@ export function ruledOutBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[]
   }
   return out;
 }
-export function matchBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[],events:ClaimEventType[]=[]):BenefitMatch[]{
+/** `facts`, when given, are the contract owner's facts: a row that cannot
+ * answer the injury they reported (a loss-of-arm line for a broken arm) never
+ * becomes a candidate. Omitted, matching is unchanged. */
+export function matchBenefits(catalog:CatalogBenefit[],traits:ScenarioTrait[],events:ClaimEventType[]=[],facts?:SubjectFacts):BenefitMatch[]{
+  if(facts)catalog=screenInjuryCompatibility(catalog,facts).compatible;
   const reported=new Set(traits);
   const hasCause=CAUSES.some(trait=>reported.has(trait));
   const matches:BenefitMatch[]=[];
@@ -280,40 +288,190 @@ export function namesASpecificInjury(benefitName:string){
   const name=(benefitName??"").toLowerCase();
   return NAMED_INJURIES.some(word=>name.includes(word))||isScaleBand(name);
 }
+/** One deterministic decision: can this row answer the injury that THIS
+ * person reported?
+ *
+ * "Charmaine broke her arm" used to surface "Loss of arm (at shoulder ...)":
+ * both responded to an accident, both named an arm, and the kind of injury was
+ * only compared after the row was already a candidate -- and not at all when
+ * the facts said only "injured arm". A schedule pays for the injury that
+ * happened, so the row's KIND is read from all its evidence (name, quoted
+ * wording, conditions) and must agree with a reported kind before a body part
+ * is even looked at. Body-part overlap alone never makes a row visible.
+ *
+ * Reads only the facts passed in -- the facts of the contract owner. */
+export type InjuryLineKind="fracture"|"permanent_loss"|"burn"|"ambiguous_injury";
+export type InjuryCompatibility={visible:boolean;lineKind:InjuryLineKind|null;reason:string|null};
+/** Internal audit record for a row screened out by injury compatibility. Never
+ * user-visible and never merged into ruledOut. */
+export type IncompatibleBenefit={benefit:CatalogBenefit;reason:string};
+const PART_PATTERNS:{part:string;pattern:RegExp}[]=[
+  {part:"upper limb",pattern:/\bupper\s+(?:limbs?|extremit)/},{part:"lower limb",pattern:/\blower\s+(?:limbs?|extremit)/},
+  {part:"limb",pattern:/\blimbs?\b/},{part:"forearm",pattern:/\bforearms?\b/},{part:"humerus",pattern:/\bhumer|\bupper\s+arm/},
+  {part:"arm",pattern:/\barms?\b/},{part:"radius",pattern:/\bradius\b/},{part:"ulna",pattern:/\bulnae?\b/},
+  {part:"elbow",pattern:/\belbows?\b/},{part:"wrist",pattern:/\bwrists?\b/},{part:"hand",pattern:/\bhands?\b/},
+  {part:"finger",pattern:/\bfingers?\b/},{part:"thumb",pattern:/\bthumbs?\b/},{part:"phalanx",pattern:/\bphalan/},
+  {part:"shoulder",pattern:/\bshoulders?\b/},{part:"clavicle",pattern:/\bclavic|\bcollar\s?bone/},
+  {part:"leg",pattern:/\blegs?\b/},{part:"thigh",pattern:/\bthighs?\b/},{part:"femur",pattern:/\bfemur|\bfemoral/},
+  {part:"tibia",pattern:/\btibia/},{part:"fibula",pattern:/\bfibula/},{part:"knee",pattern:/\bknees?\b/},
+  {part:"patella",pattern:/\bpatell|\bknee\s?cap/},{part:"ankle",pattern:/\bankles?\b/},{part:"foot",pattern:/\bfoot\b|\bfeet\b/},
+  {part:"toe",pattern:/\btoes?\b/},{part:"hip",pattern:/\bhips?\b/},{part:"pelvis",pattern:/\bpelvi/},
+  {part:"spine",pattern:/\bspin(?:e|al)\b|\bvertebra/},{part:"skull",pattern:/\bskull/},{part:"jaw",pattern:/\bjaws?\b|\bmandibl/},
+  {part:"rib",pattern:/\bribs?\b/},{part:"neck",pattern:/\bneck\b/},{part:"cheekbone",pattern:/\bcheek\s?bone/},
+  {part:"eye",pattern:/\beyes?\b/},{part:"sight",pattern:/\bsight\b|\beyesight\b|\bblind/},{part:"hearing",pattern:/\bhearing\b|\bdeaf/},
+  {part:"ear",pattern:/\bears?\b/},{part:"speech",pattern:/\bspeech\b/},{part:"insanity",pattern:/\binsanity\b/},
+];
+/** What a row's body-part word covers. A generic row ("Fracture of arm",
+ * "Simple fracture of upper limb") answers a more specific report inside it
+ * (an elbow, a humerus). The reverse is not true: a report of an "arm" does not
+ * establish the wrist, so a wrist-only row stays hidden until it does. */
+const ARM_PARTS=["arm","forearm","humerus","radius","ulna","elbow"];
+const UPPER_LIMB=[...ARM_PARTS,"upper limb","wrist","hand","finger","thumb","phalanx","shoulder"];
+const LEG_PARTS=["leg","thigh","femur","tibia","fibula","knee","patella"];
+const LOWER_LIMB=[...LEG_PARTS,"lower limb","ankle","foot","toe","hip"];
+const PART_COVERS:Record<string,string[]>={arm:ARM_PARTS,forearm:["forearm","radius","ulna"],"upper limb":UPPER_LIMB,
+  leg:LEG_PARTS,"lower limb":LOWER_LIMB,limb:[...UPPER_LIMB,...LOWER_LIMB,"limb"],eye:["eye","sight"],sight:["sight","eye"],
+  ear:["ear","hearing"],hearing:["hearing","ear"]};
+function bodyPartsIn(text:string){
+  return PART_PATTERNS.filter(entry=>entry.pattern.test(text)).map(entry=>entry.part);
+}
+const FRACTURE_WORDS=/\bfractur|\bfull break\b|non-union|\bdislocat|\bbroken bones?\b/;
+const BURN_LINE_WORDS=/\bburns?\b|\bscald|\bdisfigur/;
+const PERMANENT_LOSS_WORDS=/\bloss of use\b|\bpermanent(?:ly)?\s+(?:and\s+)?(?:total\s+|partial\s+)?(?:loss|disab|impair)|\btotal and permanent\b|\bamputat|\bdismember|\bsevered?\b|paralys|parapleg|quadripleg|hemipleg|\bshortening of\b/;
+const LOSS_OF_PART=/\b(?:loss|lost)\s+of\s+(?:or\s+)?(?:the\s+|one\s+|both\s+|a\s+|an\s+|all\s+|any\s+|two\s+)?(?:[a-z-]+\s+){0,3}?(?:arms?|legs?|hands?|feet|foot|limbs?|eyes?|sight|hearing|speech|thumbs?|fingers?|toes?|phalan\w*|ears?|lens|joints?)\b/;
+function kindsInText(text:string):Exclude<InjuryLineKind,"ambiguous_injury">[]{
+  const kinds:Exclude<InjuryLineKind,"ambiguous_injury">[]=[];
+  if(BURN_LINE_WORDS.test(text))kinds.push("burn");
+  if(FRACTURE_WORDS.test(text))kinds.push("fracture");
+  if(PERMANENT_LOSS_WORDS.test(text)||LOSS_OF_PART.test(text))kinds.push("permanent_loss");
+  return kinds;
+}
+/** A benefit in its own right, not a line of an injury schedule: it pays for
+ * treatment, a stay, a bill, a death -- whatever the injury was. */
+const OWN_RIGHT_BENEFIT=/\bmedical\b|reimburs|\bexpenses?\b|\bhospital|\bcash\b|ambulance|\bdeath\b|\bdies\b|funeral|allowance|\bincome\b|\bbills?\b|outpatient|out-patient|physiother|\btreatment|\bsurg(?:ery|ical)|dental|transport|evacuat|repatriat|recuperat|\bdaily\b|per day|compassionate|education|\btemporary\b|\bweekly\b|rehabilit|\bnursing\b|home care|modification|\bwheelchair|\bcrutch|\bprosthe|\bmobility aid/;
+/** What kind of injury a catalog row pays for, read from every piece of
+ * evidence on the row. null = not an injury-schedule line. */
+export function classifyInjuryLine(benefit:Pick<CatalogBenefit,"benefitName"|"quote"|"conditions"|"kindEvidence">):{kind:InjuryLineKind|null;
+  /** The text the row's body part and side are read from. */
+  scopeText:string}{
+  const name=(benefit.benefitName??"").toLowerCase();
+  if(isScaleBand(name))return {kind:"burn",scopeText:name};
+  // A death benefit is a death benefit, whatever else its title lists.
+  if(/\bdeath\b/.test(name))return {kind:null,scopeText:name};
+  const fromName=kindsInText(name);
+  if(fromName.length===1)return {kind:fromName[0],scopeText:name};
+  if(fromName.length>1)return {kind:"ambiguous_injury",scopeText:name};
+  if(OWN_RIGHT_BENEFIT.test(name))return {kind:null,scopeText:name};
+  const wording=[benefit.quote??"",...(benefit.conditions??[])].join(" ").toLowerCase();
+  // The same benefit as another document of the plan titles it, when that
+  // title states the kind this one lost (see preferStatedRules).
+  if(benefit.kindEvidence){
+    const inherited=kindsInText(benefit.kindEvidence.toLowerCase());
+    if(inherited.length===1)return {kind:inherited[0],scopeText:name};
+  }
+  const fromWording=kindsInText(wording);
+  const namesPart=bodyPartsIn(name).length>0;
+  if(fromWording.length===1)return {kind:fromWording[0],scopeText:namesPart?name:wording};
+  // A row whose wording spans several kinds and whose title names no body
+  // part is a summary of a whole cover, not one line of its schedule.
+  if(namesPart||/\b(?:fractur|dislocat|amputat|dismember|paralys)/.test(name))return {kind:"ambiguous_injury",scopeText:name};
+  return {kind:null,scopeText:name};
+}
+function factText(value:FactValue|undefined){
+  if(typeof value==="string")return value.toLowerCase();
+  if(Array.isArray(value))return value.join(" ").toLowerCase();
+  return "";
+}
+function statedImpairment(facts:SubjectFacts){
+  const value=knownValue(facts,"permanentImpairment");
+  if(value===true)return "permanent impairment";
+  const text=factText(value).trim();
+  if(!text||/^(?:no|none|nil|not|n\/a|unknown)\b/.test(text))return "";
+  return text;
+}
+/** Whether this person has reported an injury at all. With none, the schedule
+ * keeps its old behaviour: a hypothetical question is entitled to see what
+ * the policy pays. */
+export function hasInjuryFacts(facts:SubjectFacts){
+  if(knownValue(facts,"injured")===true)return true;
+  return ["injuries","permanentImpairment","fractureBodyPart","injuryKind","injuryBodyPart"]
+    .some(key=>{const value=knownValue(facts,key);return value!=null&&value!==false&&!(typeof value==="string"&&!value.trim());});
+}
+/** The kinds of injury established by the facts. `injuryKind` is
+ * authoritative; without it the person's own words are read. */
+export function reportedInjuryKindsFromFacts(facts:SubjectFacts):Set<InjuryKind>{
+  const kinds=new Set<InjuryKind>();
+  const stated=knownValue(facts,"injuryKind");
+  if(typeof stated==="string"&&stated.trim()){
+    const kind=stated.toLowerCase();
+    if(/fractur|broke|break|dislocat|crack/.test(kind))kinds.add("fracture");
+    else if(/burn|scald/.test(kind))kinds.add("burn");
+    else if(/permanent|loss|lost|amputat|dismember|paralys|parapleg|quadripleg|sever|blind|deaf/.test(kind))kinds.add("permanent_loss");
+  } else for(const kind of reportedInjuryKinds(facts))kinds.add(kind);
+  const fracture=knownValue(facts,"fractureBodyPart");
+  if(typeof fracture==="string"&&fracture.trim())kinds.add("fracture");
+  if(statedImpairment(facts))kinds.add("permanent_loss");
+  return kinds;
+}
+const KIND_WORDS:Record<InjuryLineKind,string>={fracture:"a fracture",permanent_loss:"a permanent loss or loss of use",
+  burn:"a burn or assessed impairment",ambiguous_injury:"a specific injury"};
+export function injuryCompatibility(benefit:CatalogBenefit,facts:SubjectFacts):InjuryCompatibility{
+  const row=classifyInjuryLine(benefit);
+  if(!row.kind)return {visible:true,lineKind:null,reason:null};
+  if(!hasInjuryFacts(facts))return {visible:true,lineKind:row.kind,reason:null};
+  const hide=(reason:string):InjuryCompatibility=>({visible:false,lineKind:row.kind,reason});
+  const label="“"+benefit.benefitName+"”";
+  if(row.kind==="ambiguous_injury")
+    return hide(label+" is a line of an injury schedule whose wording does not establish which kind of injury it pays for");
+  const kinds=reportedInjuryKindsFromFacts(facts);
+  const impairment=statedImpairment(facts);
+  const text=[reportedInjuryText(facts),factText(knownValue(facts,"injuryBodyPart"))].join(" ");
+  if(row.kind==="burn"){
+    // A burns or impairment band answers only a burn or an assessed
+    // impairment. It names no body part, so the kind is all there is.
+    const band=isScaleBand(benefit.benefitName);
+    if(kinds.has("burn")||(band&&(impairment||/impair|disfigur|\bscar\b/.test(text))))return {visible:true,lineKind:row.kind,reason:null};
+    return hide(label+" pays for "+KIND_WORDS.burn+(kinds.size?", and the reported injury is "+[...kinds].map(k=>KIND_WORDS[k]).join(" and "):", and no burn has been reported"));
+  }
+  if(!kinds.size)return hide(label+" pays for "+KIND_WORDS[row.kind]+", and the kind of injury reported is not known yet");
+  if(!kinds.has(row.kind))return hide(label+" pays for "+KIND_WORDS[row.kind]+", and the reported injury is "
+    +[...kinds].map(k=>KIND_WORDS[k]).join(" and ")+" -- the same body part does not make them the same injury");
+  // The kind agrees. Now the scope: a row for both hands or all the fingers is
+  // not answered by one thumb.
+  const scope=row.scopeText;
+  const bothSided=/\bboth\b|\ball (?:fingers|toes)\b|\bfour fingers\b/.test(scope);
+  const singleDigit=/\b(?:a|one|left|right|my|her|his)\b[^.]{0,20}\b(?:thumb|finger|toe|phalanx)\b/.test(text)&&!/\bboth\b|\ball\b/.test(text);
+  if(bothSided&&singleDigit)return hide(label+" is written for both sides or all digits, and one was reported");
+  // Which side.
+  const side=(value:string)=>({left:/\bleft\b/.test(value),right:/\bright\b/.test(value)});
+  const statedSide=factText(knownValue(facts,"injurySide"));
+  const rowSide=side(scope),hurtSide=side(statedSide||text);
+  if(rowSide.left!==rowSide.right&&hurtSide.left!==hurtSide.right&&rowSide.left!==hurtSide.left)
+    return hide(label+" is for the "+(rowSide.left?"left":"right")+" side, and the "+(hurtSide.left?"left":"right")+" was reported");
+  // Then the part of the body. A row that names none ("Fractures (simple)",
+  // "Third degree burns") is answered by its kind alone.
+  const rowParts=bodyPartsIn(scope);
+  if(!rowParts.length)return {visible:true,lineKind:row.kind,reason:null};
+  const hurtParts=bodyPartsIn(text);
+  if(!hurtParts.length)return hide(label+" is for the "+rowParts.join("/")+", and which part of the body was hurt is not known yet");
+  const covered=rowParts.some(part=>(PART_COVERS[part]??[part]).some(inner=>hurtParts.includes(inner)));
+  if(!covered)return hide(label+" is for the "+rowParts.join("/")+", and the reported injury is to the "+hurtParts.join("/"));
+  return {visible:true,lineKind:row.kind,reason:null};
+}
+/** Split a catalog into the rows that can answer this person's injury and the
+ * rows that cannot, with the reason kept for audit. */
+export function screenInjuryCompatibility(catalog:CatalogBenefit[],facts:SubjectFacts){
+  const compatible:CatalogBenefit[]=[];const incompatible:IncompatibleBenefit[]=[];
+  for(const benefit of catalog){
+    const verdict=injuryCompatibility(benefit,facts);
+    if(verdict.visible)compatible.push(benefit);
+    else incompatible.push({benefit,reason:verdict.reason??"not compatible with the reported injury"});
+  }
+  return {compatible,incompatible};
+}
+/** The second guard inside assessCatalogBenefit: the same decision. */
 export function injuryNotReported(benefit:CatalogBenefit,facts:SubjectFacts){
-  const reported=reportedInjuryText(facts);
-  if(!reported)return null;
-  const name=benefit.benefitName.toLowerCase();
-  // A burns band answers only to a burn or an assessed impairment.
-  if(isScaleBand(name))
-    return BURN_WORDS.some(word=>reported.includes(word))?null:benefit.benefitName;
-  const named=NAMED_INJURIES.filter(word=>name.includes(word));
-  if(!named.length)return null;
-  // The kind of injury first. A broken wrist is not a lost arm, whatever words
-  // the two share.
-  const lineKind=scheduleLineKind(name),reportedKinds=reportedInjuryKinds(facts);
-  if(lineKind&&reportedKinds.size&&!reportedKinds.has(lineKind))return benefit.benefitName;
-  // Then the scope. A row written for both hands, all the fingers, or both
-  // eyes is not answered by the loss of one thumb.
-  const bothSided=/\bboth\b|\ball (?:fingers|toes)\b|\bfour fingers\b/.test(name);
-  const singleDigit=/\b(?:a|one|left|right|my)\b[^.]{0,20}\b(?:thumb|finger|toe|phalanx)\b/.test(reported)
-    &&!/\bboth\b|\ball\b/.test(reported);
-  if(bothSided&&singleDigit)return benefit.benefitName;
-  // Which side. A schedule pays a different percentage for the right thumb
-  // than for the left, and offering the right-hand row for a left-hand injury
-  // is simply a different benefit.
-  const side=(text:string)=>({left:/\bleft\b/.test(text),right:/\bright\b/.test(text)});
-  const rowSide=side(name),hurtSide=side(reported);
-  if((rowSide.left!==rowSide.right)&&(hurtSide.left!==hurtSide.right)
-    &&(rowSide.left!==hurtSide.left))return benefit.benefitName;
-  // Then the part of the body. Agreement on the KIND of injury is not
-  // agreement that it happened to the same place.
-  const parts=BODY_PARTS.filter(word=>name.includes(word));
-  if(parts.length)return parts.some(word=>reported.includes(word))?null:benefit.benefitName;
-  // A row that names only a kind of injury and no body part ("Third Degree
-  // Burns") is answered by that kind alone.
-  if(INJURY_KINDS.some(word=>name.includes(word)&&reported.includes(word)))return null;
-  return benefit.benefitName;
+  return injuryCompatibility(benefit,facts).visible?null:benefit.benefitName;
 }
 export type CatalogAssessment={item:ClaimItem;missing:string[]};
 export const CATALOG_CURRENCY_MISSING="the policy page that states the currency of this benefit (DearPolicy never assumes one)";
@@ -878,7 +1036,24 @@ export function preferStatedRules(benefits:CatalogBenefit[]){
     const existing=best.get(k);
     if(!existing||rank(benefit)>rank(existing))best.set(k,benefit);
   }
-  return benefits.filter(benefit=>best.get(key(benefit.benefitName))===benefit);
+  // The two statements of one benefit are one benefit: when the survivor's
+  // own title lost the table heading that says what kind of injury it pays
+  // for ("Arm , Elbow, Wrist or Ribs" beside "Arm, Elbow, Wrist or Ribs
+  // (Other Fracture)"), the kind its sibling states is carried over as
+  // evidence, so the injury-compatibility screen can still classify it. Only
+  // an unambiguous kind is carried; figures and wording are never merged.
+  const kindsByKey=new Map<string,Set<InjuryLineKind>>();
+  for(const benefit of benefits){
+    const kind=classifyInjuryLine(benefit).kind;
+    if(kind&&kind!=="ambiguous_injury")kindsByKey.set(key(benefit.benefitName),(kindsByKey.get(key(benefit.benefitName))??new Set()).add(kind));
+  }
+  return benefits.filter(benefit=>best.get(key(benefit.benefitName))===benefit).map(benefit=>{
+    const siblings=[...(kindsByKey.get(key(benefit.benefitName))??[])];
+    const own=classifyInjuryLine(benefit).kind;
+    if(siblings.length!==1||(own&&own!=="ambiguous_injury"))return benefit;
+    const evidence=benefits.find(other=>other!==benefit&&key(other.benefitName)===key(benefit.benefitName)&&classifyInjuryLine(other).kind===siblings[0]);
+    return evidence?{...benefit,kindEvidence:evidence.benefitName}:benefit;
+  });
 }
 /** Answering "how much can I claim if…" — a situation, not an event.
  *
@@ -993,14 +1168,17 @@ export function conditionsFromTheCover(contract:PolicyContract,benefits:CatalogB
     return paysOnAccidentsOnly?{...benefit,requires:[...(benefit.requires??[]),"accident" as ScenarioTrait]}:benefit;
   });
 }
-export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];traits:ScenarioTrait[];events?:ClaimEventType[]}){
+export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];traits:ScenarioTrait[];events?:ClaimEventType[];
+  /** The owner's facts, when the question is about something that happened.
+   * Omitted for a hypothetical, which keeps showing what the policy pays. */
+  facts?:SubjectFacts}){
   const events=args.events??reportedClaimEvents({},args.traits);
   const documentIds=new Set([...args.contract.documents,...args.contract.references].map(d=>d.id));
   const mine=conditionsFromTheCover(args.contract,preferStatedRules(args.catalog.filter(benefit=>documentIds.has(benefit.policyId))));
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];const needs:ScenarioNeed[]=[];
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";
-  for(const {benefit} of matchBenefits(mine,args.traits,events)){
+  for(const {benefit} of matchBenefits(mine,args.traits,events,args.facts)){
     const coverage=coverageForBenefit(args.contract,benefit);
     if(!coverage&&!declaredOnly)continue;
     const key=benefit.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"");
@@ -1098,7 +1276,13 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
   const items:ClaimItem[]=[];const citations:ChatCitation[]=[];
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";
-  const matches=matchBenefits(mine,args.traits,events);
+  // Injury compatibility BEFORE a row can become a candidate: judging,
+  // question planning and the answer only ever see rows that can answer the
+  // injury this owner reported. The rest are kept as internal audit data.
+  const screened=screenInjuryCompatibility(mine,args.facts);
+  const matches=matchBenefits(screened.compatible,args.traits,events);
+  const matchedIds=new Set(matchBenefits(mine,args.traits,events).map(match=>match.benefit.id));
+  const incompatible=screened.incompatible.filter(entry=>matchedIds.has(entry.benefit.id));
   const excludedByFact=factExclusions(args.facts);
   const inPlay=matches.filter(match=>!excludedByFact(match.benefit));
   for(const {benefit} of inPlay){
@@ -1129,9 +1313,12 @@ export function assessContractFromCatalog(args:{contract:PolicyContract;catalog:
       pageStart:coverage.sourcePage??1,pageEnd:coverage.sourcePage??1,
       documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"});
   }
-  const excluded=ruledOutBenefits(mine,args.traits,events);
+  const excluded=ruledOutBenefits(screened.compatible,args.traits,events);
   const byFact=matches.filter(match=>!inPlay.includes(match)).map(match=>({benefit:match.benefit,because:excludedByFact(match.benefit)||"ruled out by what you told me"}));
-  return {items,citations,considered:mine.length,matches:inPlay,ruledOut:[...excluded,...byFact]};
+  return {items,citations,considered:mine.length,matches:inPlay,ruledOut:[...excluded,...byFact],
+    /** Rows screened out because they cannot answer the reported injury.
+     * Internal audit data only: never shown and never part of ruledOut. */
+    incompatible};
 }
 /** What the person has already said rules out, deterministically. "No
  * ambulance" ends every ambulance benefit and its question; "not admitted"
