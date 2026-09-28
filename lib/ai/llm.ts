@@ -257,6 +257,10 @@ export function readableModelFailure(error: unknown) {
     const said = message.replace(/^Model request failed \(\d+\):\s*/, "").trim();
     return who + " refused the request: " + (said || "the API key was not accepted") + ". Check the API key in the hosting dashboard's environment variables and its API restrictions in Google Cloud";
   }
+  if (/unsupported (value|parameter)|does not support/i.test(message)) {
+    const said = message.replace(/^Model request failed \(\d+\):\s*/, "").trim();
+    return who + " rejected a request setting: " + said;
+  }
   if (/\(404\)|not found|does not exist|unknown model|is not supported/i.test(message)) return who + " does not recognise the model name set in the hosting environment variables";
   if (/\(429\)|busy|rate limit|quota/i.test(message)) return who + " is rate-limited right now; it usually clears in under a minute";
   if (/timed out/i.test(message)) return who + " timed out on that section";

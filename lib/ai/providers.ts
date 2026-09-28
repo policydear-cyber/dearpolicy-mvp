@@ -200,19 +200,37 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
   const key=apiKeyFor(choice.provider);
   if(!key)throw new Error("No API key configured for "+choice.provider);
   const timeoutMs=args.timeoutMs??120_000;
-  const body=JSON.stringify({
+  // OpenAI generations disagree about their own parameters: newer models
+  // accept only max_completion_tokens where older ones took max_tokens, and
+  // reasoning-class models pin temperature to its default and reject an
+  // explicit 0. Rather than tracking every model's quirks by name, a 400
+  // that names a parameter is retried once without that parameter, at most
+  // three strips, so a model change in the hosting dashboard cannot brick
+  // every answer over a request setting.
+  const params:Record<string,unknown>={
     model:choice.model,temperature:args.temperature??0,
-    // OpenAI's newer models accept only max_completion_tokens; Groq (which
-    // shares this OpenAI-compatible client) still takes max_tokens.
     ...(args.maxOutputTokens?(choice.provider==="openai"?{max_completion_tokens:args.maxOutputTokens}:{max_tokens:args.maxOutputTokens}):{}),
     response_format:{type:"json_object"},
     messages:[
       {role:"system",content:args.system+"\n\nReply with a single JSON object and nothing else. It must match this JSON Schema exactly:\n"+JSON.stringify(args.jsonSchema)},
       {role:"user",content:args.user},
     ],
-  });
-  const response=await withRetries((signal)=>fetch(openAiBase(choice.provider)+"/chat/completions",{method:"POST",signal,
-      headers:{"content-type":"application/json",authorization:"Bearer "+key},body}),timeoutMs,args.attempts);
+  };
+  let response!:Response;
+  for(let strip=0;strip<4;strip++){
+    const body=JSON.stringify(params);
+    response=await withRetries((signal)=>fetch(openAiBase(choice.provider)+"/chat/completions",{method:"POST",signal,
+        headers:{"content-type":"application/json",authorization:"Bearer "+key},body}),timeoutMs,args.attempts);
+    if(response.ok)break;
+    const text=await response.text();
+    if(response.status===400){
+      if("temperature" in params&&/temperature/i.test(text)){delete params.temperature;continue;}
+      if("max_completion_tokens" in params&&/max_completion_tokens/i.test(text)){params.max_tokens=params.max_completion_tokens;delete params.max_completion_tokens;continue;}
+      if("max_tokens" in params&&/max_tokens/i.test(text)){params.max_completion_tokens=params.max_tokens;delete params.max_tokens;continue;}
+      if("response_format" in params&&/response_format/i.test(text)){delete params.response_format;continue;}
+    }
+    throw new Error("Model request failed ("+response.status+"): "+providerMessage(text));
+  }
   if(!response.ok)throw new Error("Model request failed ("+response.status+"): "+providerMessage(await response.text()));
   const payload=OpenAIShape.parse(await response.json());
   return {content:payload.choices[0].message.content??"",truncated:payload.choices[0].finish_reason==="length",
