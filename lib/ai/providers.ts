@@ -122,6 +122,7 @@ const PRICES:Record<string,Price>={
   "groq:llama-3.3-70b-versatile":{input:0.59,output:0.79},
   "groq:llama-3.1-8b-instant":{input:0.05,output:0.08},
   "openai:gpt-5-mini":{input:0.25,output:2},
+  "openai:gpt-6-luna":{input:0.10,output:0.50},
 };
 export function priceFor(choice:ModelChoice):Price|null{
   return PRICES[choice.provider+":"+choice.model]??PRICES[choice.provider+":"+choice.model.replace(/-\d{8}$/,"")]??null;
@@ -201,7 +202,9 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
   const timeoutMs=args.timeoutMs??120_000;
   const body=JSON.stringify({
     model:choice.model,temperature:args.temperature??0,
-    ...(args.maxOutputTokens?{max_tokens:args.maxOutputTokens}:{}),
+    // OpenAI's newer models accept only max_completion_tokens; Groq (which
+    // shares this OpenAI-compatible client) still takes max_tokens.
+    ...(args.maxOutputTokens?(choice.provider==="openai"?{max_completion_tokens:args.maxOutputTokens}:{max_tokens:args.maxOutputTokens}):{}),
     response_format:{type:"json_object"},
     messages:[
       {role:"system",content:args.system+"\n\nReply with a single JSON object and nothing else. It must match this JSON Schema exactly:\n"+JSON.stringify(args.jsonSchema)},
@@ -423,5 +426,11 @@ export async function hostedDocumentToText(choice: ModelChoice, args: { system: 
   if (deterministicModelEnabled()) return deterministicHostedDocumentText(args);
   if (choice.provider === "anthropic") return anthropicDocumentText(choice, args);
   if (choice.provider === "gemini") return geminiDocumentText(choice, args);
+  // Scanned-page reading is only implemented for Anthropic and Gemini. When
+  // the reading role points at another provider (OpenAI, Groq), a scanned
+  // page falls back to whichever document-capable key is configured instead
+  // of failing the whole document.
+  if (apiKeyFor("gemini")) return geminiDocumentText({ provider: "gemini", model: "flash-lite" }, args);
+  if (apiKeyFor("anthropic")) return anthropicDocumentText({ provider: "anthropic", model: "claude-haiku-4-5" }, args);
   throw new Error(describeChoice(choice) + " does not support reading scanned PDF pages yet. Use an Anthropic or Gemini preset for MODEL_PRESET/READING_MODEL, or run local PaddleOCR instead.");
 }
