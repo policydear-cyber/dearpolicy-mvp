@@ -196,6 +196,9 @@ function openAiBase(provider:Provider){
   if(provider==="groq")return (process.env.GROQ_BASE_URL??"https://api.groq.com/openai/v1").replace(/\/$/,"");
   return (process.env.OPENAI_BASE_URL??"https://api.openai.com/v1").replace(/\/$/,"");
 }
+/** Parameters a given provider:model has rejected with a 400, remembered so
+ * later calls never re-pay the discovery roundtrip. Process-lifetime only. */
+const LEARNED_PARAMETER_STRIPS=new Map<string,Set<string>>();
 export async function openAiCompatible(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}):Promise<HostedReply>{
   const key=apiKeyFor(choice.provider);
   if(!key)throw new Error("No API key configured for "+choice.provider);
@@ -206,7 +209,10 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
   // explicit 0. Rather than tracking every model's quirks by name, a 400
   // that names a parameter is retried once without that parameter, at most
   // three strips, so a model change in the hosting dashboard cannot brick
-  // every answer over a request setting.
+  // every answer over a request setting. What a model rejected is REMEMBERED
+  // per provider:model for the life of the process -- without that, every
+  // single call re-paid the failed discovery roundtrip, which on a turn with
+  // many calls added minutes.
   const params:Record<string,unknown>={
     model:choice.model,temperature:args.temperature??0,
     ...(args.maxOutputTokens?(choice.provider==="openai"?{max_completion_tokens:args.maxOutputTokens}:{max_tokens:args.maxOutputTokens}):{}),
@@ -216,6 +222,13 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
       {role:"user",content:args.user},
     ],
   };
+  const stripKey=choice.provider+":"+choice.model;
+  for(const learned of LEARNED_PARAMETER_STRIPS.get(stripKey)??[]){
+    if(learned==="max_completion_tokens"&&"max_completion_tokens" in params){params.max_tokens=params.max_completion_tokens;delete params.max_completion_tokens;}
+    else if(learned==="max_tokens"&&"max_tokens" in params){params.max_completion_tokens=params.max_tokens;delete params.max_tokens;}
+    else delete params[learned];
+  }
+  const learn=(name:string)=>{const set=LEARNED_PARAMETER_STRIPS.get(stripKey)??new Set<string>();set.add(name);LEARNED_PARAMETER_STRIPS.set(stripKey,set);};
   let response!:Response;
   for(let strip=0;strip<4;strip++){
     const body=JSON.stringify(params);
@@ -224,10 +237,10 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
     if(response.ok)break;
     const text=await response.text();
     if(response.status===400){
-      if("temperature" in params&&/temperature/i.test(text)){delete params.temperature;continue;}
-      if("max_completion_tokens" in params&&/max_completion_tokens/i.test(text)){params.max_tokens=params.max_completion_tokens;delete params.max_completion_tokens;continue;}
-      if("max_tokens" in params&&/max_tokens/i.test(text)){params.max_completion_tokens=params.max_tokens;delete params.max_tokens;continue;}
-      if("response_format" in params&&/response_format/i.test(text)){delete params.response_format;continue;}
+      if("temperature" in params&&/temperature/i.test(text)){learn("temperature");delete params.temperature;continue;}
+      if("max_completion_tokens" in params&&/max_completion_tokens/i.test(text)){learn("max_completion_tokens");params.max_tokens=params.max_completion_tokens;delete params.max_completion_tokens;continue;}
+      if("max_tokens" in params&&/max_tokens/i.test(text)){learn("max_tokens");params.max_completion_tokens=params.max_tokens;delete params.max_tokens;continue;}
+      if("response_format" in params&&/response_format/i.test(text)){learn("response_format");delete params.response_format;continue;}
     }
     throw new Error("Model request failed ("+response.status+"): "+providerMessage(text));
   }

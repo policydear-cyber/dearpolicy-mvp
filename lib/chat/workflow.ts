@@ -289,7 +289,12 @@ export function readingBudget(){
   const maximumWindows=number("RAG_MAX_EVIDENCE_WINDOWS",8,1,200);
   return {
     maximumWindows,
-    millisecondBudget:number("RAG_ANALYSIS_BUDGET_MS",300_000,15_000,3_600_000),
+    // Must leave room inside the route's 300s maxDuration for everything
+    // around the reading (interpretation, retrieval, composition, saving):
+    // at 300s the reading alone could spend the whole function life and the
+    // invocation was killed mid-answer, the job lease expired, and the
+    // retry started the same doomed turn again.
+    millisecondBudget:number("RAG_ANALYSIS_BUDGET_MS",150_000,15_000,3_600_000),
     // No fixed slice per contract: allocation is round-robin in relevance
     // order, so every candidate gets its best window before any gets a second.
     perContractCap:maximumWindows,
