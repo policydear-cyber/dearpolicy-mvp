@@ -813,3 +813,6 @@ table { font-variant-numeric: tabular-nums; }
 .assessment-details{margin-top:.6rem;border:1px solid var(--line, #e5ddd0);border-radius:10px;padding:.35rem .7rem;background:rgba(255,255,255,.5)}
 .assessment-details>summary{cursor:pointer;font-weight:600;font-size:.85rem;color:var(--muted-ink, #7a6a55);padding:.25rem 0}
 .assessment-details[open]>summary{margin-bottom:.4rem}
+
+.inline-answer{display:flex;gap:.5rem;margin-top:.5rem}
+.inline-answer input{flex:1;min-width:0;padding:.45rem .6rem;border:1px solid var(--line, #d8cdbc);border-radius:8px;font:inherit;background:#fff}

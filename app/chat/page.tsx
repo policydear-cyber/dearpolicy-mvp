@@ -17,6 +17,17 @@ const preliminaryStatusCopy:Record<NonNullable<ClaimItem["preliminaryStatus"]>,s
 const statusCopy:Record<ClaimItem["status"],string>={likely_applicable:"Likely applicable",potentially_applicable:"Potentially applicable",not_applicable:"Not applicable",needs_document:"Needs checking"};
 const reviewCopy:Record<string,string>={searched:"Retrieved sections checked",missing_wording:"Matching wording needed",not_ready:"Document processing",no_matching_section:"No match in retrieved sections",needs_review:"Further review needed"};
 const completenessCopy:Record<string,string>={full_text_reviewed:"All processed pages read",partial_retrieval:"Part of the document read",no_wording:"No matching wording uploaded",not_processed:"Still processing"};
+/** Inline answer control for a promoted fact-finding question that has no
+ * tappable options (a date or free text). Submits the question restated with
+ * the answer so the conversation model records the right fact without the
+ * person retyping the question. */
+function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:boolean;onSubmit:(value:string)=>void}){
+  const [value,setValue]=useState("");
+  return <form className="quick-replies inline-answer" onSubmit={event=>{event.preventDefault();const v=value.trim();if(v){onSubmit(v);setValue("");}}}>
+    <input type={kind==="date"?"date":"text"} value={value} disabled={disabled} onChange={event=>setValue(event.target.value)} placeholder={kind==="date"?undefined:"Type your answer"} aria-label="Your answer" />
+    <button type="submit" disabled={disabled||!value.trim()}>Answer</button>
+  </form>;
+}
 function coverageText(coverage?:{pagesRead:number;pagesTotal:number;passagesRead:number;passagesTotal:number;completeness:string}){
   if(!coverage)return "Not measured";
   return (completenessCopy[coverage.completeness]??coverage.completeness)+" · "+coverage.pagesRead+"/"+coverage.pagesTotal+" pages · "+coverage.passagesRead+"/"+coverage.passagesTotal+" passages";
@@ -239,9 +250,23 @@ function ChatContent(){
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{q.text}</strong><small>{q.why}</small>
             <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
           </div>)}
+          {/* One question at a time, always answerable: when the turn asks
+              nothing directly but the fact-finding plan still needs facts,
+              the first open question gets the same highlighted, tappable
+              treatment instead of sitting in a bullet list nobody answers.
+              Tapping restates the question with the answer so the recorded
+              fact is unambiguous. */}
+          {message.answer&&!message.answer.questions.length?(()=>{const plans=message.answer?.factFinding??[];const active=plans.find(plan=>plan.nextQuestions.length);const q=active?.nextQuestions[0];if(!active||!q)return null;
+            const remaining=plans.reduce((n,plan)=>n+plan.nextQuestions.length,0)-1;
+            const reply=(text:string)=>void sendText(q.text.replace(/\?\s*$/,"")+": "+text);
+            const locked=busy||index!==messages.length-1;
+            return <div className="fact-question" key={q.id}><div className="question-label">{active.subjectName?active.subjectName+" · ":""}{active.label}{remaining>0?` · ${remaining} more question${remaining===1?"":"s"} after this`:""}</div><strong>{q.text}</strong><small>{q.why}</small>
+              {q.type==="yes_no"?<div className="quick-replies">{["Yes","No","Not sure"].map(option=><button key={option} disabled={locked} onClick={()=>reply(option)}>{option}</button>)}</div>
+              :q.type==="choice"&&q.options?.length?<div className="quick-replies">{q.options.map(option=><button key={option} disabled={locked} onClick={()=>reply(option)}>{option}</button>)}</div>
+              :<InlineAnswer kind={q.type==="date"?"date":"text"} disabled={locked} onSubmit={reply} />}
+            </div>;})():null}
           {message.answer?.factFinding?.length?<div className="fact-finding" data-testid="fact-finding"><small>What DearPolicy still needs</small>{message.answer.factFinding.map((plan,i)=><div className="fact-finding-plan" key={i} data-status={plan.status}>
             <strong>{plan.subjectName?plan.subjectName+" · ":""}{plan.label}</strong> <span className="fact-finding-status">{factFindingStatusCopy[plan.status]}</span>
-            {plan.nextQuestions.length?<ul className="fact-finding-questions">{plan.nextQuestions.map(q=><li key={q.id}>{q.text}</li>)}</ul>:null}
             {plan.missingDocuments.length?<p className="fact-finding-documents">Documents: {plan.missingDocuments.join("; ")}</p>:null}
             {plan.reviewerRequirements.length?<p className="fact-finding-reviewers">{plan.reviewerRequirements.join("; ")}</p>:null}
             {plan.reportedAmountsIgnored.length?<p className="fact-finding-reported">Any amount you mentioned is recorded as you reported it. It is not used as your cover or to work out a claim.</p>:null}
