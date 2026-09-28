@@ -109,10 +109,36 @@ export async function enqueueChat(request:ChatRequest){
   return {jobId:id,conversationId:context.conversation.id,conversationRevision:context.conversation.revision,
     familyMemberId:context.conversation.family_member_id};
 }
+// A worker that dies silently -- the serverless invocation is killed
+// mid-run, so its lease expires and the sweep dead-letters the background
+// job -- never reaches processChatAnalysisJob's catch block, which is the
+// ONLY writer of a terminal chat status on failure. The chat row then sits
+// 'running' forever and the browser polls a spinner that can never end.
+// Heal that at the read: every poll, and a reopened chat's pendingJob
+// resume, goes through getChatJob, so the stuck turn surfaces as a normal,
+// retryable failure instead of an endless spinner.
+const STUCK_ANALYSIS_MESSAGE="The analysis stopped unexpectedly and could not be finished after several attempts. Your message is saved. Please try sending it again.";
 export async function getChatJob(accountId:string,id:string){
   await initializeQueue();
-  return (await query<{id:string;status:string;progress:Progress;result_json:unknown;error:string|null}>(
+  const row=(await query<{id:string;status:string;progress:Progress;result_json:unknown;error:string|null}>(
     "SELECT id,status,progress,result_json,error FROM chat_analysis_jobs WHERE account_id=$1 AND id=$2",[accountId,id])).rows[0]??null;
+  if(row&&(row.status==="queued"||row.status==="running")){
+    try{
+      const healed=await query<{id:string}>(
+        `UPDATE chat_analysis_jobs c SET status='failed',error=$3,updated_at=now()
+          WHERE c.id=$1 AND c.account_id=$2 AND c.status IN ('queued','running')
+            AND EXISTS (SELECT 1 FROM background_jobs j
+              WHERE j.job_type=$4 AND j.account_id=c.account_id AND j.idempotency_key=c.id::text AND j.status='dead_letter')
+          RETURNING id`,
+        [id,accountId,STUCK_ANALYSIS_MESSAGE,CHAT_ANALYSIS_JOB_TYPE]);
+      if(healed.rows.length)return {...row,status:"failed",error:STUCK_ANALYSIS_MESSAGE};
+    }catch(error){
+      // Best-effort hygiene: a heal that cannot run (e.g. background_jobs
+      // missing in a partial environment) must never break the poll itself.
+      console.warn("stuck chat job heal failed:",error);
+    }
+  }
+  return row;
 }
 export async function cancelChatJob(accountId:string,id:string){
   await ensureChatSchema();
