@@ -45,6 +45,26 @@ export async function savePolicyFile(args: {
   return key;
 }
 
+/** The storage key a policy file WILL have, for a direct upload. */
+export function policyObjectKey(args: { accountId: string; familyMemberId: string; policyId: string; filename: string }) {
+  return objectKey(args);
+}
+
+/** A one-time signed upload URL for exactly this object key, so the browser
+ * sends the file straight to Supabase Storage (serverless functions cap a
+ * request body at about 4.5 MB). The key is server-generated; the URL can
+ * only create that one object (upsert off) and is accepted by the app only
+ * through the finalize step, which re-validates the stored bytes. */
+export async function createPolicyUploadUrl(storageKey: string): Promise<{ url: string; token: string }> {
+  const { data, error } = await client().storage.from(BUCKET).createSignedUploadUrl(storageKey, { upsert: false });
+  if (error || !data) throw new Error(`Could not prepare the upload: ${error?.message ?? "no signed URL"}`);
+  return { url: data.signedUrl, token: data.token };
+}
+
+export async function appendPolicyUploadPart(): Promise<number> {
+  throw new Error("Part uploads are for the local storage driver only; Supabase Storage uploads go to a signed URL.");
+}
+
 export async function readPolicyFile(storageKey: string) {
   const { data, error } = await client().storage.from(BUCKET).download(storageKey);
   if (error) throw new Error(`Could not read the stored PDF: ${error.message}`);

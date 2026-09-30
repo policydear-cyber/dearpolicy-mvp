@@ -35,16 +35,63 @@ function subjectName(text: string) {
   const subject = text.match(/(?:^|[.!?,]\s*)(?:unfortunately\s+|sadly\s+)?([\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*){0,5})\s+(?:(?:has|had|was|is)\s+(?:been\s+)?)?(?:died|passed away|deceased|killed|murdered|assassinated|diagnosed|caught|contracted|came down with|tested positive for|suffers from|suffering from|got|(?:had|got into|was in) an? (?:motorbike |motorcycle |car |road traffic )?accident|broke|fractured|hospitalised|hospitalized|admitted|warded|rushed to (?:the )?hospital|kept in hospital|receiving treatment|being treated(?: for)?|down with|in (?:the )?icu|on a ventilator|in a coma|poisoned)\b/iu)?.[1]
     ?? text.match(/\b(?:what (?:can|could|does|did)|can|could)\s+([\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*){0,4})\s+(?:claim|have|own)\b/iu)?.[1];
   if (!subject) return null;
-  const name = subject.replace(/^(?:today|yesterday)\s+/i, "").replace(/\s+(?:has|was|is|had|been|just|recently)(?:\s+(?:been|just|recently))*$/i, "");
+  // Fillers and corrections are not part of a name ("actually she was
+  // admitted", "sorry, it was her right arm", "oh and he").
+  const name = subject.replace(/^(?:(?:actually|sorry|oh|and|but|so|also|um+|uh+|well|ok(?:ay)?|btw|anyway|then)\s+)+/i, "").replace(/^(?:today|yesterday)\s+/i, "").replace(/\s+(?:has|was|is|had|been|just|recently)(?:\s+(?:been|just|recently))*$/i, "");
   if (/^(i|i am|i['’]m|we|he|she|they|someone|a person|my (?:mother|father|mum|mom|dad|sister|brother|wife|husband|son|daughter|parent|child|spouse|sibling))$/i.test(name)) return null;
+  if (/^(?:his|her|their)\s+\S+$/i.test(name) || /['’]s\s+(?:wife|husband|spouse|son|daughter|child|kid|mother|father|mum|mom|dad|parent|sister|brother)$/i.test(name)) return null;
   // The chat's own question, sent back with its answer ("On what date was it
   // diagnosed: Not sure"), names no one: a question is not a subject.
   if (/^(?:on |at |in |from |since )?(?:what|when|where|which|who|whom|how|why)\b/i.test(name) || /\b(?:it|this|that)$/i.test(name)) return null;
   return name;
 }
 
+const RELATIVE = /\b(?:(his|her|their)|([\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*){0,3})['’]s)\s+(wife|husband|spouse|partner|son|daughter|child|children|kids?|mother|father|mum|mom|mummy|mommy|dad|daddy|papa|mama|parents?|sister|brother|sibling)\b/iu;
+type RelationGroup = "spouse" | "child" | "parent" | "sibling";
+function relationGroup(word: string): RelationGroup {
+  return /wife|husband|spouse|partner/i.test(word) ? "spouse" : /son|daughter|child|kid/i.test(word) ? "child"
+    : /sister|brother|sibling/i.test(word) ? "sibling" : "parent";
+}
+/** Family relationships are stored relative to the account holder ("self");
+ * "his wife" / "Xin Yi's mum" is relative to another person. */
+function relativesOf(anchor: ClaimPerson, group: RelationGroup, family: ClaimPerson[]): ClaimPerson[] {
+  const rel = (p: ClaimPerson) => normalized(p.relationship);
+  const of = (...rels: string[]) => family.filter((p) => p.id !== anchor.id && rels.includes(rel(p)));
+  switch (rel(anchor)) {
+    case "self": return group === "spouse" ? of("spouse") : group === "child" ? of("child") : group === "parent" ? of("parent") : of("sibling");
+    case "spouse": return group === "spouse" ? of("self") : group === "child" ? of("child") : [];
+    case "child": return group === "parent" ? of("self", "spouse") : group === "sibling" ? of("child") : [];
+    case "parent": return group === "child" ? of("self", "sibling") : group === "spouse" ? of("parent") : [];
+    case "sibling": return group === "sibling" ? of("self", "sibling") : group === "parent" ? of("parent") : [];
+    default: return [];
+  }
+}
+/** "and his wife?" after a question about Wei Jie, or "Xin Yi's mum": the
+ * person is found through the named (or previous) person's relationship. */
+export function resolveRelativePerson(text: string, family: ClaimPerson[], anchorId: string): ClaimPersonResolution | null {
+  const m = text.match(RELATIVE);
+  if (!m) return null;
+  let anchor: ClaimPerson | undefined;
+  if (m[1]) anchor = family.find((p) => p.id === anchorId);
+  else {
+    const named = normalized(m[2]);
+    const words = named.split(" ");
+    for (let i = 0; i < words.length && !anchor; i++) {
+      const tail = words.slice(i).join(" ");
+      anchor = family.find((p) => includesName(normalized(p.display_name), tail) || normalized(p.preferred_name ?? "") === tail);
+    }
+  }
+  if (!anchor) return null;
+  const candidates = relativesOf(anchor, relationGroup(m[3]), family);
+  if (candidates.length === 1) return { status: "resolved", person: candidates[0], explicit: true };
+  if (candidates.length > 1) return { status: "ambiguous", candidates };
+  return { status: "unknown", name: (anchor.preferred_name || anchor.display_name) + "’s " + m[3].toLowerCase(), candidates: family };
+}
+
 /** Explicit names take precedence over the UI selection; ambiguity never loads policies. */
 export function resolveClaimPerson(text: string, family: ClaimPerson[], selectedId: string): ClaimPersonResolution {
+  const relative = resolveRelativePerson(text, family, selectedId);
+  if (relative) return relative;
   const subject = subjectName(text);
   const message = normalized(subject ?? text);
   const subjectNormalized = subject ? normalized(subject) : "";

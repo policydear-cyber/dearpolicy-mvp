@@ -109,7 +109,8 @@ export async function annotateLedgerEvidence(accountId: string, policyId: string
   return rows.length;
 }
 
-type GroupPolicy = { id: string; original_filename: string | null; current: boolean; doc_date: string | null; amends: boolean; role: string | null };
+type GroupPolicy = { id: string; original_filename: string | null; current: boolean; doc_date: string | null; amends: boolean; role: string | null;
+  policy_number: string | null; authority: number | null; created: string | null };
 /** The document plus every other document of the same plan in the household:
  * the same policy number, or the same insurer and product name. `amends` is
  * an endorsement, or a document whose own text says it amends or replaces
@@ -119,6 +120,7 @@ async function planGroup(accountId: string, policyId: string): Promise<GroupPoli
     `WITH me AS (SELECT id,policy_number,lower(insurer) AS ins,lower(product_name) AS prod FROM policies WHERE id=$2 AND account_id=$1 AND ${activePredicate()})
      SELECT p.id,p.original_filename,(p.lifecycle_state='active' AND p.superseded_at IS NULL) AS current,
             coalesce(to_jsonb(p)->>'document_date',p.effective_date::text) AS doc_date,p.document_role AS role,
+            p.policy_number,(to_jsonb(p)->>'document_authority')::int AS authority,p.created_at::text AS created,
             (p.document_role='endorsement' OR EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id
                AND pg.text ~* '(\\m(is|are|hereby|be)\\s+amended\\M|\\mamended\\s+(to|as\\s+follows)\\M|\\mreplaced\\s+(by|with)\\M|\\mendorsement\\s+no)')) AS amends
        FROM policies p,me
@@ -184,6 +186,45 @@ function where(policy: GroupPolicy | undefined, page: number | null, sameDocumen
   return sameDocument ? at + " of this document" : at + " of " + (policy?.original_filename ?? "another version of this plan");
 }
 
+/** The same policy uploaded as two different files (a re-download, a copy
+ * sent by the agent) is one set of rows, not two. Among current documents of
+ * one plan that carry the SAME policy number, the most authoritative document
+ * (then the latest dated, then the first uploaded) keeps its rows; a row of
+ * another of those documents that states exactly what a kept row states
+ * (name, tier, kind, value, currency) is marked duplicate_of_policy_id and is
+ * no longer listed or used. Nothing is deleted, and a row the other document
+ * states differently stays (and is compared as usual). Documents of the same
+ * product for different policy numbers -- two people's certificates -- are
+ * never merged. Recomputed from scratch; returns the rows marked. */
+async function markDuplicates(accountId: string, group: GroupPolicy[]) {
+  const docs = group.filter((g) => g.current && g.policy_number);
+  if (docs.length < 2) return 0;
+  const rank = [...docs].sort((a, b) => (Number(b.authority ?? 0) - Number(a.authority ?? 0))
+    || String(b.doc_date ?? "").localeCompare(String(a.doc_date ?? ""))
+    || String(a.created ?? "").localeCompare(String(b.created ?? "")) || a.id.localeCompare(b.id));
+  const rows = (await query<{ id: string; policy_id: string; benefit_name: string; tier: string | null; row_kind: string | null; formula_kind: string; formula_value: string | null; currency: string | null; reviewed: boolean }>(
+    `SELECT id,policy_id,benefit_name,tier,row_kind,formula_kind,formula_value::text,currency,reviewed_at IS NOT NULL AS reviewed FROM policy_benefits WHERE account_id=$1 AND policy_id=ANY($2::uuid[])`,
+    [accountId, docs.map((d) => d.id)])).rows;
+  const sig = (r: (typeof rows)[number]) => [r.benefit_name.toLowerCase().replace(/[^a-z0-9]/g, ""), (r.tier ?? "").toLowerCase(), r.row_kind ?? "", r.formula_kind, r.formula_value == null ? "" : Number(r.formula_value), r.currency ?? ""].join("|");
+  let marked = 0;
+  const byNumber = new Map<string, GroupPolicy[]>();
+  for (const d of rank) byNumber.set(d.policy_number!.toUpperCase(), [...(byNumber.get(d.policy_number!.toUpperCase()) ?? []), d]);
+  for (const same of byNumber.values()) {
+    if (same.length < 2) continue;
+    const kept = new Map<string, string>();
+    for (const doc of same) {
+      for (const row of rows.filter((r) => r.policy_id === doc.id)) {
+        const keeper = kept.get(sig(row));
+        if (keeper && keeper !== doc.id && !row.reviewed) {
+          await query(`UPDATE policy_benefits SET duplicate_of_policy_id=$3 WHERE account_id=$1 AND id=$2`, [accountId, row.id, keeper]);
+          marked++;
+        } else if (!keeper) kept.set(sig(row), doc.id);
+      }
+    }
+  }
+  return marked;
+}
+
 /** Contradictory amounts or currencies for the same benefit -- two pages of
  * one document, or two current versions of the same plan -- are never
  * silently collapsed: every row involved is kept and carries a
@@ -243,15 +284,23 @@ export async function markConflicts(accountId: string, policyId: string) {
     return map.values();
   };
 
-  // Benefits.
-  await query(`UPDATE policy_benefits SET conflict_note=NULL,amended_by_policy_id=NULL,amendment_note=NULL WHERE account_id=$1 AND policy_id=ANY($2::uuid[])`, [accountId, ids]);
-  const benefits = (await query<{ id: string; policy_id: string; benefit_name: string; formula_kind: string; formula_value: string | null; currency: string | null; source_page: number | null }>(
-    `SELECT id,policy_id,benefit_name,formula_kind,formula_value::text,currency,source_page FROM policy_benefits
-      WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) AND formula_kind<>'none'`, [accountId, current])).rows;
-  await resolve("policy_benefits", grouped(benefits, (b) => b.benefit_name.toLowerCase().replace(/[^a-z0-9]/g, ""), (b) => {
+  // Benefits. A multi-column table states one value per tier or person class
+  // ("Plan A" / "Plan B", "Adult" / "Child"): those are different statements,
+  // never a contradiction. Typed schedule terms (a deductible, a co-insurance
+  // percentage, a policy-year limit) are compared like any other stated value.
+  await query(`UPDATE policy_benefits SET conflict_note=NULL,amended_by_policy_id=NULL,amendment_note=NULL,duplicate_of_policy_id=NULL WHERE account_id=$1 AND policy_id=ANY($2::uuid[])`, [accountId, ids]);
+  const benefits = (await query<{ id: string; policy_id: string; benefit_name: string; formula_kind: string; formula_value: string | null; currency: string | null; source_page: number | null; tier: string | null; row_kind: string | null }>(
+    `SELECT id,policy_id,benefit_name,formula_kind,formula_value::text,currency,source_page,tier,row_kind FROM policy_benefits
+      WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) AND (formula_kind<>'none' OR (formula_value IS NOT NULL AND coalesce(row_kind,'benefit')<>'benefit'))`, [accountId, current])).rows;
+  const benefitSignature = (b: (typeof benefits)[number]) => [b.row_kind && b.row_kind !== "benefit" ? b.row_kind : b.formula_kind, b.formula_value == null ? "" : Number(b.formula_value), b.currency ?? ""].join("|");
+  const benefitKey = (b: { benefit_name: string; tier: string | null }) => b.benefit_name.toLowerCase().replace(/[^a-z0-9]/g, "") + "|" + (b.tier ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  await resolve("policy_benefits", grouped(benefits, benefitKey, (b) => {
     const value = b.formula_value == null ? null : Number(b.formula_value);
-    return { id: b.id, policyId: b.policy_id, page: b.source_page, signature: [b.formula_kind, value ?? "", b.currency ?? ""].join("|"), label: describe(b.formula_kind, value, b.currency) };
+    const kind = b.row_kind === "co_insurance" || b.row_kind === "pro_ration" ? "sum_insured" : b.formula_kind === "none" ? "fixed" : b.formula_kind;
+    const label = (b.row_kind === "co_insurance" || b.row_kind === "pro_ration") && value != null ? Math.round(value * 10000) / 100 + "%" : describe(kind, value, b.currency);
+    return { id: b.id, policyId: b.policy_id, page: b.source_page, signature: benefitSignature(b), label: (b.tier ? b.tier + ": " : "") + label };
   }), "benefit");
+  marked += await markDuplicates(accountId, group);
 
   // Coverages: the same person's cover in the same category.
   await query(`UPDATE policy_coverages SET conflict_note=NULL,amended_by_policy_id=NULL,amendment_note=NULL WHERE account_id=$1 AND policy_id=ANY($2::uuid[])`, [accountId, ids]);
@@ -270,6 +319,8 @@ export async function markConflicts(accountId: string, policyId: string) {
   const coverIndex = new Map(coverages.map((c) => [c.policy_id + "|" + c.category, c]));
   for (const b of benefits) {
     if (b.formula_kind !== "fixed" || b.formula_value == null) continue;
+    // A tier's column is one person class's amount, not the cover itself.
+    if (b.tier || (b.row_kind && b.row_kind !== "benefit")) continue;
     const cover = coverIndex.get(b.policy_id + "|" + normalizeCoverageCategory(b.benefit_name));
     if (!cover || cover.amount == null) continue;
     const same = Number(cover.amount) === Number(b.formula_value) && (cover.currency ?? "") === (b.currency ?? "");

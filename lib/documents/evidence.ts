@@ -51,7 +51,7 @@ const ensured = new Set<string>();
  * lazily elsewhere (policy_benefits, coverage_rules) get theirs the next time
  * this runs after they exist. Never throws: evidence is additive. */
 export async function ensureEvidenceSchema() {
-  const pending = ["policies", "policy_pages", ...EVIDENCE_TABLES].filter((t) => !ensured.has(t));
+  const pending = ["policies", "policy_pages", "policy_members", ...EVIDENCE_TABLES].filter((t) => !ensured.has(t));
   if (!pending.length) return;
   for (const table of pending) {
     try {
@@ -60,6 +60,8 @@ export async function ensureEvidenceSchema() {
       if (table === "policies") {
         await query("ALTER TABLE policies ADD COLUMN IF NOT EXISTS document_date date");
         await query("ALTER TABLE policies ADD COLUMN IF NOT EXISTS reading_cache jsonb");
+      } else if (table === "policy_members") {
+        await query("ALTER TABLE policy_members ADD COLUMN IF NOT EXISTS benefit_tier text");
       } else if (table === "policy_pages") {
         await query("ALTER TABLE policy_pages ADD COLUMN IF NOT EXISTS extraction_method text");
       } else {
@@ -70,6 +72,12 @@ export async function ensureEvidenceSchema() {
         await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS conflict_note text`);
         await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS amended_by_policy_id uuid`);
         await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS amendment_note text`);
+        // Round 5: the plan tier / person class a table value applies to, what
+        // kind of schedule row it is, and the more authoritative document that
+        // states the identical row (this copy is then not shown twice).
+        await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS tier text`);
+        await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS row_kind text`);
+        await query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS duplicate_of_policy_id uuid`);
       }
       ensured.add(table);
     } catch (error) {

@@ -45,6 +45,8 @@ export const TOPICS: Topic[] = [
     fact: /hospital|\bward\b|inpatient|intensive care|\bicu\b|room and board/i, kind: /hospital|shield|\bmedishield\b|health plan/i },
   { key: "premium", label: "premium", asks: /\bpremiums?\b|how much do (?:i|we) pay for/i, fact: /premium/i },
   { key: "maturity", label: "maturity or surrender value", asks: /\b(?:matur\w*|endowment|surrender\w*|cash values?)\b/i, fact: /matur|surrender|cash value|endowment/i, kind: /endow|savings|matur/i, passage: /matur|surrender|cash value/i },
+  { key: "cost_sharing", label: "deductible, co-insurance and co-payment", asks: /\bdeductibles?\b|\bco-?insurance\b|\bco-?pay(?:ment)?s?\b|\briders?\b|\bpro-?ration\b|\b(?:policy[- ]year|annual) limit\b|\bas charged\b|\bhow much (?:do|would|will) (?:i|we|she|he|they) (?:have to )?pay\b/i,
+    fact: /deductible|co-?insurance|co-?pay|pro-?ration|policy[- ]year limit|annual limit|rider/i },
   { key: "travel", label: "travel cover", asks: /\b(?:travel\w*|trip|flight|baggage|luggage|overseas|abroad)\b/i, fact: /travel|trip|flight|baggage|luggage|overseas/i, kind: /travel|trip|voyage|wander/i },
 ];
 const GENERAL = /\bwhat (?:does|do|is) (?:my|our|his|her|their|\w+'s) (?:polic(?:y|ies)|plans?|insurance|cover(?:age)?) (?:cover|include)|\bwhat am i covered for\b|\bwhat (?:cover|coverage|policies|insurance) do (?:i|we|they) have\b|\bsums? (?:insured|assured)\b|\bhow much (?:am i|are we|is \w+) (?:covered|insured) for\b/i;
@@ -174,7 +176,9 @@ export type PolicyAnswerResult = {
   topics: string[]; notFound: string[];
   modelCalls: number; narrated: boolean; elapsedMs: number;
 };
-type Candidate = Assertion & { id: string; source: "coverage" | "benefit" | "premium" | "row" | "condition" | "expiry"; topic: string; title: string; ownerName: string };
+type Candidate = Assertion & { id: string; source: "coverage" | "benefit" | "premium" | "row" | "condition" | "expiry"; topic: string; title: string; ownerName: string;
+  /** The table column (plan tier / ward class / person class) a value was printed under. */
+  tier?: string | null; rowKind?: string | null; tierLabel?: string | null };
 /** A stored fact before its passage is located on the page. */
 type RawCandidate = Omit<Candidate, "passage"> & { quote: string | null; start: number | null; end: number | null; storedConditions?: string[] };
 
@@ -184,30 +188,50 @@ type RawCandidate = Omit<Candidate, "passage"> & { quote: string | null; start: 
 type PageRow = { page: number; index: number; label: string; value: string; line: string };
 type ConditionLine = { page: number; index: number; line: string };
 const FURNITURE = /SYNTHETIC(?:-[A-Z0-9-]+)? TEST DOCUMENT|^Page \d+ of \d+$|DPTEST|^[A-Za-z0-9+/=]{40,}$/i;
-const META_LABEL = /^(?:policy ?(?:number|no\.?|type)|insured(?: person)?|life assured|policyholder|group policyholder|issued by|effective date(?: of endorsement)?|expiry date|end date|start date|currency)$/i;
+const META_LABEL = /^(?:policy ?(?:number|no\.?|type)|insured(?: person)?|life assured|policyholder|group policyholder|issued by|effective date(?: of endorsement)?|expiry date|end date|start date|currency|plan(?: name)?|period of insurance|(?:policy |renewal |cover(?:age)? )?period|date of (?:issue|birth)|issue date|payment (?:due date|mode|date)|policy term|premium term|grace period)$/i;
+const MONTH_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/i;
+/** A premium the household pays, printed in a schedule or notice. Never a
+ * benefit, a limit or a conflicting figure for a benefit. */
+export const PREMIUM_ROW = /\bpremium\b|\bmedisave\b|\bcash payable\b|\bamount (?:due|payable)\b|^\s*less\s*:/i;
 /** Rows ("Label<TAB>value") and, on a conditions page, its sentences, exactly
  * as stored. Nothing is inferred; a row is only what the page prints. */
 export function readPage(page: number, text: string) {
-  const rows: PageRow[] = [], conditions: ConditionLine[] = [], meta: PageRow[] = [];
+  const rows: PageRow[] = [], conditions: ConditionLine[] = [], meta: PageRow[] = [], premiums: PageRow[] = [];
   const lines = text.split(/\r?\n/).map((l) => l.trim());
   const heading = lines.find((l) => l && !FURNITURE.test(l)) ?? "";
   const conditionsPage = /\b(?:conditions|exclusions|general provisions)\b/i.test(heading);
+  // A page with a multi-column table (a line of three or more cells) is read
+  // from the typed rows ingestion stores per column. Its two-cell lines are
+  // the wrapped remainders of those cells ("ward)<TAB>(B1 ward)",
+  // "days<TAB>days"), never label-value rows.
+  const tablePage = lines.some((l) => (l.match(/\t/g) ?? []).length >= 2);
   lines.forEach((line, index) => {
     if (!line || FURNITURE.test(line) || line === heading) return;
     const row = line.match(/^([^\t]{2,80})\t([^\t]{1,200})$/);
-    if (row) { const r = { page, index, label: row[1].trim(), value: row[2].trim(), line }; (META_LABEL.test(r.label) ? meta : rows).push(r); return; }
+    if (row) {
+      const r = { page, index, label: row[1].trim(), value: row[2].trim(), line };
+      // A continuation of a wrapped cell starts mid-sentence.
+      if (/^[a-z(]/.test(r.label) || !/[A-Za-z]{3}/.test(r.label)) return;
+      if (META_LABEL.test(r.label) || (MONTH_DATE.test(r.value) && !MONEY_IN_TEXT.test(r.value))) { meta.push(r); return; }
+      if (PREMIUM_ROW.test(r.label)) { premiums.push(r); return; }
+      if (!tablePage) rows.push(r);
+      return;
+    }
     if (conditionsPage || /^(?:waiting period|survival period|exclusions?|alternative benefits?)\s*:/i.test(line)) conditions.push({ page, index, line });
   });
-  return { rows, conditions, meta };
+  return { rows, conditions, meta, premiums };
 }
 const MONEY_IN_TEXT = /(S\$|SG\$|US\$|HK\$|A\$|SGD|USD|HKD|AUD|MYR|RM|EUR|GBP|JPY|€|£|¥)\s?(\d[\d,]*(?:\.\d+)?)/i;
 /** The first amount a printed value states, with its printed currency; or
  * the bare number when the value prints no currency at all. */
-function printedAmount(value: string): { amount: number | null; currency: string | null; bare: boolean } {
+export function printedAmount(value: string): { amount: number | null; currency: string | null; bare: boolean } {
   const m = value.match(MONEY_IN_TEXT);
   if (m) { const currency = statedCurrencyCode(m[1]); return { amount: currency ? Number(m[2].replace(/,/g, "")) : null, currency, bare: !currency }; }
-  const bare = value.match(/(?:^|[^\d%])(\d[\d,]*(?:\.\d+)?)(?!\s*%)(?!\s*(?:days?|months?|years?|hours?)\b)/);
-  return { amount: null, currency: null, bare: !!bare };
+  // "150 per day" prints an amount without a currency; a date, a count of
+  // days, a percentage or a multiple ("5 x MediShield Life limit") does not.
+  if (MONTH_DATE.test(value)) return { amount: null, currency: null, bare: false };
+  const bare = /^\s*(?:up to\s+)?\d[\d,]*(?:\.\d+)?(?!\s*(?:%|x\b|times\b|days?\b|months?\b|years?\b|hours?\b|nights?\b|weeks?\b))(?:\s|$)/i.test(value);
+  return { amount: null, currency: null, bare };
 }
 /** Pages of the documents in play, cached per household + checksum + version. */
 async function documentPages(accountId: string, docs: Map<string, DocRow>) {
@@ -222,13 +246,55 @@ async function documentPages(accountId: string, docs: Map<string, DocRow>) {
 const CONDITION_QUESTION = /\bwaiting period|\bsurvival period|\bexclu\w*|\bpre-existing|\bboth\b[^?]*\b(?:paid|payable|pay)\b|\balternative benefits?|\bonly the higher\b/i;
 const SUBJECTS = /\b(dental|maternity|pregnan\w*|cosmetic|mental|psychiatric|hiv|war|terroris\w*|suicide|self-inflicted|professional sports?|pre-existing)\b/i;
 const PLAN_KINDS: { re: RegExp; kind: string }[] = [
-  { re: /\bhospital (?:plan|policy|insurance|cover)\b/i, kind: "hospital" },
+  { re: /\bhospital (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
   { re: /\btravel (?:plan|policy|insurance|cover)\b/i, kind: "travel" },
   { re: /\b(?:personal )?accident (?:plan|policy|insurance)\b/i, kind: "accident" },
   { re: /\b(?:group |term )?life (?:plan|policy|insurance|cover)\b|\bterm (?:plan|policy)\b/i, kind: "death" },
   { re: /\bendowment\b/i, kind: "maturity" },
   { re: /\bcritical illness (?:plan|policy|cover)\b/i, kind: "critical_illness" },
 ];
+/** Schedule terms (round 5 typed rows): cost-sharing and limits printed in a
+ * benefit table. Stated as the document prints them; never calculated. */
+const COST_SHARING_KINDS = new Set(["deductible", "co_insurance", "co_payment", "co_payment_cap", "pro_ration", "policy_year_limit", "family_limit"]);
+function scheduleTermText(kind: string, value: number | null, currency: string | null): { text: string; amount: number | null } | null {
+  const amount = value != null && value > 0 && currency ? value : null;
+  const percent = value != null && value > 0 && value <= 1 ? Math.round(value * 10000) / 100 + "%" : null;
+  switch (kind) {
+    case "as_charged": return { text: "as charged", amount: null };
+    case "not_covered": return { text: "not payable under this column of the schedule", amount: null };
+    case "unlimited": return { text: "no limit printed", amount: null };
+    case "deductible": return amount != null ? { text: "deductible of " + money(amount, currency!) + " (paid by you first)", amount } : null;
+    case "co_insurance": return percent ? { text: "you pay " + percent + " (co-insurance)", amount: null } : null;
+    case "co_payment": return amount != null ? { text: "co-payment of " + money(amount, currency!), amount } : percent ? { text: "co-payment of " + percent, amount: null } : null;
+    case "co_payment_cap": return amount != null ? { text: "your co-payment is capped at " + money(amount, currency!) + " a policy year", amount } : null;
+    case "pro_ration": return percent ? { text: "pro-ration factor of " + percent + ", applied when you stay in a higher ward than your plan covers", amount: null } : null;
+    case "policy_year_limit": case "family_limit": return amount != null ? { text: "limit of " + money(amount, currency!) + (kind === "family_limit" ? " for the family" : " a policy year"), amount } : null;
+    default: return null;
+  }
+}
+/** Same rule as ingestion's tierApplies: a column heading may carry more
+ * words than the stored class ("Plan A (Grade M2 and above)"). */
+export function tierApplies(rowTier: string | null | undefined, memberTier: string | null | undefined) {
+  if (!rowTier || !memberTier) return true;
+  const row = rowTier.toLowerCase().replace(/\s+/g, " ").trim(), member = memberTier.toLowerCase().replace(/\s+/g, " ").trim();
+  return row === member || (row.startsWith(member) && !/[a-z0-9]/.test(row.charAt(member.length)));
+}
+async function tableTerms(accountId: string, ids: string[]) {
+  const out = new Map<string, { tier: string | null; rowKind: string | null }>();
+  if (!ids.length) return out;
+  const r = await query<{ id: string; tier: string | null; row_kind: string | null }>(
+    `SELECT id::text AS id,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind FROM policy_benefits b WHERE account_id=$1 AND id::text=ANY($2::text[])`, [accountId, ids]).catch(() => ({ rows: [] as { id: string; tier: string | null; row_kind: string | null }[] }));
+  for (const row of r.rows) out.set(row.id, { tier: row.tier || null, rowKind: row.row_kind || null });
+  return out;
+}
+async function memberTiers(accountId: string, docIds: string[]) {
+  const out = new Map<string, string>();
+  if (!docIds.length) return out;
+  const r = await query<{ policy_id: string; family_member_id: string; tier: string | null }>(
+    `SELECT policy_id::text AS policy_id,family_member_id::text AS family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier FROM policy_members pm WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, docIds]).catch(() => ({ rows: [] as { policy_id: string; family_member_id: string; tier: string | null }[] }));
+  for (const row of r.rows) if (row.tier) out.set(row.policy_id + "|" + row.family_member_id, row.tier);
+  return out;
+}
 /** "Death" and "Death benefit" and "Death (any cause)" are the same thing. */
 function sameThingKey(title: string) {
   return title.toLowerCase().replace(/\(.*?\)/g, " ").replace(/\b(?:benefits?|sum (?:insured|assured)|cover(?:age)?)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
@@ -322,8 +388,19 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     let catalog: CatalogBenefit[] = [];
     try { catalog = await loadBenefitCatalog(args.accountId, docIds); } catch { catalog = []; }
     const benefitEvidence = await evidenceFor("policy_benefits", args.accountId, catalog.map((b) => b.id));
+    // Round 5 (written by ingestion when present): the table column a value
+    // was printed under and what kind of schedule term the row is.
+    const typed = await tableTerms(args.accountId, catalog.map((b) => b.id));
+    const memberTier = await memberTiers(args.accountId, docIds);
+    // A multi-column table's columns are person classes / plan tiers only when
+    // one of them is the person's own; then only that column is theirs.
+    const tierOf = (b: CatalogBenefit) => typed.get(b.id)?.tier ?? null;
+    const tableHasTier = (docId: string, page: number | null, tier: string) => catalog.some((x) => x.policyId === docId && x.sourcePage === page && tierApplies(tierOf(x), tier) && !!tierOf(x));
     for (const b of catalog) {
-      const topic = topicOf(b.benefitName, b.quote, b.policyId);
+      const rowKind = typed.get(b.id)?.rowKind ?? null, tier = tierOf(b);
+      // A premium is never a benefit, a limit or a conflict.
+      if (PREMIUM_ROW.test(b.benefitName)) continue;
+      const topic = rowKind && COST_SHARING_KINDS.has(rowKind) && topics.some((t) => t.key === "cost_sharing") ? "cost_sharing" : topicOf(b.benefitName, b.quote, b.policyId);
       if (!topic) continue;
       const e = benefitEvidence.get(b.id);
       // Printed on the page as a row: the row is shown; a conflict the
@@ -333,16 +410,28 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
         continue;
       }
       for (const ownerId of speaksFor.get(b.policyId) ?? []) {
+        const own = memberTier.get(b.policyId + "|" + ownerId) ?? null;
+        // The person's own column only (Private hospital for a private-ward
+        // plan, Child for a child); a person whose class is not known sees
+        // every column, each labelled.
+        if (tier && own && tableHasTier(b.policyId, b.sourcePage, own) && !tierApplies(tier, own)) continue;
         const currency = statedCurrencyCode(b.currency);
         const value = b.formulaValue;
         let text = b.benefitName, amount: number | null = null;
-        if (!b.needsConfirmation && value != null && value > 0) {
+        // The column heading is shown beside the line (not inside the
+        // verified sentence: "B1 ward" is not printed in the row itself).
+        const tierLabel = tier && !(own && tierApplies(tier, own)) ? tier : null;
+        if (rowKind && rowKind !== "benefit") {
+          const term = scheduleTermText(rowKind, value, currency);
+          if (!term) continue;
+          text += ": " + term.text; amount = term.amount;
+        } else if (!b.needsConfirmation && value != null && value > 0) {
           if (b.formulaKind === "sum_insured") text += ": " + Math.round(value * 1000) / 10 + "% of the sum insured";
           else if (currency && (b.formulaKind === "fixed" || b.formulaKind === "expense_cap" || b.formulaKind === "daily")) {
             amount = value; text += ": " + (b.formulaKind === "expense_cap" ? "up to " : "") + money(value, currency) + (b.formulaKind === "daily" ? " per day" : "");
           }
         }
-        candidates.push({ id: "benefit:" + b.id, source: "benefit", topic, title: b.benefitName, ownerName: personName(ownerId),
+        candidates.push({ id: "benefit:" + b.id, source: "benefit", topic, title: b.benefitName, ownerName: personName(ownerId), tier, rowKind, tierLabel,
           kind: "policy_fact", subjectId: ownerId, policyId: b.policyId, documentHash: docs.get(b.policyId)?.file_hash ?? null, page: b.sourcePage,
           text, amount, currency: amount != null ? currency : null, conditions: [],
           conflictNote: e?.conflict_note ?? null, passageVerified: e?.passage_verified ?? null,
@@ -350,6 +439,14 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       }
     }
     if (topics.some((t) => t.key === "premium")) {
+      // Premiums as printed: "Annual premium (ShieldCare Plus Rider): S$689.00
+      // payable in cash" -- each line its own fact, never merged or compared.
+      for (const [docId, pages] of read) for (const page of pages) for (const row of page.premiums) {
+        const printed = printedAmount(row.value);
+        for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "premiumrow:" + docId + ":" + row.page + ":" + row.index, source: "premium", topic: "premium", title: row.label, ownerName: personName(ownerId),
+          kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: row.page,
+          text: row.label + ": " + row.value, amount: printed.amount, currency: printed.amount != null ? printed.currency : null, quote: row.line, start: null, end: null });
+      }
       const premiums = await query<{ id: string; policy_id: string | null; source_document_id: string | null; family_member_id: string | null; amount: string; currency: string | null; frequency: string | null; source_page: number | null }>(
         `SELECT id::text AS id,policy_id::text AS policy_id,source_document_id::text AS source_document_id,family_member_id::text AS family_member_id,amount::text,currency,frequency,source_page
            FROM premium_records WHERE account_id=$1 AND coalesce(source_document_id,policy_id)::text=ANY($2::text[])`, [args.accountId, docIds]);
@@ -387,6 +484,12 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   // Only the documents the question is about.
   const scoped = candidates.filter((c) => inScope(c.policyId));
   if (scoped.length || namedDocs.length || kindDocs.length) candidates.splice(0, candidates.length, ...scoped);
+  // "What is the deductible / co-insurance / rider co-payment cap?" is about
+  // those rows, not every benefit of the plan.
+  if (topics.some((t) => t.key === "cost_sharing")) {
+    const terms = candidates.filter((c) => c.topic === "cost_sharing");
+    if (terms.length) candidates.splice(0, candidates.length, ...terms);
+  }
   const narrow = NARROW.filter((n) => n.asks.test(args.question));
   if (narrow.length && !candidates.some((c) => c.source === "condition")) {
     const named = candidates.filter((c) => narrow.some((n) => n.fact.test(c.title)));
@@ -434,8 +537,13 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   // conflict too, whether or not ingestion flagged it.
   const policyKey = (policyId: string) => (docs.get(policyId)?.policy_number ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "") || policyId;
   const groups = new Map<string, Candidate[]>();
-  for (const a of [...kept, ...conflictSides]) if (a.amount != null && a.source !== "premium" && a.source !== "condition")
-    (groups.get(a.subjectId + "|" + policyKey(a.policyId) + "|" + sameThingKey(a.title)) ?? groups.set(a.subjectId + "|" + policyKey(a.policyId) + "|" + sameThingKey(a.title), []).get(a.subjectId + "|" + policyKey(a.policyId) + "|" + sameThingKey(a.title))!).push(a);
+  // Only benefits and covers are compared: never premiums, conditions, dates
+  // or schedule terms, and never two columns (tiers) of one table.
+  for (const a of [...kept, ...conflictSides]) {
+    if (a.amount == null || a.source === "premium" || a.source === "condition" || a.source === "expiry" || PREMIUM_ROW.test(a.title) || (a.rowKind && a.rowKind !== "benefit")) continue;
+    const key = a.subjectId + "|" + policyKey(a.policyId) + "|" + sameThingKey(a.title) + "|" + (a.tier ?? "").toLowerCase();
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(a);
+  }
   const conflicting: Candidate[][] = [...groups.values()].filter((g) => new Set(g.map((a) => a.amount + "|" + a.currency)).size > 1);
   const inConflict = new Set(conflicting.flat().map((a) => a.id + "|" + a.subjectId));
   kept = kept.filter((a) => !inConflict.has(a.id + "|" + a.subjectId));
@@ -471,7 +579,7 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   const line = (a: Candidate) => {
     const dated = dateOf(a.policyId), who = args.people.length > 1 ? a.ownerName + " · " : "";
     const status = a.source === "expiry" ? "; this policy has expired" : expired(a.policyId) ? "; expired" : outdated(a.policyId) ? "; not confirmed current" : "";
-    return who + docName(a.policyId) + " — " + a.text + " (page " + a.page + (dated && a.source !== "expiry" ? ", document dated " + dated : "") + status + ").";
+    return who + docName(a.policyId) + " — " + (a.tierLabel ? "[" + a.tierLabel + "] " : "") + a.text + " (page " + a.page + (dated && a.source !== "expiry" ? ", document dated " + dated : "") + status + ").";
   };
   for (const a of kept) {
     details.push(line(a));

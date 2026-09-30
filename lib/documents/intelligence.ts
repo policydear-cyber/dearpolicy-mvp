@@ -50,10 +50,27 @@ function fullText(pages: PdfPage[], maxPages = 8) {
   return pages.slice(0, maxPages).map((p) => p.text).join("\n");
 }
 
+/** A personal document by its own title: a renewal certificate or a policy
+ * contract / information page that names a policy number and the person it
+ * covers. Such a document is never reference material, whatever else it
+ * quotes (an extract of the provisions, "LIA 2019 definitions"). Returns the
+ * role, or null. */
+export function personalDocumentTitle(text: string): "certificate" | "personal_schedule" | null {
+  const t = text.toLowerCase();
+  const personal = /\bpolicy\s+(?:number|no\.?)\b/.test(t)
+    && /\b(?:life\s+assured|insured\s+person|name\s+of\s+(?:the\s+)?insured|policyholder|policy\s+owner|particulars\s+of\s+insured|sum\s+assured|sum\s+insured)\b/.test(t);
+  if (!personal) return null;
+  if (/\bcertificate\s+of\s+renewal\b|\brenewal\s+certificate\b/.test(t)) return "certificate";
+  if (/\bpolicy\s+contract\b|\bpolicy\s+information\s+page\b/.test(t)) return "personal_schedule";
+  return null;
+}
+
 export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExtraction["documentRole"]) {
   const text = fullText(pages).toLowerCase();
   if (/product summaries|product summary/.test(text) && /refer to your certificate of insurance/.test(text)) return "product_summary" as const;
   if (/certificate of (group )?insurance/.test(text) && /(sum assured|effective date|particulars of insured|insured person)/.test(text)) return "certificate" as const;
+  const titled = personalDocumentTitle(fullText(pages, 2));
+  if (titled) return titled;
   if (/certificate of insurance part 2|part 2:\s*highlights of cover/.test(text)) return "benefit_guide" as const;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
   if (/endorsement|policy amendment|amendment to policy/.test(text) && /(policy number|effective date|insured)/.test(text)) return "endorsement" as const;
@@ -89,10 +106,32 @@ function deriveReferenceCoverages(pages: PdfPage[]) {
   return found;
 }
 
+/** The enrolment statements of a group booklet or benefits guide: the
+ * sentences that say who is enrolled, lower-cased with whitespace collapsed.
+ * Empty for plain reference wording. */
+export function enrolledNames(text: string): string[] {
+  const flat = text.replace(/\s+/g, " ");
+  const out: string[] = [];
+  const pattern = /\b(?:eligible\s+employee|insured\s+employee|employee\s+name|member\s+name|dependants?\s+enrolled|enrolled\s+dependants?|covered\s+(?:members?|dependants?)|insured\s+(?:members?|dependants?))\s*[:\-][^.]{3,240}/gi;
+  for (const match of flat.matchAll(pattern)) out.push(match[0].toLowerCase());
+  return out;
+}
+
 export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]): PolicyExtraction {
-  const role = deterministicDocumentRole(pages, raw.documentRole);
   const notes = [...raw.documentNotes];
   const joined = pages.slice(0, 8).map((p) => p.text).join("\n");
+  let role = deterministicDocumentRole(pages, raw.documentRole);
+  // Keyword rules never downgrade a reading that confirmed personal coverage
+  // and named the insured people, when those names are printed in the
+  // document itself: a renewal certificate that quotes "definitions" is still
+  // the person's certificate.
+  const flat = joined.replace(/\s+/g, " ").toLowerCase();
+  const namedAndPrinted = raw.insuredPeople.filter((p) => looksLikeActualPersonName(p.name) && flat.includes(p.name.trim().replace(/\s+/g, " ").toLowerCase()));
+  if (role && REFERENCE_ROLES.has(role) && raw.documentRole && PERSONAL_AUTHORITY_ROLES.has(raw.documentRole)
+      && raw.personalCoverageConfirmed && namedAndPrinted.length > 0) {
+    notes.push("Kept the reading of this document as a " + raw.documentRole.replace(/_/g, " ") + ": it names the insured people and confirms their cover, so a keyword match for " + role.replace(/_/g, " ") + " did not override it.");
+    role = raw.documentRole;
+  }
   const groupPolicyNumber = raw.groupPolicyNumber ?? joined.match(/group\s+policy\s+(?:no\.?|number)\s*[:#-]?\s*([A-Z0-9-]{4,})/i)?.[1] ?? null;
   let people = raw.insuredPeople
     .filter((p) => looksLikeActualPersonName(p.name))
@@ -107,8 +146,16 @@ export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]
   const containsReferenceSections = /certificate of insurance\s*part\s*2|part\s*2\s*[:\-]?\s*(?:highlights|benefit)|highlights of cover|product summar(?:y|ies)/i.test(joined);
 
   // Reference documents explain products; they do not create family members or ownership links.
+  // Round 5 exception: a group benefits booklet that prints who is ENROLLED
+  // ("Eligible employee: Lim Wei Jie ... Dependants enrolled: spouse Tan Mei
+  // Ling; child Lim Xin Yi") links those people by name matching, exactly as
+  // a certificate does -- only names printed verbatim in such an enrolment
+  // statement, and without confirming any personal cover amount.
   if (roleIsReference) {
-    people = [];
+    const enrolled = enrolledNames(joined);
+    const kept = people.filter((p) => enrolled.some((line) => line.includes(p.name.toLowerCase())));
+    if (kept.length) notes.push("Linked the people this booklet names as enrolled: " + kept.map((p) => p.name).join(", ") + ".");
+    people = kept.map((p) => ({ ...p, coverages: [] }));
   }
 
   let personalCoverageConfirmed = Boolean(raw.personalCoverageConfirmed && explicitPersonalEvidence && !roleIsReference);

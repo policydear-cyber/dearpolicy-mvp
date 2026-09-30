@@ -16,8 +16,8 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
   const {id}=await params;if(!isUuid(id))return NextResponse.json({error:"Claim session not found"},{status:404});
   await ensureClaimRecordSchema();
   const result=await createUserSupabaseClient(ctx.userId, (client) =>
-    client.query<{id:string;family_member_id:string;status:string;event_type:string|null;event_summary:string|null;facts:Partial<ClaimFacts>;pending_question:ClaimQuestion|null;decision_packet:ClaimDecisionPacket|null;claim_category:string|null;updated_at:string}>(
-      `SELECT id,family_member_id,status,event_type,event_summary,facts,pending_question,decision_packet,claim_category,updated_at::text FROM claim_sessions WHERE id=$1 AND account_id=$2`,
+    client.query<{id:string;family_member_id:string;status:string;event_type:string|null;event_summary:string|null;facts:Partial<ClaimFacts>;pending_question:ClaimQuestion|null;decision_packet:ClaimDecisionPacket|null;claim_category:string|null;conversation_id:string|null;updated_at:string}>(
+      `SELECT id,family_member_id,status,event_type,event_summary,facts,pending_question,decision_packet,claim_category,conversation_id,updated_at::text FROM claim_sessions WHERE id=$1 AND account_id=$2`,
       [id,ctx.householdId],
     ),
   );

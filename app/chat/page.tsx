@@ -6,16 +6,29 @@ import type { ChatAnswer,ClaimItem } from "@/types";
 import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESSMENT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { formatMoney } from "@/lib/format/currency";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
+import { sgDate } from "@/components/format-date";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
  * uncertainty, and one next question or action. Internal working -- what the
  * system classified the event as, per-contract page/passage counts, ruled-out
  * benefits, reviewer routing, raw errors -- is not shown to households. */
 const ANSWER_FAILED="DearPolicy could not finish this answer. Your message is saved.";
+/** The server refuses a question longer than this (app/api/chat/route.ts). */
+const MAX_QUESTION_LENGTH=2000;
+/** The chat was changed elsewhere (another tab or window) since this page
+ * loaded it: the server refuses to append to a stale copy. */
+const CONFLICT_TEXT="This chat was updated in another tab or window, so this message was not sent. Reload the chat to see the latest messages, then send it again.";
+function isConflict(status:number|null,text:string){return status===409||/chat changed|reopen it|changed while|changed underneath/i.test(text);}
+/** Keeps the open conversation in the address bar, so a reload (or a
+ * closed tab reopened from history) returns to it -- and to its pending
+ * answer -- instead of starting a new chat. */
+function rememberConversation(id:string|null){
+  try{const url=new URL(window.location.href);url.searchParams.delete("claim");if(id)url.searchParams.set("conversation",id);else url.searchParams.delete("conversation");window.history.replaceState(window.history.state,"",url.toString());}catch{/* never block the chat */}
+}
 
 type Member={id:string;display_name:string;relationship:string;policy_count:number};
 const CHAT_MAX_WAIT_MS=6*60_000;
-type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string};
+type Message={id?:string;role:"user"|"assistant";content:string;answer?:ChatAnswer;error?:string;conflict?:boolean};
 type SavedChat={id:string;family_member_id:string|null;title:string;updated_at:string;revision:string};
 const factFindingStatusCopy:Record<NonNullable<ChatAnswer["factFinding"]>[number]["status"],string>={
   information_needed:"Information needed",evidence_needed:"Evidence needed",reviewer_assessment_needed:"A DearPolicy reviewer will check this",
@@ -33,6 +46,22 @@ function InlineAnswer({kind,disabled,onSubmit}:{kind:"text"|"date";disabled:bool
     <input type={kind==="date"?"date":"text"} value={value} disabled={disabled} onChange={event=>setValue(event.target.value)} placeholder={kind==="date"?undefined:"Type your answer"} aria-label="Your answer" />
     <button type="submit" disabled={disabled||!value.trim()}>Answer</button>
   </form>;
+}
+
+class ConflictError extends Error{}
+
+/** Starter questions that fit THIS household: its own people, never
+ * another family's names or products. */
+function examplePrompts(family:Member[]):string[]{
+  const self=family.find(m=>m.relationship==="self")??family[0];
+  const other=family.find(m=>m!==self);
+  if(!self)return ["What policies does my family have?","What does my hospital plan cover?","When do my policies renew?","A family member was admitted to hospital. What can we claim?"];
+  return [
+    "What policies does my family have?",
+    `What is ${self.display_name} covered for?`,
+    other?`${other.display_name} broke an arm. What can we claim?`:`${self.display_name} was admitted to hospital. What can be claimed?`,
+    "When do our policies renew?",
+  ];
 }
 
 function ChatContent(){
@@ -81,7 +110,7 @@ function ChatContent(){
     setBusy(false);
   }
   function reset(){
-    stopLocal();setMessages([]);setConversationId(null);setRevision(0);setMessageCursor(null);setQuestion("");setError("");setMemberId("");
+    stopLocal();setMessages([]);setConversationId(null);setRevision(0);setMessageCursor(null);setQuestion("");setError("");setMemberId("");rememberConversation(null);
   }
   function accept(answer:ChatAnswer,version:number){
     if(version!==requestVersion.current)return;
@@ -101,7 +130,10 @@ function ChatContent(){
       const data=await response.json();
       if(!response.ok)throw new Error(data.error??"Could not read analysis progress");
       if(data.job.status==="complete"){jobId.current=null;return data.result.answer;}
-      if(["failed","cancelled"].includes(data.job.status))throw new Error(data.job.error??"Analysis stopped");
+      // A job this page did not cancel ends "cancelled" only when the chat
+      // changed under it (lib/chat/jobs.ts: ChatConflict -> cancelled).
+      if(data.job.status==="cancelled")throw new ConflictError();
+      if(data.job.status==="failed")throw new Error(data.job.error??"Analysis stopped");
       if(version===requestVersion.current){
         const p=data.job.progress;
         setProgress(customerMessage(p?.stage,"Checking your policies…"));
@@ -123,7 +155,7 @@ function ChatContent(){
       const data=await response.json();
       if(!response.ok)throw new Error(data.error??"Could not open saved chat");
       if(version!==requestVersion.current)return;
-      setConversationId(id);setRevision(data.conversation.revision);
+      setConversationId(id);setRevision(data.conversation.revision);rememberConversation(id);
       setMemberId(data.conversation.family_member_id??"");
       setMessageCursor(data.nextCursor??null);
       setMessages(data.messages.map((m:{id:string;role:Message["role"];content:string;answer_json?:ChatAnswer})=>({id:m.id,role:m.role,content:m.content,answer:m.answer_json??undefined})));
@@ -167,9 +199,10 @@ function ChatContent(){
         body:JSON.stringify({familyMemberId:memberId||null,scope:memberId?"member":"family",
           question:text,conversationId,conversationRevision:conversationId?revision:undefined,asynchronous:true,
           timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,personChoiceId})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error??"Chat failed");
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok){if(isConflict(response.status,typeof data.error==="string"?data.error:""))throw new ConflictError();throw new Error(data.error??"Chat failed");}
       if(version!==requestVersion.current)return;
-      setConversationId(data.conversationId);setRevision(data.conversationRevision);
+      setConversationId(data.conversationId);setRevision(data.conversationRevision);rememberConversation(data.conversationId??null);
       const resolved=data.familyMemberId??"";setMemberId(resolved);
       const answer=await waitForJob(data.jobId,abort.signal,version);accept(answer,version);
       if(version===requestVersion.current)await refreshHistory();
@@ -179,8 +212,11 @@ function ChatContent(){
       // never got a reply: the person can see exactly which of their
       // messages didn't go through, and why, right where they sent it.
       if(version===requestVersion.current&&!(e instanceof DOMException&&e.name==="AbortError")){
-        const message=customerError(e,ANSWER_FAILED);
-        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message}:m));
+        const conflict=e instanceof ConflictError||isConflict(null,String((e as {message?:unknown}|null)?.message??""));
+        const message=conflict?CONFLICT_TEXT:customerError(e,ANSWER_FAILED);
+        setMessages(previous=>previous.map(m=>m===userMessage?{...m,error:message,conflict}:m));
+        // The unsent text goes back into the box, ready to send again.
+        if(conflict)setQuestion(current=>current||text);
       }
     }
     finally{if(version===requestVersion.current){jobId.current=null;setBusy(false);controller.current=null;}}
@@ -237,7 +273,7 @@ function ChatContent(){
     <details className="chat-history"><summary>Previous chats · {history.length}{historyCursor?"+":""}</summary>
       <div className="history-actions"><button className="mini-button danger" disabled={!history.length} onClick={clearHistory}>{confirmClearHistory?"Confirm clear all":"Clear all chat history"}</button>{confirmClearHistory&&<button className="mini-button" onClick={()=>setConfirmClearHistory(false)}>Cancel</button>}</div>
       {!history.length?<p>No previous chats yet.</p>:<ul>{history.map(chat=><li key={chat.id}>
-        <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {new Date(chat.updated_at).toLocaleDateString()}</small></button>
+        <button className="history-open" disabled={busy} onClick={()=>void restore(chat.id)} aria-current={conversationId===chat.id?"true":undefined}>{chat.title}<small>{family.find(p=>p.id===chat.family_member_id)?.display_name??"Whole family"} · {sgDate(chat.updated_at)}</small></button>
         <button className="mini-button danger" onClick={()=>void removeChat(chat.id)} aria-label={"Delete chat: "+chat.title}>{confirmDeleteChatId===chat.id?"Confirm delete":"Delete"}</button>
         {confirmDeleteChatId===chat.id&&<button className="mini-button" onClick={()=>setConfirmDeleteChatId(null)}>Cancel</button>}
       </li>)}</ul>}
@@ -247,7 +283,7 @@ function ChatContent(){
     <div className="chat-window" aria-live="polite">
       {!messages.length&&!busy?<div className="chat-empty"><img className="big-mark" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
         <p>Just say who and what happened. DearPolicy resolves the person, follows the conversation, and checks that person’s uploaded policies.</p>
-        <div className="prompt-grid">{["What policies does my family have?","What happens when my endowment plan matures?","My wife’s flight was delayed. Could any policy help?","Charmaine caught dengue. What can she claim?"].map(text=><button key={text} onClick={()=>setQuestion(text)}>{text}</button>)}</div>
+        <div className="prompt-grid">{examplePrompts(family).map(text=><button key={text} onClick={()=>setQuestion(text)}>{text}</button>)}</div>
       </div>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
       {messages.map((message,index)=><div className={"message "+message.role} key={message.id??index}>
@@ -332,7 +368,9 @@ function ChatContent(){
           )}
           {message.answer?.disclaimer?<div className="answer-disclaimer">{message.answer.disclaimer}</div>:null}
         </div>
-        {message.error?<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error} Send it again when you&rsquo;re ready.</span></div>:null}
+        {message.error?(message.conflict
+          ?<div className="alert error message-inline-error" role="alert" data-testid="chat-conflict"><strong>Not sent.</strong><span> {message.error}</span>{conversationId?<button type="button" className="mini-button" disabled={busy} onClick={()=>void restore(conversationId)}>Reload this chat</button>:null}</div>
+          :<div className="alert error message-inline-error" role="alert"><strong>This didn&rsquo;t go through.</strong><span> {message.error} Send it again when you&rsquo;re ready.</span></div>):null}
       </div>)}
       {busy?<div className="message assistant"><div className="message-label">DearPolicy</div>
         <div className="message-body thinking" role="status" aria-live="polite">
@@ -344,7 +382,8 @@ function ChatContent(){
         </div></div>:null}
       {error?<div className="alert error" role="alert"><strong>Something went wrong.</strong><span> {error}</span></div>:null}<div ref={end}/>
     </div>
-    <form className="chat-composer" onSubmit={ask}><textarea aria-label="Message to DearPolicy" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ask a question, answer a missing fact, or tell me what you don’t know yet…" rows={3}/>
+    <form className="chat-composer" onSubmit={ask}><textarea aria-label="Message to DearPolicy" aria-describedby="chat-length" value={question} maxLength={MAX_QUESTION_LENGTH} onChange={e=>setQuestion(e.target.value.slice(0,MAX_QUESTION_LENGTH))} placeholder="Ask a question, answer a missing fact, or tell me what you don’t know yet…" rows={3}/>
+      <small id="chat-length" className={"chat-length"+(question.length>=MAX_QUESTION_LENGTH*0.9?" near-limit":"")} aria-live="polite">{question.length.toLocaleString()} / {MAX_QUESTION_LENGTH.toLocaleString()}{question.length>=MAX_QUESTION_LENGTH?" — that’s the limit for one message. Split a longer story into two messages.":""}</small>
       <button disabled={busy||!question.trim()} className="button primary" type="submit">Send →</button></form>
     <p className="chat-disclaimer">Personal records confirm ownership. Matching policy wording supports benefit assessments.</p>
   </div>;

@@ -85,11 +85,11 @@ function LoginForm() {
       <form onSubmit={submit} className="field" method="post" action="/api/auth/signin" noValidate>
         <input type="hidden" name="next" value={sameSitePath(params.get("next")) ?? ""} />
         <label htmlFor="dp-email">Email</label>
-        <input id="dp-email" name="email" type="email" autoComplete="email" autoFocus required />
+        <input id="dp-email" suppressHydrationWarning name="email" type="email" autoComplete="email" autoFocus required />
         <label htmlFor="dp-password" style={{ marginTop: 12 }}>
           Password
         </label>
-        <input id="dp-password" name="password" type="password" autoComplete="current-password" required />
+        <input id="dp-password" suppressHydrationWarning name="password" type="password" autoComplete="current-password" required />
         {error ? (
           <div className="alert error" role="alert">
             {error}

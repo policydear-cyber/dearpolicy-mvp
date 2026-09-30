@@ -40,6 +40,14 @@ export type CatalogBenefit={
   needsConfirmation?:boolean;
   /** When a person confirmed or corrected this row. */
   reviewedAt?:string|null;
+  /** The column of a multi-column table this row was read from: the tier
+   * ("Plan B", "Private hospital") or person class ("Child",
+   * "Dependants") it applies to. Null for a single-value table. */
+  tier?:string|null;
+  /** What the table row is: "benefit", or a typed schedule term that is never
+   * calculated into a claim amount ("as_charged", "deductible",
+   * "co_insurance", "pro_ration", "policy_year_limit", "co_payment_cap"...). */
+  rowKind?:string|null;
   /** The title another document of the same plan gives this same benefit,
    * carried only when it states the kind of injury this row's own title lost
    * (set by preferStatedRules). Classification evidence only; never shown. */
@@ -673,6 +681,8 @@ const WORD_FRACTIONS=[
  */
 export function ruleFromQuote(benefit:CatalogBenefit):ReviewedFormula|null{
   if(benefit.formulaKind!=="none")return null;
+  // A schedule term is never turned into a payout rule.
+  if(isScheduleTerm(benefit.rowKind))return null;
   const quote=benefit.quote??"";
   const text=normalText(quote);
   const propose=(input:Parameters<typeof validateCatalogFormula>[0])=>{
@@ -801,6 +811,57 @@ export const DAILY_FACT_KEYS=["hospitalNights"] as const;
 
 /** One sentence saying what this benefit pays. Used on the schedule screen and
  * anywhere a rule is shown without a claim in progress. */
+/** Whether a row read from one column of a multi-column table applies to a
+ * person whose plan tier / person class is `memberTier`
+ * (policy_members.benefit_tier: "Plan A", "Child", "Dependants", "Adult").
+ * A row with no tier applies to everyone; a person whose tier is unknown is
+ * not narrowed (every column stays a candidate). The column heading may carry
+ * more words than the stored class ("Plan A (Grade M2 and above)",
+ * "Dependants (Plan A only)"). */
+export function tierApplies(rowTier:string|null|undefined,memberTier:string|null|undefined){
+  if(!rowTier||!memberTier)return true;
+  const row=rowTier.toLowerCase().replace(/\s+/g," ").trim(),member=memberTier.toLowerCase().replace(/\s+/g," ").trim();
+  return row===member||(row.startsWith(member)&&!/[a-z0-9]/.test(row.charAt(member.length)));
+}
+/** The rows of a document that apply to one person, given their tier.
+ * Tiers are per table: the columns of one row (same document, benefit name
+ * and page) are alternatives, and when one of them is the person's column the
+ * others are dropped. A row whose columns are a different dimension (a
+ * rider's "Panel" / "Non-panel" for a "Private hospital" member) is kept
+ * whole, and so is everything when the person's tier is unknown. */
+export function selectTierRows<T extends {policyId:string;benefitName:string;sourcePage:number|null;tier?:string|null}>(rows:T[],memberTier:(policyId:string)=>string|null|undefined):T[]{
+  const groups=new Map<string,T[]>();
+  for(const row of rows){const key=row.policyId+"|"+row.benefitName.toLowerCase()+"|"+(row.sourcePage??"");groups.set(key,[...(groups.get(key)??[]),row]);}
+  const keep=new Set<T>();
+  for(const group of groups.values()){
+    const tier=memberTier(group[0].policyId);
+    const mine=tier?group.filter(row=>row.tier&&tierApplies(row.tier,tier)):[];
+    for(const row of group)if(!mine.length||!row.tier||mine.includes(row))keep.add(row);
+  }
+  return rows.filter(row=>keep.has(row));
+}
+/** Kinds of table row that are schedule terms, not payout rules. */
+export const SCHEDULE_TERM_KINDS=["as_charged","not_covered","unlimited","deductible","co_insurance","co_payment","co_payment_cap","pro_ration","policy_year_limit","family_limit"] as const;
+export function isScheduleTerm(rowKind:string|null|undefined){return !!rowKind&&(SCHEDULE_TERM_KINDS as readonly string[]).includes(rowKind);}
+/** A schedule term as a sentence. The stored value is shown, never used to
+ * calculate a claim amount here. */
+export function describeScheduleTerm(rowKind:string,value:number|null,currency:string|null){
+  const money=value==null?null:(currency?currency+" ":"")+value.toLocaleString("en-SG",{maximumFractionDigits:2});
+  const percent=value==null?null:Math.round(value*10000)/100+"%";
+  switch(rowKind){
+    case "as_charged":return "As charged: the actual bill, within the plan's limits";
+    case "not_covered":return "Not covered";
+    case "unlimited":return "No limit stated";
+    case "deductible":return money?"Deductible of "+money+" (you pay this first)":"Deductible (see the schedule)";
+    case "co_insurance":return percent?"Co-insurance of "+percent+" of the bill after the deductible":"Co-insurance (see the schedule)";
+    case "co_payment":return money?"Co-payment of "+money:percent&&value!=null&&value<=1?"Co-payment of "+percent:"Co-payment (see the schedule)";
+    case "co_payment_cap":return money?"Your co-payment is capped at "+money+" a policy year":"Co-payment cap (see the schedule)";
+    case "pro_ration":return percent?"Pro-ration: pays "+percent+" of the bill in a higher ward than covered":"Pro-ration (see the schedule)";
+    case "policy_year_limit":return money?"Limit of "+money+" a policy year":"Policy-year limit (see the schedule)";
+    case "family_limit":return money?"Family maximum of "+money:"Family maximum (see the schedule)";
+    default:return "As printed in the schedule";
+  }
+}
 export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">){
   const currency=benefit.currency?normalizeCurrencyCode(benefit.currency):null;
   const value=benefit.formulaValue;
@@ -810,7 +871,7 @@ export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"
   if(benefit.formulaKind==="fixed"&&value!=null)
     return money(value,currency);
   if(benefit.formulaKind==="expense_cap"&&value!=null)
-    return "Reimburses the "+factKeyLabel(benefit.factKey)+", up to "+money(value,currency);
+    return "Reimburses "+(benefit.factKey?"the ":"")+factKeyLabel(benefit.factKey)+", up to "+money(value,currency);
   if(benefit.formulaKind==="daily"&&value!=null){
     const after=benefit.offsetDays?" after the first "+benefit.offsetDays+" day"+(benefit.offsetDays===1?"":"s"):"";
     const cap=benefit.maximumDays!=null?", up to "+benefit.maximumDays+" days":"";
@@ -893,6 +954,7 @@ type BenefitRow={
   offset_days:number|null;maximum_days:number|null;source_page:number|null;quote:string;
   conditions:unknown;requirements:unknown;needs_review:boolean;
   basis_inferred?:boolean;needs_confirmation?:boolean;reviewed_at?:string|null;
+  tier?:string|null;row_kind?:string|null;
 };
 function toBenefit(row:BenefitRow):CatalogBenefit{
   const value=row.formula_value==null?null:Number(row.formula_value);
@@ -905,7 +967,8 @@ function toBenefit(row:BenefitRow):CatalogBenefit{
     sourcePage:row.source_page,quote:row.quote,
     conditions:Array.isArray(row.conditions)?row.conditions.map(String):[],
     requirements:Array.isArray(row.requirements)?row.requirements as CatalogBenefit["requirements"]:[],
-    needsReview:row.needs_review,basisInferred:row.basis_inferred===true,needsConfirmation:row.needs_confirmation===true,reviewedAt:row.reviewed_at??null};
+    needsReview:row.needs_review,basisInferred:row.basis_inferred===true,needsConfirmation:row.needs_confirmation===true,reviewedAt:row.reviewed_at??null,
+    tier:row.tier??null,rowKind:row.row_kind??null};
 }
 /** A line from a certificate's cover table is not a benefit.
  *
@@ -934,7 +997,7 @@ export async function loadBenefitCatalog(accountId:string,policyIds:string[]){
   if(!policyIds.length)return [] as CatalogBenefit[];
   await ensureBenefitSchema();
   const r=await query<BenefitRow>(
-    "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation FROM policy_benefits WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) ORDER BY benefit_name",
+    "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind FROM policy_benefits b WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) AND coalesce((to_jsonb(b)->>'duplicate_of_policy_id')::uuid<>ALL($2::uuid[]),true) ORDER BY benefit_name",
     [accountId,policyIds]);
   return repairStoredRules(r.rows.map(toBenefit));
 }
@@ -953,11 +1016,15 @@ export async function replaceBenefitCatalog(accountId:string,policyId:string,ben
   for(const benefit of benefits){
     if(kept.has(benefitKey(benefit.benefitName)))continue;
     if(looksLikeCoverageLine(benefit.benefitName))continue;
-    await query(
-      "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,requires) VALUES($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18::text[])",
+    const inserted=await query<{id:string}>(
+      "INSERT INTO policy_benefits(account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,requires) VALUES($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18::text[]) RETURNING id",
       [accountId,policyId,benefit.productName,benefit.benefitName,benefit.traits,benefit.formulaKind,
        benefit.formulaValue,benefit.currency,benefit.factKey,benefit.offsetDays,benefit.maximumDays,
        benefit.sourcePage,benefit.quote,JSON.stringify(benefit.conditions),JSON.stringify(benefit.requirements),benefit.needsReview,benefit.basisInferred===true,benefit.requires??[]]);
+    // Tier and row kind (evidence columns, see ensureEvidenceSchema) are only
+    // set by the table reader, which ensures those columns first.
+    if(benefit.tier||benefit.rowKind)
+      await query("UPDATE policy_benefits SET tier=$3,row_kind=$4 WHERE account_id=$1 AND id=$2",[accountId,inserted.rows[0].id,benefit.tier??null,benefit.rowKind??null]);
   }
   // Mark the document read even when it stated no rules at all. "Read and it
   // said nothing" and "never read" look identical in the benefit table, and

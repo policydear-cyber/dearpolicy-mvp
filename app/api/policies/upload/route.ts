@@ -1,17 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
 import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
+import { isUuid } from "@/lib/db/client";
 import { recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
-import { createUserSupabaseClient } from "@/lib/db/authz-client";
-import { savePolicyFile } from "@/lib/storage";
-import { enqueuePolicyProcessing } from "@/lib/rag/processing-queue";
-import { probeImageDecodes, validateDocumentUpload } from "@/lib/documents/formats";
-import { supersedePolicyDocument } from "@/lib/policies/quarantine/store";
-import { isUuid, pool } from "@/lib/db/client";
-import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
-import { activePredicate } from "@/lib/lifecycle/scopes";
+import { acceptPolicyUpload, MULTIPART_MAX_BYTES, resolveUploadFamilyMember, uploadErrorResponse } from "./accept";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -20,185 +14,42 @@ export const ROUTE_AUTH = "household-member" as const;
 // inside after() rather than being cut off.
 export const maxDuration = 300;
 
-class NoFamilyMember extends Error {}
-class FamilyMemberNotFound extends Error {}
-class DuplicateDocument extends Error {
-  constructor(public filename: string) {
-    super();
-  }
-}
-
+/**
+ * Classic multipart upload, for SMALL files only. A serverless function
+ * cannot receive a large request body (about 4.5 MB on Vercel; the Next.js
+ * proxy buffers at most 10 MB), so the app's own pages upload through the
+ * direct-to-storage flow instead: start/route.ts -> the browser sends the
+ * file to storage -> finalize/route.ts. Both paths share every check in
+ * ./accept.ts.
+ */
 export async function POST(request: NextRequest) {
   try {
     const ctx = await requireHouseholdContext(request);
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
+    const declaredLength = Number(request.headers.get("content-length") ?? 0);
+    if (declaredLength > MULTIPART_MAX_BYTES + 64 * 1024) {
+      void recordEvent({ name: "upload.policy.rejected", correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")), route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
+      return NextResponse.json({ error: "This file is too large to send this way. Upload it from the Documents page, which sends large files directly to secure storage.", reasonCode: "USE_DIRECT_UPLOAD" }, { status: 413 });
+    }
     const form = await request.formData();
     const file = form.get("file");
-    let familyMemberId = String(form.get("familyMemberId") ?? "");
-    const explicitFamilyMember = Boolean(familyMemberId);
+    const requestedMember = String(form.get("familyMemberId") ?? "");
     const pdfPassword = String(form.get("pdfPassword") ?? "");
-    // Optional: this upload is a corrected re-upload of an existing
-    // document, not a brand-new one. When present and valid, the OLD row
-    // is marked superseded (never deleted -- its audit history stays
-    // intact) once the new row is safely inserted below. See
-    // lib/policies/quarantine/store.ts's supersedePolicyDocument().
+    // Optional: a corrected re-upload of an existing document; the OLD row is
+    // marked superseded (never deleted) once the new row is safely inserted.
     const supersedesPolicyIdRaw = String(form.get("supersedesPolicyId") ?? "");
-    const supersedesPolicyId = isUuid(supersedesPolicyIdRaw) ? supersedesPolicyIdRaw : null;
-
     if (!(file instanceof File)) return NextResponse.json({ error: "A document file is required." }, { status: 400 });
 
-    const policyId = randomUUID();
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    // Size, real file-signature sniffing, and extension/MIME/signature
-    // agreement all live in lib/documents/formats.ts -- a renamed file, a
-    // doctored form field, an executable, an archive or an unsupported
-    // format is rejected here with a message naming what IS accepted,
-    // before anything reaches storage or the processing pipeline.
-    const validation = validateDocumentUpload({ filename: file.name, mimeType: file.type, byteSize: file.size, bytes, maxBytes: 50 * 1024 * 1024 });
-    if (!validation.valid) return NextResponse.json({ error: validation.message, reasonCode: validation.reasonCode }, { status: 400 });
-    // A corrupted image fails NOW with a way forward, not minutes later in
-    // the background job.
-    const imageProblem = await probeImageDecodes(bytes, validation.format);
-    if (imageProblem) return NextResponse.json({ error: imageProblem, reasonCode: "CORRUPTED_FILE" }, { status: 400 });
-    const fileHash = createHash("sha256").update(bytes).digest("hex");
-
-    // Every check below (family-member ownership, duplicate-hash lookup, the
-    // insert itself) runs inside one RLS-scoped transaction so nothing here
-    // ever depends on a client-supplied household/account id -- the only
-    // identity in play is ctx.householdId, resolved server-side from the
-    // caller's own session.
-    const outcome = await createUserSupabaseClient(ctx.userId, async (client) => {
-      if (!familyMemberId) {
-        const fallback = await client.query<{ id: string }>(
-          `SELECT id FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY CASE WHEN relationship='self' THEN 0 ELSE 1 END,created_at LIMIT 1`,
-          [ctx.householdId],
-        );
-        familyMemberId = fallback.rows[0]?.id ?? "";
-      }
-      if (!familyMemberId) throw new NoFamilyMember();
-
-      const owner = await client.query<{ id: string }>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [familyMemberId, ctx.householdId]);
-      if (!owner.rows[0]) throw new FamilyMemberNotFound();
-
-      const duplicate = await client.query<{ id: string; original_filename: string }>(
-        `SELECT id,original_filename FROM policies WHERE account_id=$1 AND file_hash=$2 AND superseded_at IS NULL AND ${activePredicate()} LIMIT 1`,
-        [ctx.householdId, fileHash],
-      );
-      if (duplicate.rows[0]) throw new DuplicateDocument(duplicate.rows[0].original_filename);
-
-      // A supersedesPolicyId must genuinely belong to this household -- a
-      // forged id from another account must not be able to mark someone
-      // else's document superseded via this upload.
-      let verifiedSupersedesId: string | null = null;
-      if (supersedesPolicyId) {
-        const owned = await client.query<{ id: string }>(`SELECT id FROM policies WHERE id=$1 AND account_id=$2 AND superseded_at IS NULL AND ${activePredicate()}`, [supersedesPolicyId, ctx.householdId]);
-        verifiedSupersedesId = owned.rows[0]?.id ?? null;
-      }
-
-      return { familyMemberId, verifiedSupersedesId };
+    const familyMemberId = await resolveUploadFamilyMember(ctx, requestedMember);
+    return await acceptPolicyUpload({
+      request, ctx, policyId: randomUUID(),
+      bytes: new Uint8Array(await file.arrayBuffer()), filename: file.name, mimeType: file.type,
+      familyMemberId, explicitFamilyMember: Boolean(requestedMember), pdfPassword,
+      supersedesPolicyId: isUuid(supersedesPolicyIdRaw) ? supersedesPolicyIdRaw : null,
     });
-
-    // Server-generated storage path -- the object key is derived from the
-    // household id, the authorized family member id, and a freshly generated
-    // policyId, never from anything the client named directly.
-    const storageKey = await savePolicyFile({ accountId: ctx.householdId, familyMemberId: outcome.familyMemberId, policyId, filename: file.name, bytes });
-
-    // A document the household deleted (pending its daily purge) or
-    // superseded still holds its content hash, and the unique index on
-    // (account_id,file_hash) would block re-uploading the same file until
-    // the purge runs -- a trap: the library no longer shows the document,
-    // but the upload insists it already exists. Deleted and superseded rows
-    // have no claim on the hash (the duplicate pre-check above already
-    // ignores them; the purge finds rows by id, never by hash), so release
-    // it here on the trusted connection before inserting the new row.
-    await pool.query(
-      `UPDATE policies SET file_hash=NULL, updated_at=now()
-        WHERE account_id=$1 AND file_hash=$2
-          AND (superseded_at IS NOT NULL OR lifecycle_state<>'active')`,
-      [ctx.householdId, fileHash],
-    ).catch((error) => {
-      // Hygiene must never fail an upload: if the release cannot run the
-      // worst case is the pre-existing behaviour (a 409 on the insert).
-      console.warn("stale file_hash release failed:", error instanceof Error ? error.message : error);
-    });
-
-    try {
-      // Written on the trusted server connection: every value here is
-      // server-derived (ids authorized in the RLS-scoped transaction above,
-      // the server-generated storage key and checksum, initial processing
-      // state). Browser sessions hold no INSERT privilege on policies
-      // (sql/household-rls.sql), so quarantine/processing state can never be
-      // pre-set by a client.
-      await pool.query(
-        `INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,supersedes_id)
-         VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,$7,$8)`,
-        [policyId, ctx.householdId, outcome.familyMemberId, file.name, storageKey, fileHash,
-          // Prototype document-safety mode acknowledges receipt without any
-          // scan language; the normal mode keeps its existing wording.
-          malwareScanningIntentionallyDisabled() ? "Document received — reading and extracting information." : "Waiting to be analysed…",
-          outcome.verifiedSupersedesId],
-      );
-      if (outcome.verifiedSupersedesId) {
-        await supersedePolicyDocument({ accountId: ctx.householdId, oldPolicyId: outcome.verifiedSupersedesId, newPolicyId: policyId });
-      }
-    } catch (error) {
-      // A double-click or two tabs can both pass the pre-check and race each
-      // other to the insert; the unique index on (account_id,file_hash) is the
-      // real guard, so its violation gets the same friendly message as the
-      // pre-check instead of a generic 500.
-      if (error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505") {
-        return NextResponse.json({ error: "This exact document is already in DearPolicy." }, { status: 409 });
-      }
-      throw error;
-    }
-
-    // D13 (Wave 2 adversarial audit): enqueuePolicyProcessing() is now
-    // awaited directly instead of deferred via runAfterResponse()/after().
-    // The deferred version had no .catch() on this primary path, so a
-    // failed background_jobs insert was silently swallowed -- the client
-    // would see this route's 202 "queued" response (and the
-    // "upload.policy.queued" telemetry event just below) for a policy that
-    // was never actually enqueued for processing, and it would simply sit
-    // "queued" in the UI forever. The insert itself is a single fast
-    // INSERT, so awaiting it adds negligible latency to the response, and a
-    // real failure now surfaces through this route's own catch block below
-    // instead of disappearing.
-    await enqueuePolicyProcessing({
-      accountId: ctx.householdId,
-      familyMemberId: outcome.familyMemberId,
-      policyId,
-      storageKey,
-      pdfPassword: pdfPassword || undefined,
-      linkUploadMember: explicitFamilyMember,
-    });
-
-    // Checkpoint 14b: "uploads" was named as a required telemetry call
-    // site -- a successful queue outcome and the custom, early-return
-    // error branches below all bypassed routeErrorResponse() (and so
-    // never recorded telemetry) before this. Fire-and-forget, following
-    // the exact same shape recordErrorEvent() calls use throughout this
-    // codebase -- never blocks or slows the actual HTTP response.
-    void recordEvent({
-      name: "upload.policy.queued",
-      correlationId: resolveCorrelationId(request.headers.get("x-correlation-id")),
-      route: "/api/policies/upload",
-      status: "success",
-    });
-    return NextResponse.json({ policyId, status: "queued" }, { status: 202 });
   } catch (error) {
-    const correlationId = resolveCorrelationId(request.headers.get("x-correlation-id"));
-    if (error instanceof NoFamilyMember) {
-      void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
-      return NextResponse.json({ error: "Create at least one family profile before uploading documents." }, { status: 400 });
-    }
-    if (error instanceof FamilyMemberNotFound) {
-      void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
-      return NextResponse.json({ error: "Family member not found." }, { status: 404 });
-    }
-    if (error instanceof DuplicateDocument) {
-      void recordEvent({ name: "upload.policy.rejected", correlationId, route: "/api/policies/upload", status: "failure", errorCategory: "validation" });
-      return NextResponse.json({ error: `This exact document is already in DearPolicy as ${error.filename}.` }, { status: 409 });
-    }
+    const known = uploadErrorResponse(error, request);
+    if (known) return known;
     const authResponse = routeErrorResponse(error, { request, route: "/api/policies/upload" });
     if (authResponse.status === 500) return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     return authResponse;

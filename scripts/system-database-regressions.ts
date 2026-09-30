@@ -731,7 +731,11 @@ async function main(){
       assert.ok(claimItem,"The critical-illness benefit must remain visible");
       assert.equal(claimItem!.status,"needs_document");
       assert.equal(claimItem!.amountText,null,"A missing receipt must not manufacture an amount that was never confirmed");
-      assert.ok(claimItem!.conditions.some(c=>c.startsWith("Active status not recently verified")),"The currentness qualifier must still be present alongside the medical-definition qualifier");
+      // Round 5: the currentness note is about the policy, so it is said once
+      // per answer (answer.details), not repeated on every benefit card
+      // (lib/policies/currentness.ts consolidateActiveStatus).
+      assert.ok(claim.details.some(d=>d.startsWith("Active status not recently verified")),"The currentness qualifier must still be present alongside the medical-definition qualifier");
+      assert.equal(claim.details.filter(d=>d.startsWith("Active status not recently verified")).length,1,"The currentness qualifier is said once per answer");
       assert.ok(claimItem!.conditions.some(c=>c.startsWith("The diagnosis must satisfy")),"The medical-definition qualifier that actually withholds the amount must also be present");
       await db.query("INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,policy_number,amount,currency,payment_date) VALUES($1,$2,$3,'Example Insurer','REVIEW-1',1200,'SGD',current_date - 30)",
         [account,fixture.policyId,fixture.person.id]);
@@ -784,7 +788,8 @@ async function main(){
       assert.equal(answer.potentialPayoutTotals?.length??0,0,"No total may be shown when its only item was withheld");
       assert.ok(!answer.payoutQualifiers?.length,"A qualifier with no displayed total to qualify is a dangling caveat");
       assert.ok(item!.conditions.some(c=>/defined illness|definition/i.test(c)),"The outstanding definition is the real reason here: "+JSON.stringify(item!.conditions));
-      assert.ok(item!.conditions.some(c=>/active status not recently verified/i.test(c)),"The missing premium/renewal evidence must also be named");
+      // Round 5: named once per answer (answer.details), not on each card.
+      assert.ok(answer.details.some(d=>/active status not recently verified/i.test(d)),"The missing premium/renewal evidence must also be named");
       assert.doesNotMatch(answer.summary,/S\$350,000/,"An unconfirmed amount must never reach the summary text either");
     });
     await test("A failed evidence batch is never counted as text that was read",async()=>{

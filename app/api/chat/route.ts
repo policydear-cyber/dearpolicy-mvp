@@ -12,6 +12,7 @@ import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { enqueueChat } from "@/lib/chat/jobs";
 import { ChatConflict } from "@/lib/chat/store";
 
+const NO_FAMILY_MESSAGE="Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.";
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=300;
@@ -33,6 +34,10 @@ export async function POST(request:NextRequest){
     const body=BodySchema.parse(await request.json().catch(()=>({})));
     const ctx=await requireHouseholdContext(request),accountId=ctx.householdId;
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
+    // A household with nobody in it has no policies to read and nobody to ask
+    // about: say what to do, instead of failing every message with a 500.
+    const anyone=await query<{id:string}>(`SELECT id FROM family_members WHERE account_id=$1 AND ${activePredicate()} LIMIT 1`,[accountId]);
+    if(!anyone.rows.length)return NextResponse.json({error:NO_FAMILY_MESSAGE,code:"no_family_members"},{status:409});
     if(body.familyMemberId){
       const member=await query<{id:string}>(`SELECT id FROM family_members WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,[body.familyMemberId,accountId]);
       if(!member.rows.length)return NextResponse.json({error:"Family member not found."},{status:404});

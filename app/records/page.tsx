@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { formatMoney } from "@/lib/format/currency";
-import { customerError, customerMessage } from "@/components/customer-text";
+import { customerError } from "@/components/customer-text";
+import { uploadPolicyDocument } from "@/components/upload-document";
 
 type Member = { id: string; display_name: string; relationship: string };
 type RecordRow = { id: string; family_member_name: string | null; insurer: string | null; product_name: string | null; policy_number: string | null; amount: string; currency: string; frequency: string | null; payment_date: string | null; period_start: string | null; notes: string | null };
@@ -21,14 +22,13 @@ export default function RecordsPage() {
   useEffect(()=>{ void refresh(); },[]);
 
   async function upload(event: FormEvent) {
-    event.preventDefault(); if(!file) return; setBusy(true); setStatus("Reading the document and looking for actual premium/payment information…");
+    event.preventDefault(); if(!file) return; setBusy(true); setStatus("Uploading…");
     try {
-      const form = new FormData(); form.set("file",file); if(memberId) form.set("familyMemberId",memberId); if(password) form.set("pdfPassword",password);
-      const response = await fetch("/api/policies/upload",{method:"POST",body:form}); const payload=await response.json();
-      if(!response.ok) throw new Error(customerMessage(payload.error, "The upload did not go through. Please try again."));
-      const role=payload.result?.extraction?.documentRole ?? "document"; const count=payload.result?.extraction?.paymentRecords?.length ?? 0;
-      setStatus(count?`Read. Found ${count} payment${count===1?"":"s"} in ${String(role).replaceAll("_"," ")}.`:"Read. No payment amounts were found in this document.");
+      await uploadPolicyDocument(file,{familyMemberId:memberId||null,pdfPassword:password,onProgress:(f)=>setStatus(`Uploading… ${Math.round(f*100)}%`)});
+      setStatus("Uploaded. DearPolicy is reading it now — any payments it finds will appear below in a minute or two.");
       setFile(null); setPassword(""); await refresh();
+      // The document is read in the background: check back a few times.
+      for(const wait of [8000,20000,45000]) setTimeout(()=>{ void refresh(); },wait);
     } catch(e){ setStatus(customerError(e, "The upload did not go through. Please try again.")); } finally { setBusy(false); }
   }
 
@@ -37,10 +37,10 @@ export default function RecordsPage() {
       <header className="page-header compact"><div><div className="eyebrow">PREMIUM RECORDS</div><h1>Know what your family is paying.</h1><p className="lead">Upload renewal notices, premium receipts and annual statements. DearPolicy extracts actual payment amounts and uses the latest record to estimate current monthly and annual insurance cost.</p></div></header>
       <section className="upload-panel">
         <form onSubmit={upload} className="upload-form records-upload">
-          <div className="field"><label>Profile (optional)</label><select value={memberId} onChange={(e)=>setMemberId(e.target.value)}><option value="">Auto-detect from document</option>{family.map((m)=><option value={m.id} key={m.id}>{m.display_name}</option>)}</select></div>
-          <div className="field"><label>Receipt / renewal PDF</label><input type="file" accept="application/pdf,.pdf" onChange={(e)=>setFile(e.target.files?.[0]??null)} /></div>
-          <div className="field"><label>PDF password (if required)</label><input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Leave blank if not required" /></div>
-          <button className="button primary" type="submit" disabled={!file||busy}>{busy?"Reading…":"Upload & extract"}</button>
+          <div className="field"><label htmlFor="rec-profile">Profile (optional)</label><select id="rec-profile" value={memberId} onChange={(e)=>setMemberId(e.target.value)}><option value="">Auto-detect from document</option>{family.map((m)=><option value={m.id} key={m.id}>{m.display_name}</option>)}</select></div>
+          <div className="field"><label htmlFor="rec-file">Receipt / renewal PDF</label><input id="rec-file" type="file" accept="application/pdf,.pdf" onChange={(e)=>setFile(e.target.files?.[0]??null)} /></div>
+          <div className="field"><label htmlFor="rec-password">PDF password (if required)</label><input id="rec-password" type="password" autoComplete="off" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Leave blank if not required" /></div>
+          <button className="button primary" type="submit" disabled={!file||busy}>{busy?"Uploading…":"Upload & extract"}</button>
         </form>
         {status && <div className="upload-status">{status}</div>}
         <div className="note">Upload PDF statements/receipts. Photo and email-receipt OCR can be added before public beta.</div>

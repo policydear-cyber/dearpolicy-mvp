@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect,useState } from "react";
+import { sgDate } from "@/components/format-date";
 
 /** The household-facing status of a claim. Rendered ONLY from
  * claimDisplayStatus() (lib/claims/status.ts, shared interface 4), which the
@@ -10,7 +11,7 @@ import { useEffect,useState } from "react";
  * are the ones this claim's event needs (never death documents for a
  * fracture). */
 type ClaimDisplay={label:string;tone:"info"|"waiting"|"ready";hasEstimate:boolean;requestedDocuments:string[];detail?:string};
-type Claim={id:string;family_member_id:string;display_name:string;relationship:string;event_summary:string|null;updated_at:string;display?:ClaimDisplay|null};
+type Claim={id:string;family_member_id:string;conversation_id?:string|null;display_name:string;relationship:string;event_summary:string|null;updated_at:string;display?:ClaimDisplay|null};
 
 /** Until a claim carries its display status, nothing is claimed about it. */
 const UNKNOWN:ClaimDisplay={label:"Open",tone:"info",hasEstimate:false,requestedDocuments:[]};
@@ -21,9 +22,9 @@ export default function ClaimsPage(){
  return <div className="page"><header className="page-header"><div><div className="eyebrow">CLAIMS</div><h1>When something happens, pick up where you left off.</h1><p className="lead">DearPolicy keeps what you already told it about each event, so you never have to explain the same accident or diagnosis twice.</p></div><Link href="/chat" className="button primary">Start a claim check</Link></header>
  {error&&<div className="alert error" role="alert"><strong>Your claims could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}
  <section className="section"><div className="claims-list">{loading?<div className="empty-card">Loading your claims…</div>:claims.length?claims.map(c=>{const d=c.display??UNKNOWN;return <div className="claim-session-entry" key={c.id} data-testid="claim-entry">
-  <Link className="claim-session-card" href={`/claims/${c.id}`}><div className="claim-session-icon">!</div><div><strong>{c.event_summary??"Claim"}</strong><span>{c.display_name} · {c.relationship}</span><small>Updated {new Date(c.updated_at).toLocaleDateString()}</small></div><div className={`claim-session-status tone-${d.tone}`} data-testid="claim-status" data-tone={d.tone}>{d.label}</div><b>›</b></Link>
+  <Link className="claim-session-card" href={`/claims/${c.id}`}><div className="claim-session-icon">!</div><div><strong>{c.event_summary??"Claim"}</strong><span>{c.display_name} · {c.relationship}</span><small>Updated {sgDate(c.updated_at)}</small></div><div className={`claim-session-status tone-${d.tone}`} data-testid="claim-status" data-tone={d.tone}>{d.label}</div><b>›</b></Link>
   {d.tone==="info"
-   ?<Link className="claim-pack-link" href={`/chat?member=${c.family_member_id}&claim=${c.id}`}>Continue answering questions →</Link>
+   ?<Link className="claim-pack-link" href={c.conversation_id?`/chat?conversation=${c.conversation_id}`:`/chat?member=${c.family_member_id}`}>Continue answering questions →</Link>
    :d.requestedDocuments.length
     ?<Link className="claim-pack-link" href={`/claims/${c.id}`} data-testid="claim-requested-documents">Send: {d.requestedDocuments.slice(0,3).join("; ")}{d.requestedDocuments.length>3?"; …":""} →</Link>
     :<Link className="claim-pack-link" href={`/claims/${c.id}`}>Open this claim →</Link>}

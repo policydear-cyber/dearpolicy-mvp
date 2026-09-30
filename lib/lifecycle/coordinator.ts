@@ -49,6 +49,7 @@ import { randomUUID } from "node:crypto";
 import { pool } from "@/lib/db/client";
 import type { ScopedDbClient } from "@/lib/db/authz-client";
 import { deletePolicyFile } from "@/lib/storage";
+import { enqueueStoragePurge, purgeSoon } from "@/lib/storage/purge";
 import { deletePolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { transitionLifecycle, type LifecycleDbClient } from "./state-machine";
 import { activePredicate, readIncludingDeletedForInternalUse } from "./scopes";
@@ -98,6 +99,21 @@ async function sweepDeletedDocumentSideChannels(accountId: string, policyId: str
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { removeMember, revokeInvitation, deleteHousehold, NotFoundError } from "@/lib/household/repo";
 import type { DeletionReasonCategory, DeletionRequestStatus } from "./types";
+
+/** Round 5: once a document deletion has completed, its stored file is
+ * removed -- queued durably first (lib/storage/purge.ts), then removed right
+ * away; anything that fails is retried by the request drain. Never fails the
+ * deletion itself. */
+async function purgeDeletedObjects(table: "policies" | "claim_evidence_documents", accountId: string, ids: string[]) {
+  try {
+    const rows = await pool.query<{ storage_key: string | null }>(
+      `SELECT storage_key FROM ${table} WHERE account_id=$1 AND id=ANY($2::uuid[]) AND lifecycle_state IN ('soft_deleted','permanently_deleted','audit_tombstone') AND storage_key IS NOT NULL`, [accountId, ids]);
+    await enqueueStoragePurge(rows.rows.map((r) => ({ domain: table === "policies" ? "policy" as const : "claim-evidence" as const, storageKey: r.storage_key as string })), "document_deleted");
+    await purgeSoon();
+  } catch (error) {
+    console.warn("storage purge after deletion was not completed now; it will be retried:", error instanceof Error ? error.name : "unknown");
+  }
+}
 
 export type DeletionOutcome = {
   status: DeletionRequestStatus;
@@ -297,6 +313,7 @@ export async function finishPolicyDocumentDeletion(args: {
     extra: { resourceType: "policy_document" },
   });
 
+  await purgeDeletedObjects("policies", args.accountId, [args.policyId]);
   return { storageWarning };
 }
 
@@ -698,6 +715,7 @@ export async function finishClaimEvidenceDeletion(args: {
     householdRef: pseudonymizeId(args.accountId),
     extra: { resourceType: "claim_evidence" },
   });
+  await purgeDeletedObjects("claim_evidence_documents", args.accountId, [args.evidenceDocumentId]);
 }
 
 
@@ -905,6 +923,7 @@ export async function finishPolicyDeletion(args: {
     extra: { resourceType: "policy", chainSize: args.chainPolicyIds.length },
   });
 
+  await purgeDeletedObjects("policies", args.accountId, args.chainPolicyIds.length ? args.chainPolicyIds : [args.policyId]);
   return { storageWarning };
 }
 

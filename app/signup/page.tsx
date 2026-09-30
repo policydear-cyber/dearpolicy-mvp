@@ -1,11 +1,14 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { customerMessage } from "@/components/customer-text";
 
+/** Form fields carry suppressHydrationWarning: browser extensions and
+ * automation (password managers, the exploratory harness) add attributes
+ * such as an inline caret-color to inputs before React hydrates, which
+ * React otherwise reports as a hydration mismatch on this page. Only these
+ * attribute differences are silenced; the markup itself is identical. */
 export default function SignupPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [householdName, setHouseholdName] = useState("");
@@ -33,8 +36,8 @@ export default function SignupPage() {
         setNotice("Check your email for a confirmation link to finish creating your household.");
         return;
       }
-      router.push("/");
-      router.refresh();
+      // One full-page navigation (as on sign-in): the app loads with the new session.
+      window.location.assign("/");
     } catch {
       setError("Could not create your account. Please try again.");
     } finally {
@@ -48,16 +51,16 @@ export default function SignupPage() {
       <p className="lead">DearPolicy keeps every family member&apos;s coverage in one place.</p>
       <form onSubmit={submit} className="field">
         <label htmlFor="su-household">Household name (optional)</label>
-        <input id="su-household" type="text" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />
+        <input id="su-household" suppressHydrationWarning type="text" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} />
         <label htmlFor="su-email" style={{ marginTop: 12 }}>
           Email
         </label>
-        <input id="su-email" type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input id="su-email" suppressHydrationWarning type="email" autoComplete="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
         <label htmlFor="su-password" style={{ marginTop: 12 }}>
           Password
         </label>
         <input
-          id="su-password"
+          id="su-password" suppressHydrationWarning
           type="password"
           autoComplete="new-password"
           value={password}

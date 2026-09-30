@@ -93,6 +93,10 @@ function zipContains(bytes: Uint8Array, marker: string): boolean {
 
 /** Classifies the ACTUAL uploaded bytes by their real file signature.
  * Fails closed: anything unrecognised is rejected, never defaulted through. */
+/** A file named .pdf whose contents are not a PDF. */
+export const NOT_A_REAL_PDF_MESSAGE =
+  "This file isn't a real PDF -- its contents are a different kind of file. Open it and save or export it as a PDF, then upload that.";
+
 export function sniffFileFormat(bytes: Uint8Array): FormatSniff {
   if (bytes.length < 8) {
     return { ok: false, reasonCode: "CORRUPTED_FILE", message: `That file is too small to be a readable document. ${ACCEPTED_FORMATS_MESSAGE}` };
@@ -166,9 +170,15 @@ export function validateDocumentUpload(args: {
     return { valid: false, reasonCode: "FILE_TOO_LARGE", message: `Files must be ${Math.floor(args.maxBytes / (1024 * 1024))} MB or smaller.` };
   }
   const sniffed = sniffFileFormat(args.bytes);
+  const extension = extensionOf(args.filename);
+  // A file NAMED .pdf whose bytes are something else (a zip renamed, a web
+  // page saved as .pdf) is described as what the person thinks it is: it
+  // isn't a real PDF. Executables keep their own message.
+  if (!sniffed.ok && extension === ".pdf" && (sniffed.reasonCode === "ARCHIVE_FILE" || sniffed.reasonCode === "UNSUPPORTED_FORMAT")) {
+    return { valid: false, reasonCode: sniffed.reasonCode, message: NOT_A_REAL_PDF_MESSAGE };
+  }
   if (!sniffed.ok) return { valid: false, reasonCode: sniffed.reasonCode, message: sniffed.message };
 
-  const extension = extensionOf(args.filename);
   const knownExtension = SUPPORTED_UPLOAD_FORMATS.some((f) => FORMAT_EXTENSIONS[f].includes(extension));
   if (!knownExtension) {
     return { valid: false, reasonCode: "UNSUPPORTED_EXTENSION", message: `"${extension || "(none)"}" is not a supported file extension. ${ACCEPTED_FORMATS_MESSAGE}` };

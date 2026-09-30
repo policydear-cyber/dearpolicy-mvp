@@ -6,6 +6,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { syncInsuredPersonToMember } from "@/lib/policies/linking";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
+import { ensurePolicyMemberTierSchema, loadTableTiers, normalizePlanTier, tierOptionsForDocument } from "@/lib/policies/member-tier";
 
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
@@ -18,12 +19,62 @@ const Schema = z.object({
   declared: z.boolean().optional(),
 });
 
+/** Round 5 (item 3): set everyone a document covers in one request, each
+ * with the cover tier they hold when the document has tiers. People the
+ * household declared (or picked as the upload's profile hint) and left out
+ * now are unlinked; people the
+ * document itself named (matched links) are never removed here, only their
+ * tier is updated. */
+const AssignmentsSchema = z.object({
+  policyId: z.string().uuid(),
+  assignments: z.array(z.object({ familyMemberId: z.string().uuid(), planTier: z.string().max(60).nullable().optional() })).max(30),
+});
+
 class PolicyNotFound extends Error {}
 class FamilyMemberNotFound extends Error {}
 
 export async function POST(request: NextRequest) {
   try {
-    const body = Schema.parse(await request.json().catch(() => ({})));
+    const raw = await request.json().catch(() => ({}));
+    if (raw && typeof raw === "object" && Array.isArray((raw as { assignments?: unknown }).assignments)) {
+      const assignment = AssignmentsSchema.parse(raw);
+      const assignCtx = await requireHouseholdContext(request);
+      await ensurePolicyMemberTierSchema();
+      const assigned = await createUserSupabaseClient(assignCtx.userId, async (client) => {
+        const policyRow = await client.query<{ id: string; extracted_json: PolicyExtraction | null; group_policy_number: string | null; policy_type: string | null }>(
+          `SELECT id, extracted_json, group_policy_number, policy_type FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`,
+          [assignment.policyId, assignCtx.householdId],
+        );
+        if (!policyRow.rows[0]) throw new PolicyNotFound();
+        const ids = [...new Set(assignment.assignments.map((a) => a.familyMemberId))];
+        if (ids.length) {
+          const members = await client.query<{ id: string }>(
+            `SELECT id FROM family_members WHERE id=ANY($1::uuid[]) AND account_id=$2 AND ${activePredicate()}`,
+            [ids, assignCtx.householdId],
+          );
+          if (members.rows.length !== ids.length) throw new FamilyMemberNotFound();
+        }
+        const people = policyRow.rows[0].extracted_json?.insuredPeople;
+        const tableTiers = (await loadTableTiers(client, assignCtx.householdId, [assignment.policyId])).get(assignment.policyId) ?? [];
+        const offered = tierOptionsForDocument({ hints: Array.isArray(people) ? people.map((p) => p?.relationshipHint) : [], groupPolicyNumber: policyRow.rows[0].group_policy_number, policyType: policyRow.rows[0].policy_type, tableTiers });
+        for (const id of ids) {
+          const tier = normalizePlanTier(assignment.assignments.find((a) => a.familyMemberId === id)?.planTier, offered);
+          await client.query(
+            `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence,benefit_tier)
+             VALUES($1,$2,$3,'user_declared',1.0,$4)
+             ON CONFLICT(policy_id,family_member_id) DO UPDATE SET benefit_tier=EXCLUDED.benefit_tier`,
+            [assignment.policyId, id, assignCtx.householdId, tier],
+          );
+        }
+        await client.query(
+          `DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('user_declared','upload_hint') AND NOT (family_member_id=ANY($3::uuid[]))`,
+          [assignment.policyId, assignCtx.householdId, ids],
+        );
+        return ids.length;
+      });
+      return NextResponse.json({ ok: true, assigned });
+    }
+    const body = Schema.parse(raw);
     const ctx = await requireHouseholdContext(request);
 
     const result = await createUserSupabaseClient(ctx.userId, async (client) => {

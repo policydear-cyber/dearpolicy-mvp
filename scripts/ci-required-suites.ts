@@ -87,4 +87,8 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "v11:answer-test",
   "v11:claims-test",
   "v11:customer-screens-test",
+  "r5:ingestion-test",
+  "r5:answer-test",
+  "r5:claims-test",
+  "r5:ux-test",
 ];

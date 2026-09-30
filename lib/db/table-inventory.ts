@@ -88,6 +88,7 @@ export const TABLE_INVENTORY: Record<string, TableInventoryEntry> = {
   household_export_audit_log: { class: "service_only", authenticated: [], policies: DENY("household_export_audit_log"), browserGrantsRequired: false, codePath: "lib/household/export-store.ts appendExportAudit" },
   storage_cleanup_locks: { class: "service_only", authenticated: [], policies: DENY("storage_cleanup_locks"), browserGrantsRequired: false, codePath: "lib/storage/cleanup.ts withCleanupLock" },
   storage_cleanup_audit_log: { class: "service_only", authenticated: [], policies: DENY("storage_cleanup_audit_log"), browserGrantsRequired: false, codePath: "lib/storage/cleanup.ts appendCleanupAudit" },
+  storage_purge_queue: { class: "service_only", authenticated: [], policies: DENY("storage_purge_queue"), browserGrantsRequired: false, codePath: "lib/storage/purge.ts (enqueueStoragePurge / drainStoragePurge)" },
   model_executions: { class: "service_only", authenticated: [], policies: DENY("model_executions"), browserGrantsRequired: false, codePath: "lib/ai/provenance.ts recordModelExecution" },
   model_usage: { class: "service_only", authenticated: [], policies: DENY("model_usage"), browserGrantsRequired: false, codePath: "lib/ai/ledger.ts (service; enforces the plan spend cap)" },
   processing_failure_diagnostics: { class: "service_only", authenticated: [], policies: DENY("processing_failure_diagnostics"), browserGrantsRequired: false, codePath: "lib/diagnostics/processing-failures.ts recordProcessingFailure (service pool only)" },
@@ -174,6 +175,9 @@ export const POLICY_STATE_COLUMNS: Record<"policies" | "policy_coverages", Recor
     confirmed: "verification", evidence_verified: "verification",
     source_text_start: "extraction_provenance", source_text_end: "extraction_provenance", extraction_method: "extraction_provenance",
     passage_verified: "verification", conflict_note: "verification", amended_by_policy_id: "verification", amendment_note: "verification",
+    // Round 5: the table column (tier / person class) and row kind a row was
+    // read from, and the kept document when this row duplicates it.
+    tier: "extraction_provenance", row_kind: "extraction_provenance", duplicate_of_policy_id: "verification",
   },
 };
 

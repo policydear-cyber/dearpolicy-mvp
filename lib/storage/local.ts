@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 function root() {
@@ -22,6 +22,34 @@ export async function savePolicyFile(args: {
   const fullPath = path.join(/* turbopackIgnore: true */ dir, filename);
   await writeFile(fullPath, args.bytes);
   return path.relative(root(), fullPath).replaceAll(path.sep, "/");
+}
+
+/** The storage key a policy file WILL have (same layout savePolicyFile
+ * writes), for a direct upload that is written in parts before it is
+ * accepted (lib/storage/index.ts policyUploadKey). */
+export function policyObjectKey(args: { accountId: string; familyMemberId: string; policyId: string; filename: string }) {
+  return [safeSegment(args.accountId), safeSegment(args.familyMemberId), safeSegment(args.policyId), safeSegment(args.filename || "policy.pdf")].join("/");
+}
+
+function resolveInsideRoot(storageKey: string) {
+  const storageRoot = root();
+  const fullPath = path.resolve(storageRoot, storageKey);
+  if (fullPath === storageRoot || !fullPath.startsWith(`${storageRoot}${path.sep}`)) throw new Error("Invalid storage path");
+  return fullPath;
+}
+
+/** Writes one part of a direct upload at `offset`. Parts arrive in order:
+ * a part must start exactly where the file currently ends, so a retried or
+ * out-of-order part can never leave a gap or overwrite what is there. */
+export async function appendPolicyUploadPart(storageKey: string, offset: number, bytes: Uint8Array) {
+  const fullPath = resolveInsideRoot(storageKey);
+  await mkdir(path.dirname(fullPath), { recursive: true });
+  const current = await stat(fullPath).then((s) => s.size).catch(() => 0);
+  if (offset === 0 && current > 0) await rm(fullPath, { force: true });
+  else if (offset !== current) throw new Error(`Upload part out of order (expected offset ${current}, got ${offset})`);
+  const handle = await open(fullPath, offset === 0 ? "w" : "r+");
+  try { await handle.write(bytes, 0, bytes.length, offset); } finally { await handle.close(); }
+  return offset + bytes.length;
 }
 
 export async function readPolicyFile(storageKey: string) {

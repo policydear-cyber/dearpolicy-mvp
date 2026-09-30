@@ -73,6 +73,9 @@ export const processPolicyProcessingJob: JobProcessor = async (job) => {
     storageKey: requireStringField(payload, "storageKey"),
     pdfPassword: typeof payload?.pdfPassword === "string" ? payload.pdfPassword : undefined,
     linkUploadMember: Boolean(payload?.linkUploadMember),
+    // Round 5: a deferred re-read (see scheduleDeferredRead) and its queue.
+    deferredRetry: Boolean(payload?.deferredRetry),
+    jobType: job.job_type,
     jobHeartbeat: async () => {
       await heartbeatJob(pool, { jobId: job.id, workerId });
     },

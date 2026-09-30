@@ -2,7 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
-import { customerError } from "@/components/customer-text";
+import { customerError, customerMessage } from "@/components/customer-text";
+import { MAX_UPLOAD_LABEL, uploadPolicyDocument } from "@/components/upload-document";
 
 /* V1.1: the household library shows what each document is, whose it is and
  * whether it is ready -- never processing stages, page counts, search-index
@@ -13,7 +14,7 @@ import { customerError } from "@/components/customer-text";
  * unavailable and what the person can do. */
 
 type Member = { id: string; display_name: string; relationship: string; policy_count: number };
-type LinkedPerson = { id: string; name: string; relationship: string; source: string };
+type LinkedPerson = { id: string; name: string; relationship: string; source: string; planTier?: string | null };
 type DetectedPerson = { name: string; matchedFamilyMemberId: string | null };
 type Policy = {
   id: string;
@@ -40,6 +41,10 @@ type Policy = {
   processing_stalled?: boolean;
   linked_people: LinkedPerson[];
   detected_people: DetectedPerson[];
+  /** Cover tiers the document describes (e.g. Employee / Spouse / Child). */
+  tier_options?: string[];
+  /** Who the document names, and as which tier. */
+  named_tiers?: { name: string; tier: string | null }[];
 };
 type Filter = "all" | "personal" | "reference";
 
@@ -72,6 +77,11 @@ export default function PoliciesPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const previousActiveCount = useRef(0);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  // Confirmations of actions taken on the library itself (delete, who a
+  // document covers, unlocking), shown where the person is looking.
+  const [libraryNotice, setLibraryNotice] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   async function refresh() {
     const [f, p] = await Promise.all([
@@ -80,6 +90,7 @@ export default function PoliciesPage() {
     ]);
     setFamily(f.family ?? []);
     setPolicies(p.policies ?? []);
+    setLoaded(true);
     if (p.documentSafetyMode === "not_scanned_prototype" || p.documentSafetyMode === "malware_scan") setDocumentSafetyMode(p.documentSafetyMode);
   }
 
@@ -111,31 +122,20 @@ export default function PoliciesPage() {
   async function upload(e: FormEvent) {
     e.preventDefault();
     if (!file) return;
-    // The server enforces the same limit, but an oversized body can be cut
-    // off by the platform before it ever reaches the route (leaving only a
-    // generic network failure), so the useful message has to come from here.
-    if (file.size > 50 * 1024 * 1024) {
-      setStatus("Files must be 50 MB or smaller. Split the document or export it at a lower resolution, then upload it again.");
-      return;
-    }
     setBusy(true);
     setStatus("Uploading document…");
     try {
-      const form = new FormData();
-      form.set("file", file);
-      if (memberId) form.set("familyMemberId", memberId);
-      if (pdfPassword) form.set("pdfPassword", pdfPassword);
-      const response = await fetch("/api/policies/upload", { method: "POST", body: form });
-      const payload = await response.json().catch(() => ({}) as { error?: string });
-      // The backend already returns a specific, actionable reason (e.g. "Create
-      // at least one family profile before uploading documents.", "This exact
-      // document is already in DearPolicy...", the 50MB limit). Discarding it
-      // for a generic "Upload failed" hid exactly the information a person
-      // needs to fix the problem themselves.
-      if (!response.ok) throw new Error(payload.error || "Upload failed");
+      // Straight to secure storage (components/upload-document.ts): large
+      // scanned booklets never pass through a size-limited server request.
+      await uploadPolicyDocument(file, {
+        familyMemberId: memberId || null,
+        pdfPassword,
+        onProgress: (fraction) => setStatus(`Uploading document… ${Math.round(fraction * 100)}%`),
+      });
       setStatus("Upload received. DearPolicy is reading it now — you can keep using the app.");
       setFile(null);
       setPdfPassword("");
+      if (fileInput.current) fileInput.current.value = "";
       await refresh();
     } catch (err) {
       setStatus(customerError(err, "The upload did not go through. Please try again."));
@@ -144,22 +144,39 @@ export default function PoliciesPage() {
     }
   }
 
-  // Uploading your own welcome booklet says you hold that cover. Asking who it
-  // belongs to is the one question the document itself cannot answer.
-  async function declareOwner(policyId: string, familyMemberId: string) {
-    const who = family.find((m) => m.id === familyMemberId)?.display_name ?? "that profile";
-    try {
-      const response = await fetch("/api/policies/link-person", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ policyId, familyMemberId, declared: true }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Could not save that");
-      setStatus(`Saved — this policy is ${who}'s. Its benefits will now be used in answers. Upload a schedule or statement when you have one to confirm the amounts.`);
-      await refresh();
-    } catch (error) {
-      setStatus(customerError(error, "Could not save that. Please try again in a moment."));
-    }
+  /** Give the password for a locked PDF that is already in the library:
+   * it is read again with that password; nothing is re-uploaded. */
+  async function unlock(policy: Policy, password: string) {
+    const label = policy.product_name ?? policy.original_filename;
+    const response = await fetch("/api/policies/reprocess", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ policyId: policy.id, pdfPassword: password }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not read it with that password.");
+    setLibraryNotice(`Reading ${label} with the password you entered…`);
+    await refresh();
+  }
+
+  // Who a document covers: one or several people (a group booklet names
+  // the employee, spouse and children), each with the cover tier they hold
+  // when the booklet has tiers.
+  async function saveCoverage(policy: Policy, assignments: { familyMemberId: string; planTier: string | null }[]) {
+    const label = policy.product_name ?? policy.original_filename;
+    const response = await fetch("/api/policies/link-person", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ policyId: policy.id, assignments }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not save that");
+    const names = assignments.map((a) => {
+      const m = family.find((f) => f.id === a.familyMemberId);
+      return m ? `${m.display_name}${a.planTier ? ` (${a.planTier})` : ""}` : null;
+    }).filter(Boolean);
+    setLibraryNotice(names.length
+      ? `Saved — ${label} covers ${names.join(", ")}. Its benefits will now be used in answers for ${names.length === 1 ? "that person" : "each of them"}.`
+      : `Saved — ${label} is not linked to anyone.`);
+    await refresh();
   }
 
   async function linkPerson(policyId: string, detectedName: string, familyMemberId: string) {
@@ -171,10 +188,10 @@ export default function PoliciesPage() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Could not link person");
-      setStatus(`Linked ${detectedName} to the selected family profile.`);
+      setLibraryNotice(`Linked ${detectedName} to the selected family profile.`);
       await refresh();
     } catch (error) {
-      setStatus(customerError(error, "Could not link that person. Please try again in a moment."));
+      setLibraryNotice(customerError(error, "Could not link that person. Please try again in a moment."));
     }
   }
 
@@ -195,10 +212,10 @@ export default function PoliciesPage() {
       const response = await fetch(`/api/policies/${policy.id}`, { method: "DELETE" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not delete document");
-      setStatus(`${label} was deleted. The portfolio has been recalculated.`);
+      setLibraryNotice(`Deleted ${label}. It is no longer used in answers, and your portfolio has been updated.`);
       await refresh();
     } catch (error) {
-      setStatus(customerError(error, "Could not delete that document. Please try again in a moment."));
+      setLibraryNotice(customerError(error, "Could not delete that document. Please try again in a moment."));
     } finally {
       setDeletingId(null);
     }
@@ -224,9 +241,9 @@ export default function PoliciesPage() {
 
     <section className="upload-panel">
       <form onSubmit={upload} className="upload-form">
-        <div className="field"><label>Profile hint <span>(optional)</span></label><select value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure — let DearPolicy detect names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
-        <div className="field"><label>Insurance document</label><input type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
-        <div className="field"><label>PDF password <span>(if protected)</span></label><input type="password" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
+        <div className="field"><label htmlFor="up-profile">Profile hint <span>(optional)</span></label><select id="up-profile" value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Not sure — let DearPolicy detect names</option>{family.map((m) => <option value={m.id} key={m.id}>{m.display_name} · {m.relationship}</option>)}</select></div>
+        <div className="field"><label htmlFor="up-file">Insurance document <span>(up to {MAX_UPLOAD_LABEL})</span></label><input id="up-file" ref={fileInput} type="file" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png,image/webp,.webp,image/tiff,.tif,.tiff,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)}/></div>
+        <div className="field"><label htmlFor="up-password">PDF password <span>(if protected)</span></label><input id="up-password" type="password" autoComplete="off" value={pdfPassword} onChange={(e) => setPdfPassword(e.target.value)} placeholder="Leave blank if not required"/></div>
         <button disabled={busy || !file} className="button primary" type="submit">{busy ? "Uploading…" : "Upload & analyse"}</button>
       </form>
       <div className="note">The password is used only for this processing job and is not stored. Reference documents do not need to be assigned to a family member.</div>
@@ -237,6 +254,7 @@ export default function PoliciesPage() {
       <div className="section-heading"><div><div className="eyebrow">DOCUMENTS</div><h2>Your insurance library</h2></div></div>
       <div className="filter-pills"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>All <b>{policies.length}</b></button><button className={filter === "personal" ? "active" : ""} onClick={() => setFilter("personal")}>Personal proof <b>{counts.personal}</b></button><button className={filter === "reference" ? "active" : ""} onClick={() => setFilter("reference")}>Reference <b>{counts.reference}</b></button></div>
 
+      {libraryNotice && <div className="upload-status library-notice" role="status" data-testid="library-notice">{libraryNotice}<button type="button" className="mini-button" onClick={() => setLibraryNotice("")} aria-label="Dismiss">✕</button></div>}
       <div className="document-list">{shown.map((policy) => {
         const quarantineHeld = isQuarantineHeld(policy);
         const scanRejected = isScanRejected(policy);
@@ -252,7 +270,7 @@ export default function PoliciesPage() {
         const referenceLinks = policy.linked_people.filter((p) => p.source === "scheme_reference_match");
         const personalLinks = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
         const pct = Math.max(0, Math.min(100, Number(policy.processing_progress ?? 0)));
-        return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id}>
+        return <div className={`document-card ${policy.needs_review ? "needs-review" : ""} ${processing ? "processing" : ""}`} key={policy.id} data-policy-id={policy.id}>
           <div className="document-head">
             <div className="policy-logo">{(policy.insurer ?? policy.original_filename).slice(0, 2).toUpperCase()}</div>
             <div className="document-title"><strong>{policy.product_name ?? policy.original_filename}</strong><span>{policy.insurer ?? "Insurer pending"} · {processing ? stageLabel(policy.processing_stage, policy.processing_status) : roleLabel(policy.document_role)}</span></div>
@@ -280,18 +298,99 @@ export default function PoliciesPage() {
             {!!personalLinks.length && <div className="linked-people"><b>Personal coverage linked to</b>{personalLinks.map((p) => <span key={p.id} className="person-tag">{p.name}</span>)}</div>}
             {!!policy.detected_people.length && <div className="detected-block"><b>Named insured people found</b>{policy.detected_people.map((person) => <div className="detected-row" key={person.name}><span>{person.name}</span>{person.matchedFamilyMemberId ? <span className="matched">Matched ✓</span> : <select defaultValue="" onChange={(e) => e.target.value && linkPerson(policy.id, person.name, e.target.value)}><option value="">Match to family profile…</option>{family.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}</select>}</div>)}</div>}
             {!!unmatched.length && <div className="document-warning">{unmatched.length} real name{unmatched.length === 1 ? "" : "s"} from this personalised document still need matching.</div>}
-          </> : !processing && policy.processing_status === "ready" ? <div className="reference-explainer"><span className="reference-icon">i</span><div>
-            <strong>Whose policy is this?</strong>
-            <p>This document explains what the plan pays but does not name a policyholder. If it is yours or a family member&rsquo;s, say so and DearPolicy will use its benefits when answering questions. Amounts printed here stay marked as the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
-            <div className="declare-owner">{family.map((m) => <button key={m.id} type="button" className="button secondary" onClick={() => declareOwner(policy.id, m.id)}>{policy.linked_people.some((p) => p.id === m.id) ? `${m.display_name} \u2713` : m.display_name}</button>)}</div>
-            {!!referenceLinks.length && <small>Also available as matching wording for {referenceLinks.map((p) => p.name).join(", ")}.</small>}
-          </div></div> : null}
+          </> : !processing && policy.processing_status === "ready" ? <CoversPicker policy={policy} family={family} onSave={(a) => saveCoverage(policy, a)} referenceLinks={referenceLinks.map((p) => p.name)} /> : null}
 
-          {!processing && policy.processing_error && <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{/password/i.test(policy.processing_error) ? "It is password-protected." : "Its benefits and amounts are not available for answers."}</span><small>{/password/i.test(policy.processing_error) ? "Delete it, then upload the same file again with its password in the \u201CPDF password\u201D field above." : "If you have a clearer copy, delete this one and upload that instead."}</small></div>}
+          {!processing && policy.processing_error && (/password/i.test(policy.processing_error)
+            ? <LockedPdf policy={policy} onUnlock={(password) => unlock(policy, password)} />
+            : <div className="row-error processing-error" data-testid="document-unreadable"><strong>This document could not be read</strong><span>{customerMessage(policy.processing_error, "Its benefits and amounts are not available for answers.")}</span><small>If you have a clearer copy or the original file, delete this one and upload that instead.</small></div>)}
         </div>;
-      })}{!shown.length && <div className="empty-card">No documents in this view.</div>}</div>
+      })}{!shown.length && <div className="empty-card">{!loaded ? "Loading your documents…" : policies.length ? "No documents in this view." : "No documents yet. Upload a policy schedule, certificate, renewal notice or benefits booklet above."}</div>}</div>
     </section>
   </div>;
+}
+
+/** A locked PDF already in the library: enter its password here and it is
+ * read again -- no delete, no re-upload. Says plainly whether a password
+ * was missing or did not work. */
+function LockedPdf({ policy, onUnlock }: { policy: Policy; onUnlock: (password: string) => Promise<void> }) {
+  const wrong = /incorrect|did not work|didn.t work|wrong/i.test(policy.processing_error ?? "");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const id = `unlock-${policy.id}`;
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!password) { setError("Enter the PDF's password."); return; }
+    setBusy(true); setError("");
+    try { await onUnlock(password); setPassword(""); }
+    catch (err) { setError(customerError(err, "Could not read it with that password. Please try again.")); }
+    finally { setBusy(false); }
+  }
+  return <div className="row-error processing-error locked-pdf" data-testid="document-locked">
+    <strong>{wrong ? "The password didn’t work" : "This PDF is password-protected"}</strong>
+    <span>{wrong ? "DearPolicy tried the password you gave, but the PDF did not open. Check it (passwords are case-sensitive) and try again." : "Enter the password your insurer gave you for this PDF and DearPolicy will read it."}</span>
+    <form onSubmit={submit} className="unlock-form">
+      <label htmlFor={id}>PDF password</label>
+      <input id={id} type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <button type="submit" className="mini-button" disabled={busy}>{busy ? "Reading…" : wrong ? "Try again" : "Unlock and read"}</button>
+    </form>
+    {error && <small role="alert">{error}</small>}
+    <small>The password is used only to read this document and is not stored.</small>
+  </div>;
+}
+
+/** Who a document covers. A booklet can cover several people (employee,
+ * spouse, children): each family member is a toggle -- press everyone it
+ * covers -- and, when the booklet has cover tiers, each covered person gets
+ * a tier. Every change is saved at once and confirmed. People the booklet
+ * names are pointed out. */
+function CoversPicker({ policy, family, onSave, referenceLinks }: { policy: Policy; family: Member[]; onSave: (assignments: { familyMemberId: string; planTier: string | null }[]) => Promise<void>; referenceLinks: string[] }) {
+  const tiers = policy.tier_options ?? [];
+  const named = policy.named_tiers ?? [];
+  const namedFor = (m: Member) => named.find((n) => {
+    const a = n.name.toLowerCase(), b = m.display_name.toLowerCase();
+    return a === b || a.includes(b) || b.includes(a);
+  });
+  const covered = policy.linked_people.filter((p) => p.source !== "scheme_reference_match");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const current = () => covered.map((p) => ({ familyMemberId: p.id, planTier: p.planTier ?? null }));
+  async function save(next: { familyMemberId: string; planTier: string | null }[]) {
+    setBusy(true); setError("");
+    try { await onSave(next); }
+    catch (err) { setError(customerError(err, "Could not save that. Please try again in a moment.")); }
+    finally { setBusy(false); }
+  }
+  function toggle(m: Member) {
+    const on = covered.some((p) => p.id === m.id);
+    const next = on ? current().filter((a) => a.familyMemberId !== m.id)
+      : [...current(), { familyMemberId: m.id, planTier: namedFor(m)?.tier ?? null }];
+    void save(next);
+  }
+  function setTier(memberId: string, tier: string) {
+    void save(current().map((a) => a.familyMemberId === memberId ? { ...a, planTier: tier || null } : a));
+  }
+  return <div className="reference-explainer covers-picker" data-testid="covers-picker"><span className="reference-icon">i</span><div>
+    <strong>Who does this document cover?</strong>
+    <p>{named.length ? `It names ${named.map((n) => n.name).join(", ")}. ` : ""}Press everyone in your family it covers{tiers.length ? ", then choose the cover each person has" : ""} — one person or several. DearPolicy then uses its benefits when answering questions about them. Amounts printed here stay the document&rsquo;s own figures until a schedule or statement confirms yours.</p>
+    <div className="declare-owner" role="group" aria-label="Family members this document covers">{family.map((m) => {
+      const on = covered.some((p) => p.id === m.id);
+      return <button key={m.id} type="button" className={`button ${on ? "primary" : "secondary"}`} aria-pressed={on} disabled={busy} onClick={() => toggle(m)}>
+        {on ? `${m.display_name} \u2713` : m.display_name}{!on && namedFor(m) ? " · named" : ""}
+      </button>;
+    })}</div>
+    {tiers.length > 0 && covered.length > 0 && <div className="covers-list">{covered.map((p) => (
+      <div className="covers-row" key={p.id}>
+        <label htmlFor={`tier-${policy.id}-${p.id}`}>{p.name}&rsquo;s cover</label>
+        <select id={`tier-${policy.id}-${p.id}`} value={p.planTier ?? ""} disabled={busy} onChange={(e) => setTier(p.id, e.target.value)}>
+          <option value="">Choose…</option>
+          {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+    ))}</div>}
+    {error && <small role="alert" className="row-error">{error}</small>}
+    {referenceLinks.length > 0 && <small>Also available as matching wording for {referenceLinks.join(", ")}.</small>}
+  </div></div>;
 }
 
 type PolicyDetailsPayload = {

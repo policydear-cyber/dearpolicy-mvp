@@ -49,3 +49,21 @@ ALTER TABLE policies ADD COLUMN IF NOT EXISTS document_date date;
 ALTER TABLE policies ADD COLUMN IF NOT EXISTS reading_cache jsonb;
 -- How each stored page's text was obtained: 'native', 'ocr' or 'unreadable'.
 ALTER TABLE policy_pages ADD COLUMN IF NOT EXISTS extraction_method text;
+-- Round 5: tier = the heading of the table column a row's value is printed in
+-- ("Plan A", "Private hospital", "Child"); row_kind types a schedule row
+-- ('benefit','as_charged','not_covered','unlimited','deductible','co_insurance',
+-- 'co_payment','co_payment_cap','pro_ration','policy_year_limit','family_limit')
+-- -- only 'benefit' rows carry a payout formula; duplicate_of_policy_id marks a
+-- row that a more authoritative document of the same plan states identically
+-- (show that one). policy_members.benefit_tier: the column heading that
+-- applies to this person.
+ALTER TABLE IF EXISTS policy_benefits ADD COLUMN IF NOT EXISTS tier text;
+ALTER TABLE IF EXISTS policy_benefits ADD COLUMN IF NOT EXISTS row_kind text;
+ALTER TABLE IF EXISTS policy_benefits ADD COLUMN IF NOT EXISTS duplicate_of_policy_id uuid;
+ALTER TABLE IF EXISTS policy_coverages ADD COLUMN IF NOT EXISTS tier text;
+ALTER TABLE IF EXISTS policy_coverages ADD COLUMN IF NOT EXISTS row_kind text;
+ALTER TABLE IF EXISTS policy_coverages ADD COLUMN IF NOT EXISTS duplicate_of_policy_id uuid;
+ALTER TABLE IF EXISTS coverage_rules ADD COLUMN IF NOT EXISTS tier text;
+ALTER TABLE IF EXISTS coverage_rules ADD COLUMN IF NOT EXISTS row_kind text;
+ALTER TABLE IF EXISTS coverage_rules ADD COLUMN IF NOT EXISTS duplicate_of_policy_id uuid;
+ALTER TABLE IF EXISTS policy_members ADD COLUMN IF NOT EXISTS benefit_tier text;

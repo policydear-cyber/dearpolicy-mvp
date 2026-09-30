@@ -10,7 +10,16 @@ type Member = {
 
 const RELATIONSHIPS = ["self","spouse","parent","child","sibling","grandparent","dependant","other"];
 
+/** Today as YYYY-MM-DD in the person's own time zone (a birth date can't be later). */
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 export default function FamilyPage() {
+  // Set after hydration: the server's "today" (and time zone) can differ.
+  const [today, setToday] = useState<string | undefined>(undefined);
+  useEffect(() => { setToday(todayIso()); }, []);
   const [family, setFamily] = useState<Member[]>([]);
   const [baseline, setBaseline] = useState<Record<string, Member>>({});
   const [name, setName] = useState("");
@@ -30,6 +39,7 @@ export default function FamilyPage() {
 
   async function add(event: FormEvent) {
     event.preventDefault(); setStatus("");
+    if (dob && dob > todayIso()) return setStatus("A date of birth can't be in the future.");
     const response = await fetch("/api/family", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: name, relationship, dateOfBirth: dob || null, preferredName: preferred || null }) });
     const payload = await response.json();
     if (!response.ok) return setStatus(customerMessage(payload.error, "Could not add this profile. Please try again in a moment."));
@@ -37,6 +47,7 @@ export default function FamilyPage() {
   }
 
   async function save(member: Member) {
+    if (member.date_of_birth && member.date_of_birth > todayIso()) return setStatus("A date of birth can't be in the future.");
     const response = await fetch(`/api/family/${member.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ displayName: member.display_name, relationship: member.relationship, dateOfBirth: member.date_of_birth, preferredName: member.preferred_name, notes: member.notes }) });
     const payload = await response.json();
     setStatus(response.ok ? `Saved ${member.display_name}.` : (customerMessage(payload.error, "Could not save this profile. Please try again in a moment.")));
@@ -77,7 +88,7 @@ export default function FamilyPage() {
         <form onSubmit={add} className="profile-add-grid">
           <div className="field"><label htmlFor="fm-new-name">Full name</label><input id="fm-new-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Tan Yi Chuen, Desmond" required /></div>
           <div className="field"><label htmlFor="fm-new-relationship">Relationship</label><select id="fm-new-relationship" value={relationship} onChange={(e) => setRelationship(e.target.value)}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
-          <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} /></div>
+          <div className="field"><label htmlFor="fm-new-dob">Date of birth (optional)</label><input id="fm-new-dob" type="date" max={today} value={dob} onChange={(e) => setDob(e.target.value)} /></div>
           <div className="field"><label htmlFor="fm-new-preferred">Preferred name (optional)</label><input id="fm-new-preferred" value={preferred} onChange={(e) => setPreferred(e.target.value)} placeholder="e.g. Desmond" /></div>
           <button className="button primary" type="submit" disabled={!name.trim()}>+ Add person</button>
         </form>
@@ -93,7 +104,7 @@ export default function FamilyPage() {
               <div className="profile-fields">
                 <div className="field"><label htmlFor={`fm-${member.id}-name`}>Full name</label><input id={`fm-${member.id}-name`} value={member.display_name} onChange={(e) => update(member.id,{ display_name:e.target.value })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-relationship`}>Relationship</label><select id={`fm-${member.id}-relationship`} value={member.relationship} onChange={(e) => update(member.id,{ relationship:e.target.value })}>{RELATIONSHIPS.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
-                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
+                <div className="field"><label htmlFor={`fm-${member.id}-dob`}>Date of birth</label><input id={`fm-${member.id}-dob`} type="date" max={today} value={member.date_of_birth ?? ""} onChange={(e) => update(member.id,{ date_of_birth:e.target.value || null })} /></div>
                 <div className="field"><label htmlFor={`fm-${member.id}-preferred`}>Preferred name</label><input id={`fm-${member.id}-preferred`} value={member.preferred_name ?? ""} onChange={(e) => update(member.id,{ preferred_name:e.target.value || null })} /></div>
               </div>
               <div className="profile-actions">

@@ -16,14 +16,17 @@ export function assessCurrentness(args:{now:Date;lastEvidenceOn:string|null;rene
   const expiry=args.renewalOrExpiryDate&&Number.isFinite(Date.parse(args.renewalOrExpiryDate))?args.renewalOrExpiryDate:null;
   const evidence=args.lastEvidenceOn&&Number.isFinite(Date.parse(args.lastEvidenceOn))?args.lastEvidenceOn:null;
   const ageDays=evidence?Math.floor((args.now.getTime()-Date.parse(evidence))/86_400_000):null;
-  const fresh=ageDays!=null&&ageDays>=0&&ageDays<=CURRENTNESS_MAX_EVIDENCE_DAYS;
+  // A payment or renewal dated in the future (a GIRO deduction scheduled for
+  // 5 April 2027 on a renewal notice) is evidence the policy is being kept
+  // current, not "older than 400 days": a negative age used to fall through.
+  const fresh=ageDays!=null&&ageDays<=CURRENTNESS_MAX_EVIDENCE_DAYS;
   if(expiry&&Date.parse(expiry)<args.now.getTime()&&!fresh)
     return {state:"expiry_date_passed",label:"Active status not recently verified",
       detail:"The uploaded document shows a renewal or expiry date of "+expiry+" that has already passed, and no later premium or renewal evidence is on file. "+ownership,
       lastEvidenceOn:evidence,renewalOrExpiryDate:expiry};
   if(fresh)
     return {state:"verified_recent",label:"Active status evidenced",
-      detail:"Latest payment or renewal evidence on file: "+evidence+".",
+      detail:(ageDays!=null&&ageDays<0?"Next payment or renewal on file: ":"Latest payment or renewal evidence on file: ")+evidence+".",
       lastEvidenceOn:evidence,renewalOrExpiryDate:expiry};
   if(evidence)
     return {state:"not_recently_verified",label:"Active status not recently verified",
@@ -62,4 +65,20 @@ export async function loadPremiumEvidence(accountId:string,memberIds:string[]){
 export function contractCurrentness(contract:PolicyContract,rows:PremiumEvidenceRow[],now:Date){
   const renewal=contract.documents.map(d=>d.renewal_or_expiry_date).filter((v):v is string=>!!v).sort().at(-1)??null;
   return assessCurrentness({now,lastEvidenceOn:matchPremiumEvidence(contract,rows),renewalOrExpiryDate:renewal});
+}
+
+/** The "not recently verified" note is about the policy, not about each
+ * benefit: several workflow paths add it to every benefit card of a stale
+ * contract. Said once per answer instead, in the answer's details. */
+export const ACTIVE_STATUS_NOTE=/^Active status not recently verified: /;
+export function consolidateActiveStatus<T extends {details:string[];claimItems?:{conditions:string[]}[]}>(answer:T):T{
+  const notes:string[]=[];
+  for(const item of answer.claimItems??[]){
+    const kept:string[]=[];
+    for(const condition of item.conditions)(ACTIVE_STATUS_NOTE.test(condition)?notes:kept).push(condition);
+    item.conditions=kept;
+  }
+  const first=notes[0];
+  if(first&&!answer.details.some(d=>ACTIVE_STATUS_NOTE.test(d)))answer.details.push(first);
+  return answer;
 }

@@ -26,7 +26,17 @@ export const UNREADABLE_DOCUMENT_MESSAGE =
 export const UNOPENABLE_DOCUMENT_MESSAGE =
   "This file could not be opened as a document, so none of its contents are available. It may be damaged; the original file would let DearPolicy read it.";
 export const DOCUMENT_READING_FAILED_MESSAGE =
-  "DearPolicy could not finish reading this document after several automatic attempts, so the insured people, benefits and amounts in it are not available.";
+  "DearPolicy could not finish reading this document, so the insured people, benefits and amounts in it are not available.";
+/** Round 5: the reading SERVICE failed (a provider outage, a timeout), not
+ * the file. Shown after the job's own attempts ran out, while one later
+ * retry is scheduled. Never says the document is unreadable. */
+export const DOCUMENT_READING_SERVICE_MESSAGE =
+  "DearPolicy couldn't finish reading this document right now. It will try again automatically; there is nothing you need to do.";
+/** Round 5: the reading service failed but the document's own text layer was
+ * readable, so what plain code can read (its tables, conditions and text
+ * search) is available now. The progress message of a ready document. */
+export const DOCUMENT_READ_IN_PART_MESSAGE =
+  "Ready. DearPolicy read this document's text and tables, but couldn't finish reading who it covers and its cover amounts right now. It will try again automatically.";
 /** Shown (as the progress message, not an error) while an automatic retry
  * is scheduled after a temporary failure. */
 export const DOCUMENT_READING_RETRY_MESSAGE =
@@ -38,6 +48,7 @@ export const USER_ACTIONABLE_PROCESSING_ERRORS: ReadonlySet<string> = new Set([
   UNREADABLE_DOCUMENT_MESSAGE,
   UNOPENABLE_DOCUMENT_MESSAGE,
   DOCUMENT_READING_FAILED_MESSAGE,
+  DOCUMENT_READING_SERVICE_MESSAGE,
 ]);
 
 /** Pages of an otherwise readable document that could not be read. One
@@ -59,4 +70,25 @@ export class UserActionableProcessingError extends Error {
     super(message);
     this.name = "UserActionableProcessingError";
   }
+}
+
+/** Round 5: a failure of a service DearPolicy depends on (the reading model,
+ * hosted OCR), not of the document. Always retried by the durable queue
+ * (lib/jobs/pipeline-worker.ts classifyPipelineError), bounded by the job's
+ * max_attempts. Never used for an exhausted quota or spend cap. */
+export class TemporaryProcessingError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = "TemporaryProcessingError";
+  }
+}
+
+/** An exhausted provider quota, billing stop or DearPolicy's own spend cap:
+ * waiting minutes does not clear it, so it is never retried. */
+export function isQuotaOrSpendStop(error: unknown): boolean {
+  const name = error instanceof Error ? error.name || error.constructor?.name : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return name === "ProviderQuotaExhausted" || name === "SpendCapReached"
+    || (error instanceof Error && error.constructor?.name === "SpendCapReached")
+    || /insufficient_quota|quota|billing|spend.?cap|SpendCapReached/i.test(message);
 }

@@ -386,7 +386,10 @@ async function main() {
     if (fit({ eventLocation: "Singapore" })?.kind !== "location") f.push("overseas-only cover is offered for an event in Singapore");
     if (fit({ benefitTitle: "Accident medical reimbursement", policyType: "Travel", eventLocation: "Singapore" })?.kind !== "location") f.push("a travel policy's cover is offered for an event in Singapore");
     if (fit({ eventLocation: "Overseas" }) !== null) f.push("positive control: overseas cover is ruled out for an overseas event");
-    if (fit({ eventLocation: "Not sure" }) !== null) f.push("positive control: an unknown location rules overseas cover out");
+    // Round 5 (BLOCKER): travel cover needs trip context, so an unknown place no longer keeps it as a possible benefit.
+    if (fit({ eventLocation: "Not sure" })?.kind !== "trip") f.push("travel cover is offered when the place of the event is unknown");
+    if (fit({ eventLocation: "Bangkok", eventDate: "2026-09-25", tripStart: "2026-09-20", tripEnd: "2026-09-26" }) !== null) f.push("positive control: overseas cover within the trip dates is ruled out");
+    if (fit({ eventLocation: "Bangkok", eventDate: "2026-10-05", tripStart: "2026-09-20", tripEnd: "2026-09-26" })?.kind !== "trip") f.push("overseas cover is offered for an event outside the trip dates");
     if (fit({ eventLocation: "Singapore", travelEvent: true }) !== null) f.push("positive control: a travel claim's own cover is ruled out by location");
     if (fit({ benefitTitle: "Fracture of arm", eventLocation: "Singapore" }) !== null) f.push("positive control: local cover is ruled out in Singapore");
     results.push({ name: "V1.1 eval: event names and event fit", ok: !f.length, failures: f, transcript: [] });

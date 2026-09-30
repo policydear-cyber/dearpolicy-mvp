@@ -156,7 +156,7 @@ export function parseBenefitValue(cell:string,options?:{percentageBasis?:Percent
     }
   }
   // "Up to S$500 per incident" — a reimbursement ceiling, never a payout.
-  const cap=text.match(new RegExp(String.raw`^(?:up\s+to|max(?:imum)?(?:\s+of)?|not\s+exceed(?:ing)?|limited\s+to|subject\s+to\s+a?\s*(?:limit\s+of)?)\s*`+MONEY,"i"));
+  const cap=text.match(new RegExp(String.raw`^(?:(?:reimbursed\s+)?up\s+to|max(?:imum)?(?:\s+of)?|not\s+exceed(?:ing)?|limited\s+to|subject\s+to\s+a?\s*(?:limit\s+of)?)\s*`+MONEY,"i"));
   if(cap){
     const limit=amount(cap[1]);
     if(limit!=null)return {kind:"expense_cap",value:limit,currency,basis:"reimbursed up to the "+moneyLabel(currency,limit)+" limit"};

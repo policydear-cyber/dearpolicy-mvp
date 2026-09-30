@@ -10,12 +10,13 @@ import { isMedicalClaimEligibleDocumentType, type ClaimEvidenceDocumentType } fr
 import { HOUSEHOLD_REVIEW_STATUS_COPY, INDICATIVE_ESTIMATE_NOTICE, type HouseholdReviewStatus } from "@/lib/claims/reviewers/copy";
 import { IndicativeEstimatePanel } from "./indicative-panel";
 import { customerError, customerMessage } from "@/components/customer-text";
+import { maybeSgDate } from "@/components/format-date";
 
 /** claimDisplayStatus() output (lib/claims/status.ts), attached by the claims
  * API -- the ONLY source of this page's status line and "what to send" list,
  * shared with the claims list. */
 type ClaimDisplay = { label: string; tone: "info" | "waiting" | "ready"; hasEstimate: boolean; requestedDocuments: string[]; detail?: string };
-type Claim = { id: string; family_member_id: string; status: string; event_summary: string | null; display?: ClaimDisplay | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
+type Claim = { id: string; family_member_id: string; conversation_id?: string | null; status: string; event_summary: string | null; display?: ClaimDisplay | null; facts: Record<string, unknown>; decision_packet: { assessments?: { id: string; coverageId?: string; title: string }[] } | null };
 type ExtractedFields = {
   deceasedName: string | null; otherNamesMentioned: string[]; personIdentifiers: { label: string; value: string }[];
   dateOfDeath: string | null; statedCauseOfDeath: string | null; mannerOfDeath: string | null; issuingAuthority: string | null;
@@ -43,6 +44,33 @@ function reviewedValue(doc: EvidenceDoc, field: keyof ExtractedFields): unknown 
   return doc.extraction.extracted_fields[field];
 }
 
+/** Which document types answer the documents this claim asks for
+ * (claimDisplayStatus().requestedDocuments), in that order -- so a fracture
+ * claim's picker starts with medical and imaging reports, not a death
+ * certificate. */
+const REQUEST_TYPE_HINTS: { pattern: RegExp; types: string[] }[] = [
+  { pattern: /x-ray|scan|imaging|mri|ct\b/i, types: ["imaging_report"] },
+  { pattern: /doctor|medical|specialist|diagnos/i, types: ["medical_report", "doctor_memo", "specialist_memo"] },
+  { pattern: /discharge/i, types: ["discharge_summary"] },
+  { pattern: /surg|operation|procedure/i, types: ["surgical_report", "procedure_report"] },
+  { pattern: /patholog|biopsy/i, types: ["pathology_report"] },
+  { pattern: /lab/i, types: ["laboratory_report"] },
+  { pattern: /itemi[sz]ed/i, types: ["itemised_bill"] },
+  { pattern: /bill|invoice/i, types: ["hospital_bill", "itemised_bill"] },
+  { pattern: /receipt|proof of payment/i, types: ["receipt_payment_proof"] },
+  { pattern: /medishield|integrated shield/i, types: ["medishield_integrated_shield_settlement_statement"] },
+  { pattern: /settlement|other insurer/i, types: ["other_insurer_settlement_statement"] },
+  { pattern: /police|accident report/i, types: ["police_report"] },
+  { pattern: /death certificate/i, types: ["death_certificate"] },
+  { pattern: /coroner/i, types: ["coroners_report"] },
+  { pattern: /referral/i, types: ["referral"] },
+];
+function suggestedTypes(requested: string[]): string[] {
+  const known = new Set(DOCUMENT_TYPE_OPTIONS.map((o) => o.value as string));
+  const out: string[] = [];
+  for (const text of requested) for (const hint of REQUEST_TYPE_HINTS) if (hint.pattern.test(text)) for (const t of hint.types) if (known.has(t) && !out.includes(t)) out.push(t);
+  return out;
+}
 export default function ClaimEvidencePage() {
   const params = useParams<{ id: string }>();
   const claimSessionId = params.id;
@@ -131,7 +159,7 @@ export default function ClaimEvidencePage() {
 
   return (
     <div className="page">
-      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload the documents for this claim and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div></header>
+      <header className="page-header"><div><div className="eyebrow">CLAIM EVIDENCE</div><h1>{claim.event_summary ?? "Claim evidence"}</h1><p className="lead">Upload the documents for this claim and check what DearPolicy read from them. Nothing is used to estimate an amount until it has been reviewed, and the insurer makes the final decision on any claim.</p></div>{claim.conversation_id ? <a className="button secondary" href={`/chat?conversation=${claim.conversation_id}`} data-testid="claim-conversation-link">← Back to the conversation</a> : null}</header>
 
       <section className="section claim-status-panel" data-testid="claim-display" data-tone={claim.display?.tone ?? "info"}>
         <div className="eyebrow">STATUS</div>
@@ -147,9 +175,14 @@ export default function ClaimEvidencePage() {
           <label>Document type
             <select value={docType} onChange={(e) => setDocType(e.target.value)} required>
               <option value="" disabled>Choose what this document is…</option>
-              {DOCUMENT_TYPE_GROUPS.map((group) => (
+              {suggestedTypes(claim.display?.requestedDocuments ?? []).length > 0 && (
+                <optgroup label="Asked for on this claim">
+                  {suggestedTypes(claim.display?.requestedDocuments ?? []).map((value) => <option key={`s-${value}`} value={value}>{documentTypeLabel(value)}</option>)}
+                </optgroup>
+              )}
+              {DOCUMENT_TYPE_GROUPS.map((group) => group.options.every((option) => suggestedTypes(claim.display?.requestedDocuments ?? []).includes(option.value)) ? null : (
                 <optgroup key={group.id} label={group.label}>
-                  {group.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  {group.options.filter((option) => !suggestedTypes(claim.display?.requestedDocuments ?? []).includes(option.value)).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </optgroup>
               ))}
             </select>
@@ -192,7 +225,7 @@ export default function ClaimEvidencePage() {
               {doc.extraction && documentTypeGroup(doc.document_type) === "cause_of_death" && (
                 <div style={{ marginTop: 8 }}>
                   <p>Deceased name: <b>{String(reviewedValue(doc, "deceasedName") ?? "—")}</b></p>
-                  <p>Date of death: <b>{String(reviewedValue(doc, "dateOfDeath") ?? "—")}</b></p>
+                  <p>Date of death: <b>{maybeSgDate(reviewedValue(doc, "dateOfDeath")) || "—"}</b></p>
                   <p>Stated cause of death: <b>{String(reviewedValue(doc, "statedCauseOfDeath") ?? "—")}</b></p>
                   <p>Manner of death: <b>{String(reviewedValue(doc, "mannerOfDeath") ?? "—")}</b></p>
                   <p>Issuing authority: <b>{String(reviewedValue(doc, "issuingAuthority") ?? "—")}</b></p>
@@ -207,7 +240,7 @@ export default function ClaimEvidencePage() {
                   <p>Patient: <b>{String(reviewedValue(doc, "patientName") ?? "—")}</b></p>
                   <p>Diagnosis as stated: <b>{String(reviewedValue(doc, "exactDiagnosis") ?? "—")}</b></p>
                   <p>Stage as stated: <b>{String(reviewedValue(doc, "diseaseStage") ?? "—")}</b></p>
-                  <p>Diagnosis date: <b>{String(reviewedValue(doc, "diagnosisDate") ?? "—")}</b></p>
+                  <p>Diagnosis date: <b>{maybeSgDate(reviewedValue(doc, "diagnosisDate")) || "—"}</b></p>
                 </div>
               )}
 

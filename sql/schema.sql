@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS policy_members (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(policy_id, family_member_id)
 );
+-- Round 5: the cover tier a person holds (policy_members.benefit_tier) is
+-- added by sql/v11-ingestion-evidence.sql -- one column shared by the
+-- reading pipeline, the Policies "who does this cover" picker and claims.
 
 CREATE TABLE IF NOT EXISTS policy_detected_people (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -12,7 +12,7 @@ ADMIN=$(node -e 'const u=new URL(process.argv[1]);u.pathname="/postgres";console
 P=(psql "$URL" -v ON_ERROR_STOP=1 -q)
 psql "$ADMIN" -v ON_ERROR_STOP=1 -qc "DROP DATABASE IF EXISTS \"$DB\"" -c "CREATE DATABASE \"$DB\""
 echo "1. schema as currently live (every file except the pending migration)"
-for f in schema benefit-catalog claim-evidence claim-composition critical-illness disability cover-conditions model-usage chat-upgrade coverage-ledger background-jobs rate-limit lifecycle claim-reviewers model-provenance household-rls infrastructure-rls; do "${P[@]}" -f "sql/$f.sql" >/dev/null; done
+for f in schema benefit-catalog claim-evidence claim-composition critical-illness disability cover-conditions model-usage chat-upgrade coverage-ledger background-jobs rate-limit lifecycle claim-reviewers model-provenance storage-purge household-rls infrastructure-rls; do "${P[@]}" -f "sql/$f.sql" >/dev/null; done
 echo "2. Supabase-style default grants and synthetic raw-text rows"
 "${P[@]}" <<'SQL'
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;

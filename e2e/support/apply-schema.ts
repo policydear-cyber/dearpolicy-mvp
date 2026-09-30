@@ -13,6 +13,7 @@ const FILES = [
   "sql/chat-upgrade.sql", "sql/coverage-ledger.sql", "sql/background-jobs.sql", "sql/rate-limit.sql",
   "sql/lifecycle.sql", "sql/claim-reviewers.sql", "sql/model-provenance.sql", "sql/household-rls.sql",
   "sql/processing-failure-diagnostics.sql",
+  "sql/storage-purge.sql",
   "sql/infrastructure-rls.sql", "sql/v11-ingestion-evidence.sql",
 ];
 

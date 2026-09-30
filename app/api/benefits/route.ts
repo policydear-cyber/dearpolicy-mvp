@@ -4,7 +4,7 @@ import { z } from "zod";
 import { isUuid,query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { coverageForBenefit,describeBenefitFormula,ensureBenefitSchema,looksLikeCoverageLine,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { coverageForBenefit,describeBenefitFormula,describeScheduleTerm,isScheduleTerm,ensureBenefitSchema,looksLikeCoverageLine,repairStoredRules,reviewedBenefitFormula,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 
 import { loadPolicyInventory } from "@/lib/policies/inventory";
 import { ensureConditionSchema } from "@/lib/policies/condition-catalog";
@@ -27,7 +27,7 @@ type Row={
   offset_days:number|null;maximum_days:number|null;source_page:number|null;quote:string;
   conditions:unknown;requirements:unknown;needs_review:boolean;reviewed_at:string|null;basis_inferred:boolean;
   original_filename:string;insurer:string|null;document_role:string|null;document_product:string|null;
-  owner_names:string[]|null;
+  owner_names:string[]|null;tier:string|null;row_kind:string|null;
 };
 
 export async function GET(request:NextRequest){
@@ -42,7 +42,7 @@ export async function GET(request:NextRequest){
               b.currency,b.fact_key,b.offset_days,b.maximum_days,b.source_page,b.quote,
               b.conditions,b.requirements,b.needs_review,b.reviewed_at::text,b.basis_inferred,
               p.original_filename,p.insurer,p.document_role,p.product_name AS document_product,
-              owners.names AS owner_names
+              owners.names AS owner_names,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind
          FROM policy_benefits b
          JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id AND p.superseded_at IS NULL AND ${activePredicate("p")}
          LEFT JOIN LATERAL (
@@ -52,10 +52,14 @@ export async function GET(request:NextRequest){
                WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id
          ) owners ON true
         WHERE b.account_id=$1
+          -- The same policy uploaded twice: one set of rows (see markDuplicates),
+          -- as long as the kept document is still here.
+          AND NOT EXISTS (SELECT 1 FROM policies k WHERE k.account_id=b.account_id AND k.id=(to_jsonb(b)->>'duplicate_of_policy_id')::uuid
+                AND k.superseded_at IS NULL AND ${activePredicate("k")})
           AND ($2::uuid IS NULL OR EXISTS (
                 SELECT 1 FROM policy_members pm
                  WHERE pm.policy_id=b.policy_id AND pm.account_id=b.account_id AND pm.family_member_id=$2::uuid))
-        ORDER BY b.needs_review DESC,coalesce(b.product_name,p.original_filename),b.benefit_name`,
+        ORDER BY b.needs_review DESC,coalesce(b.product_name,p.original_filename),b.benefit_name,b.source_page,to_jsonb(b)->>'tier'`,
       [accountId,member||null]);
     /** What, if anything, this row needs from the person reading the screen.
      *
@@ -108,7 +112,10 @@ export async function GET(request:NextRequest){
         currency:stub.currency,factKey:stub.factKey,offsetDays:stub.offsetDays,maximumDays:stub.maximumDays,
       };
       const needsConfirmation=stub.needsConfirmation===true;
-      const attention=attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
+      // A schedule term ("As charged", a deductible, a policy-year limit) is
+      // read exactly as printed: nothing is unreadable and nothing to confirm.
+      const term=isScheduleTerm(row.row_kind);
+      const attention=term?null:attentionFor({needsConfirmation,formulaKind:stub.formulaKind,maximumDays:stub.maximumDays,factKey:stub.factKey});
       const calculatedAgainst=(contractsByDocument.get(row.policy_id)??[]).map(contract=>{
         const coverage=coverageForBenefit(contract,stub);
         return coverage?{owner:contract.ownerName,plan:coverage.productName??contract.name,amount:coverage.amount!=null?formatMoney(coverage.amount,coverage.currency):null}
@@ -123,7 +130,9 @@ export async function GET(request:NextRequest){
         traits:Array.isArray(row.traits)?row.traits:[],
         ...formula,
         // The whole point of the screen: the rule as a sentence, not a schema.
-        pays:describeBenefitFormula(formula),
+        pays:term?describeScheduleTerm(row.row_kind!,stub.formulaValue,stub.currency):describeBenefitFormula(formula),
+        // The column of a multi-column table: the plan tier or person class.
+        tier:row.tier,rowKind:row.row_kind??"benefit",
         sourcePage:row.source_page,quote:row.quote,
         conditions:stub.conditions,
         requirements:stub.requirements,

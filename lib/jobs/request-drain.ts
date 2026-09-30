@@ -85,6 +85,9 @@ export async function drainOnce(params: { jobTypes?: WorkerJobTypeConfig[]; now?
   state.inFlight = true;
   state.lastStartedAt = now();
   try {
+    // Round 5: retry any storage objects of deleted documents/households
+    // that could not be removed at deletion time (bounded; never throws).
+    await (await import("@/lib/storage/purge")).purgeSoon();
     if (!(await hasClaimableWork())) return { ran: false, reason: "no_work" };
     const jobTypes = params.jobTypes ?? (await import("./processors")).PRODUCTION_JOB_TYPES;
     const summary = await runJobBatch({ jobTypes, maxJobs: REQUEST_DRAIN_MAX_JOBS, claimBudgetMs: REQUEST_DRAIN_CLAIM_BUDGET_MS, now, workerId: `request-${Math.random().toString(36).slice(2, 10)}` });

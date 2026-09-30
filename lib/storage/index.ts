@@ -29,6 +29,25 @@ export async function savePolicyFile(args: {
   return backend().savePolicyFile(args);
 }
 
+// --- Direct uploads (Round 5): the browser sends the file to storage
+// itself instead of through a serverless function (whose request body is
+// capped at about 4.5 MB on Vercel and 10 MB by the Next.js proxy).
+// See app/api/policies/upload/{start,part,finalize}/route.ts.
+export function policyUploadDriver(): "local" | "supabase" {
+  return driver();
+}
+export function policyUploadKey(args: { accountId: string; familyMemberId: string; policyId: string; filename: string }) {
+  return backend().policyObjectKey(args);
+}
+/** Supabase Storage only: a signed URL the browser uploads to directly. */
+export async function createPolicyUploadUrl(storageKey: string) {
+  return supabaseStorage.createPolicyUploadUrl(storageKey);
+}
+/** Local driver only: append one part (at most a few MB) of a direct upload. */
+export async function appendPolicyUploadPart(storageKey: string, offset: number, bytes: Uint8Array) {
+  return local.appendPolicyUploadPart(storageKey, offset, bytes);
+}
+
 export async function readPolicyFile(storageKey: string) {
   return backend().readPolicyFile(storageKey);
 }

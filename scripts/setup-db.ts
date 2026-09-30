@@ -26,6 +26,7 @@ const MIGRATIONS = [
   "sql/lifecycle.sql",
   "sql/claim-reviewers.sql",
   "sql/processing-failure-diagnostics.sql",
+  "sql/storage-purge.sql",
   "sql/household-rls.sql",
 ];
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { structuredCompletion } from "./llm";
 import type { PdfPage } from "@/lib/documents/pdf";
 import { UNTRUSTED_DOCUMENT_NOTICE, cachedReading, delimitDocument, readingModelIdentity } from "@/lib/documents/evidence";
+import { deterministicDocumentRole, personalDocumentTitle } from "@/lib/documents/intelligence";
 
 const CoverageSchema = z.object({
   category: z.string(),
@@ -70,6 +71,8 @@ export function detectHighConfidenceReferenceRole(pages: PdfPage[]) {
   // personal extraction path for ownership even though later pages also
   // contain generic benefit wording.
   if (/certificate of (?:group )?insurance/i.test(text) && /particulars of insured|insured person(?:'s)? name|name of insured/i.test(text) && /sum insured|sum assured|effective date/i.test(text)) return null;
+  // A renewal certificate or policy contract naming its insured is personal.
+  if (personalDocumentTitle(firstPagesText(pages, 2))) return null;
   for (const candidate of REFERENCE_ROLE_PATTERNS) if (candidate.test(text)) return candidate.role;
   return null;
 }
@@ -110,6 +113,40 @@ function groupPolicyNumber(text: string) {
 function inferProductName(text: string) {
   if (/MINDEF\s*&\s*MHA\s+Group Insurance/i.test(text)) return "MINDEF & MHA Group Insurance";
   return null;
+}
+
+/** Round 5: what plain code can read when the reading service failed on a
+ * document whose text layer is readable -- its role by the document's own
+ * wording, insurer, product and printed policy number. It names no people and
+ * confirms no cover (only the model reading does that, on a later retry), so
+ * nothing personal is guessed. */
+export function buildCodeOnlyExtraction(pages: PdfPage[]): PolicyExtraction {
+  const text = pages.map((p) => p.text).join("\n");
+  const role = deterministicDocumentRole(pages, null);
+  const policyNumber = text.match(/\bpolicy\s+(?:no\.?|number)\s*[:#-]?\s*([A-Z0-9][A-Z0-9-]{4,})/i)?.[1] ?? null;
+  return PolicyExtractionSchema.parse({
+    documentType: role ? role.replace(/_/g, " ") : "Document",
+    documentRole: role,
+    documentNotes: ["DearPolicy read this document's text and tables with plain code because its reading service was unavailable. Who it covers and the cover amounts are read when it tries again."],
+    insurer: inferInsurer(text),
+    productName: inferProductName(text),
+    productsMentioned: inferProducts(text),
+    policyNumber,
+    groupPolicyNumber: groupPolicyNumber(text),
+    policyType: null,
+    policyholder: null,
+    personalCoverageConfirmed: false,
+    startDate: null,
+    renewalOrExpiryDate: null,
+    insuredPeople: [],
+    referenceCoverages: [],
+    premium: { amount: null, currency: null, frequency: null },
+    paymentRecords: [],
+    keyExclusions: [],
+    waitingPeriods: [],
+    deductiblesAndCoinsurance: [],
+    riders: [],
+  });
 }
 
 export function buildDeterministicReferenceExtraction(pages: PdfPage[], role: NonNullable<PolicyExtraction["documentRole"]>): PolicyExtraction {

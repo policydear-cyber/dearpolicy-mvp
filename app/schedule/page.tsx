@@ -79,7 +79,8 @@ export default function BenefitsPage(){
     <header className="page-header compact"><div>
       <div className="eyebrow">BENEFITS</div>
       <h1>What your policies pay.</h1>
-      <p className="lead">Each benefit as your documents state it, with the page it comes from. Where a document does not make an amount clear, this page says so instead of guessing.</p>
+      <p className="lead">Organised by policy: each benefit as the document states it, with the page it comes from, and the exclusions and limits that apply. Where a document does not make an amount clear, this page says so instead of guessing.</p>
+      <p className="muted">Want to see what one person is covered for across all their plans? <Link className="text-link" href="/ledger">See Coverage, by person →</Link></p>
     </div></header>
 
     {error&&<div className="alert error" role="alert"><strong>Your benefits could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>}

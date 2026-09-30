@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isPolicyQuarantineHeld, isPolicyScanRejected, policyQuarantineLabel } from "@/lib/policies/quarantine/ui";
+import { uploadPolicyDocument } from "@/components/upload-document";
 
 type Member = { id: string; display_name: string; relationship: string; policy_count: number };
 type LinkedPerson = { id: string; name: string; relationship: string; source: string };
@@ -125,18 +126,8 @@ export default function OperatorDocumentsPage() {
     setBusy(true);
     setStatus("Uploading document…");
     try {
-      const form = new FormData();
-      form.set("file", file);
-      if (memberId) form.set("familyMemberId", memberId);
-      if (pdfPassword) form.set("pdfPassword", pdfPassword);
-      const response = await fetch("/api/policies/upload", { method: "POST", body: form });
-      const payload = await response.json().catch(() => ({}) as { error?: string });
-      // The backend already returns a specific, actionable reason (e.g. "Create
-      // at least one family profile before uploading documents.", "This exact
-      // document is already in DearPolicy...", the 50MB limit). Discarding it
-      // for a generic "Upload failed" hid exactly the information a person
-      // needs to fix the problem themselves.
-      if (!response.ok) throw new Error(payload.error || "Upload failed");
+      // Direct to storage (large scans exceed a function's request body limit).
+      await uploadPolicyDocument(file, { familyMemberId: memberId || null, pdfPassword, onProgress: (f) => setStatus(`Uploading document… ${Math.round(f * 100)}%`) });
       setStatus("Upload received. DearPolicy is analysing it in the background; live progress appears below.");
       setFile(null);
       setPdfPassword("");

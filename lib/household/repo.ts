@@ -15,6 +15,7 @@ import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import type { Pool } from "pg";
 import { createUserSupabaseClient, withServiceTransaction, type ScopedDbClient } from "@/lib/db/authz-client";
 import { isUuid } from "@/lib/db/client";
+import { enqueueStoragePurge, householdStorageKeys, purgeSoon, type PurgeItem } from "@/lib/storage/purge";
 
 export class ForbiddenError extends Error {}
 export class NotFoundError extends Error {}
@@ -383,8 +384,20 @@ export async function acceptInvitation(
  * requirement on this and other destructive operations -- enforced at the
  * route layer, not here. */
 export async function deleteHousehold(callerUserId: string, householdId: string, poolOverride?: Pick<Pool, "connect">): Promise<void> {
+  // Round 5 (privacy): the household's stored files are collected (under the
+  // caller's own RLS, in the same transaction) before the rows cascade away,
+  // then queued and removed once the delete has committed. Removal never
+  // fails the deletion; the request drain retries anything left.
+  let keys: PurgeItem[] = [];
   await createUserSupabaseClient(callerUserId, async (client) => {
+    keys = await householdStorageKeys(householdId, client as never, true);
     const { rowCount } = await client.query(`delete from accounts where id = $1`, [householdId]);
     if (rowCount === 0) throw new NotFoundError("Household not found");
   }, poolOverride);
+  try {
+    await enqueueStoragePurge(keys, "household_deleted");
+    await purgeSoon();
+  } catch (error) {
+    console.warn("household storage purge not completed now:", error instanceof Error ? error.name : "unknown");
+  }
 }

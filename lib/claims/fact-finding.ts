@@ -60,7 +60,7 @@ export type CategorySpec = {
  * path asked it. */
 export const ACCIDENT_OR_ILLNESS_QUESTION = "Was this caused by an accident, or an illness?";
 export const INJURY_KIND_QUESTION = "What kind of injury was it — a broken bone, a cut or wound, a burn, or something else?";
-const UNCERTAIN_ANSWER = /^(?:not sure|unsure|unknown|don'?t know|do not know|not yet known)$/i;
+const UNCERTAIN_ANSWER = /^(?:(?:i\s+)?(?:am\s+|'m\s+)?(?:not sure|unsure)|unknown|(?:i\s+)?(?:don['’]?t|dont|do not|dun|never)\s+(?:know|remember|recall)|idk|dunno|no idea|not yet known|(?:can['’]?t|cannot)\s+remember|forgot|not certain)(?:\s+(?:lah|leh|lor|ah|sia|yet))*$/i;
 function specificInjuryKind(value: unknown) {
   return typeof value === "string" && !/^(?:injury|injured|hurt|pain|harm|unspecified|other injury)$/i.test(value.trim());
 }
@@ -390,7 +390,23 @@ function questionForKey(factKey: string): IndexedQuestion | null {
   for (const entry of Object.values(CONDITION_QUESTION_BY_CAUSE)) if (entry.factKey === factKey) return { factKey, type: "yes_no" };
   return null;
 }
-const bare = (text: string) => text.trim().replace(/[.!\s]+$/, "").trim();
+// Typed replies carry fillers and Singlish particles ("just one night lah",
+// "actually, no"): they are not part of the answer.
+const bare = (text: string) => text.trim().replace(/[.!\s]+$/, "").replace(/^(?:(?:actually|sorry|oh|um+|uh+|ok(?:ay)?|so|and|but|well|hmm+|er+)[,\s]+)+/i, "")
+  .replace(/(?:[,\s]+(?:lah|leh|lor|ah|sia|meh|hor))+$/i, "").replace(/[.!\s]+$/, "").trim();
+const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, fourteen: 14, twenty: 20, thirty: 30 };
+/** "3", "3 nights", "one night", "just one night", "overnight", "a week" -> a count of nights/days. */
+export function countFrom(text: string): number | null {
+  const said = bare(text).toLowerCase().replace(/^(?:just|only|about|around|maybe|roughly|approx\.?|approximately)\s+/, "");
+  if (/^overnight\b|^one overnight\b/.test(said)) return 1;
+  const digits = said.match(/^(\d{1,3})(?:\s*(?:nights?|days?|hours?|hrs?|months?|weeks?))?\b/);
+  if (digits) return Number(digits[1]);
+  const word = said.match(/^([a-z]+)\s+(night|day|hour|hr|month|week)s?\b/);
+  if (word && NUMBER_WORDS[word[1]] != null) return NUMBER_WORDS[word[1]] * (word[2] === "week" ? 7 : 1);
+  if (NUMBER_WORDS[said] != null && said !== "a" && said !== "an") return NUMBER_WORDS[said];
+  return null;
+}
 /** The stored value for a choice answer. Two facts are stored in the
  * vocabulary the rest of the app reads (eventType "accident"/"illness",
  * injuryKind "fracture"/...); every other choice keeps the option's words. */
@@ -418,6 +434,7 @@ function choiceValue(factKey: string, raw: string, options: string[] = []): stri
 function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: boolean): string | boolean | number | null {
   const said = bare(raw);
   if (question.type === "yes_no") {
+    if (UNCERTAIN_ANSWER.test(said)) return "not sure"; // "no idea" is not "no"
     if (/^y(?:es)?\b/i.test(said)) return true;
     if (/^no?\b/i.test(said)) return false;
     return strict && !UNCERTAIN_ANSWER.test(said) ? null : "not sure";
@@ -434,10 +451,16 @@ function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: 
     if (date && date.date <= claimLocalToday({ now })) return date.date;
     return strict ? null : said;
   }
-  if (question.factKey === "hospitalNights") {
-    const nights = said.match(/^(\d{1,3})\b/);
-    if (nights) return Number(nights[1]);
+  if (question.factKey === "hospitalNights" || /Months$|Hours$|Nights$|Days$/.test(question.factKey)) {
+    const count = countFrom(said);
+    if (count != null) return count;
     return strict ? null : said;
+  }
+  // "Mount Elizabeth, not sure if panel": the name is the answer; the doubt
+  // is about something else.
+  if (question.factKey === "hospitalName") {
+    const name = said.replace(/[,;]?\s*(?:(?:but\s+)?(?:not sure|unsure|dunno|idk|don['’]?t know)|no idea)\b.*$/i, "").replace(/\s+hospital$/i, " Hospital").trim();
+    if (name.length >= 3 && !UNCERTAIN_ANSWER.test(name)) return name;
   }
   return strict ? null : said;
 }
@@ -469,6 +492,8 @@ function undeclaredAnswer(pending: { factKey: string; type?: string; options?: s
     return null;
   }
   if (QUANTITY_KEY.test(pending.factKey)) {
+    const count = /Nights$|Months$|Hours$|Days$/.test(pending.factKey) ? countFrom(said) : null;
+    if (count != null) return { value: count, uncertain: false };
     const figure = said.replace(/,/g, "").match(/^(?:s\$|us\$|\$|sgd|usd)?\s*(\d+(?:\.\d+)?)\s*(?:sgd|usd|dollars?|nights?|days?|hours?)?$/i);
     return figure ? { value: Number(figure[1]), uncertain: false } : null;
   }

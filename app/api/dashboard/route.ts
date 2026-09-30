@@ -5,13 +5,13 @@ import { runAfterResponse } from "@/lib/http/background";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { annualisePremium,COVERAGE_CATEGORIES,monthlyEquivalent,normalizeCoverageCategory } from "@/lib/insurance";
+import { COVERAGE_CATEGORIES,normalizeCoverageCategory } from "@/lib/insurance";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { summarisePremiums } from "@/lib/policies/premium-summary";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 export const maxDuration=60;
-type PremiumRow={id:string;policy_id:string|null;family_member_id:string|null;insurer:string|null;product_name:string|null;policy_number:string|null;amount:string;currency:string;frequency:string|null;payment_date:string|null;period_start:string|null;created_at:string};
 
 function canonicalProduct(value:string|null|undefined){
   const v=(value??"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
@@ -55,7 +55,10 @@ export async function GET(request:NextRequest){
   });
   const familyResult=await query<{id:string;display_name:string;relationship:string;policy_count:number}>(`SELECT f.id,f.display_name,f.relationship,count(DISTINCT pm.policy_id)::int AS policy_count FROM family_members f LEFT JOIN policy_members pm ON pm.family_member_id=f.id AND pm.account_id=f.account_id WHERE f.account_id=$1 AND ${activePredicate("f")} GROUP BY f.id ORDER BY CASE WHEN f.relationship='self' THEN 0 ELSE 1 END,f.created_at`,[accountId]);
   const requested=url.searchParams.get("familyMemberId"); const active=familyResult.rows.find((m)=>m.id===requested)??familyResult.rows[0]??null;
-  if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:0,annual:0,items:[]},reminders:[],unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0}});
+  // An empty household is not "everything current": it has nothing on file yet.
+  if(!active)return NextResponse.json({family:[],activeMember:null,coverages:[],premiums:{monthly:0,annual:0,items:[],missing:[],complete:false,note:null},
+    reminders:[{kind:"family",title:"Add your family and upload a policy",detail:"Nothing is on file yet. Add who is in your family, then upload a policy schedule or certificate so DearPolicy can show what it covers and costs.",href:"/"}],
+    unclaimed:[],quality:{needsReview:0,referenceDocs:0,personalDocs:0},empty:true});
 
   const coverageRows=await query<{id:string;category:string;amount:string|null;currency:string|null;coverage_product_name:string|null;policy_key:string;document_product_name:string|null;insurer:string|null;group_policy_number:string|null;document_authority:number;effective_date:string|null;created_at:string}>(`SELECT pc.id,pc.category,pc.amount::text,pc.currency,pc.product_name AS coverage_product_name,coalesce(p.policy_number,p.id::text) AS policy_key,p.product_name AS document_product_name,p.insurer,p.group_policy_number,p.document_authority,p.effective_date::text,p.created_at::text FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")} WHERE pc.account_id=$1 AND pc.family_member_id=$2 AND pc.confirmed=true AND pc.evidence_verified=true`,[accountId,active.id]);
   type Chosen={category:string;amount:number|null;currency:string;policyKey:string;productName:string|null;insurer:string|null;ownedProduct:string;groupPolicyNumber:string|null;authority:number;effectiveDate:string|null;createdAt:string};
@@ -96,10 +99,12 @@ export async function GET(request:NextRequest){
 
   const categories=COVERAGE_CATEGORIES.map((category)=>{const row=coverageMap.get(category);return{category,status:row?"covered":"not_covered",reviewRequired:conflictCategories.has(category),amount:row?.total??null,displayAmount:row?.displayAmount??null,currency:normalizeCurrencyCode(row?.currency,"SGD"),count:row?.count??0,policyNames:row?.policyNames??[],derived:row?.derived??false};});
 
-  const premiumResult=await query<PremiumRow>(`SELECT pr.id,pr.policy_id,pr.family_member_id,pr.insurer,pr.product_name,pr.policy_number,pr.amount::text,pr.currency,pr.frequency,pr.payment_date::text,pr.period_start::text,pr.created_at::text FROM premium_records pr WHERE pr.account_id=$1 AND (pr.family_member_id=$2 OR (pr.family_member_id IS NULL AND pr.policy_id IS NOT NULL AND EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=pr.policy_id AND pm.account_id=pr.account_id AND pm.family_member_id=$2))) ORDER BY COALESCE(pr.payment_date,pr.period_start,pr.created_at::date) DESC,pr.created_at DESC`,[accountId,active.id]);
-  const latest=new Map<string,PremiumRow>(); for(const row of premiumResult.rows){const key=row.policy_number||row.policy_id||`${row.insurer??""}|${row.product_name??""}`;if(!latest.has(key))latest.set(key,row);}
-  const premiumItems=[...latest.values()].map((row)=>({...row,currency:normalizeCurrencyCode(row.currency,"SGD"),shared:row.family_member_id==null,amount:Number(row.amount),annual:annualisePremium(Number(row.amount),row.frequency),monthly:monthlyEquivalent(Number(row.amount),row.frequency)}));
-  const annual=premiumItems.reduce((s,r)=>s+r.annual,0),monthly=premiumItems.reduce((s,r)=>s+r.monthly,0);
+  // Every premium component (plan and rider under one policy number), with
+  // the MediSave portion added back where the evidence prints it, and the
+  // policies with no premium evidence named -- never the rider alone.
+  const premiumSummary=await summarisePremiums(accountId,{id:active.id,display_name:active.display_name,preferred_name:null,relationship:active.relationship});
+  const premiumItems=premiumSummary.items;
+  const annual=premiumSummary.annual,monthly=premiumSummary.monthly;
 
   const unmatched=await query<{count:number}>(`SELECT count(*)::int AS count FROM policy_detected_people pd JOIN policies p ON p.id=pd.policy_id AND ${activePredicate("p")} WHERE pd.account_id=$1 AND pd.matched_family_member_id IS NULL AND p.personal_coverage_confirmed=true`,[accountId]);
   const quality=await query<{needs_review:number;reference_docs:number;personal_docs:number}>(`SELECT count(*) FILTER(WHERE p.needs_review)::int AS needs_review,count(*) FILTER(WHERE p.personal_coverage_confirmed=false)::int AS reference_docs,count(*) FILTER(WHERE p.personal_coverage_confirmed=true)::int AS personal_docs FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id WHERE p.account_id=$1 AND ${activePredicate("p")} AND pm.family_member_id=$2`,[accountId,active.id]);
@@ -121,9 +126,10 @@ export async function GET(request:NextRequest){
   if(Number(q.needs_review)>0)reminders.push({kind:"coverage",title:"Review source evidence",detail:`${q.needs_review} document${q.needs_review===1?" needs":"s need"} review. Portfolio cards still show the best-supported binary result, with the review flag inside the evidence view.`,href:"/policies"});
   if(unclaimed.rows.length)reminders.push({kind:"family",title:`Say whose ${unclaimed.rows.length===1?"document this is":"documents these are"}`,
     detail:`${unclaimed.rows.length} uploaded document${unclaimed.rows.length===1?" is":"s are"} not linked to anyone yet, so nothing in ${unclaimed.rows.length===1?"it":"them"} is being used to answer questions.`,href:"/"});
+  if(premiumSummary.note&&premiumItems.length)reminders.push({kind:"payment",title:"Some premiums are missing from the total",detail:premiumSummary.note,href:"/records"});
   if(!selected.length)reminders.push({kind:"coverage",title:"Upload personal proof",detail:"DearPolicy needs at least one certificate or policy schedule before it can say what is covered or not covered.",href:"/policies"});
 
-  return NextResponse.json({family:familyResult.rows,activeMember:active,coverages:categories,premiums:{monthly,annual,items:premiumItems},reminders,unclaimed:unclaimed.rows,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}});
+  return NextResponse.json({family:familyResult.rows,activeMember:active,coverages:categories,premiums:{monthly,annual,items:premiumItems,cashAnnual:premiumSummary.cashAnnual,medisaveAnnual:premiumSummary.medisaveAnnual,missing:premiumSummary.missing,complete:premiumSummary.complete,note:premiumSummary.note},reminders,unclaimed:unclaimed.rows,empty:Number(q.personal_docs)===0&&!premiumItems.length,quality:{needsReview:Number(q.needs_review),referenceDocs:Number(q.reference_docs),personalDocs:Number(q.personal_docs)}});
  }catch(error){
   const authResponse=routeErrorResponse(error);
   if(authResponse.status===500)return NextResponse.json({error:"Dashboard error"},{status:500});

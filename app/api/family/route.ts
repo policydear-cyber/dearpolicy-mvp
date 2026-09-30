@@ -41,6 +41,9 @@ export async function POST(request: NextRequest) {
     if (body.relationship.trim().length > 100) return NextResponse.json({ error: "That relationship is too long." }, { status: 400 });
     if (body.preferredName && body.preferredName.trim().length > 100) return NextResponse.json({ error: "That preferred name is too long." }, { status: 400 });
     if (body.dateOfBirth && !isValidDateString(body.dateOfBirth)) return NextResponse.json({ error: "That date of birth isn't valid." }, { status: 400 });
+    // Round 5: a date of birth cannot be in the future (compared as calendar
+    // dates; a day of slack keeps every time zone's "today" valid).
+    if (body.dateOfBirth && body.dateOfBirth > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) return NextResponse.json({ error: "A date of birth can't be in the future." }, { status: 400 });
 
     const member = await createUserSupabaseClient(ctx.userId, async (client) => {
       if (body.relationship!.trim().toLowerCase() === "self") {

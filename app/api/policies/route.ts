@@ -8,6 +8,7 @@ import { POLICY_PROCESSING_STOPPED_MESSAGE, userFacingScanResultDetail, type Doc
 import { malwareScanningIntentionallyDisabled } from "@/lib/scanning/adapter";
 import { POLICY_PROCESSING_JOB_TYPE } from "@/lib/rag/processing-queue";
 import { USER_ACTIONABLE_PROCESSING_ERRORS } from "@/lib/documents/processing-errors";
+import { ensurePolicyMemberTierSchema, loadTableTiers, namedTierFor, tierOptionsForDocument } from "@/lib/policies/member-tier";
 export const runtime = "nodejs";
 export const ROUTE_AUTH = "household-member" as const;
 
@@ -18,7 +19,8 @@ type PolicyRow = {
   processing_status: string; processing_stage: string; processing_progress: number; processing_message: string | null;
   quarantine_status: string; scan_result_detail: string | null;
   original_filename: string; page_count: number | null; processing_error: string | null;
-  linked_people: { id: string; name: string; relationship: string; source: string }[];
+  linked_people: { id: string; name: string; relationship: string; source: string; planTier: string | null }[];
+  insured_hints: { name: string | null; hint: string | null }[] | null;
   detected_people: { name: string; matchedFamilyMemberId: string | null }[]; created_at: Date;
 };
 
@@ -30,6 +32,7 @@ export async function GET(request: NextRequest) {
     const familyMemberId = url.searchParams.get("familyMemberId");
     if (familyMemberId && !isUuid(familyMemberId)) return NextResponse.json({ policies: [] });
 
+    await ensurePolicyMemberTierSchema();
     const policies = await createUserSupabaseClient(ctx.userId, async (client) => {
       const params: unknown[] = [ctx.householdId];
       let memberClause = "";
@@ -41,10 +44,15 @@ export async function GET(request: NextRequest) {
         `SELECT p.id,p.family_member_id,p.insurer,p.product_name,p.policy_number,p.group_policy_number,p.policy_type,p.document_role,
          p.personal_coverage_confirmed,p.document_authority,p.document_authority_label,p.needs_review,p.review_reason,p.status,
          p.processing_status,p.processing_stage,p.processing_progress,p.processing_message,p.quarantine_status,p.scan_result_detail,p.original_filename,p.page_count,p.processing_error,p.created_at,
-         COALESCE((SELECT json_agg(json_build_object('id',f.id,'name',f.display_name,'relationship',f.relationship,'source',pm.source) ORDER BY f.display_name)
-           FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id WHERE pm.policy_id=p.id AND pm.account_id=p.account_id),'[]'::json) AS linked_people,
+         COALESCE((SELECT json_agg(json_build_object('id',f.id,'name',f.display_name,'relationship',f.relationship,'source',pm.source,'planTier',pm.benefit_tier) ORDER BY f.display_name)
+           FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id WHERE pm.policy_id=p.id AND pm.account_id=p.account_id AND ${activePredicate("f")}),'[]'::json) AS linked_people,
          COALESCE((SELECT json_agg(json_build_object('name',pd.detected_name,'matchedFamilyMemberId',pd.matched_family_member_id) ORDER BY pd.detected_name)
-           FROM policy_detected_people pd WHERE pd.policy_id=p.id AND pd.account_id=p.account_id),'[]'::json) AS detected_people
+           FROM policy_detected_people pd WHERE pd.policy_id=p.id AND pd.account_id=p.account_id),'[]'::json) AS detected_people,
+         -- Round 5: the people the document names and the tier each is covered
+         -- as (employee / spouse / child), for the "who does this cover" picker.
+         CASE WHEN jsonb_typeof(p.extracted_json->'insuredPeople')='array' THEN
+           (SELECT json_agg(json_build_object('name',ip->>'name','hint',ip->>'relationshipHint'))
+              FROM jsonb_array_elements(p.extracted_json->'insuredPeople') ip) END AS insured_hints
          FROM policies p WHERE p.account_id=$1 AND p.superseded_at IS NULL AND p.lifecycle_state='active' ${memberClause}
          ORDER BY CASE WHEN p.processing_status IN ('queued','extracting','indexing') THEN 0 ELSE 1 END,
                   p.needs_review DESC,p.personal_coverage_confirmed DESC,p.document_authority DESC,p.created_at DESC`,
@@ -64,7 +72,13 @@ export async function GET(request: NextRequest) {
         entry[row.field_name] = row.corrected_value;
         overlays.set(row.policy_id, entry);
       }
-      return result.rows.map((row) => {
+      const tableTiers = await loadTableTiers(client, ctx.householdId, result.rows.map((r) => r.id));
+      return result.rows.map(({ insured_hints, ...base }) => {
+        const columns = tableTiers.get(base.id) ?? [];
+        const tierOptions = tierOptionsForDocument({ hints: (insured_hints ?? []).map((h) => h.hint), groupPolicyNumber: base.group_policy_number, policyType: base.policy_type, tableTiers: columns });
+        // Who the document names, and as which tier -- used to pre-select.
+        const namedTiers = (insured_hints ?? []).filter((h) => h.name).map((h) => ({ name: h.name as string, tier: namedTierFor(h.hint, tierOptions, columns) }));
+        const row = { ...base, tier_options: tierOptions, named_tiers: namedTiers };
         const overlay = overlays.get(row.id);
         if (!overlay) return row;
         return {

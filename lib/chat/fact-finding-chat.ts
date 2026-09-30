@@ -16,10 +16,12 @@
  *   never brings it up. Best-effort -- a failed conditions read only means
  *   fewer questions, never a failed answer.
  */
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { categoriesFor, conditionDrivenQuestions, FACT_FINDING_SPECS, planFactFinding, type FactFindingCategory, type FactFindingPlan, type FactFindingQuestion } from "@/lib/claims/fact-finding";
 import { loadCoverConditions } from "@/lib/policies/condition-catalog";
 import { describesAScenario } from "@/lib/policies/benefit-catalog";
 import { query } from "@/lib/db/client";
+import { dedupeDocuments } from "@/lib/claims/claim-pack";
 import { looksLikeInterviewReply } from "@/lib/claims/event-name";
 import type { CoverCondition } from "@/lib/insurance/cover-conditions";
 import type { ChatAnswer, ChatCitation } from "@/types";
@@ -39,6 +41,17 @@ async function householdConditions(accountId: string): Promise<CoverCondition[]>
   }
 }
 
+const HOSPITAL_CASH = /\bcash\b|daily|per day|a day\b|confinement|allowance|income/i;
+/** The benefit names read from this person's own policies (null: unknown). */
+async function personBenefitNames(accountId: string, personId: string): Promise<string[] | null> {
+  try {
+    const rows = await query<{ benefit_name: string }>(
+      `SELECT DISTINCT b.benefit_name FROM policy_benefits b JOIN policies p ON p.id=b.policy_id AND p.account_id=b.account_id
+        WHERE b.account_id=$1 AND ${activePredicate("p")} AND (p.family_member_id=$2 OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id=$2))`,
+      [accountId, personId]);
+    return rows.rows.map((r) => r.benefit_name);
+  } catch { return null; }
+}
 export async function applyFactFinding(
   answer: ChatAnswer,
   state: ConversationState,
@@ -49,10 +62,15 @@ export async function applyFactFinding(
   if (!claimTurn) { delete answer.factFinding; return; }
   const conditions = opts?.accountId ? await householdConditions(opts.accountId) : [];
   const plans: NonNullable<ChatAnswer["factFinding"]> = [];
+  const seenDocuments = new Set<string>();
   for (const person of people) {
     const facts = state.subjects[person.id] ?? {};
     const signals = new Set<string>((state.scenarios?.[person.id] ?? []).flatMap((s) => [...s.traits, s.family]));
+    // A plan whose benefits this person does not have (hospital cash under a
+    // Shield plan that pays none) asks for nothing.
+    const benefitNames = opts?.accountId ? await personBenefitNames(opts.accountId, person.id) : null;
     for (const category of categoriesFor(signals, facts)) {
+      if (category === "hospital_cash" && benefitNames?.length && !benefitNames.some((n) => HOSPITAL_CASH.test(n))) continue;
       const plan = planFactFinding({ subjectId: person.id, category, facts });
       if (plan.status === "information_needed" || plan.status === "evidence_needed") {
         const asked = new Set(plan.nextQuestions.map((q) => q.factKey));
@@ -64,7 +82,13 @@ export async function applyFactFinding(
       }
       // FactFindingPlanView (types/) lists the categories the UI knows by name;
       // the UI only reads the label, so a newer category renders the same way.
-      plans.push({ ...plan, category: plan.category as NonNullable<ChatAnswer["factFinding"]>[number]["category"], subjectName: person.display_name });
+      // The same document is asked for once across plans ("Discharge summary"
+      // and "Discharge summary showing admission and discharge times").
+      const missingDocuments = dedupeDocuments(plan.missingDocuments).filter((d) => {
+        const key = dedupeDocuments([d, ...seenDocuments]).length === seenDocuments.size ? null : d;
+        if (!key) return false; seenDocuments.add(d); return true;
+      });
+      plans.push({ ...plan, missingDocuments, category: plan.category as NonNullable<ChatAnswer["factFinding"]>[number]["category"], subjectName: person.display_name });
     }
   }
   // The final answer of a finished interview asks nothing more: optional
@@ -280,9 +304,11 @@ export function applyClaimInterviewTurn(args: { answer: ChatAnswer; state: Conve
   answer.claimItems = [];
   delete answer.potentialPayoutTotals;
   delete answer.payoutQualifiers;
-  answer.summary = state.injuryExplained === summary ? "Thanks, noted." : summary;
+  const firstTurn = state.injuryExplained !== summary;
+  answer.summary = firstTurn ? summary : "Thanks, noted.";
   state.injuryExplained = summary;
-  answer.details = [];
+  // After a death, what to do first comes before the questions.
+  answer.details = firstTurn && next.category === "accidental_death" ? [DEATH_FIRST_STEPS] : [];
   answer.questions = [{ id: next.question.id, type: next.question.type, text: next.question.text, why: next.question.why, options: questionOptions(next.question) }];
   state.pending = { ...answer.questions[0], subjectId: next.subjectId, factKey: next.question.factKey };
   answer.confidence = "partial_match";
@@ -321,6 +347,56 @@ export function claimEventName(person: Person, facts: SubjectFacts, category: Fa
   const text = fallback.trim().replace(/\s+/g, " ");
   return text.length > 3 && !looksLikeInterviewReply(text) ? text.slice(0, 120) : who + ": claim check";
 }
+const ACTIVE_STATUS = /^Active status not recently verified\b/i;
+export const DEATH_FIRST_STEPS = "What to do first: get the death certificate (for a death in hospital the hospital issues it; after an accident the police and coroner are involved) and keep the police report number. Nothing needs to be sent to an insurer today; the documents below can follow when you are ready.";
+/* Which benefit families an event can trigger. Each event type maps only to
+ * its own families: a flight delay is travel delay (not trip cancellation,
+ * baggage or overseas medical); a diagnosis is critical-illness cover (not a
+ * travel policy's overseas medical). Travel cover additionally needs a trip
+ * (lib/claims/event-fit.ts). */
+const FAMILY = {
+  travelDelay: /\b(?:travel|flight|trip|journey|departure)\s+delay|\bdelay(?:ed)?\s+(?:departure|flight)|\bmissed (?:connection|departure)/i,
+  baggage: /baggage|luggage|personal belongings|personal effects/i,
+  cancellation: /cancel|curtail|postpone|disruption|shorten/i,
+  medical: /medical|hospital|evacuat|repatriat|dental|treatment|covid/i,
+  accidentDeath: /accident|death|disablement|dismember/i,
+  criticalIllness: /critical|illness|cancer|\bci\b|dread|carcinoma|tumou?r|heart attack|stroke|early[- ]stage|intermediate|major illness|accelerat/i,
+  death: /death|life|funeral|bereave|terminal|disablement|dismember|compassionate/i,
+  hospital: /hospital|room|board|ward|surg|\bcash\b|daily|icu|intensive|confinement|medical|ambulance|inpatient|outpatient/i,
+  notHospital: /\bdeath\b|critical illness|cancer|disab|dismember|loss of|fracture|baggage|luggage|flight|delay|cancel|maturity|surrender/i,
+  notInjury: /critical illness|\bcancer\b|maturity|surrender|baggage|luggage|flight delay|travel delay|trip cancel/i,
+};
+function travelKind(facts: SubjectFacts): keyof typeof FAMILY | null {
+  const kind = String(known(facts, "travelEventType") ?? "").toLowerCase();
+  if (known(facts, "flightDelayHours") != null || known(facts, "delayHours") != null || /delay/.test(kind)) return "travelDelay";
+  if (/baggage|luggage/.test(kind)) return "baggage";
+  if (/cancel|curtail/.test(kind)) return "cancellation";
+  if (/medical|hospital|sick|ill/.test(kind)) return "medical";
+  if (/accident|death/.test(kind)) return "accidentDeath";
+  return null;
+}
+/** Whether a benefit (by its title) belongs to a family this event can trigger. */
+export function benefitFitsEvent(category: FactFindingCategory | null, facts: SubjectFacts, title: string) {
+  // The benefit's own name: "Person · Product — Benefit" -> "Benefit" (a
+  // product called "... Critical Illness" says nothing about its hospital row).
+  const afterPerson = title.split(" · ").slice(1).join(" · ") || title;
+  const name = afterPerson.includes(" — ") ? afterPerson.split(" — ").slice(1).join(" — ") : afterPerson;
+  switch (category) {
+    case "disability_tpd": return /disab|\btpd\b|total and permanent|income|waiver/i.test(name) && !/\bloss of (?!use)/i.test(name);
+    case "accidental_injury": return !FAMILY.notInjury.test(name) && (known(facts, "permanentImpairment") === true || !PERMANENT_LOSS.test(name));
+    // An illness with a hospital stay (dengue, admitted) is also a hospital claim.
+    case "critical_illness": return FAMILY.criticalIllness.test(name) || (known(facts, "hospitalised") === true && FAMILY.hospital.test(name) && !FAMILY.notHospital.test(name));
+    case "accidental_death": return FAMILY.death.test(name);
+    case "medical_reimbursement": case "hospital_cash": return !FAMILY.notHospital.test(name);
+    case "travel": {
+      const kind = travelKind(facts);
+      if (!kind) return true;
+      if (kind === "travelDelay") return FAMILY.travelDelay.test(name) || (/\bdelay\b/i.test(name) && !FAMILY.baggage.test(name));
+      return FAMILY[kind].test(name) && (kind === "baggage" || !FAMILY.baggage.test(name));
+    }
+    default: return true;
+  }
+}
 export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: ConversationState; person: Person | null;
   requestedDocuments: string[]; eventLead?: string }) {
   const { answer, state, person } = args;
@@ -330,14 +406,11 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
   const eventPhrase = category ? EVENT_PHRASE[category](facts) : "what happened";
   const pages = new Map(answer.citations.map((c) => [c.chunkId, c]));
   const named: string[] = [];
+  const statuses = new Set<string>();
   // Only benefits of the kind this event can trigger are named: a stroke
   // that stops someone working is not a fracture or a loss-of-limb claim,
   // and a fracture is not a permanent loss unless one was reported.
-  const relevant = (title: string) => {
-    if (category === "disability_tpd") return /disab|\btpd\b|total and permanent|income|waiver/i.test(title) && !/\bloss of (?!use)/i.test(title);
-    if (category === "accidental_injury" && known(facts, "permanentImpairment") !== true) return !PERMANENT_LOSS.test(title);
-    return true;
-  };
+  const relevant = (title: string) => benefitFitsEvent(category, facts, title);
   // A benefit ruled out on these facts (a delay below the threshold) keeps
   // its card -- it says why -- but is not named as a possible benefit.
   answer.claimItems = answer.claimItems.filter((item) => relevant(item.title)).map((item) => {
@@ -351,7 +424,14 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
         "; whether it pays depends on the claim documents and the insurer’s assessment.",
       // DearPolicy's own checking work is said once, plainly -- never as a
       // task for the household ("confirm the heading", "re-read").
-      conditions: [...new Set(item.conditions.map((c) => /Coverage page|Benefits page|second read|heading|double-checked|reader could not|re-?read|re-?index/i.test(c)
+      conditions: [...new Set(item.conditions
+        // The printed formula, once amounts are hidden, reads as nonsense
+        // ("an amount that is only shown after ... per accident"); the card
+        // already says it is listed in the policy.
+        .filter((c) => !/^The policy states this benefit as\b/i.test(c))
+        // Said once for the whole answer, not under every benefit.
+        .filter((c) => !(ACTIVE_STATUS.test(c) && statuses.add(c)))
+        .map((c) => /Coverage page|Benefits page|second read|heading|double-checked|reader could not|re-?read|re-?index/i.test(c)
         ? "DearPolicy still has to check this benefit’s wording against the policy page." : c))] };
   });
   const whose = person ? (/^self$/i.test(person.relationship ?? "") ? "your" : calledName(person) + "’s") : "your family’s";
@@ -361,12 +441,18 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
   // answer says where the claim stands rather than thanking for answers.
   const opening = state.claimConcluded ? "Here is where this claim stands." : "Thanks — that’s what I need for now.";
   state.claimConcluded = true;
-  answer.summary = (args.eventLead ? args.eventLead + " " : "") + (named.length
+  const condolence = category === "accidental_death" && !/sorry for your loss/i.test(args.eventLead ?? "") ? "I’m so sorry for your loss. " : "";
+  answer.summary = condolence + (args.eventLead ? args.eventLead + " " : "") + (named.length
     ? opening + " For " + event + ", " + whose + " policies have " + (named.length === 1 ? "a possible benefit: " : "possible benefits: ") + list + ". " +
       "This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed."
     : opening + " None of the benefits in " + whose + " policies on file responds to " + event + " as described. That is based on the documents uploaded; the insurer decides any claim.");
   const definitions = category ? FACT_FINDING_SPECS[category].reviewers.map((r) => r.label.replace(/^A reviewer checks/, "A DearPolicy reviewer checks") + ".") : [];
-  answer.details = [...definitions, ...answer.details.filter((d) => /is not payable on these facts/i.test(d))].slice(0, 3);
+  // Whether the cover is still being paid for is one line for the answer.
+  const status = statuses.size ? [statuses.size === 1 ? [...statuses][0]
+    : "Active status not recently verified for some of these policies: DearPolicy has no recent premium receipt or renewal notice for them. Ownership stays confirmed by the personalised evidence."] : [];
+  // A death: condolence and what to do first come before any policy detail.
+  const firstSteps = category === "accidental_death" ? [DEATH_FIRST_STEPS] : [];
+  answer.details = [...firstSteps, ...definitions, ...status, ...answer.details.filter((d) => /is not payable on these facts/i.test(d))].slice(0, 3);
   answer.questions = [];
   delete answer.scenarioClassifications;
   const packStep = answer.nextSteps.find((s) => /claim pack/i.test(s));

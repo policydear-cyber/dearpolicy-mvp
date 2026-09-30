@@ -835,3 +835,30 @@ table { font-variant-numeric: tabular-nums; }
 .claim-session-status.tone-ready { color: var(--good-text); background: var(--good-tint); }
 .claim-session-status.tone-waiting { color: var(--warn-text); background: var(--warn-tint); }
 .claim-session-status.tone-info { color: var(--brand-ink); background: var(--brand-tint); }
+
+/* Round 5: chat length counter */
+.chat-length { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-xs); padding: 0 10px; }
+.chat-length.near-limit { color: var(--warn-text); }
+
+/* Round 5: library confirmations, locked PDFs, who a document covers */
+.library-notice { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.locked-pdf .unlock-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 4px; }
+.locked-pdf .unlock-form input { min-height: 40px; padding: 6px 10px; border: 1px solid var(--input-line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); }
+.covers-list { display: grid; gap: 8px; margin: 10px 0; }
+.covers-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.covers-row input[type="checkbox"] { width: 20px; height: 20px; }
+.covers-row select { min-height: 36px; border: 1px solid var(--input-line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); padding: 4px 8px; }
+.covers-actions { display: flex; gap: 12px; align-items: center; }
+
+/* Round 5: signed-out pages carry no app navigation */
+.nav-empty { display: none !important; }
+@media (max-width: 900px) {
+  .app-shell.no-nav { padding-bottom: 0; }
+  .app-shell.no-nav .sidebar { display: none; }
+}
+
+/* Round 5: empty portfolio */
+.getting-started { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 14px; }
+.getting-started li { display: grid; gap: 4px; justify-items: start; }
+.getting-started li span { color: var(--muted); }
+.getting-started li.done strong { color: var(--good-text); }

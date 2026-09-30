@@ -152,6 +152,18 @@ jobs:
       - name: V1.1 no system work on household screens
         run: npm run v11:customer-screens-test
 
+      - name: Round 5 ingestion (multi-column tables, tiers, schedule terms, duplicates)
+        run: npm run r5:ingestion-test
+
+      - name: Round 5 answers (Shield plan, portfolio cost, currentness, deletion privacy, empty portfolio)
+        run: npm run r5:answer-test
+
+      - name: Round 5 claims (member tier, message facts, claim interviews)
+        run: npm run r5:claims-test
+
+      - name: Round 5 UX (uploads, cover tiers, household flows)
+        run: npm run r5:ux-test
+
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
 

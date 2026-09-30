@@ -53,6 +53,8 @@ export function classifyPipelineError(error: unknown): ErrorCategory {
   // that also says "429" is not retried.
   if (/insufficient_quota|quota|billing|spend.?cap|SpendCapReached/i.test(message)
     || (error instanceof Error && error.constructor?.name === "SpendCapReached")) return "non_retryable";
+  // Round 5: a failure of a reading service (not of the file) is retried.
+  if (error instanceof Error && error.name === "TemporaryProcessingError") return "transient";
   return /\b429\b|rate.?limit|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network|timeout|timed out|\b50[0234]\b|overloaded|temporarily unavailable|service unavailable/i.test(message)
     ? "transient"
     : "non_retryable";

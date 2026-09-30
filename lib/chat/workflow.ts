@@ -2,11 +2,13 @@ import { z } from "zod";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 import { householdModelFailure,readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
-import { resolveClaimPerson,type ClaimPerson } from "@/lib/claims/person";
+import { resolveClaimPerson,resolveRelativePerson,type ClaimPerson } from "@/lib/claims/person";
 import { enforceChatMonetarySafety, evaluateChatMonetaryEligibility } from "@/lib/claims/monetary-gate";
 import { analysisSources,loadPolicyInventory,normalizedIdentifier,retrieveContractSources,type PolicyContract } from "@/lib/policies/inventory";
 import { eventFitIssue,meaningfulFact } from "@/lib/claims/event-fit";
-import { contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
+import { applyMessageFacts } from "@/lib/claims/message-facts";
+import { loadMemberTiers,rowsForMember } from "@/lib/claims/member-tier";
+import { consolidateActiveStatus,contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { contractReviewCoverage,emptyReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
 import { allocateReadingWindows,candidateFromWindows,rankCandidates } from "@/lib/policies/relevance";
 import { answerFromLedger } from "@/lib/ledger/answer";
@@ -149,7 +151,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
-  if(!family.length)throw new Error("Add a family profile before starting a chat.");
+  if(!family.length)throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");
   if(request.familyMemberId&&!family.some(p=>p.id===request.familyMemberId))throw new Error("Family profile not found.");
   const previousId=request.conversationId??request.claimSessionId;
   const previous=previousId?await getConversation(request.accountId,previousId):null;
@@ -171,6 +173,8 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   const familyQuestion=/\b(?:my family|our family|whole family|all family|everyone|all of us|family policies|family coverage|our policies|all our policies|policies do we have)\b/i.test(personMessage);
   const multiple=mentioned.length>1&&/\b(?:and|both|compare|versus|vs)\b/i.test(personMessage);
   const resolution=chosen?{status:"resolved" as const,person:chosen,explicit:true}:
+    // "and his wife?" is relative to the person this chat was about.
+    resolveRelativePerson(personMessage,family,previous?.family_member_id??request.familyMemberId??"")??
     resolveClaimPerson(personMessage,family,context?"":request.familyMemberId??previous?.family_member_id??"");
   let people:ClaimPerson[];
   let ambiguity:ChatContext["ambiguity"];
@@ -322,6 +326,8 @@ function sameSource(a:ChatCitation,b:ChatCitation){
 }
 function addCitations(target:ChatCitation[],values:ChatCitation[]){for(const c of values)if(!target.some(v=>sameSource(v,c)))target.push(c);}
 function dedupeCitations(answer:ChatAnswer){
+  // Runs before every saved turn: the policy-status note is said once.
+  consolidateActiveStatus(answer);
   const kept:ChatCitation[]=[];for(const c of answer.citations??[])if(!kept.some(v=>sameSource(v,c)))kept.push(c);
   answer.citations=kept;return answer;
 }
@@ -545,10 +551,12 @@ function applyEventFit(answer:ChatAnswer,state:ConversationState,person:ClaimPer
     if(item.status==="not_applicable")return item;
     const contract=contractOfItem(item,answer.citations,contracts.filter(c=>c.ownerId===person.id));
     const status=contract?currentness.get(contract.id):undefined;
-    const issue=eventFitIssue({benefitTitle:item.title.split(" · ").slice(1).join(" · ")||item.title,
+    const afterPerson=item.title.split(" · ").slice(1).join(" · ")||item.title;
+    const issue=eventFitIssue({benefitTitle:afterPerson.includes(" — ")?afterPerson.split(" — ").slice(1).join(" — "):afterPerson,
       policyType:contract?.documents.map(d=>d.policy_type).find(Boolean)??null,
       expiryDate:status?.renewalOrExpiryDate??contract?.documents.map(d=>d.renewal_or_expiry_date).filter((v):v is string=>!!v).sort().at(-1)??null,
-      expiryPassed:status?.state==="expiry_date_passed",eventDate,eventLocation,travelEvent:category==="travel"});
+      expiryPassed:status?.state==="expiry_date_passed",eventDate,eventLocation,travelEvent:category==="travel",
+      tripStart:meaningfulFact(knownValue(facts,"tripStartDate")),tripEnd:meaningfulFact(knownValue(facts,"tripEndDate"))});
     return issue?{...item,status:"not_applicable" as const,reason:issue.text,conditions:[]}:item;
   });
 }
@@ -559,6 +567,16 @@ function concludeClaim(args:{answer:ChatAnswer;state:ConversationState;people:Cl
   if(person&&args.contracts)applyEventFit(args.answer,args.state,person,category,args.contracts,args.currentness??new Map());
   const requested=person?requestedDocumentsFor({facts:claimFactsFromSubject(args.state.subjects[person.id]??{}),claim_category:category}):[];
   finalizeClaimAnswer({answer:args.answer,state:args.state,person,requestedDocuments:requested,eventLead:args.lead||undefined});
+  // Sources are the pages of the benefits offered: a travel policy whose
+  // cover does not apply to a local fracture is not cited for it.
+  if(person&&args.contracts){
+    const mine=args.contracts.filter(c=>c.ownerId===person.id);
+    const mapped=args.answer.claimItems.filter(i=>i.status!=="not_applicable").map(i=>contractOfItem(i,args.answer.citations,mine)?.id??null);
+    const offered=new Set(mapped);
+    const contractOfPolicy=(policyId:string)=>mine.find(c=>[...c.documents,...c.references].some(d=>d.id===policyId));
+    // Only when every offered benefit's policy is known; otherwise nothing is dropped.
+    if(!offered.has(null))args.answer.citations=args.answer.citations.filter(c=>{const contract=contractOfPolicy(c.policyId);return !contract||offered.has(contract.id);});
+  }
 }
 /** This person's most recent claim events (for a claim-money question asked
  * where no event has been described). */
@@ -567,6 +585,30 @@ async function recentClaimsFor(accountId:string,personId:string){
     return (await query<{id:string;event_summary:string|null}>("SELECT id,event_summary FROM claim_sessions WHERE account_id=$1 AND family_member_id=$2 ORDER BY updated_at DESC LIMIT 3",[accountId,personId])).rows;
   }catch{return [];}
 }
+/** A source is labelled by what the cited document IS: a personal schedule
+ * read at upload is "Your policy schedule", not "Policy wording". */
+const GENERIC_LABEL=/^(?:Policy wording|Benefit schedule), read when the document was uploaded$/;
+function roleLabel(role:string|null){
+  const r=(role??"").toLowerCase();
+  if(/schedule|certificate|personal/.test(r))return "Your policy schedule";
+  if(/renewal/.test(r))return "Renewal notice";
+  if(/summary|guide/.test(r))return "Benefit summary";
+  if(/rider|endorsement/.test(r))return "Rider or endorsement";
+  if(/wording/.test(r))return "Policy wording";
+  return null;
+}
+async function labelCitations(accountId:string,answer:ChatAnswer){
+  const generic=answer.citations.filter(c=>c.evidenceLabel&&GENERIC_LABEL.test(c.evidenceLabel)&&c.policyId);
+  if(!generic.length)return;
+  try{
+    const roles=new Map((await query<{id:string;document_role:string|null}>("SELECT id::text,document_role FROM policies WHERE account_id=$1 AND "+activePredicate()+" AND id::text=ANY($2::text[])",
+      [accountId,[...new Set(generic.map(c=>c.policyId))]])).rows.map(r=>[r.id,r.document_role]));
+    for(const c of generic){const label=roleLabel(roles.get(c.policyId)??null);if(label)c.evidenceLabel=label;}
+  }catch{/* The generic label stays. */}
+}
+/** Each turn's facts as they were before it, and any correction it made. */
+const TURN_FACTS=new WeakMap<ChatAnswer,string>();
+const TURN_CORRECTION=new WeakMap<ChatAnswer,string>();
 /** The evidence-backed indicative estimate of the claim this conversation is
  * about, for this person -- or null (no claim yet, no estimate, or it could
  * not be read; the chat then answers as before). */
@@ -586,6 +628,14 @@ async function reviewedClaimEstimate(args:{accountId:string;personId:string;clai
  * "Documents needed", until the final answer records it complete. */
 async function keepClaimInStep(args:{request:ChatRequest;conversation:{id:string};state:ConversationState;answer:ChatAnswer;people:ClaimPerson[]}){
   const {request,conversation,state,answer,people}=args;
+  await labelCitations(request.accountId,answer);
+  // "Thanks, noted." only when something was noted: a correction says what
+  // changed, and a reply that changed nothing asks again plainly.
+  const correction=TURN_CORRECTION.get(answer);
+  if(correction&&answer.mode==="fact_finding")answer.summary="Thanks — corrected to the "+correction+".";
+  else if(answer.summary==="Thanks, noted."){
+    if(TURN_FACTS.get(answer)===JSON.stringify(state.subjects??{}))answer.summary="I didn’t catch an answer to the question below. Tap an option, or type it in your own words.";
+  }
   const question=answer.questions[0];
   if(state.intent!=="claim"||people.length!==1||!question||!state.pending||state.pending.id!==question.id)return;
   const person=people[0];
@@ -607,6 +657,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   const check=options?.check??(async()=>undefined);
   await check();
   const answer=blankAnswer();let state=conversation.state;
+  TURN_FACTS.set(answer,JSON.stringify(conversation.state.subjects??{}));
   const now=request.personContextMessage&&request.personContextRecordedAt?new Date(request.personContextRecordedAt):new Date();
   const subjectIds=context.people.map(p=>p.id);
   if(context.ambiguity){
@@ -663,6 +714,13 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       // recorded deterministically -- the interpreter above may miss the
       // mapping, and a missed answer re-asks the same question forever.
       recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
+      // What the household already said in its own words (a hospital, "3
+      // nights", "delayed 13 hours") and corrections ("her right arm not
+      // left") are recorded now, so the interview never asks for them again.
+      if(context.people.length===1&&(state.intent==="claim"||pendingBefore)&&!/\b(?:if|suppose|supposing|what if|were to|in case)\b/i.test(request.submittedQuestion??request.question)){
+        const read=applyMessageFacts({message:request.submittedQuestion??request.question,facts:(state.subjects[context.people[0].id]??={}),now});
+        if(read.correction)TURN_CORRECTION.set(answer,read.correction);
+      }
       delete state.personContext;
       // "How much can she claim?" is a question about the claim, never a policy
       // topic: with an event on file it goes back to that claim (its
@@ -739,8 +797,11 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         answer.portfolioItems=contracts.map(c=>({id:c.id,ownerName:c.ownerName,policyName:c.name,confirmed:c.confirmed,
           currentness:currentness.get(c.id),
           coverages:c.coverages.map(v=>({category:v.category,amount:v.amount,currency:v.currency,productName:v.productName}))}));
-        answer.summary="I found "+contracts.length+" personal policy contract"+(contracts.length===1?"":"s")+" across "+context.people.length+" family profile"+(context.people.length===1?"":"s")+". The table separates confirmed cover from records that still need review.";
-        answer.details=["Schedules, amendments and supporting documents are grouped by insured person, insurer and policy number where available. An insured amount is a coverage amount, not a universal claim payout."];
+        answer.summary=contracts.length
+          ?"I found "+contracts.length+" personal policy contract"+(contracts.length===1?"":"s")+" across "+context.people.length+" family profile"+(context.people.length===1?"":"s")+". The table separates confirmed cover from records that still need review."
+          // No table is shown when there is nothing to list.
+          :"No personal policies are on file for "+(context.people.length===1?(context.people[0].preferred_name||context.people[0].display_name):"your family")+" yet. Upload a policy schedule or certificate and it will be listed here.";
+        answer.details=contracts.length?["Schedules, amendments and supporting documents are grouped by insured person, insurer and policy number where available. An insured amount is a coverage amount, not a universal claim payout."]:[];
         if(staleContracts.length){
           answer.details.push(staleContracts.length+" contract"+(staleContracts.length===1?"":"s")+" show ownership but no recent payment or renewal evidence, so the active status is not recently verified. Ownership is unchanged.");
           answer.nextSteps.push("Upload the latest premium receipt or renewal notice for "+[...new Set(staleContracts.map(c=>c.ownerName+" · "+c.name))].slice(0,4).join("; ")+" so current status can be verified separately from ownership.");
@@ -763,6 +824,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         try{catalog=await loadBenefitCatalog(request.accountId,
           [...new Set(contracts.flatMap(c=>[...c.documents,...c.references].map(d=>d.id)))]);}
         catch{/* An un-indexed household still answers the slow way below. */}
+        // A multi-column table's rows, narrowed to each person's own column
+        // (a child's Child column) -- see lib/claims/member-tier.ts.
+        const memberTiers=catalog.length?await loadMemberTiers(request.accountId):new Map<string,string|null>();
+        const catalogFor=(ownerId:string)=>memberTiers.size?rowsForMember(catalog,policyId=>memberTiers.get(policyId+"|"+ownerId)):catalog;
         // "How much can I claim if I fell down and have a bill of $500" reports
         // no event, so it used to miss the stored benefits entirely and go
         // hunting through whole PDFs — which is how a question about a fall came
@@ -834,7 +899,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             const ids=new Set([...contract.documents,...contract.references].map(d=>d.id));
             if(catalog.some(entry=>ids.has(entry.policyId)&&PERMANENT_LOSS.test(entry.benefitName)))permanentLossOnFile=true;
             try{
-              const assessed=assessContractFromCatalog({contract,catalog,facts,traits,events});
+              const assessed=assessContractFromCatalog({contract,catalog:catalogFor(contract.ownerId),facts,traits,events});
               for(const match of assessed.matches)candidateNames.push(match.benefit.benefitName+" "+(match.benefit.productName??""));
             }catch{/* Categories are a courtesy; the question is the point of the turn. */}
           }
@@ -993,7 +1058,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           await report({stage:"Checking your policy benefit rules",completed:0,total:contracts.length});
           const needs=new Map<string,string>();
           for(const contract of contracts){
-            const scenario=scenarioFromCatalog({contract,catalog,traits,events});
+            const scenario=scenarioFromCatalog({contract,catalog:catalogFor(contract.ownerId),traits,events});
             if(!scenario.items.length){
               // No rule on file for this contract; the schedule line itself
               // says what the plan pays for a death or a diagnosis.
@@ -1063,7 +1128,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             // what the policy says and not a matter of opinion.
             const diagnosis=knownValue(facts,"diagnosis");
             const events=reportedClaimEvents(facts,traits,typeof diagnosis==="string"&&diagnosis.trim()?[diagnosis.trim()]:[],scheduleRows);
-            return {contract,facts,traits,events,assessed:assessContractFromCatalog({contract,catalog,facts,traits,events})};
+            return {contract,facts,traits,events,assessed:assessContractFromCatalog({contract,catalog:catalogFor(contract.ownerId),facts,traits,events})};
           });
           for(const {assessed} of perContract)
             for(const entry of assessed.ruledOut)ruledOut.set(entry.benefit.benefitName,entry.because);

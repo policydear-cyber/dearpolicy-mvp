@@ -9,7 +9,7 @@ import { deterministicConditions } from "@/lib/policies/condition-catalog";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases,statedCurrencyCode } from "./benefit-rows";
 import { pageProductScopes } from "./inventory";
 import { benefitTraits,replaceBenefitCatalog,requiredTraits,validateCatalogFormula,type CatalogBenefit } from "./benefit-catalog";
-import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,methodFor,readingModelIdentity,type ExtractionMethod } from "@/lib/documents/evidence";
+import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,ensureEvidenceSchema,methodFor,readingModelIdentity,type ExtractionMethod } from "@/lib/documents/evidence";
 import { annotateBenefitEvidence,evidenceKey,markConflicts } from "@/lib/documents/evidence-store";
 
 /** Reading a document is a one-time job, so it can be slow and thorough.
@@ -112,6 +112,41 @@ function rowTraits(label:string,line:string):ScenarioTrait[]{
   const keyword=benefitTraits(label,line);
   return extra.length?[...new Set([...keyword.filter(t=>t!=="other"),...extra])]:keyword;
 }
+/** A table's row number is not part of the benefit's name ("3 Travel delay",
+ * "3a …", "2. Loss of sight"). */
+export function cleanBenefitName(label:string){
+  return label.replace(/^[•\-–\s]+/,"").replace(/^\(?\d{1,2}[a-z]?[.)]?\s+(?=[A-Za-z(])/,"").replace(/\s+/g," ").trim().slice(0,90);
+}
+/** What a table row is. Only "benefit" rows can carry a payout formula;
+ * everything else is a typed, cited row of the schedule that is never
+ * calculated into a claim amount here. */
+export type TableRowKind="benefit"|"as_charged"|"not_covered"|"unlimited"|"deductible"|"co_insurance"|"co_payment"|"co_payment_cap"|"pro_ration"|"policy_year_limit"|"family_limit";
+export function rowKind(label:string,value:string,tier:string|null=null):TableRowKind{
+  const l=label.toLowerCase(),v=value.trim().toLowerCase();
+  if(/^not\s+covered\b/.test(v))return "not_covered";
+  if(/\bdeductible\b/.test(l))return "deductible";
+  if(/co-?pay(?:ment)?\s+cap|stop[-\s]?loss/.test(l))return "co_payment_cap";
+  if(/co-?insurance/.test(l))return "co_insurance";
+  if(/pro-?ration/.test(l))return "pro_ration";
+  if(/^co-?payment\b/.test(v)||/\bco-?payment\b/.test(l))return "co_payment";
+  if(/(?:policy[-\s]year|annual|overall(?:\s+annual)?|lifetime|yearly)\s+(?:limit|maximum)|\bfamily\s+maximum\b/.test(l))return "policy_year_limit";
+  if(tier&&/\bfamily\s+max|\boverall\s+max|\bmaximum\b/i.test(tier))return "family_limit";
+  if(/^as\s+charged\b/.test(v))return "as_charged";
+  if(/^unlimited\b/.test(v))return "unlimited";
+  return "benefit";
+}
+/** The printed figure of a typed row: a money amount, or a percentage as a
+ * fraction (10% -> 0.1). Null when the cell prints none. */
+export function typedValue(kind:TableRowKind,value:string):number|null{
+  if(kind==="as_charged"||kind==="not_covered"||kind==="unlimited")return null;
+  const percent=value.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
+  if((kind==="co_insurance"||kind==="pro_ration")&&percent)return Math.round(Number(percent[1])*100)/10000;
+  const money=value.match(new RegExp(CURRENCY_MARKER+String.raw`\s?(\d[\d,]*(?:\.\d{1,2})?)`));
+  if(money)return Number(money[1].replace(/,/g,""));
+  if(percent)return Math.round(Number(percent[1])*100)/10000;
+  return null;
+}
+
 async function categoriseRows(rows:{index:number;label:string;value:string}[],owner:{accountId:string;policyId:string}){
   if(!rows.length)return new Map<number,{isBenefit:boolean;respondsTo:ScenarioTrait[];requires:ScenarioTrait[]}>();
   // attempts:2 -- one retry survives a transient 429 (the free-tier hosted
@@ -189,6 +224,26 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     // `benefits`, so a model reading of the same row can replace them.
     const statedOnly=new Map<string,number>();
     for(const row of pageRows){
+      const category=categories.get(row.index);
+      const tier=row.tier??null;
+      const benefitName=cleanBenefitName(row.label);
+      if(!benefitName)continue;
+      const quote=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().slice(0,260);
+      const kind=rowKind(row.label,row.value,tier);
+      const key=row.label.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+(tier??"").toLowerCase()+"|"+row.value.toLowerCase();
+      if(kind!=="benefit"){
+        // Cost-sharing, limits and worded values ("As charged", "Not covered")
+        // are rows of the table the person holds: stored, typed and cited,
+        // but never a formula -- nothing is calculated from them here.
+        if(seen.has(key))continue;seen.add(key);
+        const typed=typedValue(kind,row.value);
+        methods.set(evidenceKey(benefitName,page.page_number,quote),methodFor("table",page.extraction_method));
+        benefits.push({productName:section,benefitName,traits:kind==="as_charged"||kind==="unlimited"?rowTraits(row.label,row.line).filter(t=>t!=="other"):[],
+          requires:[],formulaKind:"none",formulaValue:typed,currency:statedCurrencyCode(row.value),
+          factKey:null,offsetDays:null,maximumDays:null,sourcePage:page.page_number,quote,
+          conditions:[],requirements:[],needsReview:false,basisInferred:false,tier,rowKind:kind});
+        continue;
+      }
       const parsed=parseBenefitValue(row.value,{percentageBasis:basisForRow(bases,row.index)});
       if(!parsed){
         // The row is a printed benefit whose amount cell could not be turned
@@ -196,44 +251,39 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         // is stored -- name, printed currency, page and the exact printed row
         // -- with NO formula ('none'): it is shown as the policy prints it and
         // never calculated from. No per-period conversion is ever guessed.
-        const category=categories.get(row.index);
-        if(category&&!category.isBenefit)continue;
-        const key=row.label.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+row.value.toLowerCase();
+        if(category&&!category.isBenefit&&!row.fromTable)continue;
         if(seen.has(key))continue;seen.add(key);
-        const benefitName=row.label.replace(/^[•\-–\s]+/,"").trim().slice(0,90);
-        statedOnly.set(benefitName.toLowerCase().replace(/[^a-z0-9]/g,""),benefits.length);
-        methods.set(evidenceKey(benefitName,page.page_number,row.line.replace(/\t/g," ").trim().slice(0,260)),methodFor("table",page.extraction_method));
+        statedOnly.set(benefitName.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+(tier??""),benefits.length);
+        methods.set(evidenceKey(benefitName,page.page_number,quote),methodFor("table",page.extraction_method));
         benefits.push({productName:section,benefitName,
           traits:[...new Set([...rowTraits(row.label,row.line).filter(t=>t!=="other"||!category?.respondsTo.length),...(category?.respondsTo??[])])],
           requires:[...new Set([...requiredTraits(row.label,row.line),...(category?.requires??[])])],
           formulaKind:"none",formulaValue:null,currency:statedCurrencyCode(row.value),
           factKey:null,offsetDays:null,maximumDays:null,
-          sourcePage:page.page_number,quote:row.line.replace(/\t/g," ").trim().slice(0,260),
+          sourcePage:page.page_number,quote,
           conditions:["The policy states this benefit as \u201c"+row.value.trim().slice(0,120)+"\u201d. DearPolicy shows it as printed and does not calculate an amount from it."],
-          requirements:[],needsReview:true,basisInferred:false});
+          requirements:[],needsReview:true,basisInferred:false,tier,rowKind:"benefit"});
         continue;
       }
-      const category=categories.get(row.index);
       // The model may rule a row OUT as a benefit; it never rules one in
       // that the value cell could not be parsed from.
       if(category&&!category.isBenefit)continue;
-      const key=row.label.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+row.value.toLowerCase();
       if(seen.has(key))continue;seen.add(key);
-      const daily=parsed.kind==="daily"?dailyLimitsFrom(row.line):null;
-      methods.set(evidenceKey(row.label.replace(/^[•\-–\s]+/,"").trim().slice(0,90),page.page_number,row.line.replace(/\t/g," ").trim().slice(0,260)),methodFor("table",page.extraction_method));
-      benefits.push({productName:section,benefitName:row.label.replace(/^[•\-–\s]+/,"").trim().slice(0,90),
+      const daily=parsed.kind==="daily"?dailyLimitsFrom(row.label+" "+row.value):null;
+      methods.set(evidenceKey(benefitName,page.page_number,quote),methodFor("table",page.extraction_method));
+      benefits.push({productName:section,benefitName,
         traits:[...new Set([...rowTraits(row.label,row.line).filter(t=>t!=="other"||!category?.respondsTo.length),...(category?.respondsTo??[])])],
         requires:[...new Set([...requiredTraits(row.label,row.line),...(category?.requires??[])])],
         formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency,
         factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
         offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
-        sourcePage:page.page_number,quote:row.line.replace(/\t/g," ").trim().slice(0,260),
-        conditions:parsed.inferred&&parsed.basis?["DearPolicy read this as "+parsed.basis+". Confirm it on the Benefits page."]:[],
+        sourcePage:page.page_number,quote,
+        conditions:parsed.inferred&&parsed.basis?["DearPolicy read this as "+parsed.basis+"."]:[],
         requirements:[],
         // A daily rate with no cap stated in its own row is not yet payable,
         // and a rule taken from a heading is confirmed by a person first.
         needsReview:(parsed.kind==="daily"&&daily?.maximumDays==null)||parsed.inferred===true,
-        basisInferred:parsed.inferred===true});
+        basisInferred:parsed.inferred===true,tier,rowKind:"benefit"});
       parsedHere++;
     }
     // A page whose schedule was read needs no model pass at all.
@@ -267,7 +317,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         quote:found.quote,factKey:found.factKey,offsetDays:found.offsetDays,maximumDays:found.maximumDays});
       // The same row already stored as printed-only: a validated rule from the
       // model replaces it; a model reading with no rule adds nothing new.
-      const printedOnly=statedOnly.get(found.name.toLowerCase().replace(/[^a-z0-9]/g,""));
+      const printedOnly=statedOnly.get(found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|");
       if(printedOnly!=null){
         if(formula.formulaKind==="none")continue;
         benefits.splice(printedOnly,1,{...benefits[printedOnly],...formula,quote:found.quote,
@@ -283,6 +333,8 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         requirements:[],needsReview:formula.formulaKind==="none"});
     }
   }
+  // The tier and row-kind columns are evidence columns.
+  await ensureEvidenceSchema();
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);
   // Evidence for every stored row (span, method, code verification) and any
   // contradiction with another page or a current version of the same plan.

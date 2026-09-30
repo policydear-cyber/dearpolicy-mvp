@@ -91,8 +91,28 @@ export function claimDocuments(facts:ClaimFacts,category:FactFindingCategory|nul
   const stay=category==="medical_reimbursement"||(category==="accidental_injury"&&(facts.hospitalised||facts.hospitalNights!=null))
     ?FACT_FINDING_SPECS.medical_reimbursement.documents.filter(d=>d.required).map(d=>d.label):[];
   const all=[...documentsToAttach(facts).slice(0,2),...own,...stay,...documentsToAttach(facts).slice(2)];
-  const seen=new Set<string>();
-  return all.filter(d=>{const key=d.toLowerCase().replace(/[^a-z]+/g," ").trim();if(seen.has(key))return false;seen.add(key);return true;});
+  return dedupeDocuments(all);
+}
+/** The same document under two names ("Discharge summary" and "Hospital
+ * discharge summary showing the dates of admission and discharge"; two
+ * itemised-bill lines) is asked for once, in its most specific wording. */
+function documentKey(label:string){
+  const t=label.toLowerCase();
+  if(/discharge summary/.test(t))return "discharge-summary";
+  if(/itemi[sz]ed/.test(t)&&/bill|invoice/.test(t))return "itemised-bill";
+  if(/death certificate/.test(t)&&!/cause/.test(t))return "death-certificate";
+  if(/police/.test(t)&&/coroner/.test(t))return "police-coroner";
+  if(/doctor|x-ray|scan report|medical report/.test(t)&&/injur/.test(t))return "injury-report";
+  return t.replace(/[^a-z]+/g," ").trim();
+}
+export function dedupeDocuments(labels:string[]):string[]{
+  const chosen=new Map<string,string>();
+  for(const label of labels){
+    const key=documentKey(label),current=chosen.get(key);
+    if(!current)chosen.set(key,label);
+    else if(label.length>current.length)chosen.set(key,label);
+  }
+  return [...chosen.values()];
 }
 export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:string;relationship?:string|null;generatedOn?:Date}){
   const {packet}=args;

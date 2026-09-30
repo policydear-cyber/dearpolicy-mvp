@@ -108,7 +108,8 @@ async function main() {
       assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(PDF_PASSWORD_REQUIRED_MESSAGE));
       assert.ok(USER_ACTIONABLE_PROCESSING_ERRORS.has(PDF_PASSWORD_INCORRECT_MESSAGE));
       // V1.1 Task 1 requires an unreadable document to tell the household what is unavailable: three fixed, internals-free sentences join the allowlist.
-      assert.equal(USER_ACTIONABLE_PROCESSING_ERRORS.size, 5, "the allowlist stays deliberate and small");
+      // Round 5: one more fixed sentence -- a reading SERVICE that is still failing is not an unreadable document (DOCUMENT_READING_SERVICE_MESSAGE, internals-free).
+      assert.equal(USER_ACTIONABLE_PROCESSING_ERRORS.size, 6, "the allowlist stays deliberate and small");
       assert.ok(new UserActionableProcessingError(PDF_PASSWORD_REQUIRED_MESSAGE) instanceof Error);
       assert.match(ingest, /instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS\.has\(error\.message\)/);
       assert.match(ingest, /\[userReason \?\? POLICY_PROCESSING_FAILED_MESSAGE, args\.policyId, args\.accountId\]/);

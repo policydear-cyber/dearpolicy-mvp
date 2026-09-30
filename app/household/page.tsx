@@ -4,8 +4,9 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { HouseholdExportPanel } from "./export-panel";
 import { customerMessage } from "@/components/customer-text";
+import { sgDate } from "@/components/format-date";
 
-type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string };
+type Member = { householdId: string; userId: string; role: "owner" | "member"; createdAt: string; email?: string | null; isSelf?: boolean };
 type Invitation = { id: string; household_id: string; email: string; role: "owner" | "member"; invited_by: string; created_at: string; expires_at: string };
 
 export default function HouseholdPage() {
@@ -139,9 +140,9 @@ export default function HouseholdPage() {
         return;
       }
       // Everything this household owned -- including this page's own data
-      // -- is gone the instant this succeeds. Land somewhere that still
-      // makes sense with no household selected.
-      window.location.href = "/";
+      // -- is gone the instant this succeeds. Every household page would
+      // now fail, so land on a confirmation with the real next steps.
+      window.location.href = "/household/deleted";
     } finally {
       setDeleting(false);
     }
@@ -182,14 +183,18 @@ export default function HouseholdPage() {
                 // household_members_delete policy is the real enforcement
                 // either way -- this just avoids offering a button that
                 // would only come back as a 404).
-                const canAct = isSelf || isOwner;
+                // The only owner cannot leave: the household would be left
+                // with nobody able to manage or delete it.
+                const soleOwner = isSelf && member.role === "owner" && members.filter((m) => m.role === "owner").length === 1;
+                const canAct = (isSelf || isOwner) && !soleOwner;
+                const who = member.email ?? (isSelf ? "You" : "Household member");
                 return (
                   <div className="profile-card" key={member.userId}>
-                    <div className="avatar profile-avatar">{member.userId.slice(0, 1).toUpperCase()}</div>
+                    <div className="avatar profile-avatar" aria-hidden="true">{(member.email ?? "?").slice(0, 1).toUpperCase()}</div>
                     <div className="profile-fields">
-                      <div className="field"><label>User</label><span>{isSelf ? "You" : `Member ${member.userId.slice(0, 8)}`}</span></div>
-                      <div className="field"><label>Role</label><span>{member.role}</span></div>
-                      <div className="field"><label>Joined</label><span>{new Date(member.createdAt).toLocaleDateString()}</span></div>
+                      <div className="field"><label>Member</label><span>{who}{isSelf && member.email ? " (you)" : ""}</span></div>
+                      <div className="field"><label>Role</label><span>{member.role === "owner" ? "Owner" : "Member"}</span></div>
+                      <div className="field"><label>Joined</label><span>{sgDate(member.createdAt)}</span></div>
                     </div>
                     <div className="profile-actions">
                       {canAct && (
@@ -198,6 +203,7 @@ export default function HouseholdPage() {
                         </button>
                       )}
                       {confirmMemberId === member.userId && <button className="mini-button" onClick={() => setConfirmMemberId(null)}>Cancel</button>}
+                      {soleOwner && <small className="muted">You are the only owner. To leave, make someone else an owner first, or delete the household below.</small>}
                     </div>
                   </div>
                 );
@@ -229,7 +235,7 @@ export default function HouseholdPage() {
                       <div className="profile-fields">
                         <div className="field"><label>Email</label><span>{invitation.email}</span></div>
                         <div className="field"><label>Role</label><span>{invitation.role}</span></div>
-                        <div className="field"><label>Expires</label><span>{new Date(invitation.expires_at).toLocaleDateString()}</span></div>
+                        <div className="field"><label>Expires</label><span>{sgDate(invitation.expires_at)}</span></div>
                       </div>
                       <div className="profile-actions">
                         <button className="mini-button danger" onClick={() => revokeInvitation(invitation)}>

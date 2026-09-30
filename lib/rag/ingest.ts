@@ -1,5 +1,5 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
-import { DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
+import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
 import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
@@ -11,7 +11,7 @@ import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } fr
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
-import { extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
+import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
 import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatchWithKind, linkRelatedReferenceDocuments, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
@@ -42,7 +42,66 @@ export type ProcessPolicyArgs = {
    * left is shown as "still reading" and retried automatically; only the
    * last attempt records a failure the household sees. */
   attempt?: { number: number; max: number };
+  /** Round 5: the durable job type running this (so a deferred retry lands
+   * on the same queue), and whether this run IS that one deferred retry
+   * (which never schedules another). */
+  jobType?: string;
+  deferredRetry?: boolean;
 };
+
+/** Round 5: the MediSave and cash portions a renewal notice or receipt
+ * prints ("Less: MediSave deduction S$1,050.00", "cash payable S$362.00",
+ * "Total cash payable S$1,120.00"), as one note for its premium records.
+ * Only printed figures, copied as printed; null when none is printed. */
+export function paymentSplitNote(text: string): string | null {
+  const amountOn = (pattern: RegExp) => {
+    for (const line of text.split(/\n/)) {
+      if (!pattern.test(line)) continue;
+      const amount = line.match(/(?:S\$|SGD\s?)\s?\d[\d,]*(?:\.\d{1,2})?/i)?.[0];
+      if (amount) return amount.replace(/\s+/g, "");
+    }
+    return null;
+  };
+  const medisave = amountOn(/\bmedisave\b/i);
+  const total = amountOn(/\btotal\s+cash\s+payable\b/i);
+  const cash = amountOn(/^(?!.*\btotal\b).*\bcash\s+payable\b/i);
+  const parts = [medisave ? "MediSave pays " + medisave : null, cash ? "cash payable " + cash : null, total ? "total cash payable " + total : null].filter(Boolean);
+  return parts.length ? "As printed: " + parts.join("; ") : null;
+}
+
+/** Round 5: minutes until the one deferred retry after a reading-service
+ * failure outlasted the job's own attempts. */
+export const DEFERRED_READ_RETRY_MINUTES = 30;
+/** A failure of a reading service, not of the document: retried while the
+ * job has attempts left; quota/spend stops and actionable reasons pass
+ * through unchanged. */
+function asServiceFailure(error: unknown, what: string): unknown {
+  if (error instanceof UserActionableProcessingError || error instanceof TemporaryProcessingError || isQuotaOrSpendStop(error)) return error;
+  return new TemporaryProcessingError(what + " failed: " + (error instanceof Error ? error.name + ": " + error.message : String(error)).slice(0, 300), error);
+}
+function attemptsLeft(args: ProcessPolicyArgs) { return !!args.attempt && args.attempt.number < args.attempt.max; }
+/** Schedules the single later re-read after the job's own attempts ran out
+ * on a service failure. Idempotent (its own key); never from the deferred
+ * run itself, so retries stay bounded. Returns whether one is scheduled. */
+async function scheduleDeferredRead(args: ProcessPolicyArgs): Promise<boolean> {
+  if (args.deferredRetry) return false;
+  try {
+    const [{ enqueueJob }, { pool }, { POLICY_PROCESSING_JOB_TYPE }] = await Promise.all([import("@/lib/jobs/queue"), import("@/lib/db/client"), import("@/lib/rag/processing-queue")]);
+    await enqueueJob(pool, {
+      jobType: args.jobType ?? POLICY_PROCESSING_JOB_TYPE,
+      idempotencyKey: args.policyId + ":retry-read",
+      accountId: args.accountId,
+      resurrectTerminal: true,
+      availableAt: new Date(Date.now() + DEFERRED_READ_RETRY_MINUTES * 60_000),
+      payload: { policyId: args.policyId, familyMemberId: args.familyMemberId, storageKey: args.storageKey,
+        pdfPassword: args.pdfPassword ?? null, linkUploadMember: Boolean(args.linkUploadMember), deferredRetry: true },
+    });
+    return true;
+  } catch (error) {
+    console.warn("Deferred re-read could not be scheduled for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
 
 /** V1.1 cross-check: a policy number or date the extraction reports is kept
  * only when it is printed in the document. What is not printed is not
@@ -123,6 +182,9 @@ async function progress(args: ProcessPolicyArgs, stage: string, percent: number,
 }
 
 export async function processPolicy(args: ProcessPolicyArgs) {
+  // Round 5: a reading service failed on the last attempt, but the text
+  // layer was readable: the document is completed from what code can read.
+  let readInPart = false;
   // Quarantine gate (checkpoint 3, claude/v1-launch-hardening): this is the
   // SINGLE entry point for OCR, parsing, structured extraction, embeddings
   // and indexing on a policy document (see lib/rag/processing-queue.ts --
@@ -209,14 +271,27 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         `Reading ${ocrPageNumbers.length} scanned page${ocrPageNumbers.length === 1 ? "" : "s"} with PaddleOCR…`,
         "extracting",
       );
-      pages = await completePdfPagesWithOcr({
-        accountId: args.accountId,
-        resourceId: args.policyId,
-        bytes: ocrSourceBytes as Uint8Array,
-        password: args.pdfPassword,
-        pages,
-        pageNumbers: ocrPageNumbers,
-      });
+      try {
+        pages = await completePdfPagesWithOcr({
+          accountId: args.accountId,
+          resourceId: args.policyId,
+          bytes: ocrSourceBytes as Uint8Array,
+          password: args.pdfPassword,
+          pages,
+          pageNumbers: ocrPageNumbers,
+        });
+      } catch (error) {
+        // The OCR service failed, not the file. With attempts left the job
+        // retries; on the last one a readable text layer is still used (the
+        // scanned pages are reported missing), and with none the document is
+        // not called unreadable -- reading it simply has not finished.
+        const failure = asServiceFailure(error, "OCR");
+        const textLayer = pages.reduce((sum, p) => sum + p.text.trim().length, 0);
+        if (!(failure instanceof TemporaryProcessingError) || attemptsLeft(args) || textLayer < 100) throw failure;
+        await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "OCR_SERVICE_DEGRADED", error }).catch(() => undefined);
+        pages = pages.map((page) => ocrPageNumbers.includes(page.pageNumber) ? { ...page, unreadable: true } : page);
+        readInPart = true;
+      }
     }
 
     if (pages.reduce((sum, p) => sum + p.text.length, 0) < 100) {
@@ -260,7 +335,21 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       await progress(args, "ai_extraction", 42, "Reading a compact evidence sample from this document…", "extracting");
     }
 
-    const raw = await extractPolicyStructure(pages, { accountId: args.accountId, policyId: args.policyId });
+    let raw: PolicyExtraction;
+    try {
+      raw = await extractPolicyStructure(pages, { accountId: args.accountId, policyId: args.policyId });
+    } catch (error) {
+      // The reading service failed on a document whose text is readable.
+      // With attempts left, the job retries. On the last attempt the
+      // document is NOT failed: what code can read (its role, tables,
+      // conditions and text search) is kept, nobody is guessed as insured,
+      // and one later re-read is scheduled to finish the rest.
+      const failure = asServiceFailure(error, "Policy reading");
+      if (!(failure instanceof TemporaryProcessingError) || attemptsLeft(args)) throw failure;
+      await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "READING_SERVICE_DEGRADED", error }).catch(() => undefined);
+      raw = buildCodeOnlyExtraction(pages);
+      readInPart = true;
+    }
     await progress(args, "verifying", 56, "Verifying extracted facts against the original PDF text…", "extracting");
     const extraction = crossCheckPrintedFacts(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages);
     const documentDate = documentDateFrom(pages, [extraction.startDate]);
@@ -285,7 +374,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Clear generated data before rebuilding. Preserve explicit manual/upload links.
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
     const isPaymentDocument = ["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "");
-    if (args.linkUploadMember && isPaymentDocument && !extraction.personalCoverageConfirmed) {
+    if (args.linkUploadMember && (isPaymentDocument || readInPart) && !extraction.personalCoverageConfirmed) {
       await query(
         `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
          VALUES($1,$2,$3,'upload_hint',0.70) ON CONFLICT(policy_id,family_member_id) DO NOTHING`,
@@ -352,6 +441,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       await annotateCoverageEvidence(args.accountId, args.policyId, evidencePages, printedNames);
     } catch (error) { console.warn("Coverage evidence could not be written for policy " + args.policyId + ":", error instanceof Error ? error.message : error); }
     const matchedIds = [...new Set(detected.map((d) => d.matchedMemberId).filter((id): id is string => Boolean(id)))];
+    const paymentSplit = paymentSplitNote(pages.map((p) => p.text).join("\n"));
     const unnamedPaymentTarget = matchedIds.length === 1 ? matchedIds[0] : (args.linkUploadMember && isPaymentDocument ? args.familyMemberId : null);
     for (const [paymentIndex, payment] of extraction.paymentRecords.filter((p) => p.amount != null && !p.insuredPersonName).entries()) {
       if (!extraction.personalCoverageConfirmed && !["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "")) continue;
@@ -395,6 +485,12 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       );
     }
 
+    // The MediSave and cash portions the notice prints, on every premium
+    // record read from it (named or not).
+    if (isPaymentDocument && paymentSplit) {
+      await query(`UPDATE premium_records SET notes=concat_ws(' · ',nullif(notes,''),$3::text) WHERE account_id=$1 AND source_document_id=$2`,
+        [args.accountId, args.policyId, paymentSplit]);
+    }
     await linkRelatedReferenceDocuments(args.accountId, args.policyId, extraction.groupPolicyNumber);
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
@@ -473,7 +569,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // The benefit summary the finished document shows ("Ready. 4 benefit rules
     // read…"). Kept here because later progress messages overwrite the column.
     let benefitSummary: string | null = null;
-    try {
+    // A renewal notice, premium receipt or annual statement states what is
+    // PAID ("Less: MediSave deduction", "Total cash payable"), not what the
+    // plan pays: its lines are premium records (above), never benefits.
+    if (isPaymentDocument) {
+      const { replaceBenefitCatalog } = await import("@/lib/policies/benefit-catalog");
+      await replaceBenefitCatalog(args.accountId, args.policyId, []).catch(() => undefined);
+    } else try {
       await progress(args, "benefits", 82, "Reading the benefit rules page by page. This is the slow part, and it only happens once…", "indexing");
       const { catalogueDocument } = await import("@/lib/policies/catalog-builder");
       const stored = await catalogueDocument({
@@ -522,6 +624,19 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       console.warn("Benefit cataloguing failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
 
+    // Round 5: each linked person's column of a multi-column table (plan
+    // tier / person class), and a hospital plan's Portfolio cover from its
+    // policy-year limit when the reading left none that can be shown.
+    try {
+      const { applyMemberTiers } = await import("@/lib/policies/member-tiers");
+      await applyMemberTiers({
+        accountId: args.accountId, policyId: args.policyId, text: pages.map((p) => p.text).join("\n"),
+        people: detected.filter((d) => d.matchedMemberId).map((d) => ({ name: d.name, memberId: d.matchedMemberId as string,
+          relationshipHint: extraction.insuredPeople.find((p) => p.name === d.name)?.relationshipHint ?? null })),
+        policyType: extraction.policyType ?? null, productName: extraction.productName ?? null,
+        personalCoverageConfirmed: extraction.personalCoverageConfirmed,
+      });
+    } catch (error) { console.warn("Member tiers could not be written for policy " + args.policyId + ":", error instanceof Error ? error.message : error); }
     await progress(args, "finalising", 97, "Final checks and portfolio update…", "indexing");
     await query(
       `UPDATE policies SET processing_status='ready',processing_stage='complete',processing_progress=100,
@@ -532,8 +647,15 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, unreadableNote ? "Ready. " + unreadableNote : "Ready."],
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : unreadableNote ? "Ready. " + unreadableNote : "Ready."],
     );
+    if (readInPart) {
+      await query(
+        `UPDATE policies SET needs_review=true,review_reason=concat_ws('; ',nullif(review_reason,''),$3::text) WHERE id=$1 AND account_id=$2`,
+        [args.policyId, args.accountId, "DearPolicy has not finished reading who this document covers and its cover amounts; it will try again automatically"],
+      ).catch(() => undefined);
+      await scheduleDeferredRead(args);
+    }
     // The Coverage Ledger gains this document's rows the moment it is ready,
     // so the next payout question is a lookup rather than a read.
     try {
@@ -552,7 +674,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // your coverage ledger…" for good. Only keep the job lease alive.
       if (args.jobHeartbeat) await args.jobHeartbeat().catch(() => undefined);
       const { readDocumentIntoLedger } = await import("@/lib/ledger/extract");
-      await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
+      // A payment document states premiums, not cover: nothing to read into the ledger.
+      if (!isPaymentDocument) await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
         console.warn("Ledger reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
       });
       const { seedLedger } = await import("@/lib/ledger/store");
@@ -607,7 +730,19 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // A reason the person can act on (missing/wrong PDF password) is stored
     // verbatim so the UI can say what to do; every other failure keeps the
     // fixed message and its raw detail stays in the diagnostics table.
-    const userReason = error instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS.has(error.message) ? error.message : DOCUMENT_READING_FAILED_MESSAGE;
+    // Round 5: a reading service that is still failing after the job's own
+    // attempts is not an unreadable document. One later re-read is scheduled
+    // and the household is told reading will continue.
+    if (error instanceof TemporaryProcessingError && await scheduleDeferredRead(args)) {
+      await query(
+        `UPDATE policies SET processing_status='queued',processing_stage='retry_scheduled',processing_message=$1,processing_error=NULL,updated_at=now() WHERE id=$2 AND account_id=$3`,
+        [DOCUMENT_READING_SERVICE_MESSAGE, args.policyId, args.accountId],
+      ).catch(() => undefined);
+      void recordErrorEvent({ name: "rag.policy_ingest.retry_scheduled", correlationId: resolveCorrelationId(undefined), householdRef: pseudonymizeId(args.accountId), resourceRef: pseudonymizeId(args.policyId), error });
+      throw error;
+    }
+    const userReason = error instanceof UserActionableProcessingError && USER_ACTIONABLE_PROCESSING_ERRORS.has(error.message) ? error.message
+      : error instanceof TemporaryProcessingError ? DOCUMENT_READING_SERVICE_MESSAGE : DOCUMENT_READING_FAILED_MESSAGE;
     await query(
       `UPDATE policies SET processing_status='failed',processing_stage='failed',processing_message='Analysis stopped',processing_error=$1,
        processing_completed_at=now(),updated_at=now() WHERE id=$2 AND account_id=$3`,

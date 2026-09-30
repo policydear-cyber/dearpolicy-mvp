@@ -51,6 +51,8 @@ const operatorNav: { href: string; label: string; icon: IconName }[] = [
 
 /** Pages a signed-out person uses; no sign-out control there. */
 const SIGNED_OUT_PATHS = new Set(["/login", "/signup", "/reset-password"]);
+/** Signed in, but with no household to navigate. */
+const NO_NAV_PATHS = new Set(["/household/deleted"]);
 
 /** Ends the Supabase session on the server (which clears the session
  * cookie), then leaves for the sign-in page. Navigates even if the request
@@ -124,14 +126,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const reviewerArea = pathname.startsWith("/reviewer");
   const signedOutPage = SIGNED_OUT_PATHS.has(pathname);
   const operatorArea = pathname === "/operator" || pathname.startsWith("/operator/");
-  const items = reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : operatorArea ? operatorNav : nav;
+  // Signed-out pages (sign-in, sign-up, password reset) and the page shown
+  // after a household is deleted get no app navigation: every link would
+  // only bounce to sign-in or fail for want of a household.
+  const noNav = signedOutPage || NO_NAV_PATHS.has(pathname);
+  const items = noNav ? [] : reviewerArea ? [{ href: "/reviewer", label: "Assigned reviews", icon: "claims" as IconName }] : operatorArea ? operatorNav : nav;
   return (
-    <div className="app-shell">
+    <div className={`app-shell${noNav ? " no-nav" : ""}`}>
       <aside className="sidebar">
         <Link className="brand" href="/" aria-label="DearPolicy home">
           <img className="brand-logo" src="/dearpolicy-logo.png" alt="DearPolicy" width={827} height={161} />
         </Link>
-        <nav className="nav">
+        <nav className={`nav${noNav ? " nav-empty" : ""}`} aria-hidden={noNav || undefined}>
           {reviewerArea && <div className="eyebrow">Reviewer area</div>}
           {operatorArea && <div className="eyebrow">Operator area</div>}
           {items.map((item) => {

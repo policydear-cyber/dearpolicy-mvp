@@ -9,7 +9,12 @@
  * turns the same page into lines and cells, which is what a benefit schedule
  * actually is. Nothing here uses a model: it is geometry. */
 export type TextItem = { text:string; x:number; y:number; w:number };
-export type PageLine = { cells:string[]; text:string; y:number };
+export type PageLine = { cells:string[]; text:string; y:number;
+  /** Where each cell starts and ends on the page (geometry-built lines only). */
+  xs?:number[]; xe?:number[];
+  /** The cells of a table row placed in their columns, empty ones kept, so a
+   * value always sits under its own column heading. */
+  rawCells?:string[] };
 export type PageLayout = { text:string; lines:PageLine[] };
 
 /** A column break is a vertical strip of the page with no text in it at all. */
@@ -33,16 +38,88 @@ export function columnBands(items:TextItem[],pageWidth:number,minimumGutter=26){
 /** Items sharing a baseline form a line; a wide horizontal gap starts a new cell. */
 export function lineFrom(items:TextItem[],cellGap=10):PageLine{
   const ordered=[...items].sort((a,b)=>a.x-b.x);
-  const cells:string[]=[];let current="",cursor:number|null=null;
+  const cells:string[]=[],xs:number[]=[],xe:number[]=[];let current="",cursor:number|null=null,start=0;
   for(const item of ordered){
     const piece=item.text.trim();
     if(!piece){cursor=item.x+item.w;continue;}
-    if(cursor!==null&&item.x-cursor>cellGap){if(current.trim())cells.push(current.trim());current="";}
+    if(cursor!==null&&item.x-cursor>cellGap){if(current.trim()){cells.push(current.trim());xs.push(start);xe.push(cursor);}current="";}
     else if(cursor!==null&&item.x-cursor>1.2&&current)current+=" ";
+    if(!current)start=item.x;
     current+=piece;cursor=item.x+item.w;
   }
-  if(current.trim())cells.push(current.trim());
-  return {cells,text:cells.join("\t"),y:ordered[0]?.y??0};
+  if(current.trim()){cells.push(current.trim());xs.push(start);xe.push(cursor??start);}
+  return {cells,text:cells.join("\t"),y:ordered[0]?.y??0,xs,xe};
+}
+
+/** Tables whose cells wrap onto several printed lines.
+ *
+ * A schedule cell like "Surgical benefits (including day surgery)" wraps to
+ * "Surgical benefits (including day" / "surgery)", and the wrapped half of
+ * every cell in that row sits on the next printed line. Read line by line
+ * the row falls apart into fragments and each value lands in the wrong
+ * column. Here a table is recognised by its column starts (a line of three
+ * or more cells, and the lines beneath whose every cell starts under one of
+ * those columns and stays inside it); lines of one table row are joined back
+ * by their spacing (the lines of one row are closer together than two rows);
+ * and every row is emitted with its cells in their columns, empty cells kept
+ * as empty tab-separated slots. Pure geometry. */
+const COLUMN_TOLERANCE=4;
+function columnOf(x:number,cols:number[]){
+  let best=-1,distance=Infinity;
+  cols.forEach((col,index)=>{const d=Math.abs(col-x);if(d<distance){distance=d;best=index;}});
+  return distance<=COLUMN_TOLERANCE?best:-1;
+}
+function fitsColumns(line:PageLine,cols:number[]){
+  if(!line.xs||!line.xe||!line.cells.length)return false;
+  const used=new Set<number>();
+  for(let i=0;i<line.cells.length;i++){
+    const col=columnOf(line.xs[i],cols);
+    if(col<0||used.has(col))return false;
+    used.add(col);
+    // A cell running past the start of the next column is prose, not a cell.
+    if(col+1<cols.length&&line.xe[i]>cols[col+1]+1)return false;
+  }
+  return true;
+}
+function joinWrapped(a:string,b:string){
+  if(!a)return b;if(!b)return a;
+  // "Sectio" + "n": a word the column was too narrow for.
+  if(/[A-Za-z]$/.test(a)&&/^[a-z]{1,3}$/.test(b))return a+b;
+  return a+" "+b;
+}
+function slotted(cells:string[]):PageLine{
+  const rawCells=cells.map(c=>c.trim());
+  const kept=rawCells.filter(Boolean);
+  return {cells:kept,rawCells,text:rawCells.join("\t").replace(/\t+$/,""),y:0};
+}
+export function assembleTables(lines:PageLine[]):PageLine[]{
+  const out:PageLine[]=[];
+  let i=0;
+  while(i<lines.length){
+    const head=lines[i];
+    if(!head.xs||head.cells.length<3){out.push(head);i++;continue;}
+    const cols=head.xs.slice();
+    const block=[head];let j=i+1;
+    while(j<lines.length&&fitsColumns(lines[j],cols)){block.push(lines[j]);j++;}
+    if(block.length<2){out.push(head);i++;continue;}
+    const gaps=block.slice(1).map((line,k)=>block[k].y-line.y).filter(gap=>gap>0);
+    const smallest=gaps.length?Math.min(...gaps):0,largest=gaps.length?Math.max(...gaps):0;
+    // Joining needs two kinds of spacing: within a row and between rows.
+    const wraps=smallest>0&&largest>smallest*1.25;
+    let current:string[]|null=null,currentY=0,lastY=0;
+    const flush=()=>{if(current){const line=slotted(current);line.y=currentY;out.push(line);}current=null;};
+    for(const line of block){
+      const cells=new Array(cols.length).fill("");
+      line.cells.forEach((cell,index)=>{const col=columnOf(line.xs![index],cols);cells[col]=joinWrapped(cells[col],cell);});
+      if(current&&wraps&&lastY-line.y<=smallest*1.15){
+        cells.forEach((cell,col)=>{if(cell)current![col]=joinWrapped(current![col],cell);});
+      }else{flush();current=cells;currentY=line.y;}
+      lastY=line.y;
+    }
+    flush();
+    i=j;
+  }
+  return out;
 }
 /** A label/amount table with nothing spanning the page ("Fracture of arm" …
  * "S$1,000") has an empty vertical strip between its columns, exactly like a
@@ -113,10 +190,12 @@ export function renderPageLayout(items:TextItem[],pageWidth:number):PageLayout{
       if(!byBaseline.has(key))byBaseline.set(key,[]);
       byBaseline.get(key)!.push(item);
     }
+    const bandLines:PageLine[]=[];
     for(const [,row] of [...byBaseline.entries()].sort((a,b)=>b[0]-a[0])){
       const line=lineFrom(row);
-      if(line.cells.length)lines.push(line);
+      if(line.cells.length)bandLines.push(line);
     }
+    lines.push(...assembleTables(bandLines));
   }
   // Tabs and newlines survive into storage, so table rows can be recovered
   // later by splitting. Quote matching normalises whitespace, so every existing
@@ -144,7 +223,13 @@ export type BenefitRow={label:string;value:string;line:string;
   /** Where this row sits in the page's lines, so a heading above it (for
    * example "Compensation (% of S$5,000)") can be applied to it and not to a
    * different table further down the same page. */
-  index:number};
+  index:number;
+  /** In a table with several value columns, the heading of the column this
+   * value is in: the plan tier, ward class or person class it applies to
+   * ("Plan A", "Private hospital", "Child"). Null for a single-value row. */
+  tier?:string|null;
+  /** True when the row came from a column-aware table read. */
+  fromTable?:boolean};
 /** A benefit-schedule row: a label cell, then a cell that starts with money or
  * a percentage. Deterministic, and wrong far less often than prose matching. */
 /** A sub-row of a numbered benefit: "(b) Whole eye" under "2. Permanent Total
@@ -177,6 +262,7 @@ const PREMIUM_LABEL=/\bpremiums?\b/i,PREMIUM_BENEFIT=/\b(?:waiv\w+|refund\w*|ret
 const COST_SHARING=/\b(?:deductible|co-?insurance|co-?payment|excess|pro-?ration)\b/i;
 function namesABenefit(label:string){
   if(PREMIUM_LABEL.test(label)&&!PREMIUM_BENEFIT.test(label))return false;
+  if(PAYMENT_LABEL.test(label))return false;
   if(COST_SHARING.test(label))return false;
   // A bare year is a real label — a payout that steps up each year is printed
   // exactly that way — so only the age-band shapes are excluded.
@@ -224,8 +310,92 @@ const BURN_BAND=/\bequals? to or greater than\b/i;
  * of lines with no amount ("Area", "Compensation", "(% of Sum Insured)"), and
  * only this one decides a payout. */
 const BURN_SECTION=/^(?:first|second|third|1st|2nd|3rd)[\s-]+degree\s+burns?$/i;
+// ---------------------------------------------------------------------------
+// Column-aware tables
+// ---------------------------------------------------------------------------
+/** A column that numbers rows ("Section", "Item", "No."), never a label. */
+const ROW_NUMBER_HEADING=/^(?:section|item|no\.?|s\/?n|#|clause|ref\.?)$/i;
+/** A column of footnote references, never a value. */
+const NOTES_HEADING=/^(?:notes?|remarks?|footnotes?)$/i;
+/** Cells a benefit table prints instead of an amount. */
+const WORDED_VALUE=/^(?:as\s+charged|not\s+covered|not\s+applicable|unlimited|covered\s+in\s+full|no\s+cap|nil|n\/?a|included|extended\b)/i;
+function valueLike(cell:string){return isValueCell(cell)||WORDED_VALUE.test(cell.trim())||/^(?:up to|you pay|co-?payment|reimbursed|per scale)\b/i.test(cell.trim())||AMOUNT.test(cell);}
+/** Payments the household makes, printed in schedules and notices. Never a
+ * benefit, in a table or out of one. */
+const PAYMENT_LABEL=/\b(?:medisave|cash\s+payable|amount\s+(?:due|payable)|total\s+(?:cash\s+)?(?:payable|due)|payment\s+(?:due|mode|date)|giro|premium\s+payable)\b|^\s*less\s*:/i;
+type TableShape={header:string[];labelCol:number;rowNumberCol:number;valueCols:number[];from:number;to:number};
+/** Finds tables: a heading line of three or more cells with no amount in it,
+ * followed by rows with the same number of column slots, at least one of
+ * which prints a value. */
+function findTables(lines:PageLine[]):TableShape[]{
+  const tables:TableShape[]=[];
+  for(let i=0;i<lines.length;i++){
+    const head=lines[i].rawCells??lines[i].cells;
+    if(head.length<3||head.filter(Boolean).length<3)continue;
+    if(head.slice(1).some(cell=>cell&&valueLike(cell)))continue;
+    let j=i+1;
+    while(j<lines.length){
+      const cells=lines[j].rawCells??lines[j].cells;
+      if(cells.length<2||cells.length>head.length)break;
+      if(cells.filter(Boolean).length<2)break;
+      j++;
+    }
+    if(j-i<2)continue;
+    const body=lines.slice(i+1,j).map(line=>line.rawCells??line.cells);
+    // A table prints a value on most (over half) of its rows. Prose laid out in columns
+    // beside a small table ("Monthly payouts | Year that new | Fixed monthly
+    // payout" over wrapped sentences, then "2026 | $689") is not one: it is
+    // left to the line reader, which reads the year/amount rows as printed.
+    const valued=body.filter(cells=>cells.slice(1).some(cell=>cell&&valueLike(cell))).length;
+    if(!valued||valued*2<=body.length)continue;
+    let rowNumberCol=head.findIndex(cell=>ROW_NUMBER_HEADING.test(cell.replace(/\s+/g,"")));
+    if(rowNumberCol<0&&body.every(cells=>!cells[0]||/^\d{1,2}[a-z]?[.)]?$/i.test(cells[0])))rowNumberCol=0;
+    const labelCol=rowNumberCol===0?1:0;
+    const valueCols=head.map((_,col)=>col).filter(col=>col!==labelCol&&col!==rowNumberCol&&!NOTES_HEADING.test(head[col].trim()));
+    if(!valueCols.length)continue;
+    tables.push({header:head,labelCol,rowNumberCol,valueCols,from:i,to:j});
+    i=j-1;
+  }
+  return tables;
+}
+function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
+  const rows:BenefitRow[]=[];
+  for(let index=table.from+1;index<table.to;index++){
+    const cells=lines[index].rawCells??lines[index].cells;
+    const label=(cells[table.labelCol]??"").replace(/\s+/g," ").trim();
+    if(label.length<2||label.length>160)continue;
+    if(PAYMENT_LABEL.test(label)||(PREMIUM_LABEL.test(label)&&!PREMIUM_BENEFIT.test(label)))continue;
+    if(NOT_A_BENEFIT_LABEL.some(pattern=>pattern.test(label)))continue;
+    for(const col of table.valueCols){
+      const value=(cells[col]??"").replace(/\s+/g," ").trim();
+      if(!value)continue;
+      rows.push({label,value,line:lines[index].text,index,
+        tier:table.valueCols.length>1?(table.header[col]??"").replace(/\s+/g," ").trim()||null:null,fromTable:true});
+    }
+  }
+  return rows;
+}
+
 export function benefitRows(lines:PageLine[]):BenefitRow[]{
   const rows:BenefitRow[]=[];
+  // Tables with a heading row are read by column, so each value keeps the
+  // column it was printed under; their lines are not read again below.
+  const tables=findTables(lines);
+  const inTable=new Set<number>();
+  // A table under a pro-ration factor or premium heading is not a benefit
+  // schedule, read by column or not (see NOT_A_BENEFIT_TABLE).
+  const underExcludedHeading=(from:number)=>{
+    for(let i=from;i>=0;i--){
+      const whole=lines[i].text.replace(/\s+/g," ").trim();
+      if(NOT_A_BENEFIT_TABLE.test(whole))return true;
+      if(i<from&&(NEW_TABLE.test(whole)||tables.some(table=>i>table.from&&i<table.to)))return false;
+    }
+    return false;
+  };
+  for(const table of tables){
+    for(let i=table.from;i<table.to;i++)inTable.add(i);
+    if(!underExcludedHeading(table.from))rows.push(...tableRows(lines,table));
+  }
   let stem:string|null=null,suppressed=false;
   // A two-column table states "Head" once and leaves the rows beneath it to
   // continue with a bare dash. Those rows were stored as "- Equals to or
@@ -233,6 +403,7 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
   // to neither burns table, so nothing downstream could tell them apart.
   let area:string|null=null,section:string|null=null;
   for(const [index,line] of lines.entries()){
+    if(inTable.has(index))continue;
     const whole=line.text.replace(/\s+/g," ").trim();
     if(NOT_A_BENEFIT_TABLE.test(whole))suppressed=true;
     else if(suppressed&&NEW_TABLE.test(whole))suppressed=false;
@@ -272,7 +443,7 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     if(label.length>140||!namesABenefit(label))continue;
     rows.push({label,value:(line.cells[valueIndex].trim()+continued.valueSuffix).trim(),line:line.text,index});
   }
-  return rows;
+  return rows.sort((a,b)=>a.index-b.index);
 }
 
 /** Rebuilds lines and cells from stored page text.
@@ -281,8 +452,9 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
  * in the database can be re-read as a table without re-opening the PDF. */
 export function linesFromStoredText(text:string):PageLine[]{
   return (text??"").split("\n").map((line,index)=>{
-    const cells=line.split("\t").map(cell=>cell.trim()).filter(Boolean);
-    return {cells,text:line,y:-index};
+    const rawCells=line.split("\t").map(cell=>cell.trim());
+    const cells=rawCells.filter(Boolean);
+    return {cells,rawCells,text:line,y:-index};
   }).filter(line=>line.cells.length>0);
 }
 export function benefitRowsFromText(text:string){return benefitRows(linesFromStoredText(text));}

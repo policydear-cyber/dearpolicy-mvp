@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect,useMemo,useState } from "react";
 
 /** Coverage: what each plan pays, for each person, as the documents state it.
@@ -67,7 +68,8 @@ export default function CoveragePage(){
     <header className="page-header"><div>
       <div className="eyebrow">COVERAGE</div>
       <h1>What each plan pays, for each person.</h1>
-      <p className="lead">Taken from your schedules, certificates and policy wording. Open a row&rsquo;s source to see the passage it comes from. Where a document states no figure, this page says so.</p>
+      <p className="lead">Organised by person: for each family member, what each of their plans pays when something happens. Taken from your schedules, certificates and policy wording; open a row&rsquo;s source to see the passage. Where a document states no figure, this page says so.</p>
+      <p className="muted">Looking for everything one policy pays, with its exclusions? <Link className="text-link" href="/schedule">See Benefits, by policy →</Link></p>
     </div></header>
     {error?<div className="alert error" role="alert"><strong>Your coverage could not be loaded.</strong><span> Please refresh the page in a moment.</span></div>:null}
     {(reading.pending>0||reading.inProgress)?<div className="unread-documents"><div><strong>Some of your documents are still being read.</strong><span>This page updates on its own when they are ready.</span></div></div>:null}

@@ -18,7 +18,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { statedCurrencyCode } from "@/lib/format/currency";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { loadPolicyInventory,type PolicyContract } from "@/lib/policies/inventory";
-import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
+import { coverageForBenefit,loadBenefitCatalog,preferStatedRules,selectTierRows,type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { EVENTS,PRODUCT_DEFAULTS,causeForBenefit,eventForBenefitName,type EventType,type PaysKind } from "@/lib/ledger/events";
 
 export type LedgerRow={
@@ -189,11 +189,18 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   // parser and the standard-rule defaults for the same event.
   const existing=await query<{policy_id:string|null;event_type:string;amount:string|null;pays_kind:string}>(
     "SELECT policy_id,event_type,amount::text,pays_kind FROM coverage_rules WHERE account_id=$1 AND origin='wording' AND status<>'rejected'",[accountId]);
+  const tiers=new Map((await query<{policy_id:string;family_member_id:string;tier:string|null}>(
+    "SELECT policy_id,family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier FROM policy_members pm WHERE account_id=$1",[accountId]).catch(()=>({rows:[]}))).rows
+    .map(r=>[r.policy_id+"|"+r.family_member_id,r.tier] as const));
   const seeds:Seed[]=[];
   for(const contract of contracts){
     const mine=new Set([...contract.documents,...contract.references].map(d=>d.id));
     const known=new Set<EventType>(existing.rows.filter(r=>r.policy_id&&mine.has(r.policy_id)&&r.pays_kind!=="stated"&&r.amount!=null).map(r=>r.event_type as EventType));
-    const wording=wordingSeeds(contract,preferStatedRules(catalog.filter(b=>mine.has(b.policyId)))).filter(w=>!known.has(w.eventType));
+    // A multi-column table's row applies only to the person class or plan
+    // tier of its column: a child gets the Child column, a Plan B employee
+    // the Plan B column (policy_members.benefit_tier).
+    const wording=wordingSeeds(contract,preferStatedRules(selectTierRows(catalog.filter(b=>mine.has(b.policyId)),
+      policyId=>tiers.get(policyId+"|"+contract.ownerId)))).filter(w=>!known.has(w.eventType));
     for(const w of wording)if(w.paysKind!=="stated")known.add(w.eventType);
     seeds.push(...wording,...scheduleSeeds(contract,known));
   }
