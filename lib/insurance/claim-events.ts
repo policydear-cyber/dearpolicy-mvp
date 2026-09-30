@@ -79,7 +79,9 @@ const TRIGGER_RULES:{event:ClaimEventType;pattern:RegExp}[]=[
  * dismemberment scale. */
 const SCHEDULE_LINE=/\bloss of\b|\bpermanent total loss\b|\bamputat|\bdismember|\bfractur|\bfull break\b|\bburns?\b|\bnon-union\b|\bshortening of\b|\bequals? to or greater than\b|\bdislocat/i;
 export function benefitTriggerEvents(benefitName:string,quote:string):ClaimEventType[]{
-  if(SCHEDULE_LINE.test(benefitName??"")&&!/\bdeath\b|\bdies\b|\bdisappear/i.test(benefitName??""))
+  // "Loss of or damage to baggage" is a loss of things, not of a limb.
+  if(SCHEDULE_LINE.test(benefitName??"")&&!/\bdeath\b|\bdies\b|\bdisappear/i.test(benefitName??"")
+    &&!/\b(?:baggage|luggage|belongings|personal effects|property|money|cash|travel documents|passport|deposits?|income|contents|vehicle|home)\b/i.test(benefitName??""))
     return ["accidental_injury"];
   const name=(benefitName??"").toLowerCase();
   const full=(name+" "+(quote??"")).toLowerCase();

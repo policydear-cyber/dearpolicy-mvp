@@ -1,0 +1,123 @@
+/**
+ * Round 6: the last check on every chat answer before it is saved and shown.
+ *
+ * This is a safety net, not where answers are written: every rule below has a
+ * root-cause fix where the text is composed, and scripts/r6-chat-quality-
+ * regressions.ts runs 250+ messages with none of them firing. It exists for
+ * what only a live model or a future change could produce -- an id, a table
+ * name, a model name, a template token or a stutter in household-facing text.
+ *
+ * It repairs mechanical faults (a doubled word, stray spacing and
+ * punctuation, a sentence said twice) and drops a sentence that leaks
+ * internals. It never touches what is quoted from a document: citation
+ * excerpts, policy-stated limits and anything inside quotation marks are left
+ * exactly as printed, and it never adds a figure. If nothing honest is left
+ * of the summary, it says so plainly instead of showing an empty answer.
+ */
+import type { ChatAnswer } from "@/types";
+
+export const GUARD_FALLBACK_SUMMARY = "Sorry, I couldn’t put that answer together properly. Please ask again, or ask about one policy or one person at a time.";
+
+// Things a household must never read.
+const LEAKS: RegExp[] = [
+  /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i, // ids
+  /\b(?:undefined|NaN|\[object Object\])\b|\bnull\b(?=\s*(?:[.,;:]|$))/, // debug tokens
+  /\{\{?\s*[a-zA-Z_][\w.]*\s*\}\}?|\$\{[^}]*\}|<\/?[a-z]+[^>]*>/, // template tokens, markup
+  /\b(?:gpt-?\d[\w.-]*|chatgpt|gemini(?:-[\w.]+)?|openai|anthropic|claude-[\w.-]+|llm|large language model|embeddings?|vector (?:store|database)|pinecone|pgvector|supabase|postgres(?:ql)?)\b/i, // model / provider / store names
+  /\b(?:policy_benefits|policy_members|coverage_rules|family_members|chat_conversations|chat_messages|document_chunks|premium_records|policies\.id|processing_status|processing_error)\b/i, // table and column names
+  /\b[a-z]+(?:_[a-z0-9]+){1,}\b/, // any other snake_case identifier
+  /\b(?:row|chunk|job|batch) (?:id|#)\s*\d+|\bchunk_?id\b|\bjob (?:state|status)[: ]+(?:queued|running|failed|succeeded)\b/i,
+];
+
+/** Spans the guard must not edit: “quoted” and "quoted" text. */
+function protectedSpans(text: string): [number, number][] {
+  const spans: [number, number][] = [];
+  for (const m of text.matchAll(/“[^”]*”|"[^"]*"/g)) spans.push([m.index!, m.index! + m[0].length]);
+  return spans;
+}
+function outsideQuotes(text: string): string {
+  let out = "", at = 0;
+  for (const [a, b] of protectedSpans(text)) { out += text.slice(at, a) + " ".repeat(b - a); at = b; }
+  return out + text.slice(at);
+}
+const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z“"(])/);
+
+/** Mechanical repairs outside quotes: doubled words, spacing, punctuation. */
+export function repairText(text: string): string {
+  if (!text) return text;
+  const spans = protectedSpans(text);
+  if (spans.length) {
+    // Repair each unquoted stretch on its own.
+    let out = "", at = 0;
+    for (const [a, b] of spans) { out += repairPlain(text.slice(at, a)) + text.slice(a, b); at = b; }
+    return (out + repairPlain(text.slice(at))).trim();
+  }
+  return repairPlain(text).trim();
+}
+function repairPlain(text: string): string {
+  return text
+    .replace(/\b([A-Za-z]{2,})\s+\1\b/gi, (m, w: string) => /^(?:that|had|is|very|bye|no|so|ha|there)$/i.test(w) ? m : w)
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/,\s*([.,])/g, "$1")
+    .replace(/(?<!\.)\.\.(?!\.)/g, ".")
+    .replace(/;\s*\./g, ".")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ");
+}
+
+/** Drops each sentence that leaks internals; repairs the rest. Returns null when nothing is left. */
+export function guardText(text: string): string | null {
+  if (typeof text !== "string" || !text.trim()) return text;
+  const kept = sentencesOf(text).filter((s) => !LEAKS.some((re) => re.test(outsideQuotes(s))));
+  const joined = repairText(kept.join(" "));
+  return joined.trim() ? joined : null;
+}
+
+/** Removes leaking tokens themselves (for a question, which cannot be dropped). */
+export function scrub(text: string): string {
+  let out = text;
+  for (const re of LEAKS) out = out.replace(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"), "");
+  return repairText(out);
+}
+
+/** Each time the guard had to change an answer (read by the quality suite,
+ * which requires none: a change here means a root cause still needs fixing). */
+export const guardInterventions: { before: string; after: string }[] = [];
+
+/** Guards an answer in place and returns it. */
+export function guardChatAnswer(answer: ChatAnswer): ChatAnswer {
+  if (!answer || typeof answer !== "object") return answer;
+  const visible = (a: ChatAnswer) => JSON.stringify([a.summary, a.details, a.nextSteps, (a.questions ?? []).map((q) => [q.text, q.why]), (a.claimItems ?? []).map((i) => [i.reason, i.conditions])]);
+  const before = visible(answer);
+  guardInPlace(answer);
+  const after = visible(answer);
+  if (before !== after) { guardInterventions.push({ before, after }); if (guardInterventions.length > 50) guardInterventions.shift(); console.warn("[chat] output guard changed an answer"); }
+  return answer;
+}
+function guardInPlace(answer: ChatAnswer) {
+  const seen = new Set<string>();
+  // A sentence said once is enough: the summary first, then each detail.
+  const once = (text: string | null) => {
+    if (!text) return text;
+    const parts = sentencesOf(text).filter((s) => {
+      const key = s.trim().toLowerCase();
+      if (key.length < 25) return true;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return parts.join(" ").trim() || null;
+  };
+  const summary = once(guardText(answer.summary ?? ""));
+  answer.summary = summary && summary.trim() ? summary : (answer.questions?.length ? "I need one more detail first." : GUARD_FALLBACK_SUMMARY);
+  answer.details = (answer.details ?? []).map((d) => once(guardText(d))).filter((d): d is string => !!d);
+  answer.nextSteps = (answer.nextSteps ?? []).map((d) => guardText(d)).filter((d): d is string => !!d);
+  for (const q of answer.questions ?? []) {
+    q.text = guardText(q.text) ?? scrub(q.text);
+    if (q.why) q.why = guardText(q.why) ?? "";
+  }
+  answer.claimItems = (answer.claimItems ?? []).map((item) => ({ ...item,
+    reason: guardText(item.reason) ?? "Listed in the policy.",
+    conditions: [...new Set((item.conditions ?? []).map((c) => guardText(c)).filter((c): c is string => !!c))] }));
+}

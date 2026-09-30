@@ -26,7 +26,8 @@ function editDistance(a: string, b: string) {
   return dp[a.length][b.length];
 }
 function fuzzyIncludesName(message: string, name: string) {
-  if (name.length < 4) return false; // too short to safely guess at
+  // Too short to safely guess at: "long" is one letter from "Ling" and "Wong".
+  if (name.length < 5) return false;
   const tolerance = name.length >= 8 ? 2 : 1;
   return ` ${message} `.split(" ").some(word => word.length >= 3 && Math.abs(word.length - name.length) <= tolerance && editDistance(word, name) <= tolerance);
 }
@@ -43,6 +44,38 @@ function subjectName(text: string) {
   // The chat's own question, sent back with its answer ("On what date was it
   // diagnosed: Not sure"), names no one: a question is not a subject.
   if (/^(?:on |at |in |from |since )?(?:what|when|where|which|who|whom|how|why)\b/i.test(name) || /\b(?:it|this|that)$/i.test(name)) return null;
+  return name;
+}
+
+/** Words that are never a person's name in a question like "Does X have ...". */
+const NOT_A_NAME = /^(?:i|me|my|mine|you|your|we|us|our|he|him|his|she|her|they|them|their|it|its|this|that|these|those|there|anyone|someone|everyone|everybody|anybody|nobody|the|a|an|family|household|company|employer|insurer|agent|policy|policies|plan|plans|shield|rider|travel|hospital|group|child|kid|kids|baby|wife|husband|spouse|son|daughter|mother|father|mum|mom|dad|parent|parents|sibling|brother|sister|grandma|grandpa|grandmother|grandfather|ah|ma|gong|what|which|who|when|how|does|do|is|are|can|will|much|many|about|and|or|also|so|then|now|today|tomorrow|yesterday|pls|please|lah|leh|still|really|already|ever|not|no|yes|all|both|each|other|else|any|some|one|two)$/i;
+/** Things a policy covers, never a person's name. */
+const COVER_WORD = /^(?:icu|tcm|gp|ci|tpd|pa|surgery|surgical|dental|maternity|pregnancy|cancer|stroke|covid|dengue|outpatient|inpatient|physio(?:therapy)?|chemo(?:therapy)?|ambulance|x-?ray|mri|scan|treatment|ward|hospital(?:isation|ization)?|rider|fracture|dialysis|baggage|luggage|delay|cancellation|accident|death|disability|illness|medical|dentist|specialist|clinic|evacuation|vaccination|checkup|check-up|screening)$/i;
+/** Relations a household on DearPolicy never holds (no stored relationship). */
+const OUTSIDE_RELATION = /^(?:cousin|uncle|aunt|auntie|friend|colleague|boss|neighbou?r|nephew|niece|helper|maid|landlord|tenant|classmate|boyfriend|girlfriend)$/i;
+/** The person a policy QUESTION is about ("What is Ah Beng covered for?",
+ * "Does my brother Kumar have insurance?", "my neighbour's life cover"), so a
+ * name that is not in the household is recognised instead of silently
+ * answering about whoever is selected. */
+export function questionSubjectName(text: string): string | null {
+  const t = text.replace(/[?!.,]+/g, " ").replace(/\s+/g, " ");
+  const rel = "(?:my\\s+(?:brother|sister|cousin|uncle|aunt|auntie|friend|colleague|boss|neighbou?r|nephew|niece|helper|maid|landlord|classmate|boyfriend|girlfriend)\\s*)";
+  const m = t.match(new RegExp("\\b(?:is|are|does|do|did|has|have|for|about)\\s+(" + rel + "?[\\p{L}][\\p{L}'’-]*(?:\\s+[\\p{L}][\\p{L}'’-]*){0,3}?)\\s+(?:covered|insured|have|has|got|own|owns)\\b", "iu"))
+    ?? t.match(new RegExp("\\b((?:my\\s+)?[\\p{L}][\\p{L}'’-]*(?:\\s+[\\p{L}][\\p{L}'’-]*){0,2})['’]s\\s+(?:polic(?:y|ies)|plans?|insurance|cover(?:age)?|life|hospital|shield|premiums?|deductible|travel|riders?|car|motor|company|accident|critical)\\b", "iu"))
+    ?? t.match(new RegExp("\\b(my\\s+(?:cousin|uncle|aunt|auntie|friend|colleague|boss|neighbou?r|nephew|niece|helper|maid|landlord|classmate|boyfriend|girlfriend))\\b", "iu"));
+  if (!m) return null;
+  let name = m[1].trim().replace(/^(?:(?:is|are|does|do|did|has|have|for|about|what|how|much|and|tell|me|show|the|then)\s+)+/i, "");
+  const relation = name.match(/^my\s+(\p{L}+)(?:\s+(.+))?$/iu);
+  if (relation) {
+    if (relation[2]) name = relation[2];
+    else return OUTSIDE_RELATION.test(relation[1]) ? "your " + relation[1].toLowerCase() : null;
+  }
+  const words = name.split(/\s+/).filter(Boolean);
+  if (!words.length || words.every((w) => NOT_A_NAME.test(w))) return null;
+  // What a policy covers is not a person ("Is ICU covered", "Is TCM covered for him").
+  if (words.some((w) => /^[A-Z]{2,5}$/.test(w) || COVER_WORD.test(w))) return null;
+  // Product names (\"ShieldCare\", \"TermSecure 20\") and codes are not people.
+  if (words.some((w) => /^[A-Z][a-z]+[A-Z]/.test(w) || /\d/.test(w))) return null;
   return name;
 }
 
@@ -92,7 +125,7 @@ export function resolveRelativePerson(text: string, family: ClaimPerson[], ancho
 export function resolveClaimPerson(text: string, family: ClaimPerson[], selectedId: string): ClaimPersonResolution {
   const relative = resolveRelativePerson(text, family, selectedId);
   if (relative) return relative;
-  const subject = subjectName(text);
+  const subject = subjectName(text) ?? questionSubjectName(text);
   const message = normalized(subject ?? text);
   const subjectNormalized = subject ? normalized(subject) : "";
   // A known name elsewhere in the sentence cannot make an unknown subject
@@ -120,10 +153,23 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
   });
   if (matches.length) {
     const rank = Math.max(...matches.map(m => m.rank));
-    const strongest = matches.filter(m => m.rank === rank);
+    let strongest = matches.filter(m => m.rank === rank);
+    // "it was Xin Yi, not Mei Ling": the person named after "not" is the one it is NOT about.
+    if (strongest.length === 2) {
+      const negated = strongest.filter(m => [m.person.display_name, m.person.preferred_name ?? ""].filter(Boolean)
+        .some(name => new RegExp("\\bnot\\s+(?:about\\s+|for\\s+)?" + normalized(name).replace(/\s+/g, "\\s+") + "\\b").test(message)));
+      if (negated.length === 1) strongest = strongest.filter(m => m !== negated[0]);
+    }
     // Ignore a surname-only overlap when the complete subject identifies one person.
     if (strongest.length === 1) return { status: "resolved", person: strongest[0].person, explicit: true };
     return { status: "ambiguous", candidates: strongest.map(m => m.person) };
+  }
+  // "grandma" / "ah ma" (not "my grandmother") in a household with children is
+  // the children's grandparent: the account holder's parent.
+  if (!/\bmy (?:grand|ah )/.test(message) && /\b(?:grandma|grandmother|grandpa|grandfather|ah ma|ah mah|ama|popo|nai nai|ah gong|ye ye)\b/.test(message) && family.some((p) => normalized(p.relationship) === "child")) {
+    const parents = family.filter((p) => normalized(p.relationship) === "parent");
+    if (parents.length === 1) return { status: "resolved", person: parents[0], explicit: true };
+    if (parents.length > 1) return { status: "ambiguous", candidates: parents };
   }
   const relation = message.match(/\bmy (mother|father|mum|mom|dad|parent|sister|brother|sibling|wife|husband|spouse|son|daughter|child|grandmother|grandfather|grandparent)\b/)?.[1];
   if (relation) {

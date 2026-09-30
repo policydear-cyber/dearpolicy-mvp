@@ -91,4 +91,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "r5:answer-test",
   "r5:claims-test",
   "r5:ux-test",
+  "r6:chat-quality-test",
 ];

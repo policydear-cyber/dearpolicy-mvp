@@ -335,7 +335,14 @@ const EVENT_PHRASE: Record<FactFindingCategory, (facts: SubjectFacts) => string>
   critical_illness: (f) => said(f, "diagnosis") ? "the diagnosis of " + String(said(f, "diagnosis")) : "the diagnosis",
   disability_tpd: () => "being unable to work",
   medical_reimbursement: () => "the hospital stay", hospital_cash: () => "the hospital stay",
-  travel: (f) => known(f, "flightDelayHours") != null || /delay/i.test(String(known(f, "travelEventType") ?? "")) ? "the flight delay" : "what happened on the trip",
+  travel: (f) => {
+    const kind = String(known(f, "travelEventType") ?? "");
+    return known(f, "flightDelayHours") != null || /delay/i.test(kind) ? "the flight delay"
+      : /baggage|luggage/i.test(kind) ? "the lost or damaged baggage"
+      : /medical|sick|ill/i.test(kind) ? "the treatment abroad"
+      : /cancel/i.test(kind) ? "the cancelled trip"
+      : "what happened on the trip";
+  },
 };
 /** The claim event's name, from what happened -- never from the last reply. */
 export function claimEventName(person: Person, facts: SubjectFacts, category: FactFindingCategory | null, fallback: string) {
@@ -358,7 +365,7 @@ const FAMILY = {
   travelDelay: /\b(?:travel|flight|trip|journey|departure)\s+delay|\bdelay(?:ed)?\s+(?:departure|flight)|\bmissed (?:connection|departure)/i,
   baggage: /baggage|luggage|personal belongings|personal effects/i,
   cancellation: /cancel|curtail|postpone|disruption|shorten/i,
-  medical: /medical|hospital|evacuat|repatriat|dental|treatment|covid/i,
+  medical: /medical|hospital|evacuat|repatriat|\bdental\b|treatment|covid/i,
   accidentDeath: /accident|death|disablement|dismember/i,
   criticalIllness: /critical|illness|cancer|\bci\b|dread|carcinoma|tumou?r|heart attack|stroke|early[- ]stage|intermediate|major illness|accelerat/i,
   death: /death|life|funeral|bereave|terminal|disablement|dismember|compassionate/i,
@@ -376,26 +383,65 @@ function travelKind(facts: SubjectFacts): keyof typeof FAMILY | null {
   return null;
 }
 /** Whether a benefit (by its title) belongs to a family this event can trigger. */
-export function benefitFitsEvent(category: FactFindingCategory | null, facts: SubjectFacts, title: string) {
+export function benefitFitsEvent(category: FactFindingCategory | null, facts: SubjectFacts, title: string, stillAsking = false) {
   // The benefit's own name: "Person · Product — Benefit" -> "Benefit" (a
   // product called "... Critical Illness" says nothing about its hospital row).
   const afterPerson = title.split(" · ").slice(1).join(" · ") || title;
   const name = afterPerson.includes(" — ") ? afterPerson.split(" — ").slice(1).join(" — ") : afterPerson;
+  // An illness is never an accident claim.
+  if (known(facts, "eventType") === "illness" && /\baccident/i.test(name)) return false;
   switch (category) {
     case "disability_tpd": return /disab|\btpd\b|total and permanent|income|waiver/i.test(name) && !/\bloss of (?!use)/i.test(name);
     case "accidental_injury": return !FAMILY.notInjury.test(name) && (known(facts, "permanentImpairment") === true || !PERMANENT_LOSS.test(name));
     // An illness with a hospital stay (dengue, admitted) is also a hospital claim.
-    case "critical_illness": return FAMILY.criticalIllness.test(name) || (known(facts, "hospitalised") === true && FAMILY.hospital.test(name) && !FAMILY.notHospital.test(name));
+    // While the facts are still being asked for, a hospital benefit stays a
+    // candidate until a stay is ruled out (the stay is what gets asked).
+    case "critical_illness": return FAMILY.criticalIllness.test(name) || ((stillAsking ? known(facts, "hospitalised") !== false : known(facts, "hospitalised") === true) && FAMILY.hospital.test(name) && !FAMILY.notHospital.test(name));
     case "accidental_death": return FAMILY.death.test(name);
     case "medical_reimbursement": case "hospital_cash": return !FAMILY.notHospital.test(name);
     case "travel": {
       const kind = travelKind(facts);
       if (!kind) return true;
       if (kind === "travelDelay") return FAMILY.travelDelay.test(name) || (/\bdelay\b/i.test(name) && !FAMILY.baggage.test(name));
+      // Being treated abroad for an illness is not an accident claim.
+      if (kind === "medical" && /\baccident/i.test(name) && known(facts, "eventType") !== "accident" && known(facts, "injured") !== true) return false;
       return FAMILY[kind].test(name) && (kind === "baggage" || !FAMILY.baggage.test(name));
     }
     default: return true;
   }
+}
+/** A caveat that sits under several cards is one line for the answer, and
+ * "as charged" is explained once. */
+export function collapseSharedConditions(answer: Pick<ChatAnswer, "claimItems" | "details">) {
+  const shownCards = answer.claimItems.filter((item) => item.status !== "not_applicable");
+  if (shownCards.length > 1) {
+    const counts = new Map<string, number>();
+    for (const item of shownCards) for (const c of new Set(item.conditions)) counts.set(c, (counts.get(c) ?? 0) + 1);
+    // What a card's own figure rests on ("Assumes the standard rule …",
+    // "Not yet verified …") stays on the card.
+    const shared = [...counts].filter(([c, n]) => n > 1 && !/^(?:Still needed:|Assumes the standard|Not yet verified)/.test(c)).map(([c]) => c);
+    if (shared.length) {
+      for (const item of answer.claimItems) item.conditions = item.conditions.filter((c) => !shared.includes(c));
+      for (const c of shared) if (!answer.details.includes(c)) answer.details.push(c);
+    }
+  }
+  // A sentence every card's reason repeats ("Read from your policy wording
+  // (page 3) and checked against the page.") is said once.
+  if (shownCards.length > 1) {
+    const sentencesOf = (text: string) => text.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
+    const counts = new Map<string, number>();
+    for (const item of shownCards) for (const s of new Set(sentencesOf(item.reason))) counts.set(s, (counts.get(s) ?? 0) + 1);
+    const shared = [...counts].filter(([s, n]) => n > 1 && s.length >= 25).map(([s]) => s);
+    for (const item of shownCards) {
+      const rest = sentencesOf(item.reason).filter((s) => !shared.includes(s));
+      if (rest.length) item.reason = rest.join(" ");
+    }
+    const stillShared = shared.filter((s) => shownCards.filter((item) => sentencesOf(item.reason).includes(s)).length > 1);
+    const moved = shared.filter((s) => !stillShared.includes(s));
+    for (const s of moved) if (!answer.details.includes(s)) answer.details.push(s);
+  }
+  const asCharged = "“Pays as charged” means the eligible bill is paid after the plan’s deductible and co-insurance.";
+  if (shownCards.some((item) => /^Pays as charged\b/.test(item.reason)) && !answer.details.includes(asCharged)) answer.details.push(asCharged);
 }
 export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: ConversationState; person: Person | null;
   requestedDocuments: string[]; eventLead?: string }) {
@@ -418,10 +464,20 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
     const cited = item.calculationId ? pages.get(item.calculationId.includes(":") ? item.calculationId : "benefit:" + item.calculationId) : undefined;
     const page = cited?.pageStart ?? Number(item.reason.match(/\(page (\d+)\)/)?.[1] ?? NaN);
     const title = item.title.split(" · ").slice(1).join(" · ") || item.title;
-    named.push(title + (Number.isFinite(page) && page > 0 ? " (page " + page + ")" : ""));
+    named.push(title);
+    // What the benefit pays, in words (no figure before the claim evidence is
+    // reviewed) and where it is printed; the caveat that the insurer decides
+    // is said once in the summary, not under every card.
+    const text = [item.reason, item.amountText ?? "", ...item.conditions].join(" ");
+    const pays = /\bas charged\b/i.test(text) ? "Pays as charged"
+      : item.calculationKind === "daily" || /per (?:day|night)/i.test(text) ? "Pays a set amount for each day in hospital"
+      : item.calculationKind === "expense_cap" || /reimburs|actual cost/i.test(text) || /\bexpenses\b/i.test(title) ? "Reimburses the actual cost, up to the limit in the policy"
+      : item.calculationKind === "sum_insured" || /% of the sum insured/i.test(text) ? "Pays a share of the sum insured"
+      : item.calculationKind === "fixed" || /lump sum/i.test(text) ? "Pays a set amount"
+      : "Listed in the policy";
     return { ...item,
-      reason: "Listed in the policy" + (Number.isFinite(page) && page > 0 ? " on page " + page : "") + ". It may respond to " + eventPhrase +
-        "; whether it pays depends on the claim documents and the insurer’s assessment.",
+      // Where the rule is printed stays on the card (V1.1 Task 4).
+      reason: pays + (Number.isFinite(page) && page > 0 ? " (page " + page + ")" : "") + ".",
       // DearPolicy's own checking work is said once, plainly -- never as a
       // task for the household ("confirm the heading", "re-read").
       conditions: [...new Set(item.conditions
@@ -434,6 +490,9 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
         .map((c) => /Coverage page|Benefits page|second read|heading|double-checked|reader could not|re-?read|re-?index/i.test(c)
         ? "DearPolicy still has to check this benefit’s wording against the policy page." : c))] };
   });
+  // Benefits that no event in the conversation touches (an ambulance nobody used) are not named.
+  if (known(facts, "ambulanceUsed") === false) answer.claimItems = answer.claimItems.filter((item) => !/ambulance/i.test(item.title));
+  collapseSharedConditions(answer);
   const whose = person ? (/^self$/i.test(person.relationship ?? "") ? "your" : calledName(person) + "’s") : "your family’s";
   const event = category ? EVENT_PHRASE[category](facts) : "what happened";
   const list = named.length > 1 ? named.slice(0, -1).join(", ") + " and " + named[named.length - 1] : named[0];

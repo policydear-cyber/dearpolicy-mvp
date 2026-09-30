@@ -201,7 +201,7 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
           default:break;
         }
         const conditions=[...row.conditions.map(c=>c.trim()).filter(Boolean)];
-        for(const m of missing)conditions.push("Still needed: "+m);
+        for(const m of missing)conditions.push("Still needed: "+m.replace(/[.\s]+$/,"")+".");
         if(row.status!=="confirmed")conditions.push(row.origin==="schedule"?"Assumes the standard rule for this kind of plan until the wording is read.":"Not yet verified against the policy wording.");
         conditions.push("Subject to the insurer's assessment and the plan's own terms and exclusions.");
         // A figure a person cannot trace back to one of their own covers is a

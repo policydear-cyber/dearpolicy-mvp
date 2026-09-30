@@ -72,10 +72,10 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
   accidental_death: {
     category: "accidental_death", label: "Accidental death",
     facts: [
-      { key: "deathDate", aliases: ["dateOfDeath", "death_date"], question: "On what date did they pass away?", type: "date", why: DATE_WHY, group: 1, required: true },
+      { key: "deathDate", aliases: ["dateOfDeath", "death_date"], question: "What was the date of death?", type: "date", why: DATE_WHY, group: 1, required: true },
       { key: "causeOfDeath", aliases: ["cause", "cause_of_death"], question: "What does the death certificate give as the cause of death?", type: "text", why: "An accidental death benefit depends on the cause matching the policy's own definition.", group: 2, required: true, dependsOn: ["deathDate"] },
       { key: "accidentCircumstances", aliases: ["howItHappened", "accidentDescription", "circumstances"], question: "Briefly, how did it happen?", type: "text", why: "Exclusions (for example hazardous activities) depend on the circumstances.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
-      { key: "eventLocation", aliases: ["location", "country"], question: "Where did it happen — in Singapore or overseas? If overseas, which country?", type: "text", why: "Some benefits and exclusions apply only in certain places, and an overseas death usually needs extra documents.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
+      { key: "eventLocation", aliases: ["location", "country"], question: "Where did it happen — in Singapore or overseas?", type: "choice", options: ["Singapore", "Overseas"], why: "Some benefits and exclusions apply only in certain places, and an overseas death usually needs extra documents.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
     ],
     documents: [
       { type: "death_certificate", label: "Death certificate", required: true },
@@ -136,7 +136,7 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
     facts: [
       { key: "disabilityCause", aliases: ["injury", "condition"], question: "What illness or injury caused the disability?", type: "text", why: "Disability benefits depend on the cause and on the policy's disability definition.", group: 1, required: true },
       { key: "disabilityDate", aliases: ["eventDate", "dateOfDisability"], question: "From what date has the person been unable to work?", type: "date", why: "Waiting and deferred periods run from this date.", group: 1, required: true },
-      { key: "unableToWork", aliases: ["cannotWork"], question: "Is the person currently unable to do any work, or only their own occupation?", type: "choice", options: ["Any work", "Own occupation only", "Can still work"], why: "Policies define total disability as unable to do any work or their own work.", group: 2, required: true, dependsOn: ["disabilityDate"] },
+      { key: "unableToWork", aliases: ["cannotWork"], question: "Which fits now: unable to do any work at all, or unable to do only the usual job?", type: "choice", options: ["Any work", "Own occupation only", "Can still work"], why: "Policies define total disability as unable to do any work or their own work.", group: 2, required: true, dependsOn: ["disabilityDate"] },
       { key: "disabilityContinuousMonths", aliases: ["monthsDisabled"], question: "For how many months has this continued without a break?", type: "text", why: "TPD usually requires a continuous period (often six months) before a claim is admitted.", group: 2, required: true, dependsOn: ["disabilityDate"] },
     ],
     documents: [
@@ -148,9 +148,9 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
   medical_reimbursement: {
     category: "medical_reimbursement", label: "Medical reimbursement",
     facts: [
-      { key: "admissionDate", aliases: ["hospitalAdmissionDate"], question: "On what date were they admitted?", type: "date", why: DATE_WHY, group: 1, required: true },
-      { key: "dischargeDate", aliases: ["hospitalDischargeDate"], question: "On what date were they discharged (or are they still in hospital)?", type: "date", why: "Reimbursement is assessed on the completed stay's itemised bill.", group: 1, required: true, dependsOn: ["admissionDate"] },
-      { key: "hospitalName", aliases: ["hospital"], question: "Which hospital, and was it a panel/network hospital for this plan?", type: "text", why: "Non-panel treatment can be reimbursed at a lower rate.", group: 2, required: true },
+      { key: "admissionDate", aliases: ["hospitalAdmissionDate"], question: "What was the date of admission to hospital?", type: "date", why: DATE_WHY, group: 1, required: true },
+      { key: "dischargeDate", aliases: ["hospitalDischargeDate"], question: "On what date was the patient discharged (or is the stay still going on)?", type: "date", why: "Reimbursement is assessed on the completed stay's itemised bill.", group: 1, required: true, dependsOn: ["admissionDate"] },
+      { key: "hospitalName", aliases: ["hospital"], question: "Which hospital was it?", type: "text", why: "Some plans pay differently at panel (network) hospitals, so the hospital matters.", group: 2, required: true },
       { key: "otherInsurancePaid", aliases: ["thirdPartyPaid", "employerPaid"], question: "Has any other insurer or the employer already paid part of the bill?", type: "yes_no", why: "Reimbursement is coordinated so the same bill is not paid twice.", group: 3, required: true },
     ],
     documents: [
@@ -163,8 +163,8 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
   hospital_cash: {
     category: "hospital_cash", label: "Hospital cash",
     facts: [
-      { key: "admissionDate", aliases: ["hospitalAdmissionDate"], question: "On what date and time were they admitted?", type: "date", why: DATE_WHY, group: 1, required: true },
-      { key: "dischargeDate", aliases: ["hospitalDischargeDate"], question: "On what date and time were they discharged?", type: "date", why: "Hospital cash is counted per day of a completed stay, using the policy's own day-count rule.", group: 1, required: true, dependsOn: ["admissionDate"] },
+      { key: "admissionDate", aliases: ["hospitalAdmissionDate"], question: "On what date and time was the admission to hospital?", type: "date", why: DATE_WHY, group: 1, required: true },
+      { key: "dischargeDate", aliases: ["hospitalDischargeDate"], question: "On what date and time was the patient discharged?", type: "date", why: "Hospital cash is counted per day of a completed stay, using the policy's own day-count rule.", group: 1, required: true, dependsOn: ["admissionDate"] },
       { key: "icuStay", aliases: ["icu"], question: "Was any part of the stay in intensive care?", type: "yes_no", why: "ICU days can be paid at a different rate.", group: 2, required: false },
     ],
     documents: [{ type: "discharge_summary", label: "Discharge summary showing admission and discharge times", required: true }],
@@ -173,7 +173,7 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
   travel: {
     category: "travel", label: "Travel",
     facts: [
-      { key: "tripStartDate", aliases: ["departureDate"], question: "On what dates did the trip start and end?", type: "date", why: "Travel cover applies only to events during the insured trip.", group: 1, required: true },
+      { key: "tripStartDate", aliases: ["departureDate"], question: "On what date did the trip start?", type: "date", why: "Travel cover applies only to events during the insured trip.", group: 1, required: true },
       { key: "tripEndDate", aliases: ["returnDate"], question: "On what date did (or will) the trip end?", type: "date", why: "Travel cover applies only to events during the insured trip.", group: 1, required: true },
       { key: "travelEventType", aliases: ["travelIncident"], question: "What happened on the trip?", type: "choice", options: ["Flight delay", "Medical treatment abroad", "Accident or death", "Lost or damaged baggage", "Other"], why: "Each travel benefit has its own conditions.", group: 2, required: true },
       { key: "eventDate", aliases: ["incidentDate"], question: "On what date did it happen?", type: "date", why: "It must fall within the trip dates.", group: 2, required: true, dependsOn: ["tripStartDate", "tripEndDate"] },
@@ -373,6 +373,19 @@ export function conditionDrivenQuestions(input: {
  * while the uncertainty stays tracked. Returns true when it recorded. */
 const QUESTION_PREFIX_STRIP = /^(?:You gave two different answers earlier\.\s*|An earlier answer changed, so please confirm again:\s*)/i;
 type IndexedQuestion = { factKey: string; type: FactSpec["type"]; options?: string[] };
+/** Round 6: question wordings replaced so a card never says "they" about a
+ * named person or asks two things at once ([old, current]). */
+const LEGACY_QUESTIONS: [string, string][] = [
+  ["On what date did they pass away?", "What was the date of death?"],
+  ["Where did it happen — in Singapore or overseas? If overseas, which country?", "Where did it happen — in Singapore or overseas?"],
+  ["Is the person currently unable to do any work, or only their own occupation?", "Which fits now: unable to do any work at all, or unable to do only the usual job?"],
+  ["On what date were they admitted?", "What was the date of admission to hospital?"],
+  ["On what date were they discharged (or are they still in hospital)?", "On what date was the patient discharged (or is the stay still going on)?"],
+  ["Which hospital, and was it a panel/network hospital for this plan?", "Which hospital was it?"],
+  ["On what date and time were they admitted?", "On what date and time was the admission to hospital?"],
+  ["On what date and time were they discharged?", "On what date and time was the patient discharged?"],
+  ["On what dates did the trip start and end?", "On what date did the trip start?"]
+];
 function questionIndex(): Map<string, IndexedQuestion> {
   const index = new Map<string, IndexedQuestion>();
   for (const spec of Object.values(FACT_FINDING_SPECS)) for (const fact of spec.facts) {
@@ -380,6 +393,12 @@ function questionIndex(): Map<string, IndexedQuestion> {
   }
   for (const entry of Object.values(CONDITION_QUESTION_BY_CAUSE)) {
     index.set(entry.question.replace(/\?\s*$/, "").toLowerCase(), { factKey: entry.factKey, type: "yes_no" });
+  }
+  // Earlier wordings of the same questions, so a reply to a question card in
+  // a chat saved before the wording changed is still recorded.
+  for (const [legacy, current] of LEGACY_QUESTIONS) {
+    const known = index.get(current.replace(/\?\s*$/, "").toLowerCase());
+    if (known) index.set(legacy.replace(/\?\s*$/, "").toLowerCase(), known);
   }
   return index;
 }

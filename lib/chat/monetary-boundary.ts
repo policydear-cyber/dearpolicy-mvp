@@ -63,8 +63,23 @@ export function containsForbiddenPhrase(text: string | null | undefined): boolea
 
 function moneyKey(text: string) { return text.replace(/\s+/g, "").replace(/\.00$/, "").toUpperCase(); }
 
+/** Common ways a figure is written into a sentence, rewritten without it so
+ * the sentence still reads ("S$1,000 lump sum." -> "A lump sum."). */
+function withoutFigures(text: string): string {
+  const M = "(?:" + MONEY_PATTERN.source + ")";
+  let out = text
+    .replace(new RegExp(M + "\\s*[×x]\\s*\\d+\\s+payable (?:nights?|days?)(?:\\s*\\(after the first \\d+\\))?", "gi"), "a set amount for each payable night")
+    .replace(new RegExp("the lower of the reported cost " + M + " and the limit " + M, "gi"), "the lower of the reported cost and the policy limit")
+    .replace(new RegExp("(\\d+(?:\\.\\d+)?% of )" + M, "gi"), "$1the sum insured")
+    .replace(new RegExp("\\b(?:up to|a maximum of|maximum of|capped at) " + M, "gi"), "up to the policy limit")
+    .replace(new RegExp(M + "\\s+lump sum", "gi"), "a lump sum")
+    .replace(new RegExp(M + "\\s+(per (?:day|night|month|visit|accident|admission|year|policy year|person|trip))", "gi"), "a set amount $1");
+  // A sentence that now starts with a lower-case word starts with a capital.
+  out = out.replace(/(^|[.!?]\s+)(a set amount|a lump sum|up to the policy limit|the lower of)/g, (_m, lead: string, word: string) => lead + word.charAt(0).toUpperCase() + word.slice(1));
+  return out;
+}
 export function scrubMonetaryText(text: string): string {
-  let out = text.replace(new RegExp(MONEY_PATTERN.source, "gi"), WITHHELD_AMOUNT_TEXT);
+  let out = withoutFigures(text).replace(new RegExp(MONEY_PATTERN.source, "gi"), WITHHELD_AMOUNT_TEXT);
   out = out.replace(new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "gi"), (_m, cue: string, gap: string) => `${cue}${gap}${WITHHELD_AMOUNT_TEXT}`);
   out = out.replace(/the an amount that is only shown after claim evidence has been reviewed\s+([a-z]+) limit/gi, "the $1 limit");
   out = out.replace(/verified an amount that is only shown after claim evidence has been reviewed/gi, "the verified policy limit");

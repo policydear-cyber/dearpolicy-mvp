@@ -105,7 +105,9 @@ export function candidateEvents(facts:SubjectFacts,hints:string[]=[]):EventCandi
     if(k("permanentImpairment")!=null){add("dismemberment");add("accidental_disablement");add("tpd");}
   }
   if(illness){
-    add("critical_illness");add("early_critical_illness");
+    // A named diagnosis can be a critical illness; "an illness" alone
+    // (food poisoning on a trip) is not asked about as one.
+    if(k("diagnosis")!=null||k("eventType")==="diagnosis"){add("critical_illness");add("early_critical_illness");}
     add("hospital_medical_expense",hospitalised?undefined:"hospitalised");
   }
   if((accident||injured||illness||hospitalised)&&!propertyOnly){
@@ -120,6 +122,14 @@ export function candidateEvents(facts:SubjectFacts,hints:string[]=[]):EventCandi
   }
   if(k("flightDelayHours")!=null)add("travel_delay");
   if(k("tripCancelled")===true)add("trip_cancellation");
+  // Hurt or ill overseas: a travel plan's overseas medical expenses answer it.
+  if((accident||injured||illness||hospitalised)&&/overseas|abroad/i.test(String(k("eventLocation")??"")))add("travel_medical");
+  // What happened on a trip, as the household picked it.
+  const trip=String(k("travelEventType")??"").toLowerCase();
+  if(/delay/.test(trip))add("travel_delay");
+  if(/baggage|luggage/.test(trip))add("baggage");
+  if(/cancel|curtail/.test(trip))add("trip_cancellation");
+  if(/medical|sick|ill|hospital/.test(trip))add("travel_medical");
   if(k("vehicleDamaged")===true||k("vehicleRepairBill")!=null)add("motor_damage");
   if(k("careNeed")===true||k("adlFailed")!=null)add("long_term_care");
   return out;
@@ -202,11 +212,14 @@ export function eventForBenefitName(name:string):{event:EventType;detail:string|
   if(/recuperat|daily (?:hospital )?cash|hospital (?:cash|income|allowance)|per day|daily benefit|confinement/.test(n))return {event:"hospital_daily_cash",detail:null};
   if(/surg|operation/.test(n))return {event:"surgery",detail:name};
   if(/ambulance/.test(n))return {event:"ambulance",detail:null};
+  // Treatment abroad (a travel plan's overseas medical expenses) is not a hospital bill at home.
+  if(/overseas|abroad|covid|evacuat|repatriat/.test(n)&&!accident)return {event:"travel_medical",detail:name};
   if(/medical (?:expense|reimburse|cost)|treatment|clinical|outpatient|physiotherap|tcm|chinese physician/.test(n))return {event:accident?"accident_medical_expense":"hospital_medical_expense",detail:name};
   if(/mobility aid|wheelchair|home modification/.test(n))return {event:"accidental_disablement",detail:name};
+  // "Baggage delay" is a baggage benefit, not a flight delay one.
+  if(/baggage|luggage/.test(n))return {event:"baggage",detail:name};
   if(/flight delay|travel delay|delay/.test(n))return {event:"travel_delay",detail:null};
   if(/cancel/.test(n))return {event:"trip_cancellation",detail:null};
-  if(/baggage|luggage/.test(n))return {event:"baggage",detail:name};
   if(/nursing|long[- ]term care|activities of daily living|adl/.test(n))return {event:"long_term_care",detail:null};
   if(/matur|survival/.test(n))return {event:"maturity",detail:null};
   return {event:"other",detail:name};

@@ -33,7 +33,15 @@ const MEDISAVE_BEFORE = /(?:S\$|SGD)\s?(\d[\d,]*(?:\.\d+)?)[^0-9$]{0,40}?\b(?:fr
 const MEDISAVE = /medisave[^0-9]{0,60}?(?:S\$|SGD)\s?(\d[\d,]*(?:\.\d+)?)/i;
 /** Reads the MediSave split a premium record's evidence prints. */
 export function premiumSplit(amount: number, notes: string | null | undefined): { total: number; cash: number | null; medisave: number | null } {
-  const text = notes ?? "";
+  let text = notes ?? "";
+  // A renewal notice prints ONE MediSave split for the plan ("MediSave pays
+  // S$1,050.00; cash payable S$362.00") and ingestion copies that line onto
+  // every premium it read from the notice, the rider included. The split
+  // belongs only to the premium whose amount is that cash figure; on any
+  // other line (a cash-only rider) it is not this premium's MediSave.
+  const printed = text.match(/As printed:\s*([^·]*)/i)?.[1] ?? "";
+  const printedCash = printed.match(/cash payable (?:S\$|SGD)\s?(\d[\d,]*(?:\.\d+)?)/i)?.[1];
+  if (printedCash != null && Math.abs(Number(printedCash.replace(/,/g, "")) - amount) > 0.005) text = text.replace(/As printed:[^·]*/i, "");
   const m = text.match(MEDISAVE_BEFORE) ?? text.match(MEDISAVE);
   const medisave = m ? Number(m[1].replace(/,/g, "")) : null;
   if (medisave == null) return { total: amount, cash: /\bcash\b/i.test(text) ? amount : null, medisave: null };

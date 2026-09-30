@@ -804,7 +804,8 @@ async function main(){
       assert.equal(answer.claimItems.length,0);
       assert.equal(negativeCoverageClaim(answer.summary),false,"A failed batch must never read as an absence of cover");
       assert.match(answer.summary,/incomplete review/i);
-      assert.ok(answer.nextSteps.some(step=>/evidence batch/i.test(step)),"The user must be told to retry rather than left with silence");
+      // Round 6: the retry step is said in household words ("Ask the same question again in a minute"), not "evidence batch".
+      assert.ok(answer.nextSteps.some(step=>/\bask the same question again\b/i.test(step)&&!/evidence batch/i.test(step)),"The user must be told to retry rather than left with silence");
     });
     await test("A contract with no matching wording asks for it instead of going quiet",async()=>{
       await db.query("DELETE FROM policies WHERE account_id=$1 AND document_role='policy_wording'",[account]);
@@ -874,7 +875,8 @@ async function main(){
       failReading=false;
       const answer=data.answer as ChatAnswer;
       const everything=[answer.summary,...answer.details,...answer.nextSteps].join(" ");
-      assert.ok(/evidence batch/i.test(everything),"The user is still told a section could not be read");
+      // Round 6: said in household words, never "evidence batch" or the provider's own reason.
+      assert.ok(/couldn’t be read just now/i.test(everything)&&!/evidence batch|flash|gemini|google/i.test(everything),"The user is still told a section could not be read");
       for(const leak of ["invalid_type","ZodError","{\"","received","sourceId"])
         assert.equal(everything.includes(leak),false,"Raw model or validation output leaked: "+leak);
     });

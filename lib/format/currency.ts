@@ -67,10 +67,14 @@ export function formatMoney(value: number | string | null | undefined, currency?
   const amount = Number.isFinite(numeric) ? numeric : 0;
   const code = normalizeCurrencyCode(currency, "SGD");
   try {
+    // Whole amounts of 1,000 or more drop the cents; an amount that has cents
+    // keeps them (a S$1,936.50 premium is never shown as S$1,937).
+    const whole = Math.abs(amount) >= 1000 && Math.round(Math.abs(amount) * 100) % 100 === 0;
     const formatted = new Intl.NumberFormat("en-SG", {
       style: "currency",
       currency: code,
-      maximumFractionDigits: Math.abs(amount) >= 1000 ? 0 : 2,
+      minimumFractionDigits: whole ? 0 : Math.abs(amount) >= 1000 ? 2 : undefined,
+      maximumFractionDigits: whole ? 0 : 2,
     }).format(amount);
     // Singapore's locale often renders SGD with a bare "$". DearPolicy uses an
     // explicit prefix so insurance amounts are never confused with USD.
@@ -78,6 +82,6 @@ export function formatMoney(value: number | string | null | undefined, currency?
     return formatted;
   } catch {
     // Last-resort display safety: malformed data must never take down the app.
-    return `${code} ${amount.toLocaleString("en-SG", { maximumFractionDigits: Math.abs(amount) >= 1000 ? 0 : 2 })}`;
+    return `${code} ${amount.toLocaleString("en-SG", { maximumFractionDigits: Math.abs(amount) >= 1000 && Math.round(Math.abs(amount) * 100) % 100 === 0 ? 0 : 2 })}`;
   }
 }

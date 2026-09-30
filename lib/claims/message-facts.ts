@@ -19,6 +19,7 @@ const HOSPITALS: [RegExp, string][] = [
   [/\bnuh\b|\bnational university hospital\b/i, "National University Hospital"], [/\bcgh\b|\bchangi general\b/i, "Changi General Hospital"],
   [/\bktph\b|\bkhoo teck puat\b/i, "Khoo Teck Puat Hospital"], [/\bng teng fong\b/i, "Ng Teng Fong General Hospital"], [/\bsengkang general\b|\bskh\b/i, "Sengkang General Hospital"],
 ];
+const ON_A_TRIP = /\b(?:trip|holiday|vacation|overseas|abroad|travel(?:ling|ing)?)\b/i;
 const BODY = "arm|leg|wrist|hand|ankle|foot|knee|elbow|shoulder|hip|finger|thumb|toe|collarbone|rib|eye|ear";
 
 function addDays(iso: string, days: number) {
@@ -57,6 +58,13 @@ export function applyMessageFacts(args: { message: string; facts: SubjectFacts; 
     if (changed.length) correction = to.toLowerCase() + " " + part.toLowerCase();
   }
 
+  // A broken bone in the household's own words: "broke her left arm", "xin yi break arm".
+  const broke = text.match(new RegExp(`\\b(?:broke|break|broken|breaks|fractured?|cracked)\\s+(?:(?:her|his|my|their|a|the|one)\\s+)?(?:(left|right)\\s+)?(${BODY})\\b`, "i"));
+  if (broke && unset("fractureBodyPart") && !facts.fractureBodyPart) {
+    if (unset("injured")) set("injured", true);
+    if (unset("injuryKind")) set("injuryKind", "fracture");
+    set("fractureBodyPart", ((broke[1] ? broke[1] + " " : "") + broke[2]).toLowerCase());
+  }
   // A hospital stay: "admitted overnight at KKH", "3 nights in a single room".
   const admitted = /\b(?:admitted|warded|hospitali[sz]ed|stayed in hospital|inpatient)\b/i.test(text);
   if (admitted && unset("hospitalised")) set("hospitalised", true);
@@ -77,6 +85,16 @@ export function applyMessageFacts(args: { message: string; facts: SubjectFacts; 
   if (unset("travelEventType")) {
     if (delay || (/\bdelay(?:ed)?\b/i.test(text) && /\bflight|plane|airline\b/i.test(text))) set("travelEventType", "Flight delay");
     else if (/\b(?:lost|damaged|missing)\b[^.?!]{0,20}\b(?:baggage|luggage|bag)\b|\b(?:baggage|luggage)\b[^.?!]{0,12}\b(?:lost|damaged|missing)\b/i.test(text)) set("travelEventType", "Lost or damaged baggage");
+    else if (ON_A_TRIP.test(text) && /\b(?:sick|ill|fever|food poisoning|diarrh\w*|vomit\w*|saw a doctor|see a doctor|clinic|warded|admitted|hospital)\b/i.test(text)) set("travelEventType", "Medical treatment abroad");
+  }
+  // "Food poisoning", "fever", "dengue" with no accident in it: an illness.
+  if (ON_A_TRIP.test(text) && unset("eventType") && /\b(?:food poisoning|fever|flu|dengue|covid|infection|gastro\w*|stomach bug|diarrh\w*|vomit\w*|fell sick|got sick|was sick|is sick|ill with)\b/i.test(text)
+    && !/\b(?:accident\w*|fell|fall(?:en)?|slipped|crash\w*|collision|knocked|broke|broken|fractur\w*|injur\w*|hurt|cut|burn\w*|bitten)\b/i.test(text)) set("eventType", "illness");
+  // The one date a trip problem was reported with is the day it happened
+  // ("lost on my trip to Tokyo on 2026-09-10").
+  if (ON_A_TRIP.test(text) && unset("eventDate") && !/\b(?:from|until|till|to)\s+\d/i.test(text)) {
+    const dates = [...text.matchAll(/\b(20\d\d)-(\d\d)-(\d\d)\b/g)].map((m) => m[0]);
+    if (dates.length === 1 && Date.parse(dates[0] + "T00:00:00Z") <= args.now.getTime()) set("eventDate", dates[0]);
   }
   return { changed: [...new Set(changed)], correction };
 }

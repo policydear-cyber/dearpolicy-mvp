@@ -3,6 +3,7 @@ import path from "node:path";
 import { pool, query } from "@/lib/db/client";
 import type { ChatAnswer } from "@/types";
 import { legacyState } from "./facts";
+import { guardChatAnswer } from "./output-guard";
 import type { Conversation, ConversationState, HistoryToken } from "./types";
 
 export class ChatConflict extends Error {}
@@ -86,6 +87,8 @@ export async function recentMessages(accountId:string,id:string) {
   return r.rows;
 }
 export async function saveTurn(args:{conversation:Conversation;token:HistoryToken;state:ConversationState;message:string;answer:ChatAnswer;jobId?:string}) {
+  // The last check before anything reaches the household (lib/chat/output-guard.ts).
+  guardChatAnswer(args.answer);
   const client=await pool.connect();
   try{
     await client.query("BEGIN");

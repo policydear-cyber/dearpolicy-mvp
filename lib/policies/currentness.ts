@@ -12,7 +12,8 @@ export const CURRENTNESS_MAX_EVIDENCE_DAYS=400;
 export type PremiumEvidenceRow={policy_id:string|null;family_member_id:string|null;insurer:string|null;policy_number:string|null;latest:string|null};
 
 export function assessCurrentness(args:{now:Date;lastEvidenceOn:string|null;renewalOrExpiryDate:string|null}):PolicyCurrentness{
-  const ownership="Ownership stays confirmed by the personalised evidence; only the current payment/renewal status is unverified.";
+  const ownership="Ownership stays confirmed by your policy document; only whether it is still being paid for is unconfirmed.";
+  const day=(iso:string)=>{const d=new Date(iso.slice(0,10)+"T00:00:00Z");return Number.isNaN(d.getTime())?iso:d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"});};
   const expiry=args.renewalOrExpiryDate&&Number.isFinite(Date.parse(args.renewalOrExpiryDate))?args.renewalOrExpiryDate:null;
   const evidence=args.lastEvidenceOn&&Number.isFinite(Date.parse(args.lastEvidenceOn))?args.lastEvidenceOn:null;
   const ageDays=evidence?Math.floor((args.now.getTime()-Date.parse(evidence))/86_400_000):null;
@@ -22,18 +23,18 @@ export function assessCurrentness(args:{now:Date;lastEvidenceOn:string|null;rene
   const fresh=ageDays!=null&&ageDays<=CURRENTNESS_MAX_EVIDENCE_DAYS;
   if(expiry&&Date.parse(expiry)<args.now.getTime()&&!fresh)
     return {state:"expiry_date_passed",label:"Active status not recently verified",
-      detail:"The uploaded document shows a renewal or expiry date of "+expiry+" that has already passed, and no later premium or renewal evidence is on file. "+ownership,
+      detail:"The uploaded document shows a renewal or expiry date of "+day(expiry)+" that has already passed, and no later premium receipt or renewal notice is on file. "+ownership,
       lastEvidenceOn:evidence,renewalOrExpiryDate:expiry};
   if(fresh)
     return {state:"verified_recent",label:"Active status evidenced",
-      detail:(ageDays!=null&&ageDays<0?"Next payment or renewal on file: ":"Latest payment or renewal evidence on file: ")+evidence+".",
+      detail:(ageDays!=null&&ageDays<0?"Next payment or renewal on file: ":"Latest payment or renewal on file: ")+day(evidence!)+".",
       lastEvidenceOn:evidence,renewalOrExpiryDate:expiry};
   if(evidence)
     return {state:"not_recently_verified",label:"Active status not recently verified",
-      detail:"The most recent payment or renewal evidence on file is "+evidence+", which is older than "+CURRENTNESS_MAX_EVIDENCE_DAYS+" days. "+ownership,
+      detail:"The most recent premium receipt or renewal notice on file is from "+day(evidence)+", more than a year ago. "+ownership,
       lastEvidenceOn:evidence,renewalOrExpiryDate:expiry};
   return {state:"unknown",label:"Active status not recently verified",
-    detail:"DearPolicy has no premium receipt or renewal notice for this contract, so it cannot independently confirm that the cover is still being paid for. "+ownership,
+    detail:"DearPolicy has no premium receipt or renewal notice for this policy, so it can’t yet confirm the cover is still being paid for. "+ownership,
     lastEvidenceOn:null,renewalOrExpiryDate:expiry};
 }
 /** Premium evidence must be bound to the same contract. A receipt for another

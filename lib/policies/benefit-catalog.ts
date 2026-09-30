@@ -141,6 +141,16 @@ export function eventTraits(facts:SubjectFacts,scenarioTraits:ScenarioTrait[]=[]
   if(known("flightDelayHours")!=null)traits.add("delay");
   if(known("vehicleDamaged")===true||known("vehicleRepairBill")!=null)traits.add("vehicle_collision");
   if(known("stolenItem")!=null)traits.add("theft");
+  // What happened on a trip, as the household chose it on the question card.
+  const tripEvent=String(known("travelEventType")??"").toLowerCase();
+  if(tripEvent){
+    traits.add("travel_disruption");
+    if(/baggage|luggage|belonging/.test(tripEvent)){traits.add("loss");traits.add("property_damage");}
+    if(/delay/.test(tripEvent))traits.add("delay");
+    if(/cancel/.test(tripEvent))traits.add("trip_cancellation");
+    if(/medical/.test(tripEvent))traits.add("medical_expense");
+    if(/accident|death/.test(tripEvent))traits.add("accident");
+  }
   return [...traits];
 }
 /** A benefit responds when the event shares at least one of its traits. Ranking
@@ -584,7 +594,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
     missing.push("your confirmation of what this benefit pays — DearPolicy read the rate from the heading above the row, not the row itself (Benefits page)");
   for(const requirement of benefit.requirements)
     if(knownValue(facts,requirement.factKey)==null)missing.push(requirement.why);
-  for(const entry of missing)conditions.push("Still needed: "+entry);
+  for(const entry of missing)conditions.push("Still needed: "+entry.replace(/[.\s]+$/,"")+".");
   const triggers=benefitTriggerEvents(benefit.benefitName,benefit.quote);
   const paysOn=payingEvent(triggers,args.events??[]);
   // A figure a person cannot trace back to one of their own covers is a figure
@@ -636,7 +646,8 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
           ?"Estimated from the rate quoted"+onPage(benefit.sourcePage)+" and the number of days you reported. The row does not state a day limit, so check the full wording for one."
           :"Estimated from the quoted clause"+onPage(benefit.sourcePage)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate.")
         :"Calculated from your policy schedule and the quoted clause"+onPage(benefit.sourcePage)+".")+paidUnder
-      :"This benefit can respond to what happened, but "+(missing[0]??"its payout rule")+" is still needed before an amount can be calculated.",
+      :missing[0]?"It may apply; "+missing[0].replace(/[.\s]+$/,"")+" is still needed to work out an amount"+(benefit.sourcePage?" (page "+benefit.sourcePage+")":"")+"."
+      :whatItPays(benefit)+".",
     conditions:[...new Set(conditions)],
   };
   // No figure yet, but the rule is known. Showing the rule is the answer: a
@@ -861,6 +872,36 @@ export function describeScheduleTerm(rowKind:string,value:number|null,currency:s
     case "family_limit":return money?"Family maximum of "+money:"Family maximum (see the schedule)";
     default:return "As printed in the schedule";
   }
+}
+/** What a benefit pays, in words and without any figure (a claim card never
+ * shows an amount before the claim evidence is reviewed). */
+export function whatItPays(benefit:Pick<CatalogBenefit,"formulaKind"|"quote">){
+  if(/\bas charged\b/i.test(benefit.quote))return "Pays as charged";
+  switch(benefit.formulaKind){
+    case "daily":return "Pays a set amount for each day in hospital";
+    case "expense_cap":return "Reimburses the actual cost, up to the limit in the policy";
+    case "fixed":return "Pays a set amount";
+    case "sum_insured":return "Pays a share of the sum insured";
+    default:return "Listed in the policy";
+  }
+}
+/** A benefit written for one particular kind of treatment or place (kidney
+ * dialysis, cancer drugs, maternity, dental, treatment overseas) does not
+ * respond to an event that names none of them: a broken arm in Singapore is
+ * never a dialysis or an overseas-treatment claim. */
+const SPECIFIC_BENEFITS:[RegExp,RegExp][]=[
+  [/dialysis|\bkidney\b|\brenal\b/i,/dialysis|kidney|renal/i],
+  [/cancer|chemo|radiother|oncolog/i,/cancer|tumou?r|chemo|radiother|oncolog|carcinoma|leuk(?:a|ae)mia|lymphoma|malignan/i],
+  [/transplant/i,/transplant/i],
+  [/\bcovid/i,/\bcovid|coronavirus/i],
+  [/psychiatr|mental/i,/psychiatr|mental|depress|anxiety/i],
+  [/maternity|pregnan|childbirth|newborn/i,/pregnan|maternity|birth|baby|deliver/i],
+  [/\bdental\b|\bteeth\b/i,/dental|tooth|teeth/i],
+  [/\bhiv\b/i,/\bhiv\b|\baids\b/i],
+  [/overseas|abroad|evacuat|repatriat/i,/overseas|abroad|trip|travel|holiday|evacuat|repatriat/i],
+];
+export function benefitIsForAnotherKindOfEvent(benefitName:string,eventText:string){
+  return SPECIFIC_BENEFITS.some(([row,event])=>row.test(benefitName)&&!event.test(eventText));
 }
 export function describeBenefitFormula(benefit:Pick<CatalogBenefit,"formulaKind"|"formulaValue"|"currency"|"factKey"|"offsetDays"|"maximumDays">){
   const currency=benefit.currency?normalizeCurrencyCode(benefit.currency):null;
@@ -1143,12 +1184,15 @@ export function preferStatedRules(benefits:CatalogBenefit[]){
  * not a refusal because they have not had the accident yet. */
 export type ScenarioNeed={factKey:string;question:string};
 const SCENARIO_QUESTIONS:Record<string,string>={
-  hospitalNights:"Were you admitted to hospital, and for how many nights?",
-  hospitalBill:"How much was the hospital bill?",
-  ambulanceBill:"How much was the ambulance charge?",
-  vehicleRepairBill:"How much was the repair bill?",
-  outOfPocket:"How much did you pay out of your own pocket?",
+  // A what-if has not happened: its question is asked in the conditional.
+  hospitalNights:"Roughly how many nights in hospital would it be?",
+  hospitalBill:"Roughly how much would the hospital bill be?",
+  ambulanceBill:"Roughly how much would the ambulance charge be?",
+  vehicleRepairBill:"Roughly how much would the repair bill be?",
+  outOfPocket:"Roughly how much would you pay out of your own pocket?",
 };
+/** The conditional question for a what-if (it has not happened), or null. */
+export function whatIfQuestion(factKey:string){return SCENARIO_QUESTIONS[factKey]??null;}
 /** What a schedule line says on its own.
  *
  * "GROUP TERM LIFE · S$1,000,000" on a certificate states what the plan pays
@@ -1247,6 +1291,8 @@ export function conditionsFromTheCover(contract:PolicyContract,benefits:CatalogB
   });
 }
 export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:CatalogBenefit[];traits:ScenarioTrait[];events?:ClaimEventType[];
+  /** The what-if as asked: benefits for another kind of treatment or place are left out. */
+  question?:string;
   /** The owner's facts, when the question is about something that happened.
    * Omitted for a hypothetical, which keeps showing what the policy pays. */
   facts?:SubjectFacts}){
@@ -1257,6 +1303,7 @@ export function scenarioFromCatalog(args:{contract:PolicyContract;catalog:Catalo
   const seen=new Set<string>();
   const declaredOnly=args.contract.ownershipBasis==="declared";
   for(const {benefit} of matchBenefits(mine,args.traits,events,args.facts)){
+    if(args.question!=null&&benefitIsForAnotherKindOfEvent(benefit.benefitName,args.question))continue;
     const coverage=coverageForBenefit(args.contract,benefit);
     if(!coverage&&!declaredOnly)continue;
     const key=benefit.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"");
@@ -1322,6 +1369,9 @@ export function planClaimQuestions(args:{matches:BenefitMatch[];facts:SubjectFac
     if(!key||!QUANTITY_QUESTIONS[key])continue;
     if(key==="hospitalNights"&&knownValue(args.facts,"hospitalised")===false)continue;
     if(key==="ambulanceBill"&&knownValue(args.facts,"ambulanceUsed")===false)continue;
+    // Whether there was an ambulance at all comes before what it cost.
+    if(key==="ambulanceBill"&&knownValue(args.facts,"ambulanceUsed")==null){
+      add({factKey:"ambulanceUsed",type:"yes_no",text:"Was an ambulance used?",why:"The ambulance benefit only pays when an ambulance was used."});continue;}
     add(QUANTITY_QUESTIONS[key]);
   }
   return plan;

@@ -164,6 +164,9 @@ jobs:
       - name: Round 5 UX (uploads, cover tiers, household flows)
         run: npm run r5:ux-test
 
+      - name: Round 6 chat quality (250+ messages, no garbled, leaky, repetitive or ungrounded text; output guard never needed)
+        run: npm run r6:chat-quality-test
+
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
 

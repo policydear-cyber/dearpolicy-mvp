@@ -1,0 +1,112 @@
+/**
+ * Round 6: messages that are not a question about the household's policies
+ * or a claim -- greetings and thanks, text that cannot be read, another
+ * language, requests for advice, off-topic questions, attempts to get at how
+ * DearPolicy works inside, and requests for another household's data.
+ *
+ * These are recognised in code, before any model is asked to interpret the
+ * message, so the reply is the same honest sentence every time: it never
+ * searches the policies for "hello", never says "not found" about a poem,
+ * never repeats an instruction it was given, and never names a system detail.
+ * A message that could be a real policy or claim question is never caught
+ * here (every pattern is anchored or needs an unmistakable cue).
+ */
+import type { ClaimPerson } from "@/lib/claims/person";
+
+export type ConversationalKind = "greeting" | "thanks" | "unclear" | "language" | "advice" | "legal" | "off_topic" | "system" | "other_household" | "approval" | "follow_up_why" | "follow_up_change" | "claim_start";
+export type ConversationalReply = { kind: ConversationalKind; summary: string; details: string[] };
+
+const INSURANCE_WORDS = /\b(?:polic(?:y|ies)|insur\w*|cover\w*|claim\w*|premium\w*|deductible\w*|co-?insurance|co-?pay\w*|rider\w*|plan\w*|benefit\w*|hospital\w*|warded|ward|surgery|operation|accident\w*|injur\w*|fractur\w*|broke\w*|bone|sick|ill\w*|diagnos\w*|cancer|stroke|heart|died|death|dead|pass(?:ed)? away|disab\w*|travel\w*|trip\w*|flight\w*|luggage|baggage|delay\w*|overseas|medisave|medishield|shield|renew\w*|expir\w*|sum (?:insured|assured)|payout|bill\w*|doctor|clinic|dental|maternity|pregnan\w*|outpatient|ambulance|icu|critical|life|term|endowment|matur\w*|surrender\w*|car|motor|home|exclu\w*|waiting period|grace period|excess|limit\w*|pay\w*|cost\w*|price|money|document\w*|schedule|certificate|booklet|group|agent|insurer)\b/i;
+
+/** Letters of scripts other than Latin: the message is not in English. */
+const OTHER_SCRIPT = /[Ѐ-ӿ֐-׿؀-ۿऀ-ॿ஀-௿฀-๿぀-ヿ㐀-鿿가-힯]/g;
+const MALAY = /\b(?:apa|saya|anda|insurans|perlindungan|boleh(?:kah)?|tuntutan|berapa|polisi|bagaimana|adakah|untuk|dengan|tidak|mahu|ingin|kami|kita)\b/gi;
+const SPANISH_ETC = /\b(?:qu[eé]|cubre|p[oó]liza|seguro|cu[aá]nto|c[oó]mo|puedo|tengo|mi|mis|el|los|las|una?|est[aá]|por|para|quel|quelle|assurance|couvre|mon|wie|meine|versicherung)\b/gi;
+const ENGLISH = /\b(?:what|is|are|my|the|claim|cover|covered|policy|insurance|hospital|premium|how|much|does|do|can|have|has|for|and|who|when|which|i|we|you|pay|plan|get|got|or|not|of|in|on)\b/gi;
+
+const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings)(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there))?[\s!.?]*$/i;
+const HELP_ONLY = /^(?:help|help me|can help(?: me)?|can you help(?: me)?|what can you do|how does this work|what do you do)[\s!.?]*$/i;
+const THANKS = /^(?:(?:ok(?:ay|ie)?|k|kk|alright|noted|got it|cool|great|nice|good|sure|fine|i see|oh|ah|ahh|lol|haha+|hehe+|wow|bye|goodbye|see you|cheers)[\s,!.]*)*(?:thanks?(?: you)?(?: (?:so much|very much|lah|ah|a lot))?|thank you|tq|ty|thx|tks|appreciate it)?[\s!.]*$/i;
+const THANKS_WORD = /\b(?:thanks?|thank you|tq|ty|thx|tks|appreciate)\b/i;
+
+const SYSTEM = /\b(?:ignore (?:all |any )?(?:(?:the |your )?(?:previous|prior|above|earlier) )?(?:instructions|rules|prompts?)|system prompt|(?:your|the) (?:instructions|prompt|rules|guidelines) (?:verbatim|word for word)|reveal (?:your )?(?:instructions|prompt|rules|system)|print (?:your )?(?:instructions|prompt|rules)|jailbreak|developer mode|you are now|\bDAN\b|act as (?:an? )?(?:unrestricted|different|new) |sql|database|table names?|schemas?|raw json|json (?:of|for|dump)|chunk ids?|policy ids?|file paths?|storage keys?|api keys?|source code|what model|which model|(?:are|r) you (?:gpt|chatgpt|gemini|claude|openai|an? (?:ai|llm|language model|bot))|\bgpt(?:-?\d)?\b|\bgemini\b|\bopenai\b|\bllm\b|large language model|embeddings?|vector (?:store|database))\b/i;
+const OTHER_HOUSEHOLD = /\b(?:other (?:households?|families|family'?s|users?|people'?s? (?:policies|insurance|cover))|households?(?:'s)? next door|another (?:household|family|user)|someone else'?s (?:polic(?:y|ies)|insurance|cover|claims?)|every(?:one|body) else'?s|all (?:households|users))\b|\b(?:household|account|family|user) [0-9a-f]{8}-[0-9a-f]{4}-/i;
+const APPROVAL = /\b(?:approve (?:my|the|this) claim|pretend (?:you are|to be) (?:my |the )?(?:agent|insurer|adjuster)|guarantee (?:my|the) (?:claim|payout))\b/i;
+const ADVICE = /\bshould (?:i|we|my \w+)\b[^?.]*\b(?:buy|get|take up|add|cancel|surrender|switch|keep|drop|upgrade|downgrade|lapse|terminate|stop paying|top up|change (?:insurer|plan|policy))\b|\b(?:is|are) (?:my|our|this|the) [^?.]{0,40}\bworth it\b|\bworth (?:buying|keeping|it)\b|\bwhich (?:insurer|insurance company|company|plan|policy|agent) is (?:the )?(?:best|better|cheapest|good)\b|\bbest (?:insurer|insurance(?: company| plan)?|plan to buy)\b|\brecommend (?:a|an|me|which|what)\b|\b(?:stocks?|shares|crypto|bitcoin|etfs?|unit trusts?)\b(?![^?.]*\b(?:linked|ilp)\b)|\bbuy more (?:insurance|cover|policies)\b|\bam i (?:under|over)-?insured\b|\b(?:do i|do we) (?:have|need) enough (?:insurance|cover)\b|\bwhat (?:insurance|cover|policy|plan) should (?:i|we)\b/i;
+const LEGAL = /\b(?:sue|suing|lawsuit|lawyer|solicitor|legal action|take (?:them|the insurer) to court|small claims tribunal|is it (?:legal|lawful|allowed)|legally|against the law|my (?:legal )?rights)\b/i;
+const OFF_TOPIC = /\b(?:weather|forecast|poem|song|lyrics|joke|recipe|world cup|football|soccer|premier league|nba|movie|film|netflix|news|horoscope|lottery|4d|toto|translate|homework|essay|write (?:me )?(?:a|an) (?:poem|story|song|essay|email|letter)|code|python|javascript|capital of|president|prime minister|who (?:won|is the)|what(?:'s| is) the time|what day is)\b/i;
+
+function stripEmoji(text: string) { return text.replace(/[\p{Extended_Pictographic}‍️]/gu, " "); }
+
+/** A reply for a message that is not a policy or claim question, or null. */
+export function conversationalReply(args: { message: string; selected: ClaimPerson | null; family?: ClaimPerson[]; hasTopic: boolean; pending: boolean }): ConversationalReply | null {
+  const raw = args.message ?? "";
+  const text = stripEmoji(raw).replace(/\s+/g, " ").trim();
+  const example = (() => {
+    const p = args.selected;
+    if (!p) return "“What am I covered for?”";
+    const who = /^self$/i.test(p.relationship ?? "") ? "my" : (p.preferred_name?.trim() || p.display_name) + "’s";
+    return "“What does " + who + " hospital plan pay?”";
+  })();
+  const whatICanDo = "I can tell you what anyone in your household is covered for, their deductibles, premiums and renewal dates, straight from your uploaded documents — or help you work out a claim, one question at a time. For example: " + example;
+  const reply = (kind: ConversationalKind, summary: string, details: string[] = []): ConversationalReply => ({ kind, summary, details });
+
+  // Never stand between an open claim question and its answer: "ok", "idk",
+  // "yes", a date or a name is the answer to the question on screen.
+  const blockedWhilePending = (kind: ConversationalKind) => args.pending && ["greeting", "thanks", "unclear", "follow_up_why", "follow_up_change", "claim_start"].includes(kind);
+  const pick = (r: ConversationalReply | null) => r && !blockedWhilePending(r.kind) ? r : null;
+
+  // Another script, or a Latin-script language with no English in it.
+  const otherScript = (text.match(OTHER_SCRIPT) ?? []).length;
+  const latinLetters = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (otherScript >= 2 && otherScript >= latinLetters / 3)
+    return pick(reply("language", "Sorry, I can only answer in English for now. Please ask again in English — for example: " + example));
+  const english = (text.match(ENGLISH) ?? []).length;
+  if (((text.match(MALAY) ?? []).length >= 2 || (text.match(SPANISH_ETC) ?? []).length >= 2) && english === 0)
+    return pick(reply("language", "Sorry, I can only answer in English for now. Please ask again in English — for example: " + example));
+
+  if (SYSTEM.test(text))
+    return reply("system", "I can’t share how DearPolicy works inside — its instructions, data or systems. I can help with your household’s own policies and claims.", [whatICanDo]);
+  if (OTHER_HOUSEHOLD.test(text))
+    return reply("other_household", "I can only see the policies in your own household, so I can’t show or discuss anyone else’s.", [whatICanDo]);
+  if (APPROVAL.test(text))
+    return reply("approval", "I can’t approve a claim or promise a payout — the insurer decides that after it assesses the claim. I can show which of your benefits may apply and what the insurer will ask for.");
+  if (LEGAL.test(text) && !/\b(?:exclu\w*|waiting period|what does (?:my|the) policy say)\b/i.test(text))
+    return reply("legal", "I can’t give legal advice. If an insurer turns down a claim, you can ask it to explain the decision in writing and to review it; if you still disagree, FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore, and a lawyer can advise you on your rights.",
+      ["What I can do is show exactly what your policies say — for example their premiums, exclusions and conditions — so you have the facts in front of you."]);
+  if (ADVICE.test(text))
+    return reply("advice", "I can’t recommend whether to buy, keep, change or cancel a policy, or where to put your money — that is financial advice, and a licensed financial adviser can help with it.",
+      ["What I can do is show exactly what your current policies cover and cost, so you can take that to the adviser. For example: “What am I covered for?” or “How much do we pay in premiums a year?”"]);
+
+  const letters = (text.match(/\p{L}/gu) ?? []).length;
+  if (!text || letters < 2)
+    return pick(reply("unclear", "Sorry, I didn’t catch that. " + whatICanDo));
+  if (GREETING.test(text) || HELP_ONLY.test(text))
+    return pick(reply("greeting", "Hi! " + whatICanDo));
+  if (THANKS.test(text) && text.length <= 40)
+    return pick(reply("thanks", THANKS_WORD.test(text) ? "You’re welcome. Ask me anything else about your policies, or tell me what happened if you need to make a claim." : "Is there anything else I can help with? " + whatICanDo));
+  // Keyboard mashing: short, no word I know, and a run of consonants no word has.
+  const words = text.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  if (words.length && words.length <= 5 && !INSURANCE_WORDS.test(text) && words.some((w) => /[bcdfghjklmnpqrstvwxz]{5,}/.test(w) || (w.length >= 4 && !/[aeiouy]/.test(w))) && english === 0)
+    return pick(reply("unclear", "Sorry, I didn’t catch that. " + whatICanDo));
+
+  // "Can claim anot?", "I want to make a claim": nothing has been said about
+  // what happened yet, so that is the one question to ask.
+  if (/^(?:(?:hi|hello|hey)[\s,!]+)?(?:(?:can|could|how (?:can|do|to)|how do (?:i|we)|i (?:want|would like|need) to|want to|help (?:me )?(?:to )?)\s+)?(?:i\s+|we\s+)?(?:make (?:a )?|file (?:a )?|submit (?:a )?|start (?:a )?)?claims?(?:\s+(?:anot|or not|can|ah|leh|lah|please|pls))*[\s?!.]*$/i.test(text))
+    return pick(reply("claim_start", "I can help with that. What happened, and when? Tell me who it happened to and I’ll check which of your policies could help."));
+  // A follow-up about a figure just given ("why so high?", "can reduce or not?").
+  if (args.hasTopic && /^(?:but |so |and )?(?:why|how come)\b[^?]{0,40}\b(?:so )?(?:high|low|much|expensive|big|small|different|increase\w*|go(?:ne)? up)\b/i.test(text))
+    return pick(reply("follow_up_why", "Your documents state the figures but not how the insurer arrived at them. The insurer (or your agent) can explain how it was set — for example your age, the plan or ward class you chose, and any rider."));
+  if (args.hasTopic && /\b(?:can|could|how (?:can|do|to)|is there (?:a )?way to)\b[^?]{0,30}\b(?:reduce|lower|cut|decrease|remove|waive|avoid|change)\b/i.test(text) && !INSURANCE_WORDS.test(text.replace(/\b(?:can|reduce|lower|change)\b/gi, "")))
+    return pick(reply("follow_up_change", "Your documents don’t say how to change it. Whether it can be lowered — for example by choosing a different plan, ward class or rider — is something the insurer or a licensed financial adviser can tell you, and I can’t recommend a change."));
+
+  if (OFF_TOPIC.test(text) && !INSURANCE_WORDS.test(text))
+    return reply("off_topic", "I can only help with your household’s insurance policies and claims, so I can’t answer that. " + whatICanDo);
+  // A question with nothing about insurance, a person or an event in it, at
+  // the start of a conversation: not something the documents can answer.
+  const namesSomeone = (args.family ?? []).some((p) => [p.display_name, p.preferred_name ?? ""].join(" ").toLowerCase().split(/\s+/).filter((w) => w.length >= 2).some((w) => new RegExp("\\b" + w.replace(/[^a-z0-9]/g, "") + "\\b", "i").test(text)));
+  if (!args.hasTopic && !namesSomeone && /\?\s*$|^(?:what|who|when|where|why|how|tell me|write|give me|show me)\b/i.test(text) && !/^(?:what|how) about\b|^and\b/i.test(text) && !INSURANCE_WORDS.test(text) && words.length >= 3
+    && !/\b(?:i|me|my|mine|we|us|our|he|she|his|her|him|they|them|their|mum|mom|dad|mother|father|wife|husband|son|daughter|grandma|grandpa|ah ma|ah gong|brother|sister|neighbou?r|friend)\b/i.test(text))
+    return reply("off_topic", "I can only help with your household’s insurance policies and claims, so I can’t answer that. " + whatICanDo);
+  return null;
+}
