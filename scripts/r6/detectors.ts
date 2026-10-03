@@ -61,6 +61,9 @@ export type GroundTruth = {
   foreignPolicyIds: Set<string>;
   /** Policy ids linked to each person (policy_members). */
   personPolicies: Map<string, Set<string>>;
+  /** The names "you" stands for in this household's answers (the person whose
+   * chat it is). Fixture-driven: each household says who its "you" is. */
+  selfNames?: string[];
 };
 
 export type TurnContext = {
@@ -83,6 +86,29 @@ const INTERNAL: [string, RegExp][] = [
   ["household-facing jargon", /\b(?:policy contracts?|contracts? (?:still|show)|family profiles?|personali[sz]ed policy evidence|resolve the person|retrieved sections?|uploaded passages|benefit rules?|evidence batch(?:es)?|reading budget|re-index|coverage ledger|policy review list|stored facts|panel\/network)\b/i],
   ["template token", /\{\{|\}\}|\$\{|\{[A-Za-z_][A-Za-z0-9_]*\}|%[sd]\b|<\w+>|__\w+__/],
 ];
+
+/** Figures an answer may derive from the premiums on file: any sum of them
+ * (a household total is plain addition of every printed premium -- a household
+ * with more than four policies has more than four terms), each premium also
+ * taken a year at a time (12 monthly premiums), and any of those per month.
+ * Memoised per list of figures. */
+const DERIVED = new WeakMap<number[], Set<number>>();
+function premiumDerived(figures: number[]): Set<number> {
+  const hit = DERIVED.get(figures);
+  if (hit) return hit;
+  const premium = figures.map(round2);
+  let sums = new Set<number>([0]);
+  if (premium.length <= 13) {
+    for (const p of premium) { const next = new Set(sums); for (const v of sums) { next.add(round2(v + p)); next.add(round2(v + p * 12)); } sums = next; }
+  } else {
+    for (let i = 0; i < premium.length; i++) for (let j = i; j < premium.length; j++) for (let k = j; k < premium.length; k++) sums.add(round2(premium[i] + (j > i ? premium[j] : 0) + (k > j ? premium[k] : 0)));
+  }
+  sums.delete(0);
+  const out = new Set<number>(sums);
+  for (const v of sums) { out.add(round2(v / 12)); out.add(round2(v * 12)); }
+  DERIVED.set(figures, out);
+  return out;
+}
 
 export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
   const hits: Hit[] = [];
@@ -208,13 +234,7 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
   const householdNumbers = new Set(numbersIn([...g.pages.values()].join("\n")).map(round2));
   const citedNumbers = new Set(numbersIn(pagesOf(cited)).map(round2));
   const userNumbers = new Set(numbersIn(t.userText).map(round2));
-  const premium = g.premiumFigures.map(round2);
-  const derived = new Set<number>(premium);
-  for (let i = 0; i < premium.length; i++) for (let j = i + 1; j < premium.length; j++) {
-    derived.add(round2(premium[i] + premium[j]));
-    for (let k = j + 1; k < premium.length; k++) { derived.add(round2(premium[i] + premium[j] + premium[k])); for (let l = k + 1; l < premium.length; l++) derived.add(round2(premium[i] + premium[j] + premium[k] + premium[l])); }
-  }
-  for (const v of [...derived]) { derived.add(round2(v / 12)); derived.add(round2(v * 12)); }
+  const derived = premiumDerived(g.premiumFigures);
   const citedList = [...citedNumbers].filter((v) => v >= 10).slice(0, 200);
   const sumOfCited = (v: number) => { for (let i = 0; i < citedList.length; i++) for (let j = i; j < citedList.length; j++) if (round2(citedList[i] + citedList[j]) === v || round2(citedList[i] * citedList[j]) === v) return true; return false; };
   for (const f of fields) {
@@ -250,7 +270,8 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
     const listed = a.details.find((d) => {
       if (!(new RegExp("— [^:]*\\b" + word + "\\w*[^:]*: (?!the schedule prints)", "i").test(d) && /S\$\d/.test(d))) return false;
       const owners = d.includes(" · ") ? d.split(" · ")[0].toLowerCase() : null;
-      return !who.length || !owners || who.some((w) => (w === "you" ? /\bmei ling\b/ : new RegExp("\\b" + w + "\\b")).test(owners));
+      const self = (g.selfNames ?? []).map((n) => n.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      return !who.length || !owners || who.some((w) => (w === "you" ? (self.length ? new RegExp("\\b(?:" + self.join("|") + ")\\b") : /(?!)/) : new RegExp("\\b" + w + "\\b")).test(owners));
     });
     if (listed) hit("says not found but lists it", summary + " | " + listed);
   }

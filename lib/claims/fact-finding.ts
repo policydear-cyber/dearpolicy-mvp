@@ -70,11 +70,13 @@ function accidentOrIllness(value: unknown) {
 const DATE_WHY = "It decides which policy version applies and whether waiting periods or cover dates are met.";
 export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
   accidental_death: {
-    category: "accidental_death", label: "Accidental death",
+    category: "accidental_death", label: "Death",
     facts: [
       { key: "deathDate", aliases: ["dateOfDeath", "death_date"], question: "What was the date of death?", type: "date", why: DATE_WHY, group: 1, required: true },
       { key: "causeOfDeath", aliases: ["cause", "cause_of_death"], question: "What does the death certificate give as the cause of death?", type: "text", why: "An accidental death benefit depends on the cause matching the policy's own definition.", group: 2, required: true, dependsOn: ["deathDate"] },
-      { key: "accidentCircumstances", aliases: ["howItHappened", "accidentDescription", "circumstances"], question: "Briefly, how did it happen?", type: "text", why: "Exclusions (for example hazardous activities) depend on the circumstances.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
+      { key: "accidentCircumstances", aliases: ["howItHappened", "accidentDescription", "circumstances"], question: "Briefly, how did it happen?", type: "text", why: "Exclusions (for example hazardous activities) depend on the circumstances.", group: 2, required: true, dependsOn: ["causeOfDeath"],
+        // An illness is not an accident: how an accident happened is asked only when it may have been one.
+        askWhen: (f) => f.accidentalDeath !== false },
       { key: "eventLocation", aliases: ["location", "country"], question: "Where did it happen — in Singapore or overseas?", type: "choice", options: ["Singapore", "Overseas"], why: "Some benefits and exclusions apply only in certain places, and an overseas death usually needs extra documents.", group: 2, required: true, dependsOn: ["causeOfDeath"] },
     ],
     documents: [
@@ -177,7 +179,7 @@ export const FACT_FINDING_SPECS: Record<FactFindingCategory, CategorySpec> = {
       { key: "tripEndDate", aliases: ["returnDate"], question: "On what date did (or will) the trip end?", type: "date", why: "Travel cover applies only to events during the insured trip.", group: 1, required: true },
       { key: "travelEventType", aliases: ["travelIncident"], question: "What happened on the trip?", type: "choice", options: ["Flight delay", "Medical treatment abroad", "Accident or death", "Lost or damaged baggage", "Other"], why: "Each travel benefit has its own conditions.", group: 2, required: true },
       { key: "eventDate", aliases: ["incidentDate"], question: "On what date did it happen?", type: "date", why: "It must fall within the trip dates.", group: 2, required: true, dependsOn: ["tripStartDate", "tripEndDate"] },
-      { key: "delayHours", aliases: ["flightDelayHours"], question: "How many hours was the flight delayed, according to the airline?", type: "text", why: "Delay benefits start only after the policy's minimum delay.", group: 3, required: true, askWhen: (f) => /delay/i.test(String(f.travelEventType ?? "")) },
+      { key: "delayHours", aliases: ["flightDelayHours"], question: "How many hours was the flight delayed, according to the airline?", type: "text", why: "Delay benefits start only after the policy's minimum delay.", group: 3, required: true, askWhen: (f) => /delay/i.test(String(f.travelEventType ?? "")) && !/baggage|luggage/i.test(String(f.travelEventType ?? "")) },
     ],
     documents: [
       { type: "travel_certificate", label: "Travel insurance certificate for the trip", required: true },
@@ -242,7 +244,9 @@ function resolve(facts: SubjectFacts, spec: FactSpec) {
 export function planFactFinding(input: FactFindingInput): FactFindingPlan {
   const spec = FACT_FINDING_SPECS[input.category];
   const resolved = new Map(spec.facts.map((f) => [f.key, resolve(input.facts, f)]));
-  const values: Record<string, unknown> = Object.fromEntries([...resolved].map(([k, r]) => [k, r.value]));
+  // A question's condition may depend on any known fact (whether a death was accidental), not only the plan's own.
+  const values: Record<string, unknown> = { ...Object.fromEntries(Object.entries(input.facts ?? {}).filter(([, f]) => f?.state === "known").map(([k, f]) => [k, f.value])),
+    ...Object.fromEntries([...resolved].map(([k, r]) => [k, r.value])) };
   const staleFacts: string[] = [], conflictingFacts: string[] = [], uncertainFacts: string[] = [], missing: FactSpec[] = [];
   const considered = new Set<string>();
   for (const f of spec.facts) {
@@ -411,6 +415,9 @@ function questionForKey(factKey: string): IndexedQuestion | null {
 }
 // Typed replies carry fillers and Singlish particles ("just one night lah",
 // "actually, no"): they are not part of the answer.
+/** "ya", "yah", "yup", "ya he ok now"; "nope", "nah", "no lah". */
+const YES_WORD = /^(?:y(?:es)?|ya+h?|yeah|yep|yup|sure|correct|confirmed?)\b(?![-'’])/i;
+const NO_WORD = /^(?:no?|nope|nah|never|not really)\b(?![-'’])/i;
 const bare = (text: string) => text.trim().replace(/[.!\s]+$/, "").replace(/^(?:(?:actually|sorry|oh|um+|uh+|ok(?:ay)?|so|and|but|well|hmm+|er+)[,\s]+)+/i, "")
   .replace(/(?:[,\s]+(?:lah|leh|lor|ah|sia|meh|hor))+$/i, "").replace(/[.!\s]+$/, "").trim();
 const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
@@ -450,12 +457,20 @@ function choiceValue(factKey: string, raw: string, options: string[] = []): stri
   }
   return option ?? null;
 }
+/** Typed straight into the chat while a free-text question is open, a short
+ * plain reply is that question's answer ("lung cancer", "collapsed at home").
+ * A command, a correction or a new event is not. */
+const TEXT_ANSWER_KEYS = new Set(["causeOfDeath", "accidentCircumstances", "diagnosis", "disabilityCause", "hospitalName"]);
+const NOT_AN_ANSWER = /\b(?:forget|start over|restart|cancel|never ?mind|actually|sorry|correction|wrong|not\s+(?:mei|wei|xin|my|her|his)|instead)\b|^(?:hi|hello|thanks?|thank you|ok(?:ay)?|what|how|why|when|where|which|who|can|could|does|do|is|are)\b/i;
 function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: boolean): string | boolean | number | null {
   const said = bare(raw);
+  // "dunno, since may", "not sure lah, maybe 3": the doubt is the answer.
+  if (question.type !== "choice" && /^(?:dunno|idk|not sure|unsure|no idea|(?:i\s+)?(?:don['’]?t|dont|do not)\s+know)\b[\s,;.-]+\S/i.test(said) && !(question.type === "text" && TEXT_ANSWER_KEYS.has(question.factKey))) return "not sure";
+  if (strict && question.type === "text" && TEXT_ANSWER_KEYS.has(question.factKey) && !UNCERTAIN_ANSWER.test(said) && !NOT_AN_ANSWER.test(raw.trim()) && said.length >= 3) return said;
   if (question.type === "yes_no") {
     if (UNCERTAIN_ANSWER.test(said)) return "not sure"; // "no idea" is not "no"
-    if (/^y(?:es)?\b/i.test(said)) return true;
-    if (/^no?\b/i.test(said)) return false;
+    if (YES_WORD.test(said)) return true;
+    if (NO_WORD.test(said)) return false;
     return strict && !UNCERTAIN_ANSWER.test(said) ? null : "not sure";
   }
   if (question.type === "choice") {
@@ -506,8 +521,8 @@ function undeclaredAnswer(pending: { factKey: string; type?: string; options?: s
   if (UNCERTAIN_ANSWER.test(said)) return { value: null, uncertain: true };
   const yesNo = pending.type === "yes_no" || (pending.options ?? []).some((o) => /^yes$/i.test(o));
   if (yesNo) {
-    if (/^y(?:es)?$/i.test(said)) return { value: true, uncertain: false };
-    if (/^no?$/i.test(said)) return { value: false, uncertain: false };
+    if (/^y(?:es)?$/i.test(said) || YES_WORD.test(said) && said.split(/\s+/).length <= 4) return { value: true, uncertain: false };
+    if (/^no?$/i.test(said) || NO_WORD.test(said) && said.split(/\s+/).length <= 4) return { value: false, uncertain: false };
     return null;
   }
   if (QUANTITY_KEY.test(pending.factKey)) {
@@ -563,6 +578,12 @@ export function recordDirectFactAnswer(args: {
     const asked = message.slice(0, colon).trim().replace(/\?\s*$/, "").toLowerCase();
     match = questionIndex().get(asked);
     raw = message.slice(colon + 1).trim();
+    // The card's question as shown to the family ("On what date was Xin Yi
+    // discharged ...?") is the pending question in its personal wording.
+    if (!match && args.pending && asked.length >= 12 && /^(?:what|when|on what|which|was|were|is|are|has|have|how|where|did|do|does|briefly|for how|from what)\b/.test(asked)) {
+      const declared = questionForKey(args.pending.factKey);
+      if (declared) { match = declared; strict = false; if (args.pending.subjectId && args.subjectIds.includes(args.pending.subjectId)) target = args.pending.subjectId; }
+    }
   }
   if (!match && args.pending && !questionForKey(args.pending.factKey) && (APP_ASKED_KEYS_GET().has(args.pending.factKey) || QUANTITY_KEY.test(args.pending.factKey))
     && message.length <= 160 && !message.includes("?")) {

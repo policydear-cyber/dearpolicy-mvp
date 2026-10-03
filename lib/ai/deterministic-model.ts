@@ -89,7 +89,7 @@ export function deterministicInterpretation(user: { currentMessage?: string; sub
     if (date) add("disabilityDate", date);
     scenario("Unable to work after an injury", "disability", ["disability", "bodily_injury"]);
   }
-  if (/\b(?:admitted|hospitali[sz]ed|warded)\b/i.test(message) && !/\bif\b/i.test(message)) {
+  if (/\b(?<!not |never |wasn't |was not )(?:admitted|hospitali[sz]ed|warded)\b/i.test(message) && !/\bif\b/i.test(message)) {
     intent = "claim"; add("hospitalised", true);
     if (date) add("admissionDate", date);
     scenario("Hospital stay", "hospitalisation", ["hospitalisation"]);

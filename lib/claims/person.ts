@@ -40,6 +40,8 @@ function subjectName(text: string) {
   // admitted", "sorry, it was her right arm", "oh and he").
   const name = subject.replace(/^(?:(?:actually|sorry|oh|and|but|so|also|um+|uh+|well|ok(?:ay)?|btw|anyway|then)\s+)+/i, "").replace(/^(?:today|yesterday)\s+/i, "").replace(/\s+(?:has|was|is|had|been|just|recently)(?:\s+(?:been|just|recently))*$/i, "");
   if (/^(i|i am|i['’]m|we|he|she|they|someone|a person|my (?:mother|father|mum|mom|dad|sister|brother|wife|husband|son|daughter|parent|child|spouse|sibling))$/i.test(name)) return null;
+  // ", not admitted", ", never warded": a negation, not a person.
+  if (/^(?:not|never|no|nobody|none|wasn['’]?t|isn['’]?t|but not)$/i.test(name)) return null;
   if (/^(?:his|her|their)\s+\S+$/i.test(name) || /['’]s\s+(?:wife|husband|spouse|son|daughter|child|kid|mother|father|mum|mom|dad|parent|sister|brother)$/i.test(name)) return null;
   // The chat's own question, sent back with its answer ("On what date was it
   // diagnosed: Not sure"), names no one: a question is not a subject.
@@ -192,4 +194,19 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
   }
   const selected = family.find(p => p.id === selectedId);
   return selected ? { status: "resolved", person: selected, explicit: false } : { status: "unknown", name: "this person", candidates: family };
+}
+
+/** Someone the household names who is not in it ("my colleague Ravi", "my
+ * uncle Ah Huat"): their own policies are not on DearPolicy, so no family
+ * member is offered in their place. Null when a household member is the
+ * subject instead. */
+export function outsideHouseholdSubject(text: string, family: ClaimPerson[]): { relation: string; name: string | null } | null {
+  const m = text.match(/\bmy\s+(colleague|co-?worker|uncle|aunt|auntie|friend|best friend|neighbou?r|cousin|boss|nephew|niece|helper|maid|domestic helper|classmate|boyfriend|girlfriend|(?:father|mother|brother|sister)-in-law|grand(?:uncle|aunt))\b(?:\s+((?:ah\s+)?[A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)?))?/iu);
+  if (!m) return null;
+  const before = text.slice(0, m.index ?? 0);
+  // "Wei Jie's colleague" is still not in the household, but "Xin Yi and my friend" names Xin Yi.
+  const named = family.some((p) => [p.display_name, p.preferred_name].filter(Boolean).some((n) => new RegExp("\\b" + normalized(n!).replace(/\s+/g, "\\s+") + "\\b(?!['’]s)").test(normalized(before))));
+  if (named) return null;
+  const name = m[2] && !/^(?:was|is|has|had|died|passed|fell|got|broke)$/i.test(m[2].split(/\s+/)[0]) ? m[2].replace(/\s+(?:was|is|has|had|died|passed|fell|got|broke)\b.*$/i, "").trim() : null;
+  return { relation: m[1].toLowerCase(), name };
 }

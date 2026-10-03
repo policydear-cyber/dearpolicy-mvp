@@ -152,7 +152,7 @@ function wordingSeeds(contract:PolicyContract,benefits:CatalogBenefit[]):Seed[]{
       // reviewed_at here regardless of that, as this used to, disagreed with
       // the catalogue's own answer for the identical benefit and withheld a
       // figure the catalogue already trusts.
-      status:benefit.needsConfirmation?"proposed":"confirmed",seedKey:"benefit:"+benefit.id});
+      status:benefit.needsConfirmation?"proposed":"confirmed",seedKey:"benefit:"+benefit.id+"|member:"+contract.ownerId});
   }
   return out;
 }
@@ -171,7 +171,7 @@ function scheduleSeeds(contract:PolicyContract,eventsFromWording:Set<EventType>)
         eventType:ev.event,detail:null,cause:null,paysKind:ev.pays,amount:ev.pays==="lump_sum"?coverage.amount:null,currency,
         sumBasis:coverage.amount,offsetDays:null,maximumDays:null,conditions:[],note:ev.note,
         sourcePage:coverage.sourcePage,quote:coverage.evidenceText,origin:"schedule",inferred:false,status:"proposed",
-        seedKey:"coverage:"+coverage.id+":"+ev.event});
+        seedKey:"coverage:"+coverage.id+":"+ev.event+"|member:"+contract.ownerId});
     }
   }
   return out;
@@ -219,6 +219,11 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   }
   let added=0;
   for(const s of seeds){
+    // Two insured people under one certificate ("Insured persons: Mei Ling;
+    // Wei Jie") read the same row: each gets their own ledger row. A row
+    // seeded under the older person-less key is that person's already.
+    const legacy=s.seedKey.replace(/\|member:[^|]+$/,"");
+    if(legacy!==s.seedKey&&(await query("SELECT 1 FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 AND seed_key=$3 LIMIT 1",[accountId,s.familyMemberId,legacy])).rows.length)continue;
     const r=await query<{id:string}>(
       `INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,pays_kind,amount,currency,sum_basis,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,seed_key)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::text[],$16,$17,$18,$19,$20,$21,$22)

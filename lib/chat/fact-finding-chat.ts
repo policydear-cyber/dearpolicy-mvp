@@ -298,6 +298,7 @@ export function applyClaimInterviewTurn(args: { answer: ChatAnswer; state: Conve
   const self = /^self$/i.test(person.relationship ?? "");
   const whose = self ? "your" : calledName(person) + "’s";
   const lead = next.category === "accidental_death" ? "I’m so sorry for your loss."
+    : known(state.subjects[person.id] ?? {}, "maternity") === true ? "Congratulations on the new baby."
     : self ? "I’m sorry you’re dealing with this." : "I’m sorry " + calledName(person) + " is dealing with this.";
   const summary = lead + " To check " + whose + " policies for " + CATEGORY_EVENT[next.category] + ", I need a few details first, one at a time.";
   answer.mode = "fact_finding";
@@ -308,10 +309,22 @@ export function applyClaimInterviewTurn(args: { answer: ChatAnswer; state: Conve
   answer.summary = firstTurn ? summary : "Thanks, noted.";
   state.injuryExplained = summary;
   // After a death, what to do first comes before the questions.
-  answer.details = firstTurn && next.category === "accidental_death" ? [DEATH_FIRST_STEPS] : [];
-  answer.questions = [{ id: next.question.id, type: next.question.type, text: next.question.text, why: next.question.why, options: questionOptions(next.question) }];
+  answer.details = firstTurn && next.category === "accidental_death" ? [deathFirstSteps(state.subjects[person.id] ?? {})] : [];
+  answer.questions = [{ id: next.question.id, type: next.question.type, text: personalQuestion(next.question.text, person), why: next.question.why, options: questionOptions(next.question) }];
   state.pending = { ...answer.questions[0], subjectId: next.subjectId, factKey: next.question.factKey };
   answer.confidence = "partial_match";
+}
+/** "Is the insured person still alive today?" reads as a form; the family
+ * knows the person by name. */
+export function personalQuestion(text: string, person: Person) {
+  const self = /^self$/i.test(person.relationship ?? "");
+  const name = calledName(person);
+  return text
+    .replace(/\bIs the insured person still alive today\?/, "Is " + (self ? "the person who was diagnosed" : name) + " still alive today?")
+    .replace(/\bthe insured person\b/g, self ? "you" : name)
+    .replace(/\bthe patient\b/g, self ? "you" : name)
+    .replace(/\bthe person\b/g, self ? "you" : name)
+    .replace(/\bhas you been\b/g, "have you been").replace(/\bwas you\b/g, "were you");
 }
 
 /* ------------------------------------------------------------------------
@@ -334,11 +347,16 @@ const EVENT_PHRASE: Record<FactFindingCategory, (facts: SubjectFacts) => string>
   },
   critical_illness: (f) => said(f, "diagnosis") ? "the diagnosis of " + String(said(f, "diagnosis")) : "the diagnosis",
   disability_tpd: () => "being unable to work",
-  medical_reimbursement: () => "the hospital stay", hospital_cash: () => "the hospital stay",
+  medical_reimbursement: (f) => known(f, "daySurgery") === true ? "the day surgery" : "the hospital stay",
+  hospital_cash: (f) => known(f, "daySurgery") === true ? "the day surgery" : "the hospital stay",
   travel: (f) => {
     const kind = String(known(f, "travelEventType") ?? "");
-    return known(f, "flightDelayHours") != null || /delay/i.test(kind) ? "the flight delay"
+    return (known(f, "flightDelayHours") != null || /delay/i.test(kind)) && !/baggage|luggage/i.test(kind) ? "the flight delay"
+      : /baggage|luggage/i.test(kind) && /delay/i.test(kind) ? "the delayed baggage"
+      : /^lost baggage$/i.test(kind) ? "the lost baggage"
       : /baggage|luggage/i.test(kind) ? "the lost or damaged baggage"
+      : /cut short|curtail/i.test(kind) ? "the trip cut short"
+      : /passport|travel documents?/i.test(kind) ? "the lost passport"
       : /medical|sick|ill/i.test(kind) ? "the treatment abroad"
       : /cancel/i.test(kind) ? "the cancelled trip"
       : "what happened on the trip";
@@ -356,6 +374,11 @@ export function claimEventName(person: Person, facts: SubjectFacts, category: Fa
 }
 const ACTIVE_STATUS = /^Active status not recently verified\b/i;
 export const DEATH_FIRST_STEPS = "What to do first: get the death certificate (for a death in hospital the hospital issues it; after an accident the police and coroner are involved) and keep the police report number. Nothing needs to be sent to an insurer today; the documents below can follow when you are ready.";
+/** After a death from an illness there is no police report to keep. */
+export const DEATH_FIRST_STEPS_ILLNESS = "What to do first: get the death certificate (for a death in hospital the hospital issues it; for a death at home, the family doctor certifies it). Nothing needs to be sent to an insurer today; the documents below can follow when you are ready.";
+export function deathFirstSteps(facts: SubjectFacts) { return known(facts, "accidentalDeath") === false ? DEATH_FIRST_STEPS_ILLNESS : DEATH_FIRST_STEPS; }
+/** How the chat names the event ("the hospital stay", "the broken wrist"). */
+export function claimEventPhrase(category: FactFindingCategory | null, facts: SubjectFacts) { return category ? EVENT_PHRASE[category](facts) : "what happened"; }
 /* Which benefit families an event can trigger. Each event type maps only to
  * its own families: a flight delay is travel delay (not trip cancellation,
  * baggage or overseas medical); a diagnosis is critical-illness cover (not a
@@ -364,6 +387,7 @@ export const DEATH_FIRST_STEPS = "What to do first: get the death certificate (f
 const FAMILY = {
   travelDelay: /\b(?:travel|flight|trip|journey|departure)\s+delay|\bdelay(?:ed)?\s+(?:departure|flight)|\bmissed (?:connection|departure)/i,
   baggage: /baggage|luggage|personal belongings|personal effects/i,
+  curtailment: /curtail|cut short|shorten|interrupt|early return|return early/i,
   cancellation: /cancel|curtail|postpone|disruption|shorten/i,
   medical: /medical|hospital|evacuat|repatriat|\bdental\b|treatment|covid/i,
   accidentDeath: /accident|death|disablement|dismember/i,
@@ -372,12 +396,15 @@ const FAMILY = {
   hospital: /hospital|room|board|ward|surg|\bcash\b|daily|icu|intensive|confinement|medical|ambulance|inpatient|outpatient/i,
   notHospital: /\bdeath\b|critical illness|cancer|disab|dismember|loss of|fracture|baggage|luggage|flight|delay|cancel|maturity|surrender/i,
   notInjury: /critical illness|\bcancer\b|maturity|surrender|baggage|luggage|flight delay|travel delay|trip cancel/i,
+  travelDocuments: /passport|travel documents?|personal money/i,
 };
 function travelKind(facts: SubjectFacts): keyof typeof FAMILY | null {
   const kind = String(known(facts, "travelEventType") ?? "").toLowerCase();
-  if (known(facts, "flightDelayHours") != null || known(facts, "delayHours") != null || /delay/.test(kind)) return "travelDelay";
   if (/baggage|luggage/.test(kind)) return "baggage";
-  if (/cancel|curtail/.test(kind)) return "cancellation";
+  if (known(facts, "flightDelayHours") != null || known(facts, "delayHours") != null || /delay/.test(kind)) return "travelDelay";
+  if (/curtail|cut short|shorten/.test(kind)) return "curtailment";
+  if (/cancel/.test(kind)) return "cancellation";
+  if (/passport|travel documents?/.test(kind)) return "travelDocuments";
   if (/medical|hospital|sick|ill/.test(kind)) return "medical";
   if (/accident|death/.test(kind)) return "accidentDeath";
   return null;
@@ -405,7 +432,15 @@ export function benefitFitsEvent(category: FactFindingCategory | null, facts: Su
       if (kind === "travelDelay") return FAMILY.travelDelay.test(name) || (/\bdelay\b/i.test(name) && !FAMILY.baggage.test(name));
       // Being treated abroad for an illness is not an accident claim.
       if (kind === "medical" && /\baccident/i.test(name) && known(facts, "eventType") !== "accident" && known(facts, "injured") !== true) return false;
-      return FAMILY[kind].test(name) && (kind === "baggage" || !FAMILY.baggage.test(name));
+      // A bag that arrived late is the baggage-delay benefit; a lost bag is the loss benefit.
+      // "Lost or damaged baggage" (the card's own option) may be either, so both stay.
+      if (kind === "baggage") {
+        const said = String(known(facts, "travelEventType") ?? "");
+        if (/delay/i.test(said)) return FAMILY.baggage.test(name) && /delay/i.test(name);
+        if (/^(?:lost|damaged) baggage$/i.test(said)) return FAMILY.baggage.test(name) && !/delay/i.test(name);
+        return FAMILY.baggage.test(name);
+      }
+      return FAMILY[kind].test(name) && !FAMILY.baggage.test(name);
     }
     default: return true;
   }
@@ -459,6 +494,31 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
   const relevant = (title: string) => benefitFitsEvent(category, facts, title);
   // A benefit ruled out on these facts (a delay below the threshold) keeps
   // its card -- it says why -- but is not named as a possible benefit.
+  // A hospital plan's rows for care nobody mentioned (intensive care, a community
+  // hospital, a ward for a day case) are not offered for this stay.
+  if (category === "medical_reimbursement" || category === "hospital_cash") {
+    const said = JSON.stringify(Object.values(facts).map((f) => f?.quote ?? "")).toLowerCase();
+    answer.claimItems = answer.claimItems.filter((item) => {
+      const name = item.title.toLowerCase();
+      if (/intensive care|\bicu\b/.test(name) && known(facts, "icuStay") !== true && !/\bicu\b|intensive care/.test(said)) return false;
+      if (/community hospital/.test(name) && !/community hospital/.test(said)) return false;
+      if (known(facts, "daySurgery") === true && /room, board|room and board|daily room/.test(name)) return false;
+      return true;
+    });
+  }
+  // "Travel delay - maximum per person" is the cap of "Travel delay (for every
+  // full 6 hours ...)", not a second benefit: one card, with the cap noted on it.
+  {
+    const base = (title: string) => (title.split(" · ").slice(1).join(" · ") || title).replace(/^.*? — /, "").replace(/\s*\(.*\)\s*$/, "").replace(/\s+-\s+maximum.*$/i, "").trim().toLowerCase();
+    const caps = answer.claimItems.filter((i) => /\s-\s*maximum\b|\bmaximum per (?:person|family|trip)\b/i.test(i.title));
+    for (const cap of caps) {
+      const main = answer.claimItems.find((i) => i !== cap && !caps.includes(i) && base(i.title) === base(cap.title));
+      if (!main) continue;
+      const page = cap.reason.match(/\(page (\d+)\)/)?.[1];
+      main.conditions = [...new Set([...main.conditions, "The policy also sets a maximum per person for this benefit" + (page ? " (page " + page + ")" : "") + "."])];
+      answer.claimItems = answer.claimItems.filter((i) => i !== cap);
+    }
+  }
   answer.claimItems = answer.claimItems.filter((item) => relevant(item.title)).map((item) => {
     if (item.status === "not_applicable") return item;
     const cited = item.calculationId ? pages.get(item.calculationId.includes(":") ? item.calculationId : "benefit:" + item.calculationId) : undefined;
@@ -475,12 +535,15 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
       : item.calculationKind === "sum_insured" || /% of the sum insured/i.test(text) ? "Pays a share of the sum insured"
       : item.calculationKind === "fixed" || /lump sum/i.test(text) ? "Pays a set amount"
       : "Listed in the policy";
+    // A late-stage-only benefit for an early-stage diagnosis: said on its card.
+    const stageNote = /\bearly[- ]stage\b/i.test(String(known(facts, "diagnosis") ?? "")) && /\blate[- ]stage\b/i.test(item.title)
+      ? ["This benefit is written for late-stage conditions; an early-stage diagnosis may not meet its definition. The insurer decides."] : [];
     return { ...item,
       // Where the rule is printed stays on the card (V1.1 Task 4).
       reason: pays + (Number.isFinite(page) && page > 0 ? " (page " + page + ")" : "") + ".",
       // DearPolicy's own checking work is said once, plainly -- never as a
       // task for the household ("confirm the heading", "re-read").
-      conditions: [...new Set(item.conditions
+      conditions: [...new Set([...stageNote, ...item.conditions]
         // The printed formula, once amounts are hidden, reads as nonsense
         // ("an amount that is only shown after ... per accident"); the card
         // already says it is listed in the policy.
@@ -498,20 +561,29 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
   const list = named.length > 1 ? named.slice(0, -1).join(", ") + " and " + named[named.length - 1] : named[0];
   // Asked again once the interview is over ("How much can she claim?"), the
   // answer says where the claim stands rather than thanking for answers.
-  const opening = state.claimConcluded ? "Here is where this claim stands." : "Thanks — that’s what I need for now.";
+  // Nothing was asked when the first message already said it all: no thanks for answers never given.
+  const opening = state.claimConcluded ? "Here is where this claim stands." : state.injuryExplained || state.pending ? "Thanks — that’s what I need for now." : "From what you’ve told me, here is what I found.";
   state.claimConcluded = true;
   const condolence = category === "accidental_death" && !/sorry for your loss/i.test(args.eventLead ?? "") ? "I’m so sorry for your loss. " : "";
+  // A policy whose dates do not cover the event is said out loud, once: the
+  // card that says so is not shown as a possible benefit.
+  const dateIssues = [...new Set(answer.claimItems.filter((i) => i.status === "not_applicable" && /^Not a possible benefit(?: on the document on file)?: .*(?:cover ended on|cover on file starts on)/.test(i.reason))
+    .map((i) => i.reason.replace(/^Not a possible benefit(?: on the document on file)?: /, "").replace(/^./, (c) => c.toUpperCase())))];
+  if (dateIssues.length) answer.details = [...dateIssues, ...answer.details.filter((d) => !dateIssues.includes(d))];
   answer.summary = condolence + (args.eventLead ? args.eventLead + " " : "") + (named.length
     ? opening + " For " + event + ", " + whose + " policies have " + (named.length === 1 ? "a possible benefit: " : "possible benefits: ") + list + ". " +
       "This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed."
-    : opening + " None of the benefits in " + whose + " policies on file responds to " + event + " as described. That is based on the documents uploaded; the insurer decides any claim.");
-  const definitions = category ? FACT_FINDING_SPECS[category].reviewers.map((r) => r.label.replace(/^A reviewer checks/, "A DearPolicy reviewer checks") + ".") : [];
+    : opening + (dateIssues.length ? " None of " + whose + " policies on file can be offered for " + event + ": the cover on file doesn’t include the date it happened. The insurer decides any claim."
+      : " None of the benefits in " + whose + " policies on file responds to " + event + " as described. That is based on the documents uploaded; the insurer decides any claim."));
+  // The accidental-death definition decides only a death that may have been an accident.
+  const accidentalDefinition = category !== "accidental_death" || known(facts, "accidentalDeath") === true;
+  const definitions = category && accidentalDefinition ? FACT_FINDING_SPECS[category].reviewers.map((r) => r.label.replace(/^A reviewer checks/, "A DearPolicy reviewer checks") + ".") : [];
   // Whether the cover is still being paid for is one line for the answer.
   const status = statuses.size ? [statuses.size === 1 ? [...statuses][0]
     : "Active status not recently verified for some of these policies: DearPolicy has no recent premium receipt or renewal notice for them. Ownership stays confirmed by the personalised evidence."] : [];
   // A death: condolence and what to do first come before any policy detail.
-  const firstSteps = category === "accidental_death" ? [DEATH_FIRST_STEPS] : [];
-  answer.details = [...firstSteps, ...definitions, ...status, ...answer.details.filter((d) => /is not payable on these facts/i.test(d))].slice(0, 3);
+  const firstSteps = category === "accidental_death" ? [deathFirstSteps(facts)] : [];
+  answer.details = [...firstSteps, ...dateIssues, ...definitions, ...status, ...answer.details.filter((d) => /is not payable on these facts/i.test(d))].slice(0, 3);
   answer.questions = [];
   delete answer.scenarioClassifications;
   const packStep = answer.nextSteps.find((s) => /claim pack/i.test(s));

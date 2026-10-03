@@ -14,7 +14,7 @@
  *    overseas / evacuation / repatriation benefits) is not a possible benefit
  *    for an event in Singapore.
  */
-export type EventFitIssue = { kind: "expired" | "location" | "trip"; text: string };
+export type EventFitIssue = { kind: "expired" | "not_started" | "location" | "trip"; text: string };
 
 const UNKNOWN = /^(?:not sure|unsure|unknown|not yet known|don'?t know)$/i;
 export function meaningfulFact(value: unknown): string | null {
@@ -40,8 +40,18 @@ function isoDay(value: string | null | undefined) {
   const t = Date.parse(value);
   return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : null;
 }
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** "2026-06-30" -> "30 June 2026", as a family would write it. */
+export function plainDate(iso: string) {
+  const m = iso.match(/^(\d{4})-(\d\d)-(\d\d)/);
+  return m ? Number(m[3]) + " " + MONTHS[Number(m[2]) - 1] + " " + m[1] : iso;
+}
 export function eventFitIssue(args: {
   benefitTitle: string;
+  /** The policy's name, for saying whose dates these are. */
+  policyName?: string | null;
+  /** The earliest start date printed on the policy documents on file. */
+  effectiveDate?: string | null;
   policyType?: string | null;
   /** The policy's latest printed renewal or expiry date. */
   expiryDate?: string | null;
@@ -57,9 +67,14 @@ export function eventFitIssue(args: {
 }): EventFitIssue | null {
   const expiry = isoDay(args.expiryDate);
   const eventDay = isoDay(meaningfulFact(args.eventDate));
+  const whose = args.policyName ? args.policyName + "’s" : "this policy’s";
   if (args.expiryPassed && expiry && !(eventDay && eventDay <= expiry))
-    return { kind: "expired", text: "Not a possible benefit: this policy’s cover ended on " + expiry +
-      (eventDay ? ", before the event on " + eventDay + "." : " and no renewal is on file. If it happened before then, tell DearPolicy the date.") };
+    return { kind: "expired", text: "Not a possible benefit: " + whose + " cover ended on " + plainDate(expiry) +
+      (eventDay ? ", before the event on " + plainDate(eventDay) + ", and no renewal is on file." : " and no renewal is on file. If it happened before then, tell DearPolicy the date.") };
+  const effective = isoDay(args.effectiveDate);
+  if (effective && eventDay && eventDay < effective)
+    return { kind: "not_started", text: "Not a possible benefit on the document on file: " + (args.policyName ? args.policyName + "’s" : "the") + " cover on file starts on " + plainDate(effective) +
+      ", after the event on " + plainDate(eventDay) + ". If the policy was in force before then, the earlier certificate or renewal notice will show it." };
   if (!args.travelEvent && happenedInSingapore(meaningfulFact(args.eventLocation)) && overseasOnly(args.benefitTitle, args.policyType))
     return { kind: "location", text: "Not a possible benefit: this cover is for events overseas, and this happened in Singapore." };
   // Travel cover needs a trip: an event overseas, within the trip's dates. A

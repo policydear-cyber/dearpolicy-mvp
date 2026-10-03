@@ -124,6 +124,8 @@
     "v11:customer-screens-test": "node --import tsx scripts/v11-ux-customer-screens-regressions.ts",
     "r5:ux-test": "node --import tsx scripts/r5-ux-regressions.ts",
     "r6:chat-quality-test": "node --import tsx scripts/r6-chat-quality-regressions.ts",
+    "r7:answers-test": "node --import tsx scripts/r7-answers-regressions.ts",
+    "r7:claims-test": "node --import tsx scripts/r7-claims-regressions.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
     "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts"

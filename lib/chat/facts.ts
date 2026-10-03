@@ -4,6 +4,7 @@ import { claimDateInFuture, resolveClaimDate } from "@/lib/claims/dates";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ConversationFact, ConversationState, FactValue, ScenarioClassification, ScenarioFamily, ScenarioTrait, SubjectFacts } from "./types";
 import { refreshDependentsOnFirstAnswer } from "@/lib/claims/fact-finding";
+import { reportedEvents } from "@/lib/claims/reported-events";
 
 const ValueSchema = z.union([z.string().max(500), z.number().finite(), z.boolean(), z.array(z.string().max(120)).max(12), z.null()]);
 const ScenarioFamilySchema=z.enum(["death","injury","illness","hospitalisation","disability","property","motor","travel","liability","savings","life_event","other"]);
@@ -67,6 +68,9 @@ export function reportedConditionStatement(text:string){
     /\b(?:has\s+been|had\s+been|was|is)\s+diagnosed\s+with\s+([^.!?;\n]{2,120})/gi,
     /\b(?:tested|tests|testing)\s+positive\s+for\s+([^.!?;\n]{2,120})/gi,
     /\b(?:caught|contracted|came\s+down\s+with|suffers?\s+from|is\s+suffering\s+from)\s+([^.!?;\n]{2,120})/gi,
+    // "had a stroke", "got heart attack", "has stage 2 breast cancer": a
+    // defined critical illness reported without the word "diagnosed".
+    /\b(?:had|has|got|suffered|kena)\s+(?:a\s+|an\s+)?(?:mild\s+|major\s+|massive\s+|minor\s+|serious\s+|bad\s+)?((?:stage\s+\d\s+)?(?:stroke|heart\s+attack|cardiac\s+arrest|kidney\s+failure|(?:[a-z]+\s+){0,2}cancer))\b/gi,
   ];
   for(const pattern of patterns)for(const match of text.matchAll(pattern)){
     const index=match.index??0;
@@ -285,7 +289,8 @@ const INTERROGATIVE_START=/^\s*(?:and\s+|so\s+|then\s+)?(?:what|which|who|whom|w
  * the chat's own question card has no question mark and is never this. */
 export function onlyAsksQuestions(message:string){
   if(!message.includes("?"))return false;
-  const sentences=message.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim()).filter(Boolean);
+  // "btw what is my deductible?", "oh and does it cover TCM?": a filler first is still a question.
+  const sentences=message.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim().replace(/^(?:(?:btw|by the way|oh|also|and|ok(?:ay)?|so|sorry|quick question|one more thing)[,:]?\s+)+/i,"")).filter(Boolean);
   return sentences.length>0&&sentences.every(s=>INTERROGATIVE_START.test(s));
 }
 /** Asking what an event already on file pays, rather than asking something new. */
@@ -303,6 +308,10 @@ export function mergeInterpretation(args: {
   const fractureNegated=injuryRetracted||fractureNegationStatement(args.message);
   const fractureReport=fractureNegated?null:reportedFractureStatement(args.message);
   const injuryReport=fractureReport||fractureNegated?null:reportedInjuryStatement(args.message);
+  // Events read in plain code from the household's own words (a burn, a dog
+  // bite, a bag that arrived late): the interview never depends on the model
+  // having named the event (lib/claims/reported-events.ts).
+  const otherEvents=homicideReport||fractureReport?[]:reportedEvents(args.message).filter(e=>!(e.kind==="injury"&&(injuryRetracted||fractureNegated)));
   const priorDiagnosis=args.subjectIds.length===1?knownValue(args.state.subjects[args.subjectIds[0]]??{},"diagnosis"):null;
   const conditionStartsTopic=!!conditionReport&&typeof priorDiagnosis==="string"&&normalText(priorDiagnosis)!==normalText(conditionReport.condition);
   const startsClaimTopic=interpretation.newTopic||conditionStartsTopic;
@@ -311,7 +320,14 @@ export function mergeInterpretation(args: {
   // the claim pays stays on the claim; any other question is answered as a
   // policy question in its own right instead of being swallowed by the open
   // claim question (which the workflow offers again afterwards).
-  const asksOnly=!(homicideReport||conditionReport||fractureReport||injuryReport)&&onlyAsksQuestions(args.message);
+  // "We cut short our trip because Wei Jie's father passed away": the death
+  // or the hospital stay is the REASON for a travel claim, and it happened to
+  // someone else -- it is never recorded against the traveller.
+  const tripReason=otherEvents.some(e=>e.kind==="trip_cancellation"||e.kind==="trip_curtailment");
+  if(tripReason)interpretation={...interpretation,
+    facts:interpretation.facts.filter(f=>!/^(?:death|deathDate|causeOfDeath|accidentalDeath|hospitalised|admissionDate|dischargeDate|hospitalNights|diagnosis|diagnosisDate)$/.test(f.key)&&!(f.key==="eventType"&&f.value!=="travel_disruption")),
+    scenarioCandidates:(interpretation.scenarioCandidates??[]).filter(c=>!c.traits.some(t=>t==="death"||t==="hospitalisation"||t==="diagnosis"))};
+  const asksOnly=!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length)&&onlyAsksQuestions(args.message);
   const fullQuestion=asksOnly&&args.message.trim().split(/\s+/).length>=4;
   let intent=interpretation.intent;
   if(asksOnly&&(intent==="claim"||(intent==="follow_up"&&args.state.intent==="claim"))){
@@ -328,7 +344,7 @@ export function mergeInterpretation(args: {
   // After a portfolio listing, a new full question is that question -- not
   // another request for the same table.
   if(intent==="follow_up"&&args.state.intent==="portfolio"&&fullQuestion)intent="policy_question";
-  const actualIntent = (homicideReport||conditionReport||fractureReport) && intent!=="portfolio" ? "claim" :
+  const actualIntent = (homicideReport||conditionReport||fractureReport||otherEvents.length) && intent!=="portfolio" ? "claim" :
     intent === "follow_up" ? next.intent ?? "policy_question" : intent;
   next.intent = actualIntent;
   if (!next.activeQuery || startsClaimTopic || (intent !== "follow_up" && !(actualIntent==="claim"&&args.state.intent==="claim")) ||
@@ -448,6 +464,19 @@ export function mergeInterpretation(args: {
       facts.injured={...reported,value:true};
       facts.injuryBodyPart={...reported,value:injuryReport.bodyPart};
       if(injuryReport.side)facts.injurySide={...reported,value:injuryReport.side};
+    }
+    if(args.subjectIds.length===1&&otherEvents.length&&knownValue(facts,"death")!==true){
+      for(const event of otherEvents){
+        const reported={state:"known" as const,quote:event.quote,source:"system-derived" as const,recordedAt:args.now.toISOString()};
+        for(const [key,value] of Object.entries(event.facts)){
+          if(facts[key]?.state==="known"&&facts[key].value!==null&&!(key==="hospitalised"&&value===false))continue;
+          if(key==="injuryKind"&&fractureLocked(facts))continue;
+          facts[key]={...reported,value};
+        }
+        const scenario:ScenarioClassification={subjectId:id,label:event.label,family:event.family,traits:event.traits,quote:event.quote,recordedAt:args.now.toISOString(),source:"system-derived"};
+        const list=next.scenarios![id]??=[];
+        if(!list.some(s=>normalText(s.label)===normalText(scenario.label)))list.push(scenario);
+      }
     }
     const ongoing = knownValue(facts, "hospitalStayOngoing") === true;
     if (ongoing && facts.hospitalNights) facts.hospitalNights = { ...facts.hospitalNights, value: null, state: "pending" };

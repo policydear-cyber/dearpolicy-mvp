@@ -49,14 +49,15 @@ function eventLines(facts:ClaimFacts){
 export function documentsToAttach(facts:ClaimFacts){
   const documents:string[]=["The insurer's own claim form, signed and dated","A copy of the policy schedule or certificate for the plan being claimed under"];
   if(facts.death){
-    documents.push("Death certificate");
-    documents.push("Certificate of cause of death, where one was issued");
+    // One document to the family: the death certificate, with the doctor's
+    // Certificate of Cause of Death where one was issued.
+    documents.push("Death certificate (with the Certificate of Cause of Death, if one was issued)");
     documents.push("Proof of the claimant's identity and relationship to the deceased");
   }
   if(facts.accidentType||facts.eventType==="accident")documents.push("Police or accident report, if one was made");
   if(facts.diagnosis){
     documents.push("Specialist's medical report stating the diagnosis and the date it was made");
-    documents.push("Histology, biopsy or scan report supporting the diagnosis");
+    documents.push("Test results confirming the diagnosis (histology, biopsy or scan report)");
   }
   if(facts.hospitalised||facts.hospitalNights!=null){
     documents.push("Hospital discharge summary showing the dates of admission and discharge");
@@ -68,6 +69,17 @@ export function documentsToAttach(facts:ClaimFacts){
   if(facts.hospitalBill!=null||facts.outOfPocket!=null||facts.ambulanceBill!=null)
     documents.push("Original receipts for every amount being claimed");
   return [...new Set(documents)];
+}
+/** The proof a travel claim needs depends on what happened on the trip. */
+function travelIncidentDocument(label:string,facts:ClaimFacts){
+  if(!/^Airline delay letter, police report or medical report/.test(label))return label;
+  const kind=String((facts as Record<string,unknown>).travelEventType??"").toLowerCase();
+  if(/baggage|luggage/.test(kind))return /delay/.test(kind)?"The airline’s report of the delayed bag, and receipts for essentials bought":"The airline’s property irregularity report (or a police report), and receipts or photos of the lost items";
+  if((facts as Record<string,unknown>).flightDelayHours!=null||/delay/.test(kind))return "The airline’s letter confirming the delay and how long it was";
+  if(/cancel|cut short|curtail/.test(kind))return "Proof of why the trip was cancelled or cut short (for example a medical report or death certificate), and the booking receipts";
+  if(/passport|travel document/.test(kind))return "A police report of the loss, and receipts for the replacement travel document";
+  if(/medical|sick|ill/.test(kind))return "The overseas doctor’s report and itemised bills";
+  return label;
 }
 /** The claim's category, from what happened (not from which benefit matched). */
 export function claimCategoryFromFacts(facts:ClaimFacts&Record<string,unknown>,eventType?:string|null,stored?:string|null):FactFindingCategory|null{
@@ -87,10 +99,12 @@ export function claimCategoryFromFacts(facts:ClaimFacts&Record<string,unknown>,e
  * facts add. The claim pack, the claims list, the claim page and the chat's
  * final answer all read this, so they never disagree. */
 export function claimDocuments(facts:ClaimFacts,category:FactFindingCategory|null){
-  const own=category?FACT_FINDING_SPECS[category].documents.filter(d=>d.required).map(d=>d.label):[];
+  const own=category?FACT_FINDING_SPECS[category].documents.filter(d=>d.required).map(d=>d.label).map(d=>category==="travel"?travelIncidentDocument(d,facts):d):[];
   const stay=category==="medical_reimbursement"||(category==="accidental_injury"&&(facts.hospitalised||facts.hospitalNights!=null))
     ?FACT_FINDING_SPECS.medical_reimbursement.documents.filter(d=>d.required).map(d=>d.label):[];
-  const all=[...documentsToAttach(facts).slice(0,2),...own,...stay,...documentsToAttach(facts).slice(2)];
+  const all=[...documentsToAttach(facts).slice(0,2),...own,...stay,...documentsToAttach(facts).slice(2)]
+    // A death from an illness involves no police or coroner.
+    .filter(d=>!(category==="accidental_death"&&(facts as {accidentalDeath?:boolean|null}).accidentalDeath===false&&/police|coroner/i.test(d)));
   return dedupeDocuments(all);
 }
 /** The same document under two names ("Discharge summary" and "Hospital
@@ -100,17 +114,22 @@ function documentKey(label:string){
   const t=label.toLowerCase();
   if(/discharge summary/.test(t))return "discharge-summary";
   if(/itemi[sz]ed/.test(t)&&/bill|invoice/.test(t))return "itemised-bill";
-  if(/death certificate/.test(t)&&!/cause/.test(t))return "death-certificate";
+  if(/death certificate|certificate of (?:cause of )?death/.test(t))return "death-certificate";
+  if(/specialist/.test(t)&&/diagnos/.test(t))return "specialist-report";
+  if(/histopatholog|histolog|biopsy|test results/.test(t)&&/diagnos/.test(t))return "diagnosis-tests";
   if(/police/.test(t)&&/coroner/.test(t))return "police-coroner";
   if(/doctor|x-ray|scan report|medical report/.test(t)&&/injur/.test(t))return "injury-report";
   return t.replace(/[^a-z]+/g," ").trim();
 }
+/** Where two names for one document are asked for, the wording that names both wins. */
+const PREFERRED_LABEL:Record<string,RegExp>={"death-certificate":/Certificate of Cause of Death, if one/,"specialist-report":/date it was made/,"diagnosis-tests":/histology, biopsy or scan/};
 export function dedupeDocuments(labels:string[]):string[]{
   const chosen=new Map<string,string>();
   for(const label of labels){
     const key=documentKey(label),current=chosen.get(key);
     if(!current)chosen.set(key,label);
-    else if(label.length>current.length)chosen.set(key,label);
+    else if(PREFERRED_LABEL[key]?.test(current))continue;
+    else if(PREFERRED_LABEL[key]?.test(label)||label.length>current.length)chosen.set(key,label);
   }
   return [...chosen.values()];
 }

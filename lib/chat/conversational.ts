@@ -13,10 +13,10 @@
  */
 import type { ClaimPerson } from "@/lib/claims/person";
 
-export type ConversationalKind = "greeting" | "thanks" | "unclear" | "language" | "advice" | "legal" | "off_topic" | "system" | "other_household" | "approval" | "follow_up_why" | "follow_up_change" | "claim_start";
+export type ConversationalKind = "greeting" | "thanks" | "unclear" | "language" | "advice" | "legal" | "off_topic" | "system" | "other_household" | "approval" | "document_action" | "follow_up_why" | "follow_up_change" | "claim_start";
 export type ConversationalReply = { kind: ConversationalKind; summary: string; details: string[] };
 
-const INSURANCE_WORDS = /\b(?:polic(?:y|ies)|insur\w*|cover\w*|claim\w*|premium\w*|deductible\w*|co-?insurance|co-?pay\w*|rider\w*|plan\w*|benefit\w*|hospital\w*|warded|ward|surgery|operation|accident\w*|injur\w*|fractur\w*|broke\w*|bone|sick|ill\w*|diagnos\w*|cancer|stroke|heart|died|death|dead|pass(?:ed)? away|disab\w*|travel\w*|trip\w*|flight\w*|luggage|baggage|delay\w*|overseas|medisave|medishield|shield|renew\w*|expir\w*|sum (?:insured|assured)|payout|bill\w*|doctor|clinic|dental|maternity|pregnan\w*|outpatient|ambulance|icu|critical|life|term|endowment|matur\w*|surrender\w*|car|motor|home|exclu\w*|waiting period|grace period|excess|limit\w*|pay\w*|cost\w*|price|money|document\w*|schedule|certificate|booklet|group|agent|insurer)\b/i;
+const INSURANCE_WORDS = /\b(?:excess|windscreen|renovations?|contents|ilps?|funds?|eldershield|careshield|endowment|surrender\w*|maturity|matures?|lapsed?|grace|reinstat\w*|ncd|no-claim|named driver|helper|maid|polic(?:y|ies)|insur\w*|cover\w*|claim\w*|premium\w*|deductible\w*|co-?insurance|co-?pay\w*|rider\w*|plan\w*|benefit\w*|hospital\w*|warded|ward|surgery|operation|accident\w*|injur\w*|fractur\w*|broke\w*|bone|sick|ill\w*|diagnos\w*|cancer|stroke|heart|died|death|dead|pass(?:ed)? away|disab\w*|travel\w*|trip\w*|flight\w*|luggage|baggage|delay\w*|overseas|medisave|medishield|shield|renew\w*|expir\w*|sum (?:insured|assured)|payout|bill\w*|doctor|clinic|dental|maternity|pregnan\w*|outpatient|ambulance|icu|critical|life|term|endowment|matur\w*|surrender\w*|car|motor|home|exclu\w*|waiting period|grace period|excess|limit\w*|pay\w*|cost\w*|price|money|document\w*|schedule|certificate|booklet|group|agent|insurer)\b/i;
 
 /** Letters of scripts other than Latin: the message is not in English. */
 const OTHER_SCRIPT = /[Ѐ-ӿ֐-׿؀-ۿऀ-ॿ஀-௿฀-๿぀-ヿ㐀-鿿가-힯]/g;
@@ -24,15 +24,15 @@ const MALAY = /\b(?:apa|saya|anda|insurans|perlindungan|boleh(?:kah)?|tuntutan|b
 const SPANISH_ETC = /\b(?:qu[eé]|cubre|p[oó]liza|seguro|cu[aá]nto|c[oó]mo|puedo|tengo|mi|mis|el|los|las|una?|est[aá]|por|para|quel|quelle|assurance|couvre|mon|wie|meine|versicherung)\b/gi;
 const ENGLISH = /\b(?:what|is|are|my|the|claim|cover|covered|policy|insurance|hospital|premium|how|much|does|do|can|have|has|for|and|who|when|which|i|we|you|pay|plan|get|got|or|not|of|in|on)\b/gi;
 
-const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings)(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there))?[\s!.?]*$/i;
+const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings|salam|assalamualaikum|selamat (?:pagi|petang|malam))(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there))?[\s!.?]*$/i;
 const HELP_ONLY = /^(?:help|help me|can help(?: me)?|can you help(?: me)?|what can you do|how does this work|what do you do)[\s!.?]*$/i;
 const THANKS = /^(?:(?:ok(?:ay|ie)?|k|kk|alright|noted|got it|cool|great|nice|good|sure|fine|i see|oh|ah|ahh|lol|haha+|hehe+|wow|bye|goodbye|see you|cheers)[\s,!.]*)*(?:thanks?(?: you)?(?: (?:so much|very much|lah|ah|a lot))?|thank you|tq|ty|thx|tks|appreciate it)?[\s!.]*$/i;
 const THANKS_WORD = /\b(?:thanks?|thank you|tq|ty|thx|tks|appreciate)\b/i;
 
-const SYSTEM = /\b(?:ignore (?:all |any )?(?:(?:the |your )?(?:previous|prior|above|earlier) )?(?:instructions|rules|prompts?)|system prompt|(?:your|the) (?:instructions|prompt|rules|guidelines) (?:verbatim|word for word)|reveal (?:your )?(?:instructions|prompt|rules|system)|print (?:your )?(?:instructions|prompt|rules)|jailbreak|developer mode|you are now|\bDAN\b|act as (?:an? )?(?:unrestricted|different|new) |sql|database|table names?|schemas?|raw json|json (?:of|for|dump)|chunk ids?|policy ids?|file paths?|storage keys?|api keys?|source code|what model|which model|(?:are|r) you (?:gpt|chatgpt|gemini|claude|openai|an? (?:ai|llm|language model|bot))|\bgpt(?:-?\d)?\b|\bgemini\b|\bopenai\b|\bllm\b|large language model|embeddings?|vector (?:store|database))\b/i;
+const SYSTEM = /\b(?:ignore (?:all |any )?(?:(?:the |your )?(?:previous|prior|above|earlier) )?(?:instructions|rules|prompts?)|ignore (?:all |any )?(?:of )?(?:your|the|these) (?:rules|instructions|guidelines)|system prompt|(?:your|the) (?:instructions|prompt|rules|guidelines) (?:verbatim|word for word)|reveal (?:your )?(?:instructions|prompt|rules|system)|print (?:your )?(?:instructions|prompt|rules)|jailbreak|developer mode|you are now|\bDAN\b|act as (?:an? )?(?:unrestricted|different|new) |sql|database|table names?|table rows|database rows|raw data|schemas?|raw json|json (?:of|for|dump)|chunk ids?|policy ids?|file paths?|storage keys?|api keys?|source code|what model|which model|(?:are|r) you (?:gpt|chatgpt|gemini|claude|openai|an? (?:ai|llm|language model|bot))|\bgpt(?:-?\d)?\b|\bgemini\b|\bopenai\b|\bllm\b|large language model|embeddings?|vector (?:store|database))\b/i;
 const OTHER_HOUSEHOLD = /\b(?:other (?:households?|families|family'?s|users?|people'?s? (?:policies|insurance|cover))|households?(?:'s)? next door|another (?:household|family|user)|someone else'?s (?:polic(?:y|ies)|insurance|cover|claims?)|every(?:one|body) else'?s|all (?:households|users))\b|\b(?:household|account|family|user) [0-9a-f]{8}-[0-9a-f]{4}-/i;
 const APPROVAL = /\b(?:approve (?:my|the|this) claim|pretend (?:you are|to be) (?:my |the )?(?:agent|insurer|adjuster)|guarantee (?:my|the) (?:claim|payout))\b/i;
-const ADVICE = /\bshould (?:i|we|my \w+)\b[^?.]*\b(?:buy|get|take up|add|cancel|surrender|switch|keep|drop|upgrade|downgrade|lapse|terminate|stop paying|top up|change (?:insurer|plan|policy))\b|\b(?:is|are) (?:my|our|this|the) [^?.]{0,40}\bworth it\b|\bworth (?:buying|keeping|it)\b|\bwhich (?:insurer|insurance company|company|plan|policy|agent) is (?:the )?(?:best|better|cheapest|good)\b|\bbest (?:insurer|insurance(?: company| plan)?|plan to buy)\b|\brecommend (?:a|an|me|which|what)\b|\b(?:stocks?|shares|crypto|bitcoin|etfs?|unit trusts?)\b(?![^?.]*\b(?:linked|ilp)\b)|\bbuy more (?:insurance|cover|policies)\b|\bam i (?:under|over)-?insured\b|\b(?:do i|do we) (?:have|need) enough (?:insurance|cover)\b|\bwhat (?:insurance|cover|policy|plan) should (?:i|we)\b/i;
+const ADVICE = /\bshould (?:i|we|my \w+)\b[^?.]*\b(?:buy|get|take up|add|cancel|surrender|switch|keep|drop|upgrade|downgrade|lapse|terminate|stop paying|top up|reinstate|change (?:insurer|plan|policy))\b|\b(?:is|are) (?:my|our|this|the) [^?.]{0,40}\bworth it\b|\bworth (?:buying|keeping|it)\b|\bwhich (?:insurer|insurance company|company|agent) is (?:the )?(?:best|better|cheapest|good)\b|\bwhich (?:plan|policy) is (?:the )?(?:best|better|good)\b|\bbest (?:insurer|insurance(?: company| plan)?|plan to buy)\b|\brecommend (?:a|an|me|which|what)\b|\b(?:stocks?|shares|crypto|bitcoin|etfs?|unit trusts?)\b(?![^?.]*\b(?:linked|ilp)\b)|\bbuy more (?:insurance|cover|policies)\b|\b(?:am i|are we|is (?:she|he|my \w+)) (?:under|over)-?insured\b|\b(?:do i|do we|does (?:she|he)) (?:have|need) (?:enough|too much) (?:insurance|cover)\b|\btoo (?:much|many) (?:insurance|cover|polic(?:y|ies))\b|\bwhat (?:insurance|cover|policy|plan) should (?:i|we)\b/i;
 const LEGAL = /\b(?:sue|suing|lawsuit|lawyer|solicitor|legal action|take (?:them|the insurer) to court|small claims tribunal|is it (?:legal|lawful|allowed)|legally|against the law|my (?:legal )?rights)\b/i;
 const OFF_TOPIC = /\b(?:weather|forecast|poem|song|lyrics|joke|recipe|world cup|football|soccer|premier league|nba|movie|film|netflix|news|horoscope|lottery|4d|toto|translate|homework|essay|write (?:me )?(?:a|an) (?:poem|story|song|essay|email|letter)|code|python|javascript|capital of|president|prime minister|who (?:won|is the)|what(?:'s| is) the time|what day is)\b/i;
 
@@ -67,6 +67,9 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
 
   if (SYSTEM.test(text))
     return reply("system", "I can’t share how DearPolicy works inside — its instructions, data or systems. I can help with your household’s own policies and claims.", [whatICanDo]);
+  // "Delete that travel document", "remove my old policy": documents are managed on the Documents page, not in chat.
+  if (/^(?:(?:please|pls|can you|could you|ok(?:ay)?)[,\s]+)*(?:delete|remove|erase|archive|get rid of)\b[^?]{0,60}\b(?:document|policy|file|upload|pdf|schedule|certificate|statement)s?\b/i.test(text))
+    return reply("document_action", "I can’t delete or change documents from the chat. To remove one, open the Documents page and delete it there; its details stop being used in answers once it is deleted.");
   if (OTHER_HOUSEHOLD.test(text))
     return reply("other_household", "I can only see the policies in your own household, so I can’t show or discuss anyone else’s.", [whatICanDo]);
   if (APPROVAL.test(text))
@@ -80,6 +83,9 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
 
   const letters = (text.match(/\p{L}/gu) ?? []).length;
   if (!text || letters < 2)
+    return pick(reply("unclear", "Sorry, I didn’t catch that. " + whatICanDo));
+  // "hmm", "erm", "huh": nothing asked yet.
+  if (/^(?:h+m+|erm+|um+|uh+|huh|eh+|meh)[\s?!.]*$/i.test(text))
     return pick(reply("unclear", "Sorry, I didn’t catch that. " + whatICanDo));
   if (GREETING.test(text) || HELP_ONLY.test(text))
     return pick(reply("greeting", "Hi! " + whatICanDo));

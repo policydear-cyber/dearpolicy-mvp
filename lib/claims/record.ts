@@ -21,6 +21,8 @@ export function claimFactsFromSubject(facts:SubjectFacts):ClaimFacts{
     const value=knownValue(facts,key);
     if(value!=null)(out as Record<string,unknown>)[key]=value;
   }
+  // What happened on a trip decides which proof the insurer needs (lib/claims/claim-pack.ts).
+  for(const key of ["travelEventType","flightDelayHours","tripStartDate","tripEndDate"]){const value=knownValue(facts,key);if(value!=null)(out as Record<string,unknown>)[key]=value;}
   const injuries=knownValue(facts,"injuries");
   if(Array.isArray(injuries))out.injuries=injuries.map(String);
   else if(typeof injuries==="string")out.injuries=[injuries];
@@ -114,4 +116,21 @@ export async function recordClaim(args:{accountId:string;familyMemberId:string;e
   await query("UPDATE claim_sessions SET conversation_id=COALESCE(conversation_id,$1),claim_category=COALESCE($2,claim_category) WHERE id=$3 AND account_id=$4",
     [args.conversationId??null,args.claimCategory??null,session.id,args.accountId]);
   return {id:session.id,attach:documentsToAttach(facts)};
+}
+/** Adds cards decided after the claim was written (employer group cover,
+ * lib/chat/claim-completion.ts) to the claim on record, so the claim pack and
+ * the Claims page show what the chat showed. Cards of the same title are
+ * replaced; documents to get are added to the pack's next steps once. */
+export async function addRecordedClaimItems(args:{accountId:string;familyMemberId:string;sessionId:string;items:ClaimItem[];citations:ChatCitation[];documents?:string[]}){
+  const session=await getClaimSession(args.accountId,args.familyMemberId,args.sessionId);
+  const packet=session?.decision_packet;
+  if(!session||!packet||!args.items.length)return false;
+  const titles=new Set(args.items.map(item=>item.title));
+  const kept=packet.assessments.filter(item=>!titles.has(item.title));
+  const updated:ClaimDecisionPacket={...packet,
+    assessments:[...kept,...args.items.map((item,index)=>assessmentFromItem(item,kept.length+index,args.citations))],
+    nextSteps:[...packet.nextSteps,...(args.documents??[]).map(document=>"Attach: "+document).filter(step=>!packet.nextSteps.includes(step))]};
+  await query("UPDATE claim_sessions SET decision_packet=$1::jsonb,updated_at=now() WHERE id=$2 AND account_id=$3 AND family_member_id=$4",
+    [JSON.stringify(updated),session.id,args.accountId,args.familyMemberId]);
+  return true;
 }

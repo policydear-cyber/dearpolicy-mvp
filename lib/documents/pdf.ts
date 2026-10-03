@@ -1,5 +1,17 @@
 import { PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UserActionableProcessingError } from "@/lib/documents/processing-errors";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { renderPageLayout, type PageLine } from "./layout";
+
+/** PDF.js's own character maps and standard fonts, shipped in pdfjs-dist (and
+ * traced into the deployed function by next.config.ts). Without the character
+ * maps, a page set in a CJK font that uses a predefined CMap (common in
+ * Chinese/English bilingual insurer documents) yields NO text at all -- not
+ * even the English on it. Undefined when the folders are not present. */
+function pdfjsDataDir(name: "cmaps" | "standard_fonts"): string | undefined {
+  const dir = path.join(process.cwd(), "node_modules", "pdfjs-dist", name);
+  return existsSync(dir) ? dir + path.sep : undefined;
+}
 
 export type PdfPage = {
   pageNumber: number;
@@ -33,6 +45,9 @@ export async function extractPdfPages(
       password: password || undefined,
       useSystemFonts: true,
       isEvalSupported: false,
+      cMapUrl: pdfjsDataDir("cmaps"),
+      cMapPacked: true,
+      standardFontDataUrl: pdfjsDataDir("standard_fonts"),
     };
     const task = pdfjs.getDocument(documentOptions);
     const pdf = await task.promise;

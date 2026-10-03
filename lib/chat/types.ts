@@ -46,6 +46,14 @@ export type ConversationState = {
   askedWording?: boolean;
   /** The claim interview reached its final answer in this conversation. */
   claimConcluded?: boolean;
+  /** The documents the concluded claim's possible benefits come from (policy ids), for follow-ups. */
+  claimSources?: string[];
+  /** A planned operation or admission the family told DearPolicy about (not yet happened). */
+  plannedEvent?: string;
+  /** Someone outside the household this chat is about ("my colleague Ravi"); "he"/"his" later refer to them. */
+  outsideSubject?: { relation: string; name: string | null; died?: boolean };
+  /** Damage at home or to a car this chat is about (no home or motor policy on file). */
+  propertyEvent?: "property" | "motor";
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

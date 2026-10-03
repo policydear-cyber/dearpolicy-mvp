@@ -66,6 +66,7 @@ async function main() {
       personPolicies.get(r.family_member_id)!.add(r.policy_id);
     }
     return { pages, premiumFigures: [...new Set(premiumFigures)], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Goh Boon Kiat", "Boon Kiat"],
+      selfNames: F.PEOPLE.filter((p) => p.relationship === "self").flatMap((p) => [p.display_name, p.preferred_name]),
       foreignPolicyIds: new Set([h.docs.other]), personPolicies };
   };
   let gMain = await truth();
@@ -195,7 +196,7 @@ async function main() {
 /** Positive and negative controls for every detector family. */
 function selfTest(detect: typeof import("./r6/detectors").detect): string[] {
   const fails: string[] = [];
-  const g = { pages: new Map([["p1", "Deductible per policy year S$3,500. Co-insurance 10%."]]), premiumFigures: [1284, 689], householdNames: ["Tan Mei Ling"], foreignNames: ["Goh Boon Kiat"], foreignPolicyIds: new Set(["p9"]), personPolicies: new Map([["m1", new Set(["p1"])]]) };
+  const g = { pages: new Map([["p1", "Deductible per policy year S$3,500. Co-insurance 10%."]]), premiumFigures: [1284, 689], householdNames: ["Tan Mei Ling"], selfNames: ["Tan Mei Ling", "Mei Ling"], foreignNames: ["Goh Boon Kiat"], foreignPolicyIds: new Set(["p9"]), personPolicies: new Map([["m1", new Set(["p1"])]]) };
   const base = (over: Partial<ChatAnswer>): ChatAnswer => ({ mode: "answer", summary: "Mei Ling's deductible is S$3,500 per policy year.", details: [], claimItems: [], nextSteps: [], confidence: null,
     citations: [{ chunkId: "c", policyId: "p1", policyName: "ShieldCare Premier", pageStart: 2, pageEnd: 2 }], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], ...over });
   const t = { question: "q", userText: "", claimTurn: false, ms: 10 };

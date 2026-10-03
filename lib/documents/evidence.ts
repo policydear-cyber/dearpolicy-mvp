@@ -255,6 +255,19 @@ export function printedDateAppears(pages: { text: string }[], iso: string | null
  * ("Date of issue", "Issue date", "Effective date" …), else a verified start
  * date from the extraction. Null when none is printed. */
 export function documentDateFrom(pages: { text: string }[], candidates: (string | null | undefined)[] = []): string | null {
+  // The date the document itself was written (a statement, notice or letter
+  // date) says how current it is; a cover start date only says when cover began.
+  const written = /(?:statement\s+date(?:\s+valuation\s+as\s+at)?|valuation\s+as\s+at|date\s+of\s+(?:this\s+)?(?:notice|letter|statement|reminder)|^\s*date)\s*[:\-\t ]\s*/i;
+  for (const page of pages) {
+    for (const line of String(page.text ?? "").split("\n")) {
+      const at = line.search(written);
+      if (at < 0) continue;
+      const after = line.slice(at).replace(written, "").replace(/^valuation\s+as\s+at\s+/i, "");
+      const m = new RegExp("^" + DATE_TEXT).exec(after.trim());
+      const iso = m ? parsePrintedDate(m[1]) : null;
+      if (iso) return iso;
+    }
+  }
   const label = /(?:date\s+of\s+issue|issue\s+date|issued\s+on|date\s+issued|effective\s+date(?:\s+of\s+(?:this\s+)?(?:endorsement|amendment))?|commencement\s+date|policy\s+date|start\s+date|date\s+of\s+commencement)\s*[:\-\t ]\s*/i;
   for (const page of pages) {
     for (const line of String(page.text ?? "").split("\n")) {
