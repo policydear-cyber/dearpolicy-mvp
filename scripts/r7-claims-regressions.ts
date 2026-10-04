@@ -46,6 +46,7 @@ async function main() {
   const { detect, visibleFields } = await import("./r6/detectors");
   const D = await import("./r7/claim-detectors");
   const { detectR8 } = await import("./r8/detectors");
+  const R9 = await import("./r9/ingest-detectors");
   const R8 = await import("./r8/chaos-mode");
   const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   const controls = selfTest(D);
@@ -62,7 +63,8 @@ async function main() {
   await seedLapsedPolicy(h.db, F);
   // ------------------------------------------------ employer group cover (product change), unit level
   const groupFails = await groupCoverChecks(F);
-  if (groupFails.length) { out("GROUP COVER CHECKS FAILED:\n- " + groupFails.join("\n- ")); process.exit(1); }
+  // Round 9: on a household read under the ingestion chaos stand-in a failed check is a planted fact, counted with the battery's hits.
+  if (groupFails.length && !process.env.R9_INGEST_SEED) { out("GROUP COVER CHECKS FAILED:\n- " + groupFails.join("\n- ")); process.exit(1); }
   out("group cover checks: ok");
   const { claimBattery } = await import("./r7/claims-battery");
   const { POST } = await import("@/app/api/chat/route");
@@ -74,12 +76,18 @@ async function main() {
     if (!personPolicies.has(r.family_member_id)) personPolicies.set(r.family_member_id, new Set());
     personPolicies.get(r.family_member_id)!.add(r.policy_id);
   }
-  const g = { pages, premiumFigures: [] as number[], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Goh Boon Kiat", "Boon Kiat"], foreignPolicyIds: new Set([h.docs.other]), personPolicies };
-  for (const r of (await h.db.query<{ amount: string }>("SELECT amount::text FROM premium_records WHERE account_id=$1", [F.ACCOUNT])).rows) g.premiumFigures.push(Number(r.amount));
+  const g0 = { pages, premiumFigures: [] as number[], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Goh Boon Kiat", "Boon Kiat"], foreignPolicyIds: new Set([h.docs.other]), personPolicies };
+  for (const r of (await h.db.query<{ amount: string }>("SELECT amount::text FROM premium_records WHERE account_id=$1", [F.ACCOUNT])).rows) g0.premiumFigures.push(Number(r.amount));
+  // Round 9: under R9_INGEST_SEED, who holds what comes from the household read by the well-behaved stand-in.
+  const g = R9.pristineOverride(g0);
+  const g9 = await R9.pageTruth(h.db as never, F.ACCOUNT);
 
   const only = process.env.R7_ONLY, dump = process.env.R7_DUMP;
   if (dump) writeFileSync(dump, "");
   const records: Rec[] = [];
+  // A check that something is NEVER offered failing is a planted fact; one that expected a benefit and found none is usefulness lost to a badly read booklet.
+  if (groupFails.length) records.push({ conv: "group cover checks", turn: -1, question: "", status: 0, summary: "", answer: null,
+    hits: groupFails.map((text) => ({ rule: /\b(?:never|nothing|no GP|no card|only|not covered)\b/i.test(text.split(" (got")[0]) ? "group cover check failed" : "group cover expected but missing", text })) });
   let messages = 0, conversations = 0;
   const turnsPer: number[] = [];
   const send = async (member: string, question: string, conv: { id?: string; rev?: number; personContextMessage?: string; personContextRecordedAt?: string }, personChoiceId?: string) => {
@@ -118,6 +126,7 @@ async function main() {
           hits.push(...detect(a, { question: message, userText, claimTurn: true, ms: 0 }, g as never));
           hits.push(...D.detectClaimTurn(a, { death: c.death, serious: c.serious, deny: c.deny, first: turn === 0 }));
           hits.push(...detectR8(a, { userText }, { pages: g.pages, today }));
+          hits.push(...R9.detectR9(a, g9));
           if (!c.group && D.shownCards(a).some(D.isGroupCard)) hits.push({ rule: "group cover shown where the booklet does not apply", text: D.shownCards(a).filter(D.isGroupCard).map((i) => i.title).join("; ") });
           // A fact answered with something substantive is never asked again.
           // A correction or a new instruction typed instead of an answer answers nothing.
@@ -287,6 +296,7 @@ async function main() {
           hits.push(...detect(a, { question: message, userText: message, claimTurn: true, ms: 0 }, g as never));
           hits.push(...D.detectClaimTurn(a, { first: turn === 0 }));
           hits.push(...detectR8(a, { userText: message }, { pages: g.pages, today }));
+          hits.push(...R9.detectR9(a, g9));
           const q = a.questions[0];
           if (q) {
             if (unsure.has(q.text)) hits.push({ rule: "re-asked a question answered not sure", text: q.text });
@@ -322,6 +332,7 @@ async function main() {
         else {
           hits.push(...detect(a, { question: w.then, userText: w.then, claimTurn: true, ms: 0 }, g as never));
           hits.push(...detectR8(a, { userText: w.then }, { pages: g.pages, today }));
+          hits.push(...R9.detectR9(a, g9));
           if (a.questions[0] && unsure.has(a.questions[0].text)) hits.push({ rule: "re-asked a question answered not sure", text: a.questions[0].text });
         }
         const rec: Rec = { chaos: chaosNote(), conv: w.name, turn: convRecs.length, question: w.then, status: r.status, summary: a?.summary ?? "", answer: a, hits };
@@ -344,7 +355,7 @@ async function main() {
   out(`\n${conversations} conversations, ${messages} messages (${Math.min(...turnsPer)}-${Math.max(...turnsPer)} turns each); ${failing.length} turns with hits; total ${Math.round((Date.now() - started) / 1000)} s`);
   if (!only && !R8.chaosSeed() && conversations < 40) { out("FAIL: at least 40 conversations are required"); process.exitCode = 1; }
   if (failing.length) process.exitCode = 1;
-  if (guard.guardInterventions.length) { out("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s):\n" + guard.guardInterventions.slice(0, 5).map((x) => "  before: " + x.before.slice(0, 300)).join("\n")); process.exitCode = 1; }
+  if (guard.guardInterventions.length) { out("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s):\n" + guard.guardInterventions.slice(0, 5).map((x) => { let i = 0; while (i < x.before.length && x.before[i] === x.after[i]) i++; return "  before: …" + x.before.slice(Math.max(0, i - 160), i + 200) + "\n  after:  …" + x.after.slice(Math.max(0, i - 160), i + 200); }).join("\n")); process.exitCode = 1; }
   else out("output guard interventions: 0");
   R8.reportChaos(out, "r7-claims", records, guard.guardInterventions.length, messages);
   clearTimeout(watchdog);

@@ -95,5 +95,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "r7:answers-test",
   "r7:claims-test",
   "r8:chaos-test",
+  "r9:ingest-chaos-test",
   "r8:render-test",
+  "r9:redteam-test",
 ];

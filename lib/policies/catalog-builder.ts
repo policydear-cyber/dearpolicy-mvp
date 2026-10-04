@@ -11,6 +11,9 @@ import { pageProductScopes } from "./inventory";
 import { benefitTraits,replaceBenefitCatalog,requiredTraits,validateCatalogFormula,type CatalogBenefit } from "./benefit-catalog";
 import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,ensureEvidenceSchema,methodFor,readingModelIdentity,type ExtractionMethod } from "@/lib/documents/evidence";
 import { annotateBenefitEvidence,evidenceKey,markConflicts } from "@/lib/documents/evidence-store";
+import { amountAppears,looksLikeInjectedInstruction } from "@/lib/documents/evidence";
+import { benefitNamePrinted,looksLikeName } from "@/lib/documents/fact-check";
+import { loadBenefitCatalog } from "./benefit-catalog";
 
 /** Reading a document is a one-time job, so it can be slow and thorough.
  *
@@ -147,6 +150,40 @@ export function typedValue(kind:TableRowKind,value:string):number|null{
   return null;
 }
 
+/** Round 9: what a row responds to. The reader's categories fill in a row the
+ * keyword rules cannot place, and add events of the same family to one they
+ * can; they never add an unrelated event (a hospital row is never made to
+ * answer a death or a flight delay). */
+const TRAIT_FAMILIES:ScenarioTrait[][]=[
+  ["death","accident","sudden","external","violent","unintentional_to_insured","self_inflicted"],
+  ["bodily_injury","disability","accident","income_loss","care_need","hospitalisation","medical_expense"],
+  ["illness","diagnosis","hospitalisation","medical_expense","care_need","income_loss","disability"],
+  ["travel_disruption","trip_cancellation","delay","loss","medical_expense"],
+  ["property_damage","theft","loss","vehicle_collision","liability"],
+  ["maturity","surrender","premium_event"],
+];
+function readerTraits(label:string,line:string,category?:{respondsTo:ScenarioTrait[]}):ScenarioTrait[]{
+  const keyword=rowTraits(label,line);
+  if(!category?.respondsTo.length)return keyword;
+  const known=keyword.filter(t=>t!=="other");
+  if(!known.length)return [...new Set(category.respondsTo)];
+  // An event of the same family as what the label names ("Loss of speech" is a
+  // disability and a bodily injury); never one of another family.
+  const near=new Set(TRAIT_FAMILIES.filter(f=>known.some(t=>f.includes(t))).flat());
+  return [...new Set([...known,...category.respondsTo.filter(t=>near.has(t))])];
+}
+/** Round 9: the reader may rule a row out as a benefit (a premium, a factor,
+ * a worked example) -- never a row whose own label names what a benefit pays for. */
+const BENEFIT_LABEL=/\b(?:benefit|death|accident\w*|hospital\w*|illness|cancer|fracture|surg\w*|medical|cash|disab\w*|loss\s+of|dismember\w*|ambulance|compensation|allowance|income|delay|cancell?ation|baggage|repatriat\w*|evacuat\w*|treatment|outpatient|dental|maternity|room|ward|icu|intensive|sum\s+(?:insured|assured))\b/i;
+function ruledOut(category:{isBenefit:boolean}|undefined,label:string){
+  return !!category&&!category.isBenefit&&(!BENEFIT_LABEL.test(label)||/^\s*(?:example|e\.g\.|illustration)\b/i.test(label));
+}
+/** A cause restriction only when the row's own words state it. */
+function readerRequires(label:string,line:string,category?:{requires:ScenarioTrait[]}):ScenarioTrait[]{
+  const said=(category?.requires??[]).filter(t=>t==="accident"?/\baccident/i.test(label):t==="illness"?/\billness|\bsickness|\bdisease/i.test(label):false);
+  return [...new Set([...requiredTraits(label,line),...said])];
+}
+
 async function categoriseRows(rows:{index:number;label:string;value:string}[],owner:{accountId:string;policyId:string}){
   if(!rows.length)return new Map<number,{isBenefit:boolean;respondsTo:ScenarioTrait[];requires:ScenarioTrait[]}>();
   // attempts:2 -- one retry survives a transient 429 (the free-tier hosted
@@ -191,6 +228,9 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // dedupe atomic. The page body is a function so its early exits (`return`)
   // end that one page exactly as `continue` used to.
   const concurrentPages=Math.max(1,Number(process.env.READING_CONCURRENCY||4)||4);
+  // Round 9: pages whose model read failed this time; what an earlier read of
+  // the same page established (and verified) is kept for them below.
+  const failedPages=new Set<number>();
   for(let start=startIndex;start<pages.length;start+=concurrentPages){
     const end=Math.min(start+concurrentPages,pages.length);
     const launched:Promise<void>[]=[];
@@ -251,13 +291,13 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         // is stored -- name, printed currency, page and the exact printed row
         // -- with NO formula ('none'): it is shown as the policy prints it and
         // never calculated from. No per-period conversion is ever guessed.
-        if(category&&!category.isBenefit&&!row.fromTable)continue;
+        if(ruledOut(category,row.label)&&!row.fromTable)continue;
         if(seen.has(key))continue;seen.add(key);
         statedOnly.set(benefitName.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+(tier??""),benefits.length);
         methods.set(evidenceKey(benefitName,page.page_number,quote),methodFor("table",page.extraction_method));
         benefits.push({productName:section,benefitName,
-          traits:[...new Set([...rowTraits(row.label,row.line).filter(t=>t!=="other"||!category?.respondsTo.length),...(category?.respondsTo??[])])],
-          requires:[...new Set([...requiredTraits(row.label,row.line),...(category?.requires??[])])],
+          traits:readerTraits(row.label,row.line,category),
+          requires:readerRequires(row.label,row.line,category),
           formulaKind:"none",formulaValue:null,currency:statedCurrencyCode(row.value),
           factKey:null,offsetDays:null,maximumDays:null,
           sourcePage:page.page_number,quote,
@@ -267,13 +307,13 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       }
       // The model may rule a row OUT as a benefit; it never rules one in
       // that the value cell could not be parsed from.
-      if(category&&!category.isBenefit)continue;
+      if(ruledOut(category,row.label))continue;
       if(seen.has(key))continue;seen.add(key);
       const daily=parsed.kind==="daily"?dailyLimitsFrom(row.label+" "+row.value):null;
       methods.set(evidenceKey(benefitName,page.page_number,quote),methodFor("table",page.extraction_method));
       benefits.push({productName:section,benefitName,
-        traits:[...new Set([...rowTraits(row.label,row.line).filter(t=>t!=="other"||!category?.respondsTo.length),...(category?.respondsTo??[])])],
-        requires:[...new Set([...requiredTraits(row.label,row.line),...(category?.requires??[])])],
+        traits:readerTraits(row.label,row.line,category),
+        requires:readerRequires(row.label,row.line,category),
         formulaKind:parsed.kind,formulaValue:parsed.value,currency:parsed.currency,
         factKey:parsed.kind==="expense_cap"?expenseFactKey(row.label):parsed.kind==="daily"?"hospitalNights":null,
         offsetDays:daily?daily.offsetDays:null,maximumDays:daily?daily.maximumDays:null,
@@ -307,10 +347,17 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
         system:SYSTEM,
         user:JSON.stringify(modelPayload),
       }));
-    }catch{return;/* A page that cannot be read is skipped, never guessed. */}
+    }catch{failedPages.add(page.page_number);return;/* A page that cannot be read is skipped, never guessed. */}
     for(const found of extraction.benefits){
       // The quote must be present on this page, verbatim.
       if(!hasQuote(page.text,found.quote))continue;
+      // Round 9: the name is the one the page prints, and neither is an instruction.
+      if(looksLikeInjectedInstruction(found.quote)||!looksLikeName(found.name)||!benefitNamePrinted(page.text,found.name))continue;
+      // A schedule row the table parser read belongs to that row (and its
+      // column): the model only ever completes a printed-only row, with the
+      // figure that row's own cell prints.
+      const flatQuote=found.quote.replace(/\s+/g," ").trim().toLowerCase();
+      const tableRow=pageRows.find(row=>{const line=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().toLowerCase();return line.includes(flatQuote)||flatQuote.includes(line);});
       const key=found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+found.quote.slice(0,60).toLowerCase();
       if(seen.has(key))continue;seen.add(key);
       const formula=validateCatalogFormula({kind:found.formulaKind,value:found.formulaValue,currency:found.currency,
@@ -318,23 +365,26 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       // The same row already stored as printed-only: a validated rule from the
       // model replaces it; a model reading with no rule adds nothing new.
       const printedOnly=statedOnly.get(found.name.toLowerCase().replace(/[^a-z0-9]/g,"")+"|");
+      if(tableRow&&(printedOnly==null||(formula.formulaValue!=null&&!amountAppears(tableRow.value,formula.formulaValue,formula.formulaKind==="sum_insured"?"fraction":"money"))))continue;
+      const conditions=found.conditions.filter(condition=>condition.trim().length>3&&hasQuote(page.text,condition)&&!looksLikeInjectedInstruction(condition));
       if(printedOnly!=null){
         if(formula.formulaKind==="none")continue;
         benefits.splice(printedOnly,1,{...benefits[printedOnly],...formula,quote:found.quote,
-          conditions:found.conditions.filter(condition=>condition.trim().length>3),needsReview:false});
+          conditions,needsReview:false});
         methods.set(evidenceKey(benefits[printedOnly].benefitName,page.page_number,found.quote),methodFor("model",page.extraction_method));
         continue;
       }
       methods.set(evidenceKey(found.name.trim(),page.page_number,found.quote),methodFor("model",page.extraction_method));
-      benefits.push({productName:section,benefitName:found.name.trim(),
+      benefits.push({productName:section,benefitName:found.name.replace(/\s+/g," ").trim(),
         traits:benefitTraits(found.name,found.quote),requires:requiredTraits(found.name,found.quote),...formula,
         sourcePage:page.page_number,quote:found.quote,
-        conditions:found.conditions.filter(condition=>condition.trim().length>3),
+        conditions,
         requirements:[],needsReview:formula.formulaKind==="none"});
     }
   }
   // The tier and row-kind columns are evidence columns.
   await ensureEvidenceSchema();
+  if(failedPages.size)benefits.push(...await previouslyReadRows(args.accountId,args.policyId,failedPages,benefits,args.pages));
   await replaceBenefitCatalog(args.accountId,args.policyId,benefits);
   // Evidence for every stored row (span, method, code verification) and any
   // contradiction with another page or a current version of the same plan.
@@ -346,6 +396,21 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
   // The completed checkpoint (nextIndex==pages.length) stays: a retried job
   // re-enters this function and must skip straight past a stage already done.
   return benefits.length;
+}
+/** Round 9: rows an earlier read of these pages stored from a model reading
+ * (and that are still printed on them, as quoted), for pages whose read failed
+ * this time: a failed read never erases what was already established. */
+async function previouslyReadRows(accountId:string,policyId:string,failedPages:Set<number>,current:Omit<CatalogBenefit,"id"|"policyId">[],
+  pages:{page_number:number;text:string}[]):Promise<Omit<CatalogBenefit,"id"|"policyId">[]>{
+  try{
+    const methods=new Map((await query<{id:string;m:string|null}>(
+      "SELECT id::text AS id,to_jsonb(b)->>'extraction_method' AS m FROM policy_benefits b WHERE account_id=$1 AND policy_id=$2 AND reviewed_at IS NULL",[accountId,policyId])).rows.map(r=>[r.id,r.m]));
+    const have=new Set(current.map(b=>b.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+b.sourcePage));
+    return (await loadBenefitCatalog(accountId,[policyId])).filter(b=>b.sourcePage!=null&&failedPages.has(b.sourcePage)
+      &&/model/.test(methods.get(b.id)??"")&&!have.has(b.benefitName.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+b.sourcePage)
+      &&hasQuote(pages.find(p=>p.page_number===b.sourcePage)?.text??"",b.quote))
+      .map(({id:_id,policyId:_policy,...rest})=>{void _id;void _policy;return rest;});
+  }catch{return [];}
 }
 export async function documentPages(accountId:string,policyId:string){
   const r=await query<{page_number:number;text:string;extraction_method:string|null}>(

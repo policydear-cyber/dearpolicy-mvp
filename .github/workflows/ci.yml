@@ -173,8 +173,12 @@ jobs:
         run: npm run r7:claims-test
       - name: Round 8 chaos model (every way a real model misbehaves, through the Round 6/7 batteries under fixed seeds; nothing invented, junk or leaked reaches the household)
         run: npm run r8:chaos-test
+      - name: Round 9 ingestion chaos (a broken reader at upload under fixed seeds; every stored fact traceable to its own page, a failing re-read loses nothing, and nothing planted reaches an answer)
+        run: npm run r9:ingest-chaos-test
       - name: Round 8 chat display (85 recorded answers render without markdown, raw dates or codes; phone-safe layout rules)
         run: npm run r8:render-test
+      - name: Round 9 red-team (250+ messages in styles the earlier batteries never used, over both households; plain answers, no promises, no advice, right policy kind)
+        run: npm run r9:redteam-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

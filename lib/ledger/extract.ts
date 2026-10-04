@@ -24,6 +24,8 @@ import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
 import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,readingModelIdentity } from "@/lib/documents/evidence";
 import { annotateLedgerEvidence,markConflicts } from "@/lib/documents/evidence-store";
 import { unparsedBenefitLines } from "@/lib/policies/catalog-builder";
+import { locatePassage,looksLikeInjectedInstruction } from "@/lib/documents/evidence";
+import { benefitNamePrinted,eventSupported,looksLikeName,namePrinted,personPrinted,rowFigureSupported } from "@/lib/documents/fact-check";
 
 /** The ISO code of the currency a ledger row's amount is printed in: the
  * model's answer when it is a real code or symbol (US$ -> USD, RM -> MYR),
@@ -82,13 +84,29 @@ export const VERIFY_SYSTEM=
 
 type Page={page_number:number;text:string};
 function pageText(pages:Page[],n:number){return pages.find(p=>p.page_number===n)?.text??"";}
-function quoteOnPage(quote:string,text:string){
+function quoteOnPage(quote:string,text:string){return !!printedPart(quote,text);}
+/** The part of a quote that is really printed on the page: all of it, or --
+ * tolerating a broken line or a dropped word -- its longer printed half. Every
+ * figure and word of the row is then checked against THIS text only, never
+ * against the half the page does not print or the rest of the page. */
+function printedPart(quote:string,text:string):string|null{
   const q=normalText(quote),t=normalText(text);
-  if(!q||!t)return false;
-  if(t.includes(q))return true;
-  // Tolerate a broken line or a dropped word: the longest half must be there.
+  if(!q||!t||looksLikeInjectedInstruction(quote))return null;
   const half=Math.max(20,Math.floor(q.length/2));
-  return t.includes(q.slice(0,half))||t.includes(q.slice(q.length-half));
+  const part=t.includes(q)?q:t.includes(q.slice(0,half))?q.slice(0,half):t.includes(q.slice(q.length-half))?q.slice(q.length-half):null;
+  if(!part)return null;
+  // As the page prints it (case and spacing), so the stored quote is the page's own words.
+  const span=locatePassage(text,part);
+  return span?text.slice(span.start,span.end):part;
+}
+/** Round 9: what a ledger row says is what its printed quote says -- the
+ * figure in the unit it claims, an event its words can name -- and its
+ * restrictions are printed in the document. */
+function rowSupported(row:ExtractedRow,pageText:string){
+  const part=printedPart(row.quote,pageText);
+  if(!part)return false;
+  if(!rowFigureSupported(part,row.paysKind,row.amount??null))return false;
+  return eventSupported(row.eventType,[...[row.benefitName,row.detail].filter((n):n is string=>!!n&&benefitNamePrinted(pageText,n)),part].join(" "));
 }
 function numbersOnPage(row:ExtractedRow,text:string){
   const flat=text.replace(/[,\s]/g,"");
@@ -151,9 +169,21 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
     }));
     // Deterministic checks: the quote is on the page and the numbers are on the page.
     const kept:ExtractedRow[]=[];
-    for(const row of extraction.rows){
-      const text=pageText(pages,row.sourcePage);
-      if(!quoteOnPage(row.quote,text)||!numbersOnPage(row,text)){out.dropped++;continue;}
+    const documentText=args.pages.map(p=>p.text).join("\n");
+    for(const raw of extraction.rows){
+      const text=pageText(pages,raw.sourcePage);
+      if(!quoteOnPage(raw.quote,text)||!numbersOnPage(raw,text)||!rowSupported(raw,text)){out.dropped++;continue;}
+      // Round 9: a named person must be printed in the document; the plan and
+      // benefit names are the ones it prints; a restriction is kept only as printed.
+      if(raw.insuredName&&(!personPrinted(documentText,raw.insuredName)||(args.members.length>1&&!personPrinted(text,raw.insuredName)))){out.dropped++;continue;}
+      const tidy=(name:string)=>name.replace(/\s+/g," ").trim();
+      const row:ExtractedRow={...raw,quote:printedPart(raw.quote,text)??raw.quote,
+        planName:looksLikeName(raw.planName)&&namePrinted(documentText,raw.planName)?tidy(raw.planName):(args.planName??"This plan"),
+        benefitName:raw.benefitName&&looksLikeName(raw.benefitName)&&benefitNamePrinted(text,raw.benefitName)?tidy(raw.benefitName):null,
+        detail:raw.detail&&looksLikeName(raw.detail)&&benefitNamePrinted(text,raw.detail)?tidy(raw.detail):null,
+        conditions:(raw.conditions??[]).filter(c=>normalText(documentText).includes(normalText(c))&&!looksLikeInjectedInstruction(c))};
+      // The same row read twice is one row.
+      if(kept.some(k=>k.sourcePage===row.sourcePage&&k.eventType===row.eventType&&k.paysKind===row.paysKind&&(k.amount??null)===(row.amount??null)&&normalText(k.quote)===normalText(row.quote)&&normalText(k.insuredName??"")===normalText(row.insuredName??"")))continue;
       kept.push(row);
     }
     if(!kept.length)continue;
@@ -175,8 +205,12 @@ export async function extractLedgerRows(args:{accountId:string;policyId:string;p
     kept.forEach((row,i)=>{
       // Whose row is it: the named person if they are in the family, else
       // everyone this document is linked to.
-      const named=row.insuredName?memberNames.find(m=>normalText(m.name)===normalText(row.insuredName!)||normalText(row.insuredName!).includes(normalText(m.name))||normalText(m.name).includes(normalText(row.insuredName!))):null;
-      const owners=named?[named.id]:args.members.map(m=>m.id);
+      // Round 9: the named person is matched on the whole name (display or
+      // preferred), never on a fragment two people share; a name that matches
+      // no one, or more than one person, is not attributed to anyone.
+      const matches=row.insuredName?[...new Set(memberNames.filter(m=>normalText(m.name)===normalText(row.insuredName!)||(normalText(m.name).split(" ").length>=2&&normalText(row.insuredName!).includes(normalText(m.name)))).map(m=>m.id))]:[];
+      if(row.insuredName&&matches.length!==1)return;
+      const owners=matches.length?matches:args.members.map(m=>m.id);
       for(const familyMemberId of owners)out.rows.push({...row,status:supported.has(i)?"confirmed":"proposed",familyMemberId});
     });
   }

@@ -5,6 +5,7 @@ import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from 
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
 import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { readPolicyFile } from "@/lib/storage";
 import { extractPdfPages } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
@@ -12,7 +13,9 @@ import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
 import { deletePolicyPassages, indexPolicyPassages, pineconeEnabled } from "@/lib/rag/pinecone";
 import { buildCodeOnlyExtraction, extractPolicyStructure, detectHighConfidenceReferenceRole, type PolicyExtraction } from "@/lib/ai/extract-policy";
-import { documentAuthority, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
+import { REFERENCE_ROLES, deterministicDocumentRole, documentAuthority, looksLikeActualPersonName, sanitizePolicyExtraction } from "@/lib/documents/intelligence";
+import { factCheckExtraction, personPrinted } from "@/lib/documents/fact-check";
+import { PolicyExtractionSchema } from "@/lib/ai/extract-policy";
 import { normalizeCoverageCategory } from "@/lib/insurance";
 import { familyMembersForAccount, findFamilyMatchWithKind, linkRelatedReferenceDocuments, printedCurrencyCode, syncInsuredPersonToMember } from "@/lib/policies/linking";
 import { runPolicyQuarantineGate } from "@/lib/policies/quarantine/store";
@@ -154,6 +157,27 @@ function verifyExtractionEvidence(extraction: PolicyExtraction, pages: { pageNum
       }),
     })),
   } satisfies PolicyExtraction;
+}
+
+/** The extraction an earlier, successful read of this document stored (not a
+ * plain-code fallback), or null. */
+async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtraction | null> {
+  try {
+    const row = (await query<{ extracted_json: unknown }>(`SELECT extracted_json FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [args.policyId, args.accountId])).rows[0];
+    const parsed = PolicyExtractionSchema.safeParse(row?.extracted_json);
+    if (!parsed.success) return null;
+    const codeOnly = parsed.data.documentNotes.some((n) => /read this document's text and tables with plain code/.test(n));
+    return codeOnly || (!parsed.data.insuredPeople.length && !parsed.data.insurer && !parsed.data.productName) ? null : parsed.data;
+  } catch { return null; }
+}
+
+/** Round 9: a reading as it may be stored -- roles by the document's own
+ * wording, people and cover re-found on their pages, and every name, figure,
+ * unit, date, number and role checked against the printed text. */
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string }[]): PolicyExtraction {
+  const roleFromReader = deterministicDocumentRole(pages, null) == null;
+  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages, { roleFromReader }).extraction;
+  return crossCheckPrintedFacts(checked, pages);
 }
 
 async function progress(args: ProcessPolicyArgs, stage: string, percent: number, message: string, status?: string) {
@@ -347,11 +371,34 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       const failure = asServiceFailure(error, "Policy reading");
       if (!(failure instanceof TemporaryProcessingError) || attemptsLeft(args)) throw failure;
       await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "READING_SERVICE_DEGRADED", error }).catch(() => undefined);
-      raw = buildCodeOnlyExtraction(pages);
-      readInPart = true;
+      // Round 9: a re-read that fails never erases what an earlier read of
+      // this same document established (and verified): that reading is used
+      // again, re-checked below against these pages. Only a document never
+      // read before falls back to what plain code can read.
+      const previous = await previousReading(args);
+      if (previous) raw = previous;
+      else { raw = buildCodeOnlyExtraction(pages); readInPart = true; }
     }
     await progress(args, "verifying", 56, "Verifying extracted facts against the original PDF text…", "extracting");
-    const extraction = crossCheckPrintedFacts(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages);
+    // Round 9: every name, figure, unit, date, person, number and role the
+    // reading reports is re-found in the document's own pages (fact-check.ts);
+    // what is not printed is not kept.
+    const extraction = verifiedExtraction(raw, pages);
+    // The reading named people, and none of them is printed in the document:
+    // nobody is linked by name. Like a reading that could not finish, the
+    // document stays with the profile it was uploaded to, for review.
+    const namedNobodyPrinted = raw.insuredPeople.some((p) => looksLikeActualPersonName(p.name)) && extraction.insuredPeople.length === 0
+      && !REFERENCE_ROLES.has(extraction.documentRole ?? "");
+    // Deterministic cross-check of names against the household: when exactly
+    // one family member's full name is printed in the document, that is who
+    // it names (linked for review, with no cover amounts confirmed).
+    const family = await familyMembersForAccount(args.accountId);
+    let linkedByPrintedName = false;
+    if (namedNobodyPrinted) {
+      const fullText = pages.map((p) => p.text).join("\n");
+      const printed = family.filter((m) => personPrinted(fullText, m.display_name));
+      if (printed.length === 1) { extraction.insuredPeople = [{ name: printed[0].display_name, relationshipHint: null, coverages: [] }]; linkedByPrintedName = true; }
+    }
     const documentDate = documentDateFrom(pages, [extraction.startDate]);
     const authority = documentAuthority(extraction.documentRole, extraction.personalCoverageConfirmed);
 
@@ -374,7 +421,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Clear generated data before rebuilding. Preserve explicit manual/upload links.
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
     const isPaymentDocument = ["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "");
-    if (args.linkUploadMember && (isPaymentDocument || readInPart) && !extraction.personalCoverageConfirmed) {
+    if (args.linkUploadMember && (isPaymentDocument || readInPart || (namedNobodyPrinted && !linkedByPrintedName)) && !extraction.personalCoverageConfirmed) {
       await query(
         `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
          VALUES($1,$2,$3,'upload_hint',0.70) ON CONFLICT(policy_id,family_member_id) DO NOTHING`,
@@ -399,7 +446,6 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       );
     }
 
-    const family = await familyMembersForAccount(args.accountId);
     const detected: { name: string; matchedMemberId: string | null }[] = [];
     const uploadProfileLinks: string[] = [];
     // A partial match ("Charmaine" for "Charmaine Tan") only stands when no
@@ -495,11 +541,13 @@ export async function processPolicy(args: ProcessPolicyArgs) {
 
     const unverified = extraction.insuredPeople.flatMap((p) => p.coverages).filter((c) => !c.evidenceVerified).length;
     const unmatched = detected.filter((d) => !d.matchedMemberId).length;
-    const needsReview = Boolean(extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0));
+    const needsReview = Boolean((extraction.personalCoverageConfirmed && (unmatched > 0 || unverified > 0 || uploadProfileLinks.length > 0)) || namedNobodyPrinted);
     const reasons = [
       unmatched ? `${unmatched} named insured ${unmatched === 1 ? "person is" : "people are"} not linked to a family profile` : null,
       uploadProfileLinks.length ? `The name on this document does not match a family profile, so it was linked to the profile it was uploaded to: ${uploadProfileLinks.join("; ")}. Check this is the right person` : null,
       unverified ? `${unverified} extracted coverage item${unverified === 1 ? "" : "s"} could not be source-verified` : null,
+      namedNobodyPrinted ? (linkedByPrintedName ? "The people this document was read as covering are not named in it; it was linked to the one family member whose name it prints. Check this is the right person"
+        : "The people this document was read as covering are not named in it, so it was kept with the profile it was uploaded to. Check this is the right person") : null,
     ].filter(Boolean).join("; ");
     await query(`UPDATE policies SET needs_review=$1,review_reason=$2 WHERE id=$3 AND account_id=$4`, [needsReview, reasons || null, args.policyId, args.accountId]);
 

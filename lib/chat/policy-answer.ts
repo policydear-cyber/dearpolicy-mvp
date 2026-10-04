@@ -46,7 +46,7 @@ export const TOPICS: Topic[] = [
     fact: /hospital|\bward\b|inpatient|intensive care|\bicu\b|room and board/i, kind: /hospital|\bshield|\bmedishield\b|health plan/i },
   { key: "premium", label: "the premium", asks: /\bpremiums?\b|\bmedisave\b(?![^?]*\b(?:balance|account|savings)\b)|\bcosts? (?:more|less|the most|the least)\b|\bcheaper\b|\bmore expensive\b|how much do (?:i|we) pay for|\bhow much (?:does|do|is|are) [^?]{1,40}\bcosts?\b|\bcosts? (?:me|us|a year|per year|monthly|each month)\b|\bhow much (?:does|do|did) (?:i|we|she|he|they|[\p{L}]+) (?:need|have) to pay\b(?![^?]*\b(?:hospital|bill|claim|clinic|doctor)\b)|\bhow much (?:do|does) (?:i|we|she|he|they) owe\b/iu, fact: /premium/i },
   { key: "maturity", label: "maturity or surrender value", asks: /\b(?:matur\w*|endowment|surrender\w*|cash values?|paid (?:in|into|so far)|put in(?:to)?)\b/i, fact: /matur|surrender|cash value|endowment/i, kind: /endow|savings|matur/i, passage: /matur|surrender|cash value/i },
-  { key: "cost_sharing", label: "deductible, co-insurance and co-payment", asks: /\bdeduct[ai]bles?\b|\b(?:a |the )?cap on what (?:i|you|we) pay\b|\bco-?payment cap\b|\bco-?insur[ae]nce\b|\bco-?pay(?:ment)?s?\b|\bpro-?ration\b|\b(?:policy[- ]year|annual) limit\b|\bas charged\b|\bhow much (?:do|would|will) (?:i|we|she|he|they) (?:have to )?pay\b/i,
+  { key: "cost_sharing", label: "deductible, co-insurance and co-payment", asks: /\bdeduct[ai]bles?\b|\b(?:a |the )?cap on what (?:i|you|we) pay\b|\bco-?payment cap\b|\bco-?insur[ae]nce\b|\bco-?ins\b|\b(?:how much )?(?:percent(?:age)?|%)\b[^?]{0,40}\bpay\b|^\s*(?:annual |yearly |overall )?limits?\s*\??\s*$|\bco-?pay(?:ment)?s?\b|\bpro-?ration\b|\b(?:policy[- ]year|annual) limit\b|\bas charged\b|\bhow much (?:do|would|will) (?:i|we|she|he|they) (?:have to )?pay\b/i,
     fact: /deductible|co-?insurance|co-?pay|pro-?ration|policy[- ]year limit|annual limit/i },
   { key: "rider", label: "the rider", asks: /\briders?\b/i, fact: /\brider\b/i },
   { key: "group", label: "group insurance", asks: /\b(?:group|company|employer|employee|work|office|corporate|staff)\b[^?]{0,25}\b(?:insurance|plans?|polic(?:y|ies)|cover(?:age)?|benefits?|scheme)\b|\bgroup (?:insurance|plan|policy|cover|benefits?)\b/i, fact: /(?!)/, kind: /\bgroup\b|employee benefits/i },
@@ -73,6 +73,7 @@ export const GENERAL = /['’]s [\w -]{2,40} (?:amount|limit|sum insured|payout)
  * "intensive care") is about that benefit, not every row of the plan: a
  * fracture question must not list the permanent-loss schedule. */
 const NARROW: { asks: RegExp; fact: RegExp }[] = [
+  { asks: /\b(?:skull|spine|spinal)\b/i, fact: /skull|spine/i },
   { asks: /\bfractur\w*|broken bones?\b/i, fact: /fractur/i },
   { asks: /\bintensive care|\bicu\b/i, fact: /intensive care|\bicu\b/i },
   { asks: /\broom and board\b/i, fact: /room and board/i },
@@ -91,9 +92,9 @@ const NARROW: { asks: RegExp; fact: RegExp }[] = [
   { asks: /\bcancer drugs?\b/i, fact: /cancer drug/i },
   { asks: /\bpro-?ration\b/i, fact: /pro-?ration/i },
   { asks: /\bdeduct[ai]bles?\b/i, fact: /deductible/i },
-  { asks: /\bco-?insur[ae]nce\b/i, fact: /co-?insurance/i },
+  { asks: /\bco-?insur[ae]nce\b|\bco-?ins\b|\b(?:percent(?:age)?|%)\b[^?]{0,40}\bpay\b/i, fact: /co-?insurance/i },
   { asks: /\bco-?pay(?:ment)?s?\b/i, fact: /co-?pay/i },
-  { asks: /\b(?:annual|policy[- ]year|overall|yearly) limit\b/i, fact: /\blimit\b/i },
+  { asks: /\b(?:annual|policy[- ]year|overall|yearly) limit\b|^\s*limits?\s*\??\s*$/i, fact: /\blimit\b/i },
   { asks: /\bovers(?:eas)? medical\b/i, fact: /overseas medical/i },
   { asks: /\bpermanent (?:loss|disablement)|loss of (?:an? |one )?(?:arm|leg|hand|limb|sight)\b/i, fact: /loss of|disablement|dismember/i },
   { asks: /\blos(?:e|es|ing|t|s of)\b[^?]{0,25}\b(?:thumb|finger|index finger)|\b(?:thumb|index finger|fingers?)\b/i, fact: /thumb|finger/i },
@@ -122,7 +123,7 @@ const NARROW: { asks: RegExp; fact: RegExp }[] = [
   { asks: /\bno-?claims? discount|\bncd\b/i, fact: /no-claim/i },
   { asks: /\bnamed driver|who (?:can|may) drive|(?:son|daughter|someone else|another person|wife|husband) driv/i, fact: /named driver|authori[sz]ed driver/i },
   { asks: /\bfor how long|\bhow long\b(?!\s+(?:more|until|till|before|left|to go))(?![^?]*\b(?:expir\w*|renew\w*|ends?)\b)|maximum (?:payout )?period/i, fact: /period|months|years|days/i },
-  { asks: /\bdeferment|starts? paying|before [^?]*\bpay/i, fact: /deferment/i },
+  { asks: /\bdeferment|starts? paying|before (?:it|eldershield|careshield|the (?:plan|payout|monthly payout)) (?:starts? )?pays?\b/i, fact: /deferment/i },
   { asks: /\bmonthly payout|pay(?:s)? (?:out )?(?:a|per|each) month|how much a month\b/i, fact: /monthly payout/i },
 ];
 /** A question that asks about a premium in any words ("what do I pay a year for it"). */
@@ -598,7 +599,12 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   // Which documents the question is about: one it names ("her CritiCare
   // plan"), or plans of the kind it names ("her hospital plan").
   const namedDocs = [...docs.values()].filter((d) => (d.product_name ?? "").split(/[^A-Za-z0-9]+/)
-    .some((token) => token.length >= 5 && !/^(?:synthetic|dptest|policy|insurance|plan)$/i.test(token) && !COMMON_PRODUCT_WORD.test(token) && !/\d/.test(token) && new RegExp("\\b" + token + "\\b", "i").test(args.question))).map((d) => d.id);
+    .some((token) => token.length >= 5 && !/^(?:synthetic|dptest|policy|insurance|plan)$/i.test(token) && !COMMON_PRODUCT_WORD.test(token) && !/\d/.test(token) && new RegExp("\\b" + token + "\\b", "i").test(args.question))
+      // Round 9: a product named in full ("the PA Guardian") even when each of its words is a common one.
+      || (d.product_name ?? "").length >= 6 && /\s/.test(d.product_name ?? "") && args.question.toLowerCase().includes((d.product_name ?? "").toLowerCase())).map((d) => d.id);
+  // Round 9: "my shield", "the shield plan": the Integrated Shield plan itself, not every hospital line a group booklet prints.
+  if (!namedDocs.length && /\bshield\b/i.test(args.question) && !/\b(?:home|house|contents)\s*shield\b/i.test(args.question))
+    namedDocs.push(...[...docs.values()].filter((d) => /shield/i.test((d.product_name ?? "") + " " + (d.policy_type ?? "")) && !/home|contents|household|motor|travel/i.test((d.product_name ?? "") + " " + (d.policy_type ?? ""))).map((d) => d.id));
   const plannedKinds = PLAN_KINDS.filter((p) => p.re.test(askedText)).map((p) => p.kind);
   const kindDocs = plannedKinds.length ? [...docs.keys()].filter((id) => kindsOf(id).some((k) => plannedKinds.includes(k))) : [];
   // A group booklet holds several plans; it is "a hospital plan" for the
@@ -1032,6 +1038,8 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     const topicWord = (_w: string) => false;
     const productWordSet = new Set([...docs.values()].flatMap((d) => (d.product_name ?? "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4)));
     const specific = [...new Set((rest.match(/[a-z][a-z'-]{2,}/g) ?? []).map((w) => w.replace(/['’]s$/, "")))].filter((w) => !productWordSet.has(w) && !/^polic(?:y|ies)$/.test(w))
+      // Round 9: "will the life cover reduce after?", "is it enough?": a verb or a judgement is not a thing to look for.
+      .filter((w) => !/^(?:reduc\w*|increas\w*|chang\w*|enough|after|before|still|better|worse|good|bad|cheap\w*|expensive|happen\w*|affect\w*|drop\w*|lower|higher|more|less|stop\w*|continu\w*|work\w*|exactly|really|actually)$/.test(w))
       .filter((w) => (w.length >= 4 || /^(?:ivf|hiv|tcm|lasik|mri|ncd)$/.test(w)) && !STOP_WORDS.has(w) && !nameWords.has(w) && !topicWord(w) && !/^(?:anyone|anybody|everyone|everybody|someone|somebody|then|only|just|also|many|days?|each|year|month|amount|value|right|tell|give|show|know|what|cost|worth|happens?|counts?|mean|means|meant|claims?|money|anything|something|thing|things|okay|thanks|where|which|again|limit|limits|sum|insured|assured|benefits?|payout|pays?|paid|much|lah|leh|anot|other|another|more|else|extra|still|also|either|some|every)$/.test(w));
     const defining = /\bwhat (?:counts as|is meant by|does [^?]{1,30} mean)|\bdefin\w+|\bmeaning of\b/i.test(askedText);
     // A named benefit (NARROW) or a topic answered from its own lines (ward class, dates, status) is narrowed its own way.
@@ -1072,6 +1080,7 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       candidates.splice(0, candidates.length, ...terms);
     }
   }
+  const narrowQuoted = new Map<string, string>();
   const narrow = NARROW.filter((n) => n.asks.test(askedText));
   // A particular term that was asked and that no line names ("deductible"
   // on a term life plan) is said to be not found, not answered with neighbours.
@@ -1082,9 +1091,12 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       if (narrow.some((n) => n.fact.test((row.label + " " + row.value).replace(/\([^)]*\)/g, ""))) && !candidates.some((c) => c.id === "premiumrow:" + docId + ":" + row.page + ":" + row.index))
         for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "premiumrow:" + docId + ":" + row.page + ":" + row.index, source: "premium", topic: topics[0]?.key ?? "premium", title: row.label, ownerName: personName(ownerId),
           kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: row.page, text: row.label + ": " + row.value, amount: null, currency: null, quote: row.line, start: null, end: null });
-    const names = (c: RawCandidate, n: { fact: RegExp }) => n.fact.test(c.title) || (!n.fact.source.startsWith("^") && n.fact.test(c.text.slice(c.title.length)));
+    const names = (c: RawCandidate, n: { fact: RegExp }) => n.fact.test(c.title) || (!n.fact.source.startsWith("^") && n.fact.test(c.text.slice(c.title.length)))
+      // Round 9: "skull?" is named by the benefit's printed wording ("S$2,000 for skull or spine"), shown with the line.
+      || (!n.fact.source.startsWith("^") && !!c.quote && n.fact.test(c.quote) && !!narrowQuoted.set(c.id, c.quote));
     const named = candidates.filter((c) => narrow.some((n) => names(c, n)));
-    for (const n of narrow) if (!candidates.some((c) => names(c, n))) narrowMissing.push(askedText.match(n.asks)?.[0]?.toLowerCase().replace(/^deductable/, "deductible") ?? "");
+    // Round 9: what is said to be missing is a thing ("a deductible"), never a scrap of the question ("before they pay").
+    for (const n of narrow) if (!candidates.some((c) => names(c, n))) { const w = askedText.match(n.asks)?.[0]?.toLowerCase().replace(/^deductable/, "deductible") ?? ""; narrowMissing.push(/\b(?:they|it|i|we|you|he|she|how|what|when|pay|pays|for)\b/i.test(w) ? "" : w); }
     // The plan of the kind asked ("Irfan's accident sum insured") before any other plan's line of the same name.
     const kindAsked = topics.filter((t) => t.kind).map((t) => t.key);
     if (kindAsked.length && named.some((c) => kindsOf(c.policyId).some((k) => kindAsked.includes(k)))) named.splice(0, named.length, ...named.filter((c) => kindsOf(c.policyId).some((k) => kindAsked.includes(k))));
@@ -1237,7 +1249,9 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     // A value printed in one column of a table names its column after the benefit ("Deductible (Non-panel provider): ...").
     // A column called just "Value" or "Amount" names nothing the household needs told.
     const labelled = a.tierLabel && !/^(?:values?|amounts?|limits?|benefits?|details?|description|sum insured|s\$)$/i.test(a.tierLabel.trim()) ? (a.text.startsWith(a.title) ? a.title + " (" + a.tierLabel + ")" + a.text.slice(a.title.length) : a.text + " (" + a.tierLabel + ")") : a.text;
-    const text = labelled.replace(/[.;:\s]+$/, "");
+    const q = narrowQuoted.get(a.id);
+    const quoted = q && q.length <= 200 && !labelled.includes(q) ? " — the schedule prints “" + q.replace(/\s+/g, " ").trim().replace(/[.;:\s]+$/, "") + "”" : "";
+    const text = (labelled.replace(/[.;:\s]+$/, "") + quoted).replace(/[.;:\s]+$/, "");
     return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" ? ", document dated " + dated : "") + status + ").";
   };
   // One line for a fact several people share (a family travel plan), naming them all.
@@ -1347,8 +1361,12 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   // monetary boundary shows exactly these figures for a policy-fact answer and
   // withholds any other (lib/chat/monetary-boundary.ts).
   const figures = [...new Set([...shown.flatMap((a) => a.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []),
+    ...shown.flatMap((a) => (narrowQuoted.get(a.id) ?? "").match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []),
     ...statusDocs.map((id) => statusOf.get(id)?.dueAmount).filter((x): x is string => !!x),
     ...shown.filter((a) => a.amount != null && a.currency).map((a) => money(a.amount!, a.currency!))])];
+  // Round 9: a short question gets a short answer; the rest is a question away, never a wall of lines.
+  const broad = /\b(?:everything|every|all|overview|list|family|everyone|compare|total|altogether|what (?:am i|is \w+) (?:insured|covered)|what (?:do|does) [^?]{1,40} (?:have|cover)|tell me about|what insurance|what policies)\b/i.test(askedText);
+  if (!broad && details.length > 10) { const more = details.length - 9; details.splice(9, details.length, "There " + (more === 1 ? "is 1 more line" : "are " + more + " more lines") + " on this in the documents — ask about one benefit (for example the deductible, intensive care or surgery) to see it."); }
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
     confidence: kept.length && !conflicting.length ? (rejected.length || notFound.length ? "partial_match" : "strong_match") : "partial_match",
@@ -1364,6 +1382,9 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
 /** A question about what a policy prints, even phrased with "if" ("What's the pro-ration if I go private?",
  * "If my flat is unliveable, how much for a hotel?", "How much does it pay if he loses a thumb?"). */
 export function factualEvenAsWhatIf(question: string) {
+  // Round 9: "how much life insurance does he have if anything happens to him", "how much a month if she cannot walk",
+  // "if she fractures her skull how much": what the policy prints, asked with an "if".
+  if (/\bhow much\b/i.test(question) && (/\b(?:life (?:insurance|cover)|sum (?:assured|insured)|death benefit)\b/i.test(question) || /\b(?:every|a|per|each) month\b/i.test(question) || /\b(?:skull|spine)\b/i.test(question))) return true;
   return /\b(?:surrender\w*|matur\w*|reinstat\w*|lapsed?)\b/i.test(question)
     || /\blos(?:e|es|ing|t)\b[^?]{0,30}\b(?:thumb|finger|eye|sight|limb|arm|leg|hand|foot|hearing)\b/i.test(question)
     || /^\s*(?:what(?:['’]s| is| are)|how much is|is there)\s+(?:the\s+|my\s+|a\s+|an\s+)?[\w -]{0,30}\b(?:pro-?ration|deductible|excess|co-?insurance|co-?pay\w*|limit|premium|waiting period|sum insured|payout)\b/i.test(question)

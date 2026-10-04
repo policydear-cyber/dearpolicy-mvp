@@ -58,6 +58,12 @@ export type ConversationState = {
    * replies to its questions ("unknown" for not sure). Kept in the
    * conversation only -- a what-if never records facts against a profile. */
   whatIf?: { query: string; pending?: { factKey: string; text: string }; answers: Record<string, number | "unknown"> };
+  /** Round 9: the last answer was about something that has not happened (a what-if or a planned
+   * operation), and what it was; "what documents would I need?" next is answered for it. */
+  hypothetical?: string;
+  /** Round 9: others the household said were hurt in the same event as this claim's person. A claim goes one
+   * person at a time: they are acknowledged when named, and the next one is offered when this claim is done. */
+  nextInEvent?: { lead: string; people: { id: string; name: string }[]; told?: boolean };
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

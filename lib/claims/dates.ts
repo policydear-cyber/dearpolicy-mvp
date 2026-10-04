@@ -37,6 +37,9 @@ export function resolveClaimDate(text: string, context: ClaimDateContext = {}): 
     { type: "explicit", match: text.match(/\b(\d{1,2})[/.](\d{1,2})[/.](\d{4})\b/) },
     { type: "named", match: text.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})[,.]?\\s+(\\d{4})\\b`, "i")) },
     { type: "usNamed", match: text.match(new RegExp(`\\b(${monthPattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?[,]?\\s+(\\d{4})\\b`, "i")) },
+    // Round 9: "admitted 2 Sept", "on March 3rd": a day and month without a year is the most recent one.
+    { type: "namedNoYear", match: text.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthPattern})\\b(?![,.]?\\s*\\d{4})`, "i")) },
+    { type: "usNamedNoYear", match: text.match(new RegExp(`\\b(${monthPattern})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b(?![,.]?\\s*\\d{4})(?!\\s*(?:days?|weeks?|nights?|hours?|months?|years?)\\b)`, "i")) },
     { type: "relative", match: text.match(/\b(day before yesterday|yesterday|today|(?:\d+|one|two|three|a)\s+(?:days?|weeks?)\s+ago|(?:last|this)\s+(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday))\b/i) },
   ].filter(c => c.match).sort((a,b) => a.match!.index! - b.match!.index!);
   const first = candidates[0];
@@ -53,6 +56,14 @@ export function resolveClaimDate(text: string, context: ClaimDateContext = {}): 
     const month = MONTHS.findIndex(value => value.startsWith(m[named ? 2 : 1].toLowerCase())) + 1;
     const date = isoDate(Number(m[3]), month, Number(m[named ? 1 : 2]));
     return date ? { date, expression: m[0], relative: false } : null;
+  }
+  if (first?.type === "namedNoYear" || first?.type === "usNamedNoYear") {
+    const m = first.match!, dayFirst = first.type === "namedNoYear";
+    const month = MONTHS.findIndex(value => value.startsWith(m[dayFirst ? 2 : 1].toLowerCase().slice(0, 3))) + 1;
+    const year = Number(today.slice(0, 4));
+    const date = isoDate(year, month, Number(m[dayFirst ? 1 : 2]));
+    const past = date && date > today ? isoDate(year - 1, month, Number(m[dayFirst ? 1 : 2])) : date;
+    return past ? { date: past, expression: m[0], relative: true } : null;
   }
   const relative = first?.type === "relative" ? first.match : null;
   if (!relative) return null;

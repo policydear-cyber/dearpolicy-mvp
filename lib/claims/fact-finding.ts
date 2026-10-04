@@ -59,6 +59,16 @@ export type CategorySpec = {
  * accident gate uses the same words), so an answer is recognised whichever
  * path asked it. */
 export const ACCIDENT_OR_ILLNESS_QUESTION = "Was this caused by an accident, or an illness?";
+/** Round 9: the same question when the household already said how it happened ("fell off the monkey bars", "knocked down",
+ * "slipped"). The cause is still the household's to confirm (nothing is recorded until they answer), only asked as a confirmation. */
+export const ACCIDENT_CONFIRM_QUESTION = "This sounds like an accident — is that right?";
+export const ACCIDENT_CONFIRM_OPTIONS = ["Yes, an accident", "No, an illness"];
+const STATED_ACCIDENT = /\b(?:(?:car|road|traffic|motorbike|motorcycle|bike|bicycle|work(?:place)?|sports?|freak)\s+accident|accident(?:ally)?|fell|fall(?:en)?\s+(?:off|down|from|over)|fall down|slipped|slip and fell|tripped|knocked (?:down|over)|hit by (?:a\s+)?(?:car|bus|lorry|van|motorcycle|motorbike|bike|taxi)|crash(?:ed)?|collision|rear-ended|kena langgar|langgar)\b/i;
+/** A message that plainly says the cause was an accident (and does not deny it). */
+export function statesAccidentalCause(text: string) {
+  const t = text ?? "";
+  return STATED_ACCIDENT.test(t) && !/\b(?:not|wasn['’]?t|isn['’]?t|no)\s+(?:an?\s+)?accident\b|\bif\b|\bwhat if\b|\bsuppose\b/i.test(t);
+}
 export const INJURY_KIND_QUESTION = "What kind of injury was it — a broken bone, a cut or wound, a burn, or something else?";
 const UNCERTAIN_ANSWER = /^(?:(?:i\s+)?(?:am\s+|'m\s+)?(?:not sure|unsure)|unknown|(?:i\s+)?(?:don['’]?t|dont|do not|dun|never)\s+(?:know|remember|recall)|idk|dunno|no idea|not yet known|(?:can['’]?t|cannot)\s+remember|forgot|not certain)(?:\s+(?:lah|leh|lor|ah|sia|yet))*$/i;
 function specificInjuryKind(value: unknown) {
@@ -400,6 +410,8 @@ function questionIndex(): Map<string, IndexedQuestion> {
   }
   // Earlier wordings of the same questions, so a reply to a question card in
   // a chat saved before the wording changed is still recorded.
+  // Round 9: the confirmation wording of the accident-or-illness question answers the same fact.
+  index.set(ACCIDENT_CONFIRM_QUESTION.replace(/\?\s*$/, "").toLowerCase(), { factKey: "eventType", type: "choice", options: [...ACCIDENT_CONFIRM_OPTIONS, "An accident", "An illness"] });
   for (const [legacy, current] of LEGACY_QUESTIONS) {
     const known = index.get(current.replace(/\?\s*$/, "").toLowerCase());
     if (known) index.set(legacy.replace(/\?\s*$/, "").toLowerCase(), known);
@@ -444,6 +456,8 @@ function choiceValue(factKey: string, raw: string, options: string[] = []): stri
     ?? options.find((o) => said.length >= 4 && o.toLowerCase().replace(/^(?:an?|the)\s+/, "") === said.replace(/^(?:an?|the)\s+/, ""));
   const text = (option ?? said).toLowerCase();
   if (factKey === "eventType") {
+    // Round 9: "yes" to "This sounds like an accident — is that right?".
+    if (!option && YES_WORD.test(said) && options.includes(ACCIDENT_CONFIRM_OPTIONS[0]) && !/\billness|\bsick|\bdisease/.test(said)) return "accident";
     if (/\baccident/.test(text)) return "accident";
     if (/\billness|\bsick|\bdisease/.test(text)) return "illness";
     return option ? option : null;

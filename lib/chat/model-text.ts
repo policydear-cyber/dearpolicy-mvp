@@ -121,6 +121,64 @@ export function modelProseProblem(text: unknown, check: ProseCheck): string | nu
     if (new RegExp("(?<![\\p{L}])" + part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}])", "u").test(t) && !p.includes(part.toLowerCase())) return "person not in the proof";
   for (const m of t.matchAll(/\b(?:[A-Z][\w'’-]*\s+){1,5}(?:Benefit|Rider|Bonus|Booster|Cover|Plan|Shield|Policy)\b/g))
     if (!p.includes(norm(m[0])) && !m[0].split(/\s+/).filter((w) => w.length > 2 && !/^(?:Your|The|This|That|His|Her|Their)$/.test(w)).every((w) => p.includes(norm(w)))) return "benefit name not in the proof";
+  const kept = qualifierProblem(t, proof);
+  if (kept) return kept;
+  return null;
+}
+
+/** Round 9: a rewording that keeps every figure but changes what it means. Each figure in the text is
+ * compared with the proof's own sentences that print it: a "not", "only" or "up to" the proof puts
+ * beside the figure must still be there, a unit ("per day", "per accident") must not be dropped or
+ * changed, and a kind of policy ("your travel policy") must be one the proof ties to that figure. */
+const FIGURE = /(?:S\$|SGD\s?|US\$|\$)\s?\d[\d,]*(?:\.\d+)?|\b\d+(?:\.\d+)?\s?%/gi;
+const UNIT = /\b(?:per|a|an|each|every|for each|for every)\s+(day|night|month|year|policy year|accident|visit|trip|claim|person|admission|week|6 hours)\b/i;
+const CAP = /\b(?:up to|a maximum of|maximum of|maximum|max\.?|capped at|at most|limit of|limit)\b/i;
+const NEGATION = /\b(?:not|no|never|none|except|excluding|excluded|without)\b|n't\b/i;
+const ONLY = /\bonly\b/i;
+const KIND_WORDS: Record<string, RegExp> = {
+  travel: /travel|trip|overseas|wanderlust|flight|baggage/i, car: /motor|car\b|vehicle|drive|own damage|windscreen/i, motor: /motor|car\b|vehicle|drive|own damage|windscreen/i,
+  home: /home|contents|house|household|renovation/i, life: /life|term|death|endow|whole life/i, term: /term|life|death/i,
+  hospital: /hospital|shield|ward|inpatient|integrated|medishield|surgical|medi/i, accident: /accident|\bPA\b|guardian|safeguard|fracture|injur/i,
+  "critical illness": /critical|\bCI\b|cancer|hercare|illness/i, helper: /helper|FDW|maid|domestic/i, endowment: /endow|lotus|maturity|savings/i, investment: /invest|ILP|fund|gateway|unit/i,
+};
+const figureKey = (f: string) => f.replace(/[\s,]|S\$|SGD|US\$|\$/gi, "").replace(/\.0+(?=%|$)/, "");
+function qualifierProblem(text: string, proof: string): string | null {
+  const proofSentences = proof.split(/\n+|(?<=[.!?;])\s+/).map((x) => x.trim()).filter(Boolean);
+  for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+    for (const m of sentence.matchAll(FIGURE)) {
+      const key = figureKey(m[0]);
+      if (!key || Number(key.replace(/%$/, "")) === 0) continue;
+      const at = m.index ?? 0;
+      // The proof's sentences that print this figure (with a neighbour line: a packet prints a name and its amount apart).
+      const homes: string[] = [];
+      proofSentences.forEach((p, i) => {
+        if (![...p.matchAll(FIGURE)].some((f) => figureKey(f[0]) === key)) return;
+        const bare = (p.replace(FIGURE, " ").match(/\p{L}{3,}/gu) ?? []).filter((w) => !/^(?:per|day|night|month|year|each|every|up|to|for|a|an|the|maximum|accident|visit|trip|claim|person|admission)$/i.test(w)).length < 2;
+        homes.push(bare ? (proofSentences[i - 1] ?? "") + " " + p : p);
+      });
+      if (!homes.length) continue;
+      const around = sentence.slice(Math.max(0, at - 40), at + m[0].length + 60);
+      const lead = sentence.slice(Math.max(0, at - 25), at);
+      const exact = proofSentences.filter((p) => [...p.matchAll(FIGURE)].some((f) => figureKey(f[0]) === key));
+      const windowOf = (p: string) => { const i = [...p.matchAll(FIGURE)].find((f) => figureKey(f[0]) === key)?.index ?? 0; return p.slice(Math.max(0, i - 40), i + 60); };
+      const proofUnits = exact.map((p) => windowOf(p).match(UNIT)?.[1]?.toLowerCase().replace("night", "day") ?? null);
+      const textUnit = around.match(UNIT)?.[1]?.toLowerCase().replace("night", "day") ?? null;
+      if (proofUnits.length && proofUnits.every((u) => u) && !textUnit) return "qualifier dropped";
+      if (textUnit && proofUnits.length && !proofUnits.includes(textUnit) && proofUnits.every((u) => u)) return "qualifier changed";
+      const leadOf = (p: string) => { const i = [...p.matchAll(FIGURE)].find((f) => figureKey(f[0]) === key)?.index ?? 0; return p.slice(Math.max(0, i - 25), i); };
+      if (exact.length && exact.every((p) => CAP.test(leadOf(p))) && !CAP.test(lead) && /\b(?:pays?|gives?|get|receive|is paid|will be)\b/i.test(sentence)) return "qualifier dropped";
+      if (exact.length && exact.every((p) => NEGATION.test(p)) && !NEGATION.test(sentence)) return "negation dropped";
+      if (exact.length && !exact.some((p) => NEGATION.test(p)) && NEGATION.test(sentence.replace(/\bnot yet\b|\bno later than\b|\bno more than\b/gi, ""))) {
+        // A "not" is added to a figure the proof states plainly.
+        const clause = sentence.split(/[,;:—–-]\s+/).find((c) => c.includes(m[0])) ?? sentence;
+        if (NEGATION.test(clause)) return "negation added";
+      }
+      if (exact.length && exact.every((p) => ONLY.test(p)) && !ONLY.test(sentence)) return "qualifier dropped";
+      // "Your travel policy pays S$200,000": the kind named must be one the proof ties to this figure.
+      const kind = sentence.match(/\b(?:your|the|her|his|their)\s+(travel|car|motor|home|life|term|hospital|accident|critical illness|helper|endowment|investment)\s+(?:policy|plan|insurance|cover)\b/i)?.[1]?.toLowerCase();
+      if (kind && !homes.some((h) => KIND_WORDS[kind].test(h))) return "policy kind does not match the figure";
+    }
+  }
   return null;
 }
 

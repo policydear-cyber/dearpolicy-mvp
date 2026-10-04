@@ -119,10 +119,15 @@ export function applyMessageFacts(args: { message: string; facts: SubjectFacts; 
     const d = resolveClaimDate(m[1], { now: args.now });
     return d && Date.parse(d.date + "T00:00:00Z") <= args.now.getTime() ? d.date : null;
   };
-  const DATE = String.raw`((?:20\d\d-\d\d?-\d\d?)|(?:\d{1,2}[/.]\d{1,2}[/.]\d{4})|(?:\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4})|yesterday|today|day before yesterday|last\s+[a-z]+day|this\s+[a-z]+day|(?:\d+|one|two|three|a)\s+(?:days?|weeks?)\s+ago)`;
-  // "discharged 2026-09-23", "and discharged on 2026-09-15"
+  // Round 9: a day and month with no year ("discharged 6 Sept", "admitted on 3rd sept") is the most recent one (resolveClaimDate).
+  const MON = String.raw`(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b`;
+  const DATE = String.raw`((?:20\d\d-\d\d?-\d\d?)|(?:\d{1,2}[/.]\d{1,2}[/.]\d{4})|(?:\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4})|(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?` + MON + String.raw`)|(?:` + MON + String.raw`\s+\d{1,2}(?:st|nd|rd|th)?\b(?!\s*(?:days?|weeks?|nights?|hours?)\b))|yesterday|today|day before yesterday|last\s+[a-z]+day|this\s+[a-z]+day|(?:\d+|one|two|three|a)\s+(?:days?|weeks?)\s+ago)`;
+  // "discharged 2026-09-23", "and discharged on 2026-09-15", "discharged 7 sept"
   const discharged = dateAt(new RegExp(String.raw`\bdischarged\s+(?:on\s+|home\s+on\s+)?` + DATE, "i"));
   if (discharged && unset("dischargeDate")) set("dischargeDate", discharged);
+  // Round 9: "admitted on 3rd sept and discharged 7 sept": the date said with "admitted" is the admission, whichever date was read first.
+  const admittedOn = dateAt(new RegExp(String.raw`\b(?:admitted|warded|hospitali[sz]ed)\s+(?:to\s+[^.?!,]{1,40}?\s+)?(?:on\s+)?` + DATE, "i"));
+  if (admittedOn && known(facts, "admissionDate") !== admittedOn && (!discharged || admittedOn <= discharged)) set("admissionDate", admittedOn);
   const allDates = [...text.matchAll(new RegExp(DATE, "gi"))].map((m) => resolveClaimDate(m[1], { now: args.now })?.date).filter((d): d is string => !!d);
   const single = new Set(allDates).size === 1 ? allDates[0] : null;
   const past = single && Date.parse(single + "T00:00:00Z") <= args.now.getTime() ? single : null;

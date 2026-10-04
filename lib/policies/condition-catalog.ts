@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { looksLikeInjectedInstruction } from "@/lib/documents/evidence";
+import { namePrinted } from "@/lib/documents/fact-check";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { pool,query } from "@/lib/db/client";
@@ -218,16 +220,21 @@ export function conditionsFromExtraction(args:{page:{page_number:number;text:str
     // The quote must be present on this page, verbatim. Same rule as the
     // benefit pass, and for a stronger reason: this one can take money away.
     if(!hasQuote(args.page.text,found.quote))continue;
+    // Round 9: a condition is never an instruction, governs only a cover the
+    // page names, and carves out only in the page's own words.
+    if(looksLikeInjectedInstruction(found.quote))continue;
+    const product=found.productName?.trim()&&namePrinted(args.page.text,found.productName)?found.productName.trim():null;
+    const carveOut=found.carveOut&&hasQuote(args.page.text,found.carveOut)&&!looksLikeInjectedInstruction(found.carveOut)?found.carveOut:null;
     const days=typeof found.days==="number"&&Number.isFinite(found.days)&&found.days>0?Math.round(found.days):null;
     const amount=typeof found.amount==="number"&&Number.isFinite(found.amount)&&found.amount>=0?found.amount:null;
     out.push({
-      productName:found.productName?.trim()||args.productName,
+      productName:product||args.productName,
       kind:found.kind as CoverConditionKind,
       cause:(found.cause??null) as ExcludedCause|null,
       appliesToEvents:found.appliesToEvents as ClaimEventType[],
       conditionNames:found.conditionNames.filter(name=>name.trim().length>2),
       days,amount,amountBasis:found.amountBasis,scope:found.scope,
-      carveOut:found.carveOut,sourcePage:args.page.page_number,quote:found.quote,
+      carveOut,sourcePage:args.page.page_number,quote:found.quote,
       // A condition that would silence a benefit without a period or a cause to
       // test is shown to a person before it is ever acted on.
       needsReview:(found.kind==="waiting_period"||found.kind==="survival_period")&&days==null,

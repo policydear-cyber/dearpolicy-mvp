@@ -26,6 +26,7 @@ import os from "node:os";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { installDatabase } from "../r6/fixture";
+import { enterIngestChaos, tolerateUnderChaos } from "../r9/ingest-mode";
 
 export const ACCOUNT = "00000000-0000-0000-0000-00000000a700";
 export const OTHER_ACCOUNT = "00000000-0000-0000-0000-00000000a7ff";
@@ -84,12 +85,15 @@ export async function buildHousehold(): Promise<Household> {
     const storageKey = await savePolicyFile({ accountId: account, familyMemberId: memberId, policyId, filename: name + ".pdf", bytes: new Uint8Array(bytes) });
     await db.query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,quarantine_status,scan_provider,scanned_at)
       VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,'Waiting','scan_clean','r7-answers',now())`, [policyId, account, memberId, name + ".pdf", storageKey, createHash("sha256").update(bytes).digest("hex")]);
-    await processPolicy({ accountId: account, familyMemberId: memberId, policyId, storageKey, linkUploadMember: true });
+    await tolerateUnderChaos(() => processPolicy({ accountId: account, familyMemberId: memberId, policyId, storageKey, linkUploadMember: true }));
     docs[key] = policyId;
   };
+  // Round 9: R9_INGEST_SEED reads every document under the ingestion chaos stand-in.
+  const leaveChaos = enterIngestChaos(PEOPLE.map((p) => p.display_name));
   for (const [key, [file, member]] of Object.entries(DOCUMENTS)) await ingest(key, ACCOUNT, member, "r7", file);
   // Another household's document: never visible here.
   await ingest("other", OTHER_ACCOUNT, OTHER_PERSON, "r5", "TermSecure20_Renewal_Certificate_2026_x");
+  leaveChaos?.();
   return { db, docs, storageDir };
 }
 

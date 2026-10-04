@@ -20,7 +20,8 @@ export const PREMIUM_QUESTION = /\bpremiums?\b|\bhow much (?:do|does|did|will) (
 export function isPremiumQuestion(question: string) {
   return (PREMIUM_QUESTION.test(question) || RANKED.test(question)) && !/\b(?:claim\w*|payouts?|reimburs\w*|grace period|waiver|refund\w*|legal|sue)\b/i.test(question)
     // "How much does SafeGuard pay if Irfan loses a thumb?" asks what a plan pays, not what is paid for it.
-    && !/\bpays?\s+(?:out\s+)?(?:if|for|when|on|per|towards?|each|a day|monthly)\b|\b(?:what|how much) (?:does|do|will|would) [^?]{1,40}\bpay(?: out)?\s*\??\s*$/i.test(question);
+    // Round 9: "how much do we pay for all our insurance" is what the household pays.
+    && !/(?<!\b(?:i|we) )\bpays?\s+(?:out\s+)?(?:if|for|when|on|per|towards?|each|a day|monthly)\b|\b(?:what|how much) (?:does|do|will|would) [^?]{1,40}\bpay(?: out)?\s*\??\s*$/i.test(question);
 }
 /** "Which policy is cheapest?", "the most expensive one": premiums compared, not advice. */
 export const RANKED = /\b(?:cheapest|least expensive|most expensive|costliest|highest premium|lowest premium|costs? (?:the )?(?:most|least)|which (?:one )?costs more)\b/i;

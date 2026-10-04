@@ -17,15 +17,22 @@ export function nameKey(value: string) {
     .replace(/\b(?:binti|bte|bt)\b/g, "binte").replace(/\s+/g, " ").trim() + " ";
 }
 type Gender = "f" | "m" | null;
-/** A Malay patronymic says whether someone is a son (bin, s/o) or a daughter (binte/binti, d/o). */
+/** Round 9: what the household itself wrote about someone (relationship, preferred name: "mother", "Papa"). */
+const FEMALE_WORD = /\b(?:mother|mum|mom|mummy|mommy|mama|mak|emak|ibu|amma|ah ma|grandmother|grandma|daughter|sister|wife|aunt|auntie)\b/i;
+const MALE_WORD = /\b(?:father|dad|daddy|papa|appa|ayah|abah|bapa|ah pa|grandfather|grandpa|son|brother|husband|uncle)\b/i;
+/** A Malay patronymic says whether someone is a son (bin, s/o) or a daughter (binte/binti, d/o); so does a gendered relationship
+ * or preferred name the household entered ("mother", "Papa"). */
 function genderOf(p: ClaimPerson): Gender {
+  const own = (p.relationship ?? "") + " " + (p.preferred_name ?? "");
+  if (FEMALE_WORD.test(own) !== MALE_WORD.test(own)) return FEMALE_WORD.test(own) ? "f" : "m";
   const k = nameKey(p.display_name);
   return / (?:binte|d\/o) /.test(k) ? "f" : / (?:bin|s\/o) /.test(k) ? "m" : null;
 }
 const rel = (p: ClaimPerson) => (p.relationship ?? "").toLowerCase().trim();
+const isParent = (p: ClaimPerson) => /^(?:parent|mother|father|mum|mom|dad|mama|papa)$/.test(rel(p));
 const KIN: { re: RegExp; group: (p: ClaimPerson) => boolean; gender: Gender; label: string }[] = [
-  { re: /\b(?:mak|emak|ibu|mum|mom|mummy|mommy|mother|mama)\b/i, group: (p) => rel(p) === "parent", gender: "f", label: "mother" },
-  { re: /\b(?:ayah|abah|bapa|dad|daddy|father|papa)\b/i, group: (p) => rel(p) === "parent", gender: "m", label: "father" },
+  { re: /\b(?:mak|emak|ibu|mum|mom|mummy|mommy|mother|mama|amma)\b/i, group: isParent, gender: "f", label: "mother" },
+  { re: /\b(?:ayah|abah|bapa|dad|daddy|father|papa|appa)\b/i, group: isParent, gender: "m", label: "father" },
   { re: /\b(?:son|anak lelaki|boy)\b/i, group: (p) => rel(p) === "child", gender: "m", label: "son" },
   { re: /\b(?:daughter|anak perempuan|girl)\b/i, group: (p) => rel(p) === "child", gender: "f", label: "daughter" },
   { re: /\b(?:brother|abang|adik lelaki)\b/i, group: (p) => rel(p) === "sibling", gender: "m", label: "brother" },
@@ -59,7 +66,7 @@ export function householdPersonFromWords(message: string, family: ClaimPerson[],
   const selfPeople = family.filter((p) => rel(p) === "self");
   // "and me?", "what about mine?", "back to my ILP", "what's my deductible?": the speaker.
   if (selfPeople.length === 1 && !KIN.some((k) => k.re.test(message))
-    && (/^(?:ok(?:ay)?[,\s]+)?(?:and|what about|how about|now)\s+(?:me|mine|myself)\b/i.test(message.trim()) || OWN_THING.test(message) || /\b(?:am i|do i|have i|i have|i am|i['’]m|for me)\b/i.test(message)))
+    && (/^(?:ok(?:ay)?[,\s]+)?(?:and|what about|how about|now)\s+(?:me|mine|myself)\b/i.test(message.trim()) || OWN_THING.test(message) || /\b(?:am i|do i|have i|i have|i am|i['’]m|for me|i got|have i got)\b/i.test(message)))
     return { status: "resolved", person: selfPeople[0], explicit: true };
   // 2. Kinship and household words.
   const kin = KIN.filter((k) => k.re.test(message));
@@ -75,6 +82,13 @@ export function householdPersonFromWords(message: string, family: ClaimPerson[],
   const last = kin.map((k) => ({ k, at: Math.max(...[...message.matchAll(new RegExp(k.re.source, "gi"))].map((m) => m.index ?? 0)) })).sort((a, b) => b.at - a.at)[0].k;
   let candidates = family.filter(last.group);
   if (candidates.length > 1 && last.gender) { const g = candidates.filter((p) => genderOf(p) === last.gender); if (g.length) candidates = g; }
+  // Round 9: "appa" (father) when the only parent on file is a binte (a mother): nobody on file, never her.
+  if (last.gender && candidates.length && candidates.every((p) => genderOf(p) !== null && genderOf(p) !== last.gender))
+    return { status: "unknown", name: "your " + last.label, candidates: family };
+  // Round 9: "my dad passed away" when the only parent on file is not known to be a father (the household page says
+  // "parent", the name says nothing): ask who, never guess. Whose relationship is unknown is named, so the card is not a riddle.
+  if (last.gender && (last.label === "father" || last.label === "mother") && candidates.length && !candidates.some((p) => genderOf(p) === last.gender))
+    return { status: "unknown", name: "your " + last.label, candidates: family, unsure: candidates };
   return candidates.length === 1 ? { status: "resolved", person: candidates[0], explicit: true } : null;
 }
 

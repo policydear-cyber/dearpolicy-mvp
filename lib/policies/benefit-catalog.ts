@@ -60,12 +60,12 @@ export type CatalogBenefit={
  * never be offered for a broken wrist, and the reasoning can be shown to the
  * user verbatim. */
 const TRAIT_RULES:{trait:ScenarioTrait;pattern:RegExp}[]=[
-  {trait:"death",pattern:/\b(?:death|dies|died|decease[d]?|loss of life|funeral)\b/},
+  {trait:"death",pattern:/\b(?:death|dies|died|decease[d]?|loss of life|funeral)\b|\bif anything (?:happens?|happened) to (?:him|her|me|them|you)\b/},
   {trait:"accident",pattern:/\baccident(?:al|ally)?\b|\bsudden and unforeseen\b|\b(?:fell|falls?|falling|fall down|slipped?|slipping|tripped?|collision|knocked)\b/},
-  {trait:"bodily_injury",pattern:/\b(?:injur\w+|fracture[sd]?|break(?:s|ing)?|broke(?:n)?|dislocation|sprain\w*|burns?|amputat\w+|laceration|wound\w*|cut myself)\b/},
-  {trait:"disability",pattern:/\b(?:disablement|disabilit\w+|permanently disabled|loss of (?:use|sight|limb|hearing|speech)|impairment)\b/},
+  {trait:"bodily_injury",pattern:/\b(?:injur\w+|fracture[sd]?|break(?:s|ing)?|broke(?:n)?|dislocation|sprain\w*|burns?|amputat\w+|laceration|wound\w*|cut myself|gets? hurt|got hurt|stitch(?:es|ed))\b/},
+  {trait:"disability",pattern:/\b(?:disablement|disabilit\w+|permanently disabled|loss of (?:use|sight|limb|hearing|speech)|impairment)\b|\b(?:cannot|can[’']?t|unable to) (?:walk|bathe|wash|dress|feed)\b|\bbedridden\b|\bseverely disabled\b/},
   {trait:"illness",pattern:/\b(?:illness|disease|sickness|critical illness|cancer|carcinoma|tumour|tumor|stroke|heart attack|myocardial)\b/},
-  {trait:"diagnosis",pattern:/\b(?:diagnos\w+|biops\w+|histolog\w+)\b/},
+  {trait:"diagnosis",pattern:/\b(?:diagnos\w+|biops\w+|histolog\w+)\b|\b(?:gets?|got|has|have|had|having|getting)\s+(?:a\s+)?(?:cancer|stroke|heart attack|tumou?r|leuka?emia)\b/},
   {trait:"hospitalisation",pattern:/\b(?:hospital\w*|inpatient|in-patient|confine\w+|ward|admission|admitted|daily cash|surger\w+|operation)\b/},
   {trait:"medical_expense",pattern:/\b(?:medical expense\w*|treatment cost\w*|ambulance|outpatient|out-patient|consultation|reimburs\w+|bill|invoice|receipt)\b/},
   {trait:"vehicle_collision",pattern:/\b(?:motor|vehicle|car|collision|windscreen)\b/},
@@ -79,7 +79,7 @@ const TRAIT_RULES:{trait:ScenarioTrait;pattern:RegExp}[]=[
   {trait:"maturity",pattern:/\b(?:maturit\w+|endowment)\b/},
   {trait:"surrender",pattern:/\b(?:surrender\w*|cash value)\b/},
   {trait:"income_loss",pattern:/\b(?:income|salary|earnings|loss of earning)\b/},
-  {trait:"care_need",pattern:/\b(?:nursing|care benefit|activities of daily living)\b/},
+  {trait:"care_need",pattern:/\b(?:nursing|care benefit|activities of daily living)\b|\b(?:cannot|can[’']?t|unable to) (?:walk|bathe|wash|dress|feed|move about|get out of bed)\b|\bbedridden\b|\bseverely disabled\b/},
 ];
 /** What a question describes, read from the question itself.
  *
@@ -105,8 +105,12 @@ const SCENARIO_CONDITION=/\b(?:if|when|after|suppose|supposing|in case|were to|s
 const EVENT_WORD=/\b(?:broke|broken|breaks?|fractur\w*|injur\w*|hurt|dies?|died|death|dead|passed away|hospitali[sz]\w*|admitted|warded|diagnos\w*|crash\w*|collision|stolen|theft|delayed|cancell?ed|sick|falls?|fell)\b|\bin an accident\b|\baccidentally\b/;
 export function describesAScenario(text:string){
   const lower=(text??"").toLowerCase();
-  const cue=COVERAGE_ONLY_CUE.test(lower);
-  if(!cue&&!(/\bcover\w*\b/.test(lower)&&(SCENARIO_CONDITION.test(lower)||EVENT_WORD.test(lower))))return false;
+  // Round 9: "if she fracture her skull how much the PA give": a condition and a question about what it pays.
+  // ("check if he got critical illness cover" uses "if" for "whether": it imagines nothing.)
+  const whether=/\b(?:check|see|know|wondering|ask(?:ing|ed)?|confirm|find out|tell me) (?:if|whether)\b/.test(lower);
+  const cue=COVERAGE_ONLY_CUE.test(lower)&&!(whether&&!/\b(?:what if|claim\w*|payout|pay out|pays?)\b/.test(lower))||!whether&&/\b(?:if|in case|suppose)\b[^?]{0,80}\b(?:how much|give|gives|get|gets|pays?|claim)\b|\b(?:how much|give|gives|get|gets|pays?)\b[^?]{0,80}\b(?:if|in case)\b/.test(lower);
+  const conditional=SCENARIO_CONDITION.test(lower.replace(/\b(?:check|see|know|wondering|ask(?:ing|ed)?|confirm|find out|tell me) (?:if|whether)\b/g,""));
+  if(!cue&&!(/\bcover\w*\b/.test(lower)&&(conditional||EVENT_WORD.test(lower)&&!whether)))return false;
   return questionTraits(lower).length>0;
 }
 /** What a benefit's own name says it is conditional on. Deterministic and

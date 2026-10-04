@@ -79,7 +79,14 @@ function withoutFigures(text: string): string {
   return out;
 }
 export function scrubMonetaryText(text: string): string {
-  let out = withoutFigures(text).replace(new RegExp(MONEY_PATTERN.source, "gi"), WITHHELD_AMOUNT_TEXT);
+  // Round 9: a premium is what the household pays, never a payout; "the premium of S$86.40 due on ..."
+  // keeps its figure instead of reading "the premium of an amount that is only shown after ...".
+  let out = withoutFigures(text).replace(new RegExp(MONEY_PATTERN.source, "gi"), (m: string, ...rest: unknown[]) => {
+    const wi = rest.map((x) => typeof x).lastIndexOf("string");
+    const whole = wi >= 0 ? rest[wi] as string : "", at = wi > 0 && typeof rest[wi - 1] === "number" ? rest[wi - 1] as number : 0;
+    const before = whole.slice(Math.max(0, at - 30), at), after = whole.slice(at + m.length, at + m.length + 30);
+    return /\bpremiums?(?: of| is| was| due| payable)?:?\s*$/i.test(before) || /^\s*(?:premiums?\b|(?:a|per|each) (?:month|year) in premiums?)/i.test(after) ? m : WITHHELD_AMOUNT_TEXT;
+  });
   out = out.replace(new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "gi"), (_m, cue: string, gap: string) => `${cue}${gap}${WITHHELD_AMOUNT_TEXT}`);
   out = out.replace(/the an amount that is only shown after claim evidence has been reviewed\s+([a-z]+) limit/gi, "the $1 limit");
   out = out.replace(/verified an amount that is only shown after claim evidence has been reviewed/gi, "the verified policy limit");

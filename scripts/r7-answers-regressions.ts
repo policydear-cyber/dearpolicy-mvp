@@ -41,6 +41,7 @@ async function main() {
   const { detect, moneyIn, visibleFields } = await import("./r6/detectors");
   const { detectR7, repeatedAnswer } = await import("./r7/detectors");
   const { detectR8 } = await import("./r8/detectors");
+  const R9 = await import("./r9/ingest-detectors");
   const R8 = await import("./r8/chaos-mode");
   const controls = selfTest(detect, detectR7, repeatedAnswer);
   if (controls.length) { out("DETECTOR SELF-TEST FAILED:\n- " + controls.join("\n- ")); process.exit(1); }
@@ -56,7 +57,8 @@ async function main() {
   // Every document was read, and a bilingual page kept its text (CJK fonts with predefined CMaps).
   const setup: string[] = [];
   for (const r of (await h.db.query<{ original_filename: string; processing_status: string }>("SELECT original_filename,processing_status FROM policies WHERE account_id=$1", [F.ACCOUNT])).rows)
-    if (r.processing_status !== "ready") setup.push(r.original_filename + " is " + r.processing_status);
+    // Round 9: under the ingestion chaos stand-in a document may legitimately end failed (exhausted quota); the battery runs on what was read.
+    if (r.processing_status !== "ready" && !process.env.R9_INGEST_SEED) setup.push(r.original_filename + " is " + r.processing_status);
   const bilingual = (await h.db.query<{ text: string }>("SELECT string_agg(text,E'\\n') text FROM policy_pages WHERE policy_id=$1", [h.docs.endowment])).rows[0]?.text ?? "";
   if (!/保证满期价值 Guaranteed maturity value/.test(bilingual) || !/S\$17,220/.test(bilingual)) setup.push("the Chinese/English endowment page lost its text: " + bilingual.slice(0, 120));
   if (setup.length) { out("FIXTURE FAILED:\n- " + setup.join("\n- ")); process.exit(1); }
@@ -72,12 +74,14 @@ async function main() {
     const personPolicies = new Map<string, Set<string>>();
     for (const r of (await h.db.query<{ family_member_id: string; policy_id: string }>("SELECT family_member_id,policy_id FROM policy_members WHERE account_id=$1", [F.ACCOUNT])).rows)
       (personPolicies.get(r.family_member_id) ?? personPolicies.set(r.family_member_id, new Set()).get(r.family_member_id)!).add(r.policy_id);
-    return { pages, premiumFigures: [...new Set(premiumFigures)], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Ong Siew Hwa", "Siew Hwa"],
+    // Round 9: under R9_INGEST_SEED, who holds what comes from the household read by the well-behaved stand-in.
+    return R9.pristineOverride({ pages, premiumFigures: [...new Set(premiumFigures)], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Ong Siew Hwa", "Siew Hwa"],
       foreignPolicyIds: new Set([h.docs.other]), personPolicies, selfNames: F.PEOPLE.filter((p) => p.id === F.SELF).flatMap((p) => [p.display_name, p.preferred_name]),
       inactive: F.INACTIVE.filter((x) => pages.has(h.docs[x.key])).map((x) => ({ policyId: h.docs[x.key], name: x.name, state: x.state, date: x.date })),
-      people: F.PEOPLE.map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name] })), today };
+      people: F.PEOPLE.map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name] })), today });
   };
   let g = await truth();
+  const g9 = await R9.pageTruth(h.db as never, F.ACCOUNT);
 
   const only = process.env.R7_ONLY, dump = process.env.R7_DUMP;
   if (dump) writeFileSync(dump, "");
@@ -118,6 +122,7 @@ async function main() {
         if (e.notMentions) { const said = visibleFields(a).filter((f) => !/quote|citation/.test(f.where)).map((f) => f.text).join("\n"); const m = said.match(e.notMentions); if (m) hits.push({ rule: "answer says what it must not", text: m[0] + " in: " + a.summary.slice(0, 200) }); }
         hits.push(...detectR7(a, { question: t.say, userText, expectPerson: e.person ?? null }, g));
         hits.push(...detectR8(a, { userText }, g));
+        hits.push(...R9.detectR9(a, g9));
         const all = visibleFields(a).map((f) => f.text).join("\n");
         for (const m of mentions) if (!m.test(all)) hits.push({ rule: "answer ignores the question", text: "expected " + m + " in: " + a.summary.slice(0, 200) });
         if (e.asksPerson && a.questions[0]?.id !== "claim_person") hits.push({ rule: "ambiguous person not asked", text: a.summary.slice(0, 200) });
@@ -143,7 +148,7 @@ async function main() {
   if (!only && !R8.chaosSeed() && long < 10) { out("FAIL: the battery must hold at least 10 conversations of 15+ turns (has " + long + ")"); process.exitCode = 1; }
   if (failing.length) process.exitCode = 1;
   if (guard.guardInterventions.length) {
-    out("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s) — fix the root cause:\n" + guard.guardInterventions.slice(0, 5).map((x) => "  before: " + x.before.slice(0, 300) + "\n  after:  " + x.after.slice(0, 300)).join("\n"));
+    out("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s) — fix the root cause:\n" + guard.guardInterventions.slice(0, 5).map((x) => { let i = 0; while (i < x.before.length && x.before[i] === x.after[i]) i++; return "  before: …" + x.before.slice(Math.max(0, i - 160), i + 200) + "\n  after:  …" + x.after.slice(Math.max(0, i - 160), i + 200); }).join("\n"));
     process.exitCode = 1;
   } else out("output guard interventions: 0");
   R8.reportChaos(out, "r7-answers", records, guard.guardInterventions.length, messages);

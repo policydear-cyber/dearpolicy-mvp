@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { pool, query } from "@/lib/db/client";
 import type { ChatAnswer } from "@/types";
@@ -7,6 +8,8 @@ import { guardChatAnswer } from "./output-guard";
 import type { Conversation, ConversationState, HistoryToken } from "./types";
 
 export class ChatConflict extends Error {}
+/** Round 9: the household's message as typed, when the chat read it in plainer words; it is what the history shows. */
+export const turnDisplay=new AsyncLocalStorage<{message?:string}>();
 type ChatGlobals = typeof globalThis & { __dearpolicyChatSchema?: Promise<void> };
 export async function ensureChatSchema() {
   const state = globalThis as ChatGlobals;
@@ -107,7 +110,7 @@ export async function saveTurn(args:{conversation:Conversation;token:HistoryToke
     if(!updated.rows.length)throw new ChatConflict("This chat was deleted or changed while the answer was being prepared.");
     await client.query(
       "INSERT INTO chat_messages(account_id,family_member_id,conversation_id,role,content,citations,answer_json) VALUES($1,$2,$3,'user',$4,NULL,NULL),($1,$2,$3,'assistant',$5,$6::jsonb,$7::jsonb)",
-      [args.conversation.account_id,args.conversation.family_member_id,args.conversation.id,args.message,args.answer.summary,JSON.stringify(args.answer.citations),JSON.stringify(args.answer)]);
+      [args.conversation.account_id,args.conversation.family_member_id,args.conversation.id,turnDisplay.getStore()?.message??args.message,args.answer.summary,JSON.stringify(args.answer.citations),JSON.stringify(args.answer)]);
     // The answer and the visible chat-job completion are one atomic unit.
     // If a worker dies after COMMIT but before acknowledging its generic
     // background job, the retry sees this terminal row and exits without

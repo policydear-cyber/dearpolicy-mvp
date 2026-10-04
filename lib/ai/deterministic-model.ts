@@ -26,9 +26,13 @@
  * DEARPOLICY_DETERMINISTIC_MODEL=chaos-<seed> wraps this stand-in in the chaos
  * model (lib/ai/chaos-model.ts), which mutates its output the way a misbehaving
  * real model would. It is stricter still: it also requires NODE_ENV=test.
+ * DEARPOLICY_DETERMINISTIC_MODEL=ingest-chaos-<seed> does the same for the
+ * calls made while a DOCUMENT is read (lib/ai/chaos-ingest.ts), under the same
+ * test-only guard, and leaves chat-time calls to this stand-in.
  */
 import type { HostedReply } from "./providers";
 import { chaosReply, chaosSeedOf } from "./chaos-model";
+import { ingestChaosOcrMode, ingestChaosReply, ingestChaosRng, ingestChaosSeedOf, mutateOcrTranscript } from "./chaos-ingest";
 
 export const DETERMINISTIC_MODEL_FLAG = "DEARPOLICY_DETERMINISTIC_MODEL";
 export const DETERMINISTIC_MODEL_VALUE = "synthetic-e2e";
@@ -53,8 +57,19 @@ export function chaosModelSeed(env: NodeJS.ProcessEnv = process.env): number | n
   return seed;
 }
 
+/** The ingestion chaos seed, under exactly the chaos model's test-only guard; null everywhere else. */
+export function ingestChaosModelSeed(env: NodeJS.ProcessEnv = process.env): number | null {
+  const seed = ingestChaosSeedOf(env[DETERMINISTIC_MODEL_FLAG]);
+  if (seed == null) return null;
+  if (env.NODE_ENV !== "test") return null;
+  if ((env.VERCEL ?? "").trim() || (env.VERCEL_ENV ?? "").trim()) return null;
+  if (!(env.E2E_RUN_ID ?? "").trim()) return null;
+  return seed;
+}
+
 export function deterministicModelEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (chaosModelSeed(env) != null) return true;
+  if (ingestChaosModelSeed(env) != null) return true;
   if ((env[DETERMINISTIC_MODEL_FLAG] ?? "").trim() !== DETERMINISTIC_MODEL_VALUE) return false;
   if (env.NODE_ENV === "production") return false;
   if ((env.VERCEL ?? "").trim() || (env.VERCEL_ENV ?? "").trim()) return false;
@@ -183,7 +198,12 @@ export function deterministicHostedDocumentText(args: { system: string; user: st
     "Section 1 - Critical Illness Benefit: We will pay 100% of the Sum Insured upon diagnosis of a covered critical illness.",
     "Section 2 - Waiting period: A waiting period of 90 days applies to the Critical Illness Benefit from the cover start date.",
   ].join("\n");
-  const content = JSON.stringify({ pages: (pageNumbers.length ? pageNumbers : [1]).map((n) => ({ pageNumber: n, text: pageText(n) })) });
+  let content = JSON.stringify({ pages: (pageNumbers.length ? pageNumbers : [1]).map((n) => ({ pageNumber: n, text: pageText(n) })) });
+  const ingestSeed = ingestChaosModelSeed();
+  if (ingestSeed != null) {
+    const mode = ingestChaosOcrMode(ingestSeed, pageNumbers.join(","));
+    if (mode) content = mutateOcrTranscript(content, mode, ingestChaosRng("ocr|" + ingestSeed + "|" + pageNumbers.join(",")));
+  }
   return {
     text: content, truncated: false,
     usage: { input: Math.ceil(args.pdfBase64.length / 2000), output: Math.ceil(content.length / 4) },
@@ -194,6 +214,8 @@ export function deterministicHostedDocumentText(args: { system: string; user: st
 /** Provider-shaped reply for one structured completion (through the chaos
  * model when a test process selected it). */
 export function deterministicHostedReply(args: { system: string; user: string }): HostedReply {
+  const ingestSeed = ingestChaosModelSeed();
+  if (ingestSeed != null) return ingestChaosReply(ingestSeed, args, () => syntheticHostedReply(args));
   const seed = chaosModelSeed();
   return seed == null ? syntheticHostedReply(args) : chaosReply(seed, args, () => syntheticHostedReply(args));
 }

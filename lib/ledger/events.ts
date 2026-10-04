@@ -162,6 +162,8 @@ export function eventsFromText(text:string):EventCandidate[]{
   if(/\b(?:matur\w*|survival benefit|endowment)\b/.test(t))add("maturity");
   if(accident&&!out.length){add("accident_medical_expense");add("ambulance");add("hospital_daily_cash","hospitalised");add("fracture");}
   if(illness&&!out.some(o=>o.event==="critical_illness")){add("critical_illness");add("hospital_daily_cash","hospitalised");}
+  // Round 9: hurt or ill on a trip: a travel plan's overseas medical expenses answer it.
+  if(/\b(?:overseas|abroad)\b/.test(t)&&(accident||illness||/\b(?:fractur\w*|broke|broken|break|injur\w*|hurt|hospital\w*|treatment)\b/.test(t)))add("travel_medical");
   return out;
 }
 

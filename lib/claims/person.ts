@@ -2,7 +2,7 @@ export type ClaimPerson = { id: string; display_name: string; preferred_name: st
 export type ClaimPersonResolution =
   | { status: "resolved"; person: ClaimPerson; explicit: boolean }
   | { status: "ambiguous"; candidates: ClaimPerson[] }
-  | { status: "unknown"; name: string; candidates: ClaimPerson[] };
+  | { status: "unknown"; name: string; candidates: ClaimPerson[]; /** Round 9: on file under the relation, but not known to be the one named ("my dad", a "parent"). */ unsure?: ClaimPerson[] };
 
 function normalized(value: string) {
   return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -42,6 +42,8 @@ function subjectName(text: string) {
   if (/^(i|i am|i['’]m|we|he|she|they|someone|a person|my (?:mother|father|mum|mom|dad|sister|brother|wife|husband|son|daughter|parent|child|spouse|sibling))$/i.test(name)) return null;
   // ", not admitted", ", never warded": a negation, not a person.
   if (/^(?:not|never|no|nobody|none|wasn['’]?t|isn['’]?t|but not)$/i.test(name)) return null;
+  // Round 9: "outpatient got cover?", "surgery got cover?": a kind of cover, not a person.
+  if (name.split(/\s+/).every((w) => COVER_WORD.test(w) || NOT_A_NAME.test(w))) return null;
   if (/^(?:his|her|their)\s+\S+$/i.test(name) || /['’]s\s+(?:wife|husband|spouse|son|daughter|child|kid|mother|father|mum|mom|dad|parent|sister|brother)$/i.test(name)) return null;
   // The chat's own question, sent back with its answer ("On what date was it
   // diagnosed: Not sure"), names no one: a question is not a subject.
@@ -203,10 +205,15 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
 export function outsideHouseholdSubject(text: string, family: ClaimPerson[]): { relation: string; name: string | null } | null {
   const m = text.match(/\bmy\s+(colleague|co-?worker|uncle|aunt|auntie|friend|best friend|neighbou?r|cousin|boss|nephew|niece|helper|maid|domestic helper|classmate|boyfriend|girlfriend|(?:father|mother|brother|sister)-in-law|grand(?:uncle|aunt))\b(?:\s+((?:ah\s+)?[A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)?))?/iu);
   if (!m) return null;
+  // Round 9: "my helper" when the household's own helper is on file is that person, not someone outside it.
+  const relation = m[1].toLowerCase();
+  const rel = (p: ClaimPerson) => (p.relationship ?? "").toLowerCase();
+  if (/helper|maid/.test(relation) ? family.some((p) => /helper|maid|domestic/.test(rel(p))) : family.some((p) => rel(p) === relation)) return null;
   const before = text.slice(0, m.index ?? 0);
   // "Wei Jie's colleague" is still not in the household, but "Xin Yi and my friend" names Xin Yi.
   const named = family.some((p) => [p.display_name, p.preferred_name].filter(Boolean).some((n) => new RegExp("\\b" + normalized(n!).replace(/\s+/g, "\\s+") + "\\b(?!['’]s)").test(normalized(before))));
   if (named) return null;
-  const name = m[2] && !/^(?:was|is|has|had|died|passed|fell|got|broke)$/i.test(m[2].split(/\s+/)[0]) ? m[2].replace(/\s+(?:was|is|has|had|died|passed|fell|got|broke)\b.*$/i, "").trim() : null;
+  // Round 9: a name is written with a capital ("my colleague just got cancer" names nobody).
+  const name = m[2] && /^(?:ah\s+)?\p{Lu}/u.test(m[2]) && !/^(?:was|is|has|had|died|passed|fell|got|broke|just|also|who|said|says|told|already|recently)$/i.test(m[2].split(/\s+/)[0]) ? m[2].replace(/\s+(?:was|is|has|had|died|passed|fell|got|broke)\b.*$/i, "").trim() : null;
   return { relation: m[1].toLowerCase(), name };
 }

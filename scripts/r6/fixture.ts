@@ -20,6 +20,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { vector } from "@electric-sql/pglite/vector";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { PDF_PASSWORD_REQUIRED_MESSAGE } from "@/lib/documents/processing-errors";
+import { enterIngestChaos, tolerateUnderChaos } from "../r9/ingest-mode";
 
 export const ACCOUNT = "00000000-0000-0000-0000-00000000a600";
 export const OTHER_ACCOUNT = "00000000-0000-0000-0000-00000000a6ff";
@@ -90,9 +91,11 @@ export async function buildHousehold(): Promise<Household> {
   };
   const ingest = async (key: string, memberId: string, name: string, account = ACCOUNT) => {
     const doc = await insert(account, memberId, name + ".pdf", await fixture(name));
-    await processPolicy({ accountId: account, familyMemberId: memberId, policyId: doc.policyId, storageKey: doc.storageKey, linkUploadMember: true });
+    await tolerateUnderChaos(() => processPolicy({ accountId: account, familyMemberId: memberId, policyId: doc.policyId, storageKey: doc.storageKey, linkUploadMember: true }));
     docs[key] = doc.policyId;
   };
+  // Round 9: R9_INGEST_SEED reads every document under the ingestion chaos stand-in.
+  const leaveChaos = enterIngestChaos(PEOPLE.map((p) => p.display_name));
   await ingest("shield", MEILING, "ShieldCare_Premier_Schedule_2026_x");
   await ingest("renewal", MEILING, "ShieldCare_Renewal_Notice_2027_x");
   await ingest("term", WEIJIE, "TermSecure20_Renewal_Certificate_2026_x");
@@ -100,6 +103,7 @@ export async function buildHousehold(): Promise<Household> {
   await ingest("booklet", WEIJIE, "Harbourfront_Employee_Benefits_2026_x");
   // Another household's policy: never visible here.
   await ingest("other", OTHER_PERSON, "TermSecure20_Renewal_Certificate_2026_x", OTHER_ACCOUNT);
+  leaveChaos?.();
 
   // PA Guardian for Xin Yi, seeded as ingestion stores a personal schedule; no premium on file.
   const pa = uuid(n++); docs.pa = pa;

@@ -310,12 +310,14 @@ const MONTH_NAMES="January|February|March|April|May|June|July|August|September|O
  * (a death, a diagnosis, a fracture, an injury, a delayed flight...). The
  * conversation stays usable; anything the rules could not read is simply
  * asked for again. */
+/** A hospital stay the household reports in its own words (Round 9: "my hospital stay last week", "stayed in hospital 3 nights", "was discharged"). */
+const ADMITTED=/\b(?<!not |never |wasn['’]t |was not )(?:admitted|hospitali[sz]ed|warded)\b|\b(?:my|his|her|their|our) hospital stay\b(?=[^.?!]*\b(?:last|yesterday|ago|on \d|this (?:week|month)|earlier|from)\b)|\b(?:stayed|was|were|been) (?:in|at) (?:the )?hospital\b|\b(?:was|were|got) discharged\b/i;
 export function ruleInterpretation(args:{message:string;state:ConversationState;subjectIds:string[]}):Interpretation{
   const message=args.message;
   const sentences=message.split(/(?<=[.!?])\s+|\n+/).map(x=>x.trim()).filter(Boolean);
   const reports=affirmedDeathStatement(message)||!!reportedHomicide(message)||!!reportedConditionStatement(message)||
     !!reportedFractureStatement(message)||!!reportedInjuryStatement(message)||reportedEvents(message).length>0||
-    /\b(?<!not |never |wasn['’]t |was not )(?:admitted|hospitali[sz]ed|warded)\b/i.test(message)&&!/\b(?:if|suppose|what if)\b/i.test(message);
+    ADMITTED.test(message)&&!/\b(?:if|suppose|what if)\b/i.test(message);
   const asks=onlyAsksQuestions(message);
   const intent:Interpretation["intent"]=args.state.pending&&!asks?"follow_up"
     :reports&&!asks?"claim"
@@ -327,7 +329,7 @@ export function ruleInterpretation(args:{message:string;state:ConversationState;
   if(subject&&intent!=="policy_question"&&intent!=="portfolio"){
     const died=sentences.find(x=>affirmedDeathStatement(x));
     if(died)facts.push({subjectId:subject,key:"death",value:true,state:"known",quote:died});
-    const admitted=sentences.find(x=>/\b(?<!not |never |wasn['’]t |was not )(?:admitted|hospitali[sz]ed|warded)\b/i.test(x)&&!/\b(?:if|suppose|what if)\b/i.test(x));
+    const admitted=sentences.find(x=>ADMITTED.test(x)&&!/\b(?:if|suppose|what if)\b/i.test(x));
     if(admitted)facts.push({subjectId:subject,key:"hospitalised",value:true,state:"known",quote:admitted});
     const diagnosed=sentences.map(x=>x.match(/\bdiagnosed with ([^.?!,;]{2,80}?)(?= on \d| in \d| last | yesterday|[.?!,;]|$)/i)).find(m=>m&&!hypotheticalBefore(message,message.indexOf(m[0])));
     if(diagnosed){

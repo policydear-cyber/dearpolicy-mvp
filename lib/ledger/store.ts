@@ -181,6 +181,15 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
   await ensureLedgerSchema();
   const family=people??(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[accountId])).rows;
   if(!family.length)return {added:0};
+  // Round 9: a re-read rebuilds a document's benefit and cover rows (new ids),
+  // so a row seeded from a row that no longer exists is stale: it is removed
+  // (unless a person changed or rejected it) before seeding, never left to
+  // stand beside the row seeded from the new read.
+  await query(
+    `DELETE FROM coverage_rules c WHERE c.account_id=$1 AND c.origin<>'person' AND c.status<>'rejected' AND c.updated_at=c.created_at
+       AND ((c.seed_key LIKE 'benefit:%' AND split_part(split_part(c.seed_key,'|',1),':',2) NOT IN (SELECT id::text FROM policy_benefits WHERE account_id=$1))
+         OR (c.seed_key LIKE 'coverage:%' AND split_part(split_part(c.seed_key,'|',1),':',2) NOT IN (SELECT id::text FROM policy_coverages WHERE account_id=$1)))`,
+    [accountId]).catch(()=>undefined);
   const inventory=await loadPolicyInventory(accountId,family);
   const contracts=inventory.contracts;
   const documentIds=[...new Set(contracts.flatMap(c=>[...c.documents,...c.references].map(d=>d.id)))];
@@ -215,7 +224,8 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     const priced=contract.coverages.filter(c=>c.amount!=null&&c.amount>0);
     const words=row.plan_name.toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
     const match=priced.find(c=>words.some(w=>(c.productName??"").toLowerCase().includes(w)||c.category.toLowerCase().includes(w)))??(priced.length===1?priced[0]:null);
-    if(match?.amount!=null)await query("UPDATE coverage_rules SET sum_basis=$3,updated_at=now() WHERE account_id=$1 AND id=$2",[accountId,row.id,match.amount]);
+    // A join made here, not a person's edit: updated_at is left alone, so a re-read still replaces the row.
+    if(match?.amount!=null)await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,match.amount]);
   }
   let added=0;
   for(const s of seeds){

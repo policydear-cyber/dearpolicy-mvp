@@ -475,6 +475,9 @@ export function collapseSharedConditions(answer: Pick<ChatAnswer, "claimItems" |
     const moved = shared.filter((s) => !stillShared.includes(s));
     for (const s of moved) if (!answer.details.includes(s)) answer.details.push(s);
   }
+  // Round 9: a sentence a card still says is not said again below the cards.
+  const onCards = new Set(shownCards.flatMap((item) => String(item.reason ?? "").split(/(?<=[.!?])\s+/).map((x) => x.trim().toLowerCase())));
+  answer.details = answer.details.filter((d) => !onCards.has(d.trim().toLowerCase()));
   const asCharged = "“Pays as charged” means the eligible bill is paid after the plan’s deductible and co-insurance.";
   if (shownCards.some((item) => /^Pays as charged\b/.test(item.reason)) && !answer.details.includes(asCharged)) answer.details.push(asCharged);
 }

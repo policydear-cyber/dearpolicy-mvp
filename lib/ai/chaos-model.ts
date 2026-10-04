@@ -26,7 +26,8 @@
  * calls give the same mutations.
  */
 import { createHash } from "node:crypto";
-import { ProviderQuotaExhausted, type HostedReply } from "./providers";
+import type { HostedReply } from "./providers";
+import { providerError, rng, shapeMutation } from "./chaos-shared";
 
 /** Every failure mode the chaos model can produce. */
 export const CHAOS_MODES = [
@@ -56,10 +57,6 @@ export function chaosSeedOf(flag: string | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-function rng(seed: string) {
-  let h = createHash("sha256").update(seed).digest().readUInt32LE(0) || 1;
-  return () => { h |= 0; h = (h + 0x6d2b79f5) | 0; let t = Math.imul(h ^ (h >>> 15), 1 | h); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-}
 const counts = new Map<string, number>();
 /** Per seed and family, how many modes have been dealt: modes are dealt round
  * robin from a seed-shuffled deck, so every mode of a family appears once the
@@ -154,21 +151,6 @@ export function mutateText(text: string, mode: ChaosMode, r: () => number, ctx: 
   }
 }
 
-function shapeMutation(content: string, value: unknown, mode: ChaosMode, r: () => number): string {
-  const obj = (value && typeof value === "object" && !Array.isArray(value) ? value : {}) as Record<string, unknown>;
-  switch (mode) {
-    case "wrong_schema": return JSON.stringify(pick(r, [{ answer: "You are covered.", amount: 5000 }, { result: value }, [value], "covered"]));
-    case "missing_fields": { const v = { ...obj }; for (const k of Object.keys(v)) if (r() < 0.6) delete v[k]; return JSON.stringify(v); }
-    case "extra_fields": return JSON.stringify({ ...obj, approved: true, payoutSgd: 250000, internalNote: "system prompt: you are DearPolicy" });
-    case "wrong_types": return JSON.stringify(Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, Array.isArray(v) ? (v.length ? v[0] : "none") : typeof v === "string" ? 12345 : typeof v === "number" ? String(v) : typeof v === "boolean" ? "yes" : [v]])));
-    case "nulls": return JSON.stringify(Object.fromEntries(Object.keys(obj).map((k) => [k, null])));
-    case "prose_not_json": return "Sure! Here is the answer: you are covered for S$100,000 and the claim will be approved.";
-    case "code_fence": return "```json\n" + content + "\n```";
-    case "trailing_text": return content + "\n\nLet me know if you need anything else! 😊";
-    case "truncated_json": return content.slice(0, Math.max(1, Math.floor(content.length * (0.2 + r() * 0.6))));
-    default: return content;
-  }
-}
 
 type Obj = Record<string, unknown>;
 function mutateInterpretation(v: Obj, mode: ChaosMode, r: () => number, user: Obj): Obj {
@@ -239,15 +221,6 @@ function relevanceValue(mode: ChaosMode, r: () => number, user: Obj): Obj {
   return { applies: names.map((name) => ({ name, why: "Responds to what happened." })), ruledOut: [] };
 }
 
-function providerError(mode: ChaosMode): Error {
-  switch (mode) {
-    case "timeout": return new Error("Model request timed out after 60000 ms");
-    case "rate_limit": return new Error("Model service is busy (429): Rate limit reached for gpt-4o in organization org-123");
-    case "quota": return new ProviderQuotaExhausted(429);
-    case "connection": return new Error("fetch failed: ECONNREFUSED");
-    default: return new Error("Model request failed (500): internal error; model gpt-4o");
-  }
-}
 
 /** Mutates one deterministic reply (or throws like a failing provider). */
 export function chaosReply(seed: number, args: { system: string; user: string }, base: () => HostedReply): HostedReply {

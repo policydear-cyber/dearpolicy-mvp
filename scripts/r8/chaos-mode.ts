@@ -10,7 +10,8 @@ import { appendFileSync } from "node:fs";
 import { DEGRADED } from "./detectors";
 
 type Rec = { hits: { rule: string; text: string }[]; chaos?: string[] };
-export const chaosSeed = () => process.env.R8_CHAOS_SEED ?? "";
+/** Round 9: a household READ under the ingestion chaos stand-in (R9_INGEST_SEED) is judged the same way. */
+export const chaosSeed = () => process.env.R8_CHAOS_SEED || process.env.R9_INGEST_SEED || "";
 export const isFailure = (rule: string) => !chaosSeed() || !DEGRADED.test(rule);
 
 export function reportChaos(out: (...a: unknown[]) => void, suite: string, records: Rec[], guard: number, messages: number) {

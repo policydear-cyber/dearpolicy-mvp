@@ -108,11 +108,17 @@ export function answerFromLedger(args:{rows:LedgerRow[];people:Person[];facts:Re
     if(!byEvent.size)continue;
     out.considered=true;
     // Gates first: only for events that have a row, so nothing is asked in vain.
+    // Round 9: an illness with no hospital stay said ("my helper fell sick, need to see doctor") is not asked about an
+    // operation first: whether there was an admission is the question that fits, and with none, surgery is not asked at all.
+    const bodily=knownValue(facts,"injured")===true||knownValue(facts,"fractureBodyPart")!=null||knownValue(facts,"eventType")==="accident"||knownValue(facts,"accidentType")!=null;
+    const stay=knownValue(facts,"hospitalised");
+    const surgeryWaits=!bodily&&stay!==true&&knownValue(facts,"hospitalNights")==null;
     if(!whatIf)for(const c of candidates){
       if(!c.gate||!byEvent.has(c.event))continue;
       const gate=GATES[c.gate];
       const v=knownValue(facts,gate.factKey);
       if(v!=null)continue;
+      if(c.gate==="surgery"&&surgeryWaits){if(stay==null)ask(person.id,GATES.hospitalised,facts);continue;}
       ask(person.id,gate,facts);
     }
     const bodyPart=knownValue(facts,"fractureBodyPart");

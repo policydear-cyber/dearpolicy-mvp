@@ -104,7 +104,22 @@ async function attemptHostedOcr(args: { accountId: string; resourceId?: string; 
   // string the same as the model silently DROPPING the page entirely used to
   // fail the whole document over a single decorative page. Only a page with
   // no entry at all in the reply is a real transcription failure.
-  return (parsed.pages ?? []).filter((p) => Number.isInteger(p.pageNumber));
+  return acceptTranscribedPages(args.pageNumbers, parsed.pages);
+}
+
+/** Round 9: only the pages that were asked for, each once (the first
+ * transcription of it), with text that is text. A transcript numbering a page
+ * that was not sent -- a native text page, a page that does not exist -- never
+ * replaces anything, and a repeated page never overwrites the first. */
+export function acceptTranscribedPages(requested: number[], pages: unknown): BridgePage[] {
+  const wanted = new Set(requested), seen = new Set<number>();
+  const out: BridgePage[] = [];
+  for (const p of Array.isArray(pages) ? pages as { pageNumber?: unknown; text?: unknown }[] : []) {
+    const n = Number(p?.pageNumber);
+    if (!Number.isInteger(n) || !wanted.has(n) || seen.has(n) || typeof p?.text !== "string") continue;
+    seen.add(n); out.push({ pageNumber: n, text: p.text });
+  }
+  return out;
 }
 
 /** Hosted replacement for the local PaddleOCR bridge (see ./ocr.ts). Sends

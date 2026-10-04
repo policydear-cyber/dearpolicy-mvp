@@ -51,6 +51,15 @@ async function main() {
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = path.join(dir, f); return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(f) ? [p] : []; });
     const users = [...walk("lib"), ...walk("app")].filter((f) => !f.endsWith("chaos-model.ts") && /from ["'][^"']*chaos-model["']/.test(readFileSync(f, "utf8")));
     assert.deepEqual(users.map((f) => f.split(path.sep).join("/")), ["lib/ai/deterministic-model.ts"]);
+    // Round 9: so does the ingestion chaos stand-in, and what the two share is reached only through them.
+    const importers = (name: string) => [...walk("lib"), ...walk("app")].filter((f) => !f.endsWith(name + ".ts") && new RegExp("from [\"'][^\"']*" + name + "[\"']").test(readFileSync(f, "utf8"))).map((f) => f.split(path.sep).join("/")).sort();
+    assert.deepEqual(importers("chaos-ingest"), ["lib/ai/deterministic-model.ts"]);
+    assert.deepEqual(importers("chaos-shared"), ["lib/ai/chaos-ingest.ts", "lib/ai/chaos-model.ts"]);
+    const ingestTest = { NODE_ENV: "test", DEARPOLICY_DETERMINISTIC_MODEL: "ingest-chaos-7", E2E_RUN_ID: "r9" } as unknown as NodeJS.ProcessEnv;
+    assert.equal(deterministicModelEnabled(ingestTest), true);
+    for (const env of [{ ...ingestTest, NODE_ENV: "production" }, { ...ingestTest, NODE_ENV: undefined }, { ...ingestTest, VERCEL: "1" }, { ...ingestTest, E2E_RUN_ID: "" }])
+      assert.equal(deterministicModelEnabled(env as unknown as NodeJS.ProcessEnv), false, JSON.stringify(env));
+    assert.equal(checkDeterministicModelNotInProduction({ NODE_ENV: "production", DEARPOLICY_DETERMINISTIC_MODEL: "ingest-chaos-7" } as unknown as NodeJS.ProcessEnv).ok, false);
   });
   await t("a production or Vercel server refuses to start with the flag present; without it (control) it passes", () => {
     assert.equal(checkDeterministicModelNotInProduction({ NODE_ENV: "production", DEARPOLICY_DETERMINISTIC_MODEL: "synthetic-e2e" } as unknown as NodeJS.ProcessEnv).ok, false);

@@ -38,6 +38,7 @@ async function main() {
 
   const { detect, visibleFields, moneyIn } = await import("./r6/detectors");
   const { detectR8 } = await import("./r8/detectors");
+  const R9 = await import("./r9/ingest-detectors");
   const R8 = await import("./r8/chaos-mode");
   const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   // ------------------------------------------------ detector positive controls
@@ -72,11 +73,13 @@ async function main() {
       if (!personPolicies.has(r.family_member_id)) personPolicies.set(r.family_member_id, new Set());
       personPolicies.get(r.family_member_id)!.add(r.policy_id);
     }
-    return { pages, premiumFigures: [...new Set(premiumFigures)], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Goh Boon Kiat", "Boon Kiat"],
+    // Round 9: under R9_INGEST_SEED, who holds what comes from the household read by the well-behaved stand-in.
+    return R9.pristineOverride({ pages, premiumFigures: [...new Set(premiumFigures)], householdNames: F.PEOPLE.map((p) => p.display_name), foreignNames: ["Goh Boon Kiat", "Boon Kiat"],
       selfNames: F.PEOPLE.filter((p) => p.relationship === "self").flatMap((p) => [p.display_name, p.preferred_name]),
-      foreignPolicyIds: new Set([h.docs.other]), personPolicies };
+      foreignPolicyIds: new Set([h.docs.other]), personPolicies });
   };
   let gMain = await truth();
+  const g9 = await R9.pageTruth(h.db as never, F.ACCOUNT);
 
   const only = process.env.R6_ONLY;
   const dump = process.env.R6_DUMP;
@@ -119,6 +122,7 @@ async function main() {
       for (const m of mentions) if (!m.test(all)) hits.push({ rule: "answer ignores the question", text: "expected " + m + " in: " + a.summary.slice(0, 200) });
       if (e.asksPerson && a.questions[0]?.id !== "claim_person") hits.push({ rule: "ambiguous person not asked", text: a.summary.slice(0, 200) });
       hits.push(...detectR8(a, { userText }, { pages: g.pages, today }));
+      if (account === F.ACCOUNT) hits.push(...R9.detectR9(a, g9));
     }
     const rec: Record_ = { chaos: chaosNote(), conv: name, turn, question, status: r.status, ms: r.ms, summary: a?.summary ?? String(r.data?.error ?? ""), answer: a, hits };
     records.push(rec);
@@ -194,7 +198,7 @@ async function main() {
   if (failing.length) process.exitCode = 1;
   // The guard is a safety net only: on this battery it must never have had to act.
   if (guard.guardInterventions.length) {
-    quietLog("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s) — fix the root cause:\n" + guard.guardInterventions.slice(0, 5).map((g) => "  before: " + g.before.slice(0, 300) + "\n  after:  " + g.after.slice(0, 300)).join("\n"));
+    quietLog("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s) — fix the root cause:\n" + guard.guardInterventions.slice(0, 5).map((g) => { let i = 0; while (i < g.before.length && g.before[i] === g.after[i]) i++; return "  before: …" + g.before.slice(Math.max(0, i - 160), i + 200) + "\n  after:  …" + g.after.slice(Math.max(0, i - 160), i + 200); }).join("\n"));
     process.exitCode = 1;
   } else quietLog("output guard interventions: 0");
   R8.reportChaos(quietLog, "r6", records, guard.guardInterventions.length, messages);

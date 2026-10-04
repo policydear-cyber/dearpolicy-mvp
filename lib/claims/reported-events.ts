@@ -57,6 +57,12 @@ export function reportedEvents(text: string): ReportedEvent[] {
   if (bite) injury("wound", bite[0], t.match(new RegExp(String.raw`\b(?:on|to)\s+(?:her|his|my|their)\s+(${BODY})\b`, "i"))?.[1] ?? null);
   const cut = !tooth && !burn && !bite && first(t, new RegExp(String.raw`\b(?:needed|got|had)\s+(?:\d+\s+)?stitches\b|\b(?:deep|bad|nasty)\s+cut\b|\bcut\s+(?:her|his|my|their)\s+(?:${BODY})\b`, "i"));
   if (cut) injury("wound", cut[0], t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null);
+  // Round 9: "the doctor say maybe fracture", "suspected fracture": an injury the X-ray has yet to confirm.
+  const suspected = !tooth && !burn && !bite && !cut && first(t, /\b(?:maybe|might be|may be|could be|suspect(?:ed)?|possible|possibly)\s+(?:a\s+)?(?:fracture[sd]?|broken(?:\s+bone)?)\b/i);
+  if (suspected) injury("possible fracture", suspected[0], t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null);
+  // Round 9: "knocked down by a car", "hit by a bus": a road accident, injuries still to be told.
+  const road = !tooth && !burn && !bite && !cut && !suspected && first(t, /\b(?:knocked down|hit by a (?:car|bus|lorry|motorcycle|motorbike|van|taxi)|run over)\b/i);
+  if (road) { injury("injury in a road accident", road[0], t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null); out.at(-1)!.facts.eventType = "accident"; out.at(-1)!.traits = ["bodily_injury", "accident"]; }
   // ------------------------------------------------------------ surgery, childbirth
   const surgery = first(t, /\b(?:had|went for|underwent|did)\s+(?:a\s+|an\s+|her\s+|his\s+|my\s+)?(?:day\s+)?(?:surgery|operation)\b|\bday surgery\b/i);
   if (surgery && !/\b(?:next|tomorrow|will|going to|scheduled|planned)\b/i.test(t)) {
@@ -103,7 +109,14 @@ export function plannedMedicalEvent(text: string): { what: string } | null {
   const m = t.match(/\b((?:[a-z]+\s+){0,2}(?:surgery|operation|procedure|admission|delivery|scope|colonoscopy|biopsy))\b[^.?!]{0,30}\b(?:is|will be|scheduled|planned|booked)\b[^.?!]{0,20}\b(?:next|tomorrow|on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|in \d+ (?:days|weeks))\b/i)
     ?? t.match(/\b(?:will|going to|gonna|scheduled to|booked to)\s+(?:have|go for|undergo|be admitted for|do)\s+(?:a\s+|an\s+|her\s+|his\s+|my\s+)?((?:[a-z]+\s+){0,2}(?:surgery|operation|procedure|scope|delivery))\b/i)
     ?? t.match(/\b(?:will be|going to be|is being)\s+(admitted)\b[^.?!]{0,30}\b(?:next|tomorrow|on (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i);
-  const planned = m ?? t.match(/\b(?:a |an |it is a |it['’]s a )?(?:planned|elective|scheduled)\s+((?:[a-z]+\s+)?(?:operation|surgery|procedure|admission))\b/i);
+  // Round 9: "I'm having an operation on my shoulder next month", "knee surgery next week",
+  // "my doctor say I need to do a colonoscopy": not happened yet.
+  const PROC = "(?:surgery|operation|procedure|op|scope|colonoscopy|endoscopy|gastroscopy|biopsy|cataract surgery|keyhole surgery|angioplasty|delivery|c-section|caesarean)";
+  const m9 = m ? null : t.match(new RegExp("\\b(?:i['’]m|i am|she['’]s|he['’]s|she is|he is|we['’]re|(?:my|his|her) \\w+ is)\\s+(?:having|going for|scheduled for|booked for|due for)\\s+(?:a |an |my |his |her |the )?((?:[a-z]+\\s+){0,2}" + PROC + ")\\b", "i"))
+    ?? t.match(new RegExp("\\b((?:[a-z]+\\s+){0,2}" + PROC + ")\\s+(?:next|tomorrow|this coming|in \\d+ (?:days|weeks|months))\\b", "i"))
+    ?? t.match(new RegExp("\\b(?:need|needs|have|has|got|must) to (?:do|go for|have|undergo|take)\\s+(?:a |an |my |his |her |the )?((?:[a-z]+\\s+){0,2}" + PROC + ")\\b", "i"))
+    ?? t.match(new RegExp("\\b(?:need|needs) (?:a |an )((?:[a-z]+\\s+){0,2}" + PROC + ")\\b", "i"));
+  const planned = m ?? m9 ?? t.match(/\b(?:a |an |it is a |it['’]s a )?(?:planned|elective|scheduled)\s+((?:[a-z]+\s+)?(?:operation|surgery|procedure|admission))\b/i);
   if (!planned) return null;
-  return { what: planned[1].trim().toLowerCase().replace(/^(?:my|her|his|a|an|the)\s+/, "") };
+  return { what: planned[1].trim().toLowerCase().replace(/^(?:(?:my|her|his|a|an|the|to|do|go|for|have|need|needs|undergo|get)\s+)+/, "") };
 }
