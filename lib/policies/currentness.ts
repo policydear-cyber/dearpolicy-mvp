@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalDeathInsurer } from "@/lib/claims/death-evidence";
 import { normalizedIdentifier,type PolicyContract } from "@/lib/policies/inventory";
 import type { PolicyCurrentness } from "@/types";
@@ -63,7 +64,21 @@ export async function loadPremiumEvidence(accountId:string,memberIds:string[]){
     [accountId,memberIds]);
   return r.rows;
 }
-export function contractCurrentness(contract:PolicyContract,rows:PremiumEvidenceRow[],now:Date){
+/** Round 12: a policy whose own document prints that no further premium is payable (premiums completed,
+ * fully paid up) has no receipt or renewal notice to come: asking the household to upload one is a step
+ * that does not belong. Read from the stored page text of the policy's documents. */
+export const PAID_UP_TEXT=/\bno further premiums? (?:is |are |will be )?(?:payable|due|required)\b|\bpremium payments? (?:were |was |have been |has been )?(?:completed|ended|ceased)\b|\bstatus\s*:?[^.\n]{0,40}\b(?:fully )?paid[- ]up\b/i;
+export async function loadPaidUpPolicyIds(accountId:string,policyIds:string[]){
+  if(!policyIds.length)return new Set<string>();
+  const r=await query<{policy_id:string;text:string|null}>(
+    "SELECT pp.policy_id::text AS policy_id,pp.text FROM policy_pages pp JOIN policies p ON p.id=pp.policy_id WHERE p.account_id=$1 AND pp.policy_id::text=ANY($2::text[]) AND "+activePredicate("p"),
+    [accountId,policyIds]);
+  return new Set(r.rows.filter(row=>PAID_UP_TEXT.test(row.text??"")).map(row=>row.policy_id));
+}
+export function contractCurrentness(contract:PolicyContract,rows:PremiumEvidenceRow[],now:Date,paidUp?:Set<string>){
+  if(paidUp&&contract.documents.some(d=>paidUp.has(d.id)))
+    return {state:"verified_recent",label:"Premiums completed",detail:"The policy document prints that no further premium is payable, so there is no premium receipt or renewal notice to look for.",
+      lastEvidenceOn:null,renewalOrExpiryDate:contract.documents.map(d=>d.renewal_or_expiry_date).filter((v):v is string=>!!v).sort().at(-1)??null} as PolicyCurrentness;
   const renewal=contract.documents.map(d=>d.renewal_or_expiry_date).filter((v):v is string=>!!v).sort().at(-1)??null;
   return assessCurrentness({now,lastEvidenceOn:matchPremiumEvidence(contract,rows),renewalOrExpiryDate:renewal});
 }

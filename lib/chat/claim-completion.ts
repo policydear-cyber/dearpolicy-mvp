@@ -101,6 +101,8 @@ export async function completeClaimAnswer(accountId: string, state: Conversation
       answer.summary = "I couldn’t find a benefit for " + event + " in " + whose + " policies on file. That is based on the documents uploaded; the insurer decides any claim.";
       answer.details = answer.details.filter((d) => /[.!?]$/.test(d.trim()) && !/\bfictitious\b|^None of the benefits in\b/i.test(d));
       answer.citations = []; state.claimSources = [];
+      // Round 12: with no benefit found, whether a policy is still paid up changes nothing -- no receipt to upload.
+      answer.nextSteps = answer.nextSteps.filter((step) => !/^Upload the latest premium receipt or renewal notice for /.test(step));
       // Round 11: what the person's own schedule prints about this kind of event ("Outpatient: Not included in this plan").
       try {
         const pages = await pagesFor(accountId, [personId]);

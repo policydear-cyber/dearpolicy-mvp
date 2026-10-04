@@ -23,7 +23,10 @@
  * run first: the chaos model can never be selected in production, the prose
  * gate refuses every text mutation, and the detectors detect.
  *
- * Deterministic: fixed seeds; R8_SEEDS=1,2,3 overrides them.
+ * Deterministic: fixed seeds; R8_SEEDS=1,2,3 overrides them. Round 12: a chaos decision depends only on
+ * the call's own content and repeat count (lib/ai/chaos-shared.ts chaosContentKey), never on the order calls
+ * arrive in, so a seed gives the same run every time; R8_REPEAT=<n> runs every seed n times and fails if any
+ * repeat differs (calls, mutations, hits, degraded turns).
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -96,15 +99,21 @@ async function main() {
   const summary = path.join(dir, "summary.jsonl");
   const fails: string[] = [];
   const seen = new Set<string>();
-  for (const seed of SEEDS) for (const b of BATTERIES) {
+  const prints = new Map<string, string>();
+  const repeat = Math.max(1, Number(process.env.R8_REPEAT ?? "1") || 1);
+  for (let pass = 0; pass < repeat; pass++) for (const seed of SEEDS) for (const b of BATTERIES) {
     const t0 = Date.now();
     const run = spawnSync(process.execPath, ["--import", "tsx", b.script], {
       env: { ...process.env, R8_CHAOS_SEED: seed, R8_SUMMARY: summary, R6_SHOW: "8", R7_SHOW: "8", R6_DUMP: "", R7_DUMP: "" },
       encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 20 * 60_000,
     });
     const tail = (run.stdout + run.stderr).trim().split("\n").slice(-60).join("\n");
-    const line = existsSync(summary) ? readFileSync(summary, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { suite: string; seed: string; turns: number; failures: number; degradedTurns: number; guard: number; modes: Record<string, number> }).find((x) => x.suite === b.suite && x.seed === seed) : undefined;
-    console.log(`seed ${seed} ${b.suite}: exit ${run.status}, ${line ? `${line.turns} turns, ${line.failures} failing hits, ${line.degradedTurns} degraded turns, guard ${line.guard}` : "no summary"} (${Math.round((Date.now() - t0) / 1000)} s)`);
+    const line = existsSync(summary) ? readFileSync(summary, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { suite: string; seed: string; turns: number; failures: number; degradedTurns: number; guard: number; modes: Record<string, number> }).filter((x) => x.suite === b.suite && x.seed === seed).at(-1) : undefined;
+    const calls = line ? Object.values(line.modes).reduce((a, c) => a + c, 0) : 0;
+    console.log(`seed ${seed} ${b.suite}: exit ${run.status}, ${line ? `${line.turns} turns, ${calls} model calls, ${line.failures} failing hits, ${line.degradedTurns} degraded turns, guard ${line.guard}` : "no summary"} (${Math.round((Date.now() - t0) / 1000)} s)`);
+    // Round 12: the same seed must give the same run. A fingerprint of what the chaos model did and what the
+    // battery found is compared across repeats of the run (R8_REPEAT=<n>, used to prove stability).
+    if (line) { const fp = JSON.stringify([line.turns, line.failures, line.degradedTurns, line.guard, Object.entries(line.modes).sort()]); const k = seed + "|" + b.suite; if (prints.has(k) && prints.get(k) !== fp) fails.push(`seed ${seed} ${b.suite}: not reproducible -- a repeat of the same seed gave a different run`); prints.set(k, fp); }
     if (run.status !== 0 || !line) { fails.push(`seed ${seed} ${b.suite} failed:\n${tail}`); continue; }
     for (const m of Object.keys(line.modes)) seen.add(m.split(":")[1]);
     if (line.degradedTurns > line.turns * MAX_DEGRADED_SHARE) fails.push(`seed ${seed} ${b.suite}: ${line.degradedTurns} of ${line.turns} turns degraded (limit ${Math.round(MAX_DEGRADED_SHARE * 100)}%)`);

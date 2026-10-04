@@ -4,6 +4,7 @@
  * fact-finding plans, citations) is checked for garbled, leaky, wrong,
  * repetitive or fragmentary text. Pure functions; no I/O.
  */
+import { ASKS_EVERYTHING } from "../r11/judge";
 import type { ChatAnswer } from "@/types";
 
 export type Hit = { rule: string; text: string };
@@ -161,6 +162,16 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
   const summary = (a.summary ?? "").trim();
   const asking = (a.questions ?? []).length > 0 || (a.factFinding ?? []).some((p) => p.nextQuestions.length);
   if (summary.length < (asking ? 8 : 15)) hit("empty or near-empty answer", "summary=«" + summary + "»");
+  // ---------------------------------------------------------------- length (Round 12)
+  // The concise-answer rule (scripts/r11/judge.ts wordCeiling) holds in every battery: an answer to a policy
+  // question runs to at most 250 words unless every line was asked for. A claim assessment, whose cards are
+  // the answer, is bounded by its own suites, and the household inventory (one line per person, beside the
+  // policy table) grows with the household by design.
+  if ((a.mode ?? "answer") === "answer" && !(a.claimItems ?? []).length && !(a.portfolioItems ?? []).length && !ASKS_EVERYTHING.test(t.question)) {
+    const read = [a.summary, ...a.details, ...a.nextSteps, ...(a.questions ?? []).map((q) => q.text), ...(a.policyStatedLimits ?? []).map((l) => (l.ownerName ? l.ownerName + " · " : "") + l.benefitTitle + " " + l.amountText)].join(" ");
+    const words = read.trim().split(/\s+/).filter(Boolean).length;
+    if (words > 250) hit("answer too long", words + " words: " + summary.slice(0, 160));
+  }
   // ---------------------------------------------------------------- repetition
   const sentences = new Map<string, number>();
   // Each claim card states how its own benefit pays; the same kind of rule on

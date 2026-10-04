@@ -272,6 +272,8 @@ export type PolicyAnswerArgs = {
   people: ClaimPerson[];
   /** Round 10: the message as sent, when the question answered is a carried-over one ("how much?" after a cover question). */
   message?: string;
+  /** Round 12: the household asked for every line ("show me the full list" after a short answer). */
+  fullList?: boolean;
   now?: Date;
   /** Optional rephrasing of the verified text. Its output is checked and discarded if it adds anything. */
   narrate?: (input: { question: string; text: string; assertions: Assertion[] }) => Promise<string | null>;
@@ -1284,6 +1286,14 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
        FROM premium_records WHERE account_id=$1 AND coalesce(source_document_id,policy_id)::text=ANY($2::text[]) GROUP BY 1`, [args.accountId, docIds]).catch(() => ({ rows: [] as { policy_id: string; latest: string | null }[] }));
   const premiumBy = new Map(latestPremium.rows.map((r) => [r.policy_id, r.latest]));
   const monthsAgo = (iso: string | null) => iso ? (now.getTime() - new Date(iso.slice(0, 10) + "T00:00:00Z").getTime()) / (30.44 * 86400_000) : null;
+  /** Round 12: the other documents of the same policy (same policy number, or same product for the same people). */
+  const sameContract = (policyId: string) => {
+    const d = docs.get(policyId); if (!d) return [];
+    const num = (x: DocRow) => (x.policy_number ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const owners = speaksFor.get(policyId) ?? new Set<string>();
+    return [...docs.values()].filter((o) => o.id !== policyId && !inactive(o.id) && (num(d) && num(o) === num(d)
+      || !!d.product_name && (o.product_name ?? "").toLowerCase() === d.product_name.toLowerCase() && [...(speaksFor.get(o.id) ?? [])].some((x) => owners.has(x))));
+  };
   const outdated = (policyId: string) => {
     const d = docs.get(policyId); if (!d) return false;
     if (expired(policyId)) return true;
@@ -1295,6 +1305,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     const begins = d.effective_date?.slice(0, 10) ?? null;
     if (st?.state === "in_force" && period && begins && begins <= today && daysBetween(begins, period.iso) <= 800) return false;
     const age = monthsAgo(d.document_date ?? d.effective_date), paid = monthsAgo(premiumBy.get(policyId) ?? null);
+    // Round 12: currentness is the policy's, not one document's -- a 2026 statement or renewal notice on file
+    // for the same policy makes its 1988 contract current too.
+    if (age != null && age > 15 && sameContract(policyId).some((o) => { const a2 = monthsAgo(o.document_date ?? o.effective_date), p2 = monthsAgo(premiumBy.get(o.id) ?? null); return (a2 != null && a2 <= 15) || (p2 != null && p2 <= 13); })) return false;
     return age != null && age > 15 && !(paid != null && paid <= 13);
   };
   const dateOf = (policyId: string) => { const d = docs.get(policyId); return d ? shortDate(d.document_date ?? d.effective_date) : null; };
@@ -1324,7 +1337,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       const at = text.indexOf(": ");
       text = at > 0 && at < 60 ? text.slice(0, at) + ": “" + text.slice(at + 2) + "”" : "“" + text + "”";
     }
-    return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" ? ", document dated " + dated : "") + status + ").";
+    return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" && outdated(a.policyId) ? ", document dated " + dated : "") + status + ").";
   };
   // One line for a fact several people share (a family travel plan), naming them all.
   const shared = new Map<string, Candidate[]>();
@@ -1388,7 +1401,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // "How much?" after a question about cover: the amounts, said as amounts.
   const amountsAsked = /^\s*(?:and\s+|so\s+)?how much\b[^?]{0,20}\??\s*$/i.test(args.message ?? askedText) && shown.some((a) => a.amount != null);
   if (shown.length) lines.push(amountsAsked ? "These are the amounts " + (whose === "your" ? "your" : whose) + " documents state" + (aboutLabels.length ? " for " + aboutLabels.join(" and ") : "") + ", each with the page it comes from."
-    : (whose === "your" ? "Here is what your" : "Here is what " + whose) + " documents state" + (aboutLabels.length ? " about " + aboutLabels.join(" and ") : "") + ". Each line shows the page it comes from.");
+    : (whose === "your" ? "Here is what your" : "Here is what " + whose) + " documents state" + (aboutLabels.length ? " about " + aboutLabels.join(" and ") : "") + ".");
   // Several people asked about: who has nothing on it is said, not left out.
   // A household's car or home policy, or a window of dates, is not something each person is missing.
   if (args.people.length > 1 && shown.length && !conditionsShown && topics.length && !topics.some((t) => t.key === "status") && !windowAsked && !topics.some((t) => ["motor", "home"].includes(t.key)) && !namedDocs.length) {
@@ -1434,7 +1447,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   if (otherGaps.length) lines.push("Some details were left out because they could not be matched to the exact passage in the document: " + [...new Set(otherGaps.map((r) => r.reason))].slice(0, 2).join("; ") + ".");
   if (notFound.length) lines.push("I could not find " + notFound.join(" or ") + " in the documents read" + (args.people.length === 1 ? " for " + personName(args.people[0].id) : "") + ".");
   // "Who has hospital cover?": who, and on which plan -- not every row of every plan.
-  if (args.people.length > 1 && /^\s*(?:who(?:['’]s| is| are)? (?:has|have|covered|insured|got)\b|(?:does|do|is|are|has) (?:anyone|anybody|any of us|someone|everyone)\b|which of us\b)/i.test(askedText) && shown.length && topics.length) {
+  if (args.people.length > 1 && /^\s*(?:who(?: in (?:the|our|my) (?:family|household))?(?:['’]s| is| are)? (?:has|have|covered|insured|got)\b|(?:does|do|is|are|has) (?:anyone|anybody|any of us|someone|everyone)\b|which of us\b)/i.test(askedText) && shown.length && topics.length) {
     const byOwner = new Map<string, Set<string>>();
     for (const a of shown) (byOwner.get(a.ownerName) ?? byOwner.set(a.ownerName, new Set()).get(a.ownerName)!).add(docName(a.policyId) + (expired(a.policyId) ? " (" + (statusOf.get(a.policyId)?.state === "lapsed" ? "lapsed" : "ended") + ")" : ""));
     const listing = [...byOwner].map(([owner, plans]) => owner + " (" + [...plans].join(", ") + ")");
@@ -1474,12 +1487,16 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // A person's name is who is asked about, never what ("Maria's helper insurance" is not the line naming Maria).
   const withoutNames = args.people.flatMap((p) => [p.display_name, p.preferred_name ?? "", ...p.display_name.split(/\s+/).filter((w) => w.length >= 3)]).filter((n) => n.trim().length >= 2)
     .reduce((t, n) => t.replace(new RegExp("\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:['’]s)?\\b", "gi"), " "), askedText);
-  const repaired = relevanceRepair(withoutNames, [summary, ...details].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName);
+  // Round 12: a deadline to submit or notify ("submit the final bill ... within 90 days after discharge") answers a question
+  // about submitting or claiming, not one about which bills before or after a stay are covered.
+  const asksSubmitting = /\b(?:submit\w*|claim\w*|lodg\w*|notif\w*|deadline|time limit|file (?:a|the|my))\b/i.test(askedText);
+  const notADeadline = (r: { text: string }) => asksSubmitting || !SUBMIT_DEADLINE.test(r.text);
+  const repaired = relevanceRepair(withoutNames, [summary, ...details].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName).filter(notADeadline);
   // Round 11: the printed sentence about the particular thing asked ("MediSave cannot be used", "Each trip may last up to 90 days",
   // "Plan: Annual multi-trip, Asia") when no line shown says it -- from the same documents.
   const personWords = args.people.flatMap((p) => (p.display_name + " " + (p.preferred_name ?? "")).split(/\s+/));
   const rules = printedRuleLines(askedText, [summary, ...details, ...repaired.map((r) => r.text)].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName, { ignore: personWords })
-    .filter((r) => !repaired.some((x) => x.text === r.text));
+    .filter((r) => !repaired.some((x) => x.text === r.text)).filter(notADeadline);
   for (const r of repaired) {
     details.unshift(r.text);
     if (!citations.some((c) => c.policyId === r.citation.policyId && c.pageStart === r.citation.pageStart)) citations.push(r.citation);
@@ -1488,6 +1505,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // Round 10: the lines that answer what was asked came from the repair ("for how many days?" after an
   // ICU question is the ICU days, not the period of insurance): the summary names what those lines are
   // about, from the lines themselves, not the topic the question's words first matched.
+  let labelsNow = aboutLabels;
   if (repaired.length && !narrated && aboutLabels.length) {
     const quotedOf = (t: string) => t.replace(/^[^“]*“/, "").replace(/”[^”]*$/, "");
     const answeredLabels = [...new Set(repaired.map((r) => TOPICS.find((t) => t.fact.source !== "(?!)" && t.fact.test(quotedOf(r.text)))?.label).filter((l): l is string => !!l))];
@@ -1495,6 +1513,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     if (!answeredLabels.some((l) => aboutLabels.includes(l))) {
       const now = answeredLabels.join(" and ");
       summary = summary.replace(" about " + was + ".", now ? " about " + now + "." : ".").replace(" for " + was + ",", now ? " for " + now + "," : ",");
+      labelsNow = answeredLabels;
     }
   }
   // Round 11: "how do I make a claim?": the document's own claim steps, not every benefit row of the plan.
@@ -1519,7 +1538,41 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       if (!citations.some((c) => c.policyId === docId && c.pageStart === p.page)) citations.push({ chunkId: "page:" + docId + ":" + p.page, policyId: docId, policyName: docName(docId), pageStart: p.page, pageEnd: p.page });
     }
   }
-  if (!broad && details.length > 10) { const more = details.length - 9; details.splice(9, details.length, "There " + (more === 1 ? "is 1 more line" : "are " + more + " more lines") + " on this in the documents — ask about one benefit (for example the deductible, intensive care or surgery) to see it."); }
+  // Round 12: the label says what the lines shown are about ("about maturity or surrender value" for a surrender
+  // table, never "about the premium" because a premium was mentioned in passing).
+  if (labelsNow.length && details.length) {
+    const linesShown = details.map((d) => d.replace(/\s*\(page \d+[^)]*\)\.?$/, ""));
+    const count = (re: RegExp) => linesShown.filter((l) => re.test(l)).length;
+    const topicOf = (label: string) => TOPICS.find((t) => t.label === label && t.fact.source !== "(?!)");
+    const current = labelsNow.map((label) => ({ label, n: topicOf(label) ? count(topicOf(label)!.fact) : Infinity }));
+    const best = TOPICS.filter((t) => t.fact.source !== "(?!)" && t.asks.test(askedText)).map((t) => ({ label: t.label, n: count(t.fact) })).sort((a, b) => b.n - a.n)[0];
+    const top = Math.max(...current.map((c) => c.n));
+    const now = best && best.n > 0 && best.n > top ? [best.label] : current.filter((c) => c.n > 0).map((c) => c.label);
+    const was = labelsNow.join(" and ");
+    if (now.join(" and ") !== was) summary = summary.replace(" about " + was + ".", now.length ? " about " + now.join(" and ") + "." : ".").replace(" for " + was + ",", now.length ? " for " + now.join(" and ") + "," : ",");
+  }
+  // Round 12: never say a thing could not be found when this same answer shows it.
+  if (notFound.length) {
+    const shownText = details.join("\n");
+    const stillMissing = notFound.filter((label) => { const t = TOPICS.find((x) => x.label === label.replace(/^an? /, "")); const re = t && t.fact.source !== "(?!)" ? t.fact : new RegExp("\\b" + label.replace(/^(?:an?|the) /, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i"); return !re.test(shownText); });
+    if (stillMissing.length < notFound.length) {
+      const tail = " in the documents read" + (args.people.length === 1 ? " for " + personName(args.people[0].id) : "") + ".";
+      summary = summary.replace("I could not find " + notFound.join(" or ") + tail, stillMissing.length ? "I could not find " + stillMissing.join(" or ") + tail : "").replace(/\s{2,}/g, " ").trim();
+      notFound.splice(0, notFound.length, ...stillMissing);
+    }
+  }
+  // Round 12: concise answers. The lines that answer what was asked come first; a single-topic question shows
+  // at most five of them, a broad one (an overview, a comparison) eight, and the rest is one question away --
+  // "ask for the full list" -- unless the full list is what was asked for. The cards of the amounts follow the lines shown.
+  const fullList = !!args.fullList || FULL_LIST.test(askedText);
+  // Every part of a several-part question keeps at least one line ("life cover and when does it expire and the premium").
+  const severalParts = /\?.+\?|\band (?:how|what|when|which|is|are|does|do|can|will|who)\b/i.test(askedText);
+  const keep = !severalParts ? [] : topics.map((t) => t.fact.source !== "(?!)" ? t.fact : t.key === "renewal" || t.key === "status" ? /\bexpir|\brenew|\bperiod of (?:insurance|cover)|\bend date|\bends\b|\bin force\b|\blapse|\bgrace\b/i : null).filter((re): re is RegExp => !!re);
+  conciseDetails(details, limits, { cap: fullList ? Infinity : broad || severalParts ? 8 : 5, keep });
+  // One card per amount a person has, whichever of the policy's documents printed it (a contract and its statement).
+  { const seenCard = new Set<string>(); limits.splice(0, limits.length, ...limits.filter((l) => { const k = (l.ownerName ?? "") + "|" + l.benefitTitle.toLowerCase() + "|" + l.amount + "|" + l.currency; if (seenCard.has(k)) return false; seenCard.add(k); return true; })); }
+  // A card is for an amount on a line shown; a "who has it" listing shows no rows, so no cards.
+  if (details.length) { const visible = [summary, ...details].join("\n"); limits.splice(0, limits.length, ...limits.filter((l) => visible.includes(l.benefitTitle))); }
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
     confidence: kept.length && !conflicting.length ? (rejected.length || notFound.length ? "partial_match" : "strong_match") : "partial_match",
@@ -1535,6 +1588,26 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
 /** A question about what a policy prints, even phrased with "if" ("What's the pro-ration if I go private?",
  * "If my flat is unliveable, how much for a hotel?", "How much does it pay if he loses a thumb?"). */
 /** Round 11: "how do I make a claim if I'm admitted?", "what's the claim process?": the printed steps. */
+/**
+ * Round 12: the concise-answer rule. The lines that answer what was asked come first; a question about one
+ * thing shows at most five of them, an overview, a comparison or a several-part question eight, and the rest
+ * is one question away -- "ask for the full list". Every part of a several-part question keeps a line (`keep`).
+ * The cards of amounts follow the lines shown.
+ */
+export function conciseDetails(details: string[], limits: { benefitTitle: string }[], opts: { cap: number; keep?: RegExp[] }) {
+  if (details.length <= opts.cap + 1) return;
+  const chosen = details.slice(0, opts.cap);
+  for (const re of opts.keep ?? []) if (!chosen.some((d) => re.test(d))) { const extra = details.slice(opts.cap).find((d) => re.test(d) && !chosen.includes(d)); if (extra) chosen.push(extra); }
+  const more = details.length - chosen.length;
+  if (more <= 0) return;
+  details.splice(0, details.length, ...chosen, "There " + (more === 1 ? "is 1 more line" : "are " + more + " more lines") + " on this in the documents — ask for the full list to see " + (more === 1 ? "it" : "them") + ".");
+  const visible = details.join("\n");
+  limits.splice(0, limits.length, ...limits.filter((l) => visible.includes(l.benefitTitle)));
+}
+/** Round 12: a printed deadline to submit or notify. */
+const SUBMIT_DEADLINE = /\b(?:submit\w*|notif\w*|lodg\w*|send|written notice|claims? must be)\b[^.]{0,160}\bwithin \d+ (?:days?|months?|weeks?)\b|\bwithin \d+ (?:days?|months?|weeks?)\b[^.]{0,80}\b(?:submit\w*|notif\w*|lodg\w*)\b/i;
+/** Round 12: the household asked for every line, not the short answer. */
+export const FULL_LIST = /\b(?:full list|full details|(?:all|every one) of (?:it|them|the lines)|all (?:the )?(?:lines|benefits|details|rows)|every (?:benefit|line|row)|everything|whole (?:list|table|schedule)|benefits? (?:table|schedule|list)|schedule of benefits|table of benefits|list (?:all|every|the benefits))\b/i;
 export const HOW_TO_CLAIM = /\bhow (?:do|can|should|to|would) (?:i |we |you )?(?:go about )?(?:make|file|submit|start|do|lodge) (?:a |the |my )?claim\b|\bhow (?:do|can|should|to) (?:i |we )?claim\b|\bclaims? (?:process|procedure|steps)\b|\bhow (?:long|many days) (?:do|does|have) (?:i|we) (?:have )?to (?:claim|submit)\b/i;
 export function factualEvenAsWhatIf(question: string) {
   if (HOW_TO_CLAIM.test(question)) return true;

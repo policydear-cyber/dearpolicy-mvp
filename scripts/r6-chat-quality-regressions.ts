@@ -247,6 +247,10 @@ function selfTest(detect: typeof import("./r6/detectors").detect): string[] {
   expectRule("claim wording on a question", base({ summary: "I couldn’t find a benefit in your documents that matches what you described." }), /answered as a claim/, { question: "Compare Mei Ling and Wei Jie's hospital cover" });
   expectRule("what-if framing", base({ summary: "If an accident or injury happened, these benefits could be relevant." }), /what-if framing/, { question: "Xin Yi's accident plan pays what?" });
   expectRule("slow", base({}), /slow/, { ms: 9000 });
+  // Round 12: the concise-answer rule; a request for the full list is exempt.
+  const long = base({ details: Array.from({ length: 40 }, (_, i) => "Row " + (i + 1) + " of the printed schedule appears here with its page.") });
+  expectRule("too long", long, /answer too long/);
+  if (detect(long, { ...t, question: "show me the full list" }, g as never).some((x) => /answer too long/.test(x.rule))) fails.push("a requested full list flagged as too long");
   return fails;
 }
 

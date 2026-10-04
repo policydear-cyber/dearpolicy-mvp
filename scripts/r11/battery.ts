@@ -31,6 +31,8 @@ export type Expect = {
   askOk?: boolean;
   /** ...unless that question asks for something the person already said. */
   notAsk?: RegExp;
+  /** Round 12: a missing citation fails the turn (the regression it guards is the citation itself). */
+  strictCite?: boolean;
   /** Only test this turn while the given ISO date has not passed (date-bound facts). */
   until?: string;
 };
@@ -230,5 +232,32 @@ export function battery(): Conv[] {
     c("x-03", "rh", "cross", [t("What's my ShieldCare Premier rider co-payment cap?", { must: [NOTFOUND], not: [/Merlion/i] })]),
     c("x-04", "ch", "cross", [t("Papa's TermSecure 20 has a $200,000 critical illness accelerator right?", { must: [NOTFOUND], not: [/^\s*yes\b/i, /Straits Heritage/i] })]),
     c("x-05", "rh", "cross", [t("What does my TravelSafe Annual Family plan pay for travel delay?", { must: [NOTFOUND], not: [/Sentosa/i] })]),
+
+    // ===================================================== Round 12 regressions (the imperfections Round 11 left)
+    c("r12-01", "tl", "cover", [t("Are we covered for travel? who is on the policy", { must: [/TravelSafe/i, /Xin Yi/i, /Wei Jie/i], cite: [{ doc: TRAVEL, page: 2 }], strictCite: true })]),
+    c("r12-02", "tl", "cover", [t("How many days before admission are pre-hospital bills covered?", { must: [/180 days/i], not: [/within 90 days after discharge/i] })]),
+    c("r12-03", "tl", "cover", [t("Are my post-hospitalisation bills covered after discharge?", { must: [/365 days/i], not: [/within 90 days after discharge/i] })]),
+    c("r12-04", "tl", "claims", [t("How long do I have to submit my hospital claim?", { must: [/within 90 days|within 30 days/i] })]),
+    c("r12-05", "rh", "money", [t("If we surrender Irfan's endowment now how much do we get back?", { must: [$("17,220")], not: [/about the premium/i], person: ["IR"] })]),
+    c("r12-06", "rh", "money", [t("Can I surrender my ILP without charges?", { must: [/surrender charge/i], not: [/could not find[^.]*surrender/i] })]),
+    c("r12-07", "rh", "money", [t("What does my mother have?", { must: [/ElderShield/i], not: [/upload the latest[^.]*ElderShield/i] })]),
+    c("r12-08", "rh", "money", [t("Does mum still need to pay ElderShield premiums?", { must: [/no further premium/i], not: [/upload the latest (?:premium receipt|renewal notice)/i] })]),
+    c("r12-09", "ch", "what-if", [t("If Papa passes away how much does his whole life policy pay?", { must: [$("80,000")], not: [/not confirmed current|may not reflect the current terms/i], person: ["BH"] })]),
+    c("r12-10", "rh", "claims", [
+      t("Irfan lost his thumb in an accident at school, how much can we claim?", { askOk: true, not: [/Loss of (?:one|two) limbs?/i] }),
+      t("Singapore", { askOk: true, not: [/Loss of (?:one|two) limbs?/i] }),
+      t("2026-09-28", { askOk: true, not: [/Loss of (?:one|two) limbs?/i] }),
+      t("Emergency department", { askOk: true, not: [/Loss of (?:one|two) limbs?/i] }),
+      t("Not yet known", { askOk: true, not: [/Loss of (?:one|two) limbs?/i] }),
+      t("how much can claim?", { askOk: true, any: [/thumb/i], not: [/Loss of (?:one|two) limbs?/i, /Loss of (?:an index|any other) finger/i] }),
+    ], "IR"),
+    c("r12-11", "tl", "cover", [
+      t("We're going to Japan for 2 weeks in December, is our travel insurance ok?", { must: [/Asia/i, /ask for the full list/i] }),
+      t("show me the full list", { must: [/Trip cancellation/i, /Overseas medical expenses/i] }),
+    ]),
+    c("r12-12", "ch", "comparison", [t("Compare Papa's and Mama's hospital cover", { must: [/SilverShield/i, /CareCash/i] })]),
+    c("r12-13", "tl", "cover", [t("Who in the family has hospital cover?", { must: [/ShieldCare/i] })]),
+    c("r12-14", "tl", "claims", [t("xin yi high fever went A&E at KKH yesterday, not admitted, sent home", { askOk: true, not: [/upload the latest (?:premium receipt|renewal notice)/i] })]),
+    c("r12-15", "tl", "cover", [t("How much is Wei Jie's life cover and when does it expire and what is the premium?", { must: [/TermSecure/i, /2027|2045|expir/i, /premium/i] })]),
   ];
 }

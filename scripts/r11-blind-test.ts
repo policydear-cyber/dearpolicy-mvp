@@ -100,6 +100,7 @@ function judgeSelfTest(judge: typeof import("./r11/judge").judge): string[] {
   const fails: string[] = [];
   const base = (summary: string, extra: Partial<ChatAnswer> = {}): ChatAnswer => ({ mode: "answer", summary, details: [], claimItems: [], nextSteps: [], confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], ...extra });
   const truth = { people: [{ key: "A", names: ["Tan Mei Ling", "Mei Ling"], self: true }, { key: "B", names: ["Lim Wei Jie", "Wei Jie"] }], foreignNames: ["Goh Boon Kiat"], figures: new Set([3500, 800000]), policyFile: new Map<string, string>() };
+  const pad = (n: number) => Array.from({ length: n }, (_, i) => "Row " + (i + 1) + " of the printed schedule appears here.");
   const run = (a: ChatAnswer, expect = {}, userText = "q") => judge(a, 200, "", { question: "q", userText, expect, truth });
   const cases: [string, ReturnType<typeof run>, (r: ReturnType<typeof run>) => boolean][] = [
     ["clean answer scores 2", run(base("Your deductible is S$3,500 a policy year.")), (r) => r.score === 2],
@@ -114,6 +115,13 @@ function judgeSelfTest(judge: typeof import("./r11/judge").judge): string[] {
     ["must mention", run(base("Your plan has a deductible."), { must: [/3,500/] }), (r) => r.score === 0],
     ["decline", run(base("Sure, here is how to do it."), { decline: true }), (r) => r.score === 0],
     ["missing citation is minor", run(base("Your deductible is S$3,500 a policy year."), { cite: [{ doc: /x/, page: 1 }] }), (r) => r.score === 1],
+    ["single-topic answer over 180 words fails", run(base("Your deductible is S$3,500 a policy year.", { details: pad(25) })), (r) => r.score === 0 && r.defects.some((d) => d.rule === "answer too long")],
+    ["a comparison may run to 250 words", judge(base("Your deductible is S$3,500 a policy year.", { details: pad(25) }), 200, "", { question: "Compare our hospital plans", userText: "q", expect: {}, truth }), (r) => r.score === 2],
+    ["a comparison over 250 words fails", judge(base("Your deductible is S$3,500 a policy year.", { details: pad(35) }), 200, "", { question: "Compare our hospital plans", userText: "q", expect: {}, truth }), (r) => r.score === 0],
+    ["the full list is exempt", judge(base("Your deductible is S$3,500 a policy year.", { details: pad(40) }), 200, "", { question: "show me the full list", userText: "q", expect: {}, truth }), (r) => r.score === 2],
+    ["not found beside what is shown", run(base("Here is what your documents state. I could not find maturity or surrender value in the documents read for Rahman.", { details: ["Lion Gateway — \"There is no surrender charge after the 5th policy year\" (page 2)."] })), (r) => r.defects.some((d) => d.rule === "says not found for what it shows")],
+    ["not found for what is absent is fine", run(base("Here is what your documents state. I could not find dental cover in the documents read for Rahman.", { details: ["MediGuard — Deductible: S$3,500 (page 3)."] })), (r) => r.score === 2],
+    ["strict citation missing fails", run(base("Your deductible is S$3,500 a policy year."), { cite: [{ doc: /x/, page: 1 }], strictCite: true }), (r) => r.score === 0],
     ["user's own figure allowed", run(base("Your bill of S$18,000 is being looked at."), {}, "bill is $18,000"), (r) => r.score === 2],
   ];
   for (const [name, r, ok] of cases) if (!ok(r)) fails.push(name + ": " + JSON.stringify(r));

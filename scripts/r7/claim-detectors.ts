@@ -46,7 +46,7 @@ export function detectClaimTurn(a: ChatAnswer, t: ClaimTurn): Hit[] {
   if (!(a.questions ?? []).length && planQs.length && summaryAsks) hit("more than one question in a turn", a.summary + " | " + planQs[0].text);
   // ---------------------------------------------------- promises
   for (const f of prose) {
-    const text = f.text.replace(/\bnot a promise[^.]*\./gi, "").replace(/\bLetters? of Guarantee\b/gi, "LOG");
+    const text = f.text.replace(/\bnot a promise[^.]*\./gi, "").replace(/\bLetters?\s+of\s+Guarantee\b/gi, "LOG");
     const m = text.match(/\b(?:you|she|he|they|we|the family) (?:will|would) (?:definitely )?(?:get|receive|be paid)\b|\bguaranteed?\b|\bdefinitely (?:get|be paid|covered|claim)\b|\b(?:is|are|will be|has been) approved\b|\bentitled to\b|\bwill (?:surely|certainly) pay\b|\bconfirm(?:ed)? (?:that )?(?:you|she|he|they) will be paid\b/i);
     if (m && !/\b(?:not|never|cannot|can[’']t|no one can)\b[^.]{0,40}$/i.test(text.slice(0, m.index))) hit("payout promised", f.where + ": " + f.text);
   }

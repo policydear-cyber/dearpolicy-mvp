@@ -22,12 +22,12 @@
  * NODE_ENV is "test", E2E_RUN_ID is set and no VERCEL / VERCEL_ENV is present
  * (see deterministicModelEnabled / chaosModelSeed in deterministic-model.ts);
  * lib/launch/guards.ts refuses to start a production or Vercel server with the
- * flag present at all. Deterministic: the same seed and the same sequence of
- * calls give the same mutations.
+ * flag present at all. Deterministic: the same seed gives every call the same
+ * mutation, whatever order calls arrive in (Round 12: keyed by the call's own
+ * content and repeat count, see chaosContentKey in chaos-shared.ts).
  */
-import { createHash } from "node:crypto";
 import type { HostedReply } from "./providers";
-import { providerError, rng, shapeMutation } from "./chaos-shared";
+import { chaosContentKey, dealByKey, providerError, rng, shapeMutation } from "./chaos-shared";
 
 /** Every failure mode the chaos model can produce. */
 export const CHAOS_MODES = [
@@ -58,17 +58,8 @@ export function chaosSeedOf(flag: string | undefined): number | null {
 }
 
 const counts = new Map<string, number>();
-/** Per seed and family, how many modes have been dealt: modes are dealt round
- * robin from a seed-shuffled deck, so every mode of a family appears once the
- * family has been chosen as many times as it has modes. */
-const dealt = new Map<string, number>();
 /** Forget per-prompt call counts (a suite starting a fresh pass). */
-export function resetChaos() { counts.clear(); dealt.clear(); chaosLog.length = 0; }
-function deal(seed: number, family: string, modes: readonly ChaosMode[]): ChaosMode {
-  const key = seed + "|" + family, n = dealt.get(key) ?? 0; dealt.set(key, n + 1);
-  const deck = [...modes].map((m, i) => ({ m, k: rng(seed + "|" + family + "|" + i)() })).sort((a, b) => a.k - b.k).map((x) => x.m);
-  return deck[n % deck.length];
-}
+export function resetChaos() { counts.clear(); chaosLog.length = 0; }
 const pick = <T,>(r: () => number, list: readonly T[]): T => list[Math.floor(r() * list.length) % list.length];
 
 type Op = "interpretation" | "reading" | "narration" | "relevance" | "judge" | "extraction" | "other";
@@ -225,9 +216,12 @@ function relevanceValue(mode: ChaosMode, r: () => number, user: Obj): Obj {
 /** Mutates one deterministic reply (or throws like a failing provider). */
 export function chaosReply(seed: number, args: { system: string; user: string }, base: () => HostedReply): HostedReply {
   const op = opOf(args.system, args.user);
-  const key = seed + "|" + createHash("sha256").update(args.system + "\u0000" + args.user).digest("hex");
-  const n = (counts.get(key) ?? 0) + 1; counts.set(key, n);
-  const r = rng(key + "|" + n);
+  // Round 12: keyed by the call's own content and its repeat count only (see chaosContentKey), never by global call order.
+  const base0 = chaosContentKey("chat", seed, op, args.user);
+  const n = (counts.get(base0) ?? 0) + 1; counts.set(base0, n);
+  const key = base0 + "|" + n;
+  const r = rng(key);
+  const deal = (s0: number, family: string, modes: readonly ChaosMode[]) => dealByKey(s0, family, modes, key);
   let user: Obj = {}; try { user = JSON.parse(args.user) as Obj; } catch { user = {}; }
   // A quarter of calls are left alone, so conversations also see healthy turns between broken ones.
   const opModes = OP_MODES[op];

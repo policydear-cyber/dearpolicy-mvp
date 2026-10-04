@@ -10,7 +10,7 @@ import { analysisSources,loadPolicyInventory,normalizedIdentifier,retrieveContra
 import { eventFitIssue,meaningfulFact,overseasOnly } from "@/lib/claims/event-fit";
 import { applyMessageFacts } from "@/lib/claims/message-facts";
 import { loadMemberTiers,rowsForMember } from "@/lib/claims/member-tier";
-import { consolidateActiveStatus,contractCurrentness,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
+import { consolidateActiveStatus,contractCurrentness,loadPaidUpPolicyIds,loadPremiumEvidence,type PremiumEvidenceRow } from "@/lib/policies/currentness";
 import { contractReviewCoverage,emptyReviewCoverage,negativeConclusionPermitted,negativeCoverageClaim,summarizeReviewCoverage } from "@/lib/policies/review-coverage";
 import { allocateReadingWindows,candidateFromWindows,rankCandidates } from "@/lib/policies/relevance";
 import { answerFromLedger } from "@/lib/ledger/answer";
@@ -94,13 +94,13 @@ import { modelProseProblem,proofText } from "./model-text";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
-import { answerPolicyQuestion,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
+import { answerPolicyQuestion,conciseDetails,FULL_LIST,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
 import { printedRuleLines } from "./printed-rules";
 import { conversationalReply,dishonestReply } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
 import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM } from "./premium-answer";
 import { documentQuestionAnswer, printedLinesAnswer, printedRepair, provenanceAnswer } from "./document-questions";
-import { WHO_IS_COVERED,whoIsCoveredAnswer,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
+import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { householdPersonFromWords,productOwner } from "./person-words";
 import { inactiveDocuments,inactiveList } from "./policy-status";
@@ -742,7 +742,21 @@ export function catalogueCoverageAnswer(args:{question:string;people:ClaimPerson
   return {topics:topics.map(t=>t.label),lines,citations,limits};
 }
 function possessiveOf(people:ClaimPerson[]){return possessiveName(people);}
+/** Round 12: "show me the full list", "all of them", "the rest": every line of the answer just given. */
+const FULL_LIST_FOLLOW_UP=/^\s*(?:(?:ok(?:ay)?|yes|sure|please|pls)[,!.\s]+)?(?:(?:can you |could you |pls |please )?(?:show|give|list|tell|send)(?: me| us)?(?: the)? (?:full list|whole list|full details|all(?: of)?(?: them| it| the lines| the rest)?|everything|the rest|the other lines|the other \d+(?: lines)?|more)|(?:the )?full list|all of (?:them|it)|the rest)\b/i;
 /** "Upload the latest premium receipt or renewal notice for Mei Ling’s TravelSafe Annual Family to confirm it is still in force." */
+/** Round 12: a next step must fit the question. "Upload the latest receipt" is about a policy the answer relies
+ * on: when no benefit was found, a policy the answer does not even name needs no receipt to answer it. */
+function staleContractsForAnswer(contracts:PolicyContract[],answer:ChatAnswer){
+  const shown=answer.claimItems.filter(item=>item.status!=="not_applicable");
+  if(shown.length)return contracts;
+  const text=[answer.summary,...answer.details].join("\n");
+  return contracts.filter(c=>text.includes(c.name));
+}
+function renewalEvidenceSteps(contracts:PolicyContract[],family:ClaimPerson[],answer:ChatAnswer){
+  const relevant=staleContractsForAnswer(contracts,answer);
+  return relevant.length?[renewalEvidenceStep(relevant,family)]:[];
+}
 function renewalEvidenceStep(contracts:PolicyContract[],family:ClaimPerson[]){
   const names=[...new Set(contracts.map(c=>{const owner=family.find(p=>p.id===c.ownerId);return (owner?householdName(owner)+"’s ":"")+c.name;}))].slice(0,4);
   const list=names.length<=1?names.join(""):names.slice(0,-1).join(", ")+" and "+names.at(-1);
@@ -1643,7 +1657,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       }
       delete state.personContext;
       // Round 6 routing, decided from the words sent, never from a label alone.
-      let carriedQuestion:string|null=null;
+      let carriedQuestion:string|null=null,wantsFullList=false;
       {
         // A typed name answering "Who is this about?" sends the question that was held for it.
         const sentNow=(request.personContextMessage&&context.people.length===1&&request.submittedQuestion&&explicitPeople(request.submittedQuestion,context.family).length&&request.submittedQuestion.trim().split(/\s+/).length<=4?request.question:(request.submittedQuestion??request.question)).trim();
@@ -1737,6 +1751,11 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         }
         // "What is Xin Yi covered for?", "list all our policies": the policies on file, per person.
         if(!pendingBefore&&!reportsSomething&&COVERAGE_OVERVIEW.test(sentNow)&&!topicsNow.length&&!coverageTopics(sentNow).length){state.intent="portfolio";state.activeQuery=sentNow;}
+        // Round 12: "show me the full list" after a short answer: the same question, every line.
+        if(!pendingBefore&&!reportsSomething&&before.activeQuery&&before.intent&&before.intent!=="claim"&&FULL_LIST_FOLLOW_UP.test(sentNow)&&sentNow.split(/\s+/).length<=8&&!explicitPeople(sentNow,context.family).length){
+          state.intent="policy_question";state.activeQuery=before.activeQuery;carriedQuestion=before.activeQuery;wantsFullList=true;
+          if(!before.activeClaimQuery)delete state.activeClaimQuery;
+        }
         // A long message asking several things about the family's cover
         // ("...how much we would get if one of us was hospitalised, and whether
         // the rider covers the deductible, and what we are missing") is
@@ -1792,11 +1811,14 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         }
         // "Who is covered under the travel plan?": the people the documents name.
         if(!whatIfReply&&!pendingBefore&&!reportsSomething&&WHO_IS_COVERED.test(sentNow)){
-          const who=whoIsCoveredAnswer(sentNow,context.family,await documentsByPerson(request.accountId,context.family));
+          const covered=whoIsCovered(sentNow,context.family,await documentsByPerson(request.accountId,context.family));
+          const who=covered?.text??null;
           if(who){
             state.intent="policy_question";state.activeQuery=sentNow;
             state.subjects=structuredClone(before.subjects??{});state.scenarios=structuredClone(before.scenarios??{});delete state.activeClaimQuery;
             answer.mode="answer";answer.summary=who;answer.details=[];answer.citations=[];answer.claimItems=[];answer.questions=[];answer.confidence=null;
+            // Round 12: the page that lists the insured people is cited, as every other answer's facts are.
+            try{answer.citations=await whoIsCoveredCitations(request.accountId,covered?.matched??[]);}catch{/* The answer stands without its page. */}
             answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
             await check();
             await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:false}),jobId:options?.jobId});
@@ -1870,7 +1892,10 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       let premiumEvidence:PremiumEvidenceRow[]=[];
       try{premiumEvidence=contracts.length?await loadPremiumEvidence(request.accountId,[...new Set(contracts.map(c=>c.ownerId))]):[];}
       catch{/* Missing premium history never blocks an evidence-backed answer. */}
-      const currentness=new Map(contracts.map(contract=>[contract.id,contractCurrentness(contract,premiumEvidence,now)]));
+      // Round 12: a fully paid-up policy (premiums completed) needs no receipt to be current.
+      let paidUp=new Set<string>();
+      try{paidUp=contracts.length?await loadPaidUpPolicyIds(request.accountId,[...new Set(contracts.flatMap(c=>c.documents.map(d=>d.id)))]):paidUp;}catch{/* Unknown stays unknown. */}
+      const currentness=new Map(contracts.map(contract=>[contract.id,contractCurrentness(contract,premiumEvidence,now,paidUp)]));
       const hasWording=new Map(contracts.map(contract=>[contract.id,contract.references.length>0||contract.documents.some(d=>d.has_reference_sections===true)]));
       // Anything these documents still owe -- benefit rules, or the conditions
       // on what those rules pay -- is read here, before they are used to
@@ -2087,7 +2112,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         const sent=request.submittedQuestion??request.question;
         const policyQuestion=carriedQuestion??(/\?\s*$|^\s*(?:what|which|how|does|do|is|are|can|will|would|if|when|who)\b/i.test(sent)&&sent.trim().split(/\s+/).length>=4?sent:asked);
         if(state.intent!=="claim"&&!reportsAnEvent&&(isFactualPolicyQuestion(policyQuestion)||SEVERAL_QUESTIONS.has(answer)||NOT_A_WHAT_IF.has(answer))){
-          const policy=await answerPolicyQuestion({accountId:request.accountId,question:policyQuestion,people:context.people,message:sent});
+          const policy=await answerPolicyQuestion({accountId:request.accountId,question:policyQuestion,people:context.people,message:sent,fullList:wantsFullList});
           if(policy.handled){
             // Round 9: the question this answer is about is what the next short follow-up continues ("skull?" after a fracture answer).
             state.activeQuery=policyQuestion;
@@ -2217,7 +2242,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               if(whatIf)answer.details.push("This is a what-if. Nothing here has been recorded as a claim, and no facts from this question have been saved against anyone's profile.");
               collapseSharedConditions(answer);
               const staleNames=[...new Set(contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent").map(c=>c.ownerName+" · "+c.name))];
-              if(!whatIf&&staleNames.length)answer.nextSteps.push(renewalEvidenceStep(contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent"),context.family));
+              if(!whatIf&&staleNames.length)answer.nextSteps.push(...renewalEvidenceSteps(contracts.filter(c=>currentness.get(c.id)?.state!=="verified_recent"),context.family,answer));
               if(!whatIf&&context.people.length===1){
                 try{
                   const person=context.people[0];
@@ -2584,7 +2609,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           answer.summary=(lead?lead+" ":"")+(matched?"I found "+matched+" benefit"+(matched===1?"":"s")+" that can respond to what happened. This is a preliminary claim assessment: each still needs facts, documents and reviewed claim evidence before DearPolicy can give an indicative estimate."
             :"None of the benefit rules on file respond to what you described. That is based on the rules captured from your uploaded documents, so it is only as complete as those documents.");
           answer.confidence=verdict?claimConfidence(answer.claimItems):"partial_match";
-          if(staleContracts.length)answer.nextSteps.push(renewalEvidenceStep(staleContracts,context.family));
+          if(staleContracts.length)answer.nextSteps.push(...renewalEvidenceSteps(staleContracts,context.family,answer));
           console.debug("[chat] answered from benefit catalogue",{rules:catalog.length});
           answer.details.push("Anything you upload is read automatically; the Benefits page shows what has been read from your documents.");
           // Ask for the single fact that would unlock the most, so the chat
@@ -2622,6 +2647,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               answerText:[answer.summary,...covered.lines].join("\n"),topic:conversation.state.activeQuery??null}).catch(()=>null);
             if(repair){answer.details=[...repair.details,...answer.details];addCitations(answer.citations,repair.citations);}
             answer.policyStatedLimits=covered.limits;
+            // Round 12: the concise-answer rule, as for every policy answer (lib/chat/policy-answer.ts conciseDetails).
+            conciseDetails(answer.details,answer.policyStatedLimits,{cap:wantsFullList||FULL_LIST.test(request.submittedQuestion??request.question)?Infinity:covered.topics.length>=2?8:5});
             answer.confidence="partial_match";
             delete state.pending;
             answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
@@ -2786,7 +2813,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         answer.reviewCoverage=summarizeReviewCoverage(reviews.map(r=>r.coverage??emptyReviewCoverage(r.status==="not_ready"?"not_processed":r.status==="missing_wording"?"no_wording":"partial_retrieval")));
         answer.details=[...new Set([...catalogueNotes,...observations])];
         if(staleContracts.length&&state.intent==="claim")
-          answer.nextSteps.push(renewalEvidenceStep(staleContracts,context.family));
+          answer.nextSteps.push(...renewalEvidenceSteps(staleContracts,context.family,answer));
         answer.nextSteps=[...new Set(answer.nextSteps)];
         answer.missingFacts=[...new Set(answer.missingFacts)];
         // One clause can be extracted under two coverage ids, which produced the

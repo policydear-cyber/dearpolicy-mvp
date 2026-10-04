@@ -91,7 +91,19 @@ export function judge(a: ChatAnswer | null, status: number, err: string, ctx: { 
   // ---- length
   const words = flat.split(" ").length, sw = a.summary.split(/\s+/).length;
   if (sw > 90) minor("summary too long", sw + " words");
-  if (words > 380) minor("answer too long", words + " words");
+  // Round 12: the concise-answer rule. A question about one thing is answered in at most 180 words (the direct
+  // answer first, the rest a question away); an overview, a comparison or a several-part question in at most 250.
+  // Only an explicit request for every line is exempt. A claim assessment (its cards are the answer) keeps the old bound.
+  const ceiling = wordCeiling(ctx.question, a);
+  if (ceiling != null && words > ceiling) major("answer too long", words + " words (ceiling " + ceiling + ")");
+  else if (words > 380) minor("answer too long", words + " words");
+  // ---- Round 12: never "could not find" what the same answer shows
+  for (const m of text.matchAll(/\bI could not find ([^.\n]+?) in the documents read\b/g)) {
+    const words12 = m[1].split(/\s+or\s+|,\s*/).flatMap((x) => x.replace(/^(?:an?|the|any) /i, "").split(/\s+/)).filter((w) => w.length >= 6 && !/^(?:cover|value|details?|insurance|policy|benefits?)$/i.test(w));
+    const others = text.split("\n").filter((l) => !l.includes(m[0]));
+    const shown = words12.find((w) => others.some((l) => new RegExp("\\b" + w.slice(0, 7), "i").test(l)));
+    if (shown) major("says not found for what it shows", "\"" + m[0] + "\" while a line shows " + shown);
+  }
   // ---- expectations
   // A claim interview may ask its one question first instead of answering; a question asking what was already said is not that.
   const asked = a.questions.length === 1 && e.askOk;
@@ -105,9 +117,18 @@ export function judge(a: ChatAnswer | null, status: number, err: string, ctx: { 
   }
   if (e.cite?.length && !asked) {
     const ok = a.citations.some((c) => e.cite!.some((w) => (w.doc.test(c.policyName) || w.doc.test(ctx.truth.policyFile.get(c.policyId) ?? "")) && c.pageStart != null && c.pageStart <= w.page && (c.pageEnd ?? c.pageStart) >= w.page));
-    if (!ok) minor("missing citation", "wanted " + e.cite.map((w) => w.doc.source + " p" + w.page).join(" or ") + "; got " + a.citations.map((c) => c.policyName + " p" + c.pageStart).join(", "));
+    if (!ok) (e.strictCite ? major : minor)("missing citation", "wanted " + e.cite.map((w) => w.doc.source + " p" + w.page).join(" or ") + "; got " + a.citations.map((c) => c.policyName + " p" + c.pageStart).join(", "));
   }
   return { score: d.some((x) => x.major) ? 0 : d.length ? 1 : 2, defects: d };
+}
+
+/** Round 12: the most words a reader should have to read for this question (null: no ceiling). */
+export const ASKS_EVERYTHING = /\b(?:full list|full details|(?:all|every one) of (?:it|them|the lines)|all (?:the )?(?:lines|benefits|details|rows)|every (?:benefit|line|row)|everything|whole (?:list|table|schedule)|benefits? (?:table|schedule|list)|schedule of benefits|table of benefits|list (?:all|every|the benefits))\b|^\s*(?:show|give|list|tell)(?: me| us)?(?: the)? (?:rest|full list|all)\b/i;
+const BROAD_QUESTION = /\b(?:compare|comparison|versus|vs\.?|overview|summary|summari[sz]e|everyone|each of|both|family|household|all (?:our|my|of)|every\b|list)\b|\?.+\?|\band (?:how|what|when|which|is|are|does|do|can|will)\b|\bwhat (?:do|does) [^?]{1,40} (?:have|cover)\b|\bwhat (?:am i|is \w+) (?:insured|covered)\b|\btell me about\b/i;
+export function wordCeiling(question: string, a: Pick<ChatAnswer, "mode" | "claimItems">): number | null {
+  if (a.mode === "claim_assessment" || a.mode === "fact_finding" || a.claimItems.length) return null;
+  if (ASKS_EVERYTHING.test(question)) return null;
+  return BROAD_QUESTION.test(question) ? 250 : 180;
 }
 
 function around(text: string, i: number) { return text.slice(Math.max(0, i - 80), i + 140).replace(/\s+/g, " "); }

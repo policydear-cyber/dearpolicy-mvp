@@ -10,6 +10,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { prettifyFilename, referenceRoles } from "@/lib/policies/inventory";
 import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
 import type { ClaimPerson } from "@/lib/claims/person";
+import type { ChatCitation } from "@/types";
 
 export type PersonDocument = { id: string; name: string; filename: string; role: string | null; policyType: string | null; confirmed: boolean; tier: string | null;
   status: "ready" | "processing" | "password" | "unreadable"; effectiveDate: string | null; renewalOrExpiryDate: string | null;
@@ -102,15 +103,41 @@ const PLAN_WORDS: [RegExp, RegExp][] = [
 ];
 export const WHO_IS_COVERED = /\bwho(?:['’]s| is| are| all)? (?:covered|insured|included|named|on)\b|\bwho does (?:the |our |my )?[\w\s]{0,30}(?:plan|policy|insurance) (?:cover|include|insure)\b/i;
 export function whoIsCoveredAnswer(question: string, family: ClaimPerson[], docs: Map<string, PersonDocument[]>): string | null {
+  return whoIsCovered(question, family, docs)?.text ?? null;
+}
+/** Round 12: the same answer with the documents it names, so the page that lists the insured people is cited. */
+export function whoIsCovered(question: string, family: ClaimPerson[], docs: Map<string, PersonDocument[]>): { text: string; matched: { person: ClaimPerson; document: PersonDocument }[] } | null {
   if (!WHO_IS_COVERED.test(question)) return null;
   const all = family.flatMap((p) => (docs.get(p.id) ?? []).filter((d) => d.status === "ready").map((d) => ({ p, d })));
   const tokens = question.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 5);
   const byName = all.filter(({ d }) => d.name.toLowerCase().split(/[^a-z0-9]+/).some((t) => t.length >= 5 && tokens.includes(t) && !/^(?:insurance|policy|family|annual|group|plan)$/.test(t)));
   const kind = PLAN_WORDS.find(([asks]) => asks.test(question));
   const matched = byName.length ? byName : kind ? all.filter(({ d }) => kind[1].test((d.policyType ?? "") + " " + d.name)) : [];
-  if (!matched.length) return kind || byName.length ? "I couldn’t find a policy like that in your household’s documents." : null;
+  if (!matched.length) return kind || byName.length ? { text: "I couldn’t find a policy like that in your household’s documents.", matched: [] } : null;
   const plans = new Map<string, ClaimPerson[]>();
   for (const { p, d } of matched) { const list = plans.get(d.name) ?? []; if (!list.includes(p)) list.push(p); plans.set(d.name, list); }
   const names = (people: ClaimPerson[]) => { const n = people.map((p) => isSelf(p) ? "you" : personName(p)); return n.length <= 1 ? n.join("") : n.slice(0, -1).join(", ") + " and " + n.at(-1); };
-  return [...plans].map(([plan, people]) => plan + " covers " + names(people) + ", going by the documents on file.").join(" ");
+  return { text: [...plans].map(([plan, people]) => plan + " covers " + names(people) + ", going by the documents on file.").join(" "), matched: matched.map(({ p, d }) => ({ person: p, document: d })) };
+}
+/** Round 12: the page of each matched document that names the most of its insured people (the schedule's
+ * "Insured persons" table), for the citation of a who-is-covered answer. */
+export async function whoIsCoveredCitations(accountId: string, matched: { person: ClaimPerson; document: PersonDocument }[]): Promise<ChatCitation[]> {
+  const ids = [...new Set(matched.map((m) => m.document.id))];
+  if (!ids.length) return [];
+  const r = await query<{ policy_id: string; page_number: number; text: string | null }>(
+    "SELECT policy_id::text AS policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number", [accountId, ids]);
+  const out: ChatCitation[] = [];
+  for (const id of ids) {
+    const people = matched.filter((m) => m.document.id === id).map((m) => m.person);
+    const doc = matched.find((m) => m.document.id === id)!.document;
+    let best: { page: number; hits: number } | null = null;
+    for (const row of r.rows.filter((x) => x.policy_id === id)) {
+      const text = (row.text ?? "").toLowerCase();
+      const hits = people.filter((p) => [p.display_name, p.preferred_name ?? ""].some((n) => n.trim().length >= 3 && text.includes(n.toLowerCase()))).length
+        + (/\binsured (?:persons?|members?)|\bpersons? (?:insured|covered)|\bcovered persons?/i.test(text) ? 0.5 : 0);
+      if (hits > 0 && (!best || hits > best.hits)) best = { page: row.page_number, hits };
+    }
+    if (best) out.push({ chunkId: "page:" + id + ":" + best.page, policyId: id, policyName: doc.name, pageStart: best.page, pageEnd: best.page, personalEvidence: doc.confirmed, evidenceLabel: "Policy schedule" });
+  }
+  return out;
 }

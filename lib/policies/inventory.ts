@@ -227,6 +227,8 @@ export function analysisSources(sources:PolicySource[],maximumSemanticDistance?:
   const maximum=Number.isFinite(configured)&&configured>=0&&configured<=2?configured:0.72;
   return sources.filter(s=>s.lexicalMatch===true||(typeof s.semanticDistance==="number"&&Number.isFinite(s.semanticDistance)&&s.semanticDistance<=maximum));
 }
+/** Round 12: passages come back in one fixed order (document, page, text) and ties are broken by text before
+ * the random chunk id, so the same question reads the same passages in the same order on every run. */
 export async function retrieveContractSources(args:{accountId:string;contracts:PolicyContract[];question:string;searchTerms:string[]}) {
   const documents=[...new Map(args.contracts.flatMap(c=>[...c.documents,...c.references]).filter(d=>d.processing_status==="ready").map(d=>[d.id,d])).values()];
   if(!documents.length)return new Map<string,PolicySource[]>();
@@ -248,7 +250,7 @@ export async function retrieveContractSources(args:{accountId:string;contracts:P
     }catch(error){console.warn("Pinecone retrieval failed:",error instanceof Error?error.message:error);}
   }
   const r=await query<{id:string;policy_id:string;page_start:number;page_end:number;text:string;lexical_match:boolean;semantic_distance:number|null}>(
-    "WITH wanted AS (SELECT * FROM unnest($2::uuid[],$5::int[]) AS t(id,cap)), terms AS (SELECT websearch_to_tsquery('english',$3) AS q), semantic AS (SELECT * FROM unnest($4::uuid[],$6::float8[]) AS s(id,distance)) SELECT DISTINCT c.id,c.policy_id,c.page_start,c.page_end,c.text,c.lexical_match,c.semantic_distance FROM wanted w CROSS JOIN LATERAL (SELECT x.id,x.policy_id,x.page_start,x.page_end,x.text,(x.search_vector @@ terms.q) AS lexical_match,s.distance AS semantic_distance FROM policy_chunks x CROSS JOIN terms LEFT JOIN semantic s ON s.id=x.id WHERE x.account_id=$1 AND x.policy_id=w.id ORDER BY (CASE WHEN x.search_vector @@ terms.q THEN 1 ELSE 0 END) DESC,ts_rank_cd(x.search_vector,terms.q) DESC,s.distance NULLS LAST,x.page_start,x.id LIMIT w.cap) c",
+    "WITH wanted AS (SELECT * FROM unnest($2::uuid[],$5::int[]) AS t(id,cap)), terms AS (SELECT websearch_to_tsquery('english',$3) AS q), semantic AS (SELECT * FROM unnest($4::uuid[],$6::float8[]) AS s(id,distance)) SELECT DISTINCT c.id,c.policy_id,c.page_start,c.page_end,c.text,c.lexical_match,c.semantic_distance FROM wanted w CROSS JOIN LATERAL (SELECT x.id,x.policy_id,x.page_start,x.page_end,x.text,(x.search_vector @@ terms.q) AS lexical_match,s.distance AS semantic_distance FROM policy_chunks x CROSS JOIN terms LEFT JOIN semantic s ON s.id=x.id WHERE x.account_id=$1 AND x.policy_id=w.id ORDER BY (CASE WHEN x.search_vector @@ terms.q THEN 1 ELSE 0 END) DESC,ts_rank_cd(x.search_vector,terms.q) DESC,s.distance NULLS LAST,x.page_start,x.page_end,x.text,x.id LIMIT w.cap) c ORDER BY c.policy_id,c.page_start,c.page_end,c.text,c.id",
     [args.accountId,ids,searchExpression(args.question,args.searchTerms),semanticIds,caps,semanticDistances]);
   const pages=await query<{policy_id:string;page_number:number;text:string}>(
     "SELECT policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) ORDER BY policy_id,page_number",[args.accountId,ids]);

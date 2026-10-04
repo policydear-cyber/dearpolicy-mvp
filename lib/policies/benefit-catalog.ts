@@ -363,6 +363,8 @@ const LOWER_LIMB=[...LEG_PARTS,"lower limb","ankle","foot","toe","hip"];
 const PART_COVERS:Record<string,string[]>={arm:ARM_PARTS,forearm:["forearm","radius","ulna"],"upper limb":UPPER_LIMB,
   leg:LEG_PARTS,"lower limb":LOWER_LIMB,limb:[...UPPER_LIMB,...LOWER_LIMB,"limb"],eye:["eye","sight"],sight:["sight","eye"],
   ear:["ear","hearing"],hearing:["hearing","ear"]};
+/** The digits: answered by their own rows of a scale, not by a limb's (Round 12). */
+const DIGITS=["finger","thumb","phalanx","toe"];
 function bodyPartsIn(text:string){
   return PART_PATTERNS.filter(entry=>entry.pattern.test(text)).map(entry=>entry.part);
 }
@@ -485,7 +487,14 @@ export function injuryCompatibility(benefit:CatalogBenefit,facts:SubjectFacts):I
   if(!rowParts.length)return {visible:true,lineKind:row.kind,reason:null};
   const hurtParts=bodyPartsIn(text);
   if(!hurtParts.length)return hide(label+" is for the "+rowParts.join("/")+", and which part of the body was hurt is not known yet");
-  const covered=rowParts.some(part=>(PART_COVERS[part]??[part]).some(inner=>hurtParts.includes(inner)));
+  // Round 12: a thumb or a finger is not a limb, a hand or a foot. A lost thumb is answered by the thumb and
+  // finger rows of the scale, never by "Loss of one limb" -- unless the document itself defines the limb (or
+  // hand) to include the digits.
+  const wording=[benefit.quote??"",...(benefit.conditions??[])].join(" ").toLowerCase();
+  const digitsOnly=hurtParts.length>0&&hurtParts.every(part=>DIGITS.includes(part));
+  const definesDigits=(part:string)=>new RegExp("\\b"+part+"s?\\b[^.]{0,60}\\b(?:means?|includes?|including|defined as|refers? to)\\b[^.]{0,160}\\b(?:fingers?|thumbs?|toes?|digits?)\\b").test(wording);
+  const coversPart=(part:string,inner:string)=>!(digitsOnly&&DIGITS.includes(inner)&&!DIGITS.includes(part)&&!definesDigits(part));
+  const covered=rowParts.some(part=>(PART_COVERS[part]??[part]).some(inner=>hurtParts.includes(inner)&&coversPart(part,inner)));
   if(!covered)return hide(label+" is for the "+rowParts.join("/")+", and the reported injury is to the "+hurtParts.join("/"));
   return {visible:true,lineKind:row.kind,reason:null};
 }

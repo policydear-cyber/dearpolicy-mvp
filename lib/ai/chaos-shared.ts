@@ -15,6 +15,33 @@ export function rng(seed: string) {
   return () => { h |= 0; h = (h + 0x6d2b79f5) | 0; let t = Math.imul(h ^ (h >>> 15), 1 | h); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
+/**
+ * Round 12: what a chaos decision is keyed by. It used to be the whole prompt (system + user) and a
+ * process-wide "next card of the deck" counter, so the same call got a different mutation depending on
+ * how many calls of its family happened to run before it -- concurrency order, or an unrelated call
+ * added anywhere earlier -- and the same seed could pass once and fail the next run. Now a decision
+ * depends only on the call itself: its operation, the CONTENT it carries with run-specific noise
+ * (ids, timestamps) taken out, and how many identical calls came before it (a retry). The system
+ * prompt's wording is not part of the key, so rewording an instruction does not reshuffle every
+ * mutation in a suite.
+ */
+export function chaosContentKey(prefix: string, seed: number, op: string, user: string): string {
+  let content = user
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<id>")
+    .replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/g, "<time>")
+    .replace(/\b\d{12,}\b/g, "<n>");
+  // Today's date (UTC and Singapore) is run-specific too: the same suite on another day keeps its mutations.
+  const now = Date.now();
+  const today = [new Date(now).toISOString().slice(0, 10), new Date(now + 8 * 3600_000).toISOString().slice(0, 10)];
+  for (const d of today) content = content.split(d).join("<today>");
+  return prefix + "|" + seed + "|" + op + "|" + createHash("sha256").update(content).digest("hex");
+}
+/** One mode of a family for one call: a seed-shuffled deck, the card chosen by the call's own key. */
+export function dealByKey<T>(seed: number, family: string, modes: readonly T[], key: string): T {
+  const deck = [...modes].map((m, i) => ({ m, k: rng(seed + "|" + family + "|" + i)() })).sort((a, b) => a.k - b.k).map((x) => x.m);
+  return deck[Math.floor(rng(key + "|card|" + family)() * deck.length) % deck.length];
+}
+
 const pick = <T,>(r: () => number, list: readonly T[]): T => list[Math.floor(r() * list.length) % list.length];
 export function shapeMutation(content: string, value: unknown, mode: string, r: () => number): string {
   const obj = (value && typeof value === "object" && !Array.isArray(value) ? value : {}) as Record<string, unknown>;
