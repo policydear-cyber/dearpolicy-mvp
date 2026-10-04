@@ -62,8 +62,8 @@ export type CatalogBenefit={
 const TRAIT_RULES:{trait:ScenarioTrait;pattern:RegExp}[]=[
   {trait:"death",pattern:/\b(?:death|dies|died|decease[d]?|loss of life|funeral)\b|\bif anything (?:happens?|happened) to (?:him|her|me|them|you)\b/},
   {trait:"accident",pattern:/\baccident(?:al|ally)?\b|\bsudden and unforeseen\b|\b(?:fell|falls?|falling|fall down|slipped?|slipping|tripped?|collision|knocked)\b/},
-  {trait:"bodily_injury",pattern:/\b(?:injur\w+|fracture[sd]?|break(?:s|ing)?|broke(?:n)?|dislocation|sprain\w*|burns?|amputat\w+|laceration|wound\w*|cut myself|gets? hurt|got hurt|stitch(?:es|ed))\b/},
-  {trait:"disability",pattern:/\b(?:disablement|disabilit\w+|permanently disabled|loss of (?:use|sight|limb|hearing|speech)|impairment)\b|\b(?:cannot|can[’']?t|unable to) (?:walk|bathe|wash|dress|feed)\b|\bbedridden\b|\bseverely disabled\b/},
+  {trait:"bodily_injury",pattern:/\b(?:injur\w+|fracture[sd]?|break(?:s|ing)?|broke(?:n)?|dislocation|sprain\w*|burns?|amputat\w+|laceration|wound\w*|cut myself|gets? hurt|got hurt|stitch(?:es|ed))\b|\bloss of (?:an? |one |two |both |the )?(?:thumbs?|(?:index |other |any other )?fingers?|toes?|eyes?|arms?|legs?|hands?|feet|foot|limbs?)\b/},
+  {trait:"disability",pattern:/\b(?:disablement|disabilit\w+|permanently disabled|loss of (?:use|sight|limb|hearing|speech)|impairment)\b|\bloss of (?:an? |one |two |both |the )?(?:thumbs?|(?:index |other |any other )?fingers?|toes?|eyes?|arms?|legs?|hands?|feet|foot|limbs?)\b|\b(?:cannot|can[’']?t|unable to) (?:walk|bathe|wash|dress|feed)\b|\bbedridden\b|\bseverely disabled\b/},
   {trait:"illness",pattern:/\b(?:illness|disease|sickness|critical illness|cancer|carcinoma|tumour|tumor|stroke|heart attack|myocardial)\b/},
   {trait:"diagnosis",pattern:/\b(?:diagnos\w+|biops\w+|histolog\w+)\b|\b(?:gets?|got|has|have|had|having|getting)\s+(?:a\s+)?(?:cancer|stroke|heart attack|tumou?r|leuka?emia)\b/},
   {trait:"hospitalisation",pattern:/\b(?:hospital\w*|inpatient|in-patient|confine\w+|ward|admission|admitted|daily cash|surger\w+|operation)\b/},

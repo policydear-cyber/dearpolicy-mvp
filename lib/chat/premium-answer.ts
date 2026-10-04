@@ -167,7 +167,8 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
   }
   if (!withPremiums.length) {
     summary = family ? "No premium amounts are printed in the documents on file for your household, so DearPolicy can’t total them. A renewal notice or premium receipt shows the premium; upload one and ask again."
-      : "No premium amount is printed in the documents on file for " + (isSelf(args.people[0]) ? "you" : personName(args.people[0])) + ". A renewal notice or premium receipt shows it; upload one and ask again.";
+      // Round 11: which policy has no premium printed is named ("Xin Yi's PA Guardian"), not only whose.
+      : "No premium amount is printed in the documents on file for " + (isSelf(args.people[0]) ? "you" : personName(args.people[0])) + ((perPerson[0]?.missing ?? []).length ? (isSelf(args.people[0]) ? "r " : "’s ") + [...new Set(perPerson[0].missing)].join(" or ") : "") + ". A renewal notice or premium receipt shows it; upload one and ask again.";
   } else if (!family) {
     const p = withPremiums[0];
     for (const l of p.lines) { details.push(itemText(l)); cite(l); }

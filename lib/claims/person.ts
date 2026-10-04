@@ -54,7 +54,7 @@ function subjectName(text: string) {
 /** Words that are never a person's name in a question like "Does X have ...". */
 const NOT_A_NAME = /^(?:i|me|my|mine|you|your|we|us|our|he|him|his|she|her|they|them|their|it|its|this|that|these|those|there|anyone|someone|everyone|everybody|anybody|nobody|the|a|an|family|household|company|employer|insurer|agent|policy|policies|plan|plans|shield|rider|travel|hospital|group|child|kid|kids|baby|wife|husband|spouse|son|daughter|mother|father|mum|mom|dad|parent|parents|sibling|brother|sister|grandma|grandpa|grandmother|grandfather|ah|ma|gong|what|which|who|when|how|does|do|is|are|can|will|much|many|about|and|or|also|so|then|now|today|tomorrow|yesterday|pls|please|lah|leh|still|really|already|ever|not|no|yes|all|both|each|other|else|any|some|one|two)$/i;
 /** Things a policy covers, never a person's name. */
-const COVER_WORD = /^(?:icu|tcm|gp|ci|tpd|pa|surgery|surgical|dental|maternity|pregnancy|cancer|stroke|covid|dengue|outpatient|inpatient|physio(?:therapy)?|chemo(?:therapy)?|ambulance|x-?ray|mri|scan|treatment|ward|hospital(?:isation|ization)?|rider|fracture|dialysis|baggage|luggage|delay|cancellation|accident|death|disability|illness|medical|dentist|specialist|clinic|evacuation|vaccination|checkup|check-up|screening|heart|attack|conditions?|pre-?existing|angioplasty|bypass|kidney|knee|hip|cataract|arthritis|osteoarthritis|diabetes|asthma|injury|injuries|fall|falls|loan|bonus|premiums?)$/i;
+const COVER_WORD = /^(?:icu|tcm|gp|ci|tpd|pa|surgery|surgical|dental|maternity|pregnancy|cancer|stroke|covid|dengue|outpatient|inpatient|physio(?:therapy)?|chemo(?:therapy)?|ambulance|x-?ray|mri|scan|treatment|ward|hospital(?:isation|ization)?|rider|fracture|dialysis|baggage|luggage|delay|cancellation|accident|death|disability|illness|medical|dentist|specialist|clinic|evacuation|vaccination|checkup|check-up|screening|heart|attack|conditions?|pre-?existing|angioplasty|bypass|kidney|knee|hip|cataract|arthritis|osteoarthritis|diabetes|asthma|injury|injuries|fall|falls|loan|bonus|premiums?|bills?|fees?|expenses?|charges?|costs?|claims?|pre-?hospital\w*|post-?hospital\w*|room|board|consultations?|visits?|medicines?|drugs?|tests?|procedures?|operations?|spectacles|glasses|lenses|vaccines?|jabs?|therapy|injections?|implants?|belongings|valuables|jewellery|jewelry|contents|renovations?|windscreen|damage|theft|laptop|phone|bags?|trips?|flights?|overseas|abroad|emergenc(?:y|ies)|items?|scans?|deductible|co-?insurance|co-?payment|excess|limit|payouts?)$/i;
 /** Relations a household on DearPolicy never holds (no stored relationship). */
 const OUTSIDE_RELATION = /^(?:cousin|uncle|aunt|auntie|friend|colleague|boss|neighbou?r|nephew|niece|helper|maid|landlord|tenant|classmate|boyfriend|girlfriend)$/i;
 /** The person a policy QUESTION is about ("What is Ah Beng covered for?",
@@ -189,9 +189,17 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
   // profile was selected. If an imported household has no unique "self"
   // record, ask rather than borrowing another person's cover.
   const firstPersonSubject=/\bi\s+(?:(?:was|am|have been|had been)\s+(?:diagnosed|hospitalised|hospitalized|admitted|injured|hurt|discharged)|(?:caught|contracted|tested positive for|came down with|suffer from|suffered from|broke|fractured|died|own|have)\b)|\b(?:what|how much|can|could|do)\s+i\s+(?:claim|have|own)\b|\bmy\s+(?:policy|policies|plan|plans|cover|coverage|flight|trip|car|vehicle|home|house|diagnosis|hospital stay|medical bill)\b|\bfor\s+me\b|\bmyself\b/i.test(text);
-  if (firstPersonSubject) {
+  // Round 11: any other first-person words ("my luggage was lost", "if I injure another driver", "ambulance fee for me")
+    // are the speaker too -- a relative or a name was already looked for above.
+  const speakerOnly = !firstPersonSubject && !family.some((p) => p.id === selectedId) && /\b(?:i|me|my|myself|mine)\b/i.test(text.replace(/\bi\.e\.?/gi, " ")
+      // "i dont know", "I think so": an answer, not who it is about.
+      .replace(/\bi\s*(?:do\s*n['’]?t|dont|really don['’]?t|am not|['’]?m not|have no idea|can['’]?t|cannot|think|guess|believe|suppose|reckon|forgot|forget|remember|recall|mean|dunno)\b/gi, " ")
+      // "the photo I uploaded", "the notes I typed": the one who uploaded, not who it is about.
+      .replace(/\b(?:that |which )?i (?:have |had |just )?(?:uploaded|upload|sent|added|scanned|took|attached|typed|saved|gave|put)\b/gi, " "));
+  if (firstPersonSubject || speakerOnly) {
     const candidates = family.filter(p => normalized(p.relationship) === "self");
-    if (candidates.length === 1) return { status: "resolved", person: candidates[0], explicit: true };
+    // Only the speaker's words, not a statement about them: a plan named in the question can still say whose it is ("is my HerCare still ok").
+    if (candidates.length === 1) return { status: "resolved", person: candidates[0], explicit: !speakerOnly };
     if (candidates.length > 1) return { status: "ambiguous", candidates };
   }
   const selected = family.find(p => p.id === selectedId);
@@ -203,6 +211,15 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
  * member is offered in their place. Null when a household member is the
  * subject instead. */
 export function outsideHouseholdSubject(text: string, family: ClaimPerson[]): { relation: string; name: string | null } | null {
+  // Round 11: "Wei Jie's grandmother passed away": a relative of a household member who is not in the household herself
+  // (a child's grandparent is the household's own parent, and stays theirs).
+  const kin = text.match(/\b([\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*){0,2})['’]s\s+(grandmother|grandfather|grandma|grandpa|grandparents?|aunt|auntie|uncle|cousin|colleague|friend|boss|neighbou?r|godmother|godfather)\b/iu);
+  if (kin) {
+    const named = normalized(kin[1]);
+    const anchor = family.find((p) => [p.display_name, p.preferred_name ?? ""].filter(Boolean).some((n) => normalized(n) === named || named.endsWith(" " + normalized(n))));
+    if (anchor && !(normalized(anchor.relationship) === "child" && /^grand/i.test(kin[2])))
+      return { relation: kin[2].toLowerCase(), name: (anchor.preferred_name || anchor.display_name) + "’s " + kin[2].toLowerCase() };
+  }
   const m = text.match(/\bmy\s+(colleague|co-?worker|uncle|aunt|auntie|friend|best friend|neighbou?r|cousin|boss|nephew|niece|helper|maid|domestic helper|classmate|boyfriend|girlfriend|(?:father|mother|brother|sister)-in-law|grand(?:uncle|aunt))\b(?:\s+((?:ah\s+)?[A-Z][\p{L}'’-]*(?:\s+[A-Z][\p{L}'’-]*)?))?/iu);
   if (!m) return null;
   // Round 9: "my helper" when the household's own helper is on file is that person, not someone outside it.

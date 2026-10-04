@@ -100,4 +100,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "r9:redteam-test",
   "r10:messy-docs-test",
   "r10:perf-test",
+  "r11:blind-test",
 ];

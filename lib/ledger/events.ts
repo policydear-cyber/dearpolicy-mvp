@@ -151,7 +151,7 @@ export function eventsFromText(text:string):EventCandidate[]{
   if(/\b(?:hospitali[sz]\w*|admitted|warded|in hospital|hospital stay)\b/.test(t)){add("hospital_daily_cash");add("hospital_medical_expense");}
   if(/\b(?:surgery|operation)\b/.test(t))add("surgery");
   if(/\b(?:critical illness|cancer|stroke|heart attack|kidney failure)\b/.test(t)){add("critical_illness");add("early_critical_illness");}
-  if(/\b(?:disab\w*|permanently|tpd|loss of (?:use|sight|limb|hearing|speech))\b/.test(t)){add("tpd");add("accidental_disablement");add("dismemberment");}
+  if(/\b(?:disab\w*|permanently|tpd|loss of (?:use|sight|limb|hearing|speech))\b|\b(?:lost|loss of) (?:(?:his|her|my|their|a|an|one|both|the) )?(?:thumbs?|(?:index )?fingers?|toes?|eyes?|arms?|legs?|hands?|feet|foot|limbs?)\b/.test(t)){add("tpd");add("accidental_disablement");add("dismemberment");}
   if(/\b(?:terminal)\b/.test(t))add("terminal_illness");
   if(/\b(?:ambulance)\b/.test(t))add("ambulance");
   if(/\b(?:flight|delay\w*)\b/.test(t)&&/\b(?:delay\w*)\b/.test(t))add("travel_delay");
@@ -206,7 +206,8 @@ export function eventForBenefitName(name:string):{event:EventType;detail:string|
   if(/\bdeath\b|\bdies\b|loss of life/.test(n))return {event:accident?"accidental_death":"death",detail:null};
   if(/fractur/.test(n))return {event:"fracture",detail:name};
   if(/\b(?:total (?:and|&) permanent|tpd|permanent (?:total )?disab)/.test(n))return {event:accident?"accidental_disablement":"tpd",detail:null};
-  if(/dismember|loss of (?:use|sight|hearing|speech|limb|one|two|both)|amputat/.test(n))return {event:"dismemberment",detail:name};
+  // Round 11: "Loss of a thumb", "Loss of an index finger", "Loss of any other finger" are lines of the same scale.
+  if(/dismember|loss of (?:use|sight|hearing|speech|limb|one|two|both)|loss of (?:an? |any (?:other )?|the )?(?:thumbs?|(?:index |other )?fingers?|toes?|eyes?|arms?|legs?|hands?|feet|foot)\b|amputat/.test(n))return {event:"dismemberment",detail:name};
   if(/terminal/.test(n))return {event:"terminal_illness",detail:null};
   if(/early|intermediate/.test(n)&&/illness|stage|critical/.test(n))return {event:"early_critical_illness",detail:name};
   if(/critical illness|major illness|dread disease|cancer|heart attack|stroke|kidney failure/.test(n))return {event:"critical_illness",detail:name};

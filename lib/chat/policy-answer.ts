@@ -16,6 +16,8 @@
  */
 import { NON_COVER_ROLES, flagUnclearFigures, unclearFigures } from "@/lib/documents/messy";
 import { bestLines, piecesOf, wordsOf } from "./printed-lines";
+import { printedRuleLines } from "./printed-rules";
+import { figurePremise, premiseLead, premiseOf } from "./premises";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { loadPolicyInventory, prettifyFilename, type PolicyContract } from "@/lib/policies/inventory";
@@ -38,17 +40,17 @@ type Topic = { key: string; label: string; asks: RegExp;
   /** also require the passage to say it */ passage?: RegExp };
 export const TOPICS: Topic[] = [
   { key: "death", label: "death cover", asks: /\b(?:death|die[sd]?|dying|life (?:cover|insurance|assured)|term life|term (?:plan|policy)|pass(?:es)? away)\b/i, fact: /\bdeath\b|\blife\b|(?<!long[- ])\bterm\b/i, kind: /(?<!long[- ])\bterm\b|\blife\b|\bdeath\b/i },
-  { key: "critical_illness", label: "critical illness cover", asks: /\b(?:critical illness|early critical|\bci\b|cancer|heart attack|stroke)\b/i, fact: /critical|cancer|\bci\b|living care/i, kind: /critical|cancer|living care/i },
+  { key: "critical_illness", label: "critical illness cover", asks: /\b(?:critical illness|early critical|\bci\b|cancer|heart attack|stroke|angioplasty|bypass)\b/i, fact: /critical|cancer|\bci\b|living care/i, kind: /critical|cancer|living care/i },
   { key: "disability", label: "disability cover", asks: /\b(?:disab\w*|tpd|total(?:ly)? (?:and )?permanent)\b/i, fact: /disab|tpd|permanent/i, kind: /disab|\btpd\b/i },
-  { key: "accident", label: "accident cover", asks: /\b(?:accident\w*|fractur\w*|injur\w*|broken bones?|los(?:e|es|ing|t)\s+(?:a |an |one |two |both |his |her |my |the )?(?:thumb|finger|index finger|eyes?|sight|limbs?|arm|leg|hand|foot|hearing)|thumbs?|index finger|fingers?|loss of (?:hearing|sight|a limb|one limb))\b/i, fact: /accident|fractur|injur|dismember/i, kind: /accident/i },
+  { key: "accident", label: "accident cover", asks: /\b(?:pa|personal accident|accident\w*|fractur\w*|injur\w*|broken bones?|los(?:e|es|ing|t)\s+(?:a |an |one |two |both |his |her |my |the )?(?:thumb|finger|index finger|eyes?|sight|limbs?|arm|leg|hand|foot|hearing)|thumbs?|index finger|fingers?|loss of (?:hearing|sight|a limb|one limb))\b/i, fact: /accident|fractur|injur|dismember/i, kind: /accident/i },
   // "Hospital" is named by what a hospital plan pays, not by the word
   // "medical" -- an accident plan's "Accident medical reimbursement" and a
   // travel plan's "Overseas medical expenses" are not hospital cover.
   { key: "hospital", label: "hospital cover", asks: /\b(?:hospital\w*|warded|ward|inpatient|surgery|surgical|intensive care|icu)\b|\bmedical (?:cover|coverage|plan|insurance)\b|\b(?:integrated )?shield(?: plan| policy)?\b/i,
     fact: /hospital|\bward\b|inpatient|intensive care|\bicu\b|room and board/i, kind: /hospital|\bshield|\bmedishield\b|health plan/i },
-  { key: "premium", label: "the premium", asks: /\bpremiums?\b|\bmedisave\b(?![^?]*\b(?:balance|account|savings)\b)|\bcosts? (?:more|less|the most|the least)\b|\bcheaper\b|\bmore expensive\b|how much do (?:i|we) pay for|\bhow much (?:does|do|is|are) [^?]{1,40}\bcosts?\b|\bcosts? (?:me|us|a year|per year|monthly|each month)\b|\bhow much (?:does|do|did) (?:i|we|she|he|they|[\p{L}]+) (?:need|have) to pay\b(?![^?]*\b(?:hospital|bill|claim|clinic|doctor)\b)|\bhow much (?:do|does) (?:i|we|she|he|they) owe\b/iu, fact: /premium/i },
+  { key: "premium", label: "the premium", asks: /\bpremiums?\b|\bmedisave\b(?![^?]*\b(?:balance|account|savings)\b)|\bcosts? (?:more|less|the most|the least)\b|\bcheaper\b|\bmore expensive\b|how much do (?:i|we) pay for|\bhow much (?:does|do|is|are) [^?]{1,40}\bcosts?\b|\bcosts? (?:me|us|a year|per year|monthly|each month)\b|\bhow much (?:does|do|did) (?:i|we|she|he|they|[\p{L}]+) (?:need|have) to pay\b(?![^?]*\b(?:hospital|bill|claim|clinic|doctor)\b)|\bhow much (?:do|does) (?:i|we|she|he|they) owe\b|\bhow much cash\b|\bcash (?:payable|portion|part|to pay)\b/iu, fact: /premium/i },
   { key: "maturity", label: "maturity or surrender value", asks: /\b(?:matur\w*|endowment|surrender\w*|cash values?|paid (?:in|into|so far)|put in(?:to)?)\b/i, fact: /matur|surrender|cash value|endowment/i, kind: /endow|savings|matur/i, passage: /matur|surrender|cash value/i },
-  { key: "cost_sharing", label: "deductible, co-insurance and co-payment", asks: /\bdeduct[ai]bles?\b|\b(?:a |the )?cap on what (?:i|you|we) pay\b|\bco-?payment cap\b|\bco-?insur[ae]nce\b|\bco-?ins\b|\b(?:how much )?(?:percent(?:age)?|%)\b[^?]{0,40}\bpay\b|^\s*(?:annual |yearly |overall )?limits?\s*\??\s*$|\bco-?pay(?:ment)?s?\b|\bpro-?ration\b|\b(?:policy[- ]year|annual) limit\b|\bas charged\b|\bhow much (?:do|would|will) (?:i|we|she|he|they) (?:have to )?pay\b/i,
+  { key: "cost_sharing", label: "deductible, co-insurance and co-payment", asks: /\bdeduct[ai]bles?\b|\b(?:a |the )?cap on what (?:i|you|we) pay\b|\bco-?payment cap\b|\bco-?insur[ae]nce\b|\bco-?ins\b|\b(?:how much )?(?:percent(?:age)?|%)\b[^?]{0,40}\bpay\b|^\s*(?:annual |yearly |overall )?limits?\s*\??\s*$|\bco-?pay(?:ment)?s?\b|\bpro-?ration\b|\b(?:policy[- ]year|annual) limit\b|\bas charged\b|\bhow much (?:do|would|will) (?:i|we|she|he|they) (?:have to )?pay\b|\b(?:yearly |annual |a )?cap\b[^?]{0,30}\b(?:pay|out of pocket)\b|\bout of pocket\b/i,
     fact: /deductible|co-?insurance|co-?pay|pro-?ration|policy[- ]year limit|annual limit/i },
   { key: "rider", label: "the rider", asks: /\briders?\b/i, fact: /\brider\b/i },
   { key: "group", label: "group insurance", asks: /\b(?:group|company|employer|employee|work|office|corporate|staff)\b[^?]{0,25}\b(?:insurance|plans?|polic(?:y|ies)|cover(?:age)?|benefits?|scheme)\b|\bgroup (?:insurance|plan|policy|cover|benefits?)\b/i, fact: /(?!)/, kind: /\bgroup\b|employee benefits/i },
@@ -96,6 +98,8 @@ const NARROW: { asks: RegExp; fact: RegExp }[] = [
   { asks: /\bdeduct[ai]bles?\b/i, fact: /deductible/i },
   { asks: /\bco-?insur[ae]nce\b|\bco-?ins\b|\b(?:percent(?:age)?|%)\b[^?]{0,40}\bpay\b/i, fact: /co-?insurance/i },
   { asks: /\bco-?pay(?:ment)?s?\b/i, fact: /co-?pay/i },
+  // Round 11: "a yearly cap on what I pay out of pocket": the cap row, not every cost-sharing row.
+  { asks: /\b(?:yearly |annual )?cap\b[^?]{0,30}\b(?:pay|pocket)\b|\bout of pocket\b/i, fact: /\bcap\b|maximum co-?pay/i },
   { asks: /\b(?:annual|policy[- ]year|overall|yearly) limit\b|^\s*limits?\s*\??\s*$/i, fact: /\blimit\b/i },
   { asks: /\bovers(?:eas)? medical\b/i, fact: /overseas medical/i },
   { asks: /\bpermanent (?:loss|disablement)|loss of (?:an? |one )?(?:arm|leg|hand|limb|sight)\b/i, fact: /loss of|disablement|dismember/i },
@@ -122,7 +126,7 @@ const NARROW: { asks: RegExp; fact: RegExp }[] = [
   { asks: /\bpre-?hospital\w*|before (?:admission|hospital)/i, fact: /pre-hospital/i },
   { asks: /\brestructured\b/i, fact: /restructured/i },
   { asks: /\b(?:stay|go|choose) (?:in )?(?:a )?private\b|\bprivate hospital\b|\bhigher ward\b/i, fact: /pro-?ration|private/i },
-  { asks: /\bno-?claims? discount|\bncd\b/i, fact: /no-claim/i },
+  { asks: /\bno[- ]?claims? discount|\bncd\b/i, fact: /no-claim/i },
   { asks: /\bnamed driver|who (?:can|may) drive|(?:son|daughter|someone else|another person|wife|husband) driv/i, fact: /named driver|authori[sz]ed driver/i },
   { asks: /\bfor how long|\bhow long\b(?!\s+(?:more|until|till|before|left|to go))(?![^?]*\b(?:expir\w*|renew\w*|ends?)\b)|maximum (?:payout )?period/i, fact: /period|months|years|days/i },
   { asks: /\bdeferment|starts? paying|before (?:it|eldershield|careshield|the (?:plan|payout|monthly payout)) (?:starts? )?pays?\b/i, fact: /deferment/i },
@@ -146,12 +150,14 @@ export function questionTopics(question: string): Topic[] {
   // the words that only name the plan are not a second topic.
   if (asked.length > 1) {
     // A topic word inside a plan-naming phrase ("my car insurance", "her shield plan") only says which plan.
-    const attribute = asked.some((t) => ["premium", "renewal", "cost_sharing", "excess", "rider", "ward"].includes(t.key));
+    const attribute = asked.some((t) => ["premium", "renewal", "cost_sharing", "excess", "rider", "ward", "dental", "maternity", "outpatient", "status"].includes(t.key));
     const planSpans = attribute ? PLAN_KINDS.flatMap((p) => [...question.matchAll(new RegExp(p.re.source, "gi"))].filter((m) => /\b(?:plan|policy|insurance|claims?|excess|premium)$/i.test(m[0]) || /^(?:eldershield|careshield|ilps?|invest-link|endowment)$/i.test(m[0])).map((m) => [m.index ?? 0, (m.index ?? 0) + m[0].replace(/\s+(?:excess|premium)$/i, "").length])) : [];
-    const namingOnly = (t: Topic) => { const m = question.match(t.asks); return !!m && (/^\s*(?:plan|policy|insurance|cover(?:age)?)\b/i.test(question.slice((m.index ?? 0) + m[0].length)) || planSpans.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b)); };
+    const namingOnly = (t: Topic) => { const m = question.match(t.asks); return !!m && (attribute && (t.key === "hospital" && /^(?:integrated )?shield$/i.test(m[0]) || t.key === "accident" && /^(?:pa|personal accident)$/i.test(m[0])) || /^\s*(?:plan|policy|insurance|cover(?:age)?)\b/i.test(question.slice((m.index ?? 0) + m[0].length)) || planSpans.some(([a, b]) => (m.index ?? 0) >= a && (m.index ?? 0) < b)); };
     const specific = asked.filter((t) => !namingOnly(t));
     if (specific.length) asked = specific;
   }
+  // Round 11: "if I injure another driver, is third-party injury covered?" is about the car policy, not accident cover.
+  if (asked.some((t) => t.key === "motor") && /\bthird[- ]party|\bdriver\b|\bcar\b|\bvehicle\b/i.test(question)) asked = asked.filter((t) => t.key !== "accident");
   // "Which policies have lapsed or expired?" is about status, not renewal dates.
   if (asked.some((t) => t.key === "status") && asked.some((t) => t.key === "renewal") && /\b(?:lapsed|expired|ended)\b/i.test(question) && !/\bwhen\b/i.test(question)) asked = asked.filter((t) => t.key !== "renewal");
   // "the sum assured on my lapsed term plan": "lapsed" says which plan.
@@ -440,13 +446,13 @@ const SUBJECTS = /\b(dental|maternity|pregnan\w*|cosmetic|mental|psychiatric|hiv
 export const PLAN_KINDS: { re: RegExp; kind: string }[] = [
   { re: /\bhospital (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
   { re: /\btravel (?:plan|policy|insurance|cover)\b/i, kind: "travel" },
-  { re: /\b(?:personal )?accident (?:plan|policy|insurance)\b|\bpa (?:plan|policy|cover)\b/i, kind: "accident" },
+  { re: /\b(?:personal )?accident (?:plan|policy|insurance|premium)\b|\bpa (?:plan|policy|cover|premium)\b/i, kind: "accident" },
   { re: /\b(?:group |term )?life (?:plan|policy|insurance|cover)\b|\bterm (?:plan|policy)\b/i, kind: "death" },
   { re: /\bendowment\b|\bsavings (?:plan|policy)\b/i, kind: "maturity" },
   { re: /\bcritical illness (?:plan|policy|cover)\b|\bci (?:plan|policy|cover)\b/i, kind: "critical_illness" },
   { re: /\b(?:group|company|employer|work) (?:plan|policy|insurance|cover)\b/i, kind: "group" },
   { re: /\b(?:home|house|contents) (?:plan|policy|insurance|cover|claims?|excess|premium)\b/i, kind: "home" },
-  { re: /\b(?:car|motor|vehicle) (?:plan|policy|insurance|cover|claims?|excess|premium)\b|\b(?:car|motor|vehicle|road) accident claims?\b/i, kind: "motor" },
+  { re: /\b(?:car|motor|vehicle) (?:plan|policy|insurance|cover|claims?|excess|premium)\b|\b(?:car|motor|vehicle|road) accident claims?\b|\b(?:scratched|dented|hit|crashed|damaged|bumped) (?:the|my|our) car\b/i, kind: "motor" },
   { re: /\bilps?\b|\binvestment[- ]linked (?:plan|policy)\b|\binvest-link\b/i, kind: "investment" },
   { re: /\b(?:eldershield|careshield|long[- ]term care (?:plan|policy|insurance|cover))\b/i, kind: "long_term_care" },
 ];
@@ -526,7 +532,28 @@ const PAYMENT_ONLY = /^(?:premium_receipt)$/;
 const STOP_WORDS = new Set(["what", "which", "does", "have", "with", "that", "this", "much", "when", "from", "about", "plan", "policy", "policies", "cover", "covered", "pays", "there", "their", "would", "should", "could", "also", "please", "insurance", "your", "mine", "they", "them", "will", "after", "before", "under", "into", "over", "many", "long", "need", "still", "being", "were", "been", "only", "here", "then", "than", "some", "more", "most"]);
 const stem = (w: string) => w.toLowerCase().replace(/[^a-z]/g, "").slice(0, 6);
 
+/** Round 11: the question's own assumption ("pays 100% right?", "the private plan right?", "$800k right?") is
+ * answered first, from the documents, then the facts as usual (lib/chat/premises.ts). */
 export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<PolicyAnswerResult> {
+  const premise = premiseOf(args.question);
+  let r = await answerPolicyQuestionInner(premise.rewrite ? { ...args, question: premise.rewrite } : args);
+  if (!r.handled && premise.rewrite) r = await answerPolicyQuestionInner(args);
+  if (!r.handled) return r;
+  let lead = premiseLead(premise, r.answer.details);
+  if (!lead && premise.figures.length) {
+    const selfIds = (await query<{ id: string }>("SELECT id::text id FROM family_members WHERE account_id=$1 AND lower(relationship)='self' AND " + activePredicate(), [args.accountId]).catch(() => ({ rows: [] as { id: string }[] }))).rows.map((x) => x.id);
+    const f = await figurePremise({ accountId: args.accountId, question: args.question, figures: premise.figures, answerText: [r.answer.summary, ...r.answer.details].join("\n"), peopleIds: args.people.map((p) => p.id), selfIds });
+    if (f) {
+      lead = f.lead;
+      if (f.detail) r.answer.details.unshift(f.detail);
+      if (f.citation && !r.answer.citations.some((c) => c.policyId === f.citation!.policyId && c.pageStart === f.citation!.pageStart)) r.answer.citations.push(f.citation);
+      for (const m of (f.detail ?? "").match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []) if (!(r.answer.verifiedPolicyFigures ?? []).includes(m)) (r.answer.verifiedPolicyFigures ??= []).push(m);
+    }
+  }
+  if (lead) r.answer.summary = lead + " " + r.answer.summary;
+  return r;
+}
+async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<PolicyAnswerResult> {
   // A follow-up carried onto a plan by its product name ("excess on the HomeShield Contents Plus?") is scoped by
   // that name; the name's own words ("Contents") are not part of what is asked.
   const askedText = args.question.replace(/\s+on the ([A-Z][^?]*)\?\s*$/, "?").replace(/[\u{1F697}\u{1F699}\u{1F698}]\uFE0F?\s*/gu, "car ").replace(/[\u{1F3E0}\u{1F3E1}]\uFE0F?\s*/gu, "home ").trim();
@@ -536,6 +563,8 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   let general = GENERAL.test(askedText);
   // "what's the security bond?", "how long is the deferment?": one named term of the person's plans, asked plainly.
   if (!general && !topics.length && /^\s*(?:what(?:['’]s| is| are)|how (?:much|long)|is there|are there)\b/i.test(askedText) && NARROW.some((n) => n.asks.test(askedText))) general = true;
+  // Round 11: "ambulance fee can claim or not?", "is ambulance claimable?": one named benefit, asked as a yes or no.
+  if (!general && !topics.length && /\bcan claim\b|\bclaimable\b|\bcovered\b|\bcan (?:i|we) claim\b/i.test(askedText) && NARROW.some((n) => n.asks.test(askedText))) general = true;
   const conditionAsked = CONDITION_QUESTION.test(askedText) || SUBJECTS.test(askedText);
   const result = (partial: Partial<PolicyAnswerResult>): PolicyAnswerResult => ({ handled: false, answer: empty(), kept: [], rejected: [], topics: topics.map((t) => t.key),
     notFound: [], modelCalls: 0, narrated: false, elapsedMs: Date.now() - started, ...partial });
@@ -848,8 +877,11 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       for (const ownerId of speaksFor.get(docId) ?? []) {
         const tier = tiers.get(docId + "|" + ownerId);
         if (!tier) continue;
-        const hit = (pagesByDoc.get(docId) ?? []).flatMap((pg) => pg.text.split(/\r?\n/).map((l, i) => ({ page: pg.page, i, l: l.trim() })))
-          .find((x) => x.l && (x.l.match(/\t/g) ?? []).length < 2 && !FURNITURE.test(x.l) && x.l.toLowerCase().includes(tier.toLowerCase()));
+        const lines = (pagesByDoc.get(docId) ?? []).flatMap((pg) => pg.text.split(/\r?\n/).map((l, i) => ({ page: pg.page, i, l: l.trim() })))
+          .filter((x) => x.l && (x.l.match(/\t/g) ?? []).length < 2 && !FURNITURE.test(x.l) && x.l.toLowerCase().includes(tier.toLowerCase()) && x.l.length <= 200);
+        // Round 11: a group booklet's tier ("Dependants") is named on the line that enrols this person, not in its introduction.
+        const owner = args.people.find((p) => p.id === ownerId);
+        const hit = isGuide(docId) ? lines.find((x) => !!owner && new RegExp("\\b" + owner.display_name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(x.l)) : lines[0];
         if (!hit) continue;
         candidates.push({ id: "ward:" + docId + ":" + ownerId, source: "row", topic: "ward", title: "Plan", ownerName: personName(ownerId), kind: "policy_fact", subjectId: ownerId, policyId: docId,
           documentHash: docs.get(docId)?.file_hash ?? null, page: hit.page, text: hit.l.replace(/\t+/g, ": ") + " — so the “" + tier + "” column of the benefit table applies",
@@ -887,7 +919,9 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   // row of a table does ("Water damage from a sudden burst pipe is covered.",
   // "You may apply to reinstate the policy until 16 March 2028."). Never an
   // address, a salutation or a date line.
-  const nameWords = new Set(args.people.flatMap((p) => (p.display_name + " " + (p.preferred_name ?? "")).toLowerCase().split(/\s+/)));
+  // Round 11: anyone in the household named in the question ("Aisyah scratched the car") is who, never what is asked.
+  const householdNames = (await query<{ n: string }>("SELECT display_name || ' ' || coalesce(preferred_name,'') n FROM family_members WHERE account_id=$1 AND " + activePredicate(), [args.accountId]).catch(() => ({ rows: [] as { n: string }[] }))).rows.map((r) => r.n);
+  const nameWords = new Set([...args.people.map((p) => p.display_name + " " + (p.preferred_name ?? "")), ...householdNames].flatMap((n) => n.toLowerCase().split(/\s+/)).filter(Boolean));
   const proseFor = (): RawCandidate[] => {
     const words = [...new Set((askedText.toLowerCase().match(/[a-z][a-z'-]{3,}/g) ?? []).map((w) => w.replace(/['’]s$/, "")).filter((w) => !STOP_WORDS.has(w) && !nameWords.has(w) && w.length >= 4))];
     // A plan the question names that is not on file is not answered from another plan's sentences.
@@ -1079,6 +1113,15 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
         const span = specific.length > 1 ? words.slice(0, words.toLowerCase().lastIndexOf(specific.at(-1)!) + specific.at(-1)!.length) : askedText.match(new RegExp("\\b" + specific[0] + "\\b", "i"))?.[0] ?? specific[0];
         const plans = [...new Set(candidates.map((c) => docName(c.policyId)))];
         const whoseDocs = args.people.length === 1 && !isSelf(args.people[0].id) ? personName(args.people[0].id) + "’s" : "your";
+        // Round 11: "giving birth" is printed as "childbirth", "asthma" as a pre-existing condition: that printed line, when there is one.
+        const ruleDocs = new Map([...pagesByDoc].filter(([id]) => candidates.some((c) => c.policyId === id) && inScope(id)));
+        const rules = printedRuleLines(askedText, "", ruleDocs, docName, { ignore: [...nameWords], sameThingOnly: true });
+        if (rules.length) {
+          const named = [...new Set(rules.map((r) => r.citation.policyName))];
+          const lead = "Here is what " + (args.people.length === 1 && !isSelf(args.people[0].id) ? personName(args.people[0].id) + "’s " : "your ") + (named.length === 1 ? named[0] : "documents") + " " + (named.length === 1 ? "prints" : "print") + " about that:";
+          return result({ handled: true, answer: { mode: "answer", summary: lead, details: rules.map((r) => r.text), citations: rules.map((r) => r.citation), confidence: "partial_match", nextSteps: [], questions: [], policyStatedLimits: [], verifiedPolicyFactsOnly: true,
+            verifiedPolicyFigures: [...new Set(rules.flatMap((r) => r.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []))] } });
+        }
         const summary = "DearPolicy didn’t find anything about " + span.trim() + " in " + whoseDocs + " " + (plans.length === 1 ? plans[0] + " documents" : "documents") + ". That is not the same as the policy saying it is excluded — the insurer can confirm.";
         return result({ handled: true, answer: { mode: "answer", summary, details: [], citations: [], confidence: "insufficient_evidence", nextSteps: [], questions: [], policyStatedLimits: [], verifiedPolicyFactsOnly: true, verifiedPolicyFigures: [] }, notFound: [span] });
       }
@@ -1273,7 +1316,8 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     // A column called just "Value" or "Amount" names nothing the household needs told.
     const labelled = a.tierLabel && !/^(?:values?|amounts?|limits?|benefits?|details?|description|sum insured|s\$)$/i.test(a.tierLabel.trim()) ? (a.text.startsWith(a.title) ? a.title + " (" + a.tierLabel + ")" + a.text.slice(a.title.length) : a.text + " (" + a.tierLabel + ")") : a.text;
     const q = narrowQuoted.get(a.id);
-    const quoted = q && q.length <= 200 && !labelled.includes(q) ? " — the schedule prints “" + q.replace(/\s+/g, " ").trim().replace(/[.;:\s]+$/, "") + "”" : "";
+    // Round 11: a trailing footnote number ("... within 180 days 3") is a pointer to small print, not part of the value.
+    const quoted = q && q.length <= 200 && !labelled.includes(q) ? " — the schedule prints “" + q.replace(/\s+/g, " ").trim().replace(/[.;:\s]+$/, "").replace(/(?<=[a-z)])\s+\d{1,2}(?:,\s*\d{1,2})*$/i, "") + "”" : "";
     let text = (labelled.replace(/[.;:\s]+$/, "") + quoted).replace(/[.;:\s]+$/, "");
     // Round 10: what a policy excludes is said in its own words, quoted ("Pre-existing conditions are not covered ...").
     if (/\b(?:not covered|isn['’]t covered|aren['’]t covered|no cover(?:age)? for|not insured)\b/i.test(text) && !text.includes("“")) {
@@ -1286,13 +1330,33 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   const shared = new Map<string, Candidate[]>();
   for (const a of kept) { const k = a.policyId + "|" + a.page + "|" + normalPassage(a.text) + "|" + (a.tierLabel ?? ""); (shared.get(k) ?? shared.set(k, []).get(k)!).push(a); }
   const listNames = (names: string[]) => names.length <= 1 ? names.join("") : names.slice(0, -1).join(", ") + " and " + names.at(-1);
+  // Round 11: the same printed line reached twice (a family plan's row for adults and for children) is one line naming everyone once.
+  const sameLine = new Map<string, { at: number; names: string[] }>();
+  const order = args.people.map((p) => personName(p.id));
   for (const group of shared.values()) {
     const first = group[0];
-    const names = [...new Set(group.map((g) => g.ownerName))];
-    details.push(args.people.length > 1 && names.length > 1 ? listNames(names) + " · " + line(first).replace(/^[^·]*· /, "") : line(first));
+    const names = [...new Set(group.map((g) => g.ownerName))].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+    const body = args.people.length > 1 ? line(first).replace(/^[^·]*· /, "") : line(first);
+    const seen = sameLine.get(body);
+    if (seen) {
+      for (const n of names) if (!seen.names.includes(n)) seen.names.push(n);
+      seen.names.sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+      details[seen.at] = args.people.length > 1 && seen.names.length > 1 ? listNames(seen.names) + " · " + body : details[seen.at];
+      continue;
+    }
+    sameLine.set(body, { at: details.length, names });
+    details.push(args.people.length > 1 && names.length > 1 ? listNames(names) + " · " + body : line(first));
   }
   for (const a of kept) {
     const citation = cite(a);
+    // Round 11: one card for a figure several people share on the same plan (a family travel plan's row), naming them all.
+    const same = limits.find((l) => l.benefitTitle === a.title && l.amount === a.amount && l.currency === a.currency && l.citation.policyId === a.policyId && l.citation.pageStart === a.page);
+    if (same && a.ownerName && same.ownerName && !same.ownerName.split(/, | and /).includes(a.ownerName)) {
+      const names = [...same.ownerName.split(/, | and /), a.ownerName].sort((x, y) => (order.indexOf(x) + 1 || 99) - (order.indexOf(y) + 1 || 99));
+      same.ownerName = listNames(names);
+      continue;
+    }
+    if (same) continue;
     if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
@@ -1308,7 +1372,7 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       + (sides.some((a) => docs.get(a.policyId)?.document_role === "endorsement") ? ". One of them comes from an endorsement to the policy." : "."));
   }
   // "the annual limit", "the deductible and co-insurance": the words asked, not the whole family of terms.
-  const narrowWords = narrow.map((n) => askedText.match(n.asks)?.[0]?.toLowerCase().replace(/^deductable$/, "deductible").replace(/^co-?insurence$/, "co-insurance")).filter((w): w is string => !!w && /deduct|co-?insur|co-?pay|pro-?ration|limit|\bcap\b/.test(w));
+  const narrowWords = narrow.map((n) => askedText.match(n.asks)?.[0]?.toLowerCase().replace(/^deductable$/, "deductible").replace(/^co-?insurence$/, "co-insurance").replace(/^.*\b(?:cap|out of pocket)\b.*$/, "yearly cap on what you pay")).filter((w): w is string => !!w && /deduct|co-?insur|co-?pay|pro-?ration|limit|\bcap\b/.test(w));
   const topicLabels = topics.length ? topics.map((t) => t.key === "cost_sharing" && narrowWords.length ? "the " + [...new Set(narrowWords)].join(" and the ") : t.label) : conditionAsked ? ["conditions"] : ["cover"];
   const shown = [...kept, ...conflicting.flat()];
   const answeredTopics = new Set(shown.map((a) => a.topic));
@@ -1327,8 +1391,10 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     : (whose === "your" ? "Here is what your" : "Here is what " + whose) + " documents state" + (aboutLabels.length ? " about " + aboutLabels.join(" and ") : "") + ". Each line shows the page it comes from.");
   // Several people asked about: who has nothing on it is said, not left out.
   // A household's car or home policy, or a window of dates, is not something each person is missing.
-  if (args.people.length > 1 && shown.length && !conditionsShown && topics.length && !topics.some((t) => t.key === "status") && !windowAsked && !topics.some((t) => ["motor", "home"].includes(t.key))) {
-    const missing = args.people.filter((p) => !withAnyLine.has(p.id)).map((p) => isSelf(p.id) ? "you" : personName(p.id));
+  if (args.people.length > 1 && shown.length && !conditionsShown && topics.length && !topics.some((t) => t.key === "status") && !windowAsked && !topics.some((t) => ["motor", "home"].includes(t.key)) && !namedDocs.length) {
+    // Round 11: someone with no readable document at all is not "missing" this cover -- saying so on every family answer is noise.
+    const readable = new Set([...speaksFor.values()].flatMap((owners) => [...owners]));
+    const missing = args.people.filter((p) => !withAnyLine.has(p.id) && readable.has(p.id)).map((p) => isSelf(p.id) ? "you" : personName(p.id));
     if (missing.length && missing.length < args.people.length)
       lines.push("DearPolicy didn’t find " + topicLabels.join(" or ") + " in the documents read for " + (missing.length === 1 ? missing[0] : missing.slice(0, -1).join(", ") + " or " + missing.at(-1)) + ".");
   }
@@ -1343,7 +1409,9 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       if (end && begins) lines.push("That premium is for the whole period of insurance, " + longDate(begins) + " to " + end.printed + ", not a yearly amount.");
     }
   // "How many days left?": the days from today to the date each document prints.
-  if (/\bnext \d{1,3} days\b|\bwithin \d{1,3} days\b|\bhow many days (?:left|until|till|to go|more|before|from|is that|are there)|\bdays? (?:left|until|till|to go|remaining|from (?:now|today))|\bhow long (?:more|until|till|before|left)\b/i.test(askedText)) {
+  if (/\bnext \d{1,3} days\b|\bwithin \d{1,3} days\b|\bhow many days (?:left|until|till|to go|more|before|from|is that|are there)|\bdays? (?:left|until|till|to go|remaining|from (?:now|today))|\bhow long (?:more|until|till|before|left)\b/i.test(askedText)
+    // Round 11: "how many days before admission are bills covered?" asks about the benefit's window, not the days left on the plan.
+    && !/\b(?:admission|admitted|discharge\w*|hospitali[sz]ation|treatment|surgery|diagnos\w*|deferment|waiting|trip|travel(?:ling)?|abroad|overseas)\b/i.test(askedText)) {
     const counts: string[] = [];
     for (const docId of [...new Set(shown.map((a) => a.policyId))]) {
       const st = statusOf.get(docId);
@@ -1407,6 +1475,11 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   const withoutNames = args.people.flatMap((p) => [p.display_name, p.preferred_name ?? "", ...p.display_name.split(/\s+/).filter((w) => w.length >= 3)]).filter((n) => n.trim().length >= 2)
     .reduce((t, n) => t.replace(new RegExp("\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:['’]s)?\\b", "gi"), " "), askedText);
   const repaired = relevanceRepair(withoutNames, [summary, ...details].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName);
+  // Round 11: the printed sentence about the particular thing asked ("MediSave cannot be used", "Each trip may last up to 90 days",
+  // "Plan: Annual multi-trip, Asia") when no line shown says it -- from the same documents.
+  const personWords = args.people.flatMap((p) => (p.display_name + " " + (p.preferred_name ?? "")).split(/\s+/));
+  const rules = printedRuleLines(askedText, [summary, ...details, ...repaired.map((r) => r.text)].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName, { ignore: personWords })
+    .filter((r) => !repaired.some((x) => x.text === r.text));
   for (const r of repaired) {
     details.unshift(r.text);
     if (!citations.some((c) => c.policyId === r.citation.policyId && c.pageStart === r.citation.pageStart)) citations.push(r.citation);
@@ -1423,6 +1496,16 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
       const now = answeredLabels.join(" and ");
       summary = summary.replace(" about " + was + ".", now ? " about " + now + "." : ".").replace(" for " + was + ",", now ? " for " + now + "," : ",");
     }
+  }
+  // Round 11: "how do I make a claim?": the document's own claim steps, not every benefit row of the plan.
+  if (HOW_TO_CLAIM.test(askedText) && rules.length) {
+    details.splice(0, details.length); citations.splice(0, citations.length); limits.splice(0, limits.length);
+    summary = "Here is how to claim, as " + (args.people.length === 1 && !isSelf(args.people[0].id) ? personName(args.people[0].id) + "’s" : "your") + " documents print it:";
+  }
+  for (const r of [...rules].reverse()) {
+    details.unshift(r.text);
+    if (!citations.some((c) => c.policyId === r.citation.policyId && c.pageStart === r.citation.pageStart)) citations.push(r.citation);
+    for (const m of r.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []) if (!figures.includes(m)) figures.push(m);
   }
   // Round 10: "read me the benefits table": a row whose amount the scan prints unclearly is still a row of
   // the table -- shown with the amount said to be unclear on the scan, never silently dropped.
@@ -1451,7 +1534,10 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
  * when it contains an "if". */
 /** A question about what a policy prints, even phrased with "if" ("What's the pro-ration if I go private?",
  * "If my flat is unliveable, how much for a hotel?", "How much does it pay if he loses a thumb?"). */
+/** Round 11: "how do I make a claim if I'm admitted?", "what's the claim process?": the printed steps. */
+export const HOW_TO_CLAIM = /\bhow (?:do|can|should|to|would) (?:i |we |you )?(?:go about )?(?:make|file|submit|start|do|lodge) (?:a |the |my )?claim\b|\bhow (?:do|can|should|to) (?:i |we )?claim\b|\bclaims? (?:process|procedure|steps)\b|\bhow (?:long|many days) (?:do|does|have) (?:i|we) (?:have )?to (?:claim|submit)\b/i;
 export function factualEvenAsWhatIf(question: string) {
+  if (HOW_TO_CLAIM.test(question)) return true;
   // Round 9: "how much life insurance does he have if anything happens to him", "how much a month if she cannot walk",
   // "if she fractures her skull how much": what the policy prints, asked with an "if".
   if (/\bhow much\b/i.test(question) && (/\b(?:life (?:insurance|cover)|sum (?:assured|insured)|death benefit)\b/i.test(question) || /\b(?:every|a|per|each) month\b/i.test(question) || /\b(?:skull|spine)\b/i.test(question))) return true;
@@ -1460,7 +1546,12 @@ export function factualEvenAsWhatIf(question: string) {
     || /^\s*(?:what(?:['’]s| is| are)|how much is|is there)\s+(?:the\s+|my\s+|a\s+|an\s+)?[\w -]{0,30}\b(?:pro-?ration|deductible|excess|co-?insurance|co-?pay\w*|limit|premium|waiting period|sum insured|payout)\b/i.test(question)
     || /\bwhat(?:['’]s| is) the (?:extra |additional )?(?:excess|deductible|limit)\b/i.test(question)
     || /\bhow much for (?:a |the )?(?:hotel|accommodation)\b/i.test(question)
-    || /\bwhat if (?:i|he|she|we|they) (?:stay|go|choose|pick|use)\b[^?]*\b(?:private|ward|panel)\b/i.test(question)
+    || /\b(?:what )?if (?:i|he|she|we|they) (?:stay|go|choose|pick|use)\b[^?]*\b(?:private|ward|panel)\b/i.test(question)
+    // Round 11: "if I pass away what does Lion Gateway pay?", "how much would my family get from AssureTerm 65?": what a named plan prints on death.
+    || /\b(?:die|dies|pass(?:es)? away|death)\b/i.test(question) && /\bwhat (?:does|would|will) [^?]{0,40}\bpay\b|\bhow much (?:would|will|does|do) [^?]{0,40}\b(?:get|receive)\b[^?]{0,20}\bfrom\b/i.test(question)
+    // "If I injure another driver, is third-party injury covered?": what the car policy prints.
+    || /\bthird[- ]party\b/i.test(question) && !/\bhow much (?:can|could|will|would) (?:i|we) claim\b/i.test(question)
+    || /,\s*(?:is|are|does|do|will)\b[^?]*\bcover(?:ed|s)?\b[^?]*\?\s*$/i.test(question)
     || /\bif\b[^?]*\b(?:doesn['’]?t|don['’]?t|not) pay\b/i.test(question)
     // "Is my car covered if I drive into Malaysia?": what the policy says, asked as a yes or no.
     || /^\s*(?:is|are|am|will)\b[^?]{0,40}\bcovered\b[^?]*\bif\b/i.test(question);
@@ -1475,18 +1566,22 @@ export function isFactualPolicyQuestion(question: string) {
 
 /** Round 10: what a question asks that its answer does not say, when a line of
  * the person's own documents does: at most two such lines, quoted verbatim. */
-const REPAIR_GENERIC = new Set("cover covered policy policies plan plans pay pays paid much insurance benefit benefits amount whole life many does still have has get what which mama papa your their his her hospital medical schedule document part kind type thing really also now one left".split(" ").map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
+const REPAIR_GENERIC = new Set("bill bills cover covered policy policies plan plans pay pays paid much insurance benefit benefits amount whole life many does still have has get what which mama papa your their his her hospital medical schedule document part kind type thing really also now one left".split(" ").map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
 export function relevanceRepair(question: string, answerText: string, pagesByDoc: Map<string, { page: number; text: string }[]>, docName: (id: string) => string) {
   const said = wordsOf(answerText);
   const productWords = new Set([...pagesByDoc.keys()].flatMap((id) => [...wordsOf(docName(id))]));
   // "a day", "ICU", "GST": short words that still say what is asked.
-  const missing = [...wordsOf(question)].filter((w) => (w.length >= 4 || /^(?:day|icu|gst|tcm|age)$/.test(w)) && !REPAIR_GENERIC.has(w) && !productWords.has(w) && !said.has(w));
+  // Round 11: a word that only says which plan or topic is meant ("shield" in "my shield plan") is not a thing the answer missed.
+  const topicWord = (w: string) => TOPICS.some((t) => new RegExp("^(?:" + t.asks.source + ")$", "i").test(w)) || PLAN_KINDS.some((k) => k.re.test(w + " plan"));
+  const missing = [...wordsOf(question)].filter((w) => (w.length >= 4 || /^(?:day|icu|gst|tcm|age)$/.test(w)) && !REPAIR_GENERIC.has(w) && !productWords.has(w) && !said.has(w) && !topicWord(w));
   if (!missing.length) return [];
   const found: { text: string; citation: ChatCitation; score: number }[] = [];
   for (const [docId, pages] of pagesByDoc) {
     for (const l of bestLines(pages, question, { limit: 2, min: 1.5 })) {
       const missed = l.hits.filter((h) => missing.includes(h));
       if (!missed.length || l.hits.length < 2) continue;
+      // A heading in capitals ("SHIELDCARE PREMIER - INTEGRATED SHIELD PLAN") names a section; it answers nothing.
+      if (l.line === l.line.toUpperCase() && !/\d/.test(l.line)) continue;
       found.push({ text: docName(docId) + " — “" + l.line.replace(/[.;\s]+$/, "") + "” (page " + l.page + ").", score: l.score,
         citation: { chunkId: "page:" + docId + ":" + l.page, policyId: docId, policyName: docName(docId), pageStart: l.page, pageEnd: l.page } });
     }

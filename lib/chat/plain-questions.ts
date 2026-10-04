@@ -177,6 +177,21 @@ export function insurersNotOnFile(text: string, onFile: string[]): string[] {
   return INSURERS.filter(([name, re]) => re.test(text) && !re.test(held) && !held.toLowerCase().includes(name.toLowerCase())).map(([name]) => name);
 }
 
+/** Round 11: a product the question names by its brand-style name ("MediGuard", "ShieldCare Premier",
+ * "TermSecure 20") that is on none of the household's documents. Scheme and app names are not products. */
+const NOT_A_PRODUCT = /^(?:medisave|medishield|careshield|eldershield|dearpolicy|fidrec|giro|paynow|whatsapp|iphone|ipad|youtube|linkedin|singpass|mymoh|healthhub|grabpay|paylah)$/i;
+export function productsNotOnFile(text: string, onFile: string[]): string[] {
+  const held = onFile.join(" | ").toLowerCase();
+  const out: string[] = [];
+  for (const m of text.matchAll(/\b([A-Z][a-z]+[A-Z][A-Za-z]+)((?:\s+(?:\d{1,3}|[A-Z][a-z]+))*)/g)) {
+    const brand = m[1];
+    if (NOT_A_PRODUCT.test(brand) || held.includes(brand.toLowerCase())) continue;
+    const tail = (m[2] ?? "").split(/\s+/).filter(Boolean).filter((w, i, all) => /^\d/.test(w) || all.slice(0, i + 1).every((x) => /^(?:\d+|[A-Z][a-z]+)$/.test(x) && !/^(?:Rider|Plan|Policy|Insurance|Shield)$/.test(x)));
+    out.push([brand, ...tail].join(" "));
+  }
+  return [...new Set(out)];
+}
+
 // ------------------------------------------------------------------ admin questions
 export type AdminKind = "late" | "cancel" | "contact" | "leave";
 export function adminKind(text: string): AdminKind | null {
@@ -192,7 +207,7 @@ export function adminKind(text: string): AdminKind | null {
 export function damageEvent(text: string): "motor" | "property" | null {
   const t = text.replace(/\s+/g, " ");
   // "Is a burst pipe covered?", "how much third-party damage does my car policy cover?": a question about cover, not damage.
-  const reported = /\bmy (?:house|home|flat|kitchen|room|place)\b[^?]{0,20}\b(?:flood\w*|fire|leak\w*|burgl\w*|broken into)\b|\b(?:got|was|were|kena|been|is|has been)\s+(?:hit|damaged|scratched|dented|rear-?ended|knocked|bang\w*|stolen|flooded|burgled|broken into)\b|\b(?:someone|somebody|a (?:car|lorry|bus|taxi|van|motorcycle|truck))\s+(?:hit|knocked|banged|rear-?ended|crashed into|scratched)\b|\brear-?ended\b|\b(?:leaked|leaking|flooded|burst|caught fire|cracked)\b|\baccident\b[^?]{0,30}\b(?:yesterday|today|this morning|last \w+|at the|on the)\b|^(?:and|what about|how about)\s+(?:the\s+)?(?:car|house|home)\s+damage\b/i.test(t);
+  const reported = /\bmy (?:house|home|flat|kitchen|room|place)\b[^?]{0,20}\b(?:flood\w*|fire|leak\w*|burgl\w*|broken into)\b|\b(?:got|was|were|kena|been|is|has been)\s+(?:hit|damaged|scratched|dented|rear-?ended|knocked|bang\w*|stolen|flooded|burgled|broken into)\b|\b(?:someone|somebody|a (?:car|lorry|bus|taxi|van|motorcycle|truck))\s+(?:hit|knocked|banged|rear-?ended|crashed into|scratched)\b|\brear-?ended\b|\b(?:leaked|leaking|flooded|burst|caught fire|cracked)\b|\b(?:slow |small |water )?leaks?\b[^?]{0,40}\bdamaged\b|\bdamaged (?:the|my|our) (?:floor|ceiling|wall|kitchen|cabinet|furniture|parquet|tiles)\b|\baccident\b[^?]{0,30}\b(?:yesterday|today|this morning|last \w+|at the|on the)\b|^(?:and|what about|how about)\s+(?:the\s+)?(?:car|house|home)\s+damage\b/i.test(t);
   const claimIf = /\bclaim\b/i.test(t) && /\b(?:if|when|in case)\b/i.test(t);
   if (/^\s*(?:is|are|does|do|will|would|can|how much|what)\b[^?]*\bcover(?:ed|s)?\b/i.test(t) && !/\b(?:got|was|were|kena|been)\s+(?:hit|damaged|scratched|dented|flooded|burgled|broken into)\b/i.test(t)) return null;
   if (!reported && !claimIf) return null;

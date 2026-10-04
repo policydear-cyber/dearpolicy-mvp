@@ -34,7 +34,7 @@ function first(text: string, re: RegExp) {
   for (const m of text.matchAll(new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g"))) if (affirmed(text, m.index ?? 0)) return m;
   return null;
 }
-const ACCIDENT_CUE = /\b(?:fell|fall(?:en)?|falling|slipped|tripped|spilled|spilt|knocked|bitten|bit\b|crash\w*|collid\w*|hit by|scooter|bicycle|bike|playground|playing|accident\w*)\b/i;
+const ACCIDENT_CUE = /\b(?:fell|fall(?:en)?|falling|slipped|tripped|spilled|spilt|knocked|bitten|bit\b|crash\w*|collid\w*|hit by|scooter|bicycle|bike|playground|playing|football|soccer|badminton|basketball|netball|rugby|hockey|sports?|gym|jogging|running|sprained|twisted|accident\w*)\b/i;
 const BODY = "arm|leg|wrist|hand|finger|thumb|thigh|ankle|foot|toe|knee|hip|shoulder|elbow|face|head|chest|back|neck|lip|mouth|eye";
 
 /** Every event reported in this message, most specific first. */
@@ -57,11 +57,17 @@ export function reportedEvents(text: string): ReportedEvent[] {
   if (bite) injury("wound", bite[0], t.match(new RegExp(String.raw`\b(?:on|to)\s+(?:her|his|my|their)\s+(${BODY})\b`, "i"))?.[1] ?? null);
   const cut = !tooth && !burn && !bite && first(t, new RegExp(String.raw`\b(?:needed|got|had)\s+(?:\d+\s+)?stitches\b|\b(?:deep|bad|nasty)\s+cut\b|\bcut\s+(?:her|his|my|their)\s+(?:${BODY})\b`, "i"));
   if (cut) injury("wound", cut[0], t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null);
+  // Round 11: "lost his thumb in an accident": a permanent loss -- the injury a scale of compensation pays for.
+  const loss = !tooth && !/\b(?:if|what if|suppose|in case)\b[^.?!]{0,40}\b(?:lost|severed|amputated)\b/i.test(t) && first(t, /\b(?:lost|severed|amputated)\s+(?:(?:her|his|my|their|a|an|one|both)\s+)?(thumb|index finger|finger|eye|sight|arm|leg|hand|foot|limb|hearing)s?\b/i);
+  if (loss) { const part = loss[1].toLowerCase(); injury("permanent loss", loss[0], part); out.at(-1)!.facts.permanentImpairment = true; out.at(-1)!.facts.injuries = "loss of " + part; }
+  // Round 11: "sprained his wrist at football": the kind of injury is said, so it is not asked again.
+  const sprain = !tooth && !burn && !bite && !cut && !loss && first(t, new RegExp(String.raw`\b(?:sprained|twisted|strained|pulled)\s+(?:(?:her|his|my|their|a)\s+)?(${BODY})\b|\b(?:${BODY})\s+sprain\b`, "i"));
+  if (sprain) injury("sprain", sprain[0], sprain[1] ?? t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null);
   // Round 9: "the doctor say maybe fracture", "suspected fracture": an injury the X-ray has yet to confirm.
-  const suspected = !tooth && !burn && !bite && !cut && first(t, /\b(?:maybe|might be|may be|could be|suspect(?:ed)?|possible|possibly)\s+(?:a\s+)?(?:fracture[sd]?|broken(?:\s+bone)?)\b/i);
+  const suspected = !tooth && !burn && !bite && !cut && !sprain && first(t, /\b(?:maybe|might be|may be|could be|suspect(?:ed)?|possible|possibly)\s+(?:a\s+)?(?:fracture[sd]?|broken(?:\s+bone)?)\b/i);
   if (suspected) injury("possible fracture", suspected[0], t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null);
   // Round 9: "knocked down by a car", "hit by a bus": a road accident, injuries still to be told.
-  const road = !tooth && !burn && !bite && !cut && !suspected && first(t, /\b(?:knocked down|hit by a (?:car|bus|lorry|motorcycle|motorbike|van|taxi)|run over)\b/i);
+  const road = !tooth && !burn && !bite && !cut && !sprain && !suspected && first(t, /\b(?:knocked down|hit by a (?:car|bus|lorry|motorcycle|motorbike|van|taxi)|run over)\b/i);
   if (road) { injury("injury in a road accident", road[0], t.match(new RegExp(String.raw`\b(${BODY})\b`, "i"))?.[1] ?? null); out.at(-1)!.facts.eventType = "accident"; out.at(-1)!.traits = ["bodily_injury", "accident"]; }
   // ------------------------------------------------------------ surgery, childbirth
   const surgery = first(t, /\b(?:had|went for|underwent|did)\s+(?:a\s+|an\s+|her\s+|his\s+|my\s+)?(?:day\s+)?(?:surgery|operation)\b|\bday surgery\b/i);

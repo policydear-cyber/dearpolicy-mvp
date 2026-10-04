@@ -106,7 +106,8 @@ export function modelProseProblem(text: unknown, check: ProseCheck): string | nu
   // Other scripts only as the proof prints them; a sentence of another language never.
   for (const m of t.matchAll(/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}\s]+/gu)) if (!proof.includes(m[0])) return "other script";
   const sentences = t.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
-  for (const s of sentences) if (s.split(/\s+/).length >= 4 && /^[\p{Script=Latin}\p{Script=Common}\s]+$/u.test(s) && !FUNCTION_WORDS.test(s)) return "another language";
+  // Round 11: a clause after a colon is checked on its own ("... prints about that: Polisi anda akan membayar sepenuhnya.").
+  for (const s of sentences.flatMap((x) => x.split(/(?<=:)\s+/))) if (s.split(/\s+/).length >= 4 && /^[\p{Script=Latin}\p{Script=Common}\s]+$/u.test(s) && !FUNCTION_WORDS.test(s)) return "another language";
   const seen = new Set<string>();
   for (const s of sentences) { const k = norm(s); if (k.length >= 20 && seen.has(k)) return "repeated"; seen.add(k); }
   if ((!check.fragment && !/[.!)"”’]$/.test(t)) || /\b(?:and|or|the|of|to|a|an|with|than|by|for|but)\s*[.!?]?$/i.test(t)) return "cut off";

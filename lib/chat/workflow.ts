@@ -94,8 +94,9 @@ import { modelProseProblem,proofText } from "./model-text";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
-import { answerPolicyQuestion,isFactualPolicyQuestion,factualEvenAsWhatIf } from "./policy-answer";
-import { conversationalReply } from "./conversational";
+import { answerPolicyQuestion,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
+import { printedRuleLines } from "./printed-rules";
+import { conversationalReply,dishonestReply } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
 import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM } from "./premium-answer";
 import { documentQuestionAnswer, printedLinesAnswer, printedRepair, provenanceAnswer } from "./document-questions";
@@ -104,7 +105,7 @@ import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,P
 import { householdPersonFromWords,productOwner } from "./person-words";
 import { inactiveDocuments,inactiveList } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
-import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
+import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
 
 
@@ -166,7 +167,7 @@ const NAMED_PLAN=/\b(?:travel|motor|car|home|hospital|shield|critical illness|pe
 /** Words that report something happening, as opposed to asking about cover. */
 const REPORTS_AN_EVENT=/\b(?:admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|accident|injured|injury|broke|broken|fractured|delayed|lost|stolen|fell|fall|sick|surgery|operation|disabled|cannot work|can['’]?t work|unable to work|hurt|killed|sprain(?:ed|s)?|twisted|dislocated|bruised|needed stitches|knocked down|hit by a (?:car|bus|lorry|motorcycle|van)|run over|collapsed|unconscious|murdered|stabbed|shot dead|drowned|homicide)\b|\b(?:is|was) (?:now )?in (?:\w+ )?hospital\b/i;
 /** "What is X covered for?", "What am I covered for?", "Tell me about X's policies", "list all our policies". */
-const COVERAGE_OVERVIEW=/^\s*(?:(?:what|which) (?:is|are|am) (?:i|[\p{L}]+(?: [\p{L}]+){0,3}) (?:covered|insured) (?:for|with)|what (?:does|do) (?:my |our )?[\p{L}'’ -]{1,40} have|(?:tell me|show me|give me) (?:an? )?(?:overview|summary|rundown) of|(?:tell me )?everything (?:i['’]?m|i am|we['’]?re|we are|[\p{L}]+ is) (?:insured|covered) for|compare .{1,60}(?:cover|coverage|insurance|policies|plans)|what (?:cover|coverage|insurance|policies|plans?) (?:do|does) .{1,40} have|(?:tell me|show me|list|give me)(?: me)? (?:about )?(?:all )?(?:(?:my|our|his|her|their|the family['’]?s?|[\p{L}]+(?: [\p{L}]+)?['’]s) )?(?:family )?(?:policies|coverage|cover|insurance|portfolio|plans)|(?:all )?(?:my|our) (?:policies|coverage|cover|portfolio|insurance)|cover(?:age)?|policies|portfolio|what do (?:i|we) have|what (?:insurance |cover |policies |plans )?(?:do )?(?:i|we) (?:got|have)|who (?:is|are) (?:covered|insured|named) (?:under|by|in|on)|(?:which|who) (?:of us|in (?:the|my|our) family|in the household)(?: (?:has|have|is|are))? (?:no|not|without|doesn['’]?t have|don['’]?t have)(?: any)? (?:insurance|cover(?:ed)?|coverage|policies|policy|plans?))\b[^?]*\??\s*$/iu;
+const COVERAGE_OVERVIEW=/^\s*(?:(?:what|which) (?:is|are|am) (?:i|[\p{L}]+(?: [\p{L}]+){0,3}) (?:covered|insured) (?:for|with)|what (?:does|do) (?:my |our )?[\p{L}'’ -]{1,40} have|(?:tell me|show me|give me|can i (?:get|have)) (?:an? )?(?:quick |short |brief |full |simple |overall )?(?:overview|summary|rundown) of|(?:tell me )?everything (?:i['’]?m|i am|we['’]?re|we are|[\p{L}]+ is) (?:insured|covered) for|compare .{1,60}(?:cover|coverage|insurance|policies|plans)|what (?:cover|coverage|insurance|policies|plans?) (?:do|does) .{1,40} have|(?:tell me|show me|list|give me)(?: me)? (?:about )?(?:all )?(?:(?:my|our|his|her|their|the family['’]?s?|[\p{L}]+(?: [\p{L}]+)?['’]s) )?(?:family )?(?:policies|coverage|cover|insurance|portfolio|plans)|(?:all )?(?:my|our) (?:policies|coverage|cover|portfolio|insurance)|cover(?:age)?|policies|portfolio|what do (?:i|we) have|what (?:insurance |cover |policies |plans )?(?:do )?(?:i|we) (?:got|have)|who (?:is|are) (?:covered|insured|named) (?:under|by|in|on)|(?:which|who) (?:of us|in (?:the|my|our) family|in the household)(?: (?:has|have|is|are))? (?:no|not|without|doesn['’]?t have|don['’]?t have)(?: any)? (?:insurance|cover(?:ed)?|coverage|policies|policy|plans?))\b[^?]*\??\s*$/iu;
 function explicitPeople(message:string,family:ClaimPerson[]){
   const text=" "+normalText(message).replace(/[^\p{L}\p{N}]+/gu," ")+" ";
   return family.filter(p=>[p.display_name,p.preferred_name].filter(Boolean).some(name=>text.includes(" "+normalText(name!).replace(/[^\p{L}\p{N}]+/gu," ")+" ")));
@@ -308,7 +309,12 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
     ?personMessage.split(/\b(?:because|as|since|due to|after)\b/i)[0]:null;
   // Round 9: "my daughter say I got insurance, what I got": who said it is not who it is about.
   const reportedSpeech=personMessage.replace(/^\s*(?:(?:hi|hello|um+|so|ok)[,\s]+)*(?:my|our)\s+\w+\s+(?:say|says|said|told me|tell me|ask(?:s|ed)? me(?: to check)?)(?:\s+that)?\s+/i,"");
-  const speakerWords=reportedSpeech!==personMessage&&/\b(?:i|me|my)\b/i.test(reportedSpeech)?reportedSpeech:personMessage;
+  const spokenWords=reportedSpeech!==personMessage&&/\b(?:i|me|my)\b/i.test(reportedSpeech)?reportedSpeech:personMessage;
+  // Round 11: "Wei Jie's company plan" names whose plan it is; "can Xin Yi see a GP under it", "what does it give me as his wife"
+  // are about Xin Yi and the speaker -- the dependants on it -- not about Wei Jie.
+  const planOwnerPhrase=/\b([\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*)?)['’]s\s+(?:company|group|employer|work|office|employee)\s+(?:plan|insurance|policy|cover(?:age)?|benefits?|scheme)\b/iu;
+  const ownerOnly=spokenWords.replace(planOwnerPhrase," the company plan ");
+  const speakerWords=ownerOnly!==spokenWords&&(explicitPeople(ownerOnly,family).length===1||/\b(?:i|me|my)\b/i.test(ownerOnly))?ownerOnly:spokenWords;
   const mentioned=explicitPeople(tripReason??personMessage,family);
   // "he is my dad's brother", "his wife asked me to help": still about the
   // person outside the household this chat was about.
@@ -318,7 +324,9 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   // Round 9: "check if I got critical illness cover because my colleague just got cancer": the speaker's own cover, the colleague only the reason.
   const ownCoverAsked=/\b(?:do i (?:have|got)|if i (?:have|got|am covered)|am i covered|my (?:own )?(?:cover|policy|policies|insurance|plan))\b/i.test(personMessage);
   const outside=refersBack?priorOutside:!request.personChoiceId&&!tripReason&&!ownCoverAsked?outsideHouseholdSubject(personMessage,family):null;
-  const familyQuestion=/\b(?:my family|our family|whole family|all family|everyone|all of us|family policies|family coverage|our policies|all our policies|policies do we have|do we pay|(?:cover|insurance|policies|plans?) do we have|(?:our|the family(?:['’]s)?) (?:total|premiums?|policies|cover(?:age)?|insurance|plans)|altogether|in total|combined|which of us|who in (?:the|my|our) family|^\s*(?:so\s+|and\s+|ok(?:ay)?[,\s]+)?who (?:has|have|owns|holds)\b|anyone in (?:the|my|our) family|each of us|for (?:the|my|our) family|family total)\b/i.test(personMessage);
+  const familyWords=/\b(?:my family|our family|whole family|all family|everyone|all of us|family policies|family coverage|our policies|all our policies|policies do we have|do we pay|(?:cover|insurance|policies|plans?) do we have|(?:our|the family(?:['’]s)?) (?:total|premiums?|policies|cover(?:age)?|insurance|plans)|altogether|in total|combined|which of us|who in (?:the|my|our) family|^\s*(?:so\s+|and\s+|ok(?:ay)?[,\s]+)?who (?:has|have|owns|holds)\b|anyone in (?:the|my|our) family|each of us|for (?:the|my|our) family|family total)\b/i;
+  // Round 11: "how much do we pay for Xin Yi's PA?" is about Xin Yi's plan, even said with "we".
+  const familyQuestion=familyWords.test(personMessage)&&!(mentioned.length===1&&new RegExp("\\b(?:"+[mentioned[0].display_name,mentioned[0].preferred_name??""].filter(Boolean).map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")['’]s\\b","i").test(personMessage)&&!/\b(?:my family|our family|whole family|all of us|everyone|each of us|which of us|altogether|in total|combined)\b/i.test(personMessage));
   // Round 9: "both my husband and daughter": two people named by kinship, not by name.
   const kinNamed=mentioned.length<2&&/\b(?:and|both)\b/i.test(personMessage)&&/\b(?:if|what if|suppose|in case)\b/i.test(personMessage)
     ?[...personMessage.matchAll(/\b(?:my|our)\s+(\w+(?:\s*(?:,|and|&)\s*(?:my\s+)?\w+)*)/gi)].flatMap(m=>m[1].split(/\s*(?:,|\band\b|&)\s*(?:my\s+)?/i)).filter(w=>/^(?:husband|wife|spouse|son|daughter|mum|mom|mother|mak|dad|father|brother|sister|helper|maid|grandma|grandmother|grandpa|grandfather|child|kid)$/i.test(w))
@@ -382,6 +390,14 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
     const earlier=family.find(p=>p.id===(previous?.family_member_id??request.familyMemberId))??(family.filter(p=>/^self$/i.test(p.relationship??"")).length===1?family.find(p=>/^self$/i.test(p.relationship??"")):undefined);
     if(earlier)resolution={status:"resolved",person:earlier,explicit:false};
   }
+  // Round 11: "can Irfan drive my car?", "Aisyah scratched the car": a car policy covers its drivers through the
+  // policyholder's certificate. Someone named who holds no car policy is answered from the household's car policy.
+  if(!chosen&&resolution.status==="resolved"&&!outside&&/\b(?:car|cars|drive|drives|driving|driver|motor|vehicle|windscreen|ncd|no[- ]claims? discount|scratch\w*|dent(?:s|ed)?|bumper)\b/i.test(personMessage)&&!/\b(?:hospital|warded|injur\w*|hurt|fractur\w*|broke|died|passed away)\b/i.test(personMessage)){
+    const motorOwners=(await query<{id:string}>(`SELECT DISTINCT pm.family_member_id::text id FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
+      WHERE p.account_id=$1 AND p.processing_status='ready' AND p.superseded_at IS NULL AND ${activePredicate("p")} AND (p.policy_type ILIKE 'motor%' OR p.product_name ~* '\\m(?:motor|car)\\M')`,[request.accountId]).catch(()=>({rows:[] as {id:string}[]}))).rows.map(r=>r.id);
+    const asked=resolution.person;
+    if(motorOwners.length===1&&!motorOwners.includes(asked.id)){const holder=family.find(p=>p.id===motorOwners[0]);if(holder)resolution={status:"resolved",person:holder,explicit:true};}
+  }
   let people:ClaimPerson[];
   let ambiguity:ChatContext["ambiguity"];
   if(chosen)people=[chosen];
@@ -393,8 +409,15 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   else if(resolution.status==="resolved")people=[resolution.person];
   // Automatic family context with nobody named: a question about the policies
   // is about the whole household; only a reported event needs one person.
+  // Round 11: "our flight was delayed", "the kitchen pipe burst", "my car was hit": with nobody named, the
+  // household's own account holder -- the one who holds the home, car and family travel policies -- not a question card.
+  else if(request.scope==="family"&&resolution.status==="unknown"&&resolution.name==="this person"&&family.filter(p=>/^self$/i.test(p.relationship??"")).length===1&&
+    (/\b(?:we|our|us)\b/i.test(personMessage)&&(REPORTS_AN_EVENT.test(personMessage)||/\b(?:delayed|cancel+ed|stolen|lost)\b/i.test(personMessage))||/\b(?:pipe|leak\w*|flood\w*|burst|kitchen|bathroom|ceiling|floor|stolen|theft|burglar\w*|break-?in|home|house|flat|car|vehicle|windscreen|bumper|scratch\w*|dent(?:s|ed)?|collision|third[- ]party)\b/i.test(personMessage)))
+    people=family.filter(p=>/^self$/i.test(p.relationship??""));
   else if(request.scope==="family"&&resolution.status==="unknown"&&resolution.name==="this person"&&
-    !/\b(?:claim\w*|admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|accident|injur\w*|broke|fractur\w*|delayed|lost|stolen|sick|fell)\b/i.test(personMessage))people=family;
+    !/\b(?:admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|accident|injur\w*|broke|fractur\w*|delayed|lost|stolen|sick|fell)\b/i.test(personMessage)&&
+    // Round 11: "ambulance fee can claim or not?", "post hospitalisation claim how long?" ask what the policies say; only a reported event needs one person.
+    !(/\bclaim\w*\b/i.test(personMessage)&&REPORTS_AN_EVENT.test(personMessage)))people=family;
   else {people=[];ambiguity=resolution;}
   const memberId=people.length===1?people[0].id:
     ambiguity&&request.scope!=="family"?(request.familyMemberId??previous?.family_member_id??null):null;
@@ -1029,8 +1052,12 @@ function outsideHouseholdReply(outside:{relation:string;name:string|null},messag
   }
   const Who=who.charAt(0).toUpperCase()+who.slice(1);
   const died=/\b(?:died|passed away|passed on|was killed|death)\b/i.test(message);
+  // Round 11: "can we claim on his life policy?" about a relative of a household member: that member's policies insure that member.
+  const member=outside.name?.match(/^(.+)’s [a-z]+$/)?.[1];
+  const onMemberPolicy=member&&/\b(?:his|her|their|my|our|\w+['’]s)\s+(?:own\s+|life\s+|term\s+)?(?:polic(?:y|ies)|plan|insurance|cover)\b|\bclaim\b/i.test(message)
+    ?[member+"’s own policies insure "+member+" — they pay for what happens to "+member+", not to relatives who aren’t insured under them."]:[];
   return died?{summary:"I’m so sorry to hear about "+who+". DearPolicy can only see the policies of the people in your household, and "+who+" isn’t one of them, so I can’t check "+(outside.name?outside.name+"’s":"their")+" cover here.",
-      details:["A claim on "+(outside.name?outside.name+"’s":"their")+" own life insurance is made by the family or the beneficiaries named on the policy. The insurer — or the employer’s HR, if there was group cover through work — can tell them what to send."],
+      details:[...onMemberPolicy,"A claim on "+(outside.name?outside.name+"’s":"their")+" own life insurance is made by the family or the beneficiaries named on the policy. The insurer — or the employer’s HR, if there was group cover through work — can tell them what to send."],
       nextSteps:["If someone in your own household was affected too, tell me who and what happened, and I’ll check their policies."]}
     :{summary:Who+" isn’t in your household on DearPolicy, so I can’t see "+(outside.name?outside.name+"’s":"their")+" policies — and your family’s policies cover only the people named on them.",
       details:["The claim would go to "+(outside.name?outside.name+"’s":"their")+" own insurer, or through an employer’s group insurance if there is one."],
@@ -1083,7 +1110,8 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
   const pagesP=pagesFor(request.accountId,ids);
   // Mid-claim, only "and the car damage?" is answered here; everything else is the claim's.
   const pendingOnlyDamage=!!state.pending;
-  const productsOf=async()=>[...new Set((await pagesP).map(p=>p.product))];
+  // Round 11: one name per plan, however its documents spell it ("SilverShield Integrated Plan" and "Silvershield Integrated Plan").
+  const productsOf=async()=>[...new Map((await pagesP).map(p=>[p.product.toLowerCase(),p.product])).values()];
   const listOf=(xs:string[])=>xs.length<=1?xs.join(""):xs.slice(0,-1).join(", ")+" and "+xs.at(-1);
   // 0. A policy number the household gave that is on none of its documents.
   if(context.unknownPolicyNumber&&!pendingOnlyDamage){
@@ -1186,6 +1214,21 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
     if(locked)return {summary:"Yes — “"+locked+"” is locked with a password, so it can’t be read yet. The password is usually in the email or letter the statement came with (often an ID number or a date of birth in a set format); if it can’t be found, the insurer can send an unlocked copy. Upload that copy on the Documents page and I’ll read it straight away.",details:[],nextSteps:[],citations:[]};
   }
   const notOnFile=insurersNotOnFile(text,pages.map(p=>(p.insurer??"")+" "+p.product));
+  const insurerOnly=notOnFile.length>0;
+  // Round 11: a product named that nobody in the household holds ("my MediGuard deductible") is not answered from another plan.
+  if(!pendingOnlyDamage)notOnFile.push(...productsNotOnFile(text,[...pages.map(p=>(p.insurer??"")+" "+p.product),...context.holdings]));
+  // Round 11: "the deductible on my Great Eastern Shield plan" when the one Shield plan on file is another insurer's:
+  // said, and that plan's answer given, instead of only a list of policy names.
+  const askedKind=insurerOnly&&!judgementAsked(text)?PLAN_KINDS.find(k=>k.re.test(text)):undefined;
+  const sameKind=askedKind?[...new Map(pages.filter(p=>PLAN_KINDS.find(k=>k.re.test(p.product+" "+(p.policyType??"")+" plan"))?.kind===askedKind.kind).map(p=>[p.product,p])).values()]:[];
+  if(askedKind&&sameKind.length===1&&notOnFile.length&&!pendingOnlyDamage){
+    const held=sameKind[0];
+    const asked=text.replace(new RegExp("\\b(?:"+notOnFile.map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")\\b","gi")," ").replace(/\s+/g," ");
+    const own=await answerFor(asked);
+    const insurer=cleanInsurer(held.insurer);
+    return {summary:"There’s no "+listOf(notOnFile)+" policy in "+whose+" documents — the "+askedKind.re.exec(text)![0].replace(/^(?:integrated )?/i,"").toLowerCase().replace(/^shield/,"Shield")+" on file is "+held.product+(insurer?", from "+insurer:"")+"."+(own.handled?" "+own.summary:""),
+      details:own.handled?own.details.slice(0,8):[],nextSteps:own.handled?[]:["If you hold a "+listOf(notOnFile)+" policy too, upload its schedule on the Documents page and ask again."],citations:own.handled?own.citations:[]};
+  }
   if(notOnFile.length&&!/\b(?:other (?:driver|party|car|person)|third[- ]party|their|his insurer|her insurer|colleague|friend|neighbou?r)\b/i.test(text)
     &&/\b(?:my|our|mine|do i|do we|have|has|better|worse|compare|vs|versus|than|switch|policy|plan)\b/i.test(text)){
     const names=await productsOf();
@@ -1315,14 +1358,26 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
     if(held.length){
       const q=damage==="motor"?"what is the own damage cover and excess on the car insurance?":"what does the home insurance cover for damage, and what is the excess?";
       const owners=own.length?people:context.family.filter(p=>/^self$/i.test(p.relationship??""));
-      const ownAnswer=await (async()=>{try{const r=await answerPolicyQuestion({accountId:request.accountId,question:q,people:owners.length?owners:people});const keep=new RegExp(held.map(h=>h.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|"));
-        const details=r.answer.details.filter(d=>keep.test(d));return {handled:r.handled&&details.length>0,details,citations:r.answer.citations.filter(c=>keep.test(c.policyName))};}catch{return {handled:false,details:[] as string[],citations:[] as ChatCitation[]};}})();
+      // Round 11: what the policy prints about this very thing ("a sudden burst pipe", "valuables", "a leaking pipe over a
+      // long period") comes first, then the cover and excess lines.
+      const ownAnswer=await (async()=>{const keep=new RegExp(held.map(h=>h.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|"));
+        const details:string[]=[],citations:ChatCitation[]=[];
+        for(const question of [text,q,damage==="motor"?"what is the excess on the car insurance?":"what is the excess on the home insurance?"]){try{const r=await answerPolicyQuestion({accountId:request.accountId,question,people:owners.length?owners:people});
+          if(!r.handled)continue;for(const d of r.answer.details.filter(d=>keep.test(d)))if(!details.includes(d))details.push(d);
+          for(const c of r.answer.citations.filter(c=>keep.test(c.policyName)))if(!citations.some(x=>x.policyId===c.policyId&&x.pageStart===c.pageStart))citations.push(c);}catch{/* the next question */}}
+        // The printed sentence about this very thing, when the questions above did not reach it.
+        const byDoc=new Map<string,{page:number;text:string}[]>();for(const pg of all)(byDoc.get(pg.policyId)??byDoc.set(pg.policyId,[]).get(pg.policyId)!).push({page:pg.page,text:pg.text});
+        const named=new Map(all.map(pg=>[pg.policyId,pg.product]));
+        for(const r of printedRuleLines(text,details.join("\n"),byDoc,id=>named.get(id)??"Your policy").reverse())if(!details.includes(r.text)){details.unshift(r.text);if(!citations.some(x=>x.policyId===r.citation.policyId&&x.pageStart===r.citation.pageStart))citations.push(r.citation);}
+        return {handled:details.length>0,details,citations};})();
+      const theft=/\b(?:stolen|theft|stole|burgl\w*|broken into|robbed|missing)\b/i.test(text);
       const reported=!/\b(?:if|what if|suppose|in case)\b/i.test(text);
       const ins=[...new Set(all.map(p=>cleanInsurer(p.insurer)).filter((x):x is string=>!!x))];
-      const lead=(reported?(damage==="motor"?"I’m sorry about the car. ":"I’m sorry about the damage. "):"")+"For damage to "+(damage==="motor"?"the car":"the home or its contents")+", "+listOf(held)+" is the policy to claim from — hospital and other personal plans don’t pay for "+(damage==="motor"?"vehicles":"property")+".";
+      const lead=(reported?(damage==="motor"?"I’m sorry about the car. ":theft?"I’m sorry about the theft. ":"I’m sorry about the damage. "):"")+(theft&&damage!=="motor"?"For a theft from the home":"For damage to "+(damage==="motor"?"the car":"the home or its contents"))+", "+listOf(held)+" is the policy to claim from — hospital and other personal plans don’t pay for "+(damage==="motor"?"vehicles":"property")+".";
       const reply:PlainAnswer=
       {summary:lead+(ownAnswer.handled?" Here is what it states, including what you pay yourself on each claim:":""),details:ownAnswer.details.slice(0,6),
         nextSteps:[damage==="motor"?"Report the accident to "+(ins[0]??"the insurer")+" as soon as you can (within 24 hours is the usual expectation), even if you may not claim, and keep photos and the other driver’s details."
+          :theft?"Make a police report as soon as you can, and keep receipts, valuation certificates or photos that show what was taken and what it was worth for "+(ins[0]??"the insurer")+"."
           :"Take photos of the damage before cleaning up, stop the source if you can, and keep repair quotes and receipts for "+(ins[0]??"the insurer")+"."],
         citations:ownAnswer.citations,patch:state.pending?undefined:{intent:"policy_question",activeQuery:q}};
       if(reportedNow){DAMAGE_FALLBACK.set(context.conversation,reply);return null;}
@@ -1349,6 +1404,16 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   // Round 10: the person whose document a printed line came from ("what's the travel medical limit?" is Kok Leong's plan).
   let printedOwner:string|null=null;
   TURN_FACTS.set(answer,JSON.stringify(conversation.state.subjects??{}));
+  // Round 11: "write that he never had knee problems", "backdate the payment": declined before any document is read for it.
+  const dishonest=request.personChoiceId?null:dishonestReply(request.submittedQuestion??request.question);
+  if(dishonest){
+    answer.mode="answer";answer.summary=dishonest.summary;answer.details=[...dishonest.details];answer.confidence=null;
+    if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
+    answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
+    await check();
+    await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:false}),jobId:options?.jobId});
+    return {answer,retrieved:[]};
+  }
   const now=request.personContextMessage&&request.personContextRecordedAt?new Date(request.personContextRecordedAt):new Date();
   const subjectIds=context.people.map(p=>p.id);
   // A reply to the what-if's own question ("...: Not sure", "about 3 nights")
@@ -1693,7 +1758,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         const asksSomething=/\?|^(?:what|wat|which|who|when|where|why|how|does|do|did|is|are|can|could|will|would|should|has|have|got|tell me|show me|give me|list|compare|explain)\b|\b(?:or not|anot|pls|please)\b|\b(?:how much|what)\b[\s\w]*$/i.test(sentNow)||(topicsNow.length>0&&sentNow.split(/\s+/).length<=10&&!narratesEvent);
         // "Home insurance can claim renovation or not?" asks what the plan covers.
         const canClaimWhat=/\bcan claim\b[^?]*\b(?:or not|anot)\b/i.test(sentNow)&&!narratesEvent;
-        if(!pendingBefore&&!reportsSomething&&asksSomething&&state.intent==="claim"&&before.intent!=="claim"&&(topicsNow.length||isPremiumQuestion(sentNow)||GENERAL_POLICY_QUESTION.test(sentNow))&&
+        if(!pendingBefore&&!reportsSomething&&asksSomething&&state.intent==="claim"&&before.intent!=="claim"&&(topicsNow.length||isPremiumQuestion(sentNow)||GENERAL_POLICY_QUESTION.test(sentNow)||canClaimWhat&&!REPORTS_AN_EVENT.test(sentNow)&&!/\b(?:break|broke|fractur\w*|injur\w*|hurt|fell|fall|sick|died|admitted|warded)\b/i.test(sentNow)||HOW_TO_CLAIM.test(sentNow))&&
           (!/\bclaim\w*|\bhow much can\b|\bif\b/i.test(sentNow)||canClaimWhat||asksATerm||factualEvenAsWhatIf(sentNow))){
           state.intent="policy_question";state.activeQuery=sentNow;
           // Nothing was reported, so nothing the interpreter read into it is kept.
@@ -2788,6 +2853,29 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // Round 10: "you have no life policy on file" -- but a locked PDF or an app screenshot of one is: say so, and what to do.
         const otherPapers=!printedLines&&!answer.claimItems.length&&state.intent!=="claim"&&contracts.length
           ?await documentsByPerson(request.accountId,context.people).then(m=>context.people.flatMap(p=>unusableDocumentLines(p,m.get(p.id)??[]))).catch(()=>[] as string[]):[];
+        // Round 11: "Mama had an angioplasty last month, what can she get?" -- nothing matched as a claim, but the question names
+        // a kind of cover the person's own documents print ("Angioplasty: 10% of sum assured"): those lines, not "not sure what to look up".
+        const asked11=carriedQuestion??request.submittedQuestion??request.question;
+        const topic11=questionTopics(asked11)[0];
+        // Only where the answer would otherwise be "not sure what to look up" (a plain "no such policy" stays as it is).
+        const vague=!printedLines&&!answer.claimItems.length&&!observations.length&&contracts.length&&state.intent!=="claim"&&topic11
+          &&/^I’m not sure what to look up/.test(notInDocuments({question:asked11,people:context.people,contracts,complete:false}));
+        const lastTry=vague
+          ?await (async()=>{
+            const first=await answerPolicyQuestion({accountId:request.accountId,question:asked11,people:context.people}).catch(()=>null);
+            if(first?.handled)return first;
+            // Told as a story ("had an angioplasty last month"): asked plainly, as what that cover pays for it.
+            const word=asked11.match(topic11.asks)?.[0];
+            return word?await answerPolicyQuestion({accountId:request.accountId,question:"What does the "+topic11.label.replace(/^the /,"")+" pay for "+word.toLowerCase()+"?",people:context.people}).catch(()=>null):null;
+          })():null;
+        if(lastTry?.handled){
+          Object.assign(answer,lastTry.answer);state.activeQuery=asked11;delete state.pending;
+          if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
+          answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
+          await check();dedupeCitations(answer);
+          await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
+          return {answer,retrieved:[]};
+        }
         answer.summary=printedLines?printedLines.summary:(eventLead?eventLead+" ":"")+(
           answer.claimItems.length?(liveClaimContext(state.intent,answer,request.question)
             ?"I found "+answer.claimItems.length+" potentially relevant benefit"+(answer.claimItems.length===1?"":"s")+". This is a preliminary claim assessment: DearPolicy does not estimate what the insurer will pay until the claim evidence has been reviewed. Any amount shown is a policy-stated coverage limit, not an estimate for this event."

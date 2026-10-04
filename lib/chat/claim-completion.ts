@@ -19,6 +19,8 @@ import { requestedDocumentsFor } from "@/lib/claims/status";
 import { reportedEvents } from "@/lib/claims/reported-events";
 import { claimEventName, claimEventPhrase, primaryClaimCategory } from "./fact-finding-chat";
 import type { ChatAnswer } from "@/types";
+import { pagesFor } from "./plain-questions";
+import { printedRuleLines } from "./printed-rules";
 import type { ConversationState, SubjectFacts } from "./types";
 
 const known = (facts: SubjectFacts, key: string) => facts[key]?.state === "known" ? facts[key].value : null;
@@ -99,6 +101,20 @@ export async function completeClaimAnswer(accountId: string, state: Conversation
       answer.summary = "I couldn’t find a benefit for " + event + " in " + whose + " policies on file. That is based on the documents uploaded; the insurer decides any claim.";
       answer.details = answer.details.filter((d) => /[.!?]$/.test(d.trim()) && !/\bfictitious\b|^None of the benefits in\b/i.test(d));
       answer.citations = []; state.claimSources = [];
+      // Round 11: what the person's own schedule prints about this kind of event ("Outpatient: Not included in this plan").
+      try {
+        const pages = await pagesFor(accountId, [personId]);
+        const byDoc = new Map<string, { page: number; text: string }[]>();
+        for (const pg of pages) (byDoc.get(pg.policyId) ?? byDoc.set(pg.policyId, []).get(pg.policyId)!).push({ page: pg.page, text: pg.text });
+        const names = new Map(pages.map((pg) => [pg.policyId, pg.product]));
+        const asked = event + (outpatient ? " outpatient doctor clinic" : "");
+        const printed = printedRuleLines(asked, "", byDoc, (id) => names.get(id) ?? "Your policy", { sameThingOnly: true, limit: 2 });
+        if (printed.length) {
+          answer.summary = answer.summary.replace(/\.$/, ". Here is what " + whose + " " + (printed.length === 1 ? "policy prints" : "policies print") + " about it:");
+          answer.details = [...printed.map((r) => r.text), ...answer.details];
+          answer.citations = printed.map((r) => r.citation);
+        }
+      } catch { /* the plain sentence stands */ }
       const wording = answer.questions.find((q) => q.id === "wording-upload");
       if (wording) {
         answer.questions = [];

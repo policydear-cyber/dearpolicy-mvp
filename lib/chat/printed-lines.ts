@@ -83,6 +83,9 @@ export function piecesOf(text: string): string[] {
     const short = (c: string) => c.replace(/\([^)]*\)/g, "").trim().split(/\s+/).length <= 6 && !/\bbirth\b/i.test(c);
     if (cells.length >= 2 && cells.slice(1).every((c) => c.length <= 70 && noFigures(c) && short(c) && !/[.;]$/.test(c)
       && /\b(?:amount|value|limits?|share|qty|quantity|rate|maximum|minimum|days?|premium|bonus|added|year|date|period|charges|percentage|payable|sum)\b|^\(?\s*(?:S\$|SGD)\s*\)?$/i.test(c))) { header = cells; continue; }
+    // Round 11: a benefit table's own heading row ("Benefit · Private hospital · Restructured hospital (A ward) · Notes"):
+    // each value then reads under its column's name, not as a run of unnamed cells.
+    if (cells.length >= 3 && /^(?:benefits?|rider benefit|item|section|cover|event caused by an accident)$/i.test(cells[0]) && cells.slice(1).every((c) => c.length <= 60 && !/(?:S\$|SGD|\d{2,}|%)/.test(c) && !/[.;]$/.test(c))) { header = cells; continue; }
     if (cells.length === 1) { out.push(cells[0]); continue; }
     if (cells.length === 2) {
       const h = header && header.length === 2 ? header : null;
@@ -90,7 +93,10 @@ export function piecesOf(text: string): string[] {
       out.push((h && !PLAIN_HEAD.test(h[0].trim()) && h[0].length <= 30 ? h[0] + " — " : "") + cells[0] + ": " + (named ? named + " " : "") + money(cells[1], h?.[1]));
       continue;
     }
-    if (header && header.length === cells.length) { out.push(cells[0] + ": " + cells.slice(1).map((c, i) => (headName(header![i + 1]) && !PLAIN_HEAD.test(header![i + 1].trim()) ? headName(header![i + 1]) + " " : "") + money(c, header![i + 1])).join("; ")); continue; }
+    if (header && header.length === cells.length) { out.push(cells[0] + ": " + cells.slice(1).map((c, i) => ({ c, h: header![i + 1] }))
+      // A footnote number under "Notes" is a pointer to small print, not a value.
+      .filter(({ c, h }) => !(/^notes?$/i.test(h.trim()) && /^\d+(?:,\s*\d+)*$/.test(c)))
+      .map(({ c, h }) => (headName(h) && !PLAIN_HEAD.test(h.trim()) ? headName(h) + " " : "") + money(c, h)).join("; ")); continue; }
     out.push(cells.join(" · "));
   }
   flush();

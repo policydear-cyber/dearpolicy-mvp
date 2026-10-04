@@ -183,6 +183,8 @@ jobs:
         run: npm run r10:messy-docs-test
       - name: Round 10 chat cost and scale (query and model-call budgets per answer type, bounded prompts, 10 people and 40 documents, a 110-turn conversation, 200 chats listed, concurrent chats with a document being read, a hanging provider)
         run: npm run r10:perf-test
+      - name: Round 11 blind evaluation (155 conversations written independently of the earlier batteries, over all three households; every answer judged 0-2 for correctness, citations, right person, false premises, plain words and no rubbish; no answer may score 0)
+        run: npm run r11:blind-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

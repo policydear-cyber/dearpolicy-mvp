@@ -378,6 +378,11 @@ export async function documentQuestionAnswer(args: { accountId: string; question
     };
     const zero = (l: { line: string }) => /S\$\s?0(?:\.00)?\b(?![\d,])/.test(l.line);
     const picked = bestLines(docPages, text, { limit: roleAsked === "medical_bill" || roleAsked === "app_screenshot" ? 3 : 4, always: always[roleAsked] }).filter((l) => !zero(l));
+    // Round 11: "how much was the bill?" is the bill's total, whatever single charge the question's other words match.
+    if (roleAsked === "medical_bill" && /\bhow much\b|\btotal\b|\bamount\b|\bcost\b/i.test(text) && !picked.some((l) => /total charges|amount payable/i.test(l.line))) {
+      const total = bestLines(docPages, "total charges amount payable by patient", { limit: 4 }).filter((l) => /(?:^|— )(?:total charges|amount payable by (?:the )?patient):/i.test(l.line) && !zero(l)).slice(0, 1);
+      picked.unshift(...total);
+    }
     const lines = picked.length ? picked : bestLines(docPages, "", { limit: 3, always: always[roleAsked], min: 2 }).filter((l) => !zero(l));
     // A decision that pays nothing says so in words (a zero amount reads as a fault).
     const paysNothing = roleAsked === "claim_decision" && docPages.some((p) => /amount (?:payable|approved)\W+S\$\s?0(?:\.00)?\b/i.test(p.text.replace(/\t/g, " ")));
@@ -495,6 +500,14 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
   const shown = docs.filter((d) => forPerson(d) && (!/\bmerlion\b/i.test(text) || /merlion/i.test((d.insurer ?? "") + " " + d.file)));
   const kind = (d: Doc) => NON_COVER_ROLES.has(d.role ?? "") ? ROLE_WORDS[d.role as CorrespondenceRole] : d.status !== "ready" ? "couldn’t be read" : d.superseded ? "a copy or earlier version" : /policy_wording|product_summary|benefit_guide|brochure/.test(d.role ?? "") ? "general policy wording" : /statement|receipt|renewal/.test(d.role ?? "") ? "a statement or notice" : "a policy";
   const lettersOnly = /\bletters?\b|\brather than\b|not (?:a )?polic/i.test(text);
+  // Round 11: "the CareCash photo I uploaded": that upload, and what became of it -- not every file on record.
+  const askedWords = (text.match(/[A-Za-z]{4,}/g) ?? []).map((w) => w.toLowerCase()).filter((w) => !/^(?:what|about|that|this|which|uploaded|upload|photo|picture|image|file|document|scan|from|with|have|does|policy|plan|insurance|mama|papa|your|their)$/.test(w));
+  const photoAsked = /\b(?:photo|picture|pic|image|snap(?:shot)?)\b/i.test(text);
+  const pointed = shown.filter((d) => askedWords.some((w) => (d.file + " " + (d.product ?? "")).toLowerCase().replace(/[^a-z]+/g, " ").split(" ").some((x) => x.length >= 4 && x.startsWith(w.slice(0, 6)))) && (!photoAsked || /\.(?:jpe?g|png|heic|webp)$/i.test(d.file)));
+  if (!lettersOnly && pointed.length && pointed.length <= 3 && pointed.length < shown.length && !/\bwhich\b|\bfrom\b|\blist\b|\ball\b/i.test(text)) {
+    const lines = pointed.map((d) => q(d.file) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + "." + (d.status !== "ready" && d.error ? " " + d.error : ""));
+    return done(lines[0], lines.slice(1), pointed.map((d) => d.id), ownerOf(pointed[0])?.id ?? person?.id ?? null);
+  }
   const list = (lettersOnly ? shown.filter((d) => NON_COVER_ROLES.has(d.role ?? "")) : shown);
   if (!list.length) return done("I couldn’t find uploads like that on file.", [], [], person?.id ?? null);
   const lines = list.map((d) => q(d.file) + " — " + kind(d) + (d.product && !NON_COVER_ROLES.has(d.role ?? "") ? " (" + d.product + ")" : "") + (person ? "" : ", for " + who(d)) + ".");

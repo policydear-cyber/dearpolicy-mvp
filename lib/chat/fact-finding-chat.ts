@@ -23,6 +23,7 @@ import { describesAScenario } from "@/lib/policies/benefit-catalog";
 import { query } from "@/lib/db/client";
 import { dedupeDocuments } from "@/lib/claims/claim-pack";
 import { looksLikeInterviewReply } from "@/lib/claims/event-name";
+import { reportedEvents } from "@/lib/claims/reported-events";
 import type { CoverCondition } from "@/lib/insurance/cover-conditions";
 import type { ChatAnswer, ChatCitation } from "@/types";
 import type { IndicativeEstimateView } from "@/lib/claims/indicative-assessment";
@@ -238,7 +239,9 @@ export function applyInjuryFactFindingTurn(args: {
   // Said once per chat. Repeating the same paragraph above every question
   // buries the question; a later turn acknowledges the answer instead, and
   // the explanation returns only when what it says has changed.
-  answer.summary = state.injuryExplained === text.summary ? "Thanks, noted." : text.summary;
+  // Round 11: what was said is noted, but the question still open is the same one: say so, rather than a bare "noted".
+  const sameQuestion = state.pending?.id === next.question.id;
+  answer.summary = state.injuryExplained === text.summary ? (sameQuestion ? "Thanks — I’ve noted that. I still need the answer to this one before I go on." : "Thanks, noted.") : text.summary;
   state.injuryExplained = text.summary;
   answer.details = [];
   answer.questions = [{ id: next.question.id, type: next.question.type, text: next.question.text, why: next.question.why, options: questionOptions(next.question) }];
@@ -680,5 +683,9 @@ const CLAIM_MONEY_ASK = [
 export function isClaimMoneyQuestion(text: string) {
   const t = (text ?? "").trim();
   if (!t || /\b(?:if|suppose|supposing|what if|were to|in case)\b/i.test(t)) return false;
+  // Round 11: "how much will he get when it matures?" asks what a savings plan prints, not about a claim.
+  if (/\b(?:matur\w*|surrender\w*|endowment|fund value|cash value|ilps?|invest-?link\w*|bonus\w*)\b/i.test(t)) return false;
+  // "Irfan lost his thumb in an accident, how much can we claim?": the event is in the same message -- that is the claim to start, not a question for one.
+  if (reportedEvents(t).length || /\b(?:lost (?:his|her|my|a|an|one|both) \w+|had (?:an? )?(?:angioplasty|operation|surgery|stroke|heart attack)|was (?:admitted|warded|hospitali[sz]ed|diagnosed)|(?:broke|fractured|sprained|injured|hurt) (?:his|her|my|a)\b)/i.test(t)) return false;
   return CLAIM_MONEY_ASK.some((re) => re.test(t));
 }

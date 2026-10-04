@@ -131,8 +131,10 @@ export function isValidPolicyStatedLimit(limit: PolicyStatedLimit | undefined | 
  * boundary. When in doubt this returns true (claim context, fail closed). */
 const POLICY_VALUE_QUESTION = /\b(?:matur\w*|endowment|surrender\w*|cash values?|survival benefits?|premiums?)\b/i;
 /** A term the policy prints for every claim (an excess, a deductible, a limit). */
-const POLICY_TERM_QUESTION = /\b(?:excess|no-?claims? discount|ncd|payouts?|pays? out|deductible|co-?insurance|co-?pay\w*|limits?|premiums?|sums? (?:insured|assured)|waiting period)\b/i;
+const POLICY_TERM_QUESTION = /\b(?:excess|no[- ]?claims? discount|ncd|payouts?|pays? out|deductible|co-?insurance|co-?pay\w*|limits?|premiums?|sums? (?:insured|assured)|waiting period)\b/i;
 const CLAIM_AMOUNT_ASKED = /\bhow much (?:can|could|would|will|do|does|did) (?:i|we|he|she|they|you|\w+) (?:claim|get|receive|be paid)\b|\b(?:can|could) (?:i|we|he|she|they) claim\b|\bhow much (?:is|was) (?:the |my |our )?(?:claim|payout)\b/i;
+/** Round 11: "ambulance fee can claim or not?", "is TCM claimable?": whether a benefit exists, answered by what the policy prints. */
+const COVER_YES_NO = /^(?![^?]*\bhow much\b)[^?]*\b(?:can claim (?:or not|anot)|claimable|can (?:i |we )?claim (?:for )?(?:the |an? )?\w+ (?:or not|anot))\b/i;
 const CLAIM_MONEY_QUESTION = /\b(?:claim\w*|payouts?|pays? out|pay\s*out|compensat\w*|reimburs\w*|entitled|settlement)\b/i;
 const CLAIM_EVENT = /\b(?:die[sd]?|death|dead|passed away|diagnos\w*|hospital\w*|admitted|accident\w*|injur\w*|cancer|illness|disab\w*|fractur\w*|surgery|operation|delay\w*|damage\w*|stolen|theft|collision|crash\w*|murder\w*|killed)\b/i;
 /** V1.1: an answer built only from policy facts that lib/chat/assertions.ts
@@ -145,7 +147,7 @@ export function liveClaimContext(intent: string | undefined, answer: Pick<ChatAn
   const mode: string = answer.mode;
   if (intent === "claim" || mode !== "answer") return true;
   // "What's the excess on his accident claims?" asks a term the policy prints; "how much can she claim?" asks for an amount.
-  if (CLAIM_MONEY_QUESTION.test(question) && !(verifiedPolicyFactAnswer(answer) && POLICY_TERM_QUESTION.test(question) && !CLAIM_AMOUNT_ASKED.test(question))) return true;
+  if (CLAIM_MONEY_QUESTION.test(question) && !(verifiedPolicyFactAnswer(answer) && (POLICY_TERM_QUESTION.test(question) || COVER_YES_NO.test(question)) && !CLAIM_AMOUNT_ASKED.test(question))) return true;
   // "What is her hospital coverage?" names an event word but asks what the
   // documents state. A verified policy-fact answer states the printed figure;
   // "How much can she claim?" (above) and every claim turn stay scrubbed.
