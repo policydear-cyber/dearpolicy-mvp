@@ -1,7 +1,7 @@
 /**
  * Round 7 claim-conversation suite (npm run r7:claims-test).
  *
- * Drives the REAL chat route through 46 full claim conversations
+ * Drives the REAL chat route through 51 full claim conversations
  * (scripts/r7/claims-battery.ts) over the Round 6 household built with the
  * real ingestion pipeline on PGlite, under the deterministic model stand-in.
  * Every turn goes through the Round 6 rubbish detectors and the Round 7 claim
@@ -10,8 +10,12 @@
  * concludes, employer group cover). Any hit fails the suite. Detector
  * positive controls run first.
  *
+ * Round 8: every conversation also fails if a question answered "not sure"
+ * is asked again, and 7 what-ifs answer every question "not sure" (as the
+ * chat page's answer box sends it, and typed) and must move on.
+ *
  * R7_DUMP=<file> writes every turn as JSON lines; R7_ONLY=<substring> runs
- * only matching conversations.
+ * only matching conversations ("what-if" runs only the what-if checks).
  */
 import { writeFileSync, appendFileSync } from "node:fs";
 import { NextRequest } from "next/server";
@@ -26,7 +30,9 @@ process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "ci";
 delete process.env.PINECONE_API_KEY; delete process.env.SUPABASE_URL;
 
 type Hit = { rule: string; text: string };
-type Rec = { conv: string; turn: number; question: string; status: number; summary: string; answer: ChatAnswer | null; hits: Hit[] };
+type Rec = { conv: string; chaos?: string[]; turn: number; question: string; status: number; summary: string; answer: ChatAnswer | null; hits: Hit[] };
+/** Round 8: the chaos model's mutations during this turn (only under R8_CHAOS_SEED). */
+const chaosNote = (): string[] | undefined => (globalThis as { __dpChaosLog?: { op: string; mode: string }[] }).__dpChaosLog?.splice(0).map((x) => x.op + ":" + x.mode);
 const UNSURE = /^(?:not sure|idk|i dont know|i don't know|dunno|not yet known|unknown)$/i;
 
 async function main() {
@@ -39,6 +45,9 @@ async function main() {
 
   const { detect, visibleFields } = await import("./r6/detectors");
   const D = await import("./r7/claim-detectors");
+  const { detectR8 } = await import("./r8/detectors");
+  const R8 = await import("./r8/chaos-mode");
+  const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   const controls = selfTest(D);
   if (controls.length) { out("DETECTOR SELF-TEST FAILED:\n- " + controls.join("\n- ")); process.exit(1); }
   out("claim detector self-test: ok");
@@ -48,6 +57,8 @@ async function main() {
   const F = await import("./r6/fixture");
   const h = await F.buildHousehold();
   out(`household built in ${Date.now() - started} ms`);
+  // Round 8: the same battery with the chaos model in place of the stand-in (scripts/r8-chaos-regressions.ts).
+  if (process.env.R8_CHAOS_SEED) Object.assign(process.env, { NODE_ENV: "test", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-" + process.env.R8_CHAOS_SEED });
   await seedLapsedPolicy(h.db, F);
   // ------------------------------------------------ employer group cover (product change), unit level
   const groupFails = await groupCoverChecks(F);
@@ -88,6 +99,7 @@ async function main() {
     let member = c.member, userText = "", message = c.opening, choice: string | undefined;
     const used = new Set<number>(); const after = [...(c.after ?? [])];
     const answered = new Map<string, string>(); // question text -> substantive reply
+    const unsure = new Set<string>(); // question text answered "not sure": never asked again
     const asked: string[] = [];
     let concluded = false, last: ChatAnswer | null = null, lastQ: { text: string; id: string } | null = null, sentAnswer = false;
     const convRecs: Rec[] = [];
@@ -105,13 +117,17 @@ async function main() {
           if (a.resolvedFamilyMemberId) member = a.resolvedFamilyMemberId;
           hits.push(...detect(a, { question: message, userText, claimTurn: true, ms: 0 }, g as never));
           hits.push(...D.detectClaimTurn(a, { death: c.death, serious: c.serious, deny: c.deny, first: turn === 0 }));
+          hits.push(...detectR8(a, { userText }, { pages: g.pages, today }));
           if (!c.group && D.shownCards(a).some(D.isGroupCard)) hits.push({ rule: "group cover shown where the booklet does not apply", text: D.shownCards(a).filter(D.isGroupCard).map((i) => i.title).join("; ") });
           // A fact answered with something substantive is never asked again.
           // A correction or a new instruction typed instead of an answer answers nothing.
           if (lastQ && sentAnswer && !UNSURE.test(message.replace(/^[^:]*:\s*/, "").trim()) && !/^(?:actually|sorry|forget|btw|wait)\b/i.test(message)) answered.set(lastQ.text, message);
+          // Round 8: "not sure" is an answer too -- accepted, recorded as unknown, and the question is not put again.
+          if (lastQ && sentAnswer && UNSURE.test(message.replace(/^[^:]*:\s*/, "").trim())) unsure.add(lastQ.text);
           const q = a.questions[0] ?? (a.factFinding ?? []).flatMap((p) => p.nextQuestions)[0];
           if (q) {
             if (answered.has(q.text)) hits.push({ rule: "re-asked a fact already given", text: q.text + " (answered: " + answered.get(q.text) + ")" });
+            if (unsure.has(q.text)) hits.push({ rule: "re-asked a question answered not sure", text: q.text });
             if (c.neverAsk?.test(q.text)) hits.push({ rule: "asked something already given or irrelevant", text: q.text });
             if (generic?.test(q.text)) hits.push({ rule: "asked something irrelevant to the event", text: q.text });
             if (asked.filter((x) => x === q.text).length >= 2) hits.push({ rule: "claim loops: same question three times", text: q.text });
@@ -127,11 +143,11 @@ async function main() {
           last = a;
           lastQ = q ? { text: q.text, id: q.id } : null;
         }
-        const rec: Rec = { conv: c.name, turn, question: message, status: r.status, summary: a?.summary ?? "", answer: a, hits };
+        const rec: Rec = { chaos: chaosNote(), conv: c.name, turn, question: message, status: r.status, summary: a?.summary ?? "", answer: a, hits };
         records.push(rec); convRecs.push(rec);
         if (!a) break;
         // Starting over clears what the interview had asked.
-        if (/^(?:forget it|start over|start again)\b/i.test(message)) { asked.length = 0; answered.clear(); }
+        if (/^(?:forget it|start over|start again)\b/i.test(message)) { asked.length = 0; answered.clear(); unsure.clear(); }
         // ---------------------------------------------------- next message
         sentAnswer = false;
         if (c.interject?.[turn + 1]) { message = c.interject[turn + 1]; continue; }
@@ -149,6 +165,8 @@ async function main() {
             if (!pick) break;
             message = pick.label; choice = pick.id; continue;
           }
+          // The chat page's answer box sends a free-text answer as "Question: answer".
+          if (reply === "Not sure" && c.unsureAs === "restated" && direct && !q.options?.length && q.type !== "yes_no" && q.type !== "choice") { message = q.text.replace(/\?\s*$/, "") + ": Not sure"; continue; }
           message = !direct ? q.text.replace(/\?\s*$/, "") + ": " + reply
             : q.options?.includes(reply) || /^(?:sorry|actually|i dont|idk|just|and|dunno|not sure|yes|ya|no\b|forget)/i.test(reply) || reply.includes(",") ? reply : q.text.replace(/\?\s*$/, "") + ": " + reply;
           continue;
@@ -209,18 +227,126 @@ async function main() {
     for (const x of convRecs.at(-1)!.hits.slice(hitsBefore)) out("  conversation " + c.name + ": " + x.rule + " — " + x.text.slice(0, 200));
     if (dump) for (const rec of convRecs) appendFileSync(dump, JSON.stringify(rec) + "\n");
   }
+  // ---------------------------------------------------- Round 8: "not sure" in a what-if
+  // A what-if ("how much can I claim if...") records nothing against a
+  // profile, so its question ("Roughly how much would the ambulance charge
+  // be?") was never a pending fact: "Not sure" re-ran the what-if and the same
+  // question came back every time. Each what-if here answers every question
+  // "Not sure" -- as the chat page's answer box sends it, or typed -- and must
+  // accept it, move on, never put that question again (not even to the same
+  // what-if asked again in other words), and never ask about an ambulance for a
+  // planned operation.
+  if (!only || only.startsWith("what-if")) {
+    // Every free-text what-if question: a reply in either form is read as that reply.
+    {
+      const R = await import("@/lib/chat/what-if-replies");
+      const { whatIfQuestion } = await import("@/lib/policies/benefit-catalog");
+      const unit: string[] = [];
+      for (const factKey of ["hospitalNights", "hospitalBill", "ambulanceBill", "vehicleRepairBill", "outOfPocket"]) {
+        const text = whatIfQuestion(factKey);
+        if (!text) { unit.push(factKey + ": no what-if question"); continue; }
+        const state = { query: "q", answers: {}, pending: { factKey, text } };
+        for (const said of [text.replace(/\?\s*$/, "") + ": Not sure", text + " Not sure", "Not sure", "not sure", "idk", "dunno", "I don't know", "not sure yet", "unknown"])
+          if (R.readWhatIfReply(state, said)?.value !== "unknown") unit.push(factKey + ": " + JSON.stringify(said) + " not read as unknown");
+        for (const [said, n] of [["about 300", 300], ["S$1,200", 1200], ["3", 3], [text.replace(/\?\s*$/, "") + ": about 2k", 2000]] as [string, number][])
+          if (R.readWhatIfReply(state, said)?.value !== n) unit.push(factKey + ": " + JSON.stringify(said) + " not read as " + n);
+        for (const said of ["what documents do i need?", "what if I break my leg?", "ok thanks"])
+          if (R.readWhatIfReply(state, said)) unit.push(factKey + ": " + JSON.stringify(said) + " taken as a reply");
+        if (R.readWhatIfReply({ query: "q", answers: {} }, "Not sure")) unit.push("a reply read with no question open");
+      }
+      for (const t of ["I am having knee surgery next week, how much would my policy pay?", "my knee operation is scheduled next month", "planned cataract surgery in December"])
+        if (!R.describesPlannedProcedure(t)) unit.push("planned operation not recognised: " + t);
+      for (const t of ["what if I need an ambulance after a road accident?", "if I am hospitalised after an accident", "emergency surgery next week after a fall"])
+        if (R.describesPlannedProcedure(t)) unit.push("emergency read as planned: " + t);
+      if (unit.length) { out("WHAT-IF REPLY CHECKS FAILED:\n- " + unit.join("\n- ")); process.exitCode = 1; }
+      else out("what-if reply checks: ok");
+    }
+    type W = { name: string; member: string; opening: string; form: "restated" | "bare"; never?: RegExp; denyCard?: RegExp; then?: string; figure?: string };
+    const cases: W[] = [
+      { name: "what-if: hospital stay after an accident (answer box)", member: F.MEILING, opening: "how much can I claim if I'm hospitalised after an accident?", form: "restated", then: "and what if I'm hospitalised after an accident overseas?" },
+      { name: "what-if: ambulance after a road accident (typed)", member: F.MEILING, opening: "what if I need an ambulance after a road accident, how much can claim?", form: "bare", then: "what if it was a motorcycle accident instead, how much can claim?" },
+      { name: "what-if: planned knee surgery (answer box)", member: F.MEILING, opening: "I am having knee surgery next week, how much would my policy pay?", form: "restated", never: /ambulance/i, denyCard: /ambulance/i },
+      { name: "what-if: planned knee operation (typed)", member: F.MEILING, opening: "my knee operation is scheduled next month, how much would my plans pay?", form: "bare", never: /ambulance/i, denyCard: /ambulance/i },
+      { name: "what-if: hospital stay of 5 days (answer box)", member: F.MEILING, opening: "if I am hospitalised for 5 days how much can I claim?", form: "restated" },
+      { name: "what-if: child hospitalised (typed)", member: F.XINYI, opening: "how much can we claim if Xin Yi is hospitalised for dengue?", form: "bare" },
+      { name: "what-if: a figure, then not sure (answer box)", member: F.MEILING, opening: "how much can I claim if I'm hospitalised after an accident?", form: "restated", figure: "about 300" },
+    ];
+    let questioned = 0;
+    for (const w of cases) {
+      conversations++;
+      const conv: { id?: string; rev?: number } = {};
+      const convRecs: Rec[] = [];
+      const asked: string[] = []; const unsure = new Set<string>();
+      let message = w.opening, lastSummary = "", concluded = false, open: string | null = null;
+      for (let turn = 0; turn < 8; turn++) {
+        const r = await send(w.member, message, conv);
+        const a = r.status === 200 ? r.data.answer as ChatAnswer : null;
+        const hits: Hit[] = [];
+        if (!a) hits.push({ rule: "unexpected HTTP status", text: r.status + " " + JSON.stringify(r.data).slice(0, 200) });
+        else {
+          hits.push(...detect(a, { question: message, userText: message, claimTurn: true, ms: 0 }, g as never));
+          hits.push(...D.detectClaimTurn(a, { first: turn === 0 }));
+          hits.push(...detectR8(a, { userText: message }, { pages: g.pages, today }));
+          const q = a.questions[0];
+          if (q) {
+            if (unsure.has(q.text)) hits.push({ rule: "re-asked a question answered not sure", text: q.text });
+            else if (asked.includes(q.text)) hits.push({ rule: "what-if question asked twice", text: q.text });
+            if (w.never?.test(q.text)) hits.push({ rule: "asked something irrelevant to the event", text: q.text });
+            asked.push(q.text);
+          }
+          if (w.denyCard) for (const card of D.shownCards(a)) if (w.denyCard.test(card.title)) hits.push({ rule: "benefit does not fit the event", text: card.title });
+          if (turn > 0 && a.summary === lastSummary) hits.push({ rule: "same answer to a reply (the reply was ignored)", text: a.summary.slice(0, 200) });
+          lastSummary = a.summary;
+          if (a.mode === "claim_assessment" && !q) concluded = true;
+          open = q?.text ?? null;
+        }
+        const rec: Rec = { chaos: chaosNote(), conv: w.name, turn, question: message, status: r.status, summary: a?.summary ?? "", answer: a, hits };
+        records.push(rec); convRecs.push(rec);
+        const q = a?.questions[0];
+        if (!a || !q) break;
+        const reply = w.figure && turn === 0 && !q.options?.length ? w.figure : "Not sure";
+        message = w.form === "restated" && q.type === "text" && !q.options?.length ? q.text.replace(/\?\s*$/, "") + ": " + reply : reply;
+        if (reply === "Not sure") unsure.add(q.text);
+      }
+      if (asked.length) questioned++;
+      turnsPer.push(convRecs.length);
+      const end = convRecs.at(-1)!;
+      if (open) end.hits.push({ rule: "what-if never moves on", text: "still asking after 8 turns: " + open });
+      else if (asked.length && !concluded) end.hits.push({ rule: "what-if never moves on", text: (end.summary || "").slice(0, 200) });
+      if (w.then) {
+        // The same what-if in other words: what was answered "not sure" is not put again.
+        const r = await send(w.member, w.then, conv);
+        const a = r.status === 200 ? r.data.answer as ChatAnswer : null;
+        const hits: Hit[] = [];
+        if (!a) hits.push({ rule: "unexpected HTTP status", text: String(r.status) });
+        else {
+          hits.push(...detect(a, { question: w.then, userText: w.then, claimTurn: true, ms: 0 }, g as never));
+          hits.push(...detectR8(a, { userText: w.then }, { pages: g.pages, today }));
+          if (a.questions[0] && unsure.has(a.questions[0].text)) hits.push({ rule: "re-asked a question answered not sure", text: a.questions[0].text });
+        }
+        const rec: Rec = { chaos: chaosNote(), conv: w.name, turn: convRecs.length, question: w.then, status: r.status, summary: a?.summary ?? "", answer: a, hits };
+        records.push(rec); convRecs.push(rec);
+      }
+      for (const x of convRecs.flatMap((r) => r.hits)) out("  what-if " + w.name + ": " + x.rule + " — " + x.text.slice(0, 200));
+      if (dump) for (const rec of convRecs) appendFileSync(dump, JSON.stringify(rec) + "\n");
+    }
+    // The checks above only bite if the what-ifs actually ask something.
+    if (!R8.chaosSeed() && questioned < 4) { out("FAIL: only " + questioned + " what-if(s) asked a question; the not-sure checks need at least 4"); process.exitCode = 1; }
+    else out("what-if not-sure checks: " + cases.length + " what-ifs, " + questioned + " asked a question");
+  }
   // ---------------------------------------------------- report
   const byRule = new Map<string, number>();
   for (const r of records) for (const x of r.hits) byRule.set(x.rule, (byRule.get(x.rule) ?? 0) + 1);
-  const failing = records.filter((r) => r.hits.length);
+  const failing = records.filter((r) => r.hits.some((x) => R8.isFailure(x.rule)));
   for (const r of failing.slice(0, Number(process.env.R7_SHOW ?? 60))) out(`\n✗ ${r.conv} #${r.turn} > ${r.question.slice(0, 120)}\n  < ${r.summary.slice(0, 300)}\n  - ` + r.hits.map((x) => x.rule + ": " + x.text).join("\n  - "));
   out("\n=== detector hits by rule ===");
   for (const [rule, n] of [...byRule].sort((a, b) => b[1] - a[1])) out(String(n).padStart(4) + "  " + rule);
   out(`\n${conversations} conversations, ${messages} messages (${Math.min(...turnsPer)}-${Math.max(...turnsPer)} turns each); ${failing.length} turns with hits; total ${Math.round((Date.now() - started) / 1000)} s`);
-  if (!only && conversations < 40) { out("FAIL: at least 40 conversations are required"); process.exitCode = 1; }
+  if (!only && !R8.chaosSeed() && conversations < 40) { out("FAIL: at least 40 conversations are required"); process.exitCode = 1; }
   if (failing.length) process.exitCode = 1;
   if (guard.guardInterventions.length) { out("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s):\n" + guard.guardInterventions.slice(0, 5).map((x) => "  before: " + x.before.slice(0, 300)).join("\n")); process.exitCode = 1; }
   else out("output guard interventions: 0");
+  R8.reportChaos(out, "r7-claims", records, guard.guardInterventions.length, messages);
   clearTimeout(watchdog);
   await h.db.close();
 }

@@ -1,5 +1,5 @@
 /**
- * Round 7 claim conversations: 44 full claim interviews (10-25 turns each)
+ * Round 7 claim conversations: 51 full claim interviews (10-25 turns each)
  * over the Round 6 household (scripts/r6/fixture.ts), with the answering
  * styles real families use -- one word, "idk", Singlish, corrections,
  * contradictions, two answers at once, everything up front, an unrelated
@@ -40,6 +40,10 @@ export type ClaimConversation = {
   concludes?: boolean;
   /** Final answer must say this (any visible field). */
   finalMentions?: RegExp;
+  /** Round 8: how "Not sure" is sent to a free-text question -- "restated" is
+   * what the chat page's inline answer box sends ("Question: Not sure"),
+   * "bare" is typing it into the message box. Default: bare. */
+  unsureAs?: "restated" | "bare";
 };
 
 const TAIL = ["how much can claim?", "what documents do i need ah", "is it confirmed we will get paid?", "how long do i have to submit?", "can claim from more than one policy?", "who do i send the forms to?", "anything else i should do?", "sorry, which documents again?", "ok thanks"];
@@ -205,5 +209,17 @@ export function claimBattery(): ClaimConversation[] {
   c.push({ name: "messy: vague then event", member: MEILING, opening: "can claim anot",
     interject: { 1: "Wei Jie was admitted to NUH on 2026-09-17 for appendicitis and had surgery, discharged 2026-09-20" },
     replies: [[/other insur|employer/i, "No"]], after: TAIL, person: WEIJIE, deny: /Fracture|Baggage|Travel|Sum assured - death/i, group: true, neverAsk: /which hospital|date of admission|discharged/i });
+  // ------------------------------------------------------------------ not sure, on every free-text question
+  // Round 8: "Not sure" to a free-text or amount question is accepted,
+  // recorded as unknown and the interview moves on; the question is never
+  // put again (the runner checks every conversation for that). Typed the way
+  // the chat page's answer box sends it. What-ifs are checked on their own in
+  // scripts/r7-claims-regressions.ts (whatIfUnsureChecks).
+  c.push({ name: "unsure: hospital stay, every typed answer not sure", member: MEILING, opening: "i was hospitalised at SGH last week",
+    unsureAs: "restated", after: TAIL, person: MEILING, deny: /Fracture|Baggage|Travel|TermSecure/i, group: true, neverAsk: /which hospital/i });
+  c.push({ name: "unsure: child injury, every typed answer not sure", member: XINYI, opening: "Xin Yi fell at the playground on 2026-09-26 and hurt her wrist",
+    unsureAs: "restated", after: TAIL, person: XINYI, deny: /Baggage|Travel|Critical|Sum assured - death/i, group: true, neverAsk: /when did it happen/i });
+  c.push({ name: "unsure: death, every typed answer not sure", member: WEIJIE, opening: "my husband wei jie passed away last week",
+    unsureAs: "restated", after: TAIL, person: WEIJIE, deny: /Fracture|Baggage|Travel delay|Hospital cash/i, group: true, death: true });
   return c;
 }

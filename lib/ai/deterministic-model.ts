@@ -22,8 +22,13 @@
  *   NODE_ENV other than "production" with no VERCEL / VERCEL_ENV;
  * and lib/launch/guards.ts refuses to start a production or Vercel server
  * where the flag is present at all.
+ *
+ * DEARPOLICY_DETERMINISTIC_MODEL=chaos-<seed> wraps this stand-in in the chaos
+ * model (lib/ai/chaos-model.ts), which mutates its output the way a misbehaving
+ * real model would. It is stricter still: it also requires NODE_ENV=test.
  */
 import type { HostedReply } from "./providers";
+import { chaosReply, chaosSeedOf } from "./chaos-model";
 
 export const DETERMINISTIC_MODEL_FLAG = "DEARPOLICY_DETERMINISTIC_MODEL";
 export const DETERMINISTIC_MODEL_VALUE = "synthetic-e2e";
@@ -37,7 +42,19 @@ export function deterministicModelRequested(env: NodeJS.ProcessEnv = process.env
   return (env[DETERMINISTIC_MODEL_FLAG] ?? "").trim() !== "";
 }
 
+/** The chaos seed, only for a test process (NODE_ENV=test, an E2E_RUN_ID, not
+ * production, not Vercel); null everywhere else. */
+export function chaosModelSeed(env: NodeJS.ProcessEnv = process.env): number | null {
+  const seed = chaosSeedOf(env[DETERMINISTIC_MODEL_FLAG]);
+  if (seed == null) return null;
+  if (env.NODE_ENV !== "test") return null;
+  if ((env.VERCEL ?? "").trim() || (env.VERCEL_ENV ?? "").trim()) return null;
+  if (!(env.E2E_RUN_ID ?? "").trim()) return null;
+  return seed;
+}
+
 export function deterministicModelEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (chaosModelSeed(env) != null) return true;
   if ((env[DETERMINISTIC_MODEL_FLAG] ?? "").trim() !== DETERMINISTIC_MODEL_VALUE) return false;
   if (env.NODE_ENV === "production") return false;
   if ((env.VERCEL ?? "").trim() || (env.VERCEL_ENV ?? "").trim()) return false;
@@ -174,8 +191,13 @@ export function deterministicHostedDocumentText(args: { system: string; user: st
   };
 }
 
-/** Provider-shaped reply for one structured completion. */
+/** Provider-shaped reply for one structured completion (through the chaos
+ * model when a test process selected it). */
 export function deterministicHostedReply(args: { system: string; user: string }): HostedReply {
+  const seed = chaosModelSeed();
+  return seed == null ? syntheticHostedReply(args) : chaosReply(seed, args, () => syntheticHostedReply(args));
+}
+function syntheticHostedReply(args: { system: string; user: string }): HostedReply {
   let payload: Record<string, unknown> = {};
   try { payload = JSON.parse(args.user) as Record<string, unknown>; } catch { payload = {}; }
   let value: unknown;

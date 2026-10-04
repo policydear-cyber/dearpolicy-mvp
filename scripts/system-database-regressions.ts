@@ -590,10 +590,17 @@ async function main(){
       const saved=await getSavedChat(new NextRequest("http://localhost/api/chat/history/"+answer.conversationId),{params:Promise.resolve({id:answer.conversationId!})});
       const payload=await saved.json();assert.equal(saved.status,200);assert.equal(payload.messages.length,2);assert.equal(payload.messages[1].answer_json.portfolioItems.length,90);
     });
-    await test("A malformed model response is saved as an incomplete analysis",async()=>{
+    // Round 8: a malformed interpreter reply is retried once; when the retry is
+    // malformed too, the message is read with plain rules and still answered
+    // from the documents -- never a dead end, never raw model output.
+    await test("A malformed model response is retried once, then the message is still answered from the documents",async()=>{
+      const callsBefore=interpretationCalls;
       malformed=true;const result=await send("I still don't know how many hospital nights",people[1].id);malformed=false;
       assert.equal(result.response.status,200,JSON.stringify(result.data));assert.equal(result.data.answer.claimItems.length,0);
-      assert.match(result.data.answer.summary,/couldn’t read your message just now/);assert.equal(/\{|invalid JSON/.test(result.data.answer.summary+result.data.answer.details.join(" ")),false,"Raw model output never reaches the person");assert.equal(result.data.answer.confidence,"insufficient_evidence");
+      assert.equal(interpretationCalls-callsBefore,2,"One retry, no more");
+      assert.doesNotMatch(result.data.answer.summary,/couldn’t read your message/,"A broken interpreter no longer ends the turn");
+      assert.ok(result.data.answer.citations.length>0,"Answered from cited documents");
+      assert.equal(/\{|invalid JSON/.test(result.data.answer.summary+result.data.answer.details.join(" ")),false,"Raw model output never reaches the person");
     });
     await test("Saved chats and API requests cannot access another account",async()=>{
       const c=await openConversation({accountId:foreign,memberId:foreignPerson,title:"Other account secret"});

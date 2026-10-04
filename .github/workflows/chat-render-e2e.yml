@@ -1,0 +1,40 @@
+name: Chat display on phone and desktop (synthetic data only)
+
+# Round 8: the real chat page and claim screens in Chromium at 375x812 and
+# 1280x800, fed recorded answers from the two fixture households
+# (e2e/support/r8-answers.json). Only the Next.js app is needed: the
+# household APIs are answered inside the browser, so there is no database,
+# worker, model or secret. Asserts no sideways scroll, no raw markdown or
+# entities, no console errors, 44px touch targets, readable Chinese text.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  chat-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DEV_AUTH_ENABLED: "true"
+      DEV_ACCOUNT_ID: 00000000-0000-0000-0000-000000000001
+      NEXT_TELEMETRY_DISABLED: "1"
+      E2E_R8_BASE_URL: http://localhost:3200
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start the app (development identity, no database needed for these pages)
+        run: |
+          mkdir -p logs
+          nohup npx next dev -p 3200 > logs/app.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf -o /dev/null --max-time 180 http://localhost:3200/chat && break; sleep 2; done
+          for p in /chat /claims /claims/warm-up; do curl -s -o /dev/null --max-time 180 "http://localhost:3200$p" || true; done
+      - name: Chat answers and claim screens render cleanly (phone, desktop, dark)
+        run: npm run e2e:r8-render
+      - name: App log on failure
+        if: failure()
+        run: tail -n 150 logs/app.log

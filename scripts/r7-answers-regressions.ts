@@ -26,7 +26,9 @@ process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "ci";
 delete process.env.PINECONE_API_KEY; delete process.env.SUPABASE_URL;
 
 type Hit = { rule: string; text: string };
-type Rec = { conv: string; turn: number; question: string; status: number; ms: number; summary: string; answer: ChatAnswer | null; hits: Hit[] };
+type Rec = { conv: string; chaos?: string[]; turn: number; question: string; status: number; ms: number; summary: string; answer: ChatAnswer | null; hits: Hit[] };
+/** Round 8: the chaos model's mutations during this turn (only under R8_CHAOS_SEED). */
+const chaosNote = (): string[] | undefined => (globalThis as { __dpChaosLog?: { op: string; mode: string }[] }).__dpChaosLog?.splice(0).map((x) => x.op + ":" + x.mode);
 
 async function main() {
   const started = Date.now();
@@ -38,6 +40,8 @@ async function main() {
 
   const { detect, moneyIn, visibleFields } = await import("./r6/detectors");
   const { detectR7, repeatedAnswer } = await import("./r7/detectors");
+  const { detectR8 } = await import("./r8/detectors");
+  const R8 = await import("./r8/chaos-mode");
   const controls = selfTest(detect, detectR7, repeatedAnswer);
   if (controls.length) { out("DETECTOR SELF-TEST FAILED:\n- " + controls.join("\n- ")); process.exit(1); }
   out("detector self-test: ok");
@@ -47,6 +51,8 @@ async function main() {
   const F = await import("./r7/fixture");
   const h = await F.buildHousehold();
   out(`household built in ${Date.now() - started} ms`);
+  // Round 8: the same battery with the chaos model in place of the stand-in (scripts/r8-chaos-regressions.ts).
+  if (process.env.R8_CHAOS_SEED) Object.assign(process.env, { NODE_ENV: "test", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-" + process.env.R8_CHAOS_SEED });
   // Every document was read, and a bilingual page kept its text (CJK fonts with predefined CMaps).
   const setup: string[] = [];
   for (const r of (await h.db.query<{ original_filename: string; processing_status: string }>("SELECT original_filename,processing_status FROM policies WHERE account_id=$1", [F.ACCOUNT])).rows)
@@ -111,6 +117,7 @@ async function main() {
         // "Must not say": judged on what the answer itself says, not on a verbatim policy quote shown beside it.
         if (e.notMentions) { const said = visibleFields(a).filter((f) => !/quote|citation/.test(f.where)).map((f) => f.text).join("\n"); const m = said.match(e.notMentions); if (m) hits.push({ rule: "answer says what it must not", text: m[0] + " in: " + a.summary.slice(0, 200) }); }
         hits.push(...detectR7(a, { question: t.say, userText, expectPerson: e.person ?? null }, g));
+        hits.push(...detectR8(a, { userText }, g));
         const all = visibleFields(a).map((f) => f.text).join("\n");
         for (const m of mentions) if (!m.test(all)) hits.push({ rule: "answer ignores the question", text: "expected " + m + " in: " + a.summary.slice(0, 200) });
         if (e.asksPerson && a.questions[0]?.id !== "claim_person") hits.push({ rule: "ambiguous person not asked", text: a.summary.slice(0, 200) });
@@ -118,27 +125,28 @@ async function main() {
         prev = { question: t.say, key: a.summary + "\n" + a.details.join("\n") };
         // A person card is answered by tapping a person, as the chat page does.
       }
-      const rec: Rec = { conv: c.name, turn: i, question: t.say, status, ms, summary: a?.summary ?? String(data?.error ?? ""), answer: a, hits };
+      const rec: Rec = { chaos: chaosNote(), conv: c.name, turn: i, question: t.say, status, ms, summary: a?.summary ?? String(data?.error ?? ""), answer: a, hits };
       records.push(rec);
       if (dump) appendFileSync(dump, JSON.stringify(rec) + "\n");
     }
   }
   const byRule = new Map<string, number>();
   for (const r of records) for (const x of r.hits) byRule.set(x.rule, (byRule.get(x.rule) ?? 0) + 1);
-  const failing = records.filter((r) => r.hits.length);
+  const failing = records.filter((r) => r.hits.some((x) => R8.isFailure(x.rule)));
   for (const r of failing.slice(0, Number(process.env.R7_SHOW ?? 40))) out(`\n✗ ${r.conv} #${r.turn} > ${r.question.slice(0, 120)}\n  < ${r.summary.slice(0, 300)}\n  - ` + r.hits.map((x) => x.rule + ": " + x.text).join("\n  - "));
   out("\n=== detector hits by rule ===");
   for (const [rule, n] of [...byRule].sort((x, y) => y[1] - x[1])) out(String(n).padStart(4) + "  " + rule);
   const times = records.map((r) => r.ms).sort((x, y) => x - y);
   const convs = new Set(records.map((r) => r.conv)), long = [...convs].filter((n) => records.filter((r) => r.conv === n).length >= 15).length;
   out(`\n${messages} messages in ${convs.size} conversations (${long} of 15+ turns); ${failing.length} turns with hits; median ${times[Math.floor(times.length / 2)]} ms, max ${times.at(-1)} ms; total ${Math.round((Date.now() - started) / 1000)} s`);
-  if (!only && messages < 300) { out("FAIL: the battery must send at least 300 messages (sent " + messages + ")"); process.exitCode = 1; }
-  if (!only && long < 10) { out("FAIL: the battery must hold at least 10 conversations of 15+ turns (has " + long + ")"); process.exitCode = 1; }
+  if (!only && !R8.chaosSeed() && messages < 300) { out("FAIL: the battery must send at least 300 messages (sent " + messages + ")"); process.exitCode = 1; }
+  if (!only && !R8.chaosSeed() && long < 10) { out("FAIL: the battery must hold at least 10 conversations of 15+ turns (has " + long + ")"); process.exitCode = 1; }
   if (failing.length) process.exitCode = 1;
   if (guard.guardInterventions.length) {
     out("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s) — fix the root cause:\n" + guard.guardInterventions.slice(0, 5).map((x) => "  before: " + x.before.slice(0, 300) + "\n  after:  " + x.after.slice(0, 300)).join("\n"));
     process.exitCode = 1;
   } else out("output guard interventions: 0");
+  R8.reportChaos(out, "r7-answers", records, guard.guardInterventions.length, messages);
   clearTimeout(watchdog);
   await h.db.close();
 }

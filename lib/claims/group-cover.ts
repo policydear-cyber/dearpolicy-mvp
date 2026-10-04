@@ -109,7 +109,8 @@ export function groupRowsForEvent(booklet: GroupBooklet, personId: string, categ
     if (admitted && !maternity) tests.push(/room and board|hospital (?:misc\w*|services)|surgical|pre-hospital|post-hospital/i, ...(known(facts, "icuStay") === true ? [/intensive care|\bicu\b/i] : []));
     if (category === "accidental_injury" && accidental && !illness) tests.push(/(?:accident|\bgpa\b).*medical|medical.*accident/i);
     if (category === "accidental_injury" && /dental|tooth/i.test(String(known(facts, "injuryKind") ?? ""))) tests.push(/\bdental\b/i);
-    if (!admitted && illness && known(facts, "treatmentType") === "Outpatient or clinic") tests.push(/general practitioner|\bgp\b/i);
+    // A clinic visit on a trip is the travel policy's overseas medical claim, not the employer's GP benefit.
+    if (!admitted && illness && known(facts, "treatmentType") === "Outpatient or clinic" && category !== "travel") tests.push(/general practitioner|\bgp\b/i);
   }
   const fits = mine.filter((r) => tests.some((re) => re.test(r.benefitName)) && !/annual limit|overall/i.test(r.benefitName));
   const seen = new Set<string>();

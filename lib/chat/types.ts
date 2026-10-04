@@ -54,6 +54,10 @@ export type ConversationState = {
   outsideSubject?: { relation: string; name: string | null; died?: boolean };
   /** Damage at home or to a car this chat is about (no home or motor policy on file). */
   propertyEvent?: "property" | "motor";
+  /** The what-if this chat is on, the question it put (if any), and the
+   * replies to its questions ("unknown" for not sure). Kept in the
+   * conversation only -- a what-if never records facts against a profile. */
+  whatIf?: { query: string; pending?: { factKey: string; text: string }; answers: Record<string, number | "unknown"> };
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

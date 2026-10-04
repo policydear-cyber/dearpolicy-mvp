@@ -2,6 +2,9 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  // Round 8 chat rendering runs on its own stack (e2e/playwright.r8.config.ts,
+  // .github/workflows/chat-render-e2e.yml).
+  testIgnore: /tests\/r8-[^/]*\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   retries: 0,

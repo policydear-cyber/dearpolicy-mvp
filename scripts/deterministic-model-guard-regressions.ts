@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { deterministicModelEnabled, deterministicHostedReply, deterministicInterpretation, deterministicReading, syntheticExtractionFrom, DeterministicModelUnavailableError, DETERMINISTIC_MODEL_ID, SYNTHETIC_EXTRACTION_MARKER, SYNTHETIC_EXTRACTION_END } from "@/lib/ai/deterministic-model";
+import { chaosModelSeed, deterministicModelEnabled, deterministicHostedReply, deterministicInterpretation, deterministicReading, syntheticExtractionFrom, DeterministicModelUnavailableError, DETERMINISTIC_MODEL_ID, SYNTHETIC_EXTRACTION_MARKER, SYNTHETIC_EXTRACTION_END } from "@/lib/ai/deterministic-model";
 import { checkDeterministicModelNotInProduction } from "@/lib/launch/guards";
 
 let cases = 0;
@@ -27,6 +27,30 @@ async function main() {
       ["a Vercel environment", { ...dev, VERCEL_ENV: "preview" }],
       ["no synthetic run id", { ...dev, E2E_RUN_ID: "" }],
     ] as const) assert.equal(deterministicModelEnabled(env as unknown as NodeJS.ProcessEnv), false, label);
+  });
+  await t("the chaos model (Round 8) is selectable only in a test process, never in production", () => {
+    const test = { NODE_ENV: "test", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-7", E2E_RUN_ID: "r8" } as unknown as NodeJS.ProcessEnv;
+    assert.equal(chaosModelSeed(test), 7);
+    assert.equal(deterministicModelEnabled(test), true);
+    for (const [label, env] of [
+      ["NODE_ENV=development", { ...test, NODE_ENV: "development" }],
+      ["NODE_ENV=production", { ...test, NODE_ENV: "production" }],
+      ["NODE_ENV unset", { ...test, NODE_ENV: undefined }],
+      ["on Vercel", { ...test, VERCEL: "1" }],
+      ["a Vercel environment", { ...test, VERCEL_ENV: "production" }],
+      ["no synthetic run id", { ...test, E2E_RUN_ID: "" }],
+      ["malformed seed", { ...test, DEARPOLICY_DETERMINISTIC_MODEL: "chaos-" }],
+      ["not a seed", { ...test, DEARPOLICY_DETERMINISTIC_MODEL: "chaos-x1" }],
+    ] as const) {
+      assert.equal(chaosModelSeed(env as unknown as NodeJS.ProcessEnv), null, label);
+      assert.equal(deterministicModelEnabled(env as unknown as NodeJS.ProcessEnv), false, label);
+    }
+    assert.equal(checkDeterministicModelNotInProduction({ NODE_ENV: "production", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-7" } as unknown as NodeJS.ProcessEnv).ok, false);
+    assert.equal(checkDeterministicModelNotInProduction({ NODE_ENV: "test", VERCEL: "1", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-7" } as unknown as NodeJS.ProcessEnv).ok, false);
+    // Only the deterministic stand-in itself reaches the chaos model.
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((f) => { const p = path.join(dir, f); return statSync(p).isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(f) ? [p] : []; });
+    const users = [...walk("lib"), ...walk("app")].filter((f) => !f.endsWith("chaos-model.ts") && /from ["'][^"']*chaos-model["']/.test(readFileSync(f, "utf8")));
+    assert.deepEqual(users.map((f) => f.split(path.sep).join("/")), ["lib/ai/deterministic-model.ts"]);
   });
   await t("a production or Vercel server refuses to start with the flag present; without it (control) it passes", () => {
     assert.equal(checkDeterministicModelNotInProduction({ NODE_ENV: "production", DEARPOLICY_DETERMINISTIC_MODEL: "synthetic-e2e" } as unknown as NodeJS.ProcessEnv).ok, false);

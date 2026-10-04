@@ -22,11 +22,16 @@ import { planLimits } from "./ledger";
 // ---------------------------------------------------------------------------
 // Which household a model call is for, for the whole request/job.
 // ---------------------------------------------------------------------------
-const householdScope = new AsyncLocalStorage<{ householdId: string }>();
+const householdScope = new AsyncLocalStorage<{ householdId: string; exhausted?: Set<string> }>();
 /** Runs `fn` with every model call inside it attributed to `householdId`. */
 export function runWithModelHousehold<T>(householdId: string, fn: () => Promise<T>): Promise<T> {
-  return householdScope.run({ householdId }, fn);
+  return householdScope.run({ householdId, exhausted: new Set() }, fn);
 }
+/** Round 8: a provider account found out of quota during this request. The
+ * rest of the request answers without it rather than calling an account that
+ * cannot answer (exhausted quota is shared by every model on the account). */
+export function markProviderExhausted(provider: string) { householdScope.getStore()?.exhausted?.add(provider); }
+export function providerExhaustedThisRequest(provider: string) { return householdScope.getStore()?.exhausted?.has(provider) ?? false; }
 /** The household of the current request, when one was set. In a local
  * development session (DEV_AUTH_ENABLED, one household per process) the
  * development account is used; in production there is no such default, so

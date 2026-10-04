@@ -330,7 +330,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
   }
 
   return (
-    <div style={{ marginTop: 10, display: "grid", gap: 8, maxWidth: 640 }}>
+    <div className="bill-review" style={{ marginTop: 10, display: "grid", gap: 8, maxWidth: 640 }}>
       <h3 style={{ margin: 0 }}>Check the bill details</h3>
       <p className="muted">{BILL_REVIEW_NOTICE} Compare each detail with the{" "}
         <a href={`/api/claims/evidence/${doc.id}/file?familyMemberId=${familyMemberId}&claimSessionId=${claimSessionId}`} target="_blank" rel="noreferrer">original document</a>
@@ -365,7 +365,7 @@ function BillReview({ doc, familyMemberId, claimSessionId, onSaved }: { doc: Evi
           </div>
         ))}
       </fieldset>
-      <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+      <label className="bill-review-confirm" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
         <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
         <span>I have checked these details against the document and they match what is printed.</span>
       </label>

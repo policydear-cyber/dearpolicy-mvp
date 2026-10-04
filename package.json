@@ -126,6 +126,9 @@
     "r6:chat-quality-test": "node --import tsx scripts/r6-chat-quality-regressions.ts",
     "r7:answers-test": "node --import tsx scripts/r7-answers-regressions.ts",
     "r7:claims-test": "node --import tsx scripts/r7-claims-regressions.ts",
+    "r8:chaos-test": "node --import tsx scripts/r8-chaos-regressions.ts",
+    "r8:render-test": "node --import tsx scripts/r8-render-regressions.ts",
+    "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
     "e2e:browser:live": "node e2e/support/live-guard.mjs && playwright test -c e2e/playwright.config.ts"

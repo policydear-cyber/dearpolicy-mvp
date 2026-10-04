@@ -13,6 +13,9 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#1c1512" },
   ],
   viewportFit: "cover",
+  // Android: the on-screen keyboard shrinks the layout, so the chat box
+  // stays above it instead of being covered.
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

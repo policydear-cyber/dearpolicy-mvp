@@ -25,3 +25,11 @@ export function maybeSgDate(value: unknown): string {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return sgDate(new Date(value));
   return value == null ? "" : String(value);
 }
+
+/** Answer text with every calendar date written the way the rest of the
+ * page writes it: "Death Date: 2026-09-28" becomes "Death Date: 28 Sep
+ * 2026". Only exact YYYY-MM-DD dates change; amounts, policy numbers and
+ * everything else stay as written. */
+export function readableDates(text: string): string {
+  return text.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (match) => sgDate(match) || match);
+}

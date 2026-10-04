@@ -262,7 +262,7 @@ const PRIMARY_ORDER: FactFindingCategory[] = ["accidental_death", "accidental_in
 export function primaryClaimCategory(state: ConversationState, personId: string): FactFindingCategory | null {
   const facts = state.subjects[personId] ?? {};
   const signals = new Set<string>((state.scenarios?.[personId] ?? []).flatMap((s) => [...s.traits, s.family]));
-  if (known(facts, "eventType") === "travel_disruption" || known(facts, "flightDelayHours") != null) signals.add("travel");
+  if (known(facts, "eventType") === "travel_disruption" || known(facts, "flightDelayHours") != null || known(facts, "travelEventType") != null) signals.add("travel");
   if (known(facts, "disabled") === true || known(facts, "eventType") === "disability") signals.add("disability");
   const found = categoriesFor(signals, facts);
   // Being unable to work is the event even when the model also tagged an

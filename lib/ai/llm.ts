@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { costUsd, describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, ProviderQuotaExhausted, type ModelRole } from "./providers";
-import { currentModelHousehold } from "./usage";
+import { currentModelHousehold, markProviderExhausted, providerExhaustedThisRequest } from "./usage";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
@@ -51,6 +51,16 @@ export function repairTruncatedJson(text: string): string | null {
   if (!open.length) return null;   // Already balanced; the failure was not truncation.
   if (!safe) return null;
   return source.slice(0, safe.end) + safe.closers.join("");
+}
+
+/** The one JSON object or array in a reply that wrapped it in a code fence or
+ * surrounded it with prose; undefined when there is no single complete one. */
+export function unwrapJsonDocument(text: string): unknown {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1];
+  const candidates = [fenced, trimmed.slice(trimmed.indexOf("{"), trimmed.lastIndexOf("}") + 1)].filter((x): x is string => !!x && x.length > 1);
+  for (const candidate of candidates) { try { return JSON.parse(candidate); } catch { /* next */ } }
+  return undefined;
 }
 
 /** Structured extraction with bounded context/memory. */
@@ -130,6 +140,8 @@ export async function structuredCompletion<T>(args: {
         const requestedAt = new Date();
         let reply: Awaited<ReturnType<typeof hostedStructuredCompletion>>;
         let record: Awaited<ReturnType<typeof recordModelExecution>>;
+        // Already refused for exhausted quota in this request: not called again.
+        if (providerExhaustedThisRequest(target.provider)) throw new ProviderQuotaExhausted(429);
         try {
           reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
             temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
@@ -144,6 +156,7 @@ export async function structuredCompletion<T>(args: {
           });
         } catch (error) {
           const durationMs = Date.now() - started;
+          if (error instanceof ProviderQuotaExhausted) markProviderExhausted(target.provider);
           if (householdId) await recordUsage({ accountId: householdId, role, choice: target, input: 0, output: 0, durationMs, ok: false });
           await recordModelExecution({
             correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
@@ -195,6 +208,13 @@ export async function structuredCompletion<T>(args: {
       let json: unknown;
       try { json = JSON.parse(reply.content); }
       catch {
+        // A complete JSON document wrapped in a code fence or followed by
+        // chatter ("Let me know if...") is still the model's answer; the
+        // schema below decides whether it is acceptable.
+        const wrapped = unwrapJsonDocument(reply.content);
+        if (wrapped !== undefined) json = wrapped;
+      }
+      if (json === undefined) {
         const repaired = repairTruncatedJson(reply.content);
         if (repaired === null) throw new Error(`Model returned invalid structured JSON: ${reply.content.slice(0, 200)}`);
         try { json = JSON.parse(repaired); }
@@ -232,6 +252,17 @@ export async function structuredCompletion<T>(args: {
   }
 }
 
+
+/** A failure worth one more attempt: malformed or cut-off output, a timeout,
+ * a dropped connection, a busy or failing provider. Never exhausted quota, a
+ * spend limit or a configuration problem -- those fail the same way again. */
+export function retryableModelFailure(error: unknown) {
+  if (error instanceof SpendCapReached || error instanceof ProviderQuotaExhausted) return false;
+  if (error instanceof TruncatedModelOutput) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  if (/\(40[0134]\)|api key|authentication|unsupported|does not support|not found|does not exist|unknown model/i.test(message)) return false;
+  return /invalid structured JSON|timed out|stopped responding|connection|ECONNREFUSED|ECONNRESET|fetch failed|busy|\(429\)|\(5\d\d\)/i.test(message);
+}
 
 /** Raised when the model's structured output was cut short or malformed. */
 export class TruncatedModelOutput extends Error {

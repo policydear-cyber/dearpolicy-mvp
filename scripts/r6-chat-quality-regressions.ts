@@ -23,7 +23,9 @@ process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "sk-test-not-used";
 process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "ci";
 delete process.env.PINECONE_API_KEY; delete process.env.SUPABASE_URL;
 
-type Record_ = { conv: string; turn: number; question: string; status: number; ms: number; summary: string; answer: ChatAnswer | null; error?: unknown; hits: { rule: string; text: string }[] };
+type Record_ = { conv: string; chaos?: string[]; turn: number; question: string; status: number; ms: number; summary: string; answer: ChatAnswer | null; error?: unknown; hits: { rule: string; text: string }[] };
+/** Round 8: the chaos model's mutations during this turn (only under R8_CHAOS_SEED). */
+const chaosNote = (): string[] | undefined => (globalThis as { __dpChaosLog?: { op: string; mode: string }[] }).__dpChaosLog?.splice(0).map((x) => x.op + ":" + x.mode);
 
 async function main() {
   const started = Date.now();
@@ -35,6 +37,9 @@ async function main() {
   console.log = (...args: unknown[]) => { if (typeof args[0] === "string" && /^(?:\{"|\[telemetry\]|SQL note)/.test(args[0])) return; quietLog(...args); };
 
   const { detect, visibleFields, moneyIn } = await import("./r6/detectors");
+  const { detectR8 } = await import("./r8/detectors");
+  const R8 = await import("./r8/chaos-mode");
+  const today = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10);
   // ------------------------------------------------ detector positive controls
   const controls = selfTest(detect);
   if (controls.length) { quietLog("DETECTOR SELF-TEST FAILED:\n- " + controls.join("\n- ")); process.exit(1); }
@@ -49,6 +54,8 @@ async function main() {
   const F = await import("./r6/fixture");
   const h = await F.buildHousehold();
   quietLog(`household built in ${Date.now() - started} ms`);
+  // Round 8: the same battery with the chaos model in place of the stand-in (scripts/r8-chaos-regressions.ts).
+  if (process.env.R8_CHAOS_SEED) Object.assign(process.env, { NODE_ENV: "test", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-" + process.env.R8_CHAOS_SEED });
   const { battery } = await import("./r6/battery");
   const { POST } = await import("@/app/api/chat/route");
 
@@ -111,8 +118,9 @@ async function main() {
       const all = visibleFields(a).map((f) => f.text).join("\n");
       for (const m of mentions) if (!m.test(all)) hits.push({ rule: "answer ignores the question", text: "expected " + m + " in: " + a.summary.slice(0, 200) });
       if (e.asksPerson && a.questions[0]?.id !== "claim_person") hits.push({ rule: "ambiguous person not asked", text: a.summary.slice(0, 200) });
+      hits.push(...detectR8(a, { userText }, { pages: g.pages, today }));
     }
-    const rec: Record_ = { conv: name, turn, question, status: r.status, ms: r.ms, summary: a?.summary ?? String(r.data?.error ?? ""), answer: a, hits };
+    const rec: Record_ = { chaos: chaosNote(), conv: name, turn, question, status: r.status, ms: r.ms, summary: a?.summary ?? String(r.data?.error ?? ""), answer: a, hits };
     records.push(rec);
     if (dump) appendFileSync(dump, JSON.stringify(rec) + "\n");
     return a;
@@ -176,19 +184,20 @@ async function main() {
   // ------------------------------------------------ report
   const byRule = new Map<string, number>();
   for (const r of records) for (const x of r.hits) byRule.set(x.rule, (byRule.get(x.rule) ?? 0) + 1);
-  const failing = records.filter((r) => r.hits.length);
+  const failing = records.filter((r) => r.hits.some((x) => R8.isFailure(x.rule)));
   for (const r of failing.slice(0, Number(process.env.R6_SHOW ?? 40))) quietLog(`\n✗ ${r.conv} #${r.turn} > ${r.question.slice(0, 120)}\n  < ${r.summary.slice(0, 300)}\n  - ` + r.hits.map((x) => x.rule + ": " + x.text).join("\n  - "));
   quietLog("\n=== detector hits by rule ===");
   for (const [rule, n] of [...byRule].sort((a, b) => b[1] - a[1])) quietLog(String(n).padStart(4) + "  " + rule);
   const times = records.map((r) => r.ms).sort((a, b) => a - b);
   quietLog(`\n${messages} messages in ${records.length} judged turns; ${failing.length} turns with hits; median ${times[Math.floor(times.length / 2)]} ms, max ${times.at(-1)} ms; total ${Math.round((Date.now() - started) / 1000)} s`);
-  if (!only && messages < 250) { quietLog("FAIL: the battery must send at least 250 messages (sent " + messages + ")"); process.exitCode = 1; }
+  if (!only && !R8.chaosSeed() && messages < 250) { quietLog("FAIL: the battery must send at least 250 messages (sent " + messages + ")"); process.exitCode = 1; }
   if (failing.length) process.exitCode = 1;
   // The guard is a safety net only: on this battery it must never have had to act.
   if (guard.guardInterventions.length) {
     quietLog("FAIL: the output guard changed " + guard.guardInterventions.length + " answer(s) — fix the root cause:\n" + guard.guardInterventions.slice(0, 5).map((g) => "  before: " + g.before.slice(0, 300) + "\n  after:  " + g.after.slice(0, 300)).join("\n"));
     process.exitCode = 1;
   } else quietLog("output guard interventions: 0");
+  R8.reportChaos(quietLog, "r6", records, guard.guardInterventions.length, messages);
   clearTimeout(watchdog);
   await h.db.close();
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { structuredCompletion } from "@/lib/ai/llm";
+import { retryableModelFailure, structuredCompletion } from "@/lib/ai/llm";
 import { claimDateInFuture, resolveClaimDate } from "@/lib/claims/dates";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ConversationFact, ConversationState, FactValue, ScenarioClassification, ScenarioFamily, ScenarioTrait, SubjectFacts } from "./types";
@@ -155,6 +155,20 @@ function injuryModelFactAllowed(message:string,quote:string,key:string,value:Fac
   return !/\b(?:not|never|no|if|whether|suppose|assuming|unless|might|may|could|would|possibly|perhaps|almost|nearly|such as|in case)\b|n['’]t\b/i.test(quote);
 }
 const FRACTURE_WORDS=/fractur|\bbr(?:oke|oken|eak)\b|\bcrack/i;
+/** Words without which a message reports no event at all. */
+const EVENT_REPORT_WORDS=/hospital|admit|ward|accident|fell|fall|slip|injur|hurt|broke|fractur|crack|died|death|dead|passed away|killed|murder|diagnos|cancer|tumou?r|stroke|heart|attack|ill|sick|disease|infect|fever|dengue|covid|pain|delay|cancel|curtail|lost|loss|stolen|theft|stole|damage|flood|fire|burst|leak|crash|collision|bite|bitten|burn|disab|work|surgery|operat|pregnan|birth|deliver|travel|trip|flight|luggage|baggage|bag|car|vehicle|home|house|clinic|doctor|treat|ambulance/i;
+/** Words a quote must contain before a yes/no event fact rests on it. */
+const EVENT_WORDS:Record<string,RegExp>={
+  hospitalised:/hospital|admit|admission|ward|inpatient|\bicu\b|a&e|emergency|discharg/i,
+  hospitalStayOngoing:/still|ongoing|warded|in hospital|not (?:yet )?discharged|admitted/i,
+  injured:/injur|hurt|broke|broken|fractur|crack|cut|burn|bite|bitten|wound|sprain|bruis|bleed|accident|fell|fall/i,
+  surgery:/surg|operat/i,
+  ambulanceUsed:/ambulance/i,
+  disabled:/disab|unable to work|cannot work|can['’]?t work|bedridden|paralys|wheelchair/i,
+  permanentImpairment:/permanent|lost|loss|amputat|blind|deaf|paralys/i,
+  medicalReportAvailable:/report|memo|letter|certificate/i,
+  competitiveRacing:/rac(?:e|ing)/i,
+};
 function fractureLocked(facts:SubjectFacts){
   return facts.injuryKind?.state==="known"&&facts.injuryKind.source==="system-derived"&&facts.injuryKind.value==="fracture";
 }
@@ -263,7 +277,9 @@ export async function interpretMessage(args: {
   const fromHandle = (id: string) => realIdOf.get(id) ?? (args.subjectIds.includes(id) ? id : resolved.length === 1 ? resolved[0].id : id);
   const existingFacts = Object.fromEntries(Object.entries(modelFactContext(args.state, args.subjectIds)).map(([id, facts]) => [toHandle(id), facts]));
   const pendingQuestion = args.state.pending ? { ...args.state.pending, subjectId: toHandle(args.state.pending.subjectId) } : null;
-  const interpretation = await structuredCompletion({
+  // One more attempt for malformed or cut-off output or a passing provider
+  // fault; a second failure is the caller's to handle (ruleInterpretation).
+  const ask = () => structuredCompletion({
     role: "judgement",
     operation: "chat_fact_finding",
     schema: InterpretationSchema, temperature: 0, maxOutputTokens:2400, timeoutMs: 150_000, attempts: 1,
@@ -277,11 +293,58 @@ export async function interpretMessage(args: {
       currentMessage: args.message,
     }),
   });
+  let interpretation: Interpretation;
+  try { interpretation = await ask(); }
+  catch (error) { if (!retryableModelFailure(error)) throw error; interpretation = await ask(); }
   return {
     ...interpretation,
     facts: interpretation.facts.map(fact => ({ ...fact, subjectId: fromHandle(fact.subjectId) })),
     scenarioCandidates: interpretation.scenarioCandidates?.map(s => ({ ...s, subjectId: fromHandle(s.subjectId) })),
   };
+}
+const MONTH_NAMES="January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec";
+/** Round 8: how a message is read when the interpreter cannot be used (it
+ * failed twice, or the provider is down). Plain rules, never an invented
+ * fact: the household's own words decide whether something was reported, and
+ * mergeInterpretation then reads every event it can recognise in code
+ * (a death, a diagnosis, a fracture, an injury, a delayed flight...). The
+ * conversation stays usable; anything the rules could not read is simply
+ * asked for again. */
+export function ruleInterpretation(args:{message:string;state:ConversationState;subjectIds:string[]}):Interpretation{
+  const message=args.message;
+  const sentences=message.split(/(?<=[.!?])\s+|\n+/).map(x=>x.trim()).filter(Boolean);
+  const reports=affirmedDeathStatement(message)||!!reportedHomicide(message)||!!reportedConditionStatement(message)||
+    !!reportedFractureStatement(message)||!!reportedInjuryStatement(message)||reportedEvents(message).length>0||
+    /\b(?<!not |never |wasn['’]t |was not )(?:admitted|hospitali[sz]ed|warded)\b/i.test(message)&&!/\b(?:if|suppose|what if)\b/i.test(message);
+  const asks=onlyAsksQuestions(message);
+  const intent:Interpretation["intent"]=args.state.pending&&!asks?"follow_up"
+    :reports&&!asks?"claim"
+    :args.state.intent==="claim"&&!asks?"follow_up"
+    :/\b(?:what policies|all (?:our|my) policies|portfolio|what (?:insurance|cover) do (?:we|i) have)\b/i.test(message)?"portfolio":"policy_question";
+  const facts:Interpretation["facts"]=[];
+  const scenarioCandidates:NonNullable<Interpretation["scenarioCandidates"]>=[];
+  const subject=args.subjectIds.length===1?args.subjectIds[0]:null;
+  if(subject&&intent!=="policy_question"&&intent!=="portfolio"){
+    const died=sentences.find(x=>affirmedDeathStatement(x));
+    if(died)facts.push({subjectId:subject,key:"death",value:true,state:"known",quote:died});
+    const admitted=sentences.find(x=>/\b(?<!not |never |wasn['’]t |was not )(?:admitted|hospitali[sz]ed|warded)\b/i.test(x)&&!/\b(?:if|suppose|what if)\b/i.test(x));
+    if(admitted)facts.push({subjectId:subject,key:"hospitalised",value:true,state:"known",quote:admitted});
+    const diagnosed=sentences.map(x=>x.match(/\bdiagnosed with ([^.?!,;]{2,80}?)(?= on \d| in \d| last | yesterday|[.?!,;]|$)/i)).find(m=>m&&!hypotheticalBefore(message,message.indexOf(m[0])));
+    if(diagnosed){
+      facts.push({subjectId:subject,key:"diagnosis",value:diagnosed[1].trim(),state:"known",quote:diagnosed[0]});
+      scenarioCandidates.push({subjectId:subject,label:"Reported diagnosis",family:"illness",traits:["illness","diagnosis"],quote:diagnosed[0]});
+    }
+    // When it happened, as the household dated it ("on 2026-09-22",
+    // "yesterday"); mergeInterpretation resolves and checks the date itself.
+    const when=message.match(new RegExp("\\b(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2} (?:"+MONTH_NAMES+")(?: \\d{4})?|(?:"+MONTH_NAMES+") \\d{1,2}(?:, \\d{4})?|yesterday|last night|this morning|today)\\b","i"))?.[0];
+    if(when&&(intent==="claim"||!args.state.intent)){
+      facts.push({subjectId:subject,key:"eventDate",value:when,state:"known",quote:when});
+      if(died)facts.push({subjectId:subject,key:"deathDate",value:when,state:"known",quote:when});
+      if(admitted)facts.push({subjectId:subject,key:"admissionDate",value:when,state:"known",quote:when});
+      if(diagnosed)facts.push({subjectId:subject,key:"diagnosisDate",value:when,state:"known",quote:when});
+    }
+  }
+  return {intent,newTopic:false,searchTerms:[],facts,scenarioCandidates};
 }
 const INTERROGATIVE_START=/^\s*(?:and\s+|so\s+|then\s+)?(?:what|which|who|whom|whose|when|where|why|how|does|do|did|is|are|was|were|am|can|could|would|will|should|shall|may|might|has|have|had)\b/i;
 /** A message made only of questions ("What does Marcus's travel policy cover
@@ -314,7 +377,15 @@ export function mergeInterpretation(args: {
   const otherEvents=homicideReport||fractureReport?[]:reportedEvents(args.message).filter(e=>!(e.kind==="injury"&&(injuryRetracted||fractureNegated)));
   const priorDiagnosis=args.subjectIds.length===1?knownValue(args.state.subjects[args.subjectIds[0]]??{},"diagnosis"):null;
   const conditionStartsTopic=!!conditionReport&&typeof priorDiagnosis==="string"&&normalText(priorDiagnosis)!==normalText(conditionReport.condition);
-  const startsClaimTopic=interpretation.newTopic||conditionStartsTopic;
+  const reportsNothing=!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length);
+  // Round 8: "a new topic" wipes the claim being gathered, so the model's say-so
+  // needs an event in the household's own words -- never "dunno, since may".
+  // Mid-claim, only an event told in plain code-readable words (not a
+  // correction of the one being gathered) starts over.
+  const newEventToldNow=!!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length||affirmedDeathStatement(args.message))&&
+    !/^\s*(?:actually|sorry|no|nope|not|wait|oops|correction)\b|\bnot an? (?:accident|illness)\b/i.test(args.message);
+  const startsClaimTopic=(interpretation.newTopic&&EVENT_REPORT_WORDS.test(args.message)&&(args.state.intent!=="claim"||newEventToldNow)&&
+    !(reportsNothing&&(onlyAsksQuestions(args.message)||/^[^.!?\n]{1,60}\?\s*$/.test(args.message.trim()))))||conditionStartsTopic;
   // A message that only asks questions reports no event, whatever label the
   // interpreter gave it or whatever it quoted from it. Mid-claim, asking what
   // the claim pays stays on the claim; any other question is answered as a
@@ -327,9 +398,31 @@ export function mergeInterpretation(args: {
   if(tripReason)interpretation={...interpretation,
     facts:interpretation.facts.filter(f=>!/^(?:death|deathDate|causeOfDeath|accidentalDeath|hospitalised|admissionDate|dischargeDate|hospitalNights|diagnosis|diagnosisDate)$/.test(f.key)&&!(f.key==="eventType"&&f.value!=="travel_disruption")),
     scenarioCandidates:(interpretation.scenarioCandidates??[]).filter(c=>!c.traits.some(t=>t==="death"||t==="hospitalisation"||t==="diagnosis"))};
-  const asksOnly=!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length)&&onlyAsksQuestions(args.message);
-  const fullQuestion=asksOnly&&args.message.trim().split(/\s+/).length>=4;
+  // Round 8: a short bare question ("waiting period?", "pregnancy covered?")
+  // asks too, when no question of the chat's own is waiting for an answer.
+  const asksOnly=reportsNothing&&
+    (onlyAsksQuestions(args.message)||(!args.state.pending&&/^[^.!?\n]{1,60}\?\s*$/.test(args.message.trim())&&!affirmedDeathStatement(args.message)));
+  const fullQuestion=reportsNothing&&onlyAsksQuestions(args.message)&&args.message.trim().split(/\s+/).length>=4;
+  // Round 8: a message that only asks reports nothing, so nothing the
+  // interpreter read into it is a fact -- whatever intent it was given --
+  // except a direct answer to the question the chat was waiting on.
+  if(asksOnly)interpretation={...interpretation,facts:interpretation.facts.filter(f=>args.state.pending?.factKey===f.key),scenarioCandidates:[]};
   let intent=interpretation.intent;
+  // Round 8: a bare question ("only for panel doctors?") labelled a claim or
+  // a request for the policy list, in a conversation about the policies,
+  // carries that conversation on: it reports nothing and lists nothing.
+  if(asksOnly&&!onlyAsksQuestions(args.message)&&args.state.intent&&args.state.intent!=="claim"&&(intent==="claim"||intent==="portfolio"))intent="follow_up";
+  // Round 8: mid-claim, a reply that is not a question ("sorry, it was her
+  // right arm not left") continues the claim, whatever label it was given.
+  if(args.state.intent==="claim"&&(intent==="policy_question"||intent==="portfolio")&&!asksOnly&&!/\?/.test(args.message)&&!INTERROGATIVE_START.test(args.message))intent="follow_up";
+  // ...and an event told in plain words ("Xin Yi was admitted to KKH for dengue
+  // on 2026-09-12") is a claim, not a request for the policy list or a
+  // what-if, unless the message itself asks for the list or supposes.
+  const toldEvent=!!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length||affirmedDeathStatement(args.message)||
+    [...args.message.matchAll(/\b(?:admitted|hospitali[sz]ed|warded)\b|\b(?:was|were|got|has been|have been|had been)\s+(?:delayed|cancell?ed|stolen|lost|damaged|injured|hurt|bitten|burn(?:ed|t)|robbed|diagnosed|knocked down)\b|\b(?:broke|fell|crashed|died|passed away|diagnosed with)\b/gi)]
+      .some(m=>!hypotheticalBefore(args.message,m.index??0)));
+  if((intent==="portfolio"||intent==="policy_question"||(intent==="follow_up"&&!args.state.intent))&&toldEvent&&!asksOnly&&!/\b(?:if|suppose|supposing|what if|assuming|in case|were to|would)\b/i.test(args.message)&&
+    !/\b(?:what policies|portfolio|all (?:our|my|the) (?:policies|plans)|what (?:insurance|cover) do (?:we|i|they|you) have)\b/i.test(args.message))intent="claim";
   if(asksOnly&&(intent==="claim"||(intent==="follow_up"&&args.state.intent==="claim"))){
     intent=args.state.intent==="claim"&&args.state.activeClaimQuery&&CLAIM_MONEY_ASK.test(args.message)?"claim":"policy_question";
     if(interpretation.intent==="claim")interpretation={...interpretation,facts:[],scenarioCandidates:[]};
@@ -368,6 +461,10 @@ export function mergeInterpretation(args: {
       if(fact.value&&!affirmedDeathStatement(fact.quote))continue;
       if(!fact.value&&!explicitAliveCorrection(fact.quote)&&!(pendingTerminal(args.state,fact.subjectId,["death"])&&negative(fact.quote)))continue;
     }
+    // Round 8: a yes/no event fact needs words for it in its own quote; a
+    // whole message quoted for "hospitalised: true" is not evidence of a stay.
+    if(fact.value===true&&EVENT_WORDS[fact.key]&&!EVENT_WORDS[fact.key].test(fact.quote)&&
+      !(pendingTerminal(args.state,fact.subjectId,[fact.key])&&affirmative(fact.quote)))continue;
     if(fact.key==="accidentalDeath"){
       if(typeof fact.value!=="boolean")continue;
       const pending=pendingTerminal(args.state,fact.subjectId,["accidentalDeath","causeOfDeath"]);
@@ -493,6 +590,8 @@ export function mergeInterpretation(args: {
     if(args.subjectIds.length>1&&args.subjectNames&&!/\b(?:both|all of us|everyone)\b/i.test(candidate.quote)&&
       !(args.subjectNames[candidate.subjectId]??[]).some(name=>hasQuote(candidate.quote,name)))continue;
     if(candidate.traits.includes("death")&&knownValue(next.subjects[candidate.subjectId]??{},"death")!==true)continue;
+    // Round 8: an event is classified from words that describe one.
+    if(!EVENT_REPORT_WORDS.test(candidate.quote))continue;
     const scenario:ScenarioClassification={subjectId:candidate.subjectId,label:candidate.label,family:candidate.family as ScenarioFamily,
       traits:[...new Set(candidate.traits)] as ScenarioTrait[],quote:candidate.quote,recordedAt:args.now.toISOString(),source:"model-candidate"};
     const list=next.scenarios![candidate.subjectId]??=[];

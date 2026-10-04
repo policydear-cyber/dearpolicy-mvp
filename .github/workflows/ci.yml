@@ -169,8 +169,12 @@ jobs:
 
       - name: Round 7 answers (second household: 300+ messages, 10 long conversations, bilingual and lapsed documents)
         run: npm run r7:answers-test
-      - name: Round 7 claim conversations (46 full interviews, one question per turn, fitting benefits only, employer group cover shown separately)
+      - name: Round 7 claim conversations (51 full interviews and 7 what-ifs, one question per turn, "not sure" accepted and never asked again, fitting benefits only, employer group cover shown separately)
         run: npm run r7:claims-test
+      - name: Round 8 chaos model (every way a real model misbehaves, through the Round 6/7 batteries under fixed seeds; nothing invented, junk or leaked reaches the household)
+        run: npm run r8:chaos-test
+      - name: Round 8 chat display (85 recorded answers render without markdown, raw dates or codes; phone-safe layout rules)
+        run: npm run r8:render-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

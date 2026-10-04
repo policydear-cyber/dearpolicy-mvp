@@ -22,7 +22,9 @@ const CSP_DIRECTIVES = [
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
-  "script-src 'self' 'unsafe-inline'",
+  // React's development build needs eval() for its debugging call stacks;
+  // a production build never does, so production keeps the strict policy.
+  process.env.NODE_ENV === "development" ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",

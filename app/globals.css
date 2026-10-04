@@ -55,7 +55,7 @@
   --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 22px; --fs-2xl: 28px; --fs-3xl: 36px;
   --t-hover: 120ms; --t-state: 240ms; --t-move: 340ms; --ease: cubic-bezier(.2, .7, .2, 1);
   --nav-h: 60px;
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", Inter, "Segoe UI", Roboto, system-ui, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", sans-serif;
 }
 :root[data-theme="dark"] {
     color-scheme: dark;
@@ -810,12 +810,14 @@ table { font-variant-numeric: tabular-nums; }
 
 /* Collapsed full assessment while questions are still open: the questions
    stay the visible content of the turn, the report is one tap away. */
-.assessment-details{margin-top:.6rem;border:1px solid var(--line, #e5ddd0);border-radius:10px;padding:.35rem .7rem;background:rgba(255,255,255,.5)}
-.assessment-details>summary{cursor:pointer;font-weight:600;font-size:.85rem;color:var(--muted-ink, #7a6a55);padding:.25rem 0}
+.assessment-details{margin-top:.6rem;border:1px solid var(--line);border-radius:10px;padding:.35rem .7rem;background:var(--surface)}
+.assessment-details>summary{cursor:pointer;font-weight:600;font-size:.85rem;color:var(--brand-ink);padding:.25rem 0}
 .assessment-details[open]>summary{margin-bottom:.4rem}
 
 .inline-answer{display:flex;gap:.5rem;margin-top:.5rem}
-.inline-answer input{flex:1;min-width:0;padding:.45rem .6rem;border:1px solid var(--line, #d8cdbc);border-radius:8px;font:inherit;background:#fff}
+.inline-answer input{flex:1;min-width:0;min-height:40px;padding:.45rem .6rem;border:1px solid var(--input-line);border-radius:8px;font:inherit;background:var(--surface);color:var(--ink);color-scheme:inherit}
+.inline-answer button{border:1px solid var(--brand);background:var(--brand);color:#fff;border-radius:999px;padding:8px 16px;min-height:40px;font-weight:650;font-size:var(--fs-sm)}
+.inline-answer button:disabled{opacity:.5}
 
 /* V1.1 customer answers: what the documents establish, sources collapsed. */
 .benefit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -862,3 +864,52 @@ table { font-variant-numeric: tabular-nums; }
 .getting-started li { display: grid; gap: 4px; justify-items: start; }
 .getting-started li span { color: var(--muted); }
 .getting-started li.done strong { color: var(--good-text); }
+
+/* Round 8: chat answers on a phone.
+   - The chat column is a grid; without a 0 minimum, one wide table (the
+     family policy inventory) stretched the whole page sideways on a phone.
+   - Everything a thumb taps in the chat is at least 44px tall on a touch
+     screen or a narrow window: answer chips, the inline answer box, the
+     collapsible "Sources" / "Show full assessment" / "conditions" rows,
+     "New chat", chat-history actions and the claim links.
+   - A new answer scrolls to its first line, clear of the phone's top bar. */
+.chat-window { grid-template-columns: minmax(0, 1fr); }
+.message, .message-body { min-width: 0; }
+.message { scroll-margin-top: 12px; }
+.message-body p { white-space: pre-line; }
+.citation > span { min-width: 0; }
+.composition-benefit-head, .composition-policy-head, .claim-result-head { flex-wrap: wrap; }
+.composition-benefit-head > span, .composition-policy-head > strong, .claim-result-head > strong { min-width: 0; flex: 1 1 12rem; }
+/* On a phone the family policy table reads as one card per policy, each
+   value under its column name, instead of a table scrolled sideways. */
+@media (max-width: 620px) {
+  .chat-policy-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .chat-policy-table, .chat-policy-table tbody, .chat-policy-table tr, .chat-policy-table td { display: block; width: auto; }
+  .chat-policy-table caption { display: block; }
+  .chat-policy-table tbody tr { border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); padding: 6px 12px; margin-top: 8px; content-visibility: visible; }
+  .chat-policy-table th, .chat-policy-table td { min-width: 0; }
+  .chat-policy-table td { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .chat-policy-table td:last-child { border-bottom: 0; }
+  .chat-policy-table td::before { content: attr(data-label); color: var(--muted); font-size: var(--fs-xs); font-weight: 650; }
+  .chat-policy-table td > div + div { margin-top: 0; }
+  .chat-policy-table td > div { grid-column: 2; }
+}
+@media (max-width: 900px) {
+  .message { scroll-margin-top: 64px; }
+}
+/* Round 8: the claim page's bill check fits a phone and follows the theme. */
+.bill-review fieldset { min-width: 0; min-inline-size: 0; border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px; }
+.bill-review label { min-width: 0; }
+.bill-review input:not([type=checkbox]) { width: 100%; min-width: 0; box-sizing: border-box; min-height: 36px; padding: 6px 10px; border: 1px solid var(--input-line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font: inherit; }
+.bill-review input[type=checkbox] { width: 20px; height: 20px; flex: none; margin: 2px 0 0; }
+@media (pointer: coarse), (max-width: 760px) {
+  .quick-replies button, .inline-answer input, .inline-answer button, .button.compact, .mini-button, .claim-pack-link, .mobile-bar-actions button, .bill-review input:not([type=checkbox]) { min-height: 44px; }
+  .mini-button { min-width: 44px; }
+  .mobile-bar > a { display: inline-flex; align-items: center; min-height: 44px; }
+  .bill-review .bill-review-confirm { min-height: 44px; align-items: center; }
+  .chat-page details > summary { min-height: 44px; display: flex; align-items: center; }
+  .chat-page details > summary::before { content: "▸"; margin-right: 8px; font-size: .8em; }
+  .chat-page details[open] > summary::before { content: "▾"; }
+  .chat-page details > summary::-webkit-details-marker { display: none; }
+  .chat-page details > summary::marker { content: ""; }
+}

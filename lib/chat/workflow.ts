@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
-import { householdModelFailure,readableModelFailure,structuredCompletion,TruncatedModelOutput } from "@/lib/ai/llm";
+import { householdModelFailure,readableModelFailure,structuredCompletion } from "@/lib/ai/llm";
+import { SpendCapReached } from "@/lib/ai/ledger";
 import { outsideHouseholdSubject,resolveClaimPerson,resolveRelativePerson,type ClaimPerson,type ClaimPersonResolution } from "@/lib/claims/person";
 import { plannedMedicalEvent,reportedEvents } from "@/lib/claims/reported-events";
 import { enforceChatMonetarySafety, evaluateChatMonetaryEligibility } from "@/lib/claims/monetary-gate";
@@ -33,8 +34,8 @@ import { transposedScheduleWarnings } from "@/lib/insurance/schedule-consistency
 import { acceleratedBenefitWarnings,applyPolicyAggregateCaps,describeCoverSplit,resolveCoverOverlaps } from "@/lib/insurance/cover-composition";
 import { describeBenefitFormula } from "@/lib/policies/benefit-catalog";
 import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem,PolicyStatedLimit } from "@/types";
-import { applyExplicitDeferrals,factLabels,interpretMessage,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText,onlyAsksQuestions } from "./facts";
-import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,numbersGrounded,promoteComputableObservations } from "./policy-analysis";
+import { applyExplicitDeferrals,factLabels,interpretMessage,ruleInterpretation,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText,onlyAsksQuestions } from "./facts";
+import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn as storeTurn,ChatConflict } from "./store";
 import { claimFollowUpAnswer,claimFollowUpKind,completeClaimAnswer,lockedDocumentsReply,propertyClaimReply,propertyFollowUp } from "./claim-completion";
 /** Every answer is saved through here: a concluded claim answer gets its
@@ -44,11 +45,13 @@ const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   return storeTurn(args);
 };
 import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress } from "./types";
+import { modelProseProblem,proofText } from "./model-text";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
 import { answerPolicyQuestion,isFactualPolicyQuestion,factualEvenAsWhatIf } from "./policy-answer";
 import { conversationalReply } from "./conversational";
+import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
 import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM } from "./premium-answer";
 import { WHO_IS_COVERED,whoIsCoveredAnswer,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
@@ -318,7 +321,7 @@ const NARRATION_SYSTEM=
 /** The decision is made in application code; the model only chooses the words.
  * Returns true when the narration passed every guard and was applied. */
 async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknown>;intent?:string;eventLead:string;
-  state:ConversationState;people:ClaimPerson[];permitsNegative:boolean}):Promise<boolean>{
+  state:ConversationState;people:ClaimPerson[];family?:ClaimPerson[];permitsNegative:boolean}):Promise<boolean>{
   const {answer,packet}=args;
   try{
     const explanation=await structuredCompletion({
@@ -327,10 +330,18 @@ async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknow
       schema:ExplanationSchema,temperature:0.3,maxOutputTokens:450,timeoutMs:60_000,attempts:1,
       system:NARRATION_SYSTEM,user:JSON.stringify(packet),
     });
-    const proof=JSON.stringify(packet);
-    const text=explanation.summary+" "+explanation.details.join(" ");
+    // Round 8: the model only rewords what the application already says.
+    // Its details are never shown (the application's own lines are), and its
+    // summary passes the household-prose gate (lib/chat/model-text.ts):
+    // figures only from the headline the application states, and nothing --
+    // a name, date, page, benefit, promise, advice, markup, leak -- that the
+    // packet does not itself contain.
+    const proof=proofText(packet);
+    const numberProof=proofText([packet.summary,packet.potentialPayoutTotals,packet.whatTheyTold,packet.facts]);
+    const text=explanation.summary;
     const keepsTotals=answer.potentialPayoutTotals?.every(total=>normalText(explanation.summary).includes(normalText(total.amountText)))??true;
-    if(!keepsTotals||!numbersGrounded(text,proof)||/\?/.test(text))return false;
+    const names=(args.family??args.people).flatMap(person=>[person.display_name,person.preferred_name??""]).filter(Boolean);
+    if(!keepsTotals||modelProseProblem(text,{proof,numberProof,names,echoOf:[NARRATION_SYSTEM]}))return false;
     // A small model sometimes hands the person's own message back as the
     // answer. That is not narration; the deterministic summary is better.
     const said=normalText(String(packet.whatTheyTold??"")),summary=normalText(explanation.summary);
@@ -343,7 +354,7 @@ async function narrateAnswer(args:{answer:ChatAnswer;packet:Record<string,unknow
     if(args.intent==="claim"&&/\b(?:approved|definitely|guaranteed|will receive|will pay|entitled)\b/i.test(text))return false;
     answer.summary=args.eventLead&&!explanationCoversLead(explanation.summary,args.state,args.people)&&!explanation.summary.includes(args.eventLead)
       ?args.eventLead+" "+explanation.summary:explanation.summary;
-    answer.details=mergeDetails(explanation.details,answer.details);
+    answer.details=mergeDetails([],answer.details);
     return true;
   }catch{return false;/* The validated packet is still a complete answer. */}
 }
@@ -617,7 +628,7 @@ export function askedTopic(question:string,people:ClaimPerson[]=[]){
     .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(?:mum|mom|mother|mak|emak|ibu|dad|father|bapa|son|daughter|brother|sister|wife|husband|helper|maid|grand\w+|baby|kid|child|family|it|he|she)['’]s\b/gi,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
   // What is left must read as a thing, not as the question handed back
   // ("When is the policy due for renewal", "can reduce or not").
-  if(/^(?:when|what|which|who|why|how|where|does|do|is|are|can|could|should|would|will|has|have|and|then|also|but)\b|\b(?:or not|anot|lah|leh|pls|please)\b|[?]|\b(?:give|gives|pay|pays|cover|covers|have|has|include|includes|offer|offers|get|gets)$/i.test(topic)||topic.split(/\s+/).length>6)return "anything on this";
+  if(/^(?:when|what|which|who|why|how|where|does|do|is|are|can|could|should|would|will|has|have|and|then|also|but)\b|\b(?:or not|anot|lah|leh|pls|please)\b|\b(?:i|we|me|us)\b|[?]|\b(?:give|gives|pay|pays|cover|covers|have|has|include|includes|offer|offers|get|gets)$/i.test(topic)||topic.split(/\s+/).length>6)return "anything on this";
   return topic.length>=3&&topic.length<=60?topic:"anything on this";
 }
 /** Said when a policy question finds nothing. "Not stated in your documents"
@@ -775,6 +786,16 @@ const TURN_CORRECTION=new WeakMap<ChatAnswer,string>();
 const SEVERAL_QUESTIONS=new WeakSet<ChatAnswer>();
 /** "Xin Yi's accident plan pays what?": a question about the plan, never a what-if. */
 const NOT_A_WHAT_IF=new WeakSet<ChatAnswer>();
+/** This turn answered the what-if's own question (lib/chat/what-if-replies.ts). */
+const WHAT_IF_REPLY=new WeakMap<ChatAnswer,import("./what-if-replies").WhatIfReply>();
+/** The what-if's summary, led by the acknowledgement of the reply just given. */
+function acknowledgeWhatIf(answer:ChatAnswer,asking:boolean){
+  const reply=WHAT_IF_REPLY.get(answer);
+  if(!reply)return;
+  answer.summary=acknowledgeWhatIfReply(reply)+" "+(asking
+    ?"The benefits below still apply; one more figure would help."
+    :"That’s all I need for this what-if: the benefits below are what your policies could respond to, and the amounts depend on the real figures when it happens.");
+}
 /** The evidence-backed indicative estimate of the claim this conversation is
  * about, for this person -- or null (no claim yet, no estimate, or it could
  * not be read; the chat then answers as before). */
@@ -892,11 +913,14 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   TURN_FACTS.set(answer,JSON.stringify(conversation.state.subjects??{}));
   const now=request.personContextMessage&&request.personContextRecordedAt?new Date(request.personContextRecordedAt):new Date();
   const subjectIds=context.people.map(p=>p.id);
+  // A reply to the what-if's own question ("...: Not sure", "about 3 nights")
+  // is that reply, never a new message (lib/chat/what-if-replies.ts).
+  const whatIfReply=readWhatIfReply(conversation.state.whatIf,request.submittedQuestion??request.question);
   // Greetings, thanks, another language, advice, off-topic questions and
   // attempts to get at how DearPolicy works are answered in code, before
   // anything reads the message as a policy question (lib/chat/conversational.ts).
   // A question about the claim just concluded ("what should we keep for the claim?") is never small talk or advice.
-  const conversational=request.personChoiceId||(state.intent==="claim"&&claimFollowUpKind(request.submittedQuestion??request.question))
+  const conversational=whatIfReply||request.personChoiceId||(state.intent==="claim"&&claimFollowUpKind(request.submittedQuestion??request.question))
     ||(state.propertyEvent&&propertyFollowUp(state.propertyEvent,request.submittedQuestion??request.question))||context.outside?null:conversationalReply({message:request.submittedQuestion??request.question,
     selected:context.people.length===1?context.people[0]:null,family:context.family,hasTopic:!!state.activeQuery,pending:!!state.pending});
   if(conversational){
@@ -995,26 +1019,34 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
     const replyText=request.question.slice(request.question.lastIndexOf(":")+1);
     // Only a bare answer: "3 nights, no ambulance, we took a taxi" says more
     // than the question asked, so the interpreter still reads it.
-    const answersPendingOnly=!!pendingBefore&&request.question.trim().length<=240&&replyText.trim().length<=40&&!/[?,;]|\band\b|\bbut\b/i.test(replyText)&&
+    const answersPendingOnly=!!whatIfReply||!!pendingBefore&&request.question.trim().length<=240&&replyText.trim().length<=40&&!/[?,;]|\band\b|\bbut\b/i.test(replyText)&&
       recordDirectFactAnswer({message:request.question,subjects:structuredClone(state.subjects),subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
     try{interpretation=answersPendingOnly?{intent:"follow_up" as const,newTopic:false,searchTerms:[] as string[],facts:[],scenarioCandidates:[]}
-      :await interpretMessage({message:request.question,state,people:context.family,subjectIds,history});}
+      :await interpretMessage({message:request.question,state,people:context.family,subjectIds,history});
+      // Round 8: what the household's own words plainly say (a death, an
+      // admission, a diagnosis, the date) is never lost to a reply the model
+      // cut short or left out; mergeInterpretation checks these like any other.
+      if(!answersPendingOnly){
+        const rules=ruleInterpretation({message:request.question,state,subjectIds});
+        const have=new Set(interpretation.facts.map(f=>f.subjectId+"|"+f.key));
+        interpretation={...interpretation,facts:[...interpretation.facts,...rules.facts.filter(f=>!have.has(f.subjectId+"|"+f.key))]};
+      }}
     catch(error){
-      state=applyExplicitDeferrals(state,request.question,subjectIds,now);
-      // A "Question: answer" message from the chat's own question card is
-      // recorded deterministically -- the interpreter above may miss the
-      // mapping, and a missed answer re-asks the same question forever.
-      recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
-      const truncated=error instanceof TruncatedModelOutput;
-      // The operator-facing cause (provider, model, configuration advice)
-      // goes to the log; the household sees plain words.
+      // Round 8: a failed interpreter no longer fails the turn. The message
+      // is read with plain rules instead (ruleInterpretation) and answered
+      // from the documents like any other -- only an exhausted spend limit,
+      // which the household must be told about, still stops here. The
+      // operator-facing cause (provider, model) goes to the log only.
       console.warn("[chat] interpretation failed:",readableModelFailure(error));
-      const cause=householdModelFailure(error);
-      answer.summary=truncated
-        ?"That message had a lot in it and the model ran out of room part-way through reading it. Nothing was lost — your message is saved. Send it again, or split it into two shorter messages (what happened, then the bills)."
-        :"I couldn’t read your message just now: "+cause+". Your message is saved.";
-      answer.details=[];
-      answer.nextSteps=["Send the message again — a retry usually succeeds.","If it fails twice, split it into two shorter messages and DearPolicy will keep the facts from both."];
+      if(error instanceof SpendCapReached){
+        state=applyExplicitDeferrals(state,request.question,subjectIds,now);
+        // A "Question: answer" message from the chat's own question card is
+        // recorded deterministically all the same.
+        recordDirectFactAnswer({message:request.question,subjects:state.subjects,subjectIds,scenarios:state.scenarios,now,pending:pendingBefore});
+        answer.summary="I couldn’t read your message just now. "+householdModelFailure(error)+" Your message is saved.";
+        answer.details=[];
+        answer.nextSteps=[];
+      }else interpretation=ruleInterpretation({message:request.question,state,subjectIds});
     }
     if(interpretation){
       state=mergeInterpretation({state,interpretation,message:request.question,subjectIds,
@@ -1050,6 +1082,12 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         const asksATerm=/^(?:what|what['’]s|how much|which|is there)\b[^?]*\b(?:excess|deductible|co-?insurance|co-?pay\w*|limit|premium|sum insured)\b/i.test(sentNow);
         const reportsSomething=REPORTS_AN_EVENT.test(sentNow.replace(/\b(?:personal )?accident(?:al)? (?:plan|policy|insurance|cover(?:age)?|benefits?|medical|expenses?|sum insured|limit|scale)\b/gi,""))&&!coverQuestion&&!asksATerm;
         const topicsNow=questionTopics(sentNow);
+        // Round 8: "portfolio" is a label the interpreter can get wrong. A
+        // message asking about one thing (dental cover, a premium, a surrender
+        // charge) is a policy question whatever it was labelled; the overview
+        // is for a message that asks for one.
+        if(interpretation.intent==="portfolio"&&state.intent==="portfolio"&&!COVERAGE_OVERVIEW.test(sentNow)&&!/\b(?:what policies|portfolio|all (?:our|my|the) (?:policies|plans|insurance))\b/i.test(sentNow)&&
+          (topicsNow.length||isPremiumQuestion(sentNow)||coverQuestion||asksATerm||latestPlan(sentNow,context.holdings)))state.intent="policy_question";
         // A message with a topic of its own is its own question, not the last one.
         if(!pendingBefore&&!reportsSomething&&topicsNow.length&&state.intent!=="claim")state.activeQuery=sentNow;
         // A short follow-up ("and his daughter?", "what about the rider?",
@@ -1148,7 +1186,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           state.subjects=structuredClone(before.subjects??{});state.scenarios=structuredClone(before.scenarios??{});delete state.activeClaimQuery;
         }
         // "Who is covered under the travel plan?": the people the documents name.
-        if(!pendingBefore&&!reportsSomething&&WHO_IS_COVERED.test(sentNow)){
+        if(!whatIfReply&&!pendingBefore&&!reportsSomething&&WHO_IS_COVERED.test(sentNow)){
           const who=whoIsCoveredAnswer(sentNow,context.family,await documentsByPerson(request.accountId,context.family));
           if(who){
             state.intent="policy_question";state.activeQuery=sentNow;
@@ -1164,7 +1202,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // A premium question about one plan or a due date is answered from that plan's own printed lines (below).
         const namesAPlan=(q:string)=>context.holdings.some(h=>h.split(/[^\p{L}\p{N}]+/u).some(t=>t.length>=5&&!/\d/.test(t)&&!COMMON_PRODUCT_WORD.test(t)&&!/^(?:insurance|policy|plan)$/i.test(t)&&new RegExp("\\b"+t+"\\b","i").test(q)));
         const premiumOnly=(q:string)=>RANKED_PREMIUM.test(sentNow)||(isPremiumQuestion(q)&&questionTopics(q).every(t=>t.key==="premium")&&!premiumAboutOnePlan(q)&&!namesAPlan(q));
-        if(!pendingBefore&&state.intent!=="claim"&&premiumOnly(state.activeQuery??sentNow)&&!reportsSomething){
+        if(!whatIfReply&&!pendingBefore&&state.intent!=="claim"&&premiumOnly(state.activeQuery??sentNow)&&!reportsSomething){
           const premium=await premiumAnswer({accountId:request.accountId,people:context.people,question:state.activeQuery??sentNow});
           state.intent="policy_question";
           answer.mode="answer";answer.summary=premium.summary;answer.details=premium.details;answer.citations=premium.citations;
@@ -1176,12 +1214,23 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
         }
+        // The reply to a what-if's question goes back to that what-if, with
+        // the reply noted and nothing the interpreter read into it kept.
+        if(whatIfReply&&conversation.state.whatIf){
+          const was=conversation.state;
+          state.intent=was.intent;state.activeQuery=was.whatIf!.query;
+          state.subjects=structuredClone(was.subjects??{});state.scenarios=structuredClone(was.scenarios??{});
+          if(was.activeClaimQuery)state.activeClaimQuery=was.activeClaimQuery;else delete state.activeClaimQuery;
+          if(was.pending)state.pending=was.pending;else delete state.pending;
+          state.whatIf={query:was.whatIf!.query,answers:{...was.whatIf!.answers,[whatIfReply.factKey]:whatIfReply.value}};
+          WHAT_IF_REPLY.set(answer,whatIfReply);carriedQuestion=null;
+        }else if(state.whatIf?.pending)state.whatIf={query:state.whatIf.query,answers:state.whatIf.answers};
       }
       // "How much can she claim?" is a question about the claim, never a policy
       // topic: with an event on file it goes back to that claim (its
       // interview, its possible benefits or its indicative estimate); with
       // none, the chat asks what happened, or gives an estimate that exists.
-      const claimMoney=context.people.length===1&&isClaimMoneyQuestion(request.submittedQuestion??request.question);
+      const claimMoney=!whatIfReply&&context.people.length===1&&isClaimMoneyQuestion(request.submittedQuestion??request.question);
       if(claimMoney&&primaryClaimCategory(state,context.people[0].id)){
         state.intent="claim";
         if(state.activeClaimQuery)state.activeQuery=state.activeClaimQuery;
@@ -1527,11 +1576,17 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                 answer.claimItems.push(item);
               }
               addCitations(answer.citations,looked.citations);
+              if(whatIf&&(describesPlannedProcedure(asked)||state.plannedEvent))answer.claimItems=answer.claimItems.filter(item=>!/\bambulance\b/i.test(item.title));
               answer.mode="claim_assessment";
               // A what-if names the one fact that would turn a rule into a
               // figure, without recording anything against anyone's profile.
               // Asked in the conditional: nothing has happened yet.
-              const conditional=whatIf&&looked.question?whatIfQuestion(looked.question.factKey):null;
+              // Never a question this what-if already had a reply to, and no
+              // ambulance charge for a planned operation.
+              const replied=whatIf?repliedWhatIf(state.whatIf,asked):{};
+              const conditional=whatIf&&looked.question&&replied[looked.question.factKey]===undefined
+                &&!(looked.question.factKey==="ambulanceBill"&&(describesPlannedProcedure(asked)||!!state.plannedEvent))?whatIfQuestion(looked.question.factKey):null;
+              if(whatIf)state.whatIf=whatIfAfterTurn(state.whatIf,asked,conditional?{factKey:looked.question!.factKey,text:conditional}:null);
               if(conditional)answer.questions=[{id:looked.question!.id,type:"text",text:conditional,why:"It is what turns the rule above into an actual amount."}];
               await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
               warnAboutInconsistentSchedules(answer,contracts);
@@ -1571,13 +1626,14 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               answer.details.push("The Coverage page shows where each of these came from in your documents, and whether it was verified.");
               if(stillReading)answer.details.push(stillReading+" document"+(stillReading===1?" is":"s are")+" still being read into the ledger. Ask again in a minute and anything found there is included.");
               await report({stage:"Putting the answer together",completed:contracts.length,total:contracts.length});
-              if(whatIf)await narrateAnswer({answer,intent:whatIf?"policy_question":"claim",eventLead:lead,state,people:context.people,permitsNegative:false,
+              if(whatIf)await narrateAnswer({answer,family:context.family,intent:whatIf?"policy_question":"claim",eventLead:lead,state,people:context.people,permitsNegative:false,
                 packet:{whatTheyTold:request.question.slice(0,700),facts:modelFactContext(state,subjectIds,900),
                   potentialPayoutTotals:answer.potentialPayoutTotals,
                   benefits:answer.claimItems.slice(0,5).map(item=>({name:item.title,status:item.status,amount:item.amountText,why:item.reason.slice(0,180),
                     stillNeeded:item.conditions.filter(c=>c.startsWith("Still needed: ")).map(c=>c.slice(14)).slice(0,2)})),
                   payoutQualifiers:[],activeStatusNotVerified:staleNames.length,
                   reviewCoverage:{complete:false,note:"coverage ledger built from the uploaded documents"},questionToAsk:null}});
+              if(whatIf)acknowledgeWhatIf(answer,!!conditional);
               if(!whatIf)concludeClaim({answer,state,people:context.people,lead,contracts,currentness});
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
@@ -1609,6 +1665,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(review)review.status=scenario.considered?"searched":"missing_wording";
           }
           answer.mode="claim_assessment";
+          // A planned operation does not arrive by ambulance.
+          if(describesPlannedProcedure(asked)||state.plannedEvent)answer.claimItems=answer.claimItems.filter(item=>!/\bambulance\b/i.test(item.title));
           await applyCoverConditionsToAnswer(request.accountId,answer,contracts,state);
           warnAboutInconsistentSchedules(answer,contracts);
           answer.claimItems=enforceChatMonetarySafety(answer.claimItems,{householdId:request.accountId});enforceLiveChatMonetaryBoundary(answer,{claimContext:true});
@@ -1622,14 +1680,20 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             :"None of the benefits in "+whoseWhatIf+" policies on file match "+happening+". That is only as complete as the documents you have uploaded.";
           collapseSharedConditions(answer);
           answer.confidence=claimConfidence(answer.claimItems);
-          // The facts that would turn a rule into a figure, asked one at a time.
+          // The facts that would turn a rule into a figure, asked one at a time:
+          // never one this what-if already had a reply to ("not sure" is a
+          // reply), and no ambulance charge for a planned operation.
+          const replied=repliedWhatIf(state.whatIf,asked);
+          for(const factKey of Object.keys(replied))needs.delete(factKey);
+          if(describesPlannedProcedure(asked)||state.plannedEvent)needs.delete("ambulanceBill");
           const ask=[...needs.entries()].slice(0,1);
+          state.whatIf=whatIfAfterTurn(state.whatIf,asked,ask[0]?{factKey:ask[0][0],text:ask[0][1]}:null);
           answer.questions=ask.map(([factKey,text])=>({id:"scenario-"+factKey,type:"text" as const,
             text,why:"It is what turns the rule above into an actual amount."}));
           if(needs.size)answer.details.push("Some of these pay against what is actually spent or how long the hospital stay is, so the amount depends on the real numbers when it happens.");
           answer.details.push("This is a what-if. Nothing here has been recorded as a claim, and no facts from this question have been saved against anyone's profile.");
           answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
-          await narrateAnswer({answer,intent:"policy_question",eventLead:"",state,people:context.people,permitsNegative:false,
+          await narrateAnswer({answer,family:context.family,intent:"policy_question",eventLead:"",state,people:context.people,permitsNegative:false,
             packet:{whatTheyTold:request.question.slice(0,700),
               facts:modelFactContext(state,subjectIds,900),
               potentialPayoutTotals:answer.potentialPayoutTotals,
@@ -1638,6 +1702,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
               payoutQualifiers:[],activeStatusNotVerified:staleContracts.length,
               reviewCoverage:{complete:false,note:"benefit rules read from the uploaded documents"},
               questionToAsk:answer.questions[0]??null}});
+          acknowledgeWhatIf(answer,ask.length>0);
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
@@ -2155,7 +2220,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // ledger and all assessments remain available in the application.
         const observationDetails=[...answer.details];
         if(answer.citations.length){
-          await narrateAnswer({answer,intent:state.intent,eventLead,state,people:context.people,
+          await narrateAnswer({answer,family:context.family,intent:state.intent,eventLead,state,people:context.people,
             permitsNegative:negativeConclusionPermitted(answer.reviewCoverage),
             packet:{whatTheyTold:request.question.slice(0,700),intent:state.intent,
               facts:modelFactContext(state,subjectIds,1200),scenarioCandidates:scenarioContext,
