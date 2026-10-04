@@ -34,7 +34,9 @@ const NUMBER=String.raw`\d[\d,]*(?:\.\d{1,2})?`;
 // Any printed currency marker in front of the figure (S$, US$, HK$, SGD, USD,
 // EUR, RM, €, £ …). The marker only locates the number; the currency itself
 // is read by statedCode() from what is printed, never defaulted.
-const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|RM|€|£|¥)\s?(${NUMBER})`;
+// Round 10: a figure a scan printed unclearly ("S$5O,000", "S$2,l84") is not a
+// figure at all -- never "S$5" or "S$2" (see lib/documents/messy.ts).
+const MONEY=String.raw`(?:(?:US|S|SG|A|AU|HK|NZ|C|CA)?\$|SGD|USD|EUR|GBP|AUD|HKD|MYR|NZD|CAD|JPY|CNY|RM|€|£|¥)\s?(${NUMBER})(?![,.]?[OoIl|])`;
 function amount(raw:string|undefined){
   if(!raw)return null;
   const value=Number(raw.replace(/,/g,""));

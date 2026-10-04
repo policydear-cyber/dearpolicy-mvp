@@ -1,5 +1,6 @@
 import type { PdfPage } from "@/lib/documents/pdf";
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
+import { NON_COVER_ROLES, correspondenceRole } from "@/lib/documents/messy";
 
 export const PERSONAL_AUTHORITY_ROLES = new Set([
   "personal_schedule",
@@ -66,6 +67,10 @@ export function personalDocumentTitle(text: string): "certificate" | "personal_s
 }
 
 export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExtraction["documentRole"]) {
+  // Round 10: a letter, claim decision, bill, app screenshot or the family's own
+  // notes, by what it prints -- before any keyword it quotes ("policy wording").
+  const correspondence = correspondenceRole(pages);
+  if (correspondence) return correspondence;
   const text = fullText(pages).toLowerCase();
   if (/product summaries|product summary/.test(text) && /refer to your certificate of insurance/.test(text)) return "product_summary" as const;
   if (/certificate of (group )?insurance/.test(text) && /(sum assured|effective date|particulars of insured|insured person)/.test(text)) return "certificate" as const;
@@ -121,6 +126,10 @@ export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]
   const notes = [...raw.documentNotes];
   const joined = pages.slice(0, 8).map((p) => p.text).join("\n");
   let role = deterministicDocumentRole(pages, raw.documentRole);
+  // Round 10: letters, claim decisions, bills, app screenshots and the family's
+  // own notes are never cover: the people they name are kept (so the paper is
+  // filed with them), every amount, premium, payment and benefit is not.
+  if (role && NON_COVER_ROLES.has(role)) return nonCoverExtraction(raw, role, pages);
   // Keyword rules never downgrade a reading that confirmed personal coverage
   // and named the insured people, when those names are printed in the
   // document itself: a renewal certificate that quotes "definitions" is still
@@ -139,6 +148,21 @@ export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]
 
   if (people.length !== raw.insuredPeople.length) {
     notes.push("Generic insurance role labels were removed from detected people.");
+  }
+  // Round 10: someone printed only as a named driver, a nominee, a beneficiary or the agent is not who the
+  // policy covers when the document prints its policyholder or insured person: a reading that says so is not kept.
+  {
+    const lines = joined.split("\n").map((l) => l.replace(/\s+/g, " ").trim().toLowerCase());
+    const SECONDARY = /^(?:named drivers?|additional drivers?|authori[sz]ed drivers?|nominees?|nomination|beneficiar(?:y|ies)|trustees?|(?:servicing |your )?agent|(?:financial )?advis[eo]r|payee|witness)\b/;
+    const PRIMARY = /^(?:policy ?holder|policy owner|proposer|(?:the )?insured(?: person| persons| name)?|life assured|name of (?:the )?insured)\b/;
+    const onlySecondary = (name: string) => { const n = name.toLowerCase(); const naming = lines.filter((l) => l.includes(n)); return naming.length > 0 && naming.every((l) => SECONDARY.test(l)); };
+    if (lines.some((l) => PRIMARY.test(l))) {
+      const kept = people.filter((p) => !onlySecondary(p.name));
+      if (kept.length !== people.length) {
+        notes.push("Not kept as an insured person: " + people.filter((p) => onlySecondary(p.name)).map((p) => p.name).join(", ") + " (printed only as a named driver, nominee, beneficiary or agent, not as the policyholder or insured).");
+        people = kept;
+      }
+    }
   }
 
   const roleIsReference = role ? REFERENCE_ROLES.has(role) : false;
@@ -192,7 +216,43 @@ export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]
   };
 }
 
+const NON_COVER_NOTES: Record<string, string> = {
+  insurer_letter: "This is a letter from the insurer, not a policy: what it says is kept as the letter's own words, never as cover or as the premium being paid now.",
+  claim_decision: "This is the insurer's decision on a claim, not a policy: the amounts in it are what was claimed and decided, never cover.",
+  medical_bill: "This is a hospital or medical bill, not a policy: its amounts are charges, never cover.",
+  app_screenshot: "This is a screenshot of the insurer's app, not a policy document: what it shows is a summary from the app, not confirmed by the policy schedule.",
+  personal_notes: "These are the family's own notes, not a document from the insurer: nothing in them is used as a policy fact.",
+};
+function nonCoverExtraction(raw: PolicyExtraction, role: string, pages: PdfPage[]): PolicyExtraction {
+  const text = pages.map((p) => p.text).join("\n").replace(/\s+/g, " ").toLowerCase();
+  const people = raw.insuredPeople.filter((p) => looksLikeActualPersonName(p.name) && text.includes(p.name.trim().replace(/\s+/g, " ").toLowerCase()))
+    .map((p) => ({ ...p, name: p.name.trim().replace(/\s+/g, " "), coverages: [] }));
+  // A hospital is not an insurer; neither are the family's own notes.
+  const insurer = role === "medical_bill" || role === "personal_notes" ? null : raw.insurer;
+  return {
+    ...raw,
+    documentRole: role as PolicyExtraction["documentRole"],
+    documentType: raw.documentType,
+    documentNotes: [...new Set([...raw.documentNotes.filter((n) => !/^Read from a photo/i.test(n)), NON_COVER_NOTES[role]])],
+    insurer,
+    productName: role === "personal_notes" || role === "medical_bill" ? null : raw.productName,
+    personalCoverageConfirmed: false,
+    startDate: null,
+    renewalOrExpiryDate: null,
+    insuredPeople: people,
+    referenceCoverages: [],
+    premium: { amount: null, currency: null, frequency: null },
+    paymentRecords: [],
+    keyExclusions: [],
+    waitingPeriods: [],
+    deductiblesAndCoinsurance: [],
+    riders: role === "insurer_letter" ? raw.riders : [],
+  };
+}
+export { NON_COVER_ROLES };
+
 export function documentAuthority(role: PolicyExtraction["documentRole"], personalCoverageConfirmed: boolean) {
+  if (role && NON_COVER_ROLES.has(role)) return { level: 20, label: role === "personal_notes" ? "Your own notes" : role === "app_screenshot" ? "App screenshot" : "Correspondence", kind: "correspondence" };
   if (personalCoverageConfirmed && role === "endorsement") return { level: 100, label: "Personal amendment", kind: "personal" };
   if (personalCoverageConfirmed && (role === "personal_schedule" || role === "certificate")) return { level: 95, label: "Personal proof", kind: "personal" };
   if (role === "renewal_statement" || role === "annual_statement" || role === "premium_receipt") return { level: 80, label: "Current account record", kind: "personal" };

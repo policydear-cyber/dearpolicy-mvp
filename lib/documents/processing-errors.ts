@@ -25,6 +25,12 @@ export const UNREADABLE_DOCUMENT_MESSAGE =
   "DearPolicy could not find readable text in this document, so the insured people, benefits and amounts in it are not available. The original PDF or a clearer scan would let DearPolicy read it.";
 export const UNOPENABLE_DOCUMENT_MESSAGE =
   "This file could not be opened as a document, so none of its contents are available. It may be damaged; the original file would let DearPolicy read it.";
+/** Round 10: a photo the reader could not make out at all (blurred, dark, faint). Says how to take it again. */
+export const UNREADABLE_PHOTO_MESSAGE =
+  "DearPolicy couldn’t read this photo — it is too blurred, dark or faint to make out the words, so nothing in it is available. Take it again: lay the page flat in good light with no shadow across it, hold the phone steady and straight above the page, and keep the whole page in the frame. A PDF from the insurer is even better.";
+/** Round 10: a PDF that stops part-way (cut off while downloading or copying). */
+export const INCOMPLETE_PDF_MESSAGE =
+  "This PDF is incomplete — the file stops part-way, as happens when a download or copy is cut off, so none of its contents could be opened. Download it again from the insurer’s email or website (or ask the insurer for a fresh copy) and upload the new file.";
 export const DOCUMENT_READING_FAILED_MESSAGE =
   "DearPolicy could not finish reading this document, so the insured people, benefits and amounts in it are not available.";
 /** Round 5: the reading SERVICE failed (a provider outage, a timeout), not
@@ -47,6 +53,8 @@ export const USER_ACTIONABLE_PROCESSING_ERRORS: ReadonlySet<string> = new Set([
   PDF_PASSWORD_INCORRECT_MESSAGE,
   UNREADABLE_DOCUMENT_MESSAGE,
   UNOPENABLE_DOCUMENT_MESSAGE,
+  UNREADABLE_PHOTO_MESSAGE,
+  INCOMPLETE_PDF_MESSAGE,
   DOCUMENT_READING_FAILED_MESSAGE,
   DOCUMENT_READING_SERVICE_MESSAGE,
 ]);

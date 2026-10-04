@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { costUsd, describeChoice, fallbackModelFor, hostedStructuredCompletion, modelFor, ProviderQuotaExhausted, type ModelRole } from "./providers";
-import { currentModelHousehold, markProviderExhausted, providerExhaustedThisRequest } from "./usage";
+import { currentModelHousehold, markProviderExhausted, providerExhaustedThisRequest, remainingModelTimeMs } from "./usage";
 import { assertUnderSpendCap, recordUsage, SpendCapReached } from "./ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse, MONETARY_GATED_OPERATIONS, type KnownOperation, type ModelExecutionRecord } from "./provenance";
 import { canaryConfigFor, resolveRollout } from "./rollout";
@@ -62,6 +62,12 @@ export function unwrapJsonDocument(text: string): unknown {
   for (const candidate of candidates) { try { return JSON.parse(candidate); } catch { /* next */ } }
   return undefined;
 }
+
+/** Round 10: a model call is not started with less than this left of the turn's budget. */
+const MIN_MODEL_CALL_MS = 3_000;
+/** Round 10: test-only per-call meter (scripts/r10/meter.ts sets it; never set in production). */
+export type ModelMeterEvent = { role: ModelRole; operation: string; promptChars: number; input: number; output: number; ms: number; ok: boolean };
+function modelMeter(event: ModelMeterEvent) { (globalThis as { __dpModelMeter?: (event: ModelMeterEvent) => void }).__dpModelMeter?.(event); }
 
 /** Structured extraction with bounded context/memory. */
 export async function structuredCompletion<T>(args: {
@@ -142,10 +148,17 @@ export async function structuredCompletion<T>(args: {
         let record: Awaited<ReturnType<typeof recordModelExecution>>;
         // Already refused for exhausted quota in this request: not called again.
         if (providerExhaustedThisRequest(target.provider)) throw new ProviderQuotaExhausted(429);
+        // Round 10: the turn's model time budget (lib/ai/usage.ts). Spent: fail
+        // now as a timeout (every caller already falls back on one); otherwise
+        // never wait longer than what is left.
+        const left = remainingModelTimeMs();
+        if (left != null && left < MIN_MODEL_CALL_MS) throw new Error("Model request timed out: the time set aside for this answer was used up");
+        const callTimeoutMs = left == null ? args.timeoutMs : Math.min(args.timeoutMs ?? 120_000, left);
         try {
           reply = await hostedStructuredCompletion(target, { system: args.system, user: args.user, jsonSchema,
-            temperature: args.temperature, maxOutputTokens: budget, timeoutMs: args.timeoutMs, attempts: args.attempts });
+            temperature: args.temperature, maxOutputTokens: budget, timeoutMs: callTimeoutMs, attempts: args.attempts });
           const durationMs = Date.now() - started;
+          modelMeter({ role, operation, promptChars: args.system.length + args.user.length, input: reply.usage.input, output: reply.usage.output, ms: durationMs, ok: true });
           if (householdId) await recordUsage({ accountId: householdId, role, choice: target, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
           record = await recordModelExecution({
             correlationId: args.correlationId, attemptGroupId, attemptIndex, operation, role,
@@ -156,6 +169,7 @@ export async function structuredCompletion<T>(args: {
           });
         } catch (error) {
           const durationMs = Date.now() - started;
+          modelMeter({ role, operation, promptChars: args.system.length + args.user.length, input: 0, output: 0, ms: durationMs, ok: false });
           if (error instanceof ProviderQuotaExhausted) markProviderExhausted(target.provider);
           if (householdId) await recordUsage({ accountId: householdId, role, choice: target, input: 0, output: 0, durationMs, ok: false });
           await recordModelExecution({

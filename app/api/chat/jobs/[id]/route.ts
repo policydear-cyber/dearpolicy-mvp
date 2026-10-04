@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireHouseholdContext, routeErrorResponse } from "@/lib/auth/request-context";
-import { scheduleRequestDrain } from "@/lib/jobs/request-drain";
+import { scheduleChatDrain,scheduleRequestDrain } from "@/lib/jobs/request-drain";
 import { cancelChatJob,getChatJob } from "@/lib/chat/jobs";
 import { sanitizeStoredAnswer } from "@/lib/chat/monetary-boundary";
 import { invalidateAnswersWithDeletedPolicies } from "@/lib/chat/stale-answers";
@@ -10,11 +10,17 @@ import type { ChatAnswer } from "@/types";
 
 export const runtime="nodejs";
 export const ROUTE_AUTH = "household-member" as const;
+// Round 10: the chat answer is worked out by the drain this poll schedules
+// after its response (lib/jobs/request-drain.ts); the platform default time
+// limit cut that work off mid-answer and left the chat "thinking" until the
+// lease expired. The same limit as the chat route itself.
+export const maxDuration=300;
 export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
   try{
     const {id}=await params;z.string().uuid().parse(id);
     const ctx=await requireHouseholdContext(request);
     scheduleRequestDrain(); // bounded job drain after the response (lib/jobs/request-drain.ts)
+    scheduleChatDrain(); // Round 10: and the chat lane, so an answer never waits behind a document job
     const job=await getChatJob(ctx.householdId,id);
     if(!job)return NextResponse.json({error:"Analysis not found or its chat was deleted."},{status:404});
     let result:unknown=job.status==="complete"?sanitizeStoredAnswer(job.result_json):null;

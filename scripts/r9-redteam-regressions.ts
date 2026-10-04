@@ -135,9 +135,9 @@ async function main() {
       let status = 0, data: { answer?: ChatAnswer; error?: string } = {};
       const hits: Hit[] = [];
       try {
-        const res = await POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+        const res = await (await import("./r10/meter")).meterTurn(say, () => POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
           body: JSON.stringify({ familyMemberId: member, scope: member ? "member" : "family", question: say, conversationId: conv.id, conversationRevision: conv.rev, asynchronous: false, timeZone: "Asia/Singapore",
-            ...(choice ? { personChoiceId: choice, personContextMessage: conv.pcm, personContextRecordedAt: conv.pcr } : {}) }) }));
+            ...(choice ? { personChoiceId: choice, personContextMessage: conv.pcm, personContextRecordedAt: conv.pcr } : {}) }) })));
         status = res.status; data = await res.json();
       } catch (e) { hits.push({ rule: "threw", text: (e instanceof Error ? e.stack ?? e.message : String(e)).slice(0, 400) }); }
       const ms = Date.now() - t0;

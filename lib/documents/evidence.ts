@@ -132,7 +132,8 @@ function moneyPattern(value: number) {
   for (let end = digits.length; end > 0; end -= 3) groups.unshift(digits.slice(Math.max(0, end - 3), end));
   const body = groups.join("[,\\s]?");
   const fraction = cents ? "\\." + String(cents).padStart(2, "0").replace(/0$/, "0?") : "(?:\\.0{1,2})?";
-  return new RegExp("(?<![\\d.,])" + body + fraction + "(?![\\d])");
+  // Round 10: never part of a figure a scan printed unclearly ("S$1,O36.00" is not 36).
+  return new RegExp("(?<![\\d.,])(?<![\\d][,.]?[OoIl|]+[,.]?)" + body + fraction + "(?![\\d]|[,.]?[OoIl|])");
 }
 /** Does the passage print this amount? A money amount must appear as that
  * number; a fraction of the sum insured as its percentage; a fixed amount

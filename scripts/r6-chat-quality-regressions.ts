@@ -54,6 +54,8 @@ async function main() {
 
   const F = await import("./r6/fixture");
   const h = await F.buildHousehold();
+  // Round 10: R10_SCALE grows the household to 10 people and 40 documents first (scripts/r10/scale.ts).
+  if (process.env.R10_SCALE) quietLog("scaled household: " + JSON.stringify(await (await import("./r10/scale")).scaleHousehold(h.db as never, F.ACCOUNT, F.PEOPLE)));
   quietLog(`household built in ${Date.now() - started} ms`);
   // Round 8: the same battery with the chaos model in place of the stand-in (scripts/r8-chaos-regressions.ts).
   if (process.env.R8_CHAOS_SEED) Object.assign(process.env, { NODE_ENV: "test", DEARPOLICY_DETERMINISTIC_MODEL: "chaos-" + process.env.R8_CHAOS_SEED });
@@ -91,9 +93,9 @@ async function main() {
   const send = async (account: string, member: string | null, scope: string | undefined, question: string, conv: { id?: string; rev?: number; personContextMessage?: string; personContextRecordedAt?: string }, personChoiceId?: string) => {
     process.env.DEV_ACCOUNT_ID = account;
     const t0 = Date.now();
-    const res = await POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+    const res = await (await import("./r10/meter")).meterTurn(question, () => POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ familyMemberId: member, scope: scope ?? (member ? "member" : "family"), question, conversationId: conv.id, conversationRevision: conv.rev, asynchronous: false, timeZone: "Asia/Singapore",
-        ...(personChoiceId ? { personChoiceId, personContextMessage: conv.personContextMessage, personContextRecordedAt: conv.personContextRecordedAt } : {}) }) }));
+        ...(personChoiceId ? { personChoiceId, personContextMessage: conv.personContextMessage, personContextRecordedAt: conv.personContextRecordedAt } : {}) }) })));
     const ms = Date.now() - t0;
     const data = await res.json();
     messages++;
@@ -132,8 +134,10 @@ async function main() {
 
   for (const c of battery()) {
     if (only && !c.name.includes(only)) continue;
-    if (c.before === "delete-travel") { await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [h.docs.travel]); gMain = await truth(); }
-    if (c.before === "restore-travel") { await h.db.query("UPDATE policies SET lifecycle_state='active' WHERE id=$1", [h.docs.travel]); gMain = await truth(); }
+    // Round 10 (R10_SCALE): the travel policy's clones on the added people go with it, so "no travel cover" stays the household's truth.
+    const travelIds = process.env.R10_SCALE ? (await h.db.query<{ id: string }>("SELECT id::text FROM policies WHERE account_id=$1 AND product_name=(SELECT product_name FROM policies WHERE id=$2)", [F.ACCOUNT, h.docs.travel])).rows.map((r) => r.id) : [h.docs.travel];
+    if (c.before === "delete-travel") { await h.db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=ANY($1::uuid[])", [travelIds]); gMain = await truth(); }
+    if (c.before === "restore-travel") { await h.db.query("UPDATE policies SET lifecycle_state='active' WHERE id=ANY($1::uuid[])", [travelIds]); gMain = await truth(); }
     const account = accountOf(c), member = memberOf(c.member);
     const conv: { id?: string; rev?: number } = {};
     let userText = "";

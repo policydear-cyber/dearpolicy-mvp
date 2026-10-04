@@ -92,9 +92,9 @@ async function main() {
   const turnsPer: number[] = [];
   const send = async (member: string, question: string, conv: { id?: string; rev?: number; personContextMessage?: string; personContextRecordedAt?: string }, personChoiceId?: string) => {
     process.env.DEV_ACCOUNT_ID = F.ACCOUNT;
-    const res = await POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+    const res = await (await import("./r10/meter")).meterTurn(question, () => POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ familyMemberId: member, scope: "member", question, conversationId: conv.id, conversationRevision: conv.rev, asynchronous: false, timeZone: "Asia/Singapore",
-        ...(personChoiceId ? { personChoiceId, personContextMessage: conv.personContextMessage, personContextRecordedAt: conv.personContextRecordedAt } : {}) }) }));
+        ...(personChoiceId ? { personChoiceId, personContextMessage: conv.personContextMessage, personContextRecordedAt: conv.personContextRecordedAt } : {}) }) })));
     const data = await res.json(); messages++;
     if (res.status === 200) { const a = data.answer as ChatAnswer; conv.id = a.conversationId ?? conv.id; conv.rev = a.conversationRevision ?? conv.rev; conv.personContextMessage = a.personContextMessage; conv.personContextRecordedAt = a.personContextRecordedAt; }
     return { status: res.status, data };

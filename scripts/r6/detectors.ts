@@ -237,6 +237,14 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
   const derived = premiumDerived(g.premiumFigures);
   const citedList = [...citedNumbers].filter((v) => v >= 10).slice(0, 200);
   const sumOfCited = (v: number) => { for (let i = 0; i < citedList.length; i++) for (let j = i; j < citedList.length; j++) if (round2(citedList[i] + citedList[j]) === v || round2(citedList[i] * citedList[j]) === v) return true; return false; };
+  // Round 10 (scale): the subset sums above use each distinct premium figure
+  // once (and stop at three terms past 13 figures), so a household where
+  // several people pay the same premiums has a total they cannot form. Such a
+  // total is checked as exactly the sum of the per-person yearly figures this
+  // same answer states -- each of which must itself be a checked premium
+  // figure, or the total is not accepted.
+  const firsts = g.premiumFigures.length ? fields.filter((f) => /^details\[/.test(f.where)).map((f) => moneyIn(f.text)[0]).filter((v): v is number => v != null) : [];
+  const statedTotal = firsts.length >= 2 && firsts.every((v) => derived.has(round2(v))) ? round2(firsts.reduce((n, v) => n + v, 0)) : null;
   for (const f of fields) {
     for (const v of moneyIn(f.text)) {
       if (v <= 0) { hit(v === 0 ? "zero amount" : "negative amount", f.where + ": " + f.text); continue; }
@@ -247,6 +255,7 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
       }
       const r = round2(v);
       if (userNumbers.has(r) || derived.has(r)) continue;
+      if (statedTotal != null && f.where === "summary" && (r === statedTotal || r === round2(statedTotal / 12))) continue;
       if (/quote/.test(f.where)) continue;
       if (!householdNumbers.has(r) && !sumOfCited(r)) { hit("amount not in any document", f.where + ": S$" + v + " — " + f.text); continue; }
       if (cited.size && !citedNumbers.has(r) && !sumOfCited(r)) hit("amount not in the cited source", f.where + ": S$" + v + " — " + f.text);

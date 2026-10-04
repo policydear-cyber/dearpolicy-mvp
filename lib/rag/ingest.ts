@@ -1,13 +1,14 @@
 import { POLICY_PROCESSING_FAILED_MESSAGE, recordProcessingFailure } from "@/lib/diagnostics/processing-failures";
-import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
-import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears } from "@/lib/documents/evidence";
+import { NON_COVER_ROLES, ROLE_WORDS, bundleSegments, mendOcrRows, printedOrder, printsPolicyNumber, settleOcrFigures, type BundleSegment } from "@/lib/documents/messy";
+import { DOCUMENT_READ_IN_PART_MESSAGE, DOCUMENT_READING_FAILED_MESSAGE, INCOMPLETE_PDF_MESSAGE, UNREADABLE_PHOTO_MESSAGE, DOCUMENT_READING_RETRY_MESSAGE, DOCUMENT_READING_SERVICE_MESSAGE, TemporaryProcessingError, isQuotaOrSpendStop, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_DOCUMENT_MESSAGE, USER_ACTIONABLE_PROCESSING_ERRORS, UserActionableProcessingError, unreadablePagesNote } from "@/lib/documents/processing-errors";
+import { documentDateFrom, ensureEvidenceSchema, evidenceColumnsReady, policyNumberAppears, printedDateAppears, printedDates } from "@/lib/documents/evidence";
 import { annotateCoverageEvidence, annotateLedgerEvidence, markConflicts } from "@/lib/documents/evidence-store";
 import { classifyPipelineError } from "@/lib/jobs/pipeline-worker";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import { readPolicyFile } from "@/lib/storage";
-import { extractPdfPages } from "@/lib/documents/pdf";
+import { readPolicyFile, savePolicyFile } from "@/lib/storage";
+import { extractPdfPages, type PdfPage } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
@@ -50,6 +51,9 @@ export type ProcessPolicyArgs = {
    * (which never schedules another). */
   jobType?: string;
   deferredRetry?: boolean;
+  /** Round 10: this document is one policy split out of a file that held
+   * several (the file's own id); a part is never split again. */
+  bundleOf?: string;
 };
 
 /** Round 5: the MediSave and cash portions a renewal notice or receipt
@@ -180,6 +184,108 @@ export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: n
   return crossCheckPrintedFacts(checked, pages);
 }
 
+/** Round 10: what the household should know about how this upload was read, in a sentence or two. */
+function readyNote(extraction: PolicyExtraction, pages: PdfPage[], notes: string[]): string | null {
+  const role = extraction.documentRole ?? "";
+  const out: string[] = [];
+  if (NON_COVER_ROLES.has(role)) out.push(role === "personal_notes" && pages.some((p) => p.legibility === "poor")
+    ? "This is handwriting: only parts of it could be read, so it is kept as your own notes and nothing in it is used as a policy fact."
+    : "This is " + ROLE_WORDS[role as keyof typeof ROLE_WORDS] + ", not a policy, so nothing in it is counted as cover.");
+  const bundle = notes.find((n) => n.startsWith("This file holds"));
+  if (bundle) out.push(bundle);
+  const turned = pages.filter((p) => p.turnedBy);
+  if (turned.length) out.push((turned.length === 1 ? "Page " + turned[0].pageNumber + " was" : "Pages " + turned.map((p) => p.pageNumber).join(", ") + " were") + " sideways or upside down; DearPolicy turned " + (turned.length === 1 ? "it" : "them") + " upright to read " + (turned.length === 1 ? "it" : "them") + ".");
+  if (notes.some((n) => n.startsWith("The pages of this file are out of order"))) out.push("The pages are out of order in the file; DearPolicy read them in their printed order.");
+  const unclear = notes.filter((n) => /can’t be read with certainty/.test(n)).map((n) => n.match(/“([^”]+)”/)?.[1]).filter(Boolean);
+  if (unclear.length) out.push("Some figures on the scan can’t be read with certainty (" + unclear.join(", ") + "), so they are not used; check them against the paper copy.");
+  return out.length ? out.join(" ") : null;
+}
+
+/** Round 10: each further policy in a file that holds several is saved as its
+ * own document (those pages only) and read on its own, as if uploaded
+ * separately. Reading the file again reuses the parts already made. Returns
+ * one phrase per part for the file's own note. */
+async function readBundleParts(args: ProcessPolicyArgs, bytes: Uint8Array, segments: BundleSegment[]): Promise<string[]> {
+  const { PDFDocument } = await import("pdf-lib");
+  const parent = (await query<{ original_filename: string | null; family_member_id: string; quarantine_status: string | null; scan_provider: string | null; scanned_at: string | null }>(
+    `SELECT original_filename,family_member_id::text,quarantine_status,scan_provider,scanned_at::text FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [args.policyId, args.accountId])).rows[0];
+  if (!parent) return [];
+  const source = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+  const base = String(parent.original_filename ?? "Document").replace(/\.pdf$/i, "");
+  const phrases: string[] = [];
+  for (const [index, segment] of segments.entries()) {
+    if (index === 0) continue;
+    const part = await PDFDocument.create({ updateMetadata: false });
+    const copied = await part.copyPages(source, Array.from({ length: segment.to - segment.from + 1 }, (_, k) => segment.from - 1 + k));
+    copied.forEach((page) => part.addPage(page));
+    const partBytes = await part.save();
+    const fileHash = createHash("sha256").update(partBytes).digest("hex");
+    const filename = `${base} — part ${index + 1} of ${segments.length} (pages ${segment.from}–${segment.to}).pdf`;
+    const existing = (await query<{ id: string; storage_key: string }>(`SELECT id::text,storage_key FROM policies WHERE account_id=$1 AND file_hash=$2 AND ${activePredicate()} LIMIT 1`, [args.accountId, fileHash])).rows[0];
+    let partId = existing?.id, storageKey = existing?.storage_key;
+    if (!partId || !storageKey) {
+      partId = randomUUID();
+      storageKey = await savePolicyFile({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, filename, bytes: partBytes });
+      // The part is pages of a file that already cleared the upload scan.
+      await query(`INSERT INTO policies(id,account_id,family_member_id,original_filename,storage_key,file_hash,processing_status,processing_stage,processing_progress,processing_message,quarantine_status,scan_provider,scanned_at)
+        VALUES($1,$2,$3,$4,$5,$6,'queued','queued',1,$7,$8,$9,$10)`,
+        [partId, args.accountId, parent.family_member_id, filename, storageKey, fileHash, "Read from " + (parent.original_filename ?? "a file that held several policies") + ".", parent.quarantine_status, parent.scan_provider, parent.scanned_at]);
+    }
+    try {
+      await processPolicy({ accountId: args.accountId, familyMemberId: parent.family_member_id, policyId: partId, storageKey, linkUploadMember: args.linkUploadMember, bundleOf: args.policyId, jobHeartbeat: args.jobHeartbeat, attempt: args.attempt, jobType: args.jobType });
+    } catch { /* the part records its own outcome; the file goes on */ }
+    phrases.push(`pages ${segment.from}–${segment.to} (${segment.title.replace(/\s+/g, " ").trim()}) became “${filename}”`);
+  }
+  return phrases;
+}
+
+const SCHEDULE_ROLES = ["personal_schedule", "certificate", "endorsement"];
+/** Round 10: another current schedule in this household that prints the same
+ * policy number (allowing a scan's O/0 and l/1) is the same policy. Printed for
+ * the same period, it is the same schedule uploaded twice: the copy read from a
+ * photo or scan gives way to the one with a text layer (else the later upload
+ * gives way) and is kept as a marked copy. For an earlier period, the earlier
+ * schedule gives way to the newer one. Never across households. */
+async function settleSameSchedule(args: ProcessPolicyArgs, extraction: PolicyExtraction, pages: PdfPage[]) {
+  if (!SCHEDULE_ROLES.includes(extraction.documentRole ?? "")) return;
+  const mine = pages.map((p) => p.text).join("\n");
+  const myNative = pages.every((p) => (p.extractionMethod ?? "native") === "native");
+  const others = (await query<{ id: string; original_filename: string | null; policy_number: string | null; effective_date: string | null; renewal_or_expiry_date: string | null; native: boolean; text: string }>(
+    `SELECT p.id::text,p.original_filename,p.policy_number,p.effective_date::text,p.renewal_or_expiry_date::text,
+            bool_and(coalesce(to_jsonb(pp)->>'extraction_method','native')='native') AS native,string_agg(pp.text,E'\n' ORDER BY pp.page_number) AS text
+       FROM policies p JOIN policy_pages pp ON pp.policy_id=p.id AND pp.account_id=p.account_id
+      WHERE p.account_id=$1 AND p.id<>$2 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND p.processing_status='ready' AND p.document_role=ANY($3::text[])
+      GROUP BY p.id,p.original_filename,p.policy_number,p.effective_date,p.renewal_or_expiry_date`, [args.accountId, args.policyId, SCHEDULE_ROLES])).rows;
+  const myFile = (await query<{ f: string | null }>(`SELECT original_filename f FROM policies WHERE id=$1 AND account_id=$2 AND ${activePredicate()}`, [args.policyId, args.accountId])).rows[0]?.f ?? "this upload";
+  const myDates = new Set(printedDates(mine));
+  for (const other of others) {
+    const same = (extraction.policyNumber && printsPolicyNumber(other.text, extraction.policyNumber)) || (other.policy_number && printsPolicyNumber(mine, other.policy_number));
+    if (!same) continue;
+    const myEnd = extraction.renewalOrExpiryDate || null, theirEnd = other.renewal_or_expiry_date;
+    const shared = printedDates(other.text).filter((d) => myDates.has(d)).length;
+    const samePeriod = myEnd && theirEnd ? myEnd === theirEnd : shared >= 2;
+    let older: string, newer: string, olderFile: string, newerFile: string, note: string;
+    if (samePeriod) {
+      const keepMine = myNative && !other.native;
+      [older, newer, olderFile, newerFile] = keepMine ? [other.id, args.policyId, other.original_filename ?? "an earlier upload", myFile] : [args.policyId, other.id, myFile, other.original_filename ?? "an earlier upload"];
+      note = `Same schedule as “${newerFile}”, uploaded again${keepMine || !myNative ? " as a photo or scan" : ""}; kept as a copy, and answers use “${newerFile}”.`;
+    } else if (myEnd && theirEnd) {
+      const mineNewer = myEnd > theirEnd;
+      [older, newer, olderFile, newerFile] = mineNewer ? [other.id, args.policyId, other.original_filename ?? "an earlier upload", myFile] : [args.policyId, other.id, myFile, other.original_filename ?? "an earlier upload"];
+      const olderEnd = mineNewer ? theirEnd : myEnd;
+      note = `An earlier schedule of the same policy (ending ${new Date(olderEnd + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}), replaced by the newer schedule “${newerFile}”; kept for reference.`;
+    } else continue;
+    const { supersedePolicyDocument } = await import("@/lib/policies/quarantine/store");
+    await supersedePolicyDocument({ accountId: args.accountId, oldPolicyId: older, newPolicyId: newer });
+    await query(`UPDATE policies SET processing_message=concat_ws(' ', nullif(processing_message,''), $3::text),
+        extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
+      WHERE id=$1 AND account_id=$2`, [older, args.accountId, note]);
+    await query(`UPDATE policies SET extracted_json=jsonb_set(coalesce(extracted_json,'{}'::jsonb),'{documentNotes}',coalesce(extracted_json->'documentNotes','[]'::jsonb)||to_jsonb($3::text)),updated_at=now()
+      WHERE id=$1 AND account_id=$2`, [newer, args.accountId, `“${olderFile}” is ${samePeriod ? "a copy of this schedule" : "an earlier schedule of this policy"}.`]);
+    if (older === args.policyId) return;
+  }
+}
+
 async function progress(args: ProcessPolicyArgs, stage: string, percent: number, message: string, status?: string) {
   await query(
     `UPDATE policies
@@ -248,7 +354,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       console.warn(`Stored file is not in a supported format for policy ${args.policyId}. ${ACCEPTED_FORMATS_MESSAGE}`);
       throw new UserActionableProcessingError(UNOPENABLE_DOCUMENT_MESSAGE);
     }
-    let pages;
+    let pages: PdfPage[];
     // The bytes the OCR step reads pages from: the original PDF, the PDF
     // built from the uploaded image, or null for a .docx (pure text; there
     // is nothing to OCR).
@@ -261,6 +367,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       try { return await work(); } catch (error) {
         if (error instanceof UserActionableProcessingError) throw error;
         await recordProcessingFailure({ accountId: args.accountId, resourceType: "policy_document", resourceId: args.policyId, failureCode: "DOCUMENT_UNOPENABLE", error }).catch(() => undefined);
+        // Round 10: a PDF that stops part-way (no end-of-file marker) was cut off
+        // while downloading or copying: say so, and that a fresh download fixes it.
+        if (sniffed.format === "pdf" && !Buffer.from(fileBytes.subarray(Math.max(0, fileBytes.length - 2048))).toString("latin1").includes("%%EOF")) throw new UserActionableProcessingError(INCOMPLETE_PDF_MESSAGE);
         throw new UserActionableProcessingError(UNOPENABLE_DOCUMENT_MESSAGE);
       }
     };
@@ -318,9 +427,41 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       }
     }
 
+    // Round 10: a photo the reader could not make out at all is explained as a
+    // photo, with how to take it again.
+    if (sniffed.format !== "pdf" && sniffed.format !== "docx" && pages.length && pages.every((p) => p.unreadable || !p.text.trim())) {
+      console.warn(`Policy ${args.policyId}: the photo could not be read.`);
+      throw new UserActionableProcessingError(UNREADABLE_PHOTO_MESSAGE);
+    }
     if (pages.reduce((sum, p) => sum + p.text.length, 0) < 100) {
       console.warn(`Policy ${args.policyId}: not enough readable text after the text layer and OCR.`);
       throw new UserActionableProcessingError(UNREADABLE_DOCUMENT_MESSAGE);
+    }
+    // Round 10: what real uploads bring -- several policies in one file, pages
+    // out of order, pages photographed sideways, figures a scan prints unclearly,
+    // handwriting. Each is handled here, once, and told to the household.
+    const messyNotes: string[] = [];
+    if (!args.bundleOf && ocrSourceBytes && sniffed.format === "pdf") {
+      const segments = bundleSegments(pages);
+      if (segments) {
+        const parts = await readBundleParts(args, ocrSourceBytes, segments);
+        const first = segments[0];
+        pages = pages.filter((p) => p.pageNumber >= first.from && p.pageNumber <= first.to);
+        messyNotes.push(`This file holds ${segments.length} separate policies, so DearPolicy read each one on its own: pages ${first.from}–${first.to} are read here, and ${parts.join("; ")}.`);
+      }
+    }
+    for (const page of pages) if (page.turnedBy) messyNotes.push(`Page ${page.pageNumber} was ${page.turnedBy === 180 ? "upside down" : "sideways"} in the photo or scan; DearPolicy turned it upright to read it.`);
+    if (pages.some((p) => p.legibility === "poor")) messyNotes.push("This is handwriting or hard to read: only parts of it could be read with confidence, so nothing in it is used as a policy fact.");
+    // A transcribed table's broken columns are joined back into rows before anything reads it.
+    pages = pages.map((p) => (p.extractionMethod === "ocr" ? { ...p, text: mendOcrRows(p.text) } : p));
+    const settled = settleOcrFigures(pages);
+    pages = settled.pages;
+    messyNotes.push(...settled.notes);
+    const order = printedOrder(pages);
+    if (order) {
+      const printed = pages.map((p) => order.indexOf(p.pageNumber) + 1);
+      messyNotes.push(`The pages of this file are out of order: its pages ${pages.map((p) => p.pageNumber).join(", ")} are printed pages ${printed.join(", ")}. DearPolicy read them in their printed order; page numbers here are the file's own.`);
+      pages = order.map((n) => pages.find((p) => p.pageNumber === n)!);
     }
     // Pages the reader could not transcribe even after its own retry: the
     // rest of the document is used, and the household is told which pages
@@ -384,6 +525,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // reading reports is re-found in the document's own pages (fact-check.ts);
     // what is not printed is not kept.
     const extraction = verifiedExtraction(raw, pages);
+    if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
+    const noCover = NON_COVER_ROLES.has(extraction.documentRole ?? "");
     // The reading named people, and none of them is printed in the document:
     // nobody is linked by name. Like a reading that could not finish, the
     // document stays with the profile it was uploaded to, for review.
@@ -421,7 +564,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Clear generated data before rebuilding. Preserve explicit manual/upload links.
     await query(`DELETE FROM policy_members WHERE policy_id=$1 AND account_id=$2 AND source IN ('ai_name_match','scheme_reference_match','legacy_upload')`, [args.policyId, args.accountId]);
     const isPaymentDocument = ["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "");
-    if (args.linkUploadMember && (isPaymentDocument || readInPart || (namedNobodyPrinted && !linkedByPrintedName)) && !extraction.personalCoverageConfirmed) {
+    if (args.linkUploadMember && (isPaymentDocument || noCover || readInPart || (namedNobodyPrinted && !linkedByPrintedName)) && !extraction.personalCoverageConfirmed) {
       await query(
         `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
          VALUES($1,$2,$3,'upload_hint',0.70) ON CONFLICT(policy_id,family_member_id) DO NOTHING`,
@@ -620,7 +763,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // A renewal notice, premium receipt or annual statement states what is
     // PAID ("Less: MediSave deduction", "Total cash payable"), not what the
     // plan pays: its lines are premium records (above), never benefits.
-    if (isPaymentDocument) {
+    // Round 10: nor do letters, claim decisions, bills, screenshots or notes.
+    if (isPaymentDocument || noCover) {
       const { replaceBenefitCatalog } = await import("@/lib/policies/benefit-catalog");
       await replaceBenefitCatalog(args.accountId, args.policyId, []).catch(() => undefined);
     } else try {
@@ -695,7 +839,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       // pages could not be read, what is unavailable -- not counts of
       // internal rules or tasks to confirm them (benefitSummary stays in
       // the progress history above for operators).
-      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : unreadableNote ? "Ready. " + unreadableNote : "Ready."],
+      [args.policyId, args.accountId, readInPart ? DOCUMENT_READ_IN_PART_MESSAGE : ["Ready.", unreadableNote, readyNote(extraction, pages, messyNotes)].filter(Boolean).join(" ")],
     );
     if (readInPart) {
       await query(
@@ -723,7 +867,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
       if (args.jobHeartbeat) await args.jobHeartbeat().catch(() => undefined);
       const { readDocumentIntoLedger } = await import("@/lib/ledger/extract");
       // A payment document states premiums, not cover: nothing to read into the ledger.
-      if (!isPaymentDocument) await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
+      if (!isPaymentDocument && !noCover) await readDocumentIntoLedger({ accountId: args.accountId, policyId: args.policyId }).catch((error) => {
         console.warn("Ledger reading failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
       });
       const { seedLedger } = await import("@/lib/ledger/store");
@@ -735,6 +879,11 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     } catch (error) {
       console.warn("Coverage ledger update failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
     }
+    // Round 10: the same schedule uploaded twice (a photo and a PDF), or last
+    // year's schedule of the same policy, is not a second policy.
+    await settleSameSchedule(args, extraction, pages).catch((error) => {
+      console.warn("Duplicate check failed for policy " + args.policyId + ":", error instanceof Error ? error.message : error);
+    });
     // Checkpoint 14i: "Policy ingest/extraction" was named as a required
     // telemetry call site (scripts/launch-check.ts's privacy_safe_
     // observability capability) -- processPolicy() is the SINGLE entry

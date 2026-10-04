@@ -153,7 +153,7 @@ function mergeTableBands(bands:{left:number;right:number}[],items:TextItem[]){
     // label. Two columns of prose have long lines.
     const shortCells=rightLines.length>0&&rightLines.every(line=>line.text.length<=32);
     let merged=false;
-    if(valueLines.length>=1&&(valueLines.length>=2&&valueLines.length/rightLines.length>=0.6||shortCells)){
+    if((valueLines.length>=1||shortCells&&rightLines.length>=2)&&(valueLines.length>=2&&valueLines.length/rightLines.length>=0.6||shortCells)){
       for(let j=i-1;j>=0;j--){
         const left=baselines(out[j]);
         const beside=(line:{y:number})=>left.has(line.y)||left.has(line.y-4)||left.has(line.y+4);
@@ -163,9 +163,20 @@ function mergeTableBands(bands:{left:number;right:number}[],items:TextItem[]){
         // footer) are not cells of the table.
         const ys=[...left.keys()],top=Math.max(...ys)+4,bottom=Math.min(...ys)-4;
         const within=rightLines.filter(line=>line.y<=top&&line.y>=bottom);
+        // Round 10: a further column of a table whose first columns are already
+        // read as one ("Maximum" / "30 days per admission" / "-") prints no
+        // amounts, but every one of its short cells sits beside a row of that
+        // table (a line of two or more cells). Read apart, those cells landed at
+        // the bottom of the page, cut off from their rows.
+        const tableRowBeside=(line:{y:number})=>[line.y,line.y-4,line.y+4].some(y=>{const row=left.get(y);return !!row&&lineFrom(row).cells.length>=2;});
         const aligned=valueLines.length>=2&&valueLines.length/rightLines.length>=0.6
           ?valueLines.filter(beside).length/valueLines.length>=0.8
-          :within.length>0&&within.some(line=>isValueCell(line.text))&&within.every(beside);
+          :within.length>0&&within.some(line=>isValueCell(line.text))&&within.every(beside)
+            ||(shortCells&&within.length>=2&&within.length===rightLines.length&&within.every(tableRowBeside))
+            // ...or a column of bare figures and dashes ("Qty" 6, 1, -; "Amount (S$)" 4,830.00), each
+            // beside a label: an itemised bill or statement whose amounts print no currency of their own.
+            ||(shortCells&&within.length>=3&&within.length===rightLines.length&&within.every(beside)
+              &&within.filter(line=>/^(?:[\d][\d,]*(?:\.\d+)?%?|[-–—])$/.test(line.text.trim())).length>=Math.max(2,Math.ceil((within.length-1)*0.75)));
         if(aligned){out.splice(j,i-j+1,{left:out[j].left,right:out[i].right});i=j+1;merged=true;break;}
       }
     }
@@ -368,7 +379,8 @@ function tableRows(lines:PageLine[],table:TableShape):BenefitRow[]{
     if(NOT_A_BENEFIT_LABEL.some(pattern=>pattern.test(label)))continue;
     for(const col of table.valueCols){
       const value=(cells[col]??"").replace(/\s+/g," ").trim();
-      if(!value)continue;
+      // Round 10: a dash is how a table prints an empty cell, never a value.
+      if(!value||/^[-–—]$/.test(value))continue;
       rows.push({label,value,line:lines[index].text,index,
         tier:table.valueCols.length>1?(table.header[col]??"").replace(/\s+/g," ").trim()||null:null,fromTable:true});
     }

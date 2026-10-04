@@ -321,6 +321,9 @@ export async function markConflicts(accountId: string, policyId: string) {
     if (b.formula_kind !== "fixed" || b.formula_value == null) continue;
     // A tier's column is one person class's amount, not the cover itself.
     if (b.tier || (b.row_kind && b.row_kind !== "benefit")) continue;
+    // Round 10: a part of the cover ("Accidental medical expenses (per accident)", "Fracture") has its own
+    // smaller limit under an accident plan's S$50,000; only a row naming the cover itself is compared.
+    if (/\b(?:medical|expenses?|fractures?|cash|hospital\w*|burns?|dental|physio\w*|chinese|tcm|per day|daily|reimburs\w*|transport|funeral|ambulance|per accident)\b/i.test(b.benefit_name)) continue;
     const cover = coverIndex.get(b.policy_id + "|" + normalizeCoverageCategory(b.benefit_name));
     if (!cover || cover.amount == null) continue;
     const same = Number(cover.amount) === Number(b.formula_value) && (cover.currency ?? "") === (b.currency ?? "");

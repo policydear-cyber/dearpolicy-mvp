@@ -183,9 +183,9 @@ export function syntheticExtractionFrom(text: string): unknown | null {
  * plumbing, with the real transcription quality owned by the production
  * reading model. Enabled under exactly the same triple guard as everything
  * else in this file. */
-export function deterministicHostedDocumentText(args: { system: string; user: string; pdfBase64: string }): {
+export async function deterministicHostedDocumentText(args: { system: string; user: string; pdfBase64: string }): Promise<{
   text: string; truncated: boolean; usage: { input: number; output: number }; resolved: { resolvedModel: string; providerRequestId: string | null; finishReason: string | null; region: string | null };
-} {
+}> {
   const runId = (process.env.E2E_RUN_ID ?? "").replace(/[^A-Za-z0-9]/g, "").slice(-12);
   const pageNumbers = (args.user.match(/in this order: ([0-9, ]+)/)?.[1] ?? "1")
     .split(",").map((n) => parseInt(n.trim(), 10)).filter((n) => Number.isInteger(n) && n > 0);
@@ -198,7 +198,11 @@ export function deterministicHostedDocumentText(args: { system: string; user: st
     "Section 1 - Critical Illness Benefit: We will pay 100% of the Sum Insured upon diagnosis of a covered critical illness.",
     "Section 2 - Waiting period: A waiting period of 90 days applies to the Critical Illness Benefit from the cover start date.",
   ].join("\n");
-  let content = JSON.stringify({ pages: (pageNumbers.length ? pageNumbers : [1]).map((n) => ({ pageNumber: n, text: pageText(n) })) });
+  const numbers = pageNumbers.length ? pageNumbers : [1];
+  // Round 10: an image a test registered gets ITS transcript, read the way a
+  // reader sees it -- only when the page is shown upright (see scriptedOcrPages).
+  const scripted = await scriptedOcrPages(args.pdfBase64, numbers).catch(() => null);
+  let content = JSON.stringify({ pages: numbers.map((n, i) => scripted?.[i] ?? { pageNumber: n, text: pageText(n) }) });
   const ingestSeed = ingestChaosModelSeed();
   if (ingestSeed != null) {
     const mode = ingestChaosOcrMode(ingestSeed, pageNumbers.join(","));
@@ -209,6 +213,55 @@ export function deterministicHostedDocumentText(args: { system: string; user: st
     usage: { input: Math.ceil(args.pdfBase64.length / 2000), output: Math.ceil(content.length / 4) },
     resolved: { resolvedModel: DETERMINISTIC_MODEL_ID, providerRequestId: `det-ocr-${pageNumbers.join("-") || "1"}`, finishReason: "stop", region: null },
   };
+}
+
+/** Round 10 (synthetic tests only): what a hosted reading model would
+ * transcribe from one exact scanned image -- registered by a test under the
+ * sha256 of the image's encoded stream (pageImageFingerprints), with the
+ * clockwise rotation of the content in that image and how legible it is.
+ * The stand-in never reads pixels: it serves the registered transcript only
+ * when the page, as sent, shows the content upright (the image's own
+ * rotation plus the page's /Rotate). A sideways or upside-down page comes
+ * back empty with the orientation the reader saw; an illegible page comes
+ * back empty; handwriting comes back partly read and marked poor. */
+export type SyntheticOcrScript = { text: string; rotation: number; quality: "good" | "poor" | "unreadable" };
+export const SYNTHETIC_OCR_REGISTRY = "__dpOcrTranscripts";
+function ocrRegistry(): Map<string, SyntheticOcrScript> | undefined {
+  return (globalThis as Record<string, unknown>)[SYNTHETIC_OCR_REGISTRY] as Map<string, SyntheticOcrScript> | undefined;
+}
+/** sha256 of each image stream drawn on each page, in page order. */
+export async function pageImageFingerprints(pdfBytes: Uint8Array): Promise<string[][]> {
+  const { PDFDocument, PDFName, PDFDict, PDFRawStream } = await import("pdf-lib");
+  const { createHash } = await import("node:crypto");
+  const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true, updateMetadata: false });
+  return doc.getPages().map((page) => {
+    const resources = page.node.Resources();
+    const xobjects = resources?.lookupMaybe(PDFName.of("XObject"), PDFDict);
+    const out: string[] = [];
+    for (const [, ref] of xobjects?.entries() ?? []) {
+      const stream = doc.context.lookup(ref);
+      if (stream instanceof PDFRawStream && String(stream.dict.get(PDFName.of("Subtype"))) === "/Image") out.push(createHash("sha256").update(stream.contents).digest("hex"));
+    }
+    return out;
+  });
+}
+async function scriptedOcrPages(pdfBase64: string, pageNumbers: number[]) {
+  const registry = ocrRegistry();
+  if (!registry?.size) return null;
+  const { PDFDocument } = await import("pdf-lib");
+  const bytes = Buffer.from(pdfBase64, "base64");
+  const fingerprints = await pageImageFingerprints(bytes);
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+  const pages = doc.getPages();
+  return fingerprints.map((hashes, i) => {
+    const script = hashes.map((h) => registry.get(h)).find(Boolean);
+    if (!script) return null;
+    const pageNumber = pageNumbers[i] ?? i + 1;
+    const turned = (((script.rotation + (pages[i]?.getRotation().angle ?? 0)) % 360) + 360) % 360;
+    if (script.quality === "unreadable") return { pageNumber, text: "", legibility: "unreadable" };
+    if (turned !== 0) return { pageNumber, text: "", orientation: turned === 180 ? "upside_down" : "sideways", rotation: turned };
+    return { pageNumber, text: script.text, orientation: "upright", legibility: script.quality };
+  });
 }
 
 /** Provider-shaped reply for one structured completion (through the chaos

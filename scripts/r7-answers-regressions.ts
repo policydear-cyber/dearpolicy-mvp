@@ -104,8 +104,8 @@ async function main() {
       let status = 0, data: { answer?: ChatAnswer; error?: string } = {};
       const hits: Hit[] = [];
       try {
-        const res = await POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ familyMemberId: member, scope: c.scope ?? (member ? "member" : "family"), question: t.say, conversationId: conv.id, conversationRevision: conv.rev, asynchronous: false, timeZone: "Asia/Singapore" }) }));
+        const res = await (await import("./r10/meter")).meterTurn(t.say, () => POST(new NextRequest("http://localhost/api/chat", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ familyMemberId: member, scope: c.scope ?? (member ? "member" : "family"), question: t.say, conversationId: conv.id, conversationRevision: conv.rev, asynchronous: false, timeZone: "Asia/Singapore" }) })));
         status = res.status; data = await res.json();
       } catch (e) { hits.push({ rule: "threw", text: (e instanceof Error ? e.stack ?? e.message : String(e)).slice(0, 400) }); }
       const ms = Date.now() - t0;

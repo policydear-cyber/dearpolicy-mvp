@@ -130,6 +130,8 @@
     "r9:ingest-chaos-test": "node --import tsx scripts/r9-ingest-chaos-regressions.ts",
     "r8:render-test": "node --import tsx scripts/r8-render-regressions.ts",
     "r9:redteam-test": "node --import tsx scripts/r9-redteam-regressions.ts",
+    "r10:messy-docs-test": "node --import tsx scripts/r10-messy-docs-regressions.ts",
+    "r10:perf-test": "node --import tsx scripts/r10-perf-regressions.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",

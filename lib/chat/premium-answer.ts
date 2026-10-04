@@ -37,22 +37,34 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 
 type Line = { item: PremiumItem; docId: string | null; docName: string | null; page: number | null; role: string | null; insurer?: string | null; policyType?: string | null };
 
-/** What the document behind a premium says about the policy now (lapsed, ended, in force). */
-async function pagesOf(accountId: string, docId: string) {
-  return (await query<{ page_number: number; text: string }>(`SELECT page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=$2 ORDER BY page_number`, [accountId, docId])).rows.map((r) => ({ page: r.page_number, text: r.text }));
+/** What the document behind a premium says about the policy now (lapsed, ended, in force).
+ * Round 10: one read of a document's pages and dates per answer -- a household
+ * total used to re-read the same pages for every premium line of every person. */
+type DocMemo = { pages: Map<string, Promise<{ page: number; text: string }[]>>; dates: Map<string, Promise<{ expiry: string | null; start: string | null }>> };
+const newDocMemo = (): DocMemo => ({ pages: new Map(), dates: new Map() });
+function pagesOf(accountId: string, docId: string, memo: DocMemo) {
+  let hit = memo.pages.get(docId);
+  if (!hit) { hit = query<{ page_number: number; text: string }>(`SELECT page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=$2 ORDER BY page_number`, [accountId, docId]).then((r) => r.rows.map((x) => ({ page: x.page_number, text: x.text }))); memo.pages.set(docId, hit); }
+  return hit;
 }
-async function statusFor(accountId: string, docId: string): Promise<PrintedStatus> {
-  const expiry = (await query<{ d: string | null }>(`SELECT renewal_or_expiry_date::text AS d FROM policies WHERE account_id=$1 AND id::text=$2 AND ${activePredicate()}`, [accountId, docId])).rows[0]?.d ?? null;
-  return printedStatus(await pagesOf(accountId, docId), expiry, todayIso());
+function datesOf(accountId: string, docId: string, memo: DocMemo) {
+  let hit = memo.dates.get(docId);
+  if (!hit) { hit = query<{ e: string | null; s: string | null }>(`SELECT renewal_or_expiry_date::text AS e,effective_date::text AS s FROM policies WHERE account_id=$1 AND id::text=$2 AND ${activePredicate()}`, [accountId, docId]).then((r) => ({ expiry: r.rows[0]?.e ?? null, start: r.rows[0]?.s ?? null })); memo.dates.set(docId, hit); }
+  return hit;
 }
-async function periodFor(accountId: string, docId: string) {
-  const end = printedPeriodEnd(await pagesOf(accountId, docId));
-  const start = (await query<{ d: string | null }>(`SELECT effective_date::text AS d FROM policies WHERE account_id=$1 AND id::text=$2 AND ${activePredicate()}`, [accountId, docId])).rows[0]?.d ?? null;
+async function statusFor(accountId: string, docId: string, memo: DocMemo): Promise<PrintedStatus> {
+  const expiry = (await datesOf(accountId, docId, memo)).expiry;
+  return printedStatus(await pagesOf(accountId, docId, memo), expiry, todayIso());
+}
+async function periodFor(accountId: string, docId: string, memo: DocMemo) {
+  const end = printedPeriodEnd(await pagesOf(accountId, docId, memo));
+  const start = (await datesOf(accountId, docId, memo)).start;
   return end && start ? longDate(start) + " to " + end.printed : null;
 }
 
 export async function premiumAnswer(args: { accountId: string; people: ClaimPerson[]; question: string }) {
   const notCounted: string[] = [];
+  const memo = newDocMemo();
   // The pages that say why a premium is not counted are cited like any other.
   const uncounted: { docId: string; page: number; name: string; insurer: string | null; id: string }[] = [];
   const perPerson: { person: ClaimPerson; lines: Line[]; missing: string[]; annual: number; cash: number | null; medisave: number | null; currency: string }[] = [];
@@ -70,11 +82,11 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     for (const item of summary.items.filter((i) => byId.get(i.id)?.active)) {
       // A policy that has lapsed or ended costs nothing now; a one-off premium for a cover period is not a yearly one.
       const docId = byId.get(item.id)?.doc_id ?? null;
-      const status = docId ? await statusFor(args.accountId, docId) : null;
+      const status = docId ? await statusFor(args.accountId, docId, memo) : null;
       if (status && (status.state === "lapsed" || status.state === "ended")) { if (docId && status.page) uncounted.push({ docId, page: status.page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id }); notCounted.push((item.product_name ?? byId.get(item.id)?.product_name ?? "A policy") + " — it " + (status.state === "lapsed" ? "lapsed" : "ended") + " on " + status.printed); continue; }
       if (/single|one[- ]?off|for the period/i.test(item.frequency ?? "")) {
-        const span = docId ? await periodFor(args.accountId, docId) : null;
-        const docPages = docId ? await pagesOf(args.accountId, docId) : [];
+        const span = docId ? await periodFor(args.accountId, docId, memo) : null;
+        const docPages = docId ? await pagesOf(args.accountId, docId, memo) : [];
         const amountPage = docPages.find((p) => p.text.replace(/(\d),(?=\d{3}\b)/g, "$1").includes(String(item.amount)))?.page ?? byId.get(item.id)?.page ?? null;
         for (const page of new Set([amountPage, printedPeriodEnd(docPages)?.page ?? null]))
           if (docId && page) uncounted.push({ docId, page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id });
@@ -85,7 +97,7 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
       let page = src.page;
       // A premium read from the schedule carries no page: it is the page that prints it.
       if (src.doc_id) {
-        const pages = (await query<{ page_number: number; text: string }>(`SELECT page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=$2 ORDER BY page_number`, [args.accountId, src.doc_id])).rows;
+        const pages = (await pagesOf(args.accountId, src.doc_id, memo)).map((x) => ({ page_number: x.page, text: x.text }));
         const printedOn = (p: { text: string }) => { const digits = p.text.replace(/(\d),(?=\d{3}\b)/g, "$1"); return new RegExp("(?:^|[^\\d.])" + String(item.amount).replace(".", "\\.") + "(?:\\.0+)?(?![\\d])").test(digits); };
         if (!page || !pages.some((p) => p.page_number === page && printedOn(p))) page = pages.find(printedOn)?.page_number ?? page;
       }
@@ -138,7 +150,9 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const top = sorted[0];
     const label = (x: { p: (typeof perPerson)[number]; l: Line }) => (x.l.item.product_name ?? x.l.docName ?? "A policy") + (family ? " (" + personName(x.p.person) + ")" : "");
     for (const x of sorted) { details.push((family ? personName(x.p.person) + " · " : "") + itemText(x.l)); cite(x.l); }
-    summary = "Of the premiums printed in " + (family ? "your household’s" : isSelf(args.people[0]) ? "your" : personName(args.people[0]) + "’s") + " documents, the " + (most ? "highest" : "lowest") + " is " + label(top) + " at " + money(top.l.item.annual, top.l.item.currency) + " a year.";
+    // Round 10: none of the plans asked about prints a premium (or none is theirs): said, never a crash.
+    summary = !top ? "None of the plans you asked about has a premium printed in " + (family ? "your household’s" : isSelf(args.people[0]) ? "your" : personName(args.people[0]) + "’s") + " documents, so they can’t be compared."
+      : "Of the premiums printed in " + (family ? "your household’s" : isSelf(args.people[0]) ? "your" : personName(args.people[0]) + "’s") + " documents, the " + (most ? "highest" : "lowest") + " is " + label(top) + " at " + money(top.l.item.annual, top.l.item.currency) + " a year.";
     if (notCounted.length) details.push("Not compared: " + notCounted.join("; ") + ".");
     return { summary, details, citations, handled: true };
   }

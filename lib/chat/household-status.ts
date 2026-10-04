@@ -8,11 +8,13 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { prettifyFilename, referenceRoles } from "@/lib/policies/inventory";
-import { PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE } from "@/lib/documents/processing-errors";
+import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
 import type { ClaimPerson } from "@/lib/claims/person";
 
 export type PersonDocument = { id: string; name: string; filename: string; role: string | null; policyType: string | null; confirmed: boolean; tier: string | null;
-  status: "ready" | "processing" | "password" | "unreadable"; effectiveDate: string | null; renewalOrExpiryDate: string | null };
+  status: "ready" | "processing" | "password" | "unreadable"; effectiveDate: string | null; renewalOrExpiryDate: string | null;
+  /** Round 10: why an unreadable upload could not be read, for the advice that fits it. */
+  reason?: "photo" | "incomplete" | "unopenable" | "scan" };
 
 export async function documentsByPerson(accountId: string, people: ClaimPerson[]): Promise<Map<string, PersonDocument[]>> {
   const out = new Map<string, PersonDocument[]>(people.map((p) => [p.id, []]));
@@ -28,8 +30,10 @@ export async function documentsByPerson(accountId: string, people: ClaimPerson[]
     const status: PersonDocument["status"] = row.processing_status === "ready" ? "ready"
       : row.processing_status === "failed" ? ([PDF_PASSWORD_REQUIRED_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE].includes(row.processing_error ?? "") || /password/i.test(row.processing_error ?? "") ? "password" : "unreadable")
       : "processing";
+    const error = row.processing_error ?? "";
+    const reason = status !== "unreadable" ? undefined : error === UNREADABLE_PHOTO_MESSAGE ? "photo" as const : error === INCOMPLETE_PDF_MESSAGE ? "incomplete" as const : error === UNOPENABLE_DOCUMENT_MESSAGE ? "unopenable" as const : "scan" as const;
     out.get(row.family_member_id)?.push({ id: row.id, name: row.product_name ?? prettifyFilename(row.original_filename), filename: row.original_filename, role: row.document_role,
-      policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date });
+      policyType: row.policy_type, confirmed: row.personal_coverage_confirmed, tier: row.tier, status, effectiveDate: row.effective_date, renewalOrExpiryDate: row.renewal_or_expiry_date, ...(reason ? { reason } : {}) });
   }
   return out;
 }
@@ -42,13 +46,28 @@ export function possessive(p: ClaimPerson) { return isSelf(p) ? "your" : personN
 
 export function isGroupGuide(d: Pick<PersonDocument, "role" | "confirmed">) { return !d.confirmed && referenceRoles.has(d.role ?? ""); }
 
-/** One sentence per document this person has that DearPolicy could not use. */
-export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[]): string[] {
+/** One sentence per document this person has that DearPolicy could not use.
+ * Round 10: with `said` (shared across the people of one household answer),
+ * what to do about it is said once, not once per person -- a household where
+ * several people each have a locked document gets the instruction once. */
+export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[], said?: Set<string>): string[] {
   const lines: string[] = [];
+  const once = (fix: string) => { if (said?.has(fix)) return ""; said?.add(fix); return " " + fix; };
+  // Two people's documents can share a file name: the second is said as theirs.
+  const whose = (sentence: string) => {
+    if (!said) return sentence;
+    const own = said.has(sentence) ? possessive(p).replace(/^./, (c) => c.toUpperCase()) + " " + sentence : sentence;
+    said.add(sentence); return own;
+  };
   for (const d of docs) {
-    if (d.status === "password") lines.push("“" + d.filename + "” couldn’t be read because it is password-protected. Upload it again with its password and DearPolicy will read it automatically.");
-    else if (d.status === "unreadable") lines.push("“" + d.filename + "” couldn’t be read. The original PDF or a clearer scan would let DearPolicy read it.");
-    else if (d.status === "processing") lines.push("“" + d.filename + "” is still being read. Ask again in a few minutes.");
+    if (d.status === "password") lines.push(whose("“" + d.filename + "” couldn’t be read because it is password-protected.") + once("Upload it again with its password and DearPolicy will read it automatically."));
+    // Round 10: the advice that fits why it could not be read.
+    else if (d.status === "unreadable" && d.reason === "photo") lines.push(whose("“" + d.filename + "” is a photo too blurred, dark or faint to read.") + once("Take it again — page flat, good light, no shadow, phone steady and straight above it, the whole page in the frame — or upload the insurer’s PDF."));
+    else if (d.status === "unreadable" && d.reason === "incomplete") lines.push(whose("“" + d.filename + "” is incomplete — the file stops part-way, as when a download is cut off — so it couldn’t be opened.") + once("Download it again from the insurer’s email or website and upload the new copy."));
+    else if (d.status === "unreadable" && d.reason === "unopenable") lines.push(whose("“" + d.filename + "” couldn’t be opened — the file may be damaged.") + once("Upload the original file again, or ask the insurer for a fresh copy."));
+    else if (d.status === "unreadable") lines.push(whose("“" + d.filename + "” couldn’t be read.") + once("The original PDF or a clearer scan would let DearPolicy read it."));
+    else if (d.status === "ready" && d.role === "app_screenshot") lines.push(whose("“" + d.filename + "” is a screenshot of the insurer’s app" + (d.name && d.name !== d.filename ? " showing " + d.name : "") + " — a summary from the app, not a policy document, so its figures are not treated as confirmed cover."));
+    else if (d.status === "processing") lines.push(whose("“" + d.filename + "” is still being read.") + once("Ask again in a few minutes."));
   }
   return lines;
 }
@@ -57,13 +76,19 @@ export function unusableDocumentLines(p: ClaimPerson, docs: PersonDocument[]): s
 export function noPoliciesSentence(p: ClaimPerson, docs: PersonDocument[]): string {
   const unusable = docs.filter((d) => d.status !== "ready");
   const who = isSelf(p) ? "you" : personName(p);
+  // Round 10: an app screenshot is on file, but it is not a policy document.
+  const shots = docs.filter((d) => d.status === "ready" && d.role === "app_screenshot");
+  if (shots.length && !unusable.length) return "No policy document is on file for " + who + " yet. " + unusableDocumentLines(p, shots).join(" ") + " Upload the policy schedule itself to confirm the cover.";
   if (unusable.length) {
     const first = unusable[0];
-    const why = first.status === "password" ? "it is password-protected" : first.status === "processing" ? "it is still being read" : "DearPolicy couldn’t find readable text in it";
-    const fix = first.status === "password" ? " Upload it again with its password and ask again." : first.status === "processing" ? " Ask again in a few minutes." : " Upload the original PDF or a clearer scan and ask again.";
+    const why = first.status === "password" ? "it is password-protected" : first.status === "processing" ? "it is still being read" : first.reason === "photo" ? "the photo is too blurred or dark to read"
+      : first.reason === "incomplete" ? "the file is incomplete (cut off part-way)" : first.reason === "unopenable" ? "the file couldn’t be opened" : "DearPolicy couldn’t find readable text in it";
+    const fix = first.status === "password" ? " Upload it again with its password and ask again." : first.status === "processing" ? " Ask again in a few minutes." : first.reason === "photo" ? " Take the photo again — flat, in good light, the whole page in the frame — or upload the insurer’s PDF."
+      : first.reason === "incomplete" ? " Download it again from the insurer and upload the new copy." : " Upload the original PDF or a clearer scan and ask again.";
     const whose = isSelf(p) ? "you" : who;
     return (unusable.length === 1 ? "The only document on file for " + whose + ", “" + first.filename + "”, couldn’t be read yet because " + why + "."
-      : "None of the " + unusable.length + " documents on file for " + whose + " could be read yet — for example “" + first.filename + "”, because " + why + ".") + fix;
+      : "None of the " + unusable.length + " documents on file for " + whose + " could be read yet — for example “" + first.filename + "”, because " + why + ".") + fix
+      + (shots.length ? " " + unusableDocumentLines(p, shots).join(" ") : "");
   }
   return "There are no policies on file for " + who + " yet. Upload a policy schedule or certificate for " + (isSelf(p) ? "yourself" : who) + " on the Documents page and ask again.";
 }

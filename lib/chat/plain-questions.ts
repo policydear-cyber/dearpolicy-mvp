@@ -21,6 +21,7 @@
  *   hypotheticalFollowUp()  "what documents would I need if it happens?" after
  *                      a what-if or a planned operation: a direct answer.
  */
+import { NON_COVER_ROLES } from "@/lib/documents/messy";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 import type { ChatCitation } from "@/types";
@@ -211,9 +212,9 @@ export async function pagesFor(accountId: string, personIds: string[]): Promise<
   try {
     return (await query<{ policy_id: string; product_name: string | null; insurer: string | null; policy_type: string | null; page_number: number; text: string }>(
       `SELECT pp.policy_id::text,p.product_name,p.insurer,p.policy_type,pp.page_number,pp.text FROM policy_pages pp JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id
-        WHERE pp.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready'
+        WHERE pp.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' AND p.superseded_at IS NULL AND NOT (coalesce(p.document_role,'')=ANY($3::text[]))
           AND (p.family_member_id::text=ANY($2::text[]) OR EXISTS (SELECT 1 FROM policy_members pm WHERE pm.policy_id=p.id AND pm.family_member_id::text=ANY($2::text[])))
-        ORDER BY p.product_name,pp.page_number`, [accountId, personIds])).rows
+        ORDER BY p.product_name,pp.page_number`, [accountId, personIds, [...NON_COVER_ROLES]])).rows
       .map((r) => ({ policyId: r.policy_id, product: r.product_name ?? "Your policy", insurer: r.insurer, policyType: r.policy_type, page: r.page_number, text: r.text }));
   } catch { return []; }
 }

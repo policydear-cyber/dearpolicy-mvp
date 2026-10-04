@@ -21,6 +21,12 @@ export type PdfPage = {
   /** OCR was needed and the reader returned nothing for this page even after
    * a retry: anything printed only here is not available. */
   unreadable?: boolean;
+  /** Round 10: the reader said the page is hard to read (handwriting, a
+   * smudged photo): only parts of it were transcribed with confidence. */
+  legibility?: "poor";
+  /** Round 10: the page was photographed or scanned sideways or upside down
+   * and was read after turning it by this many degrees (clockwise). */
+  turnedBy?: number;
   /** Lines and cells recovered from the page geometry. A benefit schedule is a
    * table, and this is what makes it readable as one. */
   lines?: PageLine[];

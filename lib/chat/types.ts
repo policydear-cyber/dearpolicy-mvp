@@ -64,6 +64,8 @@ export type ConversationState = {
   /** Round 9: others the household said were hurt in the same event as this claim's person. A claim goes one
    * person at a time: they are acknowledged when named, and the next one is offered when this claim is done. */
   nextInEvent?: { lead: string; people: { id: string; name: string }[]; told?: boolean };
+  /** Round 10: the last answer was about uploads (lib/chat/document-questions.ts): which kind, and which documents, so "and the photo?" follows on. */
+  documents?: { kind: "unreadable" | "uploads" | "correspondence" | "who"; role?: string; ids: string[] };
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

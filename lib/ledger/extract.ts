@@ -21,7 +21,7 @@ import { ensureLedgerSchema } from "@/lib/ledger/store";
 import { normalizeCurrencyCode } from "@/lib/format/currency";
 import { statedCurrencyCode } from "@/lib/policies/benefit-rows";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
-import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,readingModelIdentity } from "@/lib/documents/evidence";
+import { UNTRUSTED_DOCUMENT_NOTICE,cachedReading,ensureEvidenceSchema,readingModelIdentity } from "@/lib/documents/evidence";
 import { annotateLedgerEvidence,markConflicts } from "@/lib/documents/evidence-store";
 import { unparsedBenefitLines } from "@/lib/policies/catalog-builder";
 import { locatePassage,looksLikeInjectedInstruction } from "@/lib/documents/evidence";
@@ -230,7 +230,9 @@ export async function readDocumentIntoLedger(args:{accountId:string;policyId:str
   const members=(await query<{id:string;display_name:string;preferred_name:string|null}>(
     `SELECT f.id,f.display_name,f.preferred_name FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND pm.policy_id=$2`,[args.accountId,args.policyId])).rows
     .map(m=>({id:m.id,names:[m.display_name,...(m.preferred_name?[m.preferred_name]:[])]}));
-  const extraction=await extractLedgerRows({accountId:args.accountId,policyId:args.policyId,pages,members,planName:doc.product_name,insurer:doc.insurer,report:args.report});
+  let extraction:LedgerExtraction;
+  try{extraction=await extractLedgerRows({accountId:args.accountId,policyId:args.policyId,pages,members,planName:doc.product_name,insurer:doc.insurer,report:args.report});}
+  catch(error){await recordLedgerReadFailure(args.accountId,args.policyId);throw error;}
   // The one currency this document's stored figures are printed in, if they
   // agree on exactly one.
   const documentCurrencies=(await query<{currency:string}>(
@@ -263,7 +265,7 @@ export async function readDocumentIntoLedger(args:{accountId:string;policyId:str
        (row.benefitName??row.detail)?.slice(0,200)??null,row.sourcePage,row.quote.slice(0,600),row.status,seedKeyFor(args.policyId,row,row.familyMemberId),row.minimum?.factKey??null,row.minimum?.value??null]);
     added+=r.rows.length;
   }
-  await query("UPDATE policies SET ledger_read_at=now() WHERE id=$1 AND account_id=$2",[args.policyId,args.accountId]);
+  await query("UPDATE policies SET ledger_read_at=now()"+(await hasReadingCache()?",reading_cache=reading_cache-'"+LEDGER_RETRY_KEY+"'":"")+" WHERE id=$1 AND account_id=$2",[args.policyId,args.accountId]);
   try{
     await annotateLedgerEvidence(args.accountId,args.policyId);
     await markConflicts(args.accountId,args.policyId);
@@ -271,10 +273,43 @@ export async function readDocumentIntoLedger(args:{accountId:string;policyId:str
   return {added,read:extraction.read,dropped:extraction.dropped+skippedNoCurrency};
 }
 
+// Round 10: a document whose ledger read failed (provider down, out of quota,
+// output that did not validate) is not read again on every claim turn,
+// dashboard load and ledger view -- each retry is a paid reading call per
+// document, so a household with many such documents spent tens of model calls
+// on every turn and never got an answer faster. It is retried after a delay
+// that doubles with each failure (10 minutes, 20, 40 ... at most a day); a
+// person asking for the read on the Coverage Ledger page reads it at once.
+// The note lives in the document's own reading cache, so no schema change.
+export const LEDGER_RETRY_KEY="ledger_read_failure";
+const LEDGER_RETRY_BASE_MS=10*60_000,LEDGER_RETRY_MAX_MS=24*3600_000;
+let readingCacheColumn:Promise<boolean>|null=null;
+async function hasReadingCache(){
+  readingCacheColumn??=ensureEvidenceSchema().then(()=>query<{ok:boolean}>("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='policies' AND column_name='reading_cache') AS ok"))
+    .then(r=>!!r.rows[0]?.ok).catch(()=>{readingCacheColumn=null;return false;});
+  return readingCacheColumn;
+}
+async function recordLedgerReadFailure(accountId:string,policyId:string){
+  try{
+    if(!await hasReadingCache())return;
+    // One statement: the attempt count and the next retry time follow from the note already there.
+    await query(`UPDATE policies SET reading_cache=coalesce(reading_cache,'{}'::jsonb)||jsonb_build_object($3::text,jsonb_build_object(
+        'attempts',coalesce((reading_cache->$3::text->>'attempts')::int,0)+1,
+        'retryAfter',to_char((now()+least(interval '1 millisecond'*$5::bigint,interval '1 millisecond'*$4::bigint*power(2,least(20,coalesce((reading_cache->$3::text->>'attempts')::int,0))))) AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+      WHERE id=$1 AND account_id=$2`,
+      [policyId,accountId,LEDGER_RETRY_KEY,LEDGER_RETRY_BASE_MS,LEDGER_RETRY_MAX_MS]);
+  }catch{/* Never let the note fail the turn. */}
+}
+/** A document still waiting for its ledger read and not resting after a failed one. */
+async function dueClause(includeBackedOff:boolean){
+  if(includeBackedOff||!await hasReadingCache())return "";
+  return ` AND coalesce((p.reading_cache->'${LEDGER_RETRY_KEY}'->>'retryAfter')::timestamptz,'-infinity'::timestamptz)<=now()`;
+}
+
 type ExtractGlobals=typeof globalThis&{__dearpolicyLedgerReading?:Map<string,Promise<{documents:number;added:number}>>};
 /** Reads every ready document that has not been read into the ledger yet.
  * One run per account at a time; a second caller joins the first. */
-export async function readPendingDocuments(accountId:string,report?:(stage:string)=>void):Promise<{documents:number;added:number}>{
+export async function readPendingDocuments(accountId:string,report?:(stage:string)=>void,opts:{includeBackedOff?:boolean}={}):Promise<{documents:number;added:number}>{
   const state=globalThis as ExtractGlobals;
   state.__dearpolicyLedgerReading??=new Map();
   const running=state.__dearpolicyLedgerReading.get(accountId);
@@ -284,7 +319,7 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
     const pending=(await query<{id:string;original_filename:string}>(
       `SELECT p.id,p.original_filename FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
          AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
-         AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id) ORDER BY p.created_at`,[accountId])).rows;
+         AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id)${await dueClause(!!opts.includeBackedOff)} ORDER BY p.created_at`,[accountId])).rows;
     let added=0;
     for(const doc of pending){
       try{
@@ -299,12 +334,15 @@ export async function readPendingDocuments(accountId:string,report?:(stage:strin
   state.__dearpolicyLedgerReading.set(accountId,job);
   return job;
 }
-export async function pendingDocumentCount(accountId:string){
+/** Documents waiting for their ledger read, including one resting after a
+ * failed read (callers refresh the ledger's seeded rows when any is waiting);
+ * `dueOnly` counts only those readPendingDocuments would read now. */
+export async function pendingDocumentCount(accountId:string,opts:{dueOnly?:boolean}={}){
   await ensureLedgerSchema();
   const r=await query<{n:number}>(
     `SELECT count(*)::int AS n FROM policies p WHERE p.account_id=$1 AND p.processing_status='ready' AND p.ledger_read_at IS NULL AND ${activePredicate("p")} AND ${trustedPolicyStatePredicate("p")}
        AND EXISTS(SELECT 1 FROM policy_pages pg WHERE pg.account_id=p.account_id AND pg.policy_id=p.id)
-       AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id)`,[accountId]);
+       AND EXISTS(SELECT 1 FROM policy_members pm WHERE pm.account_id=p.account_id AND pm.policy_id=p.id)${await dueClause(!opts.dueOnly)}`,[accountId]);
   return Number(r.rows[0]?.n??0);
 }
 export function ledgerReadingInProgress(accountId:string){

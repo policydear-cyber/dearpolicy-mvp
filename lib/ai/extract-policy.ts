@@ -3,6 +3,7 @@ import { structuredCompletion } from "./llm";
 import type { PdfPage } from "@/lib/documents/pdf";
 import { UNTRUSTED_DOCUMENT_NOTICE, cachedReading, delimitDocument, readingModelIdentity } from "@/lib/documents/evidence";
 import { deterministicDocumentRole, personalDocumentTitle } from "@/lib/documents/intelligence";
+import { correspondenceRole } from "@/lib/documents/messy";
 
 const CoverageSchema = z.object({
   category: z.string(),
@@ -34,7 +35,7 @@ const ReferenceCoverageSchema = z.object({
 
 export const PolicyExtractionSchema = z.object({
   documentType: z.string().nullable(),
-  documentRole: z.enum(["personal_schedule","certificate","endorsement","policy_wording","product_summary","benefit_guide","brochure","rider","policy_illustration","premium_receipt","renewal_statement","annual_statement","claim_receipt","claim_form","welcome_letter","other"]).nullable(),
+  documentRole: z.enum(["personal_schedule","certificate","endorsement","policy_wording","product_summary","benefit_guide","brochure","rider","policy_illustration","premium_receipt","renewal_statement","annual_statement","claim_receipt","claim_form","welcome_letter","insurer_letter","claim_decision","medical_bill","app_screenshot","personal_notes","other"]).nullable(),
   documentNotes: z.array(z.string()),
   insurer: z.string().nullable(), productName: z.string().nullable(), productsMentioned: z.array(z.string()), policyNumber: z.string().nullable(), groupPolicyNumber: z.string().nullable(), policyType: z.string().nullable(), policyholder: z.string().nullable(),
   personalCoverageConfirmed: z.boolean(), startDate: z.string().nullable(), renewalOrExpiryDate: z.string().nullable(),
@@ -73,6 +74,8 @@ export function detectHighConfidenceReferenceRole(pages: PdfPage[]) {
   if (/certificate of (?:group )?insurance/i.test(text) && /particulars of insured|insured person(?:'s)? name|name of insured/i.test(text) && /sum insured|sum assured|effective date/i.test(text)) return null;
   // A renewal certificate or policy contract naming its insured is personal.
   if (personalDocumentTitle(firstPagesText(pages, 2))) return null;
+  // Round 10: a letter, claim decision or bill that mentions the policy wording is not the wording.
+  if (correspondenceRole(pages)) return null;
   for (const candidate of REFERENCE_ROLE_PATTERNS) if (candidate.test(text)) return candidate.role;
   return null;
 }
@@ -231,7 +234,7 @@ For every personal coverage/payment, sourcePage is required and evidenceText mus
 For every currency field, return a 3-letter ISO 4217 code such as SGD, USD, MYR or PHP. Never return symbols such as S$, $, RM, ₱, € or £.
 
 ROLES
-personal_schedule = personalised policy schedule; certificate = personalised certificate; endorsement = personalised amendment; policy_wording/product_summary/benefit_guide/brochure = generic reference; premium_receipt/renewal_statement/annual_statement = payment/account evidence; claim_receipt/claim_form = claims documents.
+personal_schedule = personalised policy schedule; certificate = personalised certificate; endorsement = personalised amendment; policy_wording/product_summary/benefit_guide/brochure = generic reference; premium_receipt/renewal_statement/annual_statement = payment/account evidence; claim_receipt/claim_form = claims documents; insurer_letter = any other letter from the insurer (for example a premium revision or a rider being withdrawn); claim_decision = the insurer's decision on a claim; medical_bill = a hospital or clinic bill; app_screenshot = a screenshot of an insurer's app; personal_notes = notes the family wrote themselves. A letter, claim decision, bill, screenshot or note is never a personal schedule and never confirms cover: a figure it prints (an amount claimed, a bill total, a future premium) is not a cover amount or the current premium.
 
 CATEGORIES
 Use Hospitalisation; Hospital Cash; Death; Total Permanent Disability; Critical Illness; Early Critical Illness; Personal Accident; Disability Income; Outpatient; Long-term Care; Travel; Home; Motor; Savings; Investment; Other.

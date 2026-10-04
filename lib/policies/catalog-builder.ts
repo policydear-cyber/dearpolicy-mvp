@@ -144,7 +144,7 @@ export function typedValue(kind:TableRowKind,value:string):number|null{
   if(kind==="as_charged"||kind==="not_covered"||kind==="unlimited")return null;
   const percent=value.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
   if((kind==="co_insurance"||kind==="pro_ration")&&percent)return Math.round(Number(percent[1])*100)/10000;
-  const money=value.match(new RegExp(CURRENCY_MARKER+String.raw`\s?(\d[\d,]*(?:\.\d{1,2})?)`));
+  const money=value.match(new RegExp(CURRENCY_MARKER+String.raw`\s?(\d[\d,]*(?:\.\d{1,2})?)(?![,.]?[OoIl|])`));
   if(money)return Number(money[1].replace(/,/g,""));
   if(percent)return Math.round(Number(percent[1])*100)/10000;
   return null;
@@ -268,7 +268,8 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
       const tier=row.tier??null;
       const benefitName=cleanBenefitName(row.label);
       if(!benefitName)continue;
-      const quote=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().slice(0,260);
+      // Round 10: an empty cell printed as a dash ("Surgical cash | S$1,000 | -") is not part of what is quoted.
+      const quote=row.line.replace(/\t/g," ").replace(/\s+/g," ").trim().replace(/(?:\s+[-–—])+$/,"").slice(0,260);
       const kind=rowKind(row.label,row.value,tier);
       const key=row.label.toLowerCase().replace(/[^a-z0-9]/g,"")+"|"+(tier??"").toLowerCase()+"|"+row.value.toLowerCase();
       if(kind!=="benefit"){

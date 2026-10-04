@@ -179,6 +179,10 @@ jobs:
         run: npm run r8:render-test
       - name: Round 9 red-team (250+ messages in styles the earlier batteries never used, over both households; plain answers, no promises, no advice, right policy kind)
         run: npm run r9:redteam-test
+      - name: Round 10 messy uploads (a third household of real-world uploads -- sideways and upside-down photos, a scan with no text layer, three policies in one PDF, pages out of order, a photo and a PDF of one schedule, letters, a claim decision, a bill, an app screenshot, notes, locked, damaged and blurry files; every upload read sensibly or said plainly what couldn't be read, 200+ messages answered from them)
+        run: npm run r10:messy-docs-test
+      - name: Round 10 chat cost and scale (query and model-call budgets per answer type, bounded prompts, 10 people and 40 documents, a 110-turn conversation, 200 chats listed, concurrent chats with a document being read, a hanging provider)
+        run: npm run r10:perf-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

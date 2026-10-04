@@ -62,7 +62,7 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
   // Match reference material conservatively: same group-policy number is strongest; exact insurer + product name is the fallback.
   await query(
     `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
-     SELECT ref.id,pm.family_member_id,$1,'scheme_reference_match',
+     SELECT DISTINCT ON (ref.id,pm.family_member_id) ref.id,pm.family_member_id,$1,'scheme_reference_match',
             CASE WHEN current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number THEN 0.95 ELSE 0.82 END
        FROM policies current
        JOIN policy_members pm ON pm.policy_id=current.id AND pm.account_id=current.account_id
@@ -73,12 +73,15 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
           (current.insurer IS NOT NULL AND ref.insurer IS NOT NULL AND lower(current.insurer)=lower(ref.insurer)
            AND current.product_name IS NOT NULL AND ref.product_name IS NOT NULL AND lower(current.product_name)=lower(ref.product_name))
         )
+      -- Round 10: one row per (document, person) even when several documents match
+      -- (a schedule and its photo, last year's schedule); Postgres refuses a second.
+      ORDER BY ref.id,pm.family_member_id,(current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number) DESC
      ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence`,
     [accountId, policyId],
   );
   await query(
     `INSERT INTO policy_members(policy_id,family_member_id,account_id,source,confidence)
-     SELECT current.id,pm.family_member_id,$1,'scheme_reference_match',
+     SELECT DISTINCT ON (pm.family_member_id) current.id,pm.family_member_id,$1,'scheme_reference_match',
             CASE WHEN current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number THEN 0.95 ELSE 0.82 END
        FROM policies current
        JOIN policies personal ON personal.account_id=current.account_id AND personal.id<>current.id AND personal.personal_coverage_confirmed=true AND ${activePredicate("personal")}
@@ -89,6 +92,7 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
           (current.insurer IS NOT NULL AND personal.insurer IS NOT NULL AND lower(current.insurer)=lower(personal.insurer)
            AND current.product_name IS NOT NULL AND personal.product_name IS NOT NULL AND lower(current.product_name)=lower(personal.product_name))
         )
+      ORDER BY pm.family_member_id,(current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number) DESC
      ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence`,
     [accountId, policyId],
   );

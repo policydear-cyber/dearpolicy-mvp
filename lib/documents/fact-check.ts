@@ -33,9 +33,10 @@ function digitsPattern(value: number) {
 export function moneyPrinted(text: string, value: number): boolean {
   if (!Number.isFinite(value) || value < 0) return false;
   const body = digitsPattern(value);
-  const marked = new RegExp(CURRENCY_MARK + String.raw`\s?` + body + String.raw`(?![\d.,]\d|\s*%|\s*per\s*cent)`, "i");
+  // Round 10: never part of a figure a scan printed unclearly ("S$5O,000" is not S$5).
+  const marked = new RegExp(CURRENCY_MARK + String.raw`\s?` + body + String.raw`(?![\d.,]\d|\s*%|\s*per\s*cent|[,.]?[OoIl|])`, "i");
   if (marked.test(text)) return true;
-  const bare = new RegExp(String.raw`(?<![\d.,/-])` + body + String.raw`(?![\d]|[.,]\d|\s*(?:%|per\s*cent|days?|nights?|years?|months?|hours?|weeks?|x\b|times)|[/-]\d)`, "i");
+  const bare = new RegExp(String.raw`(?<![\d.,/-])(?<![\d][,.]?[OoIl|]+[,.]?)` + body + String.raw`(?![\d]|[.,]\d|\s*(?:%|per\s*cent|days?|nights?|years?|months?|hours?|weeks?|x\b|times)|[/-]\d|[,.]?[OoIl|])`, "i");
   return String(text ?? "").split("\n").some((line) => new RegExp(CURRENCY_MARK, "i").test(line) && bare.test(line));
 }
 /** A per-day (or per-night) rate: the figure is followed by "per day", "a day", "daily", "per night" in its line. */

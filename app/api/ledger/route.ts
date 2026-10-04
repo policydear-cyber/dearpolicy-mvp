@@ -104,7 +104,8 @@ export async function POST(request:NextRequest){
     if(body?.action==="read"){
       // Reads every document the model has not read yet, then fills in the
       // standard rows for anything a certificate states without wording.
-      const read=await readPendingDocuments(accountId);
+      // Asked for on the page: read now, including a document resting after a failed read.
+      const read=await readPendingDocuments(accountId,undefined,{includeBackedOff:true});
       const seeded=await seedLedger(accountId);
       return NextResponse.json({documents:read.documents,added:read.added+seeded.added});
     }

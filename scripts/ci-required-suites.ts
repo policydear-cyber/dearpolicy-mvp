@@ -98,4 +98,6 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "r9:ingest-chaos-test",
   "r8:render-test",
   "r9:redteam-test",
+  "r10:messy-docs-test",
+  "r10:perf-test",
 ];

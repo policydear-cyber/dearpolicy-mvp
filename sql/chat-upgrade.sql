@@ -51,6 +51,12 @@ ALTER TABLE policy_chunks ADD COLUMN IF NOT EXISTS search_vector tsvector
 CREATE INDEX IF NOT EXISTS idx_policy_chunks_search ON policy_chunks USING gin(search_vector);
 CREATE INDEX IF NOT EXISTS idx_policy_pages_account_policy ON policy_pages(account_id,policy_id,page_number);
 
+-- Round 10: the two legacy back-fills below run on every cold start (inside
+-- the upgrade's transaction, while it holds its table locks). Without this
+-- partial index each one scanned every chat message of every household; with
+-- it they read only the (normally zero) messages still without a chat.
+CREATE INDEX IF NOT EXISTS idx_chat_messages_unassigned ON chat_messages(account_id,family_member_id) WHERE conversation_id IS NULL;
+
 -- Keep every previous guided session addressable, including its saved facts.
 INSERT INTO chat_conversations(id,account_id,family_member_id,title,state,created_at,updated_at)
 SELECT id,account_id,family_member_id,coalesce(event_summary,'Previous claim check'),

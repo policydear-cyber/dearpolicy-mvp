@@ -23,6 +23,7 @@
  * context is scrubbed of every money figure: a model may explain, never
  * state, create, sum, convert or relabel an amount. Idempotent.
  */
+import { flagUnclearFigures } from "@/lib/documents/messy";
 import type { ChatAnswer, ClaimItem, PolicyStatedLimit, PreliminaryClaimStatus } from "@/types";
 
 export const POLICY_STATED_LIMIT_LABEL = "Policy-stated coverage limit" as const;
@@ -199,6 +200,12 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
     }
   }
   if (answer.composition) answer.composition = { ...answer.composition, disclaimer: INDICATIVE_ESTIMATE_NOTICE };
+  // Round 10: a figure or year a scan printed unclearly ("S$12,5OO", "2O18")
+  // is never shown as a figure: it is said to be unclear, in every line.
+  answer.summary = flagUnclearFigures(answer.summary);
+  answer.details = answer.details.map(flagUnclearFigures);
+  answer.nextSteps = answer.nextSteps.map(flagUnclearFigures);
+  answer.claimItems = answer.claimItems.map((item) => ({ ...item, reason: flagUnclearFigures(item.reason), conditions: item.conditions.map(flagUnclearFigures) }));
   return answer;
 }
 

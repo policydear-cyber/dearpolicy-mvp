@@ -227,18 +227,37 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     // A join made here, not a person's edit: updated_at is left alone, so a re-read still replaces the row.
     if(match?.amount!=null)await query("UPDATE coverage_rules SET sum_basis=$3 WHERE account_id=$1 AND id=$2",[accountId,row.id,match.amount]);
   }
-  let added=0;
-  for(const s of seeds){
+  // Round 10: one lookup for the keys already in the ledger and one insert for
+  // the rest, instead of a lookup and an insert per seed (two queries for each
+  // of a hundred-odd rows in a ten-person household, on every seeding).
+  const legacyOf=(s:Seed)=>s.seedKey.replace(/\|member:[^|]+$/,"");
+  const keys=[...new Set(seeds.flatMap(s=>[s.seedKey,legacyOf(s)]))];
+  const present=keys.length?(await query<{seed_key:string;family_member_id:string|null}>(
+    "SELECT seed_key,family_member_id::text FROM coverage_rules WHERE account_id=$1 AND seed_key=ANY($2::text[])",[accountId,keys])).rows:[];
+  const existingKeys=new Set(present.map(r=>r.seed_key));
+  const legacyHeld=new Set(present.map(r=>r.family_member_id+"|"+r.seed_key));
+  const fresh=seeds.filter(s=>{
     // Two insured people under one certificate ("Insured persons: Mei Ling;
     // Wei Jie") read the same row: each gets their own ledger row. A row
     // seeded under the older person-less key is that person's already.
-    const legacy=s.seedKey.replace(/\|member:[^|]+$/,"");
-    if(legacy!==s.seedKey&&(await query("SELECT 1 FROM coverage_rules WHERE account_id=$1 AND family_member_id=$2 AND seed_key=$3 LIMIT 1",[accountId,s.familyMemberId,legacy])).rows.length)continue;
+    const legacy=legacyOf(s);
+    if(legacy!==s.seedKey&&legacyHeld.has(s.familyMemberId+"|"+legacy))return false;
+    return !existingKeys.has(s.seedKey);
+  });
+  let added=0;
+  for(let i=0;i<fresh.length;i+=200){
+    const batch=fresh.slice(i,i+200).map(s=>({family_member_id:s.familyMemberId,policy_id:s.policyId,plan_name:s.planName,insurer:s.insurer,event_type:s.eventType,detail:s.detail,cause:s.cause,
+      pays_kind:s.paysKind,amount:s.amount,currency:s.currency,sum_basis:s.sumBasis,offset_days:s.offsetDays,maximum_days:s.maximumDays,conditions:s.conditions??[],note:s.note,source_page:s.sourcePage,
+      quote:s.quote,origin:s.origin,inferred:s.inferred,status:s.status,seed_key:s.seedKey}));
     const r=await query<{id:string}>(
       `INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,pays_kind,amount,currency,sum_basis,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,seed_key)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::text[],$16,$17,$18,$19,$20,$21,$22)
+       SELECT $1,x.family_member_id,x.policy_id,x.plan_name,x.insurer,x.event_type,x.detail,x.cause,x.pays_kind,x.amount,x.currency,x.sum_basis,x.offset_days,x.maximum_days,x.conditions,x.note,x.source_page,x.quote,x.origin,x.inferred,x.status,x.seed_key
+         FROM ROWS FROM (jsonb_to_recordset($2::jsonb) AS (family_member_id uuid,policy_id uuid,plan_name text,insurer text,event_type text,detail text,cause text,pays_kind text,amount numeric,currency text,
+           sum_basis numeric,offset_days int,maximum_days int,conditions text[],note text,source_page int,quote text,origin text,inferred boolean,status text,seed_key text))
+         WITH ORDINALITY AS x(family_member_id,policy_id,plan_name,insurer,event_type,detail,cause,pays_kind,amount,currency,sum_basis,offset_days,maximum_days,conditions,note,source_page,quote,origin,inferred,status,seed_key,n)
+        ORDER BY x.n
        ON CONFLICT (account_id,seed_key) WHERE seed_key IS NOT NULL DO NOTHING RETURNING id`,
-      [accountId,s.familyMemberId,s.policyId,s.planName,s.insurer,s.eventType,s.detail,s.cause,s.paysKind,s.amount,s.currency,s.sumBasis,s.offsetDays,s.maximumDays,s.conditions,s.note,s.sourcePage,s.quote,s.origin,s.inferred,s.status,s.seedKey]);
+      [accountId,JSON.stringify(batch)]);
     added+=r.rows.length;
   }
   return {added};

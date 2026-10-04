@@ -14,6 +14,8 @@
  * caller may fall back to the reading path. What was not found is reported
  * as "not found in the documents read" -- never as "not covered".
  */
+import { NON_COVER_ROLES, flagUnclearFigures, unclearFigures } from "@/lib/documents/messy";
+import { bestLines, piecesOf, wordsOf } from "./printed-lines";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { loadPolicyInventory, prettifyFilename, type PolicyContract } from "@/lib/policies/inventory";
@@ -138,6 +140,8 @@ export function questionTopics(question: string): Topic[] {
   let asked = TOPICS.filter((t) => t.asks.test(question));
   // "Which ward class is she covered for?" is about her column, not every hospital row.
   if (asked.some((t) => t.key === "ward")) asked = asked.filter((t) => t.key !== "hospital");
+  // Round 10: "if Mama falls at home" is where a person was hurt, not a question about home insurance.
+  if (/\b(?:falls?|fell|slip(?:s|ped)?|trip(?:s|ped)?|hurt|injur\w*)\b[^?]{0,30}\bat home\b/i.test(question) && !/\b(?:house|flat|hdb|contents|renovations?|jewell?ery|valuables|home insurance|home policy)\b/i.test(question)) asked = asked.filter((t) => t.key !== "home");
   // "When does her accident plan end?", "Does his group plan cover dental?":
   // the words that only name the plan are not a second topic.
   if (asked.length > 1) {
@@ -260,6 +264,8 @@ export type PolicyAnswerArgs = {
   accountId: string; question: string;
   /** The insured people this question is about, already resolved by the caller (same household). */
   people: ClaimPerson[];
+  /** Round 10: the message as sent, when the question answered is a carried-over one ("how much?" after a cover question). */
+  message?: string;
   now?: Date;
   /** Optional rephrasing of the verified text. Its output is checked and discarded if it adds anything. */
   narrate?: (input: { question: string; text: string; assertions: Assertion[] }) => Promise<string | null>;
@@ -323,13 +329,19 @@ const PROSE_FACT = /^(death benefit|maturity benefit|surrender value|monthly pay
  * as stored. Nothing is inferred; a row is only what the page prints. */
 export function readPage(page: number, text: string) {
   const rows: PageRow[] = [], conditions: ConditionLine[] = [], meta: PageRow[] = [], premiums: PageRow[] = [], prose: ConditionLine[] = [];
-  const lines = text.split(/\r?\n/).map((l) => l.trim());
+  // Round 10: a two-cell row printed under a three-column layout keeps an
+  // empty middle slot ("Premiums paid in total<TAB><TAB>S$43,560.00"); it is a
+  // label and a value all the same.
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).map((l) => (l.split("\t").filter((c) => c.trim()).length === 2 ? l.replace(/\t{2,}/g, "\t") : l));
   const heading = lines.find((l) => l && !FURNITURE.test(l)) ?? "";
-  // A page with a multi-column table (a line of three or more cells) is read
-  // from the typed rows ingestion stores per column. Its two-cell lines are
-  // the wrapped remainders of those cells ("ward)<TAB>(B1 ward)",
-  // "days<TAB>days"), never label-value rows.
-  const tablePage = lines.some((l) => (l.match(/\t/g) ?? []).length >= 2);
+  // A multi-column table (a line of three or more cells) is read from the
+  // typed rows ingestion stores per column. The two-cell lines right beside
+  // its rows are the wrapped remainders of those cells ("ward)<TAB>(B1
+  // ward)", "days<TAB>days"), never label-value rows. Round 10: only those --
+  // an e-statement prints small two-column tables on the same page as a
+  // three-column one, and those rows are rows.
+  const wide = (l: string | undefined) => ((l ?? "").match(/\t/g) ?? []).length >= 2;
+  const remainder = (index: number) => wide(lines[index - 1]) || wide(lines[index + 1]);
   // Prose (everything that is not a table cell) is re-joined across wrapped
   // lines and read as whole sentences, each under the numbered heading it
   // sits beneath ("5. Grace period"), so a condition is never cut mid-line.
@@ -356,6 +368,11 @@ export function readPage(page: number, text: string) {
   let last: PageRow | null = null, lastIndex = -2;
   // A table whose header says its rows are "% of sum insured": each bare percentage is of that sum.
   let scale: string | null = null;
+  // Round 10: a small table whose value column is headed with its currency
+  // ("Value<TAB>S$", "Amount (S$)") prints its amounts bare: each is in that
+  // currency, and the row's passage runs from the heading down to the row, so
+  // the currency is written in what is cited.
+  let columnCurrency: { mark: string; at: number } | null = null;
   lines.forEach((line, index) => {
     if (!line || FURNITURE.test(line) || line === heading) { flush(); return; }
     const row = line.match(/^([^\t]{1,120})\t([^\t]{1,200})$/);
@@ -368,24 +385,27 @@ export function readPage(page: number, text: string) {
         last.label = last.label + " " + rawLabel; last.value = last.value + " " + rawValue; last.line = last.line + "\n" + line; lastIndex = index; return;
       }
       const r: PageRow = { page, index, label: englishPart(rawLabel), value: englishPart(rawValue), line };
+      const currencyHead = rawValue.match(/^(?:(?:amount|value|total)\s*)?\(?\s*(S\$|SG\$|SGD)\s*\)?$/i);
+      if (currencyHead) { columnCurrency = { mark: /SGD/i.test(currencyHead[1]) ? "SGD " : "S$", at: index }; last = null; return; }
       // A table's own header ("Item<TAB>Amount") is not a row.
-      if (isHeaderRow(rawLabel, rawValue)) { scale = /%\s*of (?:the )?sum (insured|assured)/i.exec(rawValue)?.[1] ?? null; last = null; return; }
+      if (isHeaderRow(rawLabel, rawValue)) { scale = /%\s*of (?:the )?sum (insured|assured)/i.exec(rawValue)?.[1] ?? null; columnCurrency = null; last = null; return; }
+      if (columnCurrency && /^\d[\d,]*(?:\.\d{1,2})?$/.test(r.value)) { r.value = columnCurrency.mark + r.value; r.line = lines.slice(columnCurrency.at, index + 1).filter(Boolean).join("\n"); }
       // A continuation of a wrapped cell starts mid-sentence.
       if (/^[a-z(]/.test(r.label) || !/[A-Za-z]{3}/.test(r.label)) return;
       if (scale && /^\d+(?:\.\d+)?%$/.test(r.value)) r.value += " of the sum " + scale;
       last = r; lastIndex = index;
       if (META_LABEL.test(r.label) || (MONTH_DATE.test(r.value) && !MONEY_IN_TEXT.test(r.value))) { meta.push(r); return; }
       if (PREMIUM_ROW.test(r.label)) { premiums.push(r); return; }
-      if (!tablePage) rows.push(r);
+      if (!remainder(index)) rows.push(r);
       return;
     }
-    if ((line.match(/\t/g) ?? []).length || /^Dear\b[^.]{0,60},$/.test(line)) { flush(); last = null; return; }
+    if ((line.match(/\t/g) ?? []).length || /^Dear\b[^.]{0,60},$/.test(line)) { flush(); last = null; columnCurrency = null; return; }
     // A wrapped continuation of a label ("stage)", "Rider)") belongs to the row above.
     if (last && lastIndex === index - 1 && /^[^\t]{1,40}\)$/.test(line) && (last.label.match(/\(/g) ?? []).length > (last.label.match(/\)/g) ?? []).length) { last.label += " " + line; last.line += "\n" + line; lastIndex = index; return; }
     if (/^[a-z][^\t]{0,40}\)$/.test(line) && /\t/.test(lines[index - 1] ?? "")) return;
     // A wrapped value ("… no further" / "premium is payable.") belongs to the row above.
     if (last && lastIndex === index - 1 && /^[a-z]/.test(line) && /(?:\b(?:no|further|of|and|the|is|to|a|an|for|with|or|in|on|at|from|by|are|be)|,)$/i.test(last.value)) { last.value += " " + line; last.line += "\n" + line; lastIndex = index; return; }
-    last = null;
+    last = null; columnCurrency = null;
     const numbered = line.match(/^(?:\d{1,2}[.)]|[A-Z][.)])\s+([A-Z][^.]{2,60})$/);
     if (numbered || /^[A-Z][A-Z &'-]{4,60}$/.test(line)) { flush(); section = numbered ? numbered[1].trim() : line; scale = null; return; }
     chunk.push({ index, text: line, heading: section });
@@ -474,7 +494,8 @@ async function memberTiers(accountId: string, docIds: string[]) {
 }
 /** "Death" and "Death benefit" and "Death (any cause)" are the same thing. */
 function sameThingKey(title: string) {
-  return title.toLowerCase().replace(/\(.*?\)/g, " ").replace(/\b(?:benefits?|sum (?:insured|assured)|cover(?:age)?)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  // Round 10: an age band ("(age 80 and below)" / "(age 81 and above)") names a different row, not the same one.
+  return title.toLowerCase().replace(/\((.*?)\)/g, (_m, inner: string) => /\bage[sd]?\b|\byears? old\b|\b(?:adult|child|senior)\b/.test(inner) ? " " + inner + " " : " ").replace(/\b(?:benefits?|sum (?:insured|assured)|cover(?:age)?)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 /** The Latin-script tail of a bilingual table heading ("总退保价值 (4.25%) Total surrender value at 4.25%"). */
@@ -544,7 +565,9 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     `SELECT id::text AS id,account_id::text AS account_id,lifecycle_state,superseded_at::text,quarantine_status,file_hash,effective_date::text,renewal_or_expiry_date::text,
             ${cols.policies?.has("document_date") ? "document_date::text" : "NULL::text"} AS document_date,product_name,insurer,original_filename,updated_at::text,personal_coverage_confirmed,policy_type,policy_number,document_role
        FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND ${activePredicate()}`, [args.accountId, docIds]);
-  const docs = new Map(docRows.rows.map((d) => [d.id, d]));
+  // Round 10: letters, claim decisions, bills, screenshots and notes speak for nobody's cover.
+  const docs = new Map(docRows.rows.filter((d) => !NON_COVER_ROLES.has(d.document_role ?? "")).map((d) => [d.id, d]));
+  for (const id of [...speaksFor.keys()]) if (!docs.has(id)) speaksFor.delete(id);
   const docName = (id: string) => { const d = docs.get(id); return d?.product_name ?? (d ? prettifyFilename(d.original_filename) : "Policy document"); };
   const pagesByDocEarly = new Map<string, { page: number; text: string }[]>();
   /** What kind of document a line comes from, when it is not the person's own schedule. */
@@ -1040,7 +1063,7 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     const specific = [...new Set((rest.match(/[a-z][a-z'-]{2,}/g) ?? []).map((w) => w.replace(/['’]s$/, "")))].filter((w) => !productWordSet.has(w) && !/^polic(?:y|ies)$/.test(w))
       // Round 9: "will the life cover reduce after?", "is it enough?": a verb or a judgement is not a thing to look for.
       .filter((w) => !/^(?:reduc\w*|increas\w*|chang\w*|enough|after|before|still|better|worse|good|bad|cheap\w*|expensive|happen\w*|affect\w*|drop\w*|lower|higher|more|less|stop\w*|continu\w*|work\w*|exactly|really|actually)$/.test(w))
-      .filter((w) => (w.length >= 4 || /^(?:ivf|hiv|tcm|lasik|mri|ncd)$/.test(w)) && !STOP_WORDS.has(w) && !nameWords.has(w) && !topicWord(w) && !/^(?:anyone|anybody|everyone|everybody|someone|somebody|then|only|just|also|many|days?|each|year|month|amount|value|right|tell|give|show|know|what|cost|worth|happens?|counts?|mean|means|meant|claims?|money|anything|something|thing|things|okay|thanks|where|which|again|limit|limits|sum|insured|assured|benefits?|payout|pays?|paid|much|lah|leh|anot|other|another|more|else|extra|still|also|either|some|every)$/.test(w));
+      .filter((w) => (w.length >= 4 || /^(?:ivf|hiv|tcm|lasik|mri|ncd)$/.test(w)) && !STOP_WORDS.has(w) && !nameWords.has(w) && !topicWord(w) && !/^(?:anyone|anybody|everyone|everybody|someone|somebody|family|household|members?|then|only|just|also|many|days?|each|year|month|amount|value|right|tell|give|show|know|what|cost|worth|happens?|counts?|mean|means|meant|claims?|money|anything|something|thing|things|okay|thanks|where|which|again|limit|limits|sum|insured|assured|benefits?|payout|pays?|paid|much|lah|leh|anot|other|another|more|else|extra|still|also|either|some|every)$/.test(w));
     const defining = /\bwhat (?:counts as|is meant by|does [^?]{1,30} mean)|\bdefin\w+|\bmeaning of\b/i.test(askedText);
     // A named benefit (NARROW) or a topic answered from its own lines (ward class, dates, status) is narrowed its own way.
     const ownWay = NARROW.some((n) => n.asks.test(askedText)) || topics.some((t) => ["ward", "renewal", "status", "maturity", "premium"].includes(t.key));
@@ -1251,7 +1274,12 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     const labelled = a.tierLabel && !/^(?:values?|amounts?|limits?|benefits?|details?|description|sum insured|s\$)$/i.test(a.tierLabel.trim()) ? (a.text.startsWith(a.title) ? a.title + " (" + a.tierLabel + ")" + a.text.slice(a.title.length) : a.text + " (" + a.tierLabel + ")") : a.text;
     const q = narrowQuoted.get(a.id);
     const quoted = q && q.length <= 200 && !labelled.includes(q) ? " — the schedule prints “" + q.replace(/\s+/g, " ").trim().replace(/[.;:\s]+$/, "") + "”" : "";
-    const text = (labelled.replace(/[.;:\s]+$/, "") + quoted).replace(/[.;:\s]+$/, "");
+    let text = (labelled.replace(/[.;:\s]+$/, "") + quoted).replace(/[.;:\s]+$/, "");
+    // Round 10: what a policy excludes is said in its own words, quoted ("Pre-existing conditions are not covered ...").
+    if (/\b(?:not covered|isn['’]t covered|aren['’]t covered|no cover(?:age)? for|not insured)\b/i.test(text) && !text.includes("“")) {
+      const at = text.indexOf(": ");
+      text = at > 0 && at < 60 ? text.slice(0, at) + ": “" + text.slice(at + 2) + "”" : "“" + text + "”";
+    }
     return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" ? ", document dated " + dated : "") + status + ").";
   };
   // One line for a fact several people share (a family travel plan), naming them all.
@@ -1285,13 +1313,18 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
   const shown = [...kept, ...conflicting.flat()];
   const answeredTopics = new Set(shown.map((a) => a.topic));
   const conditionsShown = shown.some((a) => a.source === "condition");
-  const notFound = conditionsShown ? [] : [...topics.filter((t) => !narrowAnswered && !answeredTopics.has(t.key) && !setAside.has(t.key) && !candidates.some((c) => c.topic === t.key) && !(t.key === "rider" && topics.some((x) => x.key === "premium") && shown.some((a) => a.topic === "premium")) && !shown.some((a) => a.policyId && kindsOf(a.policyId).includes(t.key))).map((t) => t.label),
+  const notFound = conditionsShown ? [] : [...topics.filter((t) => !narrowAnswered && !answeredTopics.has(t.key) && !setAside.has(t.key) && !candidates.some((c) => c.topic === t.key) && !(t.key === "rider" && topics.some((x) => x.key === "premium") && shown.some((a) => a.topic === "premium")) && !shown.some((a) => a.policyId && kindsOf(a.policyId).includes(t.key))
+    // Round 10: "Accidental death: S$50,000" is shown -- death cover is not "not found".
+    && !shown.some((a) => { const w = t.label.replace(/^(?:an?|the|any) /, "").split(/\s+/)[0]; return w === "death" && new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(a.title); })).map((t) => t.label),
     ...narrowMissing.filter(Boolean).map((w) => /^(?:deductible|co-?payment|co-?pay|pro-?ration|annual limit|policy[- ]year limit|overall limit|yearly limit)$/.test(w) ? (/^[aeiou]/.test(w) ? "an " : "a ") + w : w)];
   const whose = args.people.length === 1 ? (isSelf(args.people[0].id) ? "your" : personName(args.people[0].id) + "’s") : "your family’s";
   const lines: string[] = [];
   const windowAsked = Number.isFinite(windowDays);
   const aboutLabels = shown.length && shown.every((a) => a.id.startsWith("meta:")) ? [] : conditionsShown ? topics.filter((t) => ["dental", "maternity", "outpatient"].includes(t.key)).map((t) => t.label) : topicLabels;
-  if (shown.length) lines.push((whose === "your" ? "Here is what your" : "Here is what " + whose) + " documents state" + (aboutLabels.length ? " about " + aboutLabels.join(" and ") : "") + ". Each line shows the page it comes from.");
+  // "How much?" after a question about cover: the amounts, said as amounts.
+  const amountsAsked = /^\s*(?:and\s+|so\s+)?how much\b[^?]{0,20}\??\s*$/i.test(args.message ?? askedText) && shown.some((a) => a.amount != null);
+  if (shown.length) lines.push(amountsAsked ? "These are the amounts " + (whose === "your" ? "your" : whose) + " documents state" + (aboutLabels.length ? " for " + aboutLabels.join(" and ") : "") + ", each with the page it comes from."
+    : (whose === "your" ? "Here is what your" : "Here is what " + whose) + " documents state" + (aboutLabels.length ? " about " + aboutLabels.join(" and ") : "") + ". Each line shows the page it comes from.");
   // Several people asked about: who has nothing on it is said, not left out.
   // A household's car or home policy, or a window of dates, is not something each person is missing.
   if (args.people.length > 1 && shown.length && !conditionsShown && topics.length && !topics.some((t) => t.key === "status") && !windowAsked && !topics.some((t) => ["motor", "home"].includes(t.key))) {
@@ -1366,6 +1399,43 @@ export async function answerPolicyQuestion(args: PolicyAnswerArgs): Promise<Poli
     ...shown.filter((a) => a.amount != null && a.currency).map((a) => money(a.amount!, a.currency!))])];
   // Round 9: a short question gets a short answer; the rest is a question away, never a wall of lines.
   const broad = /\b(?:everything|every|all|overview|list|family|everyone|compare|total|altogether|what (?:am i|is \w+) (?:insured|covered)|what (?:do|does) [^?]{1,40} (?:have|cover)|tell me about|what insurance|what policies)\b/i.test(askedText);
+  // Round 10: the answer misses what was asked ("recuperation", "nominee", "ICU days") while a line
+  // the person's own documents print says it: that line, quoted verbatim with its page, comes first.
+  // Only from the plans this answer is about: another plan's line never "repairs" it.
+  const answeredDocs = new Set(shown.map((a) => a.policyId));
+  // A person's name is who is asked about, never what ("Maria's helper insurance" is not the line naming Maria).
+  const withoutNames = args.people.flatMap((p) => [p.display_name, p.preferred_name ?? "", ...p.display_name.split(/\s+/).filter((w) => w.length >= 3)]).filter((n) => n.trim().length >= 2)
+    .reduce((t, n) => t.replace(new RegExp("\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?:['’]s)?\\b", "gi"), " "), askedText);
+  const repaired = relevanceRepair(withoutNames, [summary, ...details].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName);
+  for (const r of repaired) {
+    details.unshift(r.text);
+    if (!citations.some((c) => c.policyId === r.citation.policyId && c.pageStart === r.citation.pageStart)) citations.push(r.citation);
+    for (const m of r.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []) if (!figures.includes(m)) figures.push(m);
+  }
+  // Round 10: the lines that answer what was asked came from the repair ("for how many days?" after an
+  // ICU question is the ICU days, not the period of insurance): the summary names what those lines are
+  // about, from the lines themselves, not the topic the question's words first matched.
+  if (repaired.length && !narrated && aboutLabels.length) {
+    const quotedOf = (t: string) => t.replace(/^[^“]*“/, "").replace(/”[^”]*$/, "");
+    const answeredLabels = [...new Set(repaired.map((r) => TOPICS.find((t) => t.fact.source !== "(?!)" && t.fact.test(quotedOf(r.text)))?.label).filter((l): l is string => !!l))];
+    const was = aboutLabels.join(" and ");
+    if (!answeredLabels.some((l) => aboutLabels.includes(l))) {
+      const now = answeredLabels.join(" and ");
+      summary = summary.replace(" about " + was + ".", now ? " about " + now + "." : ".").replace(" for " + was + ",", now ? " for " + now + "," : ",");
+    }
+  }
+  // Round 10: "read me the benefits table": a row whose amount the scan prints unclearly is still a row of
+  // the table -- shown with the amount said to be unclear on the scan, never silently dropped.
+  if (/\b(?:benefits? (?:table|schedule|list)|schedule of benefits|table of benefits|(?:all|every) (?:of )?(?:the |her |his |my |their )?benefits?|list (?:all |the |every )?benefits)\b/i.test(askedText)) {
+    const text = () => [summary, ...details].join("\n").toLowerCase();
+    for (const docId of answeredDocs) for (const p of pagesByDoc.get(docId) ?? []) for (const piece of piecesOf(p.text)) {
+      if (!unclearFigures(piece).length || !/%|\bsum (?:assured|insured)\b|\bup to\b|\bper (?:day|year|admission)\b|\bpayable\b/i.test(piece)) continue;
+      const row = piece.split(/:|\s{2,}|\t/)[0].replace(/\s*\([^)]*\)\s*$/, "").trim();
+      if (row.length < 3 || text().includes(row.toLowerCase())) continue;
+      details.push(docName(docId) + " — “" + flagUnclearFigures(piece).replace(/[.;\s]+$/, "") + "” (page " + p.page + ").");
+      if (!citations.some((c) => c.policyId === docId && c.pageStart === p.page)) citations.push({ chunkId: "page:" + docId + ":" + p.page, policyId: docId, policyName: docName(docId), pageStart: p.page, pageEnd: p.page });
+    }
+  }
   if (!broad && details.length > 10) { const more = details.length - 9; details.splice(9, details.length, "There " + (more === 1 ? "is 1 more line" : "are " + more + " more lines") + " on this in the documents — ask about one benefit (for example the deductible, intensive care or surgery) to see it."); }
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
@@ -1401,4 +1471,25 @@ export function isFactualPolicyQuestion(question: string) {
   if (CONDITION_QUESTION.test(question)) return true;
   if (/^\s*what (?:does|do|would|will) [^?]*\b(?:policy|plan|insurance|cover)\b[^?]*\b(?:pay|provide)\b/i.test(question)) return true;
   return !/\b(?:what if|if (?:i|he|she|we|they|my|our|his|her|their|\w+ (?:is|was|were|gets?|dies?|died))|suppose|supposing|assuming|in case|were to)\b/i.test(question);
+}
+
+/** Round 10: what a question asks that its answer does not say, when a line of
+ * the person's own documents does: at most two such lines, quoted verbatim. */
+const REPAIR_GENERIC = new Set("cover covered policy policies plan plans pay pays paid much insurance benefit benefits amount whole life many does still have has get what which mama papa your their his her hospital medical schedule document part kind type thing really also now one left".split(" ").map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
+export function relevanceRepair(question: string, answerText: string, pagesByDoc: Map<string, { page: number; text: string }[]>, docName: (id: string) => string) {
+  const said = wordsOf(answerText);
+  const productWords = new Set([...pagesByDoc.keys()].flatMap((id) => [...wordsOf(docName(id))]));
+  // "a day", "ICU", "GST": short words that still say what is asked.
+  const missing = [...wordsOf(question)].filter((w) => (w.length >= 4 || /^(?:day|icu|gst|tcm|age)$/.test(w)) && !REPAIR_GENERIC.has(w) && !productWords.has(w) && !said.has(w));
+  if (!missing.length) return [];
+  const found: { text: string; citation: ChatCitation; score: number }[] = [];
+  for (const [docId, pages] of pagesByDoc) {
+    for (const l of bestLines(pages, question, { limit: 2, min: 1.5 })) {
+      const missed = l.hits.filter((h) => missing.includes(h));
+      if (!missed.length || l.hits.length < 2) continue;
+      found.push({ text: docName(docId) + " — “" + l.line.replace(/[.;\s]+$/, "") + "” (page " + l.page + ").", score: l.score,
+        citation: { chunkId: "page:" + docId + ":" + l.page, policyId: docId, policyName: docName(docId), pageStart: l.page, pageEnd: l.page } });
+    }
+  }
+  return found.sort((a, b) => b.score - a.score).slice(0, 2).reverse();
 }

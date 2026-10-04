@@ -1,4 +1,5 @@
 import { query } from "@/lib/db/client";
+import { NON_COVER_ROLES } from "@/lib/documents/messy";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { canonicalDeathInsurer } from "@/lib/claims/death-evidence";
 import { canonicalProduct, confirmedOwnedCoverages, type OwnedCoverage } from "@/lib/coverage/facts";
@@ -150,6 +151,9 @@ export async function loadPolicyInventory(accountId:string,people:ClaimPerson[])
       doc.declared_member_ids=Array.isArray(doc.declared_member_ids)?doc.declared_member_ids:[];
       if(!doc.group_policy_number)doc.group_policy_number=doc.header.match(/group\s+policy\s+(?:no\.?|number)\s*[:#-]?\s*([A-Z0-9-]{4,})/i)?.[1]??null;
       if(!doc.insurer&&/\bSingapore Life Ltd\b/i.test(doc.header))doc.insurer="Singapore Life Ltd";
+      // Round 10: a letter, claim decision, bill, app screenshot or the family's
+      // own notes is never a contract (lib/chat/document-questions.ts answers from them).
+      if(NON_COVER_ROLES.has(doc.document_role??""))continue;
       documents.push(doc);
     }
     if(r.rows.length<200)break;cursor=r.rows.at(-1)!.id;

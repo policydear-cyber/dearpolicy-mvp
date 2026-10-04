@@ -22,10 +22,28 @@ import { planLimits } from "./ledger";
 // ---------------------------------------------------------------------------
 // Which household a model call is for, for the whole request/job.
 // ---------------------------------------------------------------------------
-const householdScope = new AsyncLocalStorage<{ householdId: string; exhausted?: Set<string> }>();
-/** Runs `fn` with every model call inside it attributed to `householdId`. */
-export function runWithModelHousehold<T>(householdId: string, fn: () => Promise<T>): Promise<T> {
-  return householdScope.run({ householdId, exhausted: new Set() }, fn);
+const householdScope = new AsyncLocalStorage<{ householdId: string; exhausted?: Set<string>; deadline?: number }>();
+/** Runs `fn` with every model call inside it attributed to `householdId`.
+ * Round 10: with `budgetMs`, every model call inside it also shares one time
+ * budget (lib/ai/llm.ts clamps each call's timeout to what is left and fails
+ * a call fast once it is spent), so a slow or hanging provider can no longer
+ * stack 150-second timeouts and retries past the platform's function limit --
+ * the turn falls back to what code can answer instead of dying mid-answer. */
+export function runWithModelHousehold<T>(householdId: string, fn: () => Promise<T>, opts: { budgetMs?: number } = {}): Promise<T> {
+  const deadline = opts.budgetMs != null && opts.budgetMs > 0 ? Date.now() + opts.budgetMs : undefined;
+  return householdScope.run({ householdId, exhausted: new Set(), deadline }, fn);
+}
+/** Milliseconds left in this request's model time budget; null when none was set. */
+export function remainingModelTimeMs(): number | null {
+  const deadline = householdScope.getStore()?.deadline;
+  return deadline == null ? null : Math.max(0, deadline - Date.now());
+}
+/** A chat turn's model time budget: CHAT_TURN_MODEL_BUDGET_MS, default 150 s
+ * (the chat functions' limit is 300 s; the rest is the database, the answer
+ * itself and the retry the job runner may still need). */
+export function chatTurnModelBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.CHAT_TURN_MODEL_BUDGET_MS);
+  return Number.isFinite(raw) && raw >= 5_000 ? Math.min(raw, 270_000) : 150_000;
 }
 /** Round 8: a provider account found out of quota during this request. The
  * rest of the request answers without it rather than calling an account that
