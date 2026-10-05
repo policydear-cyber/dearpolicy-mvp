@@ -660,7 +660,7 @@ export function assessCatalogBenefit(args:{benefit:CatalogBenefit;coverage:Owned
           :"Estimated from the quoted clause"+onPage(benefit.sourcePage)+" and a sum insured found in a document naming you, rather than in your own schedule or certificate.")
         :"Calculated from your policy schedule and the quoted clause"+onPage(benefit.sourcePage)+".")+paidUnder
       :missing[0]?"It may apply; "+missing[0].replace(/[.\s]+$/,"")+" is still needed to work out an amount"+(benefit.sourcePage?" (page "+benefit.sourcePage+")":"")+"."
-      :whatItPays(benefit)+".",
+      :whatItPays(benefit)+(benefit.sourcePage?" (page "+benefit.sourcePage+")":"")+".",
     conditions:[...new Set(conditions)],
   };
   // No figure yet, but the rule is known. Showing the rule is the answer: a

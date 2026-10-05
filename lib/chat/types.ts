@@ -34,6 +34,9 @@ export type ConversationState = {
   scenarios?: Record<string, ScenarioClassification[]>;
   intent?: "claim" | "portfolio" | "policy_question";
   activeQuery?: string;
+  /** Round 13: who the last answer was about, when it was about several people (a family-wide answer);
+   * "show me the full list" answers for the same people. */
+  answerPeople?: string[];
   activeClaimQuery?: string;
   pending?: ChatQuestion & { subjectId: string; factKey: string };
   /** The claim on record for this conversation's event, once one exists. */

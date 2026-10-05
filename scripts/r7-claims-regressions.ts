@@ -88,6 +88,18 @@ async function main() {
   // A check that something is NEVER offered failing is a planted fact; one that expected a benefit and found none is usefulness lost to a badly read booklet.
   if (groupFails.length) records.push({ conv: "group cover checks", turn: -1, question: "", status: 0, summary: "", answer: null,
     hits: groupFails.map((text) => ({ rule: /\b(?:never|nothing|no GP|no card|only|not covered)\b/i.test(text.split(" (got")[0]) ? "group cover check failed" : "group cover expected but missing", text })) });
+  // Round 13: a full list prints every line with its amount; a printed-limit card saying only what a listed
+  // line says is left out, and one the list does not print (another person's, another amount) stays.
+  {
+    const { withoutListedLimitCards } = await import("@/lib/chat/policy-answer");
+    const details = ["Mei Ling and Wei Jie · TravelSafe Annual Family — Trip cancellation: S$10,000 (page 3).", "Xin Yi · TravelSafe Annual Family — Baggage: S$5,000 (S$500 per item) (page 3)."];
+    const limits = [{ ownerName: "Mei Ling and Wei Jie", benefitTitle: "Trip cancellation", amountText: "S$10,000" }, { ownerName: "Xin Yi", benefitTitle: "Trip cancellation", amountText: "S$5,000" },
+      { ownerName: "Xin Yi", benefitTitle: "Baggage", amountText: "S$500" }, { ownerName: "Xin Yi", benefitTitle: "Baggage", amountText: "S$5,000" }];
+    withoutListedLimitCards(details, limits);
+    const kept = limits.map((l) => l.ownerName + "|" + l.benefitTitle + "|" + l.amountText).join(", ");
+    if (kept !== "Xin Yi|Trip cancellation|S$5,000")
+      records.push({ conv: "full-list card checks", turn: -1, question: "", status: 0, summary: "", answer: null, hits: [{ rule: "full list repeats its lines as cards", text: "kept: " + kept }] });
+  }
   let messages = 0, conversations = 0;
   const turnsPer: number[] = [];
   const send = async (member: string, question: string, conv: { id?: string; rev?: number; personContextMessage?: string; personContextRecordedAt?: string }, personChoiceId?: string) => {
@@ -232,6 +244,37 @@ async function main() {
         }
         void all;
       }
+    }
+    // Round 13: the claim pack (the printed sheet) follows the same rule as the answer: every sentence once.
+    if (conv.id && finalAnswer?.claimSessionId) {
+      const row = (await h.db.query<{ decision_packet: import("@/lib/claims/types").ClaimDecisionPacket | null }>("SELECT decision_packet FROM claim_sessions WHERE account_id=$1 AND conversation_id=$2 ORDER BY updated_at DESC LIMIT 1", [F.ACCOUNT, conv.id])).rows[0];
+      if (row?.decision_packet) {
+        const { claimPackContent } = await import("@/lib/claims/claim-pack");
+        const lines = claimPackContent({ packet: row.decision_packet, claimantName: "Claimant", generatedOn: new Date("2026-10-01") }).sections.flatMap((x) => x.lines);
+        const seen = new Map<string, number>();
+        for (const line of lines) for (const raw of line.replace(/^\s*(?:•|\d+\.|Condition:|Why it may be relevant:)\s*/, "").split(/(?<=[.!?])\s+/)) {
+          if (raw.trim().length < 25) continue;
+          const k = D.normalSentence(raw); seen.set(k, (seen.get(k) ?? 0) + 1);
+        }
+        for (const [k, n] of seen) if (n > 1) convHit("claim pack repeats a sentence", n + "x: " + k);
+        // Round 13: every benefit on record that is not ruled out -- a personal one still needing documents
+        // included, not only the group card -- is on the sheet with its status, as every card the answer shows.
+        const STATUS = / — (?:Likely applicable|Potentially applicable|Needs checking)$/;
+        const benefitLines = lines.filter((l) => !/^\s/.test(l) && STATUS.test(l));
+        const packTitles = new Set(benefitLines.map((l) => l.replace(STATUS, "").replace(/ \(the policy pays this instead of .*\)$/, "")));
+        const recorded = row.decision_packet.assessments.filter((x) => x.status !== "not_applicable");
+        for (const x of recorded) if (!packTitles.has(x.title)) convHit("benefit missing from the claim pack", x.title + " (" + x.status + ") not in: " + [...packTitles].join("; ").slice(0, 200));
+        if (benefitLines.length !== recorded.length) convHit("claim pack benefit without its status", benefitLines.length + " benefits with a status for " + recorded.length + " on record");
+        const recordedTitles = new Set(row.decision_packet.assessments.map((x) => x.title));
+        for (const card of D.shownCards(finalAnswer)) if (recordedTitles.has(card.title) && !packTitles.has(card.title)) convHit("card in the answer missing from the claim pack", card.title);
+        if (dump) appendFileSync(dump, JSON.stringify({ conv: c.name, pack: lines }) + "\n");
+      }
+    }
+    // Round 13: a hospital stay's claim always asks for the itemised bill and the discharge summary,
+    // whichever policy (personal or the employer's group plan) may pay it.
+    if (/^hosp:/.test(c.name) && (c.concludes ?? true) && !/\bnot admitted\b/i.test(c.opening) && finalAnswer?.mode === "claim_assessment" && D.shownCards(finalAnswer).length) {
+      const docs = D.checklist(finalAnswer);
+      if (!docs.some((d) => /itemi[sz]ed/i.test(d) && /bill/i.test(d)) || !docs.some((d) => /discharge summary/i.test(d))) convHit("hospital claim checklist without the bill or discharge summary", docs.join("; ") || "(no checklist)");
     }
     for (const x of convRecs.at(-1)!.hits.slice(hitsBefore)) out("  conversation " + c.name + ": " + x.rule + " — " + x.text.slice(0, 200));
     if (dump) for (const rec of convRecs) appendFileSync(dump, JSON.stringify(rec) + "\n");
@@ -419,6 +462,10 @@ async function groupCoverChecks(F: typeof import("./r6/fixture")): Promise<strin
     G.applyGroupCover(answer, cover); G.applyGroupCover(answer, cover);
     check("applied once, however often", answer.claimItems.length === 1 && answer.citations.length === 1 && (answer.nextSteps[0].match(/HR/g) ?? []).length === 1 && (answer.summary.match(/group plan/g) ?? []).length === 1, answer);
     check("group sentence before the closing caveat", /group plan — it is on its own card below, and HR or the insurer can confirm it\. This is not a promise of payment/.test(answer.summary), answer.summary);
+    // Round 13: a summary that already names the booklet as the possible benefit is not told about it twice; the card is still added.
+    const named = { ...answer, summary: "Wei Jie’s policies have a possible benefit: " + (cover.cards[0]?.coverLabel ?? "?") + " — Death. This is not a promise of payment: the insurer decides.", claimItems: [], citations: [], nextSteps: [] } as unknown as ChatAnswer;
+    G.applyGroupCover(named, cover);
+    check("booklet already named: card added, no second group sentence", named.claimItems.length === 1 && !/group plan/.test(named.summary), named.summary);
   }
   return fails;
 }
@@ -474,6 +521,15 @@ function selfTest(D: typeof import("./r7/claim-detectors")): string[] {
   if (D.sameDocument("Death certificate", "Police or coroner's report")) fails.push("distinct documents judged the same");
   expectRule("garbled echo", base({ summary: "DearPolicy didn’t find i send the insurer in the parts of your policies read so far." }), /garbled echo/);
   expectRule("generic fallback", base({ summary: "I couldn’t find a benefit in your documents that matches what you described." }), /generic/);
+  // Round 13: the claim-answer shape (word ceilings, every sentence once, a page on every card).
+  const shape = (name: string, a: ChatAnswer, rule: RegExp) => { if (!D.detectClaimAnswerShape(a).some((x) => rule.test(x.rule))) fails.push(name + " not detected"); };
+  if (D.detectClaimAnswerShape(base({ claimItems: [card("A · TermSecure 20 — Sum assured - death"), card("A · TravelSafe — Accidental death", { reason: "Pays a set amount (page 3)." })] })).length) fails.push("clean claim answer flagged by the shape rules");
+  shape("main text over the ceiling", base({ claimItems: [card("A · X — Death")], details: ["word ".repeat(D.CLAIM_MAIN_WORDS).trim() + "."] }), /claim answer too long$/);
+  shape("cards over the ceiling", base({ claimItems: Array.from({ length: 12 }, (_, n) => card("A · X — Benefit " + n, { reason: "Pays a set amount (page " + (n + 2) + ").", conditions: ["Still needed: " + "detail ".repeat(30).trim() + " " + n + "."] })) }), /too long with its cards/);
+  shape("sentence repeated across cards", base({ claimItems: [card("A · X — Death", { conditions: ["Subject to the insurer's assessment and the plan's own terms."] }), card("A · Y — Disability", { reason: "Pays a share of the sum insured (page 4).", conditions: ["Subject to the insurer's assessment and the plan's own terms."] })] }), /repeated sentence in a claim answer/);
+  shape("summary said again in the details", base({ summary: "This is not a promise of payment: the insurer decides after assessing the claim.", details: ["This is not a promise of payment: the insurer decides after assessing the claim."], claimItems: [card("A · X — Death")] }), /repeated sentence in a claim answer/);
+  shape("card without its page", base({ claimItems: [card("A · X — Death", { reason: "Pays a set amount." })] }), /without its page/);
+  shape("cards that read the same", base({ claimItems: [card("A · X — Pre-hospital", { reason: "Pays as charged (page 3)." }), card("A · X — Post-hospital", { reason: "Pays as charged (page 3)." })] }), /no distinguishing content/);
   return fails;
 }
 

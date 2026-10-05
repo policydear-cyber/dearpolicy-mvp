@@ -1573,6 +1573,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   { const seenCard = new Set<string>(); limits.splice(0, limits.length, ...limits.filter((l) => { const k = (l.ownerName ?? "") + "|" + l.benefitTitle.toLowerCase() + "|" + l.amount + "|" + l.currency; if (seenCard.has(k)) return false; seenCard.add(k); return true; })); }
   // A card is for an amount on a line shown; a "who has it" listing shows no rows, so no cards.
   if (details.length) { const visible = [summary, ...details].join("\n"); limits.splice(0, limits.length, ...limits.filter((l) => visible.includes(l.benefitTitle))); }
+  if (fullList) withoutListedLimitCards(details, limits);
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
     confidence: kept.length && !conflicting.length ? (rejected.length || notFound.length ? "partial_match" : "strong_match") : "partial_match",
@@ -1603,6 +1604,14 @@ export function conciseDetails(details: string[], limits: { benefitTitle: string
   details.splice(0, details.length, ...chosen, "There " + (more === 1 ? "is 1 more line" : "are " + more + " more lines") + " on this in the documents — ask for the full list to see " + (more === 1 ? "it" : "them") + ".");
   const visible = details.join("\n");
   limits.splice(0, limits.length, ...limits.filter((l) => visible.includes(l.benefitTitle)));
+}
+/** Round 13: in a full list every line is already printed with its amount, so a policy-stated-limit card that
+ * says only what a listed line says (same person, benefit and amount) is the list again and is left out. */
+export function withoutListedLimitCards(details: string[], limits: { ownerName?: string | null; benefitTitle: string; amountText: string }[]) {
+  const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const listed = (l: (typeof limits)[number]) => details.some((d) => d.includes(l.benefitTitle) && (!l.ownerName || d.startsWith(l.ownerName + " · ")) &&
+    !!l.amountText && new RegExp(escape(l.amountText) + "(?![\\d,.]\\d)").test(d));
+  limits.splice(0, limits.length, ...limits.filter((l) => !listed(l)));
 }
 /** Round 12: a printed deadline to submit or notify. */
 const SUBMIT_DEADLINE = /\b(?:submit\w*|notif\w*|lodg\w*|send|written notice|claims? must be)\b[^.]{0,160}\bwithin \d+ (?:days?|months?|weeks?)\b|\bwithin \d+ (?:days?|months?|weeks?)\b[^.]{0,80}\b(?:submit\w*|notif\w*|lodg\w*)\b/i;

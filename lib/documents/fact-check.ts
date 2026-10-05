@@ -11,7 +11,7 @@
  */
 import type { PolicyExtraction } from "@/lib/ai/extract-policy";
 import { PERSONAL_AUTHORITY_ROLES } from "@/lib/documents/intelligence";
-import { amountAppears, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDates } from "@/lib/documents/evidence";
+import { amountAppears, documentDateFrom, locatePassage, looksLikeInjectedInstruction, nameAppears, parsePrintedDate, printedDateMatches, printedDates } from "@/lib/documents/evidence";
 
 type Page = { pageNumber: number; text: string };
 const norm = (value: string) => String(value ?? "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
@@ -112,23 +112,94 @@ export function onlyPrintedAsGroupNumber(pages: Page[], number: string) {
   }
   return seen > 0 && group === seen;
 }
-const START_CONTEXT = /\b(?:start|commenc\w*|effective|inception|from|begin\w*|issue\s+date|date\s+of\s+issue|policy\s+date|period\s+of\s+(?:insurance|cover)|cover\s+period|policy\s+period|insured\s+period|valid\s+from)\b/i;
-const END_CONTEXT = /\b(?:expir\w*|end\w*|until|till|to|through|renew\w*|maturity|matures?|valid\s+(?:till|until|to)|period\s+of\s+(?:insurance|cover)|cover\s+period|policy\s+period|lapse\w*|grace|due)\b/i;
-const OTHER_DATE_CONTEXT = /\b(?:date\s+of\s+birth|birth\s*date|born|d\.?o\.?b|valuation|bid\s+price|nav|receipt\s+(?:no|date)|date\s+of\s+payment|payment\s+received|paid\s+on|statement\s+date|claim\s+date|date\s+of\s+(?:accident|loss|admission))\b/i;
-/** Lines that print this ISO date. */
-function linesWithDate(pages: Page[], iso: string) {
-  return pages.flatMap((p) => p.text.split("\n")).filter((line) => printedDates(line).includes(iso));
+/**
+ * Round 13: what a printed date IS, read from the words printed before it on its own line (the
+ * closest label wins) -- or from its place in a printed period ("1 March 2026 to 28 February
+ * 2027": the first date starts it, the second ends it). A date the reader reports as the start or
+ * the expiry must be printed at least once in a place that fits: an expiry printed only as a
+ * "Policy start date", a start printed only as the end of the period, a birth or valuation date
+ * as either, is not that date.
+ */
+export type PrintedDateKind = "start" | "issue" | "expiry" | "end" | "due" | "maturity" | "renewal" | "other" | "period" | "unlabelled";
+const DATE_LABELS: [Exclude<PrintedDateKind, "unlabelled">, RegExp][] = [
+  ["other", /\b(?:date\s+of\s+birth|birth\s*date|born|d\.?o\.?b\.?|tarikh\s+lahir|age|valuation|bid\s+price|nav|as\s+at|receipt|date\s+of\s+payment|payment\s+(?:received|date)|paid(?:\s+on)?|statement\s+date|tarikh\s+penyata|claim|date\s+of\s+(?:accident|loss|admission|discharge|event)|admitted|discharged|letter|printed|^\s*date)/gi],
+  ["issue", /\b(?:date\s+of\s+issue|issue\s+date|issued(?:\s+on)?|date\s+issued)\b/gi],
+  ["maturity", /\b(?:matur\w*)\b/gi],
+  ["start", /\b(?:start\w*|commenc\w*|effective|inception|from|begin\w*|valid\s+from|cover\s+start|mula|policy\s+date|in\s+force\s+since)\b/gi],
+  // A renewal date both ends one period and starts the next.
+  ["renewal", /\b(?:renew\w*)\b/gi],
+  // A payment due date, a grace period's end or a lapse: an end of sorts, never the expiry a reader can be corrected to.
+  ["due", /\b(?:lapse\w*|grace|due)\b/gi],
+  ["expiry", /\b(?:expir\w*|end\s+date|ends?|ended)\b/gi],
+  ["end", /\b(?:until|till|through|valid\s+(?:till|until|to)|to)\b/gi],
+  ["period", /\b(?:period\s+of\s+(?:insurance|cover)|cover\s+period|policy\s+period|insured\s+period|period)\b/gi],
+];
+function labelKind(label: string): PrintedDateKind {
+  let best: { kind: PrintedDateKind; end: number } | null = null;
+  for (const [kind, re] of DATE_LABELS) for (const m of label.matchAll(re)) {
+    const end = (m.index ?? 0) + m[0].length;
+    if (!best || end > best.end) best = { kind, end };
+  }
+  return best?.kind ?? "unlabelled";
 }
-/** A start or expiry date is acceptable when it is printed and at least one
- * line that prints it reads like that role (or carries no label at all) --
- * never a date printed only as a birth, valuation, receipt or claim date. */
+/** Every printing of a date in the pages, with what its label says it is. */
+export function printedDateKinds(pages: Page[], iso: string): PrintedDateKind[] {
+  const out: PrintedDateKind[] = [];
+  for (const page of pages) {
+    const lines = page.text.split("\n");
+    lines.forEach((line, i) => {
+      const found = printedDateMatches(line);
+      found.forEach((m, k) => {
+        if (m.iso !== iso) return;
+        const prev = found[k - 1], next = found[k + 1];
+        const RANGE = /^\s*(?:to|until|till|through|-|–|—|hingga|sehingga)\s*$/i;
+        if (next && RANGE.test(line.slice(m.index + m.length, next.index))) { out.push("start"); return; }
+        if (prev && RANGE.test(line.slice(prev.index + prev.length, m.index))) { out.push("expiry"); return; }
+        let label = line.slice(prev ? prev.index + prev.length : 0, m.index);
+        if (!/[a-z]{2}/i.test(label)) label = (lines[i - 1] ?? "").slice(-80) + " " + label;
+        out.push(labelKind(label.slice(-80)));
+      });
+    });
+  }
+  return out;
+}
+/** A start or expiry date is acceptable when it is printed at least once with a label that fits
+ * that role (or a period or no label at all). An issue date stands for the start only when the
+ * document prints no start date of its own; a maturity date is an expiry. */
 export function dateFitsRole(pages: Page[], iso: string, role: "start" | "end") {
-  const lines = linesWithDate(pages, iso);
-  if (!lines.length) return false;
-  const fits = role === "start" ? START_CONTEXT : END_CONTEXT;
-  if (lines.some((line) => fits.test(line))) return true;
-  return lines.some((line) => !OTHER_DATE_CONTEXT.test(line));
+  const kinds = printedDateKinds(pages, iso);
+  if (!kinds.length) return false;
+  if (role === "end") return kinds.some((k) => k === "expiry" || k === "end" || k === "due" || k === "maturity" || k === "renewal" || k === "period" || k === "unlabelled");
+  if (kinds.some((k) => k === "start" || k === "renewal" || k === "period" || k === "unlabelled")) return true;
+  if (!kinds.includes("issue")) return false;
+  const text = pages.map((p) => p.text).join("\n");
+  return !printedDateMatches(text).some((m) => m.iso !== iso && printedDateKinds(pages, m.iso).includes("start"));
 }
+/** Round 13: the one date a document prints under a label of that role (a start or commencement
+ * date or the first date of its period; a maturity date, else the last date of its period or an
+ * expiry date), or null when it prints none or more than one. */
+export function labelledDate(pages: Page[], role: "start" | "end"): string | null {
+  const text = pages.map((p) => p.text).join("\n");
+  const dates = [...new Set(printedDateMatches(text).map((m) => m.iso))];
+  const kinds = new Map(dates.map((d) => [d, printedDateKinds(pages, d)]));
+  const having = (k: PrintedDateKind) => dates.filter((d) => kinds.get(d)!.includes(k));
+  const pick = (list: string[]) => (list.length === 1 ? list[0] : null);
+  if (role === "start") return pick(having("start"));
+  const maturity = having("maturity");
+  return maturity.length ? pick(maturity) : pick(having("expiry").filter((d) => !kinds.get(d)!.some((k) => k === "due" || k === "renewal" || k === "start")));
+}
+/** Round 13: the policy term a document prints, in years ("Policy term 18 years", "a 20-year plan"). */
+export function printedTermYears(fullText: string): number | null {
+  const m = fullText.match(/\b(?:policy\s+|plan\s+|benefit\s+|coverage\s+|cover\s+)?term\s*(?:of\s*)?[:\-\t ]\s*(\d{1,2})\s*years?\b/i)
+    ?? fullText.match(/\b(\d{1,2})[-\s]year\s+(?:policy\s+)?(?:term|policy|plan|endowment|cover)\b/i);
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isFinite(n) && n >= 1 && n <= 99 ? n : null;
+}
+function printedTermYearsAll(fullText: string): number[] {
+  return [...fullText.matchAll(/\b(?:term|plan|endowment|policy)[^\n]{0,24}?(\d{1,2})\s*years?\b|\b(\d{1,2})[-\s]year\b/gi)].map((m) => Number(m[1] ?? m[2])).filter((n) => n >= 1 && n <= 99);
+}
+const DAY_MS = 86_400_000;
+const isoMs = (d: string) => Date.parse(d + "T00:00:00Z");
 
 // ---------------------------------------------------------------------------
 // Roles
@@ -137,16 +208,62 @@ const PAYMENT_WORDS = /\b(?:premium|receipt|payment|payable|amount\s+due|paid|gi
 const PERSONAL_WORDS = /\b(?:insured\s+person|life\s+assured|name\s+of\s+(?:the\s+)?insured|policyholder|policy\s+owner|insured\s*:|particulars\s+of\s+insured|named\s+driver|insured\s+helper|employee\s+name|member\s+name)\b/i;
 const PAYMENT_ROLES = new Set(["premium_receipt", "renewal_statement", "annual_statement"]);
 const PERSONAL_ROLES = new Set(["personal_schedule", "certificate", "endorsement"]);
-const REFERENCE_ROLE_SET = new Set(["policy_wording", "product_summary", "benefit_guide", "brochure"]);
+const REFERENCE_ROLE_SET = new Set(["policy_wording", "product_summary", "benefit_guide", "brochure", "policy_illustration", "claim_form", "welcome_letter"]);
+/** Round 13: the wording that names each kind of document. A role other than the generic ones
+ * ("personal_schedule", "other") is kept only when the document prints its name. */
+const ROLE_WORDS: Partial<Record<NonNullable<PolicyExtraction["documentRole"]>, RegExp>> = {
+  certificate: /\bcertificate\s+(?:of\s+(?:insurance|renewal|cover|entitlement)|and\s+schedule)|\b(?:insurance|renewal)\s+certificate\b|\bcertificate\s+(?:no\.?|number)\b/i,
+  endorsement: /\bendorsement\b|\b(?:policy\s+)?amendment\b/i,
+  premium_receipt: /\breceipt\b|\bpayment\s+(?:received|acknowledg\w*)|\bpremium\s+notice\b|\bamount\s+received\b|\btax\s+invoice\b/i,
+  renewal_statement: /\brenewal\s+(?:notice|statement|invitation|premium|advice)\b|\bnotice\s+of\s+renewal\b|\bdue\s+for\s+renewal\b/i,
+  annual_statement: /\b(?:annual|yearly)\s+(?:policy\s+)?statement\b|\bpolicy\s+statement\b|\bstatement\s+of\s+account\b|\bpenyata\s+tahunan\b/i,
+  policy_wording: /\bpolicy\s+(?:wording|conditions|contract\s+terms)\b|\bterms\s+and\s+conditions\b|\bgeneral\s+(?:provisions|conditions|exclusions)\b|\bdefinitions\b/i,
+  product_summary: /\bproduct\s+summar(?:y|ies)\b/i,
+  benefit_guide: /\bbenefits?\s+(?:guide|booklet|summary|schedule|table|highlights)\b|\b(?:summary|schedule|table)\s+of\s+benefits\b|\bhighlights\s+of\s+cover\b|\bemployee\s+benefits\b/i,
+  brochure: /\bbrochure\b|\bleaflet\b|\bwhy\s+choose\b|\bapply\s+(?:now|today)\b/i,
+  policy_illustration: /\b(?:policy|benefit)\s+illustration\b|\billustration\b/i,
+  claim_form: /\bclaim\s+form\b/i,
+  welcome_letter: /\bwelcome\b/i,
+};
+/** The kinds of document a document's TITLE names (its heading lines, product names taken out:
+ * "TravelSafe Annual Family" is a product, not an annual statement). "CERTIFICATE OF RENEWAL" names a
+ * certificate, not a renewal notice. */
+export function titleRoles(pages: Page[], productNames: (string | null | undefined)[] = []): Set<string> {
+  let title = contentLines(pages).slice(0, 6).join("\n");
+  for (const name of [...productNames, titleProductName(pages)]) if (name && name.trim().length >= 4) title = title.split(new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")).join(" ");
+  const out = new Set<string>();
+  const t = title.replace(/\s+/g, " ");
+  if (/\bcertificate\s+of\s+renewal\b|\brenewal\s+certificate\b/i.test(t)) out.add("certificate");
+  else if (ROLE_WORDS.renewal_statement!.test(t)) out.add("renewal_statement");
+  for (const role of ["certificate", "endorsement", "premium_receipt", "annual_statement", "product_summary", "benefit_guide", "brochure", "policy_illustration", "claim_form", "policy_wording"] as const)
+    if (ROLE_WORDS[role]!.test(t) && !(role === "policy_wording" && !/\bpolicy\s+wording\b|\bterms\s+and\s+conditions\b/i.test(t))) out.add(role);
+  // "CERTIFICATE AND SCHEDULE" is a certificate (its schedule is part of it).
+  if (/\b(?:policy\s+)?schedule\b(?!\s+of\s+benefits)|\bpolicy\s+(?:information\s+page|contract)\b/i.test(t.replace(/\bcertificate\s+and\s+schedule\b/gi, "certificate"))) out.add("personal_schedule");
+  return out;
+}
 /** A role the reader chose that the document's own wording cannot carry is not kept. */
-export function plausibleRole(role: PolicyExtraction["documentRole"], fullText: string): PolicyExtraction["documentRole"] {
+export function plausibleRole(role: PolicyExtraction["documentRole"], fullText: string, pages?: Page[], productNames: (string | null | undefined)[] = []): PolicyExtraction["documentRole"] {
   if (!role) return role;
   if (PAYMENT_ROLES.has(role) && !PAYMENT_WORDS.test(fullText)) return null;
   const particulars = PERSONAL_WORDS.test(fullText) && /\b(?:policy|certificate)\s+(?:no\.?|number)\b/i.test(fullText);
   if (PERSONAL_ROLES.has(role) && !particulars) return null;
   // Generic wording never prints one person's particulars and policy number.
   if (REFERENCE_ROLE_SET.has(role) && particulars) return null;
-  return role;
+  // Round 13: a specific kind of document is one whose wording names it -- in its title when its
+  // title names a kind at all; and the generic personal schedule is not a document whose title
+  // names it as a payment notice, a guide or wording.
+  const docPages = pages ?? [{ pageNumber: 1, text: fullText }];
+  const titled = titleRoles(docPages, productNames);
+  if (role === "personal_schedule") {
+    if ([...titled].some((r) => r === "premium_receipt" || r === "renewal_statement" || r === "certificate" || r === "endorsement" || REFERENCE_ROLE_SET.has(r)) && !titled.has("personal_schedule")) return null;
+    return role;
+  }
+  const words = ROLE_WORDS[role];
+  if (!words) return role;
+  if (titled.size) return titled.has(role) ? role : null;
+  let text = fullText;
+  for (const name of productNames) if (name && name.trim().length >= 4) text = text.split(new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")).join(" ");
+  return words.test(text) ? role : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,11 +318,28 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
   // Dates: printed in a line that reads like that role, and in order.
   let startDate = raw.startDate, renewalOrExpiryDate = raw.renewalOrExpiryDate;
   const iso = (d: string | null) => (d ? parsePrintedDate(d) ?? (/^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null) : null);
-  if (startDate && iso(startDate) && printedDates(fullText).includes(iso(startDate)!) && !dateFitsRole(pages, iso(startDate)!, "start")) startDate = drop("a start date this document prints for something else");
-  if (renewalOrExpiryDate && iso(renewalOrExpiryDate) && printedDates(fullText).includes(iso(renewalOrExpiryDate)!) && !dateFitsRole(pages, iso(renewalOrExpiryDate)!, "end")) renewalOrExpiryDate = drop("an expiry date this document prints for something else");
+  let startDropped = false, endDropped = false;
+  if (startDate && iso(startDate) && printedDates(fullText).includes(iso(startDate)!) && !dateFitsRole(pages, iso(startDate)!, "start")) { startDate = drop("a start date this document prints for something else"); startDropped = true; }
+  if (renewalOrExpiryDate && iso(renewalOrExpiryDate) && printedDates(fullText).includes(iso(renewalOrExpiryDate)!) && !dateFitsRole(pages, iso(renewalOrExpiryDate)!, "end")) { renewalOrExpiryDate = drop("an expiry date this document prints for something else"); endDropped = true; }
   if (startDate && renewalOrExpiryDate && iso(startDate) && iso(renewalOrExpiryDate) && iso(startDate)! > iso(renewalOrExpiryDate)!) {
     dropped.push("a start date later than the expiry date (the two were not used)");
-    startDate = null; renewalOrExpiryDate = null;
+    startDate = null; renewalOrExpiryDate = null; startDropped = endDropped = true;
+  }
+  // Round 13: a date the reader got wrong is replaced only by the one date this document prints
+  // under that very label ("Commencement date", "Maturity date", the two ends of its printed period)
+  // -- never guessed, and never when it prints more than one.
+  if (startDropped && !startDate) startDate = labelledDate(pages, "start");
+  if (endDropped && !renewalOrExpiryDate) renewalOrExpiryDate = labelledDate(pages, "end");
+  if (startDate && renewalOrExpiryDate && iso(startDate)! > iso(renewalOrExpiryDate)!) { startDate = null; renewalOrExpiryDate = null; }
+  // Round 13: sanity bounds. Cover does not start more than a year after the document itself was
+  // written (a renewal notice or a schedule is issued shortly before its period, never years ahead).
+  const written = documentDateFrom(pages);
+  if (startDate && iso(startDate) && written && isoMs(iso(startDate)!) - isoMs(written) > 400 * DAY_MS) startDate = drop("a start date implausibly far after the date of this document");
+  // An endowment's or ILP's maturity is its term after its start: a date that is not is some other date.
+  const term = printedTermYears(fullText);
+  if (term && startDate && renewalOrExpiryDate && iso(startDate) && iso(renewalOrExpiryDate)) {
+    const years = (isoMs(iso(renewalOrExpiryDate)!) - isoMs(iso(startDate)!)) / (365.25 * DAY_MS);
+    if (years > 2 && Math.abs(years - term) > 1.05 && Math.abs(years - term + 1) > 1.05 && !printedTermYearsAll(fullText).some((t) => Math.abs(years - t) <= 1.05)) renewalOrExpiryDate = drop("an expiry or maturity date that does not match the policy term this document prints");
   }
 
   // People: printed in the document, one entry per person, a relationship only as printed near them.
@@ -253,8 +387,14 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     return [rec];
   });
 
-  const documentRole = opts.roleFromReader ? plausibleRole(raw.documentRole, fullText) : raw.documentRole;
-  if (documentRole !== raw.documentRole) dropped.push("a document type its own wording does not support");
+  let documentRole = opts.roleFromReader ? plausibleRole(raw.documentRole, fullText, pages, [insurer, productName, ...productsMentioned]) : raw.documentRole;
+  if (documentRole !== raw.documentRole) {
+    dropped.push("a document type its own wording does not support");
+    // Round 13: replaced only by the one kind of REFERENCE document its title names ("Employee Benefits
+    // Booklet"): a role that never confers personal cover. A personal role is never assigned here.
+    const titled = [...titleRoles(pages, [productName, ...productsMentioned])];
+    if (titled.length === 1 && REFERENCE_ROLE_SET.has(titled[0]) && plausibleRole(titled[0] as PolicyExtraction["documentRole"], fullText, pages, [insurer, productName, ...productsMentioned]) === titled[0]) documentRole = titled[0] as PolicyExtraction["documentRole"];
+  }
   const personalCoverageConfirmed = raw.personalCoverageConfirmed && people.length > 0 && !!documentRole && PERSONAL_AUTHORITY_ROLES.has(documentRole);
   // Summaries the reader wrote (shown on the document's page): no instruction, and every figure, date and status in them printed.
   const keep = (items: string[]) => [...new Set(items.filter((x) => readerTextSupported(fullText, x)))];
@@ -294,12 +434,20 @@ function contentLines(pages: Page[]) {
 const TITLE_KINDS = /\s+[-–:]\s+(?:policy\s+schedule|schedule|certificate|policy|statement|benefit\s+illustration|policy\s+illustration|illustration|renewal|notice|endorsement|summary)\b/i;
 /** The product a document names in its own title line ("MEDIGUARD INTEGRATED SHIELD - POLICY SCHEDULE"). */
 const KIND_FIRST = /^(?:notice\s+of\s+lapse|lapse\s+notice|renewal\s+notice|premium\s+notice|premium\s+reminder|grace\s+period\s+reminder|reminder|annual\s+statement|statement)\s*[-–:]\s*(.+)$/i;
+/** A line that is nothing but the kind of document ("POLICY SCHEDULE") under a title line. */
+const KIND_ONLY = /^(?:policy\s+schedule|schedule(?:\s+of\s+insurance)?|certificate(?:\s+of\s+insurance)?|policy\s+certificate|policy\s+statement|annual\s+statement|benefit\s+illustration|policy\s+illustration|endorsement|renewal\s+(?:notice|certificate))$/i;
 export function titleProductName(pages: Page[]): string | null {
-  for (const line of contentLines(pages).slice(0, 40)) {
-    const m = line.match(TITLE_KINDS);
-    const first = m ? null : line.match(KIND_FIRST);
-    if ((!m || m.index == null) && !first) continue;
-    const name = (first ? first[1] : line.slice(0, m!.index)).trim();
+  const lines = contentLines(pages).slice(0, 40);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Round 13: a title printed over two lines ("SHIELDCARE PREMIER - Integrated Shield Plan" / "POLICY SCHEDULE").
+    const twoLine = lines[i + 1] && KIND_ONLY.test(lines[i + 1]) && /[A-Za-z]{3}/.test(line) && !/\t/.test(line) ? line.split(/\s+[-–:]\s+/)[0] : null;
+    const m = twoLine ? null : line.match(TITLE_KINDS);
+    const first = m || twoLine ? null : line.match(KIND_FIRST);
+    if ((!m || m.index == null) && !first && !twoLine) continue;
+    const name = (twoLine ?? (first ? first[1] : line.slice(0, m!.index))).trim();
+    // A rider's own schedule ("SHIELDCARE PLUS RIDER - SCHEDULE OF BENEFITS") does not name the document's product.
+    if (/\brider\s*$/i.test(name) || (m && /^\s*[-–:]\s*schedule\s+of\s+benefits\b/i.test(line.slice(m.index!)))) continue;
     if (name.length < 4 || name.length > 70 || /\b(?:insurance|assurance)\s*\(|^(?:dear|page|item)\b/i.test(name) || looksLikeInjectedInstruction(name)) continue;
     return name === name.toUpperCase() ? name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : name;
   }

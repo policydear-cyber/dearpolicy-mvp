@@ -32,6 +32,52 @@ export function sameDocument(a: string, b: string) {
   return inter / Math.min(x.size, y.size) >= 0.75 || inter / new Set([...x, ...y]).size >= 0.5;
 }
 
+/* ------------------------------------------------------------------------
+ * Round 13: the shape of every claim answer with cards, in every suite that
+ * runs the Round 6 detectors (scripts/r6/detectors.ts calls this for each
+ * claim answer): a short main text, bounded cards, every sentence said once,
+ * and every card citing the page its benefit is printed on.
+ * ---------------------------------------------------------------------- */
+export const CLAIM_MAIN_WORDS = 220;
+export const CLAIM_TOTAL_WORDS = 450;
+const countWords = (parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" ").split(/\s+/).filter(Boolean).length;
+/** One sentence, normalised: case, punctuation and spacing ignored. */
+export const normalSentence = (s: string) => s.toLowerCase().replace(/[’‘]/g, "'").replace(/[^a-z0-9$%' ]+/g, " ").replace(/\s+/g, " ").trim();
+export function claimAnswerParts(a: ChatAnswer) {
+  const cards = shownCards(a);
+  const main = [a.summary, ...(a.details ?? []), ...(a.nextSteps ?? [])];
+  const cardText = cards.flatMap((i) => [i.title, i.amountText, i.reason, ...(i.conditions ?? [])]);
+  const limits = (a.policyStatedLimits ?? []).map((l) => (l.ownerName ? l.ownerName + " · " : "") + l.benefitTitle + " " + l.amountText);
+  return { cards, mainWords: countWords(main), totalWords: countWords([...main, ...cardText, ...limits]) };
+}
+/** Sentences said more than once in one answer (summary, details, next steps and every card), normalised. */
+export function repeatedSentences(a: ChatAnswer): string[] {
+  const seen = new Map<string, number>();
+  const prose = [a.summary, ...(a.details ?? []), ...(a.nextSteps ?? []), ...shownCards(a).flatMap((i) => [i.reason, ...(i.conditions ?? [])])];
+  for (const text of prose) for (const raw of String(text ?? "").split(/(?<=[.!?])\s+/)) {
+    if (raw.trim().length < 25) continue;
+    const k = normalSentence(raw);
+    seen.set(k, (seen.get(k) ?? 0) + 1);
+  }
+  return [...seen].filter(([, n]) => n > 1).map(([s, n]) => n + "x: " + s);
+}
+export function detectClaimAnswerShape(a: ChatAnswer): Hit[] {
+  if (a.mode !== "claim_assessment") return [];
+  const { cards, mainWords, totalWords } = claimAnswerParts(a);
+  if (!cards.length) return [];
+  const hits: Hit[] = [];
+  const hit = (rule: string, text: string) => hits.push({ rule, text: text.slice(0, 260) });
+  if (mainWords > CLAIM_MAIN_WORDS) hit("claim answer too long", mainWords + " words in the answer text (ceiling " + CLAIM_MAIN_WORDS + "): " + a.summary.slice(0, 160));
+  if (totalWords > CLAIM_TOTAL_WORDS) hit("claim answer too long with its cards", totalWords + " words with the cards (ceiling " + CLAIM_TOTAL_WORDS + "): " + a.summary.slice(0, 160));
+  for (const r of repeatedSentences(a)) hit("repeated sentence in a claim answer", r);
+  for (const i of cards) if (!/\(page \d+\)|\bpages? \d+/.test([i.reason, ...(i.conditions ?? [])].join(" "))) hit("claim card without its page", i.title + " — " + i.reason);
+  const body = (i: ClaimItem) => normalSentence(i.reason) + "|" + (i.conditions ?? []).map(normalSentence).join("|");
+  for (let x = 0; x < cards.length; x++) for (let y = x + 1; y < cards.length; y++)
+    if (body(cards[x]) === body(cards[y])) hit("claim card with no distinguishing content", cards[x].title + " ~ " + cards[y].title + ": " + cards[x].reason);
+  for (const i of cards) if (!normalSentence(i.reason.replace(/\(page \d+\)/g, ""))) hit("claim card with no distinguishing content", i.title + ": empty reason");
+  return hits;
+}
+
 export type ClaimTurn = { death?: boolean; serious?: boolean; deny?: RegExp; first: boolean };
 export function detectClaimTurn(a: ChatAnswer, t: ClaimTurn): Hit[] {
   const hits: Hit[] = [];
@@ -61,6 +107,7 @@ export function detectClaimTurn(a: ChatAnswer, t: ClaimTurn): Hit[] {
   if (t.deny) for (const i of cards) if (t.deny.test(i.title)) hit("benefit that does not fit the event", i.title + " — " + i.reason);
   if (a.mode === "claim_assessment" && cards.length && !(a.questions ?? []).length) {
     for (const i of cards) if (!/\(page \d+\)|pages? \d+/.test(i.reason) && !(a.citations ?? []).length) hit("card without a citation", i.title);
+    // Round 13: every card cites its own page (scripts/r6/detectors.ts runs detectClaimAnswerShape on every claim answer).
     if (!(a.citations ?? []).length) hit("claim answer with cards but no citation", a.summary);
   }
   for (const i of cards) if (i.amountText && isGroupCard(i)) hit("group booklet figure shown as a personal amount", i.title + " " + i.amountText);

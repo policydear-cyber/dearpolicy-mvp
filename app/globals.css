@@ -465,6 +465,8 @@ table { font-variant-numeric: tabular-nums; }
 .payout-qualifiers small { display: block; font-size: var(--fs-xs); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .payout-qualifiers ul { margin: 4px 0 0; padding-left: 18px; font-size: var(--fs-sm); line-height: 1.45; }
 .claim-results { display: grid; gap: 10px; margin: 12px 0; }
+.claim-before { margin: 12px 0; }
+.claim-before > strong { display: block; font-size: var(--fs-sm); margin-bottom: 4px; }
 .claim-result { border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; background: var(--surface); }
 .claim-result.likely_claimable { border-color: var(--good-line); }
 .claim-result.conditional, .claim-result.potentially_applicable { border-color: var(--warn-line); }

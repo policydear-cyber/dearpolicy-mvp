@@ -143,7 +143,7 @@ export function groupCoverFor(args: { booklets: GroupBooklet[]; person: { id: st
     out.cards.push({
       title: "Possible cover through " + who, status: "potentially_applicable", amountText: null,
       reason: "The " + booklet.productName + " booklet lists " + list(parts) + column + ". " + caveat,
-      conditions: ["The booklet summarises the scheme for all members; its amounts are not confirmed figures for " + args.person.name + ". The employer’s records and the insurer’s master policy decide.",
+      conditions: ["Booklet amounts are for the whole scheme, not confirmed figures for " + args.person.name + "; the employer’s records and the insurer’s master policy decide.",
         ...(period === "unchecked" ? ["The booklet prints no start or end date for the scheme, so DearPolicy couldn’t check that " + (day(args.eventDate) ? "the event date" : "the event") + " falls within it — HR can confirm the scheme’s dates."] : [])],
       coverLabel: booklet.productName, coverKey: "group:" + booklet.policyId,
     });
@@ -164,7 +164,10 @@ export function applyGroupCover(answer: ChatAnswer, cover: GroupCoverResult) {
   if (!cover.cards.length) return false;
   answer.claimItems = [...answer.claimItems.filter((i) => !/^Possible cover through\b/.test(i.title)), ...cover.cards];
   for (const c of cover.citations) if (!answer.citations.some((x) => x.chunkId === c.chunkId)) answer.citations.push(c);
-  if (cover.sentence && !answer.summary.includes(cover.sentence)) {
+  // Round 13: a summary that already names the booklet as the possible benefit (a booklet read as a personal plan)
+  // is not told about it a second time; its card below says the rest.
+  const namesBooklet = cover.cards.some((c) => !!c.coverLabel && answer.summary.includes(c.coverLabel));
+  if (cover.sentence && !namesBooklet && !answer.summary.includes(cover.sentence)) {
     // Said before the closing caveat ("This is not a promise of payment ...").
     const at = answer.summary.search(/\s(?:This is not a promise of payment|That is based on the documents uploaded)/);
     answer.summary = at > 0 ? answer.summary.slice(0, at) + " " + cover.sentence + answer.summary.slice(at) : answer.summary + " " + cover.sentence;

@@ -30,9 +30,10 @@
  * calls made while a DOCUMENT is read (lib/ai/chaos-ingest.ts), under the same
  * test-only guard, and leaves chat-time calls to this stand-in.
  */
+import { createHash } from "node:crypto";
 import type { HostedReply } from "./providers";
 import { chaosReply, chaosSeedOf } from "./chaos-model";
-import { ingestChaosOcrMode, ingestChaosReply, ingestChaosRng, ingestChaosSeedOf, mutateOcrTranscript } from "./chaos-ingest";
+import { ingestChaosOcrMode, ingestChaosReply, ingestChaosRng, ingestChaosSeedOf, mutateOcrTranscript, recordIngestCall } from "./chaos-ingest";
 
 export const DETERMINISTIC_MODEL_FLAG = "DEARPOLICY_DETERMINISTIC_MODEL";
 export const DETERMINISTIC_MODEL_VALUE = "synthetic-e2e";
@@ -205,7 +206,7 @@ export async function deterministicHostedDocumentText(args: { system: string; us
   let content = JSON.stringify({ pages: numbers.map((n, i) => scripted?.[i] ?? { pageNumber: n, text: pageText(n) }) });
   const ingestSeed = ingestChaosModelSeed();
   if (ingestSeed != null) {
-    const mode = ingestChaosOcrMode(ingestSeed, pageNumbers.join(","));
+    const mode = ingestChaosOcrMode(ingestSeed, pageNumbers.join(","), createHash("sha256").update(args.pdfBase64).digest("hex").slice(0, 24));
     if (mode) content = mutateOcrTranscript(content, mode, ingestChaosRng("ocr|" + ingestSeed + "|" + pageNumbers.join(",")));
   }
   return {
@@ -266,7 +267,8 @@ async function scriptedOcrPages(pdfBase64: string, pageNumbers: number[]) {
 
 /** Provider-shaped reply for one structured completion (through the chaos
  * model when a test process selected it). */
-export function deterministicHostedReply(args: { system: string; user: string }): HostedReply {
+export function deterministicHostedReply(args: { system: string; user: string; jsonSchema?: unknown }): HostedReply {
+  recordIngestCall(args);
   const ingestSeed = ingestChaosModelSeed();
   if (ingestSeed != null) return ingestChaosReply(ingestSeed, args, () => syntheticHostedReply(args));
   const seed = chaosModelSeed();

@@ -74,5 +74,6 @@ function derivedFromPrinted(iso: string, pages: string) {
 
 /** Rules that measure how much a broken model cost the household in usefulness (an honest
  * fallback instead of the answer) rather than what it put in front of them. Under the chaos
- * model these are counted and bounded, not failed one by one. */
-export const DEGRADED = /^(?:answer ignores the question|ambiguous person not asked|same answer to a different question|claim never concludes|expected benefit missing|group cover left out|conversation shorter than 10 turns|same answer repeated|generic 'couldn't find a benefit' for a described event|what-if framing on a plain question|group cover expected but missing)$/;
+ * model these are counted and bounded, not failed one by one. Round 13: a card whose page a
+ * broken reader never recorded cannot cite it -- the page is lost, nothing is invented. */
+export const DEGRADED = /^(?:answer ignores the question|ambiguous person not asked|same answer to a different question|claim never concludes|expected benefit missing|group cover left out|conversation shorter than 10 turns|same answer repeated|generic 'couldn't find a benefit' for a described event|what-if framing on a plain question|group cover expected but missing|claim card without its page)$/;

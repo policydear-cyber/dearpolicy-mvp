@@ -37,6 +37,8 @@ import type { ChatAnswer,ChatCitation,ChatQuestion,ClaimItem,PolicyStatedLimit }
 import { applyExplicitDeferrals,factLabels,interpretMessage,ruleInterpretation,knownValue,mergeInterpretation,modelFactContext,modelScenarioContext,normalText,onlyAsksQuestions } from "./facts";
 import { aggregatePotentialPayouts,analyzePolicyWindow,assessmentFromBenefit,evidenceWindows,promoteComputableObservations } from "./policy-analysis";
 import { assignConversationMember,getConversation,historyToken,openConversation,recentMessages,saveTurn as storeTurn,ChatConflict } from "./store";
+import { tidyClaimAnswer } from "@/lib/claims/answer-shape";
+import { dedupeDocuments } from "@/lib/claims/claim-pack";
 import { claimFollowUpAnswer,claimFollowUpKind,completeClaimAnswer,lockedDocumentsReply,propertyClaimReply,propertyFollowUp } from "./claim-completion";
 /** Round 9: "fell off the monkey bars", "knocked down", "slipped": the accident-or-illness card is asked as a
  * confirmation. Nothing is inferred: the cause is recorded only from the household's answer. Done before the claim
@@ -83,18 +85,20 @@ const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
     }
   }
   confirmStatedCause(args.answer,args.state,args.message);
+  // Round 13: every claim answer with cards says each sentence once (lib/claims/answer-shape.ts).
+  if(args.answer.mode==="claim_assessment"&&args.answer.claimItems.some(i=>i.status!=="not_applicable"))tidyClaimAnswer(args.answer,{dedupeDocuments});
   // Round 9: what the next "what documents would I need?" is about, when this answer was about something that has not happened.
   const hypothetical=HYPOTHETICAL.get(args.answer)??(args.answer.details.some(d=>/^This is a what-if\./.test(d))?args.state.whatIf?.query??args.state.activeQuery??"it":null);
   if(hypothetical)args.state.hypothetical=hypothetical;else if(args.state.plannedEvent&&args.state.intent!=="claim")args.state.hypothetical="planned "+args.state.plannedEvent;
   else if(args.state.hypothetical==="rejected claim"&&args.answer.mode==="answer"&&args.state.intent!=="claim"){/* still on the turned-down claim */}else delete args.state.hypothetical;
   return storeTurn(args);
 };
-import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress } from "./types";
+import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress,SubjectFacts } from "./types";
 import { modelProseProblem,proofText } from "./model-text";
 import { recordErrorEvent, recordEvent } from "@/lib/telemetry";
 import { resolveCorrelationId } from "@/lib/telemetry/correlation";
 import { pseudonymizeId } from "@/lib/telemetry/pseudonymize";
-import { answerPolicyQuestion,conciseDetails,FULL_LIST,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
+import { answerPolicyQuestion,conciseDetails,withoutListedLimitCards,FULL_LIST,isFactualPolicyQuestion,factualEvenAsWhatIf,HOW_TO_CLAIM } from "./policy-answer";
 import { printedRuleLines } from "./printed-rules";
 import { conversationalReply,dishonestReply } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
@@ -400,7 +404,12 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   }
   let people:ClaimPerson[];
   let ambiguity:ChatContext["ambiguity"];
+  // Round 13: "show me the full list" after a family-wide answer is the full list for the same people.
+  const sameScope=previous?.state.answerPeople?.length&&previous.state.intent!=="claim"&&!previous.state.pending&&!mentioned.length&&
+    FULL_LIST_FOLLOW_UP.test(personMessage)&&personMessage.trim().split(/\s+/).length<=8
+    ?family.filter(p=>previous.state.answerPeople!.includes(p.id)):[];
   if(chosen)people=[chosen];
+  else if(sameScope.length>1)people=sameScope;
   else if(outside){people=[];ambiguity=undefined;}
   // "My family's insurance ... my husband Wei Jie ... my daughter Xin Yi ...
   // and I": the family, not only the people named.
@@ -919,6 +928,28 @@ function applyEventFit(answer:ChatAnswer,state:ConversationState,person:ClaimPer
     return item;
   });
 }
+/** Round 13: whether a policy's wording could decide this kind of event (by what the policy is). A policy whose kind
+ * can't be told from its name or type is kept. */
+function wordingCouldAnswer(c:PolicyContract,category:string|null,facts:SubjectFacts){
+  const kind=(c.name+" "+c.documents.map(d=>d.policy_type??"").join(" ")).toLowerCase();
+  const travel=/travel/.test(kind),accident=/\bpa\b|personal accident|\baccident/.test(kind),hospital=/hospital|shield|medical|health/.test(kind),
+    life=/\blife\b|\bterm\b|whole|endow|legacy/.test(kind),illness=/critical|illness|cancer|early/.test(kind),income=/cash|income|disab/.test(kind);
+  if(!travel&&!accident&&!hospital&&!life&&!illness&&!income)return true;
+  const where=String(knownValue(facts,"eventLocation")??knownValue(facts,"eventCountry")??knownValue(facts,"deathLocation")??"").trim();
+  const abroad=!!where&&!/^(?:singapore|sg|local|home|not sure|unsure|unknown|not yet known)$/i.test(where);
+  const injury=knownValue(facts,"eventType")==="accident"||knownValue(facts,"injured")===true;
+  // An illness is never an accident plan's claim.
+  if(knownValue(facts,"eventType")==="illness"&&accident&&!hospital&&!life&&!illness&&!income&&!travel)return false;
+  switch(category){
+    case "travel":return travel;
+    case "accidental_death":return life||accident||(travel&&abroad);
+    case "critical_illness":return illness||life||hospital;
+    case "disability_tpd":return life||accident||income;
+    case "accidental_injury":return accident||hospital||income||(travel&&abroad);
+    case "medical_reimbursement":case "hospital_cash":return hospital||income||(accident&&injury)||(travel&&abroad);
+    default:return !travel||abroad;
+  }
+}
 function concludeClaim(args:{answer:ChatAnswer;state:ConversationState;people:ClaimPerson[];lead?:string;
   contracts?:PolicyContract[];currentness?:Map<string,{state:string;renewalOrExpiryDate?:string|null}>}){
   const person=args.people.length===1?args.people[0]:null;
@@ -936,6 +967,19 @@ function concludeClaim(args:{answer:ChatAnswer;state:ConversationState;people:Cl
     // Only when every offered benefit's policy is known; otherwise nothing is dropped.
     if(!offered.has(null))args.answer.citations=args.answer.citations.filter(c=>{const contract=contractOfPolicy(c.policyId);return !contract||offered.has(contract.id);});
   }
+}
+/** Round 13: the claim was put on record before concludeClaim chose the cards the answer shows (a hospital plan's
+ * rows for care nobody mentioned are dropped there), so the record -- and the claim pack printed from it -- is
+ * written again with exactly those cards. */
+async function recordConcludedCards(args:{request:ChatRequest;conversation:{id:string};state:ConversationState;answer:ChatAnswer;people:ClaimPerson[]}){
+  const {request,conversation,state,answer,people}=args;
+  if(people.length!==1||!answer.claimSessionId||answer.claimSessionId!==state.claimSessionId||!answer.claimItems.length)return;
+  try{
+    const person=people[0],facts=state.subjects[person.id]??{},category=primaryClaimCategory(state,person.id);
+    await recordClaim({accountId:request.accountId,familyMemberId:person.id,existingId:state.claimSessionId,facts,
+      eventSummary:claimEventName(person,facts,category,state.activeClaimQuery??request.question),conversationId:conversation.id,claimCategory:category,
+      items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
+  }catch{/* The record written before the answer was concluded stands. */}
 }
 /** This person's most recent claim events (for a claim-money question asked
  * where no event has been described). */
@@ -1406,6 +1450,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   const check=options?.check??(async()=>undefined);
   await check();
   const answer=blankAnswer();let state=conversation.state;
+  if(context.people.length>1)state.answerPeople=context.people.map(p=>p.id);else delete state.answerPeople;
   if(context.alsoInEvent?.length&&context.people.length===1){
     const name=(p:ClaimPerson)=>p.preferred_name?.trim()||p.display_name;
     const known=state.nextInEvent?.lead===name(context.people[0])?state.nextInEvent:undefined;
@@ -2251,7 +2296,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                     conversationId:conversation.id,claimCategory:primaryClaimCategory(state,person.id),
                     items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
                   state.claimSessionId=recorded.id;answer.claimSessionId=recorded.id;
-                  answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.");
+                  answer.nextSteps.push("Download the claim pack from the Claims page: these benefits, their pages and what to attach, on one sheet.");
                   const gather=recorded.attach.slice(2,6);if(gather.length)answer.nextSteps.push("Gather: "+gather.join("; ")+".");
                 }catch{/* The answer stands without the record. */}
               }
@@ -2270,7 +2315,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                   payoutQualifiers:[],activeStatusNotVerified:staleNames.length,
                   reviewCoverage:{complete:false,note:"coverage ledger built from the uploaded documents"},questionToAsk:null}});
               if(whatIf)acknowledgeWhatIf(answer,!!conditional);
-              if(!whatIf)concludeClaim({answer,state,people:context.people,lead,contracts,currentness});
+              if(!whatIf){concludeClaim({answer,state,people:context.people,lead,contracts,currentness});await recordConcludedCards({request,conversation,state,answer,people:context.people});}
               if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
               answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
               await check();
@@ -2595,7 +2640,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
                 conversationId:conversation.id,claimCategory:primaryClaimCategory(state,person.id),
                 items:answer.claimItems,citations:answer.citations,knownFacts:[],missingFacts:[],complete:true,nextSteps:[]});
               state.claimSessionId=recorded.id;answer.claimSessionId=recorded.id;
-              answer.nextSteps.push("Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.");
+              answer.nextSteps.push("Download the claim pack from the Claims page: these benefits, their pages and what to attach, on one sheet.");
               const gather=recorded.attach.slice(2,6);if(gather.length)answer.nextSteps.push("Gather: "+gather.join("; ")+".");
             }catch{/* The answer stands without the record. */}
           }
@@ -2619,6 +2664,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           // it is said on the card, never asked as a question.
           await report({stage:"Putting the answer together",completed:contracts.length,total:contracts.length});
           concludeClaim({answer,state,people:context.people,lead,contracts,currentness});
+          await recordConcludedCards({request,conversation,state,answer,people:context.people});
           if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
           answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
           await check();
@@ -2649,6 +2695,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             answer.policyStatedLimits=covered.limits;
             // Round 12: the concise-answer rule, as for every policy answer (lib/chat/policy-answer.ts conciseDetails).
             conciseDetails(answer.details,answer.policyStatedLimits,{cap:wantsFullList||FULL_LIST.test(request.submittedQuestion??request.question)?Infinity:covered.topics.length>=2?8:5});
+            if(wantsFullList||FULL_LIST.test(request.submittedQuestion??request.question))withoutListedLimitCards(answer.details,answer.policyStatedLimits);
             answer.confidence="partial_match";
             delete state.pending;
             answer.knownFacts=context.people.flatMap(person=>[person.display_name,...factLabels(state.subjects[person.id]??{})]);
@@ -2831,7 +2878,9 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // going quiet. Missing wording is the usual blocker and the user can fix
         // it, so it is asked rather than merely reported.
         if(!answer.questions.length&&state.intent==="claim"&&!answer.claimItems.length&&contracts.length){
-          const unwordedContracts=contracts.filter(c=>hasWording.get(c.id)!==true);
+          // Round 13: only the wording of a policy that could answer this event is asked for (no term-life wording for a lost passport).
+          const askedAbout=context.people.length===1?context.people[0].id:null;
+          const unwordedContracts=contracts.filter(c=>hasWording.get(c.id)!==true&&wordingCouldAnswer(c,askedAbout?primaryClaimCategory(state,askedAbout):null,askedAbout?state.subjects[askedAbout]??{}:{}));
           const unworded=[...new Set(unwordedContracts.map(c=>c.ownerName+" · "+c.name))];
           // Asked once per conversation: re-asking after "I don’t have it" or
           // "Not sure" left the household answering the same card forever.

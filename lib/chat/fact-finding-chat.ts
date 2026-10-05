@@ -22,10 +22,11 @@ import { loadCoverConditions } from "@/lib/policies/condition-catalog";
 import { describesAScenario } from "@/lib/policies/benefit-catalog";
 import { query } from "@/lib/db/client";
 import { dedupeDocuments } from "@/lib/claims/claim-pack";
+import { forSeveral, sharedReasonLine } from "@/lib/claims/answer-shape";
 import { looksLikeInterviewReply } from "@/lib/claims/event-name";
 import { reportedEvents } from "@/lib/claims/reported-events";
 import type { CoverCondition } from "@/lib/insurance/cover-conditions";
-import type { ChatAnswer, ChatCitation } from "@/types";
+import type { ChatAnswer, ChatCitation, ClaimItem } from "@/types";
 import type { IndicativeEstimateView } from "@/lib/claims/indicative-assessment";
 import type { ConversationState, SubjectFacts } from "./types";
 
@@ -376,9 +377,9 @@ export function claimEventName(person: Person, facts: SubjectFacts, category: Fa
   return text.length > 3 && !looksLikeInterviewReply(text) ? text.slice(0, 120) : who + ": claim check";
 }
 const ACTIVE_STATUS = /^Active status not recently verified\b/i;
-export const DEATH_FIRST_STEPS = "What to do first: get the death certificate (for a death in hospital the hospital issues it; after an accident the police and coroner are involved) and keep the police report number. Nothing needs to be sent to an insurer today; the documents below can follow when you are ready.";
+export const DEATH_FIRST_STEPS = "What to do first: get the death certificate and keep the police report number (after an accident the police and coroner are involved). Nothing has to go to an insurer today.";
 /** After a death from an illness there is no police report to keep. */
-export const DEATH_FIRST_STEPS_ILLNESS = "What to do first: get the death certificate (for a death in hospital the hospital issues it; for a death at home, the family doctor certifies it). Nothing needs to be sent to an insurer today; the documents below can follow when you are ready.";
+export const DEATH_FIRST_STEPS_ILLNESS = "What to do first: get the death certificate (the hospital issues it, or the family doctor for a death at home). Nothing has to go to an insurer today.";
 export function deathFirstSteps(facts: SubjectFacts) { return known(facts, "accidentalDeath") === false ? DEATH_FIRST_STEPS_ILLNESS : DEATH_FIRST_STEPS; }
 /** How the chat names the event ("the hospital stay", "the broken wrist"). */
 export function claimEventPhrase(category: FactFindingCategory | null, facts: SubjectFacts) { return category ? EVENT_PHRASE[category](facts) : "what happened"; }
@@ -460,7 +461,7 @@ export function collapseSharedConditions(answer: Pick<ChatAnswer, "claimItems" |
     const shared = [...counts].filter(([c, n]) => n > 1 && !/^(?:Still needed:|Assumes the standard|Not yet verified)/.test(c)).map(([c]) => c);
     if (shared.length) {
       for (const item of answer.claimItems) item.conditions = item.conditions.filter((c) => !shared.includes(c));
-      for (const c of shared) if (!answer.details.includes(c)) answer.details.push(c);
+      for (const c of shared.map(forSeveral)) if (!answer.details.includes(c)) answer.details.push(c);
     }
   }
   // A sentence every card's reason repeats ("Read from your policy wording
@@ -476,13 +477,35 @@ export function collapseSharedConditions(answer: Pick<ChatAnswer, "claimItems" |
     }
     const stillShared = shared.filter((s) => shownCards.filter((item) => sentencesOf(item.reason).includes(s)).length > 1);
     const moved = shared.filter((s) => !stillShared.includes(s));
-    for (const s of moved) if (!answer.details.includes(s)) answer.details.push(s);
+    const line = sharedReasonLine(moved);
+    if (line && !answer.details.includes(line)) answer.details.push(line);
   }
   // Round 9: a sentence a card still says is not said again below the cards.
   const onCards = new Set(shownCards.flatMap((item) => String(item.reason ?? "").split(/(?<=[.!?])\s+/).map((x) => x.trim().toLowerCase())));
   answer.details = answer.details.filter((d) => !onCards.has(d.trim().toLowerCase()));
   const asCharged = "“Pays as charged” means the eligible bill is paid after the plan’s deductible and co-insurance.";
   if (shownCards.some((item) => /^Pays as charged\b/.test(item.reason)) && !answer.details.includes(asCharged)) answer.details.push(asCharged);
+}
+/** The closing caveat of a claim answer, said once. */
+export const CLAIM_NOT_A_PROMISE = "This is not a promise of payment: the insurer decides.";
+/** The active-status note without the ownership sentence (ownership is not what the claim answer is about). */
+export function compactStatus(note: string) {
+  return note.replace(/\s*Ownership stays confirmed[^.]*\.(?:[^.]*\bunconfirmed\.)?/, "")
+    .replace("DearPolicy has no premium receipt or renewal notice for this policy, so it can’t yet confirm the cover is still being paid for.", "no premium receipt or renewal notice is on file to confirm the cover is still being paid for.").trim();
+}
+/** How directly a benefit answers the event, for the lead's "most relevant". */
+const LEAD_RELEVANCE: Partial<Record<FactFindingCategory, RegExp>> = {
+  accidental_death: /\bdeath\b|\blife\b/i, critical_illness: /critical|cancer|illness|\bci\b/i, disability_tpd: /\btpd\b|disab/i,
+  accidental_injury: /fracture|medical expenses|accident/i, medical_reimbursement: /room|board|ward|hospital(?!isation (?:treatment|extension))/i, hospital_cash: /cash|daily|per day/i,
+  travel: /delay|cancel|baggage|medical/i,
+};
+function leadRank(category: FactFindingCategory | null, facts: SubjectFacts, item: ClaimItem) {
+  const name = item.title.split(" · ").slice(1).join(" · ") || item.title;
+  const status = item.status === "likely_applicable" ? 3 : item.status === "potentially_applicable" ? 2 : 1;
+  const fits = category && LEAD_RELEVANCE[category]?.test(name) ? 4 : 0;
+  const open = item.conditions.some((c) => /^Still needed:/.test(c)) ? 0 : 1;
+  void facts;
+  return fits + status + open;
 }
 export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: ConversationState; person: Person | null;
   requestedDocuments: string[]; eventLead?: string }) {
@@ -561,40 +584,54 @@ export function finalizeClaimAnswer(args: { answer: ChatAnswer; state: Conversat
   });
   // Benefits that no event in the conversation touches (an ambulance nobody used) are not named.
   if (known(facts, "ambulanceUsed") === false) answer.claimItems = answer.claimItems.filter((item) => !/ambulance/i.test(item.title));
+  const detailsBefore = new Set(answer.details);
   collapseSharedConditions(answer);
   const whose = person ? (/^self$/i.test(person.relationship ?? "") ? "your" : calledName(person) + "’s") : "your family’s";
   const event = category ? EVENT_PHRASE[category](facts) : "what happened";
-  const list = named.length > 1 ? named.slice(0, -1).join(", ") + " and " + named[named.length - 1] : named[0];
+  // Round 13: the lead names the one possible benefit, or with several the most
+  // relevant one and how many there are -- every benefit has its own card.
+  const shownNow = answer.claimItems.filter((i) => i.status !== "not_applicable");
+  const leadName = (item: ClaimItem) => item.title.split(" · ").slice(1).join(" · ") || item.title;
+  const ranked = [...shownNow].sort((a, b) => leadRank(category, facts, b) - leadRank(category, facts, a));
+  const list = named.length > 1 ? leadName(ranked[0] ?? shownNow[0]) : named[0];
   // Asked again once the interview is over ("How much can she claim?"), the
   // answer says where the claim stands rather than thanking for answers.
   // Nothing was asked when the first message already said it all: no thanks for answers never given.
-  const opening = state.claimConcluded ? "Here is where this claim stands." : state.injuryExplained || state.pending ? "Thanks — that’s what I need for now." : "From what you’ve told me, here is what I found.";
+  const opening = state.claimConcluded ? "Here is where this claim stands. " : state.injuryExplained || state.pending ? "Thanks — that’s what I need for now. " : "";
   state.claimConcluded = true;
   const condolence = category === "accidental_death" && !/sorry for your loss/i.test(args.eventLead ?? "") ? "I’m so sorry for your loss. " : "";
   // A policy whose dates do not cover the event is said out loud, once: the
   // card that says so is not shown as a possible benefit.
   const dateIssues = [...new Set(answer.claimItems.filter((i) => i.status === "not_applicable" && /^Not a possible benefit(?: on the document on file)?: .*(?:cover ended on|cover on file starts on)/.test(i.reason))
     .map((i) => i.reason.replace(/^Not a possible benefit(?: on the document on file)?: /, "").replace(/^./, (c) => c.toUpperCase())))];
-  if (dateIssues.length) answer.details = [...dateIssues, ...answer.details.filter((d) => !dateIssues.includes(d))];
+  // The single next action: after a death, getting the death certificate (said in the first steps below); otherwise the claim form.
+  // A lead that already says what happened ("I’ve noted the reported death of Wei Jie") is not said again.
+  const leadSaysEvent = /\bI’ve noted the (?:reported death|diagnosis)\b|\bI’ve noted your diagnosis\b/.test(args.eventLead ?? "");
+  const nextAction = category === "accidental_death" ? "" : " Next: send the insurer’s claim form with the documents listed below.";
   answer.summary = condolence + (args.eventLead ? args.eventLead + " " : "") + (named.length
-    ? opening + " For " + event + ", " + whose + " policies have " + (named.length === 1 ? "a possible benefit: " : "possible benefits: ") + list + ". " +
-      "This is not a promise of payment: the insurer decides after assessing the claim, and DearPolicy shows an estimate only once the claim documents have been reviewed."
-    : opening + (dateIssues.length ? " None of " + whose + " policies on file can be offered for " + event + ": the cover on file doesn’t include the date it happened. The insurer decides any claim."
-      : " None of the benefits in " + whose + " policies on file responds to " + event + " as described. That is based on the documents uploaded; the insurer decides any claim."));
+    ? opening + (leadSaysEvent ? whose.replace(/^./, (c) => c.toUpperCase()) : "For " + event + ", " + whose) + " policies have " + (named.length === 1 ? "a possible benefit: " : named.length + " possible benefits — the most relevant is ") + list + ". " +
+      CLAIM_NOT_A_PROMISE + nextAction
+    : opening + (dateIssues.length ? "None of " + whose + " policies on file can be offered for " + event + ": the cover on file doesn’t include the date it happened. The insurer decides any claim."
+      : "None of the benefits in " + whose + " policies on file responds to " + event + " as described. That is based on the documents uploaded; the insurer decides any claim.")).trim();
   // The accidental-death definition decides only a death that may have been an accident.
   const accidentalDefinition = category !== "accidental_death" || known(facts, "accidentalDeath") === true;
   const definitions = category && accidentalDefinition ? FACT_FINDING_SPECS[category].reviewers.map((r) => r.label.replace(/^A reviewer checks/, "A DearPolicy reviewer checks") + ".") : [];
-  // Whether the cover is still being paid for is one line for the answer.
-  const status = statuses.size ? [statuses.size === 1 ? [...statuses][0]
-    : "Active status not recently verified for some of these policies: DearPolicy has no recent premium receipt or renewal notice for them. Ownership stays confirmed by the personalised evidence."] : [];
+  // Whether the cover is still being paid for is one line for the answer;
+  // that ownership itself is not in doubt is the policy table's to say.
+  const status = statuses.size ? [compactStatus(statuses.size === 1 ? [...statuses][0]
+    : "Active status not recently verified for some of these policies: DearPolicy has no recent premium receipt or renewal notice for them.")] : [];
   // A death: condolence and what to do first come before any policy detail.
   const firstSteps = category === "accidental_death" ? [deathFirstSteps(facts)] : [];
-  answer.details = [...firstSteps, ...dateIssues, ...definitions, ...status, ...answer.details.filter((d) => /is not payable on these facts/i.test(d))].slice(0, 3);
+  // "Before you claim": what applies to the whole claim, each said once (the
+  // caveats several cards shared were moved here by collapseSharedConditions).
+  const notPayable = answer.details.filter((d) => /is not payable on these facts/i.test(d));
+  const shared = answer.details.filter((d) => !detailsBefore.has(d) && !notPayable.includes(d) && !/^(?:What to do first|A DearPolicy reviewer checks|Active status not recently verified)/.test(d) && !dateIssues.includes(d));
+  answer.details = [...firstSteps, ...dateIssues, ...definitions, ...status, ...notPayable, ...shared].slice(0, 5);
   answer.questions = [];
   delete answer.scenarioClassifications;
   const packStep = answer.nextSteps.find((s) => /claim pack/i.test(s));
   answer.nextSteps = [
-    ...(args.requestedDocuments.length ? ["Send these documents for the claim: " + args.requestedDocuments.join("; ") + "."] : []),
+    ...(args.requestedDocuments.length ? ["Send these documents for the claim: " + dedupeDocuments(args.requestedDocuments).join("; ") + "."] : []),
     ...(packStep ? [packStep] : []),
   ];
   answer.mode = "claim_assessment";

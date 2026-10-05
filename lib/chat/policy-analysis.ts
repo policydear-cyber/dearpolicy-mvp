@@ -533,6 +533,12 @@ export function assessmentFromBenefit(args:{benefit:PolicyBenefit;contract:Polic
   for(const q of [...args.benefit.evidence,...args.benefit.conditions.map(c=>c.evidence),...args.benefit.requirements.map(r=>r.evidence),...(args.benefit.formula.evidence?[args.benefit.formula.evidence]:[])]){
     const source=args.sources.find(s=>s.id===q.sourceId);if(source&&!citations.some(c=>c.chunkId===source.citation.chunkId))citations.push(source.citation);
   }
+  // Round 13: every card says which page its benefit is printed on (the first page of its own evidence).
+  const printed=citations.find(c=>c.pageStart!=null);
+  if(printed&&!/\(page \d+\)|\bpages? \d+/.test(item.reason)){
+    const [first,...rest]=item.reason.split(/(?<=[.!?])\s+/);
+    item.reason=[first.replace(/[.\s]+$/,"")+" (page "+printed.pageStart+").",...rest].join(" ");
+  }
   if(coverage)citations.unshift({chunkId:"coverage:"+coverage.id,policyId:coverage.policyId,policyName:coverage.productName??args.contract.name,
     insurer:coverage.insurer??undefined,pageStart:coverage.sourcePage??null,pageEnd:coverage.sourcePage??null,documentRole:coverage.documentRole,personalEvidence:true,evidenceLabel:"Verified personal cover"});
   return {item,citations,checks};

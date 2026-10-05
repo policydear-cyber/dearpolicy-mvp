@@ -16,8 +16,9 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { applyGroupCover, groupCoverFor, loadGroupBooklets } from "@/lib/claims/group-cover";
 import { addRecordedClaimItems, claimFactsFromSubject, recordClaim } from "@/lib/claims/record";
 import { requestedDocumentsFor } from "@/lib/claims/status";
+import { dedupeDocuments } from "@/lib/claims/claim-pack";
 import { reportedEvents } from "@/lib/claims/reported-events";
-import { claimEventName, claimEventPhrase, primaryClaimCategory } from "./fact-finding-chat";
+import { claimEventName, claimEventPhrase, compactStatus, primaryClaimCategory } from "./fact-finding-chat";
 import type { ChatAnswer } from "@/types";
 import { pagesFor } from "./plain-questions";
 import { printedRuleLines } from "./printed-rules";
@@ -121,7 +122,9 @@ export async function completeClaimAnswer(accountId: string, state: Conversation
       if (wording) {
         answer.questions = [];
         if (state.pending?.id === "wording-upload") delete state.pending;
-        answer.nextSteps.push("If you have the policy wording or benefit summary for " + wording.text.replace(/^Do you have the policy wording or benefit summary for /, "").replace(/\?$/, "") + ", upload it on the Documents page and DearPolicy will check it.");
+        // Round 13: one wording step, never an "If you have…" beside a "When you have…".
+        if (!answer.nextSteps.some((n) => /^(?:If|When) you have the policy wording\b/.test(n)))
+          answer.nextSteps.push("If you have the policy wording or benefit summary for " + wording.text.replace(/^Do you have the policy wording or benefit summary for /, "").replace(/\?$/, "") + ", upload it on the Documents page and DearPolicy will check it.");
       }
       answer.mode = "claim_assessment"; state.claimConcluded = true;
       for (const plan of answer.factFinding ?? []) plan.nextQuestions = [];
@@ -138,7 +141,7 @@ export async function completeClaimAnswer(accountId: string, state: Conversation
       answer.questions = [];
       if (state.pending?.id === "wording-upload") delete state.pending;
       const step = "If you have the policy wording or benefit summary for " + wording.text.replace(/^Do you have the policy wording or benefit summary for /, "").replace(/\?$/, "") + ", upload it on the Documents page and ask again.";
-      if (!answer.nextSteps.includes(step)) answer.nextSteps.push(step);
+      if (!answer.nextSteps.some((n) => /^(?:If|When) you have the policy wording\b/.test(n))) answer.nextSteps.push(step);
     }
     if (!personal.length && !/None of the benefits in |cover on file doesn’t include the date/.test(answer.summary)) {
       const whose = /^self$/i.test(person.relationship ?? "") ? "your own" : calledName(person) + "’s own";
@@ -152,6 +155,19 @@ export async function completeClaimAnswer(accountId: string, state: Conversation
       answer.citations = [];
       answer.nextSteps = answer.nextSteps.filter((n) => !/^(?:Upload the latest premium receipt|If you have the policy wording|When you have the policy wording)/.test(n));
     }
+    // Round 13: a hospital claim needs the bill and the discharge summary (and whatever else the event
+    // calls for) whichever policy pays -- the group plan's claim too, not only the HR confirmation.
+    if (answer.mode !== "fact_finding") {
+      const eventDocuments = requestedDocumentsFor({ facts: claimFactsFromSubject(facts), claim_category: category });
+      if (eventDocuments.length) {
+        const at = answer.nextSteps.findIndex((s) => /^Send these documents for the claim:/.test(s));
+        const listed = at >= 0 ? answer.nextSteps[at].replace(/^[^:]*:\s*/, "").replace(/\.$/, "").split(/;\s*/).filter(Boolean) : [];
+        const line = "Send these documents for the claim: " + dedupeDocuments([...listed, ...eventDocuments]).join("; ") + ".";
+        if (at >= 0) answer.nextSteps[at] = line; else answer.nextSteps.unshift(line);
+        // The longer checklist is paid for by the active-status note in its short form, as a concluded answer has it.
+        answer.details = answer.details.map((d) => /^Active status not recently verified\b/.test(d) ? compactStatus(d) : d);
+      }
+    }
     applyGroupCover(answer, cover);
     // The claim on record (the claim pack, the Claims page) shows the group card too:
     // the record was written before the card was added.
@@ -163,7 +179,7 @@ export async function completeClaimAnswer(accountId: string, state: Conversation
           eventSummary: claimEventName(person, facts, category, "What happened"), conversationId: answer.conversationId ?? null, claimCategory: category,
           items: answer.claimItems, citations: answer.citations, knownFacts: [], missingFacts: [], complete: true, nextSteps: cover.documents.map((d) => "Attach: " + d) });
         state.claimSessionId = recorded.id; answer.claimSessionId = recorded.id;
-        const step = "Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach.";
+        const step = "Download the claim pack from the Claims page: these benefits, their pages and what to attach, on one sheet.";
         if (!answer.nextSteps.includes(step)) answer.nextSteps.push(step);
       }
     } catch { /* The answer stands; the record keeps what it had. */ }
@@ -222,12 +238,14 @@ export async function claimFollowUpAnswer(args: { accountId: string; state: Conv
       : "Nothing is needed right now — no benefit was found for " + event + " in the documents on file, so there’s no claim form to send. If anything changes (a hospital admission, a new diagnosis or a new bill), tell me and I’ll check again.",
     details: [], nextSteps: [], citations: [] };
   if (kind === "documents" && nothingOffered && !group?.cards.length) return {
-    summary: "No benefit was found for " + event + " in the documents on file, so there may be nothing to send. If you’d like the insurer to check anyway, send its claim form with the bill and the doctor’s report or memo.",
+    // Round 13: what to send is what this event needs -- no doctor's memo for a lost passport.
+    summary: "No benefit was found for " + event + " in the documents on file, so there may be nothing to send. If you’d like the insurer to check anyway, send its claim form with " +
+      (documents.length ? documents.slice(0, 3).map((d) => d.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())).join("; ") : category === "travel" ? "the receipts and any report about what happened" : "the bill and the doctor’s report or memo") + ".",
     details: [], nextSteps: [], citations: [] };
   if (kind === "documents") return {
     summary: allDocuments.length ? "For " + event + ", these are the documents to gather: " + allDocuments.join("; ") + "." : "For " + event + ", the insurer’s claim form and the bills or reports for what happened are the place to start; the insurer will say if it needs more.",
     details: ["Keep the originals; insurers usually accept clear copies or scans first and ask for originals only if they need them."],
-    nextSteps: ["Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach."], citations: [] };
+    nextSteps: ["Download the claim pack from the Claims page: these benefits, their pages and what to attach, on one sheet."], citations: [] };
   if (kind === "several") return {
     summary: "Usually yes — each policy is claimed separately, with its own form. A benefit that reimburses a bill is coordinated between insurers so the same bill is not paid twice; a benefit that pays a set amount for the event is decided by each policy on its own terms.",
     details: ["Send each insurer copies of the documents and tell them about the other claims; the first insurer’s settlement letter is often asked for by the second."],
@@ -243,7 +261,7 @@ export async function claimFollowUpAnswer(args: { accountId: string; state: Conv
   if (kind === "next") return {
     summary: "Nothing else is needed for DearPolicy right now. Gather the documents, fill in the claim form" + (routes.length > 1 || group?.cards.length ? "s" : "") + " and submit " + (routes.length > 1 || group?.cards.length ? "them" : "it") + "." +
       " If anything changes — a new bill, a doctor’s report, or a date you weren’t sure of — tell me and I’ll update the claim.",
-    details: [], nextSteps: ["Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach."], citations: [] };
+    details: [], nextSteps: ["Download the claim pack from the Claims page: these benefits, their pages and what to attach, on one sheet."], citations: [] };
   if (kind === "send" && !routes.length && group?.cards.length) return {
     summary: "The possible cover here is the group plan, so start with HR at " + group.cards.map((c) => c.title.replace(/^Possible cover through /, "")).join(" and ") + " — they submit group claims to the insurer and will tell you which form to use.",
     details: allDocuments.length ? ["Documents to attach: " + allDocuments.join("; ") + "."] : [], nextSteps: [], citations: [] };
@@ -251,7 +269,7 @@ export async function claimFollowUpAnswer(args: { accountId: string; state: Conv
     summary: (routes.length ? "The claim " + (routes.length === 1 ? "under " + routes[0] : "under " + routes.slice(0, -1).join(", ") + " and " + routes.at(-1)) + ": fill in the insurer’s claim form (on its website or app, or through your agent), attach the documents and submit it."
       : "From here, the claim goes to the insurer: fill in its claim form (on its website or app, or from your agent), attach the documents, and submit it.") + (group?.cards.length ? " For the group cover, start with HR — they submit group claims to the insurer." : ""),
     details: allDocuments.length ? ["Documents to attach: " + allDocuments.join("; ") + "."] : [],
-    nextSteps: ["Download the claim pack from the Claims page — one sheet with the relevant benefits, the pages they came from, and what to attach."], citations: [] };
+    nextSteps: ["Download the claim pack from the Claims page: these benefits, their pages and what to attach, on one sheet."], citations: [] };
   if (kind === "confirmed") return {
     summary: "Not yet — nothing is confirmed until the insurer has assessed the claim. DearPolicy can show which benefits may apply to " + event + " and what to send, but only the insurer decides whether it pays and how much.",
     details: ["Sending complete documents early is the best way to avoid delays; the insurer may ask follow-up questions or for more reports."],

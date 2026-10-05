@@ -2,6 +2,7 @@ import { FACT_FINDING_SPECS, type FactFindingCategory } from "./fact-finding";
 import { PDFDocument,StandardFonts,rgb } from "pdf-lib";
 import { PRELIMINARY_ASSESSMENT_NOTICE,scrubMonetaryText } from "@/lib/chat/monetary-boundary";
 import type { ClaimDecisionPacket,ClaimFacts } from "./types";
+import { benefitName,sentenceKey,sentencesOf } from "./answer-shape";
 
 /** The claim pack.
  *
@@ -133,10 +134,15 @@ export function dedupeDocuments(labels:string[]):string[]{
   }
   return [...chosen.values()];
 }
+/** The status of each benefit, in the words the chat's cards use (app/chat/page.tsx). */
+export const PACK_STATUS:Record<ClaimDecisionPacket["assessments"][number]["status"],string>={likely_applicable:"Likely applicable",potentially_applicable:"Potentially applicable",not_applicable:"Not applicable",needs_document:"Needs checking"};
 export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:string;relationship?:string|null;generatedOn?:Date}){
   const {packet}=args;
   const generated=args.generatedOn??new Date();
-  const claimable=packet.assessments.filter(item=>item.status==="likely_applicable"||item.status==="potentially_applicable");
+  // Round 13: every benefit the chat's answer shows is on the sheet, with its
+  // status -- a personal benefit that still needs documents is not left off
+  // because only the group card was "potentially applicable".
+  const claimable=packet.assessments.filter(item=>item.status!=="not_applicable");
   const sections:ClaimPackSection[]=[];
   sections.push({heading:"Claimant",lines:[
     "Name: "+args.claimantName,
@@ -146,28 +152,60 @@ export function claimPackContent(args:{packet:ClaimDecisionPacket;claimantName:s
   // A claim pack is built from a PRELIMINARY claim assessment (live chat has
   // no reviewed claim evidence), so it lists benefits, pages, conditions and
   // documents -- never an amount or a total. See lib/chat/monetary-boundary.ts.
+  // Round 13: the sheet says each sentence once, like the chat's answer
+  // (lib/claims/answer-shape.ts): what several benefits share is printed once
+  // under them, and a document in the list is not asked for again as a step.
+  // Two benefits whose reasons open the same way ("Pays as charged (page 3).") are told apart by their names, as on the chat's cards.
+  const openingKey=(item:typeof claimable[number])=>sentenceKey(sentencesOf(scrubMonetaryText(item.reason))[0]??"");
+  const openings=new Map<string,number>();
+  for(const item of claimable)openings.set(openingKey(item),(openings.get(openingKey(item))??0)+1);
+  const reasonOf=(item:typeof claimable[number])=>{
+    const sentences=sentencesOf(scrubMonetaryText(item.reason)),name=benefitName(item.title);
+    if(sentences.length&&(openings.get(openingKey(item))??0)>1&&name&&!sentenceKey(sentences[0]).startsWith(sentenceKey(name)))
+      sentences[0]=name+": "+sentences[0].replace(/^./,x=>x.toLowerCase());
+    return sentences;
+  };
+  const conditionsOf=(item:typeof claimable[number])=>[...new Set(item.conditions.map(c=>scrubMonetaryText(c)))];
+  const holders=new Map<string,{text:string;count:number}>();
+  for(const item of claimable){
+    const own=new Set<string>();
+    for(const sentence of [...reasonOf(item).slice(1),...conditionsOf(item).flatMap(sentencesOf)]){
+      const key=sentenceKey(sentence);if(sentence.length<25||own.has(key))continue;own.add(key);
+      const entry=holders.get(key)??{text:sentence,count:0};entry.count++;holders.set(key,entry);
+    }
+  }
+  const sharedKeys=new Set(claimable.length>1?[...holders].filter(([,e])=>e.count>1).map(([k])=>k):[]);
+  const notShared=(sentence:string)=>!sharedKeys.has(sentenceKey(sentence));
   if(claimable.length)sections.push({
     heading:"Benefits that may be relevant",
-    lines:claimable.flatMap(item=>{
+    lines:[...claimable.flatMap(item=>{
       const evidence=item.ruleEvidence;
+      const reason=reasonOf(item);
+      const said=new Set(reason.map(sentenceKey));
+      const conditions=conditionsOf(item).map(c=>sentencesOf(c).filter(notShared).filter(x=>!said.has(sentenceKey(x))).join(" ")).filter(Boolean);
       return [
-        item.title+(item.supersededBy?" (the policy pays this instead of \u201c"+item.supersededBy+"\u201d)":""),
-        "    Why it may be relevant: "+scrubMonetaryText(item.reason),
+        item.title+(item.supersededBy?" (the policy pays this instead of \u201c"+item.supersededBy+"\u201d)":"")+" \u2014 "+PACK_STATUS[item.status],
+        "    Why it may be relevant: "+[reason[0],...reason.slice(1).filter(notShared)].filter(Boolean).join(" "),
         ...(evidence?["    Policy wording: "+evidence.policyName+", page "+evidence.pageStart+(evidence.pageEnd!==evidence.pageStart?"–"+evidence.pageEnd:"")]:[]),
-        ...item.conditions.map(condition=>"    Condition: "+scrubMonetaryText(condition)),
+        ...conditions.map(condition=>"    Condition: "+condition),
       ];
-    }),
+    }),...(sharedKeys.size?["Applies to each benefit above:",...[...sharedKeys].map(k=>"    "+holders.get(k)!.text)]:[])],
     note:PRELIMINARY_ASSESSMENT_NOTICE+" The insurer determines eligibility and any amount after assessment.",
   });
   else sections.push({heading:"Benefits that may be relevant",lines:[
     "No relevant benefit has been identified yet from the documents on file.",
   ],note:"This usually means a policy schedule or the benefit wording is still missing. Upload it and the claim pack can be produced again."});
-  if(packet.missingFacts.length)sections.push({
+  const missing=[...new Set(packet.missingFacts)];
+  if(missing.length)sections.push({
     heading:"Still needed before this is submitted",
-    lines:packet.missingFacts.map(fact=>"• "+fact),
+    lines:missing.map(fact=>"• "+fact),
   });
-  sections.push({heading:"Documents to attach",lines:claimDocuments(packet.facts,claimCategoryFromFacts(packet.facts as ClaimFacts&Record<string,unknown>,null,packet.claimCategory??null)).map(document=>"• "+document)});
-  if(packet.nextSteps.length)sections.push({heading:"Next steps",lines:packet.nextSteps.map((step,index)=>index+1+". "+step)});
+  const documents=claimDocuments(packet.facts,claimCategoryFromFacts(packet.facts as ClaimFacts&Record<string,unknown>,null,packet.claimCategory??null));
+  sections.push({heading:"Documents to attach",lines:documents.map(document=>"• "+document)});
+  // "Attach: <a document already in the list>" is the list again, not a step.
+  const listed=new Set(documents.map(sentenceKey));
+  const steps=[...new Set(packet.nextSteps)].filter(step=>{const m=step.match(/^Attach:\s*(.*?)\.?$/);return !m||!listed.has(sentenceKey(m[1]));});
+  if(steps.length)sections.push({heading:"Next steps",lines:steps.map((step,index)=>index+1+". "+step)});
   return {
     title:"Claim summary",
     subtitle:args.claimantName+" · prepared "+generated.toLocaleDateString("en-SG",{day:"numeric",month:"long",year:"numeric"}),

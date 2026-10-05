@@ -5,6 +5,7 @@
  * repetitive or fragmentary text. Pure functions; no I/O.
  */
 import { ASKS_EVERYTHING } from "../r11/judge";
+import { detectClaimAnswerShape } from "../r7/claim-detectors";
 import type { ChatAnswer } from "@/types";
 
 export type Hit = { rule: string; text: string };
@@ -174,14 +175,11 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
   }
   // ---------------------------------------------------------------- repetition
   const sentences = new Map<string, number>();
-  // Each claim card states how its own benefit pays; the same kind of rule on
-  // two cards ("Reimburses the actual cost…") is one card each, not a repeat.
-  const cardReasons = new Set<string>();
+  // Round 13: no exemption for claim cards -- a sentence on two cards is a repeat like any other.
   for (const f of prose.filter((x) => x.where !== "disclaimer")) {
     for (const raw of f.text.split(/(?<=[.!?])\s+/)) {
       const s = raw.trim().toLowerCase().replace(/\s+/g, " ");
       if (s.length < 25) continue;
-      if (/^claim\[\d+\]\.(?:reason|condition)$/.test(f.where)) { const key = f.where.replace(/\[\d+\]/, "") + "|" + s; if (cardReasons.has(key)) continue; cardReasons.add(key); }
       sentences.set(s, (sentences.get(s) ?? 0) + 1);
     }
   }
@@ -191,6 +189,10 @@ export function detect(a: ChatAnswer, t: TurnContext, g: GroundTruth): Hit[] {
   const conds = (a.claimItems ?? []).flatMap((i) => i.conditions ?? []);
   const dupCond = conds.find((c, i) => conds.indexOf(c) !== i && conds.filter((x) => x === c).length > (a.claimItems ?? []).length / 2 && (a.claimItems ?? []).length < 2);
   if (dupCond) hit("repeated caveat", dupCond);
+  // ---------------------------------------------------------------- claim answers (Round 13)
+  // The claim-answer shape (word ceilings, every sentence once, a page on every
+  // card) holds in every suite: scripts/r7/claim-detectors.ts.
+  hits.push(...detectClaimAnswerShape(a));
   // ---------------------------------------------------------------- dangling references
   if (/\b(?:the |this )?(?:table|list|chart) (?:below|above)\b|\bsee (?:below|above)\b|\bas shown (?:below|above)\b|\bthe following (?:table|list)\b/i.test(all)) {
     const hasTable = (a.portfolioItems?.length ?? 0) > 0 || (a.policyStatedLimits?.length ?? 0) > 0 || (a.claimItems?.length ?? 0) > 0;

@@ -248,6 +248,10 @@ const DATE_TEXT = String.raw`(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4
 export function printedDates(text: string): string[] {
   return [...String(text ?? "").matchAll(new RegExp(DATE_TEXT, "g"))].map((m) => parsePrintedDate(m[1])).filter((d): d is string => !!d);
 }
+/** Round 13: every date printed in the text with where it is printed (for reading its label). */
+export function printedDateMatches(text: string): { iso: string; index: number; length: number }[] {
+  return [...String(text ?? "").matchAll(new RegExp(DATE_TEXT, "g"))].flatMap((m) => { const iso = parsePrintedDate(m[1]); return iso ? [{ iso, index: m.index ?? 0, length: m[0].length }] : []; });
+}
 export function printedDateAppears(pages: { text: string }[], iso: string | null | undefined) {
   if (!iso) return false;
   return pages.some((p) => printedDates(p.text).includes(iso));
