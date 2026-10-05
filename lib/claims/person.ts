@@ -125,11 +125,55 @@ export function resolveRelativePerson(text: string, family: ClaimPerson[], ancho
   return { status: "unknown", name: (anchor.preferred_name || anchor.display_name) + "’s " + m[3].toLowerCase(), candidates: family };
 }
 
+/** Round 7: everyday words that are never part of a person's name. The
+ * subject finders above read the words before "'s policy" or "was admitted";
+ * in "What's my dad's hospital plan", "cash portion for dad's insurance" or
+ * "Airline went bust and my trip got cancelled" those words are not a name,
+ * and calling them a stranger ("I can't find anyone called 'portion for
+ * dad'") was the commonest wrong answer an independent battery found. */
+const COMMON_WORD = /^(?:what|whats|what's|who|whose|when|where|why|how|which|is|are|was|were|be|been|being|am|do|does|did|done|has|have|had|having|can|could|will|would|shall|should|may|might|must|got|get|gets|go|goes|going|went|gone|come|came|need|needs|want|wants|use|used|pay|paid|claim|claims|make|made|take|took|see|say|said|tell|know|feel|feeling|keep|still|just|also|very|too|so|only|if|then|than|that|this|these|those|there|here|it|it's|its|of|for|from|to|in|on|at|by|with|without|about|after|before|during|since|until|till|into|onto|over|under|between|and|or|but|nor|not|no|yes|a|an|the|some|any|all|both|each|every|few|many|much|more|most|less|other|another|same|such|own|my|mine|me|i|i'm|i've|i'd|i'll|we|us|our|you|your|he|she|they|them|their|his|her|him|she'll|he'll|they'll|she's|he's|we're|one|two|three|first|last|next|new|old|now|today|yesterday|tomorrow|week|weeks|month|months|year|years|day|days|night|nights|hour|hours|time|times|money|cash|portion|part|amount|total|cost|bill|bills|fee|fees|price|house|home|flat|car|trip|flight|flights|airline|hotel|luggage|baggage|bag|job|work|company|boss|office|school|bust|cancelled|canceled|delayed|lost|stolen|flooded|broken|condition|conditions|heart|knee|hip|arm|leg|back|teeth|tooth|eye|head|replacement|income|while|warded|admitted|hospital|hospitalised|hospitalized|policy|policies|plan|plans|insurance|insurans|cover|coverage|covered|premium|premiums|benefit|benefits|rider|riders|schedule|document|documents|endowment|whole|life|term|shield|careshield|medishield|medisave|deductible|braces|crowns|suicide|maturity|payout|ilp|gtl|gpa|ghs|tpd|ci|pa|nominee|lapse|lapsed|reinstated|ok|okay|sorry|actually|please|pls|lah|leh|lor|ah|meh|hor|anot|wah|eh)$/i;
+/** The words of a subject candidate as written, with any leading or trailing
+ * filler dropped; null when what is left cannot be a person's name. */
+function plausibleName(candidate: string | null, original: string, family: ClaimPerson[]): string | null {
+  if (!candidate) return null;
+  const words = candidate.trim().split(/\s+/).filter(Boolean);
+  while (words.length && COMMON_WORD.test(words[0]) && !/^(?:ah|siti|nur|mohd|muhammad)$/i.test(words[0])) words.shift();
+  while (words.length && COMMON_WORD.test(words[words.length - 1])) words.pop();
+  if (!words.length || words.length > 4) return null;
+  const name = words.join(" ");
+  const n = normalized(name);
+  // A family member's name, or a close typo of one, is always a name.
+  if (family.some((p) => [p.display_name, p.preferred_name ?? ""].some((x) => x && (includesName(normalized(x), n) || includesName(n, normalized(x)) || fuzzyIncludesName(n, normalized(x)))))) return name;
+  if (words.some((w) => COMMON_WORD.test(w) && !/^ah$/i.test(w))) return null;
+  // "dad", "papa", "my wife" name a relationship, resolved further on.
+  if (words.every((w) => /^(?:my|our|the)$/i.test(w) || RELATION_WORD.test(w.replace(/['’]s$/i, "")))) return null;
+  // Someone who writes in sentence case capitalises a name ("Siti Hajar",
+  // "Ah Beng"); all-lowercase words in such a message are not one.
+  const usesCase = /[A-Z]/.test(original.replace(/^\s*\S/, "").replace(/\bI\b/g, ""));
+  if (usesCase && words.every((w) => /^[a-z]/.test(w))) return null;
+  return name;
+}
+/** Relationship words, with or without "my" ("dad's plan", "Papa admitted",
+ * "my hubby"), relative to the account holder. */
+const RELATION_WORD = /(?:^|[^\p{L}'’])(?:(?:my|our|the)\s+)?(dad|daddy|papa|father|mum|mom|mummy|mommy|mama|mother|wife|husband|hubby|spouse|missus|son|daughter|kids|children|brother|sister)(?:['’]s)?(?![\p{L}-])/iu;
+function relationGroupOf(word: string): "parent" | "spouse" | "child" | "sibling" {
+  return /dad|papa|father|mum|mom|mama|mother/i.test(word) ? "parent" : /wife|husband|hubby|spouse|missus/i.test(word) ? "spouse" : /son|daughter|kids|children/i.test(word) ? "child" : "sibling";
+}
+/** Is the question about that relative's OWN cover ("my sister's policies",
+ * "is my mum covered", "a policy covering my sister")? Otherwise a relative
+ * outside the household is the cause of a claim, not its subject ("my trip
+ * was cancelled because my mum was hospitalised"). */
+function aboutRelativesCover(text: string, word: string) {
+  const w = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp("\\b" + w + "['’]s\\s+(?:\\w+\\s+){0,2}(?:polic(?:y|ies)|plans?|insurance|cover(?:age)?|premiums?|benefits?)\\b|\\b(?:is|are|was)\\s+my\\s+" + w + "\\s+(?:covered|insured)\\b|\\bcover(?:s|ing)?\\s+(?:for\\s+)?my\\s+" + w + "\\b|\\bmy\\s+" + w + "\\s+(?:covered|insured)\\b", "i").test(text);
+}
+const FIRST_PERSON = /\b(?:i|i['’]m|im|i['’]ve|i['’]d|i['’]ll|me|my|mine|myself)\b/i;
+
 /** Explicit names take precedence over the UI selection; ambiguity never loads policies. */
 export function resolveClaimPerson(text: string, family: ClaimPerson[], selectedId: string): ClaimPersonResolution {
   const relative = resolveRelativePerson(text, family, selectedId);
   if (relative) return relative;
-  const subject = subjectName(text) ?? questionSubjectName(text);
+  const subject = plausibleName(subjectName(text), text, family) ?? plausibleName(questionSubjectName(text), text, family);
   const message = normalized(subject ?? text);
   const subjectNormalized = subject ? normalized(subject) : "";
   // A known name elsewhere in the sentence cannot make an unknown subject
@@ -175,6 +219,23 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
     if (parents.length === 1) return { status: "resolved", person: parents[0], explicit: true };
     if (parents.length > 1) return { status: "ambiguous", candidates: parents };
   }
+  // "Mrs Ong" in the Ongs' household is the account holder's spouse.
+  const self = family.filter((p) => normalized(p.relationship) === "self");
+  const title = text.match(/\b(?:mrs|madam|mdm)\.?\s+([\p{L}]+)/iu)?.[1];
+  if (title && self.length === 1 && normalized(self[0].display_name).split(" ").includes(normalized(title))) {
+    const spouses = family.filter((p) => normalized(p.relationship) === "spouse");
+    if (spouses.length === 1) return { status: "resolved", person: spouses[0], explicit: true };
+  }
+  // "Dad's plan", "papa admitted", "my hubby": relative to the account holder.
+  const bare = text.match(RELATION_WORD)?.[1];
+  // ("me as his wife", "her husband's plan": a relation of someone else, not of the account holder.)
+  if (bare && !/\bmy (?:grand|ah )/i.test(text) && !new RegExp("\\b(?:his|her|their|[\\p{L}]+['’]s)\\s+" + bare + "\\b", "iu").test(text)) {
+    const group = relationGroupOf(bare);
+    const candidates = family.filter(p => normalized(p.relationship) === group);
+    if (candidates.length === 1) return { status: "resolved", person: candidates[0], explicit: true };
+    if (candidates.length > 1 && !/^(?:kids|children)$/i.test(bare)) return { status: "ambiguous", candidates };
+    if (!candidates.length && aboutRelativesCover(text, bare)) return { status: "unknown", name: `your ${bare.toLowerCase()}`, candidates: family };
+  }
   const relation = message.match(/\bmy (mother|father|mum|mom|dad|parent|sister|brother|sibling|wife|husband|spouse|son|daughter|child|grandmother|grandfather|grandparent)\b/)?.[1];
   if (relation) {
     const group = /mother|father|mum|mom|dad|^parent$/.test(relation) && !relation.startsWith("grand") ? "parent"
@@ -183,7 +244,11 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
       : /son|daughter|child/.test(relation) ? "child" : "grandparent";
     const candidates = family.filter(p => normalized(p.relationship) === group);
     if (candidates.length === 1) return { status: "resolved", person: candidates[0], explicit: true };
-    return candidates.length ? { status: "ambiguous", candidates } : { status: "unknown", name: `your ${relation}`, candidates: family };
+    if (candidates.length) return { status: "ambiguous", candidates };
+    // A relative outside the household is the subject only when the question
+    // is about their own cover; otherwise they are the reason for the
+    // household member's own claim (a trip cancelled for a parent's illness).
+    if (aboutRelativesCover(text, relation) || !FIRST_PERSON.test(text.replace(new RegExp("\\bmy\\s+" + relation + "\\b", "gi"), ""))) return { status: "unknown", name: `your ${relation}`, candidates: family };
   }
   // First-person statements identify the account holder even when no UI
   // profile was selected. If an imported household has no unique "self"
@@ -203,7 +268,10 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
     if (candidates.length > 1) return { status: "ambiguous", candidates };
   }
   const selected = family.find(p => p.id === selectedId);
-  return selected ? { status: "resolved", person: selected, explicit: false } : { status: "unknown", name: "this person", candidates: family };
+  if (selected) return { status: "resolved", person: selected, explicit: false };
+  // A household of one: there is nobody else it can be about.
+  if (family.length === 1) return { status: "resolved", person: family[0], explicit: false };
+  return { status: "unknown", name: "this person", candidates: family };
 }
 
 /** Someone the household names who is not in it ("my colleague Ravi", "my

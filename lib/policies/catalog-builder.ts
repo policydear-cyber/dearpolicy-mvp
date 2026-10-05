@@ -4,7 +4,7 @@ import { structuredCompletion } from "@/lib/ai/llm";
 import { readCatalogCheckpoint,writeCatalogCheckpoint } from "@/lib/policies/catalog-checkpoint";
 import { ScenarioTraitSchema,hasQuote } from "@/lib/chat/facts";
 import type { ScenarioTrait } from "@/lib/chat/types";
-import { CURRENCY_MARKER,benefitRowsFromText } from "@/lib/documents/layout";
+import { CURRENCY_MARKER,benefitRowsFromText,costSharingRowsFromText } from "@/lib/documents/layout";
 import { deterministicConditions } from "@/lib/policies/condition-catalog";
 import { basisForRow,dailyLimitsFrom,expenseFactKey,parseBenefitValue,percentageBases,statedCurrencyCode } from "./benefit-rows";
 import { pageProductScopes } from "./inventory";
@@ -253,7 +253,7 @@ export async function catalogueDocument(args:{accountId:string;policyId:string;p
     // Read once per page: which heading says what a bare percentage is of,
     // and where on the page that heading starts applying.
     const bases=percentageBases(page.text);
-    const pageRows=benefitRowsFromText(page.text);
+    const pageRows=[...benefitRowsFromText(page.text),...costSharingRowsFromText(page.text)];
     // One categorising call per schedule page, for all its rows at once. It is
     // kept even when keywords place every row: it is what rules OUT a row that
     // only looks like a benefit (a worked example, a factor), and it adds the

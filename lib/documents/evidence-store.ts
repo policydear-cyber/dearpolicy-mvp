@@ -324,6 +324,9 @@ export async function markConflicts(accountId: string, policyId: string) {
     // Round 10: a part of the cover ("Accidental medical expenses (per accident)", "Fracture") has its own
     // smaller limit under an accident plan's S$50,000; only a row naming the cover itself is compared.
     if (/\b(?:medical|expenses?|fractures?|cash|hospital\w*|burns?|dental|physio\w*|chinese|tcm|per day|daily|reimburs\w*|transport|funeral|ambulance|per accident)\b/i.test(b.benefit_name)) continue;
+    // Round 7 (port): a stage of a multi-stage critical illness plan ("Early stage ... S$50,000", "Severe stage ... S$200,000")
+    // pays its own amount by design; it does not contradict the plan's cover amount.
+    if (/\b(?:early|intermediate|severe|advanced|minor|major|partial)\b[^\n]{0,20}\bstage\b|\bstage\b|\bper claim\b/i.test(b.benefit_name)) continue;
     const cover = coverIndex.get(b.policy_id + "|" + normalizeCoverageCategory(b.benefit_name));
     if (!cover || cover.amount == null) continue;
     const same = Number(cover.amount) === Number(b.formula_value) && (cover.currency ?? "") === (b.currency ?? "");

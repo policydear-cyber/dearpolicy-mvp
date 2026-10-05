@@ -11,7 +11,7 @@
  * Every state carries the page and line that says it, so an answer can cite it.
  */
 export type PrintedStatus = {
-  state: "lapsed" | "grace" | "ended" | "in_force" | "unknown";
+  state: "lapsed" | "grace" | "ended" | "in_force" | "reinstated" | "unknown";
   /** ISO date the status turns on (lapse date, end of grace, end of period). */
   date: string | null;
   /** The date as the document prints it ("17 March 2026"). */
@@ -21,6 +21,10 @@ export type PrintedStatus = {
   /** grace: the premium that is unpaid and when it fell due, as printed. */
   dueAmount?: string | null;
   duePrinted?: string | null;
+  /** reinstated: the lapse the reinstatement ended, as the earlier document printed it. */
+  lapsedPrinted?: string | null;
+  /** reinstated: the document that says so (another document of the same policy). */
+  byDocId?: string | null;
 };
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const DATE = "(\\d{1,2})\\s+(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(\\d{4})";
@@ -78,10 +82,41 @@ export function printedStatus(pages: Page[], expiryIso: string | null, today: st
   return { state: "unknown", date: null, printed: null, page: null, line: null };
 }
 
+/** Round 7 (port): "your policy has been REINSTATED with effect from 6 January 2026" -- the date a document
+ * prints that a lapsed policy was put back in force, with its page and sentence. */
+export function printedReinstatement(pages: Page[]): { iso: string; printed: string; page: number; line: string } | null {
+  for (const p of pages) {
+    const text = p.text.replace(/\s*\n\s*/g, " ");
+    const m = text.match(new RegExp("\\breinstated\\b[^.]{0,40}?\\b(?:with effect from|effective(?: from)?|on|from)\\s+" + DATE, "i"));
+    if (m) return { iso: isoOf(m[1], m[2], m[3]), printed: m[1] + " " + m[2] + " " + m[3], page: p.page, line: sentenceAt(pages, p.page, /reinstated/i) ?? m[0] };
+  }
+  return null;
+}
+/** Round 7 (port): a lapse that a later document of the same policy (same policy number) says was reinstated
+ * is not the policy's status any more: both documents read as reinstated, citing the reinstatement. */
+export function applyReinstatements(statusOf: Map<string, PrintedStatus>, docs: { id: string; policy_number: string | null }[], pagesOf: (id: string) => Page[]) {
+  const num = (x: string | null) => (x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  for (const d of docs) {
+    const st = statusOf.get(d.id);
+    if (st?.state !== "lapsed" || !num(d.policy_number)) continue;
+    for (const o of docs) {
+      if (o.id === d.id || num(o.policy_number) !== num(d.policy_number)) continue;
+      const r = printedReinstatement(pagesOf(o.id));
+      if (!r || (st.date && r.iso < st.date)) continue;
+      const reinstated: PrintedStatus = { state: "reinstated", date: r.iso, printed: r.printed, page: r.page, line: r.line, lapsedPrinted: st.printed, byDocId: o.id };
+      statusOf.set(d.id, reinstated);
+      if (["unknown", "in_force"].includes(statusOf.get(o.id)?.state ?? "unknown")) statusOf.set(o.id, reinstated);
+      break;
+    }
+  }
+  return statusOf;
+}
+
 /** One plain sentence about a policy that no longer covers anyone, or is in its grace period. */
 export function statusSentence(name: string, s: PrintedStatus): string | null {
   const page = s.page != null ? " (page " + s.page + ")" : "";
   if (s.state === "lapsed") return name + " lapsed on " + s.printed + page + ", so it no longer pays for anything that happens from that date.";
+  if (s.state === "reinstated") return name + (s.lapsedPrinted ? " lapsed on " + s.lapsedPrinted + " and" : "") + " was reinstated with effect from " + s.printed + page + ", so it is in force again; the reinstatement letter is the later document.";
   if (s.state === "ended") return name + " expired on " + s.printed + page + ", so it no longer covers anyone.";
   if (s.state === "grace") return name + " is in its grace period" + page + ": " + (s.dueAmount && s.duePrinted ? "the premium of " + s.dueAmount + " due on " + s.duePrinted + " has not been received. " : "a premium has not been received. ")
     + "It stays in force until " + s.printed + ", and lapses if the premium is not paid by then.";
@@ -93,17 +128,19 @@ export async function inactiveDocuments(accountId: string, personIds: string[], 
   const { query } = await import("@/lib/db/client");
   const { activePredicate } = await import("@/lib/lifecycle/scopes");
   if (!personIds.length) return [];
-  const docs = (await query<{ id: string; product_name: string | null; renewal_or_expiry_date: string | null; people: string[] }>(
-    `SELECT p.id::text AS id,p.product_name,p.renewal_or_expiry_date::text AS renewal_or_expiry_date,array_agg(DISTINCT pm.family_member_id::text) AS people
+  const docs = (await query<{ id: string; product_name: string | null; policy_number: string | null; renewal_or_expiry_date: string | null; people: string[] }>(
+    `SELECT p.id::text AS id,p.product_name,p.policy_number,p.renewal_or_expiry_date::text AS renewal_or_expiry_date,array_agg(DISTINCT pm.family_member_id::text) AS people
        FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
       WHERE p.account_id=$1 AND pm.family_member_id::text=ANY($2::text[]) AND p.processing_status='ready' AND ${activePredicate("p")} AND p.superseded_at IS NULL
-      GROUP BY p.id,p.product_name,p.renewal_or_expiry_date`, [accountId, personIds]).catch(() => ({ rows: [] }))).rows;
+      GROUP BY p.id,p.product_name,p.policy_number,p.renewal_or_expiry_date`, [accountId, personIds]).catch(() => ({ rows: [] }))).rows;
   if (!docs.length) return [];
   const pages = (await query<{ policy_id: string; page_number: number; text: string }>(
     `SELECT policy_id::text AS policy_id,page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY page_number`, [accountId, docs.map((d) => d.id)])).rows;
   const today = todayIso(now);
+  const pagesFor = (id: string) => pages.filter((p) => p.policy_id === id).map((p) => ({ page: p.page_number, text: p.text }));
+  const statuses = applyReinstatements(new Map(docs.map((d) => [d.id, printedStatus(pagesFor(d.id), d.renewal_or_expiry_date, today)])), docs, pagesFor);
   return docs.flatMap((d) => {
-    const status = printedStatus(pages.filter((p) => p.policy_id === d.id).map((p) => ({ page: p.page_number, text: p.text })), d.renewal_or_expiry_date, today);
+    const status = statuses.get(d.id)!;
     return status.state === "lapsed" || status.state === "ended" ? [{ docId: d.id, name: d.product_name ?? "A policy", people: d.people, status }] : [];
   });
 }

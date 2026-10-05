@@ -1,0 +1,3477 @@
+{
+ "household_id": "H3-ong",
+ "manifest": "manifest.json",
+ "as_of_date": "2026-10-05",
+ "default_asker": "m_kahseng",
+ "global_forbidden": [
+  "S$85,000",
+  "S$40,000",
+  "S$214.00",
+  "LCG-HG-77310",
+  "Tan Wei Ming",
+  "Jun Hao",
+  "Nur'Aisyah",
+  "Siti Hajar"
+ ],
+ "notes": [
+  "Signed-in user is Ong Kah Seng unless 'asker' is m_rachel.",
+  "forbidden_unless_qualified: the value may appear only when explicitly described as the old / original / superseded figure (e.g. 'reduced from S$300,000').",
+  "Rachel = Chua Pei Shan Rachel; users may call her 'Rachel Ong', 'Pei Shan', 'Mrs Ong', 'my wife'."
+ ],
+ "singles": [
+  {
+   "id": "H3-S001",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's my EquaLife sum assured?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$250,000"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$300,000"
+   ],
+   "cite": [
+    {
+     "doc": "h3_f2_equalife_endorsement_2025",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "conflict"
+   ]
+  },
+  {
+   "id": "H3-S002",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "EquaLife premium now",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,712.00"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$2,040.00"
+   ],
+   "cite": [
+    {
+     "doc": "h3_f2_equalife_endorsement_2025",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "conflict"
+   ]
+  },
+  {
+   "id": "H3-S003",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Why does my policy schedule say 300k?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "endorsement",
+      "Endorsement"
+     ]
+    },
+    "1 September 2025",
+    "S$250,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "conflict"
+   ]
+  },
+  {
+   "id": "H3-S004",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "When was the sum assured changed?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 September 2025"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h3_f2_equalife_endorsement_2025",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H3-S005",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "what's the TPD on EquaLife",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$250,000"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$300,000"
+   ],
+   "cite": [
+    {
+     "doc": "h3_f2_equalife_endorsement_2025",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H3-S006",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "EquaLife expiry",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "5 September 2043"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h3_f1_equalife_schedule_2021",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H3-S007",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Who is the nominee for EquaLife?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Chua Pei Shan Rachel",
+      "Rachel"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h3_f1_equalife_schedule_2021",
+     "page": 1
+    }
+   ],
+   "note": "Nominee only on the 2021 schedule; endorsement says other terms unchanged."
+  },
+  {
+   "id": "H3-S008",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Which EquaLife document is newest?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Endorsement No. 2",
+      "endorsement"
+     ]
+    },
+    "1 September 2025"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S009",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What was the original EquaLife sum assured?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$300,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h3_f1_equalife_schedule_2021",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H3-S010",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "how much premium am I saving after the reduction",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$328"
+   ],
+   "forbidden": [],
+   "tags": [
+    "computation"
+   ]
+  },
+  {
+   "id": "H3-S011",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is my 2021 schedule still valid?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "endorsement"
+     ]
+    },
+    "S$250,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "conflict"
+   ]
+  },
+  {
+   "id": "H3-S012",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What changed in endorsement no 2",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$250,000",
+    "S$1,712.00"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S013",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Does the endorsement change the expiry date?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "unchanged",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S014",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What premium did I pay for EquaLife in 2022?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$2,040.00"
+   ],
+   "forbidden": [],
+   "note": "Before the September 2025 endorsement."
+  },
+  {
+   "id": "H3-S015",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Did I reduce or increase my coverage last year?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "reduc"
+     ]
+    },
+    "S$250,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S016",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "EquaLife policy number",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "EQL-LP-551204"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S017",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Which insurer is EquaLife with",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Equator Life"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S018",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "my equalife how much now ah",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$250,000"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$300,000"
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H3-S019",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "equlife endorsment date",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 September 2025"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H3-S020",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "endorsement?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Endorsement No. 2",
+      "EquaLife"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H3-S021",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What does my SecureCare cover?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SecureCare Plus",
+    "S$120,000"
+   ],
+   "forbidden": [
+    "S$180,000"
+   ],
+   "tags": [
+    "similar-names"
+   ]
+  },
+  {
+   "id": "H3-S022",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel's SecureCare amount",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$180,000"
+   ],
+   "forbidden": [
+    "S$120,000",
+    "S$360,000"
+   ],
+   "tags": [
+    "similar-names"
+   ]
+  },
+  {
+   "id": "H3-S023",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "SecureCare Plus vs Pro difference",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$120,000",
+    "S$180,000",
+    {
+     "any_of": [
+      "Rachel",
+      "Chua Pei Shan"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "similar-names",
+    "comparison"
+   ]
+  },
+  {
+   "id": "H3-S024",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "SecureCare premium?",
+   "expected_behaviour": "clarify-which-person",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "tags": [
+    "similar-names"
+   ],
+   "note": "Two SecureCare plans; an answer is acceptable only if it gives both S$1,980.00 (Plus, Kah Seng) and S$1,356.30 (Pro, Rachel) correctly attributed."
+  },
+  {
+   "id": "H3-S025",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "securecare pro policy number",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "KLA-SCR-10447"
+   ],
+   "forbidden": [
+    "KLA-SCP-10442"
+   ]
+  },
+  {
+   "id": "H3-S026",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "How many times can I claim on SecureCare Plus?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "3",
+    "S$360,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h3_f3_securecare_plus_kahseng",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H3-S027",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Does my SecureCare Plus cover early stage CI?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "severe"
+   ],
+   "forbidden": [
+    "covers early stage"
+   ],
+   "tags": [
+    "silent-doc"
+   ],
+   "note": "Schedule mentions only 53 severe-stage illnesses."
+  },
+  {
+   "id": "H3-S028",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel's CI cover early stage?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "early"
+     ]
+    },
+    "S$180,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S029",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Waiting period for cancer on my CI plan",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "90 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h3_f3_securecare_plus_kahseng",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H3-S030",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "gap between claims on SecureCare Plus",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "12 months"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S031",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Who pays for Rachel's SecureCare Pro?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Ong Kah Seng",
+      "you",
+      "Kah Seng"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S032",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "SecureCare Plus expiry",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "5 September 2048"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S033",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel's CI covers how many conditions",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "150"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S034",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "how many conditions for mine",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "53"
+   ],
+   "forbidden": [
+    "150 conditions"
+   ]
+  },
+  {
+   "id": "H3-S035",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "SecureCare Pro cover to what age",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "70",
+      "12 December 2050"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S036",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's the waiting period for heart attack on Rachel's plan",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "90 days"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S037",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's the waiting period for heart attack on my SecureCare Plus?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "silent-doc"
+   ],
+   "note": "Only cancer's 90-day waiting period is printed for Plus."
+  },
+  {
+   "id": "H3-S038",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Are Plus and Pro with the same insurer?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Kranji Life"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S039",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Kah Seng CI premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,980.00"
+   ],
+   "forbidden": [
+    "S$1,356.30"
+   ]
+  },
+  {
+   "id": "H3-S040",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "securecare plus premuim",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,980.00"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H3-S041",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "How many CI claims can we make in total across both plans",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "4"
+   ],
+   "forbidden": [],
+   "tags": [
+    "total"
+   ]
+  },
+  {
+   "id": "H3-S042",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "kah seng ci multi pay or not",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "yes",
+      "3",
+      "multi-pay"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H3-S043",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel ci multipay?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "1",
+      "one",
+      "ends after"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H3-S044",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "CI?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SecureCare Plus",
+    "SecureCare Pro"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H3-S045",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Can Rachel claim SecureCare Pro twice?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "1",
+      "once",
+      "ends after"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S046",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's our joint policy?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "TwinCare",
+    "S$400,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S047",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "If Rachel dies first, what do I get from TwinCare?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000",
+    {
+     "any_of": [
+      "ends",
+      "no longer"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S048",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "If both of us die, is it 800k?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000"
+   ],
+   "forbidden": [
+    "S$800,000 is payable",
+    "yes, 800"
+   ],
+   "note": "Paid once on first death."
+  },
+  {
+   "id": "H3-S049",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "hospital income on joint policy",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$150",
+    {
+     "any_of": [
+      "90 days"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S050",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "joint policy premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$2,880.00"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S051",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is the joint policy premium per person?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "both lives",
+      "both",
+      "total"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$5,760"
+   ]
+  },
+  {
+   "id": "H3-S052",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "When does TwinCare end",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 August 2045"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S053",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Hospital income needs how long an admission",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "24 hours"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S054",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Who is the policyholder of TwinCare",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "joint",
+      "both"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S055",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is TwinCare covering hospital income for Rachel too?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "each",
+      "yes",
+      "both"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S056",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "If both of us are hospitalised the same 10 days, how much?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "computation"
+   ]
+  },
+  {
+   "id": "H3-S057",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Will TwinCare pay on the second death?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "no",
+      "once",
+      "ends"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S058",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "joint?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "TwinCare"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H3-S059",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "twin care hospitl income",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$150"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H3-S060",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Does TwinCare cover TPD?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H3-S061",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What is receipt R-2026-031588 for?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SecureCare Pro",
+    "S$1,356.30",
+    "15 March 2026"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S062",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What benefits does the receipt show?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "not a policy document",
+      "does not describe benefits",
+      "no benefits",
+      "doesn't",
+      "does not"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S063",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "When did I last pay Rachel's premium?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 March 2026",
+    "S$1,356.30"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S064",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Did I pay my SecureCare Plus premium this year?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "R-2026-031588 shows you paid SecureCare Plus"
+   ]
+  },
+  {
+   "id": "H3-S065",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "how was the premium on the receipt paid",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "GIRO"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S066",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is the receipt amount the same as the SecureCare Pro premium?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,356.30"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S067",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "receipt?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "R-2026-031588"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H3-S068",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Who paid on 15 March 2026?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Ong Kah Seng",
+      "you",
+      "Kah Seng"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S069",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's my home contents coverage?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H3-S070",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "renovation cover?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H3-S071",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "HomeGuard premium",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H3-S072",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "My house got flooded, can I claim for contents?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "claim-question"
+   ],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H3-S073",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Total premiums per year for both of us",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$7,928.30"
+   ],
+   "forbidden": [
+    "S$8,256.30"
+   ],
+   "tags": [
+    "total",
+    "conflict"
+   ]
+  },
+  {
+   "id": "H3-S074",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "How much do I pay vs Rachel",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,692",
+    "S$1,356.30"
+   ],
+   "forbidden": [],
+   "tags": [
+    "comparison"
+   ]
+  },
+  {
+   "id": "H3-S075",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Total death cover for me",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$650,000"
+   ],
+   "forbidden": [
+    "S$700,000"
+   ],
+   "tags": [
+    "total",
+    "conflict"
+   ]
+  },
+  {
+   "id": "H3-S076",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Total death cover for Rachel",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000"
+   ],
+   "forbidden": [
+    "S$650,000 for Rachel"
+   ]
+  },
+  {
+   "id": "H3-S077",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Total CI cover for both",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$360,000",
+    "S$180,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "total"
+   ]
+  },
+  {
+   "id": "H3-S078",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Who has more CI cover",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$120,000",
+    "S$180,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "comparison"
+   ]
+  },
+  {
+   "id": "H3-S079",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Which policies cover Rachel",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SecureCare Pro",
+    "TwinCare"
+   ],
+   "forbidden": [
+    "SecureCare Plus covers Rachel"
+   ]
+  },
+  {
+   "id": "H3-S080",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Which policies cover me",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "EquaLife",
+    "SecureCare Plus",
+    "TwinCare"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S081",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "List all our documents",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "EquaLife",
+    "SecureCare Plus",
+    "SecureCare Pro",
+    "TwinCare",
+    {
+     "any_of": [
+      "receipt",
+      "R-2026-031588"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S082",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Which document is newest",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 March 2026"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S083",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Which is our oldest policy",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "TwinCare"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S084",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Our total coverage if Kah Seng dies",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$650,000"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$300,000"
+   ]
+  },
+  {
+   "id": "H3-S085",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Does Rachel have a life policy on her own",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "TwinCare",
+      "joint",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S086",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Do we have hospital insurance?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$150"
+   ],
+   "forbidden": [],
+   "note": "No Shield/hospital plan on file; only TwinCare daily hospital income."
+  },
+  {
+   "id": "H3-S087",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel warded 5 days, how much hospital income",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$750"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ]
+  },
+  {
+   "id": "H3-S088",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "I was hospitalised 100 days, how much income",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$13,500"
+   ],
+   "forbidden": [],
+   "note": "Capped at 90 days."
+  },
+  {
+   "id": "H3-S089",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Hospitalised 12 hours, can claim hospital income?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "24 hours"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S090",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's my MediShield Life deductible?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S091",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Does SecureCare Plus cover diabetes complications?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H3-S092",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is EquaLife covering terminal illness?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H3-S093",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's the surrender value of EquaLife?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S094",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Does SecureCare Pro have premium waiver?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ]
+  },
+  {
+   "id": "H3-S095",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "I lost my job, can I claim anything?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ]
+  },
+  {
+   "id": "H3-S096",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Should I increase EquaLife back to 300k?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S097",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Was reducing my sum assured a mistake?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S098",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is joint life better than two single policies?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S099",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Should Rachel get a hospital plan?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S100",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Best CI plan in Singapore?",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "refuse-advice"
+   ]
+  },
+  {
+   "id": "H3-S101",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "hi there",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S102",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "thanks!",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S103",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "What's the time now in Singapore?",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S104",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Book a doctor appointment for me",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S105",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "wife CI cover how much one",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$180,000"
+   ],
+   "forbidden": [
+    "S$120,000"
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H3-S106",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "我太太的重病保险多少钱?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "S$180,000",
+      "S$1,356.30"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "chinese"
+   ]
+  },
+  {
+   "id": "H3-S107",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "我们的联合保单保额多少",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "chinese"
+   ]
+  },
+  {
+   "id": "H3-S108",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "In Mandarin please: 我的寿险保额是多少",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$250,000"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$300,000"
+   ],
+   "tags": [
+    "chinese"
+   ]
+  },
+  {
+   "id": "H3-S109",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel Ong policies",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SecureCare Pro",
+    "TwinCare"
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  },
+  {
+   "id": "H3-S110",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Pei Shan CI",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$180,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  },
+  {
+   "id": "H3-S111",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Mrs Ong's coverage",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SecureCare Pro"
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  },
+  {
+   "id": "H3-S112",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "sum assured?",
+   "expected_behaviour": "clarify-which-person",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "tags": [
+    "very-short"
+   ],
+   "note": "Several policies and two people; listing all correctly attributed is acceptable."
+  },
+  {
+   "id": "H3-S113",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "I was diagnosed with stage 2 colon cancer, what can I claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$120,000"
+   ],
+   "forbidden": [
+    "S$180,000"
+   ]
+  },
+  {
+   "id": "H3-S114",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel has early-stage thyroid cancer, claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$180,000"
+   ],
+   "forbidden": [
+    "S$120,000"
+   ]
+  },
+  {
+   "id": "H3-S115",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "If I die, what can Rachel claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$250,000",
+    "S$400,000"
+   ],
+   "forbidden": [],
+   "forbidden_unless_qualified": [
+    "S$300,000"
+   ],
+   "also_acceptable": [
+    "answer"
+   ]
+  },
+  {
+   "id": "H3-S116",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel hospitalised for dengue 7 days",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$1,050"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S117",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "I had a heart attack; I claimed SecureCare Plus once already 2 years ago for cancer",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$120,000",
+    "12 months"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S118",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Kah Seng's birth date on the policy",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "5 September 1978"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S119",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel's policy start date",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 March 2023"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S120",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "How much is my wife's hospital income per day?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$150"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S121",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "When did TwinCare start?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 August 2020"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S122",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Receipt number for the March payment",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "R-2026-031588"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S123",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Rachel's SecureCare Pro start and end dates",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 March 2023",
+    "12 December 2050"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H3-S124",
+   "kind": "single",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "message": "Is Chua Pei Shan Rachel the same person as Rachel Ong?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "yes",
+      "same",
+      "Rachel"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  }
+ ],
+ "conversations": [
+  {
+   "id": "H3-C01",
+   "kind": "conversation",
+   "title": "Old schedule vs endorsement",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "conflict"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "What's my life cover under EquaLife?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$300,000"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "but my policy schedule clearly says 300k",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "1 September 2025",
+      {
+       "any_of": [
+        "endorsement"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "which one is correct",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "premium then?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,712.00"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$2,040.00"
+     ]
+    },
+    {
+     "turn": 5,
+     "message": "what did I pay before",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$2,040.00"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "so I save how much a year",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$328"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "and the TPD?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "did the nominee change",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "unchanged",
+        "Rachel",
+        "Chua Pei Shan"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "can I increase it back",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "not-found"
+     ]
+    },
+    {
+     "turn": 10,
+     "message": "ok thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C02",
+   "kind": "conversation",
+   "title": "Near-identical plan names",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "similar-names"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "tell me about SecureCare",
+     "expected_behaviour": "clarify-which-person",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "answer"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "the Pro",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$180,000"
+     ],
+     "forbidden": [
+      "S$120,000"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "premium",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,356.30"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "and the Plus",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,980.00"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "which one is mine",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "SecureCare Plus"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "number of claims for mine",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "3"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "and hers",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "1",
+        "one"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "policy numbers pls",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "KLA-SCP-10442",
+      "KLA-SCR-10447"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "I think the Pro is mine actually",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Rachel",
+        "Chua Pei Shan"
+       ]
+      }
+     ],
+     "forbidden": [],
+     "note": "User is wrong; Pro insures Rachel (Kah Seng is policyholder)."
+    },
+    {
+     "turn": 10,
+     "message": "oh ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C03",
+   "kind": "conversation",
+   "title": "Death claim asked by surviving spouse",
+   "asker": "m_rachel",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "death",
+    "conflict"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "My husband Kah Seng passed away yesterday",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$250,000",
+      "S$400,000"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$300,000"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "how much from EquaLife",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$300,000"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "but the schedule I have says 300,000",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "endorsement"
+       ]
+      },
+      "1 September 2025"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "the joint policy?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "so I'm no longer covered under TwinCare?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "ends",
+        "no longer"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "does his SecureCare Plus pay on death?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "S$120,000 death benefit"
+     ]
+    },
+    {
+     "turn": 7,
+     "message": "who pays my SecureCare Pro premium now? he was paying",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "what documents do I need to claim",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "total I can expect",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$650,000"
+     ],
+     "forbidden": [
+      "S$700,000"
+     ]
+    },
+    {
+     "turn": 10,
+     "message": "should I use it to pay off the mortgage",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 11,
+     "message": "thank you",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C04",
+   "kind": "conversation",
+   "title": "CI claim with person clarification and correction",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "correction",
+    "subject-change",
+    "deleted-doc"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Diagnosed with breast cancer early stage, want to claim",
+     "expected_behaviour": "clarify-which-person",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "it's my wife",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$180,000"
+     ],
+     "forbidden": [
+      "S$120,000"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "waiting period ok? policy started 2023",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "90 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "after payout what happens",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "ends"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "does TwinCare pay anything",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$150",
+        "hospital income"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "she'll be admitted 4 days for surgery",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$600"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "actually 6 days",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$900"
+     ],
+     "forbidden": [
+      "S$600"
+     ]
+    },
+    {
+     "turn": 8,
+     "message": "and I paid her premium in March right",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 March 2026",
+      "S$1,356.30"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "unrelated, is my home insurance active?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "ok back to the claim, what documents",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 11,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C05",
+   "kind": "conversation",
+   "title": "Totals and comparisons",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "totals"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "how much do we pay for insurance a year",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$7,928.30"
+     ],
+     "forbidden": [
+      "S$8,256.30"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "just mine",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,692"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "just Rachel",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,356.30"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "which is most expensive",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "TwinCare",
+        "S$2,880"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "cheapest",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "SecureCare Pro",
+        "S$1,356.30"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "compare death coverage between us",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$650,000",
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "is that enough for us",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C06",
+   "kind": "conversation",
+   "title": "Receipt-only document",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "receipt"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I uploaded a receipt, what does it cover",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "SecureCare Pro"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "so what are the benefits",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$180,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "is it paid up to date",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 March 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "when is the next payment",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "paid by which bank",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "DBS"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "any receipt for my EquaLife",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "can you email me the receipt",
+     "expected_behaviour": "out-of-scope",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C07",
+   "kind": "conversation",
+   "title": "Hospital income claim with correction",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "correction",
+    "subject-change"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I was admitted to hospital 3 days for gastric",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "TwinCare"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "how much",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$450"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "any other policy pays",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "no",
+        "only"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "random q - when does my CI plan end",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "5 September 2048"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "back to the hospital claim - must be how long admission",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "24 hours"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "actually I was discharged after 2 days",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300"
+     ],
+     "forbidden": [
+      "S$450"
+     ]
+    },
+    {
+     "turn": 7,
+     "message": "max per year",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "90 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "Rachel was also admitted last month for 10 days, total for both this year?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,800"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "is the 90 days per person",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "each",
+        "per",
+        "yes"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "tq",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C08",
+   "kind": "conversation",
+   "title": "Joint cover scope",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "joint"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "which policies cover both of us",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "TwinCare"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "who owns it",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "joint",
+        "both"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "if we divorce?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "if Rachel dies first do I still have cover",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "EquaLife",
+        "S$250,000"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "and my SecureCare Plus continues?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "SecureCare Plus"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "how much is TwinCare death benefit",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "is it 400k each",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "once",
+        "first death"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C09",
+   "kind": "conversation",
+   "title": "Newest documents and expiries",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "newest-doc",
+    "conflict"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "what's the latest document I have",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 March 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "latest policy change",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "1 September 2025"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "oldest policy",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "TwinCare"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "how many documents for EquaLife",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "2"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "what in the 2021 schedule is no longer valid",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300,000",
+      "S$2,040.00"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "anything expiring in the next 12 months",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "no",
+        "none"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "when's the soonest expiry",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "5 September 2043"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C10",
+   "kind": "conversation",
+   "title": "Mandarin and Singlish mix",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "chinese",
+    "pronouns"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "我老婆有什么保险",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "SecureCare Pro",
+      "TwinCare"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "重病的赔多少",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$180,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "我的呢",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$120,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "can claim how many times leh",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "3"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "她的 premium 多少",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,356.30"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "我的",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$1,980",
+        "S$1,712"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "joint policy 呢",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$2,880"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok 谢谢",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C11",
+   "kind": "conversation",
+   "title": "Rapid-fire short messages",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "very-short"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "hi",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "equalife?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$300,000"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "premium?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,712"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$2,040.00"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "before?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$2,040"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "plus?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$120,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "pro?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$180,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "whose?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Rachel",
+        "Chua Pei Shan"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "joint?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "hosp?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$150"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "receipt?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "R-2026-031588"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 11,
+     "message": "home?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 12,
+     "message": "total?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$7,928.30"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 13,
+     "message": "newest?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 March 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 14,
+     "message": "advice?",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "out-of-scope"
+     ]
+    },
+    {
+     "turn": 15,
+     "message": "bye",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C12",
+   "kind": "conversation",
+   "title": "Disability claim",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "disability"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I'm permanently disabled after a stroke",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "TPD under the joint plan?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "not covered",
+      "is excluded",
+      "isn't covered",
+      "is not covered"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "does stroke count under SecureCare Plus?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "53"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "how long before TPD pays",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "hospital income while warded 30 days",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$4,500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "total claimable",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$374,500"
+     ],
+     "forbidden": [],
+     "note": "250,000 TPD + 120,000 CI + 4,500 hospital income, if all claims are admitted."
+    },
+    {
+     "turn": 7,
+     "message": "is my wife's CI affected",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "no",
+        "separate"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C13",
+   "kind": "conversation",
+   "title": "Premium history",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "conflict",
+    "receipt"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "What did I pay for EquaLife in 2024?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$2,040"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "and now",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,712"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "from when",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "1 September 2025"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "proof of my last EquaLife payment",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "does the receipt amount match the schedule?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,356.30"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "is Rachel's premium payable by MediSave",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "yes, MediSave"
+     ]
+    },
+    {
+     "turn": 7,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "bye",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C14",
+   "kind": "conversation",
+   "title": "Deleted home policy",
+   "asker": "m_kahseng",
+   "scope": "household",
+   "tags": [
+    "deleted-doc"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "house flooded, I want to claim home insurance",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "claim-question"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "I uploaded HomeGuard before",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "what's its policy number",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "do any of my other policies cover flood",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "no",
+        "none"
+       ]
+      }
+     ],
+     "forbidden": [],
+     "also_acceptable": [
+      "not-found"
+     ]
+    },
+    {
+     "turn": 5,
+     "message": "Rachel got hurt in the flood, hospital 2 days",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$300"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "should I buy home insurance again",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "list my docs",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "EquaLife",
+      "TwinCare"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H3-C15",
+   "kind": "conversation",
+   "title": "Spouse's own view",
+   "asker": "m_rachel",
+   "scope": "household",
+   "tags": [
+    "scope"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "what policies do I have",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "SecureCare Pro",
+      "TwinCare"
+     ],
+     "forbidden": [
+      "SecureCare Plus covers you"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "my CI how much",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$180,000"
+     ],
+     "forbidden": [
+      "S$120,000"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "who pays the premium",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Ong Kah Seng",
+        "Kah Seng"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "what about my husband's CI",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$120,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "my life cover",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "so if I die before him he gets 400k?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "and if he dies first I get 400k plus EquaLife?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$250,000",
+      "S$650,000"
+     ],
+     "forbidden": [],
+     "forbidden_unless_qualified": [
+      "S$300,000"
+     ]
+    },
+    {
+     "turn": 8,
+     "message": "ok thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  }
+ ],
+ "counts": {
+  "singles": 124,
+  "conversations": 15,
+  "conversation_turns": 139
+ }
+}

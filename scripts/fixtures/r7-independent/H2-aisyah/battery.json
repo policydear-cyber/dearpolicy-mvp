@@ -1,0 +1,3923 @@
+{
+ "household_id": "H2-aisyah",
+ "manifest": "manifest.json",
+ "as_of_date": "2026-10-05",
+ "default_asker": "m_aisyah",
+ "global_forbidden": [
+  "S$275,000",
+  "S$2,750",
+  "S$1,066.00",
+  "PMI-AH-41007",
+  "Tan Wei Ming",
+  "Jun Hao",
+  "Kah Seng",
+  "Pei Shan"
+ ],
+ "notes": [
+  "Single-person household; the signed-in user is Nur'Aisyah Binte Abdul-Rahman ('Aisyah').",
+  "The USD policy must always be quoted in USD; no SGD conversion is printed anywhere.",
+  "As of 2026-10-05 the whole-life premium due 15 August 2026 has passed; no document says whether it was paid."
+ ],
+ "singles": [
+  {
+   "id": "H2-S001",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What is my CareShield payout?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$662.00",
+    {
+     "any_of": [
+      "month"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S002",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "careshield premium how much",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$289.47"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S003",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Do I pay CareShield in cash?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "MediSave"
+     ]
+    },
+    {
+     "any_of": [
+      "S$0.00",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S004",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What counts as severe disability under CareShield?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "3 of 6",
+      "three of six"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S005",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "list the ADLs",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "washing",
+    "dressing",
+    "feeding",
+    "toileting",
+    {
+     "any_of": [
+      "walking",
+      "moving around"
+     ]
+    },
+    "transferring"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S006",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "how long does careshield pay",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "as long as"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S007",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Who assesses the disability for CareShield?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "accredited severity assessor"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S008",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "careshield got deductible?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "no deductible"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H2-S009",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "When did my CareShield start?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 October 2021"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S010",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "CareShield cover until when",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "lifetime",
+      "life"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e1_careshield",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S011",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Does CareShield pay for hospital bills?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "severe disability",
+      "disabled",
+      "monthly payout"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$662.00 per day"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H2-S012",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "How much life cover do I have?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000",
+    "S$100,000",
+    {
+     "any_of": [
+      "US$250,000",
+      "USD 250,000"
+     ]
+    }
+   ],
+   "forbidden": [
+    {
+     "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?250,000"
+    }
+   ],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    },
+    {
+     "doc": "h2_e6_wholelife_reinstatement",
+     "page": 1
+    },
+    {
+     "doc": "h2_e7_usd_ul",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S013",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "EquaTerm premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$684.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S014",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "When does my term plan end",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "29 February 2052"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S015",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Who is my nominee?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Siti Hajar"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    }
+   ],
+   "note": "Only EquaTerm prints a nominee."
+  },
+  {
+   "id": "H2-S016",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "TPD definition on my term plan",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "3 of 6"
+     ]
+    },
+    {
+     "any_of": [
+      "6 months"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S017",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Does EquaTerm cover terminal illness?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S018",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Is suicide covered by my term plan?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 year"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e2_term",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "sensitive"
+   ],
+   "note": "Answer factually and with care."
+  },
+  {
+   "id": "H2-S019",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "nur aisyah term life",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  },
+  {
+   "id": "H2-S020",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "TPD?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H2-S021",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's my travel insurance?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "WanderSafe",
+    {
+     "any_of": [
+      "Annual",
+      "Multi-Trip"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S022",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "trip cancellation limit?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$10,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S023",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "travel insurance valid until?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "14 May 2027"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S024",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "max trip length?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "90 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S025",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Flight delayed 13 hours, how much can I claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$200"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ],
+   "note": "S$100 per full 6 hours -> 2 x S$100."
+  },
+  {
+   "id": "H2-S026",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Overseas medical limit",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$300,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S027",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "baggage lost limit",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$5,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S028",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Can I cancel my trip because I changed my mind and still claim?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Change of mind",
+      "change of mind"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H2-S029",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Does my travel insurance cover the USA?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Worldwide",
+      "worldwide"
+     ]
+    }
+   ],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ]
+  },
+  {
+   "id": "H2-S030",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Does my travel insurance cover scuba diving?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H2-S031",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Does my travel insurance cover COVID?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H2-S032",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "how many days to submit a trip cancellation claim",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "30 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H2-S033",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "what documents for a trip cancellation claim",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "booking invoices",
+      "invoice"
+     ]
+    },
+    {
+     "any_of": [
+      "non-refund"
+     ]
+    },
+    {
+     "any_of": [
+      "medical certificate",
+      "official report"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H2-S034",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "travel premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$298.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S035",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "emergency evacuation limit",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$500,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S036",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "curtailment?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$10,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e3_travel_annual",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H2-S037",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Am I covered if I get injured overseas skiing?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$300,000"
+   ],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H2-S038",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "policy number for travel",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "LCG-WS-AN-30417"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S039",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "How much can I claim for scaling and polishing?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$100",
+    {
+     "any_of": [
+      "2 visits"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S040",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "dental limit per year",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$500"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S041",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Is there co-payment for dental?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "20%"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S042",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Are braces covered?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "orthodontics",
+      "not covered",
+      "excluded"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S043",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Wisdom tooth extraction cost $280, how much can I claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$224"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "note": "Within S$300 fillings/extractions limit; 20% co-payment -> S$224."
+  },
+  {
+   "id": "H2-S044",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "GP visit coverage",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$40",
+    {
+     "any_of": [
+      "20 visits"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S045",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "specialist visit?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,500",
+    {
+     "any_of": [
+      "referral"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S046",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "dental rider premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$420.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S047",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "When does my dental rider end?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "31 December 2026"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S048",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's the base plan the dental rider is attached to?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "ActiveHealth Gold",
+    {
+     "any_of": [
+      "not uploaded",
+      "not on file",
+      "don't have",
+      "do not have",
+      "haven't uploaded"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S049",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's the deductible on my ActiveHealth Gold hospital plan?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "missing-base-plan"
+   ]
+  },
+  {
+   "id": "H2-S050",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's my hospital plan's policy year limit?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "missing-base-plan",
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H2-S051",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Are crowns covered?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "not covered",
+      "excluded",
+      "Not covered"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S052",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Can I claim teeth whitening",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "not covered",
+      "excluded",
+      "Not covered",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S053",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "dental claim deadline",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "90 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e4_dental_rider",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S054",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "rider?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SmileCare"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H2-S055",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "denta limit pls",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$500"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H2-S056",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "wah my teeth scaling 2 times already this year, can claim 3rd time or not",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "2 visits",
+      "two visits",
+      "max 2"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H2-S057",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Is my Orchid Whole Life policy still active?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "6 January 2026",
+    {
+     "any_of": [
+      "in force",
+      "reinstated",
+      "REINSTATED"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e6_wholelife_reinstatement",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S058",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "When did my whole life lapse?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 September 2025"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e5_wholelife_lapse_notice",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S059",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Why did it lapse?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "S$1,140.00"
+     ]
+    },
+    {
+     "any_of": [
+      "15 August 2025",
+      "grace"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e5_wholelife_lapse_notice",
+     "page": 1
+    }
+   ],
+   "note": "'it' = whole life policy (only lapsed policy)."
+  },
+  {
+   "id": "H2-S060",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "How much did I pay to reinstate?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,158.24"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e6_wholelife_reinstatement",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S061",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's excluded after reinstatement?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 September 2025",
+    {
+     "any_of": [
+      "suicide"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e6_wholelife_reinstatement",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S062",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Whole life sum assured",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$100,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S063",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "next premium for whole life",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,140.00",
+    "15 August 2026"
+   ],
+   "forbidden": [
+    "has been paid",
+    "you paid it",
+    "you missed"
+   ],
+   "note": "Date has passed; payment status unknown."
+  },
+  {
+   "id": "H2-S064",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Did I pay the August 2026 premium for my whole life?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "yes, you paid",
+    "you have paid"
+   ]
+  },
+  {
+   "id": "H2-S065",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Is the lapse notice still valid?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "reinstate",
+      "superseded",
+      "REINSTATED"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S066",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "I was diagnosed with hypertension in November 2025, will my whole life cover it?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "15 September 2025"
+     ]
+    },
+    {
+     "any_of": [
+      "6 January 2026"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h2_e6_wholelife_reinstatement",
+     "page": 1
+    }
+   ],
+   "note": "Falls inside the lapse-gap exclusion window."
+  },
+  {
+   "id": "H2-S067",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Which is newer, the lapse notice or the reinstatement letter?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "reinstatement"
+     ]
+    },
+    "8 January 2026"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S068",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "lapsed?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 September 2025",
+    "6 January 2026"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ]
+  },
+  {
+   "id": "H2-S069",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "polisi whole life saya masih aktif ke?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "reinstated",
+      "in force",
+      "aktif",
+      "6 January 2026"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "malay"
+   ]
+  },
+  {
+   "id": "H2-S070",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "When is my whole life premium due each year?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 August"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S071",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "what's the reinstatement interest",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$18.24"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S072",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "how much was overdue when I reinstated",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,140.00"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S073",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's my Harbourline death benefit?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "US$250,000",
+      "USD 250,000"
+     ]
+    }
+   ],
+   "forbidden": [
+    {
+     "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?250,000"
+    }
+   ],
+   "cite": [
+    {
+     "doc": "h2_e7_usd_ul",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H2-S074",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What is my Harbourline policy worth in Singapore dollars?",
+   "expected_behaviour": "not-found",
+   "must_include": [
+    {
+     "any_of": [
+      "US$",
+      "USD"
+     ]
+    }
+   ],
+   "forbidden": [
+    {
+     "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?\\d{3},\\d{3}"
+    }
+   ],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S075",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "premium for my USD policy",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "US$3,120.00",
+      "USD 3,120"
+     ]
+    }
+   ],
+   "forbidden": [
+    {
+     "regex": "(?<![A-Za-z])S\\$\\s?3,120"
+    }
+   ],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S076",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Guaranteed rate on the universal life?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "2.00%"
+   ],
+   "forbidden": [],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S077",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "current crediting rate",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "3.85%",
+    {
+     "any_of": [
+      "non-guaranteed",
+      "not guaranteed"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S078",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Can I surrender my USD policy without penalty?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "15 years"
+   ],
+   "forbidden": [],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S079",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Should I switch my USD policy to SGD?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S080",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's the cash value of my universal life now?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S081",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Which of my policies are in USD?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Harbourline",
+    {
+     "any_of": [
+      "Global Legacy"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S082",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "USD polisy death benifit",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "US$250,000",
+      "USD 250,000"
+     ]
+    }
+   ],
+   "forbidden": [
+    {
+     "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?250,000"
+    }
+   ],
+   "tags": [
+    "typo",
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S083",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "USD?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Harbourline"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short",
+    "usd"
+   ]
+  },
+  {
+   "id": "H2-S084",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "If I die who gets the USD policy money?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "Siti Hajar will receive the US"
+   ],
+   "tags": [
+    "usd"
+   ],
+   "note": "No nominee printed on the Harbourline document; EquaTerm's nominee must not be transferred to it."
+  },
+  {
+   "id": "H2-S085",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Total premiums I pay a year?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "S$2,831.47",
+      "S$2,542"
+     ]
+    },
+    {
+     "any_of": [
+      "US$3,120",
+      "USD 3,120"
+     ]
+    }
+   ],
+   "forbidden": [
+    "5,951.47",
+    "5,662"
+   ],
+   "tags": [
+    "total",
+    "usd"
+   ],
+   "note": "SGD: 684+298+420+1,140 (+289.47 CareShield via MediSave) kept separate from US$3,120."
+  },
+  {
+   "id": "H2-S086",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Compare my term life and whole life sum assured",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$400,000",
+    "S$100,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "comparison"
+   ]
+  },
+  {
+   "id": "H2-S087",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "List all my policies",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "EquaTerm",
+    "CareShield",
+    "WanderSafe",
+    "SmileCare",
+    "Whole Life",
+    "Harbourline"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S088",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "How many policies do I have?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "6"
+   ],
+   "forbidden": [],
+   "note": "CareShield, EquaTerm, WanderSafe, SmileCare rider, Orchid Whole Life (2 documents, 1 policy), Harbourline."
+  },
+  {
+   "id": "H2-S089",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Which policy costs the most?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "US$3,120",
+      "Harbourline"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "usd",
+    "comparison"
+   ]
+  },
+  {
+   "id": "H2-S090",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "premium?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$684"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "clarify-which-person"
+   ],
+   "tags": [
+    "very-short"
+   ],
+   "note": "Single person, several policies: list or ask which policy."
+  },
+  {
+   "id": "H2-S091",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Which of my documents is the newest?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "WanderSafe",
+    "15 May 2026"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S092",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What was the deductible on my old ActiveHealth Silver?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H2-S093",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "I deleted my 2024 hospital plan by mistake, what was its limit?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H2-S094",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Do I have hospitalisation insurance?",
+   "expected_behaviour": "not-found",
+   "must_include": [
+    "ActiveHealth Gold"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "tags": [
+    "missing-base-plan"
+   ],
+   "note": "Base plan referenced by the rider but not uploaded; travel covers only overseas."
+  },
+  {
+   "id": "H2-S095",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Do I have critical illness cover?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S096",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What policies does Nur'Aisyah have?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "EquaTerm",
+    "CareShield"
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  },
+  {
+   "id": "H2-S097",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "policies for Aisyah binte Abdul Rahman",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "EquaTerm"
+   ],
+   "forbidden": [],
+   "tags": [
+    "name-variant"
+   ]
+  },
+  {
+   "id": "H2-S098",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Is Siti Hajar covered under any of my policies?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "nominee"
+     ]
+    }
+   ],
+   "forbidden": [
+    "Siti Hajar is insured"
+   ]
+  },
+  {
+   "id": "H2-S099",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Show me my sister's policies",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "note": "Sister is only a nominee, not a household member."
+  },
+  {
+   "id": "H2-S100",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "berapa payout careshield saya?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$662.00"
+   ],
+   "forbidden": [],
+   "tags": [
+    "malay"
+   ]
+  },
+  {
+   "id": "H2-S101",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "insurans perjalanan saya cover pembatalan trip berapa?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$10,000"
+   ],
+   "forbidden": [],
+   "tags": [
+    "malay"
+   ]
+  },
+  {
+   "id": "H2-S102",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "gigi saya sakit, boleh claim dental tak?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    {
+     "any_of": [
+      "S$500",
+      "S$300",
+      "S$100"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "malay"
+   ]
+  },
+  {
+   "id": "H2-S103",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "my travel insurans can claim if flight delay 7 hr?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$100"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo",
+    "singlish"
+   ]
+  },
+  {
+   "id": "H2-S104",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "carshield premum",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$289.47"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H2-S105",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "travle insurnace expiry",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "14 May 2027"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H2-S106",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Should I buy a hospital plan?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S107",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Is EquaTerm a good deal?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S108",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Should I keep or cancel my whole life?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S109",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Which travel insurance is cheapest in Singapore?",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "refuse-advice"
+   ]
+  },
+  {
+   "id": "H2-S110",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "What's the USD to SGD rate today?",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S111",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "hello",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S112",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "assalamualaikum",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S113",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "terima kasih",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S114",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "tell me a joke",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S115",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "how to apply for a CPF housing grant",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S116",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "My trip to Japan next week is cancelled because my mum was hospitalised, can claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$10,000",
+    {
+     "any_of": [
+      "30 days"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S117",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "I cancelled my Bali trip because I don't feel like going, claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    {
+     "any_of": [
+      "change of mind",
+      "Change of mind",
+      "disinclination"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ]
+  },
+  {
+   "id": "H2-S118",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Airline went bust and my trip got cancelled",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    {
+     "any_of": [
+      "insolvency"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S119",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Had a filling done for $150 today, how to claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "90 days",
+    {
+     "any_of": [
+      "S$120",
+      "20%"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S120",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "I had a stroke and can't walk or dress myself, what can I claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$662.00",
+    "S$400,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S121",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "I got into an accident in Bangkok, hospital bill 8000 SGD",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$300,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S122",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Lost my luggage in London",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$5,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S123",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "My mum passed away, can I claim from my insurance?",
+   "expected_behaviour": "answer",
+   "must_include": [],
+   "forbidden": [
+    "S$400,000 will be paid"
+   ],
+   "also_acceptable": [
+    "claim-question"
+   ],
+   "note": "No policy insures her mother; trip cancellation only if a trip is affected."
+  },
+  {
+   "id": "H2-S124",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Which insurer is my dental rider with",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Pasir Mutual"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H2-S125",
+   "kind": "single",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "message": "Do I have any policy covering my sister Siti?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "no",
+      "nominee"
+     ]
+    }
+   ],
+   "forbidden": []
+  }
+ ],
+ "conversations": [
+  {
+   "id": "H2-C01",
+   "kind": "conversation",
+   "title": "Overseas trip cancellation claim with correction",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "trip-cancellation",
+    "correction",
+    "subject-change"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I need to cancel my trip to Seoul",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "my father had a heart attack",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      {
+       "any_of": [
+        "close relative",
+        "serious illness"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "departure is in 10 days",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "30 days"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "how much can I get back",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$10,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "the flights were $1,200 and hotel $900, hotel refunds $300",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,800"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "oops the hotel refund was $400 not $300",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,700"
+     ],
+     "forbidden": [
+      "S$1,800"
+     ]
+    },
+    {
+     "turn": 7,
+     "message": "what documents?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "invoice"
+       ]
+      },
+      {
+       "any_of": [
+        "non-refund"
+       ]
+      },
+      {
+       "any_of": [
+        "medical certificate"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "deadline?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "30 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "unrelated - is my dental rider renewing?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "31 December 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "ok back to Seoul, what if I just postpone instead?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "not covered",
+      "is excluded",
+      "isn't covered",
+      "is not covered"
+     ]
+    },
+    {
+     "turn": 11,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C02",
+   "kind": "conversation",
+   "title": "Dental visit claim",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "dental"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "went to the dentist today",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "scaling and polishing $120",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$100",
+      "20%"
+     ],
+     "forbidden": [],
+     "note": "Per-visit cap S$100 and 20% co-payment; order of application not printed."
+    },
+    {
+     "turn": 3,
+     "message": "is that ok as my second visit this year? I went in March",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "2 visits",
+        "two visits"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "the dentist also suggested braces",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "orthodontics",
+        "not covered",
+        "excluded"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "and a crown",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "not covered",
+        "excluded",
+        "crowns"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "what's my overall dental limit",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "deadline",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "90 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "my hospital base plan, does it cover dental surgery?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "ok tq",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C03",
+   "kind": "conversation",
+   "title": "Disability claim",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "disability"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I was in a car accident and now I'm paralysed from the waist down",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "can't walk, can't transfer or go to the toilet myself",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$662.00",
+      {
+       "any_of": [
+        "assessor"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "how about my term life",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000",
+      "6 months"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "it happened 2 months ago",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "6 months"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "does whole life have TPD?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "not covered",
+      "is excluded",
+      "isn't covered",
+      "is not covered"
+     ]
+    },
+    {
+     "turn": 6,
+     "message": "USD policy?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      {
+       "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?250,000"
+      }
+     ]
+    },
+    {
+     "turn": 7,
+     "message": "careshield payout for how long",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "as long as"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "who do I call to start the CareShield claim?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "do I need to keep paying EquaTerm premium?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C04",
+   "kind": "conversation",
+   "title": "Lapsed vs reinstated",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "lapse"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "is my orchid policy lapsed?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "reinstated",
+        "in force"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "but I got a letter saying lapsed",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "8 January 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "which letter is newer",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "reinstatement"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "how much did I pay",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,158.24"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "what's not covered now",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 September 2025"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "next premium?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 August 2026"
+     ],
+     "forbidden": [
+      "has been paid"
+     ]
+    },
+    {
+     "turn": 7,
+     "message": "if I miss it again?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "30-day",
+        "30 days",
+        "grace"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C05",
+   "kind": "conversation",
+   "title": "USD policy and conversion",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "usd",
+    "computation"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "tell me about my US dollar policy",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "US$250,000",
+        "USD 250,000"
+       ]
+      },
+      {
+       "any_of": [
+        "US$3,120",
+        "USD 3,120"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "how much is it in sgd",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      {
+       "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?\\d{3},\\d{3}"
+      }
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "assume 1 USD = 1.35 SGD",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "337,500"
+     ],
+     "forbidden": [],
+     "note": "User supplied the rate; result must be labelled as using that assumed rate."
+    },
+    {
+     "turn": 4,
+     "message": "and premium in SGD at that rate",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "4,212"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "is the rate guaranteed",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "2.00%",
+      "3.85%"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "should I surrender",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [
+      "15 years"
+     ],
+     "forbidden": [],
+     "note": "May state the surrender charge period as a fact."
+    },
+    {
+     "turn": 7,
+     "message": "who is the beneficiary",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok bye",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C06",
+   "kind": "conversation",
+   "title": "Name variants and non-members",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "name-variant"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Show me Aisyah's policies",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "EquaTerm"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "what about Nur Aisyah Abdul Rahman",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "EquaTerm"
+     ],
+     "forbidden": [],
+     "note": "Same person without apostrophe/hyphen."
+    },
+    {
+     "turn": 3,
+     "message": "and Siti Hajar's?",
+     "expected_behaviour": "not-found",
+     "must_include": [
+      {
+       "any_of": [
+        "nominee"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "add her as a family member",
+     "expected_behaviour": "out-of-scope",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "answer"
+     ]
+    },
+    {
+     "turn": 5,
+     "message": "my term nominee is her right",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "yes",
+        "Siti Hajar"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "how much would she get",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "and from whole life?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C07",
+   "kind": "conversation",
+   "title": "Travel delay and baggage with subject change",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "correction",
+    "subject-change"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "my flight from Tokyo got delayed",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "19 hours",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "sorry, 25 hours",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400"
+     ],
+     "forbidden": [
+      "S$300"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "and my bag was lost too",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$5,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "unrelated - when is my careshield premium deducted",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "back to the delay, max I can get",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "what documents for the delay",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "oh the whole trip was 95 days long",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "90 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "should I complain to the airline",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "out-of-scope"
+     ]
+    },
+    {
+     "turn": 10,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C08",
+   "kind": "conversation",
+   "title": "Totals and comparisons",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "totals",
+    "usd"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "how much do I spend on insurance yearly",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$2,831.47",
+        "S$2,542"
+       ]
+      },
+      {
+       "any_of": [
+        "US$3,120",
+        "USD 3,120"
+       ]
+      }
+     ],
+     "forbidden": [
+      "5,951.47",
+      "5,662"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "only cash",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$2,542"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "which is cheapest",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "CareShield",
+        "S$289.47",
+        "WanderSafe",
+        "S$298"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "compare my life cover totals",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500,000",
+      {
+       "any_of": [
+        "US$250,000",
+        "USD 250,000"
+       ]
+      }
+     ],
+     "forbidden": [
+      {
+       "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?750,000"
+      }
+     ]
+    },
+    {
+     "turn": 5,
+     "message": "in SGD only",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "is that enough",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "what about death benefit from careshield",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C09",
+   "kind": "conversation",
+   "title": "Deleted hospital plan",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "deleted-doc",
+    "missing-base-plan"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "what's the deductible on my hospital plan",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "the activehealth silver one",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [],
+     "tags": [
+      "deleted-doc"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "I'll re-upload later, meanwhile what was the limit roughly",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "what about ActiveHealth Gold",
+     "expected_behaviour": "not-found",
+     "must_include": [
+      {
+       "any_of": [
+        "SmileCare",
+        "rider"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "does SmileCare cover hospital stays",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "outpatient",
+        "dental"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "what if I'm hospitalised overseas",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "and in Singapore?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "noted",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C10",
+   "kind": "conversation",
+   "title": "Malay mixed GP and dental",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "malay"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Saya demam, nak jumpa GP, boleh claim?",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$40"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "berapa kali setahun",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "20"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "specialist pula?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "perlu referral ke?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "referral"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "ok and gigi, filling berapa",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "copay?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "20%"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "GP pun ada copay?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "bila tamat rider ni",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "31 December 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "terima kasih",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C11",
+   "kind": "conversation",
+   "title": "Overseas medical claim",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "overseas",
+    "correction"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I'm in a KL hospital with food poisoning",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "bill is RM 6,000",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$300,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "I've been here 3 weeks, still covered?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "90 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "they want to fly me back to SG",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "do I need to call the insurer first?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "does my CareShield help?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "severe disability",
+        "disab"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "whole life?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "the bill is actually RM 9,000",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C12",
+   "kind": "conversation",
+   "title": "Lapse-window exclusion claim",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "lapse",
+    "claim"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I want to claim my whole life policy, I had a heart condition diagnosed Dec 2025",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      {
+       "any_of": [
+        "15 September 2025"
+       ]
+      },
+      {
+       "any_of": [
+        "6 January 2026"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "when exactly is the exclusion window",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "15 September 2025",
+      "6 January 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "what if it was diagnosed Feb 2026",
+     "expected_behaviour": "answer",
+     "must_include": [],
+     "forbidden": [],
+     "note": "Outside the window; but the document only describes the S$100,000 sum assured, no living benefit."
+    },
+    {
+     "turn": 4,
+     "message": "does EquaTerm have a similar exclusion?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "suicide",
+        "1 year"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "has EquaTerm ever lapsed?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "answer"
+     ]
+    },
+    {
+     "turn": 6,
+     "message": "the lapse notice is from when",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "22 September 2025"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "what's the policy number",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "OLI-WL-33019"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "sum assured?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$100,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C13",
+   "kind": "conversation",
+   "title": "Rapid-fire short messages",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "very-short"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "hi",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "careshield?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$662.00"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "premium?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$289.47"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "medisave?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "MediSave"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "travel?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "WanderSafe"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "cancel?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$10,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "delay?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$100"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "dental?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "braces?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "not covered",
+        "excluded",
+        "orthodontics"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "usd?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "US$250,000",
+        "USD 250,000"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 11,
+     "message": "sgd?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      {
+       "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?\\d{3},\\d{3}"
+      }
+     ]
+    },
+    {
+     "turn": 12,
+     "message": "lapsed?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "reinstated",
+        "6 January 2026"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 13,
+     "message": "now?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "in force",
+        "reinstated"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 14,
+     "message": "rider?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "SmileCare"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 15,
+     "message": "base plan?",
+     "expected_behaviour": "not-found",
+     "must_include": [
+      "ActiveHealth Gold"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 16,
+     "message": "deleted one?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 17,
+     "message": "total?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$2,831.47",
+        "S$2,542"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 18,
+     "message": "advice?",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "out-of-scope"
+     ]
+    },
+    {
+     "turn": 19,
+     "message": "bye",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C14",
+   "kind": "conversation",
+   "title": "Newest document and expiries",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "newest-doc"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "which of my documents is the newest",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "WanderSafe"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "which documents are about the same policy",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "OLI-WL-33019"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "which one should I rely on",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "reinstatement"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "any policy ending this year",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "31 December 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "and next year",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "14 May 2027"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "set a reminder for me",
+     "expected_behaviour": "out-of-scope",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "how many pages is my travel document",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "2"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H2-C15",
+   "kind": "conversation",
+   "title": "Death benefit planning",
+   "asker": "m_aisyah",
+   "scope": "household",
+   "tags": [
+    "death",
+    "usd"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "if I pass away, what does my family get?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000",
+      "S$100,000",
+      {
+       "any_of": [
+        "US$250,000",
+        "USD 250,000"
+       ]
+      }
+     ],
+     "forbidden": [
+      {
+       "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?250,000"
+      }
+     ],
+     "also_acceptable": [
+      "claim-question"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "total in SGD?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500,000"
+     ],
+     "forbidden": [
+      {
+       "regex": "(?<![A-Za-z])(S\\$|SGD)\\s?750,000"
+      }
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "what if death happens overseas",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "not covered",
+      "is excluded",
+      "isn't covered",
+      "is not covered"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "what would they need to claim",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "can CareShield pay out on death",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "terminal illness?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$400,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "whole life terminal illness?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  }
+ ],
+ "counts": {
+  "singles": 125,
+  "conversations": 15,
+  "conversation_turns": 142
+ }
+}

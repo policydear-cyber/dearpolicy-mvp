@@ -87,6 +87,14 @@ export function householdPersonFromWords(message: string, family: ClaimPerson[],
     return { status: "unknown", name: "your " + last.label, candidates: family };
   // Round 9: "my dad passed away" when the only parent on file is not known to be a father (the household page says
   // "parent", the name says nothing): ask who, never guess. Whose relationship is unknown is named, so the card is not a riddle.
+  // Round 7 (port): a question about a plan ("What's my dad's hospital plan?") is not a reported event: with only
+  // one parent on file it is about them, said by name in the answer; a reported event (a death, an admission) still asks.
+  if (last.gender && (last.label === "father" || last.label === "mother") && candidates.length === 1 && !candidates.some((p) => genderOf(p) !== null)
+    && !/\b(?:died|dead|passed (?:away|on)|admitted|hospitali[sz]ed|warded|fell|broke|fractured|diagnosed|kena|yesterday|last (?:week|month|night)|just now|this morning)\b/i.test(message)
+    // (A question about what a plan would do -- "what if dad needs rehab after surgery", "does the GHS cover dad's cataract surgery?" -- reports nothing.)
+    && (/^\s*(?:what if|if|does|do|is|are|can|could|will|would|how much|how|what|which|when)\b|\?\s*$/i.test(message)
+      || !/\b(?:death|accident|injur\w*|fractur\w*|diagnos\w*|sick|ill|claim\w*|operation|surgery)\b/i.test(message)))
+    return { status: "resolved", person: candidates[0], explicit: true };
   if (last.gender && (last.label === "father" || last.label === "mother") && candidates.length && !candidates.some((p) => genderOf(p) === last.gender))
     return { status: "unknown", name: "your " + last.label, candidates: family, unsure: candidates };
   return candidates.length === 1 ? { status: "resolved", person: candidates[0], explicit: true } : null;
@@ -114,4 +122,24 @@ export function productOwner(message: string, holdings: { productName: string; o
     for (const o of h.ownerIds) owners.add(o);
   }
   return matched && owners.size === 1 ? [...owners][0] : null;
+}
+/** Round 7 (port): two products named alike ("SecureCare Plus", "SecureCare Pro"): the word that tells them
+ * apart ("the Pro") says which one -- when only one of the alike products has it, and one person holds it. */
+export function alikeProductOwner(message: string, holdings: { productName: string; ownerIds: string[] }[]): string | null {
+  // Round 7 (port): two products named alike ("SecureCare Plus", "SecureCare Pro"): the word that tells them
+  // apart ("the Pro", "my SecureCare Plus") says which one -- when only one of the alike products has it.
+  const words = (name: string) => name.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !/\d/.test(t)).map((t) => t.toLowerCase());
+  for (const h of holdings) {
+    const mine = words(h.productName);
+    const alike = holdings.filter((o) => o.productName.toLowerCase() !== h.productName.toLowerCase() && words(o.productName).some((t) => t.length >= 5 && mine.includes(t)));
+    if (!alike.length) continue;
+    const telling = mine.filter((t) => !alike.some((o) => words(o.productName).includes(t)) && !/^(?:the|and|of|for|plan|policy|insurance)$/.test(t));
+    if (!telling.length || !telling.some((t) => new RegExp("(?<![\\p{L}\\p{N}])" + t + "(?![\\p{L}\\p{N}])", "iu").test(message))) continue;
+    if (alike.some((o) => words(o.productName).filter((t) => !mine.includes(t)).some((t) => new RegExp("(?<![\\p{L}\\p{N}])" + t + "(?![\\p{L}\\p{N}])", "iu").test(message)))) continue;
+    // (A payment notice names its payer too: the person on every document of that product is its holder.)
+    const same = holdings.filter((o) => o.productName.toLowerCase() === h.productName.toLowerCase());
+    const holders = h.ownerIds.filter((id) => same.every((o) => o.ownerIds.includes(id)));
+    if (holders.length === 1) return holders[0];
+  }
+  return null;
 }

@@ -1,0 +1,24 @@
+===== page 1 =====
+Orchid Life Insurance Berhad (Singapore Branch)
+Joint-life policy (fictional)
+
+
+
+POLICY SCHEDULE - JOINT LIFE, FIRST DEATH
+Policy number: OLI-JL-88231
+Lives assured: ONG KAH SENG and CHUA PEI SHAN RACHEL (joint policyholders)
+Start: 1 August 2020 End: 1 August 2045
+Benefit                                                                       Amount
+Death of the first life assured                                               S$400,000
+Daily hospital income (each life assured)                                     S$150 per day
+Hospital income maximum                                                       90 days per policy year
+Annual premium (both lives)                                                   S$2,880.00
+The death benefit is paid once, on the first death. The policy then ends and the
+surviving life assured is no longer covered under this policy.
+Hospital income requires admission of at least 24 hours.
+
+
+
+
+SYNTHETIC TEST DOCUMENT - fictional insurer and persons - not a real policy                             Page 1 of 1
+

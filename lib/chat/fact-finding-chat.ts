@@ -724,5 +724,9 @@ export function isClaimMoneyQuestion(text: string) {
   if (/\b(?:matur\w*|surrender\w*|endowment|fund value|cash value|ilps?|invest-?link\w*|bonus\w*)\b/i.test(t)) return false;
   // "Irfan lost his thumb in an accident, how much can we claim?": the event is in the same message -- that is the claim to start, not a question for one.
   if (reportedEvents(t).length || /\b(?:lost (?:his|her|my|a|an|one|both) \w+|had (?:an? )?(?:angioplasty|operation|surgery|stroke|heart attack)|was (?:admitted|warded|hospitali[sz]ed|diagnosed)|(?:broke|fractured|sprained|injured|hurt) (?:his|her|my|a)\b)/i.test(t)) return false;
+  // Round 7 (port): what a plan pays at maturity, what it is worth or what it pays
+  // per visit are policy facts, not a claim for an event ("How much will Jun
+  // Hao get at maturity?", "How much can I claim for scaling and polishing?").
+  if (/\b(?:matur\w*|surrender\w*|cash value|account value|worth|per visit|per year|per day|limit|maximum|max)\b/i.test(t)) return false;
   return CLAIM_MONEY_ASK.some((re) => re.test(t));
 }

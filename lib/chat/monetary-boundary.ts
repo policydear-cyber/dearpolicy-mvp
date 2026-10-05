@@ -146,6 +146,9 @@ function verifiedPolicyFactAnswer(answer: Pick<ChatAnswer, "mode" | "claimItems"
 export function liveClaimContext(intent: string | undefined, answer: Pick<ChatAnswer, "mode" | "claimItems"> & Partial<Pick<ChatAnswer, "verifiedPolicyFactsOnly" | "composition">>, question = ""): boolean {
   const mode: string = answer.mode;
   if (intent === "claim" || mode !== "answer") return true;
+  // "Never mind the claim. How much is her hospital cash?" sets the claim
+  // aside: the words doing that are not a question about claim money.
+  question = question.replace(/\b(?:never\s*mind|forget(?:\s+about)?|stop|drop|cancel|leave|skip|pause|park)\b[^.?!]{0,20}\bclaims?\b[^.?!]*[.!]?/gi, " ");
   // "What's the excess on his accident claims?" asks a term the policy prints; "how much can she claim?" asks for an amount.
   if (CLAIM_MONEY_QUESTION.test(question) && !(verifiedPolicyFactAnswer(answer) && (POLICY_TERM_QUESTION.test(question) || COVER_YES_NO.test(question)) && !CLAIM_AMOUNT_ASKED.test(question))) return true;
   // "What is her hospital coverage?" names an event word but asks what the

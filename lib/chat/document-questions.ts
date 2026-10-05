@@ -29,7 +29,8 @@ import type { ConversationState } from "./types";
 import { NON_COVER_ROLES, ROLE_WORDS, flagUnclearFigures, printedLines, type CorrespondenceRole } from "@/lib/documents/messy";
 import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_REQUIRED_MESSAGE, UNOPENABLE_DOCUMENT_MESSAGE, UNREADABLE_PHOTO_MESSAGE } from "@/lib/documents/processing-errors";
 import { householdPersonFromWords } from "./person-words";
-import { askedCoverage, bestLines, piecesOf, quoted, wordsOf } from "./printed-lines";
+import { replacedFigures } from "@/lib/policies/amendments";
+import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
 type Doc = { id: string; file: string; role: string | null; status: string; error: string | null; message: string | null; product: string | null; insurer: string | null;
@@ -526,7 +527,7 @@ const PRODUCT_COMMON_WORDS = ["plan", "policy", "insurance", "integrated", "pers
 /** Plan kinds a question names without the product's name ("Mama's CI plan", "the accident plan"). */
 const PLAN_KINDS: [RegExp, RegExp][] = [
   [/\bci\b|critical illness/i, /critical illness/i],
-  [/\baccident (?:plan|policy|cover)\b|\bpa (?:plan|policy)\b|personal accident/i, /accident/i],
+  [/\baccident (?:plan|policy|cover)\b|\bpa (?:plan|policy|premium|cover)\b|\b(?:her|his|my|their|\w+[’']s) pa\b|personal accident/i, /accident/i],
   [/\bhospital (?:cash|income)\b/i, /hospital (?:cash|income)/i],
   [/\btravel\b/i, /travel/i],
   [/\bwhole life\b/i, /whole life/i],
@@ -595,6 +596,15 @@ export async function printedLinesAnswer(args: { accountId: string; question: st
   const summary = best.d.superseded
     ? q(best.d.file) + " is an earlier schedule of " + whose + " " + (best.d.product ?? "policy") + ", kept for reference (answers about the current year use the newer one). For that earlier year it prints:"
     : "Here is what " + whose + " " + (best.d.product ?? q(best.d.file)) + what + " prints about that:";
+  // Round 7 (port): a per-column table row says only the column asked (or this person's, on the household's own group plan), or is not quoted.
+  const self = args.family.find((p) => /^self$/i.test(p.relationship ?? ""));
+  const columns = args.people.length === 1 && self && best.d.owners.includes(self.id) ? columnsFor(args.people[0].relationship) : [];
+  // Round 7 (port): a figure a later endorsement of the same policy replaced is not quoted from the older document as if current.
+  const replaced = (await replacedFigures(args.accountId, [best.d.id]).catch(() => new Map())).get(best.d.id);
+  const stale = (line: string) => !!replaced && [...line.matchAll(/(?:S\$|SGD\s?|US\$|USD\s?)\s?(\d[\d,]*(?:\.\d+)?)/gi)].some((m) => replaced.amounts.has(Number(m[1].replace(/,/g, ""))));
+  const lines = best.lines.flatMap((l) => { const line = narrowToColumn(l.line, question, columns); return line && !stale(line) ? [{ ...l, line }] : []; });
+  if (!lines.length) return null;
+  best.lines = lines;
   return { summary, details: quoted(best.lines),
     citations: cite(best.d, (best.d.product ?? best.d.file) + " (" + best.d.file + ")", best.lines.map((l) => l.page)), personId: owner?.id ?? null };
 }

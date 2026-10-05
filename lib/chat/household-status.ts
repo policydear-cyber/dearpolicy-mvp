@@ -97,7 +97,7 @@ export function noPoliciesSentence(p: ClaimPerson, docs: PersonDocument[]): stri
 /** "Who is covered under the travel plan?": the people each matching policy
  * names, from the documents on file. Null when the question names no plan. */
 const PLAN_WORDS: [RegExp, RegExp][] = [
-  [/\btravel\b/i, /travel/i], [/\bhospital|\bshield\b|\bmedical\b/i, /hospital|shield|medical|health/i],
+  [/\btravel\b/i, /travel/i], [/\bhospital|\bshield\b|\bmedical\b/i, /hospital|(?<!care)shield|medical|health/i],
   [/\b(?:personal )?accident|\bpa\b/i, /accident|\bpa\b/i], [/\blife\b|\bterm\b|\bdeath\b/i, /life|term|death/i],
   [/\bcritical illness|\bci\b/i, /critical|\bci\b/i], [/\bgroup|\bcompany|\bemployer|\bwork\b/i, /group|employee/i],
 ];

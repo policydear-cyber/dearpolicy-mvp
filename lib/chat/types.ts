@@ -49,6 +49,8 @@ export type ConversationState = {
   askedWording?: boolean;
   /** The claim interview reached its final answer in this conversation. */
   claimConcluded?: boolean;
+  /** The household set the open claim aside ("never mind the claim"): its facts stay on record but later policy questions are not read as reporting that event. Cleared when a claim is open again. */
+  claimSetAside?: boolean;
   /** The documents the concluded claim's possible benefits come from (policy ids), for follow-ups. */
   claimSources?: string[];
   /** A planned operation or admission the family told DearPolicy about (not yet happened). */

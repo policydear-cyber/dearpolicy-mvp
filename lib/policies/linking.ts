@@ -68,6 +68,8 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
        JOIN policy_members pm ON pm.policy_id=current.id AND pm.account_id=current.account_id
        JOIN policies ref ON ref.account_id=current.account_id AND ref.id<>current.id AND ${activePredicate("ref")}
       WHERE current.account_id=$1 AND current.id=$2 AND ${activePredicate("current")} AND ref.personal_coverage_confirmed=false
+        -- Round 7 (port): a premium receipt names whoever paid; its payer is not who another document of the product covers.
+        AND coalesce(current.document_role,'')<>'premium_receipt'
         AND (
           (current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number) OR
           (current.insurer IS NOT NULL AND ref.insurer IS NOT NULL AND lower(current.insurer)=lower(ref.insurer)

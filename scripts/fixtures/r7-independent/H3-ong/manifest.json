@@ -1,0 +1,444 @@
+{
+  "household_id": "H3-ong",
+  "household_name": "Ong / Chua couple",
+  "as_of_date": "2026-10-05",
+  "timezone": "Asia/Singapore",
+  "account_owner": "m_kahseng",
+  "members": [
+    {
+      "id": "m_kahseng",
+      "display_name": "Ong Kah Seng",
+      "preferred_name": "Kah Seng",
+      "relationship": "self",
+      "dob": "1978-09-05"
+    },
+    {
+      "id": "m_rachel",
+      "display_name": "Chua Pei Shan Rachel",
+      "preferred_name": "Rachel",
+      "relationship": "spouse",
+      "dob": "1980-12-12",
+      "notes": "sometimes called 'Rachel Ong' by Kah Seng; documents use CHUA PEI SHAN RACHEL"
+    }
+  ],
+  "upload_order_note": "Upload the 2025 endorsement BEFORE the 2021 schedule (so upload order != document date order); 'newest' means newest document date.",
+  "traps": [
+    "EquaLife Protect: 2021 schedule says S$300,000 / S$2,040.00 but Endorsement No. 2 (1 Sep 2025) reduced it to S$250,000 / S$1,712.00. Current = S$250,000.",
+    "SecureCare Plus (Kah Seng, KLA-SCP-10442, S$120,000 x up to 3) vs SecureCare Pro (Rachel, KLA-SCR-10447, S$180,000 once). Never swap.",
+    "TwinCare Joint Life covers BOTH; pays S$400,000 once on first death and then ends.",
+    "Premium receipt R-2026-031588 is payment evidence only (paid by Kah Seng for Rachel's SecureCare Pro); it has no benefits.",
+    "HomeGuard Contents is deleted: S$85,000 / S$40,000 / S$214.00 must never appear.",
+    "No hospital/medical (Shield) plan for either spouse is on file; only the joint plan's hospital income."
+  ],
+  "documents": [
+    {
+      "id": "h3_f1_equalife_schedule_2021",
+      "filename": "equalife-protect-schedule-2021.pdf",
+      "title": "EquaLife Protect - Policy Schedule (2021)",
+      "letterhead": "Equator Life Assurance Ltd",
+      "insurer": "Equator Life Assurance Ltd",
+      "product_name": "EquaLife Protect",
+      "policy_number": "EQL-LP-551204",
+      "policy_type": "Life",
+      "document_role": "certificate",
+      "covers": [
+        "m_kahseng"
+      ],
+      "policyholder": "m_kahseng",
+      "document_date": "2021-06-01",
+      "effective_date": "2021-06-01",
+      "renewal_or_expiry_date": "2043-09-05",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "superseded_in_part_by": "h3_f2_equalife_endorsement_2025",
+      "facts": [
+        {
+          "id": "sa_old",
+          "label": "Original death SA (superseded)",
+          "value": "S$300,000",
+          "page": 1,
+          "line_contains": "Death"
+        },
+        {
+          "id": "prem_old",
+          "label": "Original premium (superseded)",
+          "value": "S$2,040.00",
+          "page": 1
+        },
+        {
+          "id": "issue",
+          "label": "Issue date",
+          "value": "1 June 2021",
+          "page": 1
+        }
+      ],
+      "file": "docs/equalife-protect-schedule-2021.pdf",
+      "file_b64": "docs/equalife-protect-schedule-2021.pdf.b64",
+      "sha256": "d0ffe23cdaee179a8d921be3b84c94466ca4005ef9a0f8ed079f69650d138e6a",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Original schedule; sum assured S$300,000 (superseded)"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h3_f2_equalife_endorsement_2025",
+      "filename": "equalife-protect-endorsement-2025.pdf",
+      "title": "EquaLife Protect - Endorsement No. 2",
+      "letterhead": "Equator Life Assurance Ltd",
+      "insurer": "Equator Life Assurance Ltd",
+      "product_name": "EquaLife Protect",
+      "policy_number": "EQL-LP-551204",
+      "policy_type": "Life",
+      "document_role": "endorsement",
+      "covers": [
+        "m_kahseng"
+      ],
+      "policyholder": "m_kahseng",
+      "document_date": "2025-09-01",
+      "effective_date": "2025-09-01",
+      "renewal_or_expiry_date": "2043-09-05",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "sa_new",
+          "label": "Current death SA",
+          "value": "S$250,000",
+          "page": 1,
+          "line_contains": "Death sum assured"
+        },
+        {
+          "id": "tpd_new",
+          "label": "Current TPD",
+          "value": "S$250,000",
+          "page": 1,
+          "line_contains": "TPD sum assured"
+        },
+        {
+          "id": "prem_new",
+          "label": "Current premium",
+          "value": "S$1,712.00",
+          "page": 1
+        },
+        {
+          "id": "eff",
+          "label": "Effective",
+          "value": "1 September 2025",
+          "page": 1
+        }
+      ],
+      "file": "docs/equalife-protect-endorsement-2025.pdf",
+      "file_b64": "docs/equalife-protect-endorsement-2025.pdf.b64",
+      "sha256": "463dd274e7c543ac11433ad1ce91a2336479c0b83681d0b8212ae48f2d5fd798",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Endorsement reducing sum assured to S$250,000"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h3_f3_securecare_plus_kahseng",
+      "filename": "kranji-securecare-plus-ong-kah-seng.pdf",
+      "title": "SecureCare Plus - Policy Schedule",
+      "letterhead": "Kranji Life Assurance Pte Ltd",
+      "insurer": "Kranji Life Assurance Pte Ltd",
+      "product_name": "SecureCare Plus",
+      "policy_number": "KLA-SCP-10442",
+      "policy_type": "Critical illness",
+      "document_role": "certificate",
+      "covers": [
+        "m_kahseng"
+      ],
+      "policyholder": "m_kahseng",
+      "effective_date": "2023-02-01",
+      "renewal_or_expiry_date": "2048-09-05",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "per",
+          "label": "Per claim",
+          "value": "S$120,000",
+          "page": 1
+        },
+        {
+          "id": "max",
+          "label": "Max total",
+          "value": "S$360,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Premium",
+          "value": "S$1,980.00",
+          "page": 1
+        },
+        {
+          "id": "gap",
+          "label": "Gap",
+          "value": "12 months",
+          "page": 1
+        },
+        {
+          "id": "conds",
+          "label": "Conditions",
+          "value": "53 severe-stage",
+          "page": 1
+        }
+      ],
+      "file": "docs/kranji-securecare-plus-ong-kah-seng.pdf",
+      "file_b64": "docs/kranji-securecare-plus-ong-kah-seng.pdf.b64",
+      "sha256": "68eb1c3a58cd94359a7da7783b95ae0d20d44a708207fe5e174ff5d05a6e886c",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Multi-pay CI for Kah Seng"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h3_f4_securecare_pro_rachel",
+      "filename": "kranji-securecare-pro-chua-pei-shan.pdf",
+      "title": "SecureCare Pro - Policy Schedule",
+      "letterhead": "Kranji Life Assurance Pte Ltd",
+      "insurer": "Kranji Life Assurance Pte Ltd",
+      "product_name": "SecureCare Pro",
+      "policy_number": "KLA-SCR-10447",
+      "policy_type": "Critical illness",
+      "document_role": "certificate",
+      "covers": [
+        "m_rachel"
+      ],
+      "policyholder": "m_kahseng",
+      "effective_date": "2023-03-15",
+      "renewal_or_expiry_date": "2050-12-12",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "sa",
+          "label": "CI amount",
+          "value": "S$180,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Premium",
+          "value": "S$1,356.30",
+          "page": 1
+        },
+        {
+          "id": "claims",
+          "label": "Claims",
+          "value": "1 (policy ends after payout)",
+          "page": 1
+        },
+        {
+          "id": "conds",
+          "label": "Conditions",
+          "value": "150 conditions",
+          "page": 1
+        }
+      ],
+      "file": "docs/kranji-securecare-pro-chua-pei-shan.pdf",
+      "file_b64": "docs/kranji-securecare-pro-chua-pei-shan.pdf.b64",
+      "sha256": "ea8bd13f65bcc42697bc15b82b9d6baa8a4e1c035ad0d4ff0edff88d2b14e8ee",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Early CI for Rachel"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h3_f5_twincare_joint",
+      "filename": "orchid-twincare-joint-life-ong-chua.pdf",
+      "title": "TwinCare Joint Life - Policy Schedule",
+      "letterhead": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "insurer": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "product_name": "TwinCare Joint Life",
+      "policy_number": "OLI-JL-88231",
+      "policy_type": "Life",
+      "document_role": "certificate",
+      "covers": [
+        "m_kahseng",
+        "m_rachel"
+      ],
+      "policyholder": "joint: m_kahseng and m_rachel",
+      "effective_date": "2020-08-01",
+      "renewal_or_expiry_date": "2045-08-01",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "death",
+          "label": "First-death benefit",
+          "value": "S$400,000",
+          "page": 1
+        },
+        {
+          "id": "hi",
+          "label": "Hospital income",
+          "value": "S$150 per day",
+          "page": 1
+        },
+        {
+          "id": "himax",
+          "label": "HI max",
+          "value": "90 days per policy year",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Premium",
+          "value": "S$2,880.00",
+          "page": 1
+        },
+        {
+          "id": "adm24",
+          "label": "Admission",
+          "value": "at least 24 hours",
+          "page": 1
+        }
+      ],
+      "file": "docs/orchid-twincare-joint-life-ong-chua.pdf",
+      "file_b64": "docs/orchid-twincare-joint-life-ong-chua.pdf.b64",
+      "sha256": "282d8f7925cce110f0dac7ce05a1f8f3c0b4449da1b1e76bf863e3eadbe31925",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Joint life covering both spouses"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h3_f6_receipt",
+      "filename": "kranji-premium-receipt-2026-03.pdf",
+      "title": "Official Receipt",
+      "letterhead": "Kranji Life Assurance Pte Ltd",
+      "insurer": "Kranji Life Assurance Pte Ltd",
+      "product_name": "SecureCare Pro",
+      "policy_number": "KLA-SCR-10447",
+      "policy_type": "Critical illness",
+      "document_role": "premium_receipt",
+      "covers": [
+        "m_rachel"
+      ],
+      "policyholder": "m_kahseng",
+      "document_date": "2026-03-15",
+      "effective_date": null,
+      "renewal_or_expiry_date": null,
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "amt",
+          "label": "Receipt amount",
+          "value": "S$1,356.30",
+          "page": 1
+        },
+        {
+          "id": "rno",
+          "label": "Receipt number",
+          "value": "R-2026-031588",
+          "page": 1
+        },
+        {
+          "id": "date",
+          "label": "Date",
+          "value": "15 March 2026",
+          "page": 1
+        },
+        {
+          "id": "payer",
+          "label": "Payer",
+          "value": "ONG KAH SENG",
+          "page": 1
+        }
+      ],
+      "file": "docs/kranji-premium-receipt-2026-03.pdf",
+      "file_b64": "docs/kranji-premium-receipt-2026-03.pdf.b64",
+      "sha256": "d9b1e681f1162e180fb6a15b62e4d257c1a8b974804a8dadf7daa05adacd472a",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Receipt only - no benefit details"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h3_f7_deleted_home",
+      "filename": "lioncity-homeguard-contents-2025.pdf",
+      "title": "HomeGuard Contents - Schedule",
+      "letterhead": "Lion City General Insurance Pte Ltd",
+      "insurer": "Lion City General Insurance Pte Ltd",
+      "product_name": "HomeGuard Contents",
+      "policy_number": "LCG-HG-77310",
+      "policy_type": "Home",
+      "document_role": "certificate",
+      "covers": [
+        "m_kahseng",
+        "m_rachel"
+      ],
+      "policyholder": "m_kahseng",
+      "effective_date": "2025-04-01",
+      "renewal_or_expiry_date": "2026-03-31",
+      "currency": "SGD",
+      "fixture_state": "deleted",
+      "fixture_note": "Upload, index, then soft-delete. Amounts must never appear.",
+      "facts": [
+        {
+          "id": "contents",
+          "label": "Contents",
+          "value": "S$85,000",
+          "page": 1
+        },
+        {
+          "id": "reno",
+          "label": "Renovations",
+          "value": "S$40,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Premium",
+          "value": "S$214.00",
+          "page": 1
+        }
+      ],
+      "file": "docs/lioncity-homeguard-contents-2025.pdf",
+      "file_b64": "docs/lioncity-homeguard-contents-2025.pdf.b64",
+      "sha256": "4f748ffa040d9d3a3a5aeebf1d10b317f9109bf3245b36e264d4b005408be258",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Home contents (deleted)"
+        }
+      ],
+      "facts_verified": true
+    }
+  ]
+}

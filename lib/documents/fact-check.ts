@@ -30,8 +30,20 @@ function digitsPattern(value: number) {
 /** The amount printed as MONEY in the text: with a currency mark before it, or
  * bare in a line that prints a currency elsewhere -- never as a percentage, a
  * count of days or years, or part of a longer number or a date. */
+/** Round 7 (port): the two ways a scan misreads a Singapore-dollar figure --
+ * the "S" read as "5" or "$" ("5$168,00", "$$50,000") and the decimal point
+ * read as a comma before exactly two digits ("168,00": never a thousands
+ * separator, which is followed by three). Repaired only next to a dollar sign. */
+export function repairScannedMoney(text: string): string {
+  return String(text ?? "").replace(/(^|[^\w$])(?:\$\$|5\$|S5\$?|SS)(?=\d)/g, "$1S$").replace(/(S\$\d{1,3}(?:,\d{3})*),(\d{2})(?![\d,])/g, "$1.$2");
+}
 export function moneyPrinted(text: string, value: number): boolean {
   if (!Number.isFinite(value) || value < 0) return false;
+  const repaired = repairScannedMoney(text);
+  if (repaired !== text && moneyPrintedExact(repaired, value)) return true;
+  return moneyPrintedExact(text, value);
+}
+function moneyPrintedExact(text: string, value: number): boolean {
   const body = digitsPattern(value);
   // Round 10: never part of a figure a scan printed unclearly ("S$5O,000" is not S$5).
   const marked = new RegExp(CURRENCY_MARK + String.raw`\s?` + body + String.raw`(?![\d.,]\d|\s*%|\s*per\s*cent|[,.]?[OoIl|])`, "i");
@@ -205,7 +217,8 @@ const isoMs = (d: string) => Date.parse(d + "T00:00:00Z");
 // Roles
 // ---------------------------------------------------------------------------
 const PAYMENT_WORDS = /\b(?:premium|receipt|payment|payable|amount\s+due|paid|giro|medisave|renewal\s+notice|statement)\b/i;
-const PERSONAL_WORDS = /\b(?:insured\s+person|life\s+assured|name\s+of\s+(?:the\s+)?insured|policyholder|policy\s+owner|insured\s*:|particulars\s+of\s+insured|named\s+driver|insured\s+helper|employee\s+name|member\s+name)\b/i;
+// (Round 7 port: "Insured: NAME", "Insured child: NAME" -- a label ending in a colon has no word boundary after it.)
+const PERSONAL_WORDS = /\b(?:insured\s+person|life\s+assured|name\s+of\s+(?:the\s+)?insured|policyholder|policy\s+owner|insured(?:\s+(?:child|spouse|life|member|employee))?\s*:|particulars\s+of\s+insured|named\s+driver|insured\s+helper|employee\s+name|member\s+name)(?![a-z])/i;
 const PAYMENT_ROLES = new Set(["premium_receipt", "renewal_statement", "annual_statement"]);
 const PERSONAL_ROLES = new Set(["personal_schedule", "certificate", "endorsement"]);
 const REFERENCE_ROLE_SET = new Set(["policy_wording", "product_summary", "benefit_guide", "brochure", "policy_illustration", "claim_form", "welcome_letter"]);
@@ -245,7 +258,7 @@ export function titleRoles(pages: Page[], productNames: (string | null | undefin
 export function plausibleRole(role: PolicyExtraction["documentRole"], fullText: string, pages?: Page[], productNames: (string | null | undefined)[] = []): PolicyExtraction["documentRole"] {
   if (!role) return role;
   if (PAYMENT_ROLES.has(role) && !PAYMENT_WORDS.test(fullText)) return null;
-  const particulars = PERSONAL_WORDS.test(fullText) && /\b(?:policy|certificate)\s+(?:no\.?|number)\b/i.test(fullText);
+  const particulars = PERSONAL_WORDS.test(fullText) && /\b(?:policy|certificate|rider)\s+(?:no\.?|number)(?![a-z])/i.test(fullText);
   if (PERSONAL_ROLES.has(role) && !particulars) return null;
   // Generic wording never prints one person's particulars and policy number.
   if (REFERENCE_ROLE_SET.has(role) && particulars) return null;
@@ -288,7 +301,7 @@ export type FactCheckResult = { extraction: PolicyExtraction; dropped: string[] 
 
 /** Re-finds every fact of a policy extraction in the document's pages.
  * `roleFromReader`: the role was the reader's choice (no wording rule decided it), so it must be plausible. */
-export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean } = {}): FactCheckResult {
+export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: { roleFromReader?: boolean; documentTitle?: string | null } = {}): FactCheckResult {
   const fullText = pages.map((p) => p.text).join("\n");
   const pageText = new Map(pages.map((p) => [p.pageNumber, p.text]));
   const dropped: string[] = [];
@@ -297,7 +310,11 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
 
   // A name the reader got wrong (or could not give) is replaced only by the one the document prints as its own title or letterhead.
   const insurer = printedOr(raw.insurer, "an insurer name") ?? letterheadInsurer(pages);
-  const productName = printedOr(raw.productName, "a product name") ?? titleProductName(pages);
+  // Round 7 (port): the PDF's own Title property is the document speaking too
+  // ("LifeGuard Term to 65 - Policy Schedule"), for the product's name only.
+  const titled = opts.documentTitle && !looksLikeInjectedInstruction(opts.documentTitle) ? opts.documentTitle : "";
+  const productName = (raw.productName && titled && !namePrinted(fullText, raw.productName) && namePrinted(titled, raw.productName) ? raw.productName : null)
+    ?? printedOr(raw.productName, "a product name") ?? titleProductName(pages) ?? productFromDocumentTitle(titled);
   const policyholder = printedOr(raw.policyholder, "a policyholder name");
   const productsMentioned = [...new Set(raw.productsMentioned.filter((p) => namePrinted(fullText, p)))];
   if (productsMentioned.length < raw.productsMentioned.length) dropped.push("product names that are not printed in this document");
@@ -353,6 +370,22 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
       policyNumber: c.policyNumber && printedNumber(c.policyNumber) ? c.policyNumber : null }, person.name, pageText));
     if (same) { same.coverages.push(...coverages); same.relationshipHint ??= hint; }
     else people.push({ ...person, relationshipHint: hint, coverages });
+  }
+  // Round 7 (port): someone the document names only as its policyholder or payer ("Policyholder: ONG KAH SENG" on his
+  // wife's schedule) is not one of its insured people when the document names someone else as insured.
+  {
+    const flat = fullText.replace(/\s+/g, " ");
+    const LABEL = /(policyholder|policy owner|proposer|payer|paid by|premium payer|owner|life assured|insured(?: person| child| spouse| member)?|name of (?:the )?insured|member|employee|dependants?|spouse|child(?:ren)?|insured lives?)\s*[:\-]?\s*$/i;
+    const payerOnly = (name: string) => {
+      const re = new RegExp(name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), "gi");
+      const labels = [...flat.matchAll(re)].map((m) => flat.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0).match(LABEL)?.[1]?.toLowerCase() ?? null);
+      return labels.length > 0 && labels.every((l) => !!l && /^(?:policyholder|policy owner|proposer|payer|paid by|premium payer|owner)$/.test(l));
+    };
+    // Someone else is printed as the insured ("Life assured: CHUA PEI SHAN RACHEL"): the payer is not.
+    const insuredElsewhere = (name: string) => [...flat.matchAll(/\b(?:life assured|insured(?: person| child| spouse)?|name of (?:the )?insured)\s*[:\-]\s*([A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){0,4})/g)]
+      .some((m) => !m[1].toLowerCase().startsWith(name.trim().toLowerCase().split(/\s+/)[0]));
+    const keep = people.filter((p) => !(payerOnly(p.name) && (people.length > 1 || insuredElsewhere(p.name))));
+    if (keep.length < people.length) { dropped.push("a policyholder named as insured"); people.splice(0, people.length, ...keep); }
   }
   for (const person of people) {
     const seen = new Set<string>();
@@ -449,9 +482,21 @@ export function titleProductName(pages: Page[]): string | null {
     // A rider's own schedule ("SHIELDCARE PLUS RIDER - SCHEDULE OF BENEFITS") does not name the document's product.
     if (/\brider\s*$/i.test(name) || (m && /^\s*[-–:]\s*schedule\s+of\s+benefits\b/i.test(line.slice(m.index!)))) continue;
     if (name.length < 4 || name.length > 70 || /\b(?:insurance|assurance)\s*\(|^(?:dear|page|item)\b/i.test(name) || looksLikeInjectedInstruction(name)) continue;
+    // Round 7 (port): a letterhead or address line above the title ("Policy
+    // Services | 8 Kranji Link Singapore 739000") is not the product's name.
+    if (/\||\b\d{6}\b|\b(?:pte|ltd|berhad|limited|services|tel|fax|www|email)\b|@/i.test(name)) continue;
     return name === name.toUpperCase() ? name.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()) : name;
   }
   return null;
+}
+/** Round 7 (port): the product a PDF's Title property names ("EquaLife Protect -
+ * Endorsement No. 2", "Notice of Lapse - Orchid Whole Life Protector"). */
+export function productFromDocumentTitle(title: string | null | undefined): string | null {
+  const parts = String(title ?? "").replace(/\\?\(scanned\\?\)/gi, "").split(/\s+[-–:|]\s+/).map((x) => x.trim()).filter(Boolean);
+  const kind = /^(?:notice of lapse|lapse notice|confirmation of reinstatement|reinstatement|official receipt|receipt|premium (?:notice|reminder)|renewal notice|annual statement|statement|policy (?:schedule|summary|data page|illustration summary|contract summary|statement)|schedule(?: \d{4})?|certificate|rider schedule|endorsement(?: no\.? ?\d+)?|benefit summary|policy schedule \(\d{4}\)|employee benefits booklet.*)$/i;
+  const name = parts.find((p) => !kind.test(p)) ?? null;
+  if (!name || name.length < 4 || name.length > 70 || looksLikeInjectedInstruction(name)) return null;
+  return name.replace(/\s+(?:certificate|schedule|policy)$/i, "").trim();
 }
 /** The insurer a document's letterhead prints (its first line naming an insurer). */
 export function letterheadInsurer(pages: Page[]): string | null {

@@ -185,6 +185,8 @@ jobs:
         run: npm run r10:perf-test
       - name: Round 11 blind evaluation (155 conversations written independently of the earlier batteries, over all three households; every answer judged 0-2 for correctness, citations, right person, false premises, plain words and no rubbish; no answer may score 0)
         run: npm run r11:blind-test
+      - name: Round 7 chat robustness (three independently written households read through real ingestion -- a scanned page, an endorsement, a reinstatement, a group plan -- 800+ singles and multi-turn chats, long chats, the chaos model in chat and at upload; score floors and locked trap items)
+        run: npm run r7:chat-robustness-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

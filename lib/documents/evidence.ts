@@ -18,6 +18,7 @@
  * It also owns the lazy, additive schema for those columns
  * (sql/v11-ingestion-evidence.sql is the same DDL for fresh databases).
  */
+import { looksScanned } from "@/lib/chat/scanned-text";
 import { createHash } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
@@ -157,11 +158,23 @@ export function amountAppears(passage: string, value: number, kind: "money" | "f
 function tokens(text: string) {
   return [...new Set(String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter((w) => w.length > 1))];
 }
+function editDistance(a: string, b: string) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]; row[0] = i;
+    for (let j = 1; j <= b.length; j++) { const tmp = row[j]; row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = tmp; }
+  }
+  return row[b.length];
+}
 export function nameAppears(passage: string, name: string) {
   const wanted = tokens(name).filter((w) => !/^\d+$/.test(w) && !["of", "the", "and", "or", "for", "to", "in", "on", "at", "by", "a"].includes(w));
   if (!wanted.length) return true;
   const hay = new Set(tokens(passage));
-  return wanted.filter((w) => hay.has(w)).length / wanted.length >= 0.7;
+  // A passage read by OCR from a scan misreads letters ("pecident" for
+  // "accident"): there, a long word two letters off still counts.
+  const scanned = looksScanned(passage);
+  const has = (w: string) => hay.has(w) || (scanned && w.length >= 6 && [...hay].some((h) => Math.abs(h.length - w.length) <= 2 && editDistance(h, w) <= 2));
+  return wanted.filter(has).length / wanted.length >= 0.7;
 }
 
 /** Sentences addressed to a model rather than to a policyholder. A passage
@@ -262,7 +275,8 @@ export function printedDateAppears(pages: { text: string }[], iso: string | null
 export function documentDateFrom(pages: { text: string }[], candidates: (string | null | undefined)[] = []): string | null {
   // The date the document itself was written (a statement, notice or letter
   // date) says how current it is; a cover start date only says when cover began.
-  const written = /(?:statement\s+date(?:\s+valuation\s+as\s+at)?|valuation\s+as\s+at|date\s+of\s+(?:this\s+)?(?:notice|letter|statement|reminder)|^\s*date)\s*[:\-\t ]\s*/i;
+  // (Round 7 port: "ANNUAL STATEMENT AS AT 30 JUNE 2026".)
+  const written = /(?:statement\s+date(?:\s+valuation\s+as\s+at)?|valuation\s+as\s+at|statement\s+as\s+(?:at|of)|date\s+of\s+(?:this\s+)?(?:notice|letter|statement|reminder)|^\s*date)\s*[:\-\t ]\s*/i;
   for (const page of pages) {
     for (const line of String(page.text ?? "").split("\n")) {
       const at = line.search(written);

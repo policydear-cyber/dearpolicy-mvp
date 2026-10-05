@@ -23,6 +23,7 @@
  *  - an indicative estimate never passes here: only the deterministic claim
  *    calculators may produce one.
  */
+import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { currenciesStatedIn, currencyStatedIn } from "@/lib/claims/currency-evidence";
 
 export type Assertion = {
@@ -113,7 +114,11 @@ export function verifyAssertion(a: Assertion, ctx: VerifyContext): string | null
   // passage does not.
   const passageNumbers = numbersIn(a.passage);
   for (const n of numbersIn(a.text)) if (!passageNumbers.some((h) => Math.abs(h - n) < 1e-9)) return "the wording states a number the passage does not";
-  for (const code of currenciesStatedIn(a.text)) if (!currencyStatedIn(code, a.passage)) return "the wording states a currency the passage does not";
+  // A passage read by OCR from a scan may print "$$50,000" for "S$50,000";
+  // the repaired line (scanned-text.ts, which repairs only that sign) is what
+  // the wording is checked against, alongside the raw OCR text.
+  const currencyPassage = looksScanned(a.passage) ? (cleanScannedLine(a.passage) ?? "") + " " + a.passage : a.passage;
+  for (const code of currenciesStatedIn(a.text)) if (!currencyStatedIn(code, currencyPassage)) return "the wording states a currency the passage does not";
   return null;
 }
 

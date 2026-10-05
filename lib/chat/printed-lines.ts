@@ -6,6 +6,7 @@
  * code; every line is quoted verbatim from its page. Used by
  * lib/chat/document-questions.ts and lib/chat/policy-answer.ts.
  */
+import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { flagUnclearFigures, printedLines } from "@/lib/documents/messy";
 // ---------------------------------------------------------------------------
 // Lines from a paper, by what the question asks
@@ -16,6 +17,11 @@ const SYNONYMS: [RegExp, string[]][] = [
   [/\bappeal\w*|disagree|won['’]?t change|review/i, ["appeal", "review", "fidrec", "disagree", "dissatisfied"]],
   [/\bcancel\w*|still (?:valid|active|covered)|in force|no (?:hospital )?cover|mean (?:he|she|papa|mama)? ?has no/i, ["force", "remains", "cancel"]],
   [/\bdeadline|by when|how long/i, ["within", "days", "before"]],
+  [/\b(?:length|how long)\b[^?]*\btrip|\btrip\b[^?]*\b(?:length|how long)\b/i, ["duration", "maximum", "days"]],
+  // Round 7 (port): "what documents for a claim?" is answered by the line listing them.
+  [/\b(?:documents?|papers?|paperwork|what (?:do i|to) (?:need|submit|send|attach))\b/i, ["submit", "invoice", "invoices", "receipt", "receipts", "certificate", "report", "proof", "itemised", "bill", "bills", "form"]],
+  // "what does TPD mean?": the definition the document prints.
+  [/\bdefinition|\bdefined?\b|\bmean(?:s|ing)?\b|what counts as/i, ["means", "defined", "definition", "unable", "least"]],
   [/\bgoing up|increase\w*|rise|more|next (?:year|april)|from next/i, ["increase", "premium", "from", "2027"]],
   [/\breplace\w*|instead|switch/i, ["replacement", "switch", "care"]],
   [/\bowe|still (?:have to )?pay|due\b/i, ["payable", "due", "patient"]],
@@ -85,7 +91,7 @@ export function piecesOf(text: string): string[] {
       && /\b(?:amount|value|limits?|share|qty|quantity|rate|maximum|minimum|days?|premium|bonus|added|year|date|period|charges|percentage|payable|sum)\b|^\(?\s*(?:S\$|SGD)\s*\)?$/i.test(c))) { header = cells; continue; }
     // Round 11: a benefit table's own heading row ("Benefit · Private hospital · Restructured hospital (A ward) · Notes"):
     // each value then reads under its column's name, not as a run of unnamed cells.
-    if (cells.length >= 3 && /^(?:benefits?|rider benefit|item|section|cover|event caused by an accident)$/i.test(cells[0]) && cells.slice(1).every((c) => c.length <= 60 && !/(?:S\$|SGD|\d{2,}|%)/.test(c) && !/[.;]$/.test(c))) { header = cells; continue; }
+    if (cells.length >= 3 && /^(?:benefits?|rider benefit|item|section|cover|event caused by an accident)(?:\s*\([^)]*\))?$/i.test(cells[0]) && cells.slice(1).every((c) => c.length <= 60 && !/(?:S\$|SGD|\d{2,}|%)/.test(c) && !/[.;]$/.test(c))) { header = cells; continue; }
     if (cells.length === 1) { out.push(cells[0]); continue; }
     if (cells.length === 2) {
       const h = header && header.length === 2 ? header : null;
@@ -111,15 +117,21 @@ export function bestLines(pages: { page: number; text: string }[], question: str
   const spread = (w: string) => every.filter((ws) => ws.has(w)).length || 1;
   const wantsFigure = /\bhow much\b|\bamount\b|\bfee\b|\bgst\b|\btotal\b|\bcost\b|\bvalue\b|\bworth\b|\bowe\b/i.test(question);
   for (const [re, extra] of SYNONYMS) if (re.test(question)) for (const w of extra) asked.add(w.replace(/(?:ing|ed|es|s)$/, ""));
-  const scored: { line: string; page: number; score: number; order: number; hits: string[] }[] = [];
+  const scored: { line: string; page: number; score: number; order: number; hits: string[]; under?: string }[] = [];
   let order = 0;
-  for (const p of pages) for (const piece of piecesOf(p.text)) {
+  for (const p of pages) {
+    // Round 7 (port): the exclusions heading a line sits under ("GENERAL EXCLUSIONS", "We will not pay for:").
+    let heading: string | null = null;
+    for (const piece of piecesOf(p.text)) {
+    if (isTitle(piece) || /:\s*$/.test(piece)) { if (isTitle(piece) || EXCLUSION_HEAD.test(piece)) heading = isTitle(piece) || !heading || !EXCLUSION_HEAD.test(heading) ? piece.replace(/:\s*$/, "") : heading; }
+    const under = heading && EXCLUSION_HEAD.test(heading) && !EXCLUSION_HEAD.test(piece) && piece !== heading ? heading : undefined;
     const w = wordsOf(piece);
     const hits = [...w].filter((x) => asked.has(x));
     let score = hits.length + hits.reduce((sum, h) => sum + 1 / spread(h), 0) / 2;
     if (wantsFigure && hits.length && /(?:S\$|SGD)\s?\d/.test(piece)) score += 0.75;
     if ((!question.trim() || GENERIC_ASK.test(question)) && opts.always?.some((re) => re.test(piece))) score += 2;
-    scored.push({ line: piece, page: p.page, score, order: order++, hits });
+    scored.push({ line: piece, page: p.page, score, order: order++, hits, ...(under ? { under } : {}) });
+    }
   }
   // A title on its own ("Policy loan", "WANDERER ANNUAL TRAVEL - CERTIFICATE OF INSURANCE") names a
   // section; it never answers a question while a line under it can.
@@ -146,7 +158,39 @@ export function withoutBarePercent(piece: string): string {
     .map((seg) => seg.replace(/\s*\b(?:rate\s+)?\d+(?:\.\d+)?%/g, "").trim()).filter(Boolean);
   return kept.length ? head + ": " + kept.join("; ") : head;
 }
-export function quoted(lines: { line: string; page: number }[]) {
+/** Round 7 (port): a row of a table with a column per member type or plan, narrowed to the column asked
+ * ("Child room and board?" -> "Daily room & board (max 120 days) — Child: S$300"). A row whose columns are
+ * not named, or none of whose columns is the one asked, is not quoted (null): it would show other columns'
+ * figures as if they were the household's. Any other line is returned as it is. */
+export function narrowToColumn(line: string, question: string, columns: string[] = []): string | null {
+  const money = (t: string) => new Set(t.match(/(?:S\$|SGD\s?|US\$|USD\s?)\s?\d[\d,]*(?:\.\d+)?/gi) ?? []).size;
+  const at = line.indexOf(": ");
+  const cells = at > 0 ? line.slice(at + 2).split(/;\s*/) : [];
+  // (Only columns per member type or plan: "Before / After", "Private / Restructured" rows are left as printed.)
+  const named = cells.length >= 2 && cells.every((c) => /^(?:employee|spouse|child(?:ren)?|each child|member|dependants?|adult|plan [a-z0-9]{1,3})\s+(?:S\$|SGD|US\$|USD|\d|company|nil|covered|not covered|as charged)/i.test(c));
+  if (named && money(line) >= 2) {
+    // The column the question names comes first; the person's own column only when it names none.
+    const asked = (question.toLowerCase().match(/\b(?:employee|spouse|wife|husband|child(?:ren)?|kids?|son|daughter|plan \w+|member)\b/g) ?? [])
+      .map((w) => w.replace(/^(?:children|kids?|son|daughter)$/, "child").replace(/^(?:wife|husband)$/, "spouse"));
+    const want = asked.length ? asked : columns.map((w) => w.toLowerCase());
+    const pick = cells.find((c) => want.some((w) => c.toLowerCase().startsWith(w)));
+    if (!pick) return null;
+    const [, head, value] = pick.match(/^(.*?)\s+((?:S\$|SGD|US\$|USD|\d|company|nil|covered|not covered|as charged).*)$/i) ?? [];
+    return head ? line.slice(0, at) + " — " + head + ": " + value : null;
+  }
+  if (/ · /.test(line) && money(line) >= 2) return null;
+  return line;
+}
+/** The column a person's figures are in, by how they relate to the employee (member) of a group plan. */
+export function columnsFor(relationship: string | null | undefined): string[] {
+  const r = (relationship ?? "").toLowerCase();
+  return /^(?:spouse|wife|husband)$/.test(r) ? ["spouse"] : /^(?:child|son|daughter)$/.test(r) ? ["child"] : r === "self" ? ["employee", "member"] : [];
+}
+const EXCLUSION_HEAD = /\bexclu\w*|\b(?:will|do|does) not (?:pay|cover)\b|\bnot covered\b/i;
+export function quoted(lines: { line: string; page: number; under?: string }[]) {
   // "Loan outstanding: S$0.00" reads as nil: a zero is not an amount anyone is owed or paid.
-  return lines.map((l) => "“" + flagUnclearFigures(l.line.replace(/[.;\s]+$/, "")).replace(/:\s*(?:S\$|SGD\s?)0(?:\.00)?(?![\d.,])/g, ": nil") + "” (page " + l.page + ").");
+  // Round 7 (port): a line OCR read from a scan is shown cleaned of the scanner's noise, and says so.
+  return lines.flatMap((l) => { const scanned = looksScanned(l.line), line = scanned ? cleanScannedLine(l.line) : l.line; if (!line) return [];
+    return ["“" + flagUnclearFigures(line.replace(/[.;\s]+$/, "")).replace(/:\s*(?:S\$|SGD\s?)0(?:\.00)?(?![\d.,])/g, ": nil") + "”" + (scanned ? " (read from a scanned page; check it against the original)" : "")
+      + (l.under ? " — listed under “" + (l.under === l.under.toUpperCase() ? l.under.charAt(0) + l.under.slice(1).toLowerCase() : l.under) + "”" : "") + " (page " + l.page + ")."]; });
 }

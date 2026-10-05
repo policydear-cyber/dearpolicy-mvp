@@ -61,6 +61,48 @@ async function periodFor(accountId: string, docId: string, memo: DocMemo) {
   const start = (await datesOf(accountId, docId, memo)).start;
   return end && start ? longDate(start) + " to " + end.printed : null;
 }
+/** Round 7: an amount per currency, never added across currencies
+ * ("S$4,250 and US$3,120"): a US-dollar premium is never shown as S$. */
+function byCurrency(values: { amount: number; currency: string }[]): { currency: string; amount: number }[] {
+  const out = new Map<string, number>();
+  for (const v of values) out.set(v.currency, r2((out.get(v.currency) ?? 0) + v.amount));
+  return [...out].map(([currency, amount]) => ({ currency, amount }));
+}
+function moneyList(values: { amount: number; currency: string }[], divide = 1) {
+  const parts = byCurrency(values).map((v) => money(r2(v.amount / divide), v.currency));
+  return parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts.at(-1) : parts[0] ?? "";
+}
+/** Words in a question that name one plan rather than premiums in general. */
+const KIND_WORDS: [RegExp, RegExp][] = [
+  [/\bilp\b|investment[- ]linked|wealth ?builder/i, /investment[- ]linked|\bilp\b/i],
+  [/\bwhole[- ]life\b/i, /whole[- ]life/i],
+  [/\bterm\b/i, /\bterm\b/i],
+  [/\btravel\b|\btrip\b/i, /travel|trip/i],
+  [/\bdental\b|\brider\b|\boutpatient\b/i, /dental|rider|outpatient/i],
+  [/\b(?:shield|hospital|medical)\b/i, /(?<!care)shield|hospital|health/i],
+  [/\bcritical illness\b|\bci\b/i, /critical/i],
+  [/\bendowment\b|\bsaver\b/i, /endowment|saver/i],
+  [/\bjoint\b/i, /joint/i],
+  [/\bcareshield\b|long[- ]term care/i, /careshield|long[- ]term care/i],
+  [/\buniversal life\b|\busd\b|\bus dollar/i, /universal life|usd/i],
+  [/\b(?:car|motor|vehicle)\b/i, /motor|\bcar\b|drive/i],
+  [/\b(?:home|house|contents)\b/i, /\bhome\b|contents|house/i],
+];
+const GENERIC_PRODUCT_WORD = /^(?:annual|family|group|plan|policy|cover|basic|plus|premier|benefits?|life|care|secure|protect(?:or|ion)?|insurance|premium|personal|accident|travel|health|hospital|term|whole|rider|multi|trip|worldwide|outpatient|dental|silver|gold|advantage)$/i;
+const isSelfP = (p: ClaimPerson) => /^self$/i.test(p.relationship ?? "");
+/** Does the question name this plan by its own distinctive name? */
+function namesPlanByName(question: string, product: string) {
+  const q = " " + question.toLowerCase().replace(/[^a-z0-9]+/g, " ") + " ";
+  return product.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter((w) => w.length >= 5 && !GENERIC_PRODUCT_WORD.test(w)).some((w) => q.includes(" " + w + " "));
+}
+/** Does the question name this plan, by its own distinctive name or its kind? */
+function namesPlan(question: string, product: string | null, type: string | null) {
+  const q = " " + question.toLowerCase().replace(/[^a-z0-9]+/g, " ") + " ";
+  const words = (product ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter((w) => w.length >= 4 && !GENERIC_PRODUCT_WORD.test(w));
+  if (words.some((w) => q.includes(" " + w + " "))) return true;
+  const label = (product ?? "") + " " + (type ?? "");
+  return KIND_WORDS.some(([asks, is]) => asks.test(question) && is.test(label));
+}
 
 export async function premiumAnswer(args: { accountId: string; people: ClaimPerson[]; question: string }) {
   const notCounted: string[] = [];
@@ -106,13 +148,54 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const currency = lines[0]?.item.currency ?? "SGD";
     const sameCurrency = lines.every((l) => l.item.currency === currency);
     const annual = sameCurrency ? r2(lines.reduce((n, l) => n + l.item.annual, 0)) : NaN;
-    const cash = lines.some((l) => l.item.cashAnnual != null) ? r2(lines.reduce((n, l) => n + (l.item.cashAnnual ?? l.item.annual), 0)) : null;
-    const medisave = lines.some((l) => l.item.medisaveAnnual != null) ? r2(lines.reduce((n, l) => n + (l.item.medisaveAnnual ?? 0), 0)) : null;
+    // MediSave pays Singapore-dollar premiums only; the split is of those.
+    const sgd = lines.filter((l) => l.item.currency === "SGD");
+    const cash = sgd.some((l) => l.item.cashAnnual != null) ? r2(sgd.reduce((n, l) => n + (l.item.cashAnnual ?? l.item.annual), 0)) : null;
+    const medisave = sgd.some((l) => l.item.medisaveAnnual != null) ? r2(sgd.reduce((n, l) => n + (l.item.medisaveAnnual ?? 0), 0)) : null;
     perPerson.push({ person, lines, missing: summary.missing, annual, cash, medisave, currency });
   }
   // One policy covering two people is paid once: it is counted under the first of them.
   const seenItems = new Set<string>();
   for (const p of perPerson) { p.lines = p.lines.filter((l) => !seenItems.has(l.item.id) && !!seenItems.add(l.item.id)); p.annual = r2(p.lines.reduce((n, l) => n + l.item.annual, 0)); }
+  // Round 7: "What premium do we pay for Jun Hui's ILP?", "EquaLife premium
+  // now", "careshield premium how much" ask about ONE plan. Answer that plan
+  // -- or say plainly that no premium is printed for it -- instead of the
+  // household's whole bill with other people's premiums in it.
+  const missingTypes = new Map<string, string | null>();
+  const allMissing = [...new Set(perPerson.flatMap((p) => p.missing))];
+  if (allMissing.length) for (const r of (await query<{ product_name: string; policy_type: string | null }>(`SELECT DISTINCT product_name,policy_type FROM policies p WHERE account_id=$1 AND product_name=ANY($2::text[]) AND ${activePredicate("p")}`, [args.accountId, allMissing]).catch(() => ({ rows: [] as { product_name: string; policy_type: string | null }[] }))).rows) missingTypes.set(r.product_name, r.policy_type);
+  const focusLines = perPerson.flatMap((p) => p.lines.filter((l) => namesPlan(args.question, l.item.product_name ?? l.docName, l.policyType ?? null)).map((l) => ({ p, l })));
+  const focusMissing = perPerson.flatMap((p) => p.missing.filter((m) => namesPlan(args.question, m, missingTypes.get(m) ?? null)).map((m) => ({ p, m })));
+  // ("Which one costs more, car or home?" compares plans: that is the ranked answer below, not one plan's premium.)
+  if ((focusLines.length || focusMissing.length) && !RANKED.test(args.question)) {
+    const citations: ChatCitation[] = [];
+    const details: string[] = [];
+    const lines: string[] = [];
+    for (const { p, l } of focusLines) {
+      const i = l.item, name = i.product_name ?? l.docName ?? "the policy";
+      const split = i.medisaveAnnual != null && i.cashAnnual != null ? " (" + money(i.medisaveAnnual, i.currency) + " from MediSave and " + money(i.cashAnnual, i.currency) + " in cash)" : "";
+      lines.push((args.people.length > 1 ? personName(p.person) + "’s " : "") + name + " premium is " + money(i.annual, i.currency) + " a year" + split + (l.page ? " (page " + l.page + ")" : "") + ".");
+      if (l.docId && l.page && !citations.some((c) => c.policyId === l.docId && c.pageStart === l.page))
+        citations.push({ chunkId: "premium:" + i.id, policyId: l.docId, policyName: l.docName ?? name, insurer: l.insurer ?? undefined, pageStart: l.page, pageEnd: l.page, evidenceLabel: /renewal/.test(l.role ?? "") ? "Renewal notice" : "Your policy document" });
+    }
+    const missingText = focusMissing.map(({ p, m }) => (args.people.length > 1 ? personName(p.person) + "’s " : "") + m);
+    if (missingText.length) lines.push("No premium is printed in the documents on file for " + (missingText.length > 1 ? missingText.slice(0, -1).join(", ") + " and " + missingText.at(-1) : missingText[0]) +
+      ", so DearPolicy can’t say what it costs. The insurer’s premium notice or a statement that shows the premium would.");
+    return { summary: lines.join(" "), details, citations, handled: true };
+  }
+  // A plan that was deleted from the household's documents has no premium on file.
+  const deleted = (await query<{ product_name: string; policy_type: string | null }>(`SELECT DISTINCT product_name,policy_type FROM policies WHERE account_id=$1 AND lifecycle_state<>'active' AND product_name IS NOT NULL`, [args.accountId]).catch(() => ({ rows: [] as { product_name: string; policy_type: string | null }[] }))).rows
+    .filter((d) => namesPlanByName(args.question, d.product_name));
+  if (!RANKED.test(args.question) && deleted.length) return { summary: "There is no " + deleted[0].product_name + " policy on file — it was removed from your documents — so DearPolicy has no premium for it.", details: [] as string[], citations: [] as ChatCitation[], handled: true };
+  // A document the question names that has no premium line (a group booklet,
+  // a receipt): its own pages answer it, not the household's total.
+  const named = (await query<{ product_name: string; policy_type: string | null; document_role: string | null }>(`SELECT DISTINCT product_name,policy_type,document_role FROM policies p WHERE account_id=$1 AND ${activePredicate("p")} AND product_name IS NOT NULL`, [args.accountId]).catch(() => ({ rows: [] as { product_name: string; policy_type: string | null; document_role: string | null }[] }))).rows
+    .filter((d) => namesPlan(args.question, d.product_name, d.policy_type) || (/\breceipt\b/i.test(args.question) && d.document_role === "premium_receipt") || (/\b(?:ghs|gtl|gpa|group|company|employer|dependants?)\b/i.test(args.question) && /group/i.test(d.policy_type ?? "")));
+  if (!RANKED.test(args.question) && named.length) return { summary: "", details: [] as string[], citations: [] as ChatCitation[], handled: false };
+  // A kind of plan asked about that no document on file is ("Jun Hui's ILP"
+  // when its statement could not be read): say so, not the household total.
+  const askedKind = KIND_WORDS.find(([asks]) => asks.test(args.question));
+  if (!RANKED.test(args.question) && askedKind) return { summary: "No premium for that plan is printed in the documents on file" + (args.people.length === 1 ? " for " + (isSelfP(args.people[0]) ? "you" : personName(args.people[0])) : "") + ", so DearPolicy can’t say what it costs.", details: [] as string[], citations: [] as ChatCitation[], handled: true };
   const withPremiums = perPerson.filter((p) => p.lines.length);
   const citations: ChatCitation[] = [];
   const details: string[] = [];
@@ -175,21 +258,83 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const today = new Date().toISOString().slice(0, 10);
     const starts = [...new Set(p.lines.map((l) => l.item.period_start?.slice(0, 10) ?? ""))];
     const future = starts.length === 1 && starts[0] > today ? new Date(starts[0] + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : null;
-    summary = (future ? "From " + future + ", " : "") + (isSelf(p.person) ? (future ? "you pay" : "You pay") : personName(p.person) + " pays") + " " + money(p.annual, p.currency) + " a year in premiums" +
-" — about " + money(r2(p.annual / 12), p.currency) + " a month." +
-      (p.cash != null && p.medisave != null ? " Of that, " + money(p.cash, p.currency) + " is paid in cash and " + money(p.medisave, p.currency) + " from MediSave." : "");
+    const amounts = p.lines.map((l) => ({ amount: l.item.annual, currency: l.item.currency }));
+    const mixed = byCurrency(amounts).length > 1;
+    summary = (future ? "From " + future + ", " : "") + (isSelf(p.person) ? (future ? "you pay" : "You pay") : personName(p.person) + " pays") + " " + moneyList(amounts) + " a year in premiums" +
+" — about " + moneyList(amounts, 12) + " a month" + (mixed ? " (each currency as printed; they are not added together)" : "") + "." +
+      (p.cash != null && p.medisave != null ? (mixed ? " Of the Singapore-dollar premiums, " : " Of that, ") + money(p.cash, "SGD") + " is paid in cash and " + money(p.medisave, "SGD") + " from MediSave." : "");
   } else {
-    const currency = withPremiums[0].currency;
-    const total = r2(withPremiums.reduce((n, p) => n + p.annual, 0));
+    // Round 7: a joint policy's one premium is listed under each person it
+    // covers but counted ONCE in the household's total.
+    const counted = new Set<string>();
+    const amounts = withPremiums.flatMap((p) => p.lines.filter((l) => { if (counted.has(l.item.id)) return false; counted.add(l.item.id); return true; }).map((l) => ({ amount: l.item.annual, currency: l.item.currency })));
+    const holders = new Map<string, number>();
+    for (const p of withPremiums) for (const l of p.lines) holders.set(l.item.id, (holders.get(l.item.id) ?? 0) + 1);
     for (const p of withPremiums) {
-      details.push(personName(p.person) + ": " + money(p.annual, p.currency) + " a year (" + p.lines.map((l) => (l.item.product_name ?? l.docName ?? "a policy") + " " + money(l.item.annual, l.item.currency)).join(", ") + ").");
+      details.push(personName(p.person) + ": " + moneyList(p.lines.map((l) => ({ amount: l.item.annual, currency: l.item.currency }))) + " a year (" + p.lines.map((l) => (l.item.product_name ?? l.docName ?? "a policy") + " " + money(l.item.annual, l.item.currency) + ((holders.get(l.item.id) ?? 0) > 1 ? ", one joint premium" : "")).join(", ") + ").");
       for (const l of p.lines) cite(l);
     }
-    summary = "Your household pays " + money(total, currency) + " a year in premiums — about " + money(r2(total / 12), currency) + " a month — from the premiums printed in the documents on file.";
+    if ([...holders.values()].some((n) => n > 1)) details.push("A joint policy’s premium is counted once in the household total.");
+    summary = "Your household pays " + moneyList(amounts) + " a year in premiums — about " + moneyList(amounts, 12) + " a month — from the premiums printed in the documents on file" + (byCurrency(amounts).length > 1 ? " (each currency as printed; they are not added together)" : "") + ".";
   }
   const counted = new Set(withPremiums.flatMap((p) => p.lines.map((l) => l.item.product_name ?? l.docName ?? "")));
   const missing = [...new Set(perPerson.flatMap((p) => p.missing))].filter((m) => !counted.has(m) && !notCounted.some((n) => n.startsWith(m + " — ")));
   if (notCounted.length && withPremiums.length) details.push("Not included: " + [...new Set(notCounted)].join("; ") + ".");
   if (missing.length && withPremiums.length) details.push("Not included: " + missing.slice(0, 4).join(", ") + (missing.length > 4 ? " and " + (missing.length - 4) + " more" : "") + " — no premium is printed in the documents on file for " + (missing.length === 1 ? "it" : "them") + ".");
   return { summary, details, citations, handled: true };
+}
+
+/** Round 7 (port): "How much am I paying for the dependants' GHS?" A group plan's booklet prints a
+ * yearly premium per dependant ("Spouse S$612.00 per year", "Each child S$298.00 per year"); the
+ * dependants it names are on file with the document. The answer is those printed rates times the
+ * dependants the document names -- shown as the sum it is, with the page -- never a figure of its own. */
+export const DEPENDANT_PREMIUM_QUESTION = /\b(?:dependants?|dependents?)\b|\b(?:spouse|wife|husband|kids?|children|child)\b(?=[^?]*\b(?:ghs|group|company|employer|work|staff|salary)\b)|\b(?:ghs|group|company|employer|work|staff)\b(?=[^?]*\b(?:spouse|wife|husband|kids?|children|child)\b)/i;
+export async function dependantPremiumAnswer(args: { accountId: string; question: string }) {
+  if (!DEPENDANT_PREMIUM_QUESTION.test(args.question) || !/\b(?:premiums?|pay(?:ing)?|paid|costs?|deduct\w*)\b/i.test(args.question)) return null;
+  const docs = (await query<{ id: string; product_name: string | null; insurer: string | null }>(
+    `SELECT p.id::text AS id,p.product_name,p.insurer FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL`, [args.accountId])).rows;
+  const memo = newDocMemo();
+  const RATE = /^\s*(spouse|each child|per child|child(?:ren)?)\b[\s:·\-–]*(?:S\$|SGD\s?)\s?(\d[\d,]*(?:\.\d{2})?)\s*(?:per (?:year|annum)|a year|yearly|annually)?\s*$/i;
+  for (const doc of docs) {
+    for (const page of await pagesOf(args.accountId, doc.id, memo)) {
+      const lines = page.text.split(/\n/).map((l) => l.replace(/\t/g, " ").replace(/\s{2,}/g, " ").trim());
+      const at = lines.findIndex((l) => /\bdependants?['’]?\s+premiums?\b|\bpremiums? (?:for|of) dependants?\b/i.test(l));
+      if (at < 0) continue;
+      const rates: { who: "spouse" | "child"; amount: number; text: string }[] = [];
+      for (const l of lines.slice(at + 1, at + 8)) {
+        const m = RATE.exec(l);
+        if (m) rates.push({ who: /spouse/i.test(m[1]) ? "spouse" : "child", amount: Number(m[2].replace(/,/g, "")), text: l });
+      }
+      if (!rates.length) continue;
+      const members = (await query<{ display_name: string; preferred_name: string | null; relationship: string | null }>(
+        `SELECT f.display_name,f.preferred_name,f.relationship FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND pm.policy_id::text=$2`,
+        [args.accountId, doc.id])).rows;
+      const kindOf = (r: string | null) => /^(?:spouse|wife|husband)$/i.test(r ?? "") ? "spouse" : /^(?:child|son|daughter)$/i.test(r ?? "") ? "child" : null;
+      const onlySpouse = /\b(?:spouse|wife|husband)\b/i.test(args.question) && !/\b(?:kids?|children|child|dependants?|dependents?)\b/i.test(args.question);
+      const onlyChildren = /\b(?:kids?|children|child)\b/i.test(args.question) && !/\b(?:spouse|wife|husband|dependants?|dependents?)\b/i.test(args.question);
+      const parts: { label: string; count: number; amount: number; names: string[] }[] = [];
+      for (const rate of rates) {
+        if ((onlySpouse && rate.who !== "spouse") || (onlyChildren && rate.who !== "child")) continue;
+        const names = members.filter((m) => kindOf(m.relationship) === rate.who).map((m) => m.preferred_name?.trim() || m.display_name);
+        if (names.length) parts.push({ label: rate.who === "spouse" ? "spouse" : "child", count: rate.who === "spouse" ? Math.min(1, names.length) : names.length, amount: rate.amount, names });
+      }
+      const name = doc.product_name ?? "Group policy document";
+      const shown = (v: number) => formatMoney(v, "SGD").replace(/\.00$/, "");
+      const printed = rates.map((r) => "“" + r.text + "”").join(" and ");
+      const citations: ChatCitation[] = [{ chunkId: "premium:dependants:" + doc.id + ":" + page.page, policyId: doc.id, policyName: name, insurer: doc.insurer ?? undefined, pageStart: page.page, pageEnd: page.page, evidenceLabel: "Your policy document" }];
+      if (!parts.length) return { summary: name + " prints the yearly dependant premium as " + printed + " (page " + page.page + "), but no dependant of that kind is named in it, so DearPolicy can’t add it up.", details: [] as string[], citations };
+      const total = parts.reduce((t, p) => t + p.count * p.amount, 0);
+      const listNames = (n: string[]) => n.length <= 1 ? n.join("") : n.slice(0, -1).join(", ") + " and " + n.at(-1);
+      const sum = parts.map((p) => (p.count > 1 ? p.count + " × " : "") + formatMoney(p.amount, "SGD")).join(" + ");
+      const deducted = /deducted from salary/i.test(lines[at]) ? ", deducted from salary" : "";
+      return {
+        summary: "For the dependants on " + name + " you pay " + shown(total) + " a year" + deducted + ": " + sum + ", from the dependant premiums it prints for "
+          + listNames(parts.flatMap((p) => p.names)) + ".",
+        details: [name + " — " + printed + " (page " + page.page + ").",
+          "That is the printed rate for each dependant named in the document, added up; the employer’s HR or the insurer can confirm what is actually deducted."],
+        citations,
+      };
+    }
+  }
+  return null;
 }

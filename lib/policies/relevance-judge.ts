@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { structuredCompletion } from "@/lib/ai/llm";
+import { modelProseProblem } from "@/lib/chat/model-text";
 
 /** Which of a person's benefits actually respond to what happened.
  *
@@ -61,9 +62,17 @@ async function judgeBatch(args:{event:string;facts:string[]},candidates:Relevanc
         candidates:candidates.map(c=>({name:c.name,pays:c.pays.slice(0,90),product:c.product}))}),
     });
     const known=new Map(candidates.map(c=>[c.name.toLowerCase(),c.name]));
-    const applies=result.applies.flatMap(entry=>{const name=known.get(entry.name.toLowerCase());return name?[{name,why:entry.why}]:[];});
-    const ruledOut=result.ruledOut.flatMap(entry=>{const name=known.get(entry.name.toLowerCase());return name?[{name,why:entry.why||"not the kind of event this benefit is for"}]:[];});
+    // A reason is shown to the household only when it is plain prose that
+    // names nothing the candidates and facts do not (Round 7).
+    const proof=[args.event,...args.facts,...candidates.map(c=>c.name+" "+c.pays+" "+(c.product??""))].join(" ");
+    const reason=(why:string,fallback:string)=>why&&!modelProseProblem(why,{proof,fragment:true,maxLength:200})?why:fallback;
+    const applies=result.applies.flatMap(entry=>{const name=known.get(entry.name.toLowerCase());return name?[{name,why:reason(entry.why,"responds to what happened")}]:[];});
+    const ruledOut=result.ruledOut.flatMap(entry=>{const name=known.get(entry.name.toLowerCase());return name?[{name,why:reason(entry.why,"not the kind of event this benefit is for")}]:[];});
     const mentioned=new Set([...applies,...ruledOut].map(entry=>entry.name));
+    // A reply that names none of the candidates it was given has not read
+    // them (Round 7: invented benefit names). That is no verdict, not a
+    // verdict ruling everything out.
+    if(!mentioned.size)return null;
     // Only this batch's own candidates are reconciled here. Reconciling the
     // whole list against one batch's verdict is what used to put "loss of
     // sight in one eye" in front of someone with a broken wrist: those rows

@@ -15,7 +15,7 @@
  * as "not found in the documents read" -- never as "not covered".
  */
 import { NON_COVER_ROLES, flagUnclearFigures, unclearFigures } from "@/lib/documents/messy";
-import { bestLines, piecesOf, wordsOf } from "./printed-lines";
+import { bestLines, columnsFor, narrowToColumn, piecesOf, wordsOf } from "./printed-lines";
 import { printedRuleLines } from "./printed-rules";
 import { figurePremise, premiseLead, premiseOf } from "./premises";
 import { query } from "@/lib/db/client";
@@ -26,8 +26,10 @@ import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
 import { MONEY_PATTERN, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE } from "@/lib/chat/monetary-boundary";
 import { amountAppears, dateAppears, normalPassage, rephrasingIsFaithful, verifyAssertions, type Assertion, type AssertionDocument, type Rejection } from "./assertions";
 import type { ClaimPerson } from "@/lib/claims/person";
+import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
+import { replacedFigures } from "@/lib/policies/amendments";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
-import { daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
+import { applyReinstatements, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
 // ---------------------------------------------------------------------------
 // Topics
@@ -42,6 +44,7 @@ export const TOPICS: Topic[] = [
   { key: "death", label: "death cover", asks: /\b(?:death|die[sd]?|dying|life (?:cover|insurance|assured)|term life|term (?:plan|policy)|pass(?:es)? away)\b/i, fact: /\bdeath\b|\blife\b|(?<!long[- ])\bterm\b/i, kind: /(?<!long[- ])\bterm\b|\blife\b|\bdeath\b/i },
   { key: "critical_illness", label: "critical illness cover", asks: /\b(?:critical illness|early critical|\bci\b|cancer|heart attack|stroke|angioplasty|bypass)\b/i, fact: /critical|cancer|\bci\b|living care/i, kind: /critical|cancer|living care/i },
   { key: "disability", label: "disability cover", asks: /\b(?:disab\w*|tpd|total(?:ly)? (?:and )?permanent)\b/i, fact: /disab|tpd|permanent/i, kind: /disab|\btpd\b/i },
+  { key: "infectious", label: "infectious disease cover", asks: /\b(?:dengue|hfmd|infectious|hand,? foot and mouth)\b/i, fact: /dengue|infectious|hfmd/i },
   { key: "accident", label: "accident cover", asks: /\b(?:pa|personal accident|accident\w*|fractur\w*|injur\w*|broken bones?|los(?:e|es|ing|t)\s+(?:a |an |one |two |both |his |her |my |the )?(?:thumb|finger|index finger|eyes?|sight|limbs?|arm|leg|hand|foot|hearing)|thumbs?|index finger|fingers?|loss of (?:hearing|sight|a limb|one limb))\b/i, fact: /accident|fractur|injur|dismember/i, kind: /accident/i },
   // "Hospital" is named by what a hospital plan pays, not by the word
   // "medical" -- an accident plan's "Accident medical reimbursement" and a
@@ -55,7 +58,7 @@ export const TOPICS: Topic[] = [
   { key: "rider", label: "the rider", asks: /\briders?\b/i, fact: /\brider\b/i },
   { key: "group", label: "group insurance", asks: /\b(?:group|company|employer|employee|work|office|corporate|staff)\b[^?]{0,25}\b(?:insurance|plans?|polic(?:y|ies)|cover(?:age)?|benefits?|scheme)\b|\bgroup (?:insurance|plan|policy|cover|benefits?)\b/i, fact: /(?!)/, kind: /\bgroup\b|employee benefits/i },
   { key: "dental", label: "dental cover", asks: /\b(?:dental|dentist\w*|teeth|tooth)\b/i, fact: /\bdental\b/i },
-  { key: "outpatient", label: "outpatient cover", asks: /\b(?:outpatient|gp|general practitioners?|clinics?|specialists?|tcm|chinese medicine)\b/i, fact: /outpatient|general practitioner|specialist|clinic|chinese medicine/i },
+  { key: "outpatient", label: "outpatient cover", asks: /\b(?:outpatient|gp|general practitioners?|clinics?|specialists?|tcm|chinese medicine)\b/i, fact: /outpatient|general practitioner|\bgp\b|specialist|clinic|chinese medicine/i },
   { key: "maternity", label: "maternity cover", asks: /\b(?:maternity|pregnan\w*|childbirth)\b/i, fact: /maternity|pregnan|childbirth/i },
   // Answered from the person's own column and the schedule line that names it, not from rows.
   { key: "ward", label: "ward class", asks: /\bward (?:class|type)\b|\bwhich ward\b|\bwhat ward\b|\b(?:plan|cover) tier\b|\bwhich (?:tier|plan (?:type|level))\b/i, fact: /(?!)/ },
@@ -68,11 +71,12 @@ export const TOPICS: Topic[] = [
   { key: "excess", label: "the excess", asks: /\bexcess\b/i, fact: /\bexcess\b/i },
   { key: "motor", label: "car insurance", asks: /\b(?:car|motor|vehicle|windscreen|driv(?:e|es|er|ers|ing)|no-?claims? discount|ncd|third[- ]party|own damage)\b/i, fact: /vehicle|windscreen|own damage|third-party|driver|no-claim|\bmotor\b/i, kind: /\bmotor\b|\bvehicle\b|\bcar insurance\b/i },
   { key: "home", label: "home insurance", asks: /\b(?:home|house|flat|hdb|contents|renovations?|jewell?ery|valuables|personal liability|alternative accommodation|hotel)\b/i, fact: /contents|renovation|valuables|liability|accommodation|household|pipe|termite/i, kind: /\bhome\b|\bcontents\b|household/i },
-  { key: "investment", label: "the fund value", asks: /\b(?:ilps?|invest(?:ment)?[- ]?link\w*|investments?|funds?|units held|how many units|units? of|bid price|unit price|fund value)\b/i, fact: /\bfunds?\b|\bunits?\b|bid price|invest/i, kind: /invest|\bilp\b|unit[- ]linked/i },
+  { key: "investment", label: "the fund value", asks: /\b(?:ilps?|invest(?:ment)?[- ]?link\w*|investments?|funds?|units held|how many units|units? of|bid price|unit price|fund value|account value)\b/i, fact: /\bfunds?\b|\bunits\b|\bunits? (?:held|price)\b|bid price|invest|\baccount value\b/i, kind: /invest|\bilp\b|unit[- ]linked/i },
   { key: "long_term_care", label: "long-term care cover", asks: /\b(?:eldershield|careshield|long[- ]term care|severe(?:ly)? disab\w*|activities of daily living|adls?|deferment)\b/i, fact: /payout|deferment|daily living|long-term care/i, kind: /eldershield|careshield|long[- ]term care/i },
   { key: "travel", label: "travel cover", asks: /\b(?:travel\w*|trip|flight|baggage|luggage|overseas|abroad)\b/i, fact: /travel|trip|flight|baggage|luggage|overseas/i, kind: /travel|trip|voyage|wander/i },
 ];
-export const GENERAL = /['’]s [\w -]{2,40} (?:amount|limit|sum insured|payout)\s*\??\s*$|\bhow much (?:was|is) (?:it|that|this) for\b|\bwhat(?:['’]s| is| does) (?:it|that|this) cover(?:ing)?\b|\b(?:assumes?|assumptions?|illustration|illustrated)\b|\bwhat (?:does|do|is) (?:my|our|his|her|their|\w+'s) (?:polic(?:y|ies)|plans?|insurance|cover(?:age)?) (?:cover|include)|\bwhat (?:does|do|will|would) [^?]{1,60}\b(?:pay(?: out)?|give|cover)\s*\??\s*$|\btell me about [^?]{0,40}\b(?:plan|policy|insurance|cover)\b|\b(?:plan|policy|insurance) covers? (?:what|wat)\b|\bwhat am i covered for\b|\bwhat (?:cover|coverage|policies|insurance) do (?:i|we|they) have\b|\bsums? (?:insured|assured)\b|\bhow much (?:am i|are we|is \w+) (?:covered|insured) for\b/i;
+const ABOUT_PLAN = /^\s*(?:(?:can you |pls |please )?(?:tell me (?:more )?about|show me|describe|explain|details? (?:of|on|about|for)|what about|summari[sz]e))\b/i;
+export const GENERAL = /['’]s [\w -]{2,40} (?:amount|limit|sum insured|payout)\s*\??\s*$|\bhow much (?:was|is) (?:it|that|this) for\b|\bwhat(?:['’]s| is| does) (?:it|that|this) cover(?:ing)?\b|\b(?:assumes?|assumptions?|illustration|illustrated)\b|\bwhat (?:does|do|is) (?:my|our|his|her|their|(?:[\w-]+ ){0,2}[\w-]+(?:'s|’s)) (?:\w+ )?(?:polic(?:y|ies)|plans?|insurance|cover(?:age)?|pa|ci|ilp|shield|gtl|gpa|ghs|riders?|endowment) (?:cover|include)|\bwhat (?:does|do|will|would) [^?]{1,60}\b(?:pay(?: out)?|give|cover)\s*\??\s*$|\btell me about [^?]{0,40}\b(?:plan|policy|insurance|cover)\b|\b(?:plan|policy|insurance) covers? (?:what|wat)\b|\bwhat am i covered for\b|\bwhat (?:cover|coverage|policies|insurance) do (?:i|we|they) have\b|\bsums? (?:insured|assured)\b|\bhow much (?:am i|are we|is \w+) (?:covered|insured) for\b/i;
 /** A question that names one particular benefit ("a fracture benefit",
  * "intensive care") is about that benefit, not every row of the plan: a
  * fracture question must not list the permanent-loss schedule. */
@@ -144,6 +148,8 @@ export function questionTopics(question: string): Topic[] {
   let asked = TOPICS.filter((t) => t.asks.test(question));
   // "Which ward class is she covered for?" is about her column, not every hospital row.
   if (asked.some((t) => t.key === "ward")) asked = asked.filter((t) => t.key !== "hospital");
+  // Round 7 (port): "valid until?" asks the end date, not whether it is still in force.
+  if (/\bvalid (?:until|till)\b|\buntil when\b/i.test(question) && asked.some((t) => t.key === "renewal")) asked = asked.filter((t) => t.key !== "status");
   // Round 10: "if Mama falls at home" is where a person was hurt, not a question about home insurance.
   if (/\b(?:falls?|fell|slip(?:s|ped)?|trip(?:s|ped)?|hurt|injur\w*)\b[^?]{0,30}\bat home\b/i.test(question) && !/\b(?:house|flat|hdb|contents|renovations?|jewell?ery|valuables|home insurance|home policy)\b/i.test(question)) asked = asked.filter((t) => t.key !== "home");
   // "When does her accident plan end?", "Does his group plan cover dental?":
@@ -308,7 +314,7 @@ const MONTH_DATE = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a
 export const COMMON_PRODUCT_WORD = /^(?:annual|family|group|premier|premium|programme|program|plus|classic|basic|standard|personal|accident|travel|health|hospital|medical|life|term|secure|guardian|shield|care|protect|protection|saver|gold|silver|platinum|benefits?|employee|schedule|certificate|renewal|notice|integrated|critical|illness|cover|global|family|essential|elite|advantage)$/i;
 /** A premium the household pays, printed in a schedule or notice. Never a
  * benefit, a limit or a conflicting figure for a benefit. */
-export const PREMIUM_ROW = /\bpremium\b|\bmedisave\b|\bcash payable\b|\bamount (?:due|payable)\b|^\s*less\s*:/i;
+export const PREMIUM_ROW = /\bpremium\b|\bmedisave\b|\bcash payable\b|\bpayable (?:in|by) cash\b|\bamount (?:due|payable)\b|^\s*less\s*:/i;
 /** The English half of a bilingual cell ("Bayaran bulanan / Monthly payout",
  * "保证满期价值 Guaranteed maturity value", "S$2,460.00, payable for 18 years 缴费18年").
  * A cell with no second language is returned unchanged. */
@@ -349,7 +355,8 @@ export function readPage(page: number, text: string) {
   // an e-statement prints small two-column tables on the same page as a
   // three-column one, and those rows are rows.
   const wide = (l: string | undefined) => ((l ?? "").match(/\t/g) ?? []).length >= 2;
-  const remainder = (index: number) => wide(lines[index - 1]) || wide(lines[index + 1]);
+  // (Round 7 port: a table's own total -- "Total account value<TAB><TAB><TAB>S$21,385.40" -- is a row, not a wrapped cell.)
+  const remainder = (index: number) => (wide(lines[index - 1]) || wide(lines[index + 1])) && !/^(?:total|grand total|overall)\b[^\t]*\t\s*(?:S\$|SGD|US\$|USD)\s?\d/i.test(lines[index] ?? "");
   // Prose (everything that is not a table cell) is re-joined across wrapped
   // lines and read as whole sentences, each under the numbered heading it
   // sits beneath ("5. Grace period"), so a condition is never cut mid-line.
@@ -402,7 +409,9 @@ export function readPage(page: number, text: string) {
       if (/^[a-z(]/.test(r.label) || !/[A-Za-z]{3}/.test(r.label)) return;
       if (scale && /^\d+(?:\.\d+)?%$/.test(r.value)) r.value += " of the sum " + scale;
       last = r; lastIndex = index;
-      if (META_LABEL.test(r.label) || (MONTH_DATE.test(r.value) && !MONEY_IN_TEXT.test(r.value))) { meta.push(r); return; }
+      // (Round 7 port: "Insured: NAME<TAB>Policy number: X" is particulars, not a row -- unless its value is an amount,
+      // as in "Additional excess: driver under 26 ...<TAB>S$2,500".)
+      if (META_LABEL.test(r.label) || (/:\s*\S/.test(r.label) && !MONEY_IN_TEXT.test(r.value)) || (MONTH_DATE.test(r.value) && !MONEY_IN_TEXT.test(r.value))) { meta.push(r); return; }
       if (PREMIUM_ROW.test(r.label)) { premiums.push(r); return; }
       if (!remainder(index)) rows.push(r);
       return;
@@ -447,7 +456,7 @@ const CONDITION_QUESTION = /\bwaiting period|\bsurvival period|\bgrace period|\b
 const SUBJECTS = /\b(dental|maternity|pregnan\w*|cosmetic|mental|psychiatric|hiv|war|terroris\w*|suicide|self-inflicted|professional sports?|pre-existing)\b/i;
 export const PLAN_KINDS: { re: RegExp; kind: string }[] = [
   { re: /\bhospital (?:plan|policy|insurance|cover)\b|\b(?:integrated )?shield (?:plan|policy)\b/i, kind: "hospital" },
-  { re: /\btravel (?:plan|policy|insurance|cover)\b/i, kind: "travel" },
+  { re: /\btravel (?:plan|policy|insurance|cover|premium)\b/i, kind: "travel" },
   { re: /\b(?:personal )?accident (?:plan|policy|insurance|premium)\b|\bpa (?:plan|policy|cover|premium)\b/i, kind: "accident" },
   { re: /\b(?:group |term )?life (?:plan|policy|insurance|cover)\b|\bterm (?:plan|policy)\b/i, kind: "death" },
   { re: /\bendowment\b|\bsavings (?:plan|policy)\b/i, kind: "maturity" },
@@ -500,10 +509,26 @@ async function memberTiers(accountId: string, docIds: string[]) {
   for (const row of r.rows) if (row.tier) out.set(row.policy_id + "|" + row.family_member_id, row.tier);
   return out;
 }
+function ageOn(dob: string, now: Date) {
+  const d = new Date(dob.slice(0, 10) + "T00:00:00Z");
+  let age = now.getUTCFullYear() - d.getUTCFullYear();
+  if (now.getUTCMonth() < d.getUTCMonth() || (now.getUTCMonth() === d.getUTCMonth() && now.getUTCDate() < d.getUTCDate())) age--;
+  return age;
+}
+/** "age 80 and below" / "age 81 and above" / "aged 81+" in a row's label. */
+function ageBand(text: string): { kind: "max" | "min"; age: number; text: string } | null {
+  const m = text.match(/\bage[ds]?\s*(\d{1,3})\s*(?:years?\s*)?(?:and|or|&)\s*(below|under|younger|less|above|over|older)\b/i);
+  if (m) return { kind: /below|under|younger|less/i.test(m[2]) ? "max" : "min", age: Number(m[1]), text: m[0].toLowerCase() };
+  const plus = text.match(/\bage[ds]?\s*(\d{1,3})\s*\+/i);
+  if (plus) return { kind: "min", age: Number(plus[1]), text: plus[0].toLowerCase() };
+  return null;
+}
 /** "Death" and "Death benefit" and "Death (any cause)" are the same thing. */
 function sameThingKey(title: string) {
   // Round 10: an age band ("(age 80 and below)" / "(age 81 and above)") names a different row, not the same one.
-  return title.toLowerCase().replace(/\((.*?)\)/g, (_m, inner: string) => /\bage[sd]?\b|\byears? old\b|\b(?:adult|child|senior)\b/.test(inner) ? " " + inner + " " : " ").replace(/\b(?:benefits?|sum (?:insured|assured)|cover(?:age)?)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  const key = title.toLowerCase().replace(/\btpd\b/g, "total and permanent disability").replace(/\btotal (?:&|and) permanent\b/g, "total and permanent").replace(/\((.*?)\)/g, (_m, inner: string) => /\bage[sd]?\b|\byears? old\b|\b(?:adult|child|senior)\b/.test(inner) ? " " + inner + " " : " ").replace(/\b(?:benefits?|sum (?:insured|assured)|cover(?:age)?)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim();
+  // Round 7 (port): a life policy's "Life", "Death" and "Sum assured" are one figure.
+  return /^(?:life|death|life cover|death cover|sum|main|basic)$/.test(key) ? "death" : key;
 }
 
 /** The Latin-script tail of a bilingual table heading ("总退保价值 (4.25%) Total surrender value at 4.25%"). */
@@ -562,7 +587,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const started = Date.now(), now = args.now ?? new Date();
   const empty = (): PolicyAnswer => ({ mode: "answer", summary: "", details: [], citations: [], confidence: "insufficient_evidence", nextSteps: [], questions: [], policyStatedLimits: [] });
   const topics = questionTopics(askedText);
-  let general = GENERAL.test(askedText);
+  // Round 7 (port): "tell me about SecureCare", "show me Siew Ling's ILP" ask what a named plan states.
+  const aboutPlan = !GENERAL.test(askedText) && ABOUT_PLAN.test(askedText);
+  let general = GENERAL.test(askedText) || aboutPlan;
   // "what's the security bond?", "how long is the deferment?": one named term of the person's plans, asked plainly.
   if (!general && !topics.length && /^\s*(?:what(?:['’]s| is| are)|how (?:much|long)|is there|are there)\b/i.test(askedText) && NARROW.some((n) => n.asks.test(askedText))) general = true;
   // Round 11: "ambulance fee can claim or not?", "is ambulance claimable?": one named benefit, asked as a yes or no.
@@ -598,11 +625,53 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
        FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND ${activePredicate()}`, [args.accountId, docIds]);
   // Round 10: letters, claim decisions, bills, screenshots and notes speak for nobody's cover.
   const docs = new Map(docRows.rows.filter((d) => !NON_COVER_ROLES.has(d.document_role ?? "")).map((d) => [d.id, d]));
+  // Round 7 (port): the insurer's letter confirming a lapsed policy was reinstated is that policy's latest word
+  // on its status, its conditions and its next premium: it is read with the policy (same policy number).
+  {
+    const num = (x: string | null | undefined) => (x ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const letters = docRows.rows.filter((d) => !docs.has(d.id) && d.document_role === "insurer_letter" && num(d.policy_number) && [...docs.values()].some((o) => num(o.policy_number) === num(d.policy_number)));
+    if (letters.length) {
+      const letterPages = await documentPages(args.accountId, new Map(letters.map((d) => [d.id, d])));
+      for (const d of letters) if (printedReinstatement(letterPages.get(d.id) ?? [])) {
+        docs.set(d.id, d);
+        const owners = speaksFor.get(d.id) ?? speaksFor.set(d.id, new Set()).get(d.id)!;
+        for (const o of docs.values()) if (o.id !== d.id && num(o.policy_number) === num(d.policy_number)) for (const x of speaksFor.get(o.id) ?? []) owners.add(x);
+      }
+    }
+  }
   for (const id of [...speaksFor.keys()]) if (!docs.has(id)) speaksFor.delete(id);
+  // Round 7 (port): a premium receipt or notice speaks for the people its policy insures, not for whoever paid it
+  // ("Kah Seng CI premium" is not the receipt he paid for his wife's plan) -- when that policy is on file.
+  {
+    const payments = [...docs.values()].filter((d) => PAYMENT_ONLY.test(d.document_role ?? "") && (d.policy_number || d.product_name));
+    if (payments.length) {
+      // (By its policy number, or -- when the receipt prints none -- by its product.)
+      const insured = await query<{ policy_number: string | null; product_name: string | null; family_member_id: string }>(
+        `SELECT p.policy_number,p.product_name,pm.family_member_id::text AS family_member_id FROM policies p JOIN policy_members pm ON pm.policy_id=p.id AND pm.account_id=p.account_id
+          WHERE p.account_id=$1 AND ${activePredicate("p")} AND (p.policy_number=ANY($2::text[]) OR lower(p.product_name)=ANY($3::text[])) AND coalesce(p.document_role,'') NOT IN ('premium_receipt','renewal_statement','annual_statement','insurer_letter')`,
+        [args.accountId, payments.flatMap((d) => d.policy_number ? [d.policy_number] : []), payments.flatMap((d) => d.product_name ? [d.product_name.toLowerCase()] : [])]).catch(() => ({ rows: [] as { policy_number: string | null; product_name: string | null; family_member_id: string }[] }));
+      for (const d of payments) {
+        const covered = new Set(insured.rows.filter((r) => d.policy_number ? r.policy_number === d.policy_number : (r.product_name ?? "").toLowerCase() === (d.product_name ?? "").toLowerCase()).map((r) => r.family_member_id));
+        const owners = speaksFor.get(d.id);
+        if (!covered.size || !owners) continue;
+        for (const o of [...owners]) if (!covered.has(o)) owners.delete(o);
+        if (!owners.size) { speaksFor.delete(d.id); docs.delete(d.id); }
+      }
+    }
+  }
+  // Round 7 (port): the column of a group plan's table that is this person's -- only when the plan's member is the household's own "self".
+  // (Only when a group plan with per-member columns could be among the documents: no query otherwise.)
+  const groupish = [...docs.values()].some((d) => /group|employee|benefit_guide/i.test((d.policy_type ?? "") + " " + (d.document_role ?? "") + " " + (d.product_name ?? "")) || !d.document_role);
+  const personColumns = args.people.length === 1 ? columnsFor(args.people[0].relationship) : [];
+  // (One query: the plans the household's own "self" is a member of.)
+  const selfPlans = new Set(args.people.length === 1 && groupish && personColumns.length ? (await query<{ policy_id: string }>(`SELECT pm.policy_id::text AS policy_id FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND f.account_id=pm.account_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND f.relationship='self'`, [args.accountId]).catch(() => ({ rows: [] as { policy_id: string }[] }))).rows.map((r) => r.policy_id) : []);
+  const columnsOf = (ids: Iterable<string>) => [...ids].some((id) => selfPlans.has(id)) ? personColumns : [];
   const docName = (id: string) => { const d = docs.get(id); return d?.product_name ?? (d ? prettifyFilename(d.original_filename) : "Policy document"); };
   const pagesByDocEarly = new Map<string, { page: number; text: string }[]>();
   /** What kind of document a line comes from, when it is not the person's own schedule. */
-  const isGuide = (id: string) => { const d = docs.get(id); return !!d && !d.personal_coverage_confirmed && /benefit_guide|benefit_summary|product_summary/.test(d.document_role ?? ""); };
+  // (Round 7 port: an employer's group booklet that names its employees is still a booklet -- the
+  // same documents lib/claims/group-cover.ts treats as group cover.)
+  const isGuide = (id: string) => { const d = docs.get(id); return !!d && !d.personal_coverage_confirmed && (/benefit_guide|benefit_summary|product_summary/.test(d.document_role ?? "") || (!d.document_role && (/\bgroup\b/i.test(d.policy_type ?? "") || /\bgroup\b|employee benefits/i.test(d.product_name ?? "")))); };
   const docKind = (id: string, page?: number | null) => { const d = docs.get(id); if (!d) return ""; if (isGuide(id)) { const section = page != null ? sectionOf(id, page) : null; return " (group benefits booklet" + (section ? ", " + section : "") + ")"; } if (/renewal/.test(d.document_role ?? "")) return " (renewal notice)"; return ""; };
   /** A booklet section's own title ("SECTION 2 - GROUP HOSPITAL AND SURGICAL (GHS)" -> "Group hospital and surgical (GHS)"). */
   const sectionOf = (docId: string, page: number) => {
@@ -632,10 +701,11 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     // A row that names another kind of cover this plan also is (an ILP's fund
     // rows on a question about its death benefit) belongs to that kind.
     if (topics.length && namedBenefit.some((n) => n.fact.test(label) || n.fact.test(passage.replace(/^[^\t]*\t/, "")))) return topics[0].key;
-    if (TOPICS.some((o) => o.kind && kinds.includes(o.key) && !topics.some((t) => t.key === o.key) && o.fact.test(label) && !topics.some((t) => t.fact.test(label)))) return null;
+    // (Round 7 port: not when the question asks what the plan covers at all -- "What does my SecureCare cover?" -- its own kind's rows are the answer.)
+    if (!general && topics.length && TOPICS.some((o) => o.kind && kinds.includes(o.key) && !topics.some((t) => t.key === o.key) && o.fact.test(label) && !topics.some((t) => t.fact.test(label)))) return null;
     // A row whose own name says what it is ("Dental") belongs to that topic
     // before it belongs to the plan's kind ("group insurance").
-    const byName = topics.find((t) => t.fact.test(label) && !(t.passage && !t.passage.test(label + " " + passage)) && (ATTRIBUTE_TOPICS.has(t.key) && t.key !== "cost_sharing" || !kinds.some((k) => k !== t.key && (OTHER_KIND.has(k) || (k === "hospital" && t.key !== "cost_sharing")))));
+    const byName = topics.find((t) => t.fact.test(label) && !(t.passage && !t.passage.test(label + " " + passage)) && (t.key === "infectious" || ATTRIBUTE_TOPICS.has(t.key) && t.key !== "cost_sharing" || !kinds.some((k) => k !== t.key && (OTHER_KIND.has(k) || (k === "hospital" && t.key !== "cost_sharing")))));
     if (byName && topics.length > 1) return byName.key;
     for (const t of topics) {
       if (t.passage && !t.passage.test(label + " " + passage)) continue;
@@ -644,7 +714,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       // A row whose own name says so belongs, unless it sits on a plan of a
       // different specific kind (an accident or travel plan's "hospital" row
       // pays only for an accident or a trip).
-      if (t.fact.test(label) && ((ATTRIBUTE_TOPICS.has(t.key) && t.key !== "cost_sharing") || !kinds.some((k) => k !== t.key && (OTHER_KIND.has(k) || (k === "hospital" && t.key !== "cost_sharing"))))) return t.key;
+      if (t.fact.test(label) && (t.key === "infectious" || (ATTRIBUTE_TOPICS.has(t.key) && t.key !== "cost_sharing") || !kinds.some((k) => k !== t.key && (OTHER_KIND.has(k) || (k === "hospital" && t.key !== "cost_sharing"))))) return t.key;
       // A rider's rows are named by the rider's page, not by the word "rider".
       if (t.key === "rider" && page != null && riderPages.has(docId + "#" + page)) return t.key;
     }
@@ -656,11 +726,28 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     .some((token) => token.length >= 5 && !/^(?:synthetic|dptest|policy|insurance|plan)$/i.test(token) && !COMMON_PRODUCT_WORD.test(token) && !/\d/.test(token) && new RegExp("\\b" + token + "\\b", "i").test(args.question))
       // Round 9: a product named in full ("the PA Guardian") even when each of its words is a common one.
       || (d.product_name ?? "").length >= 6 && /\s/.test(d.product_name ?? "") && args.question.toLowerCase().includes((d.product_name ?? "").toLowerCase())).map((d) => d.id);
+  // Round 7 (port): "the Pro" when the household also holds "SecureCare Plus": the word that tells two alike products apart names one.
+  if (!namedDocs.length && args.question.trim().split(/\s+/).length <= 6) {
+    const allNames = (await query<{ product_name: string }>(`SELECT DISTINCT p.product_name FROM policies p WHERE p.account_id=$1 AND p.product_name IS NOT NULL AND ${activePredicate("p")}`, [args.accountId]).catch(() => ({ rows: [] as { product_name: string }[] }))).rows.map((r) => r.product_name);
+    const words = (name: string) => name.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !/\d/.test(t)).map((t) => t.toLowerCase());
+    const says = (t: string) => new RegExp("(?<![\\p{L}\\p{N}])" + t + "(?![\\p{L}\\p{N}])", "iu").test(args.question);
+    for (const d of docs.values()) {
+      const mine = words(d.product_name ?? "");
+      const alike = allNames.filter((n) => n !== d.product_name && words(n).some((t) => t.length >= 5 && mine.includes(t)));
+      if (!alike.length) continue;
+      const telling = mine.filter((t) => !alike.some((n) => words(n).includes(t)) && !/^(?:the|and|of|for|plan|policy|insurance)$/.test(t));
+      if (telling.some(says) && !alike.some((n) => words(n).filter((t) => !mine.includes(t)).some(says))) namedDocs.push(d.id);
+    }
+  }
   // Round 9: "my shield", "the shield plan": the Integrated Shield plan itself, not every hospital line a group booklet prints.
   if (!namedDocs.length && /\bshield\b/i.test(args.question) && !/\b(?:home|house|contents)\s*shield\b/i.test(args.question))
     namedDocs.push(...[...docs.values()].filter((d) => /shield/i.test((d.product_name ?? "") + " " + (d.policy_type ?? "")) && !/home|contents|household|motor|travel/i.test((d.product_name ?? "") + " " + (d.policy_type ?? ""))).map((d) => d.id));
   const plannedKinds = PLAN_KINDS.filter((p) => p.re.test(askedText)).map((p) => p.kind);
-  const kindDocs = plannedKinds.length ? [...docs.keys()].filter((id) => kindsOf(id).some((k) => plannedKinds.includes(k))) : [];
+  // Round 7 (port): "my USD policy", "the US dollar plan": the policy whose own currency is US dollars.
+  const usdAsked = /\b(?:usd|us\$|us dollars?|american dollars?)\b/i.test(askedText);
+  const usdPages = usdAsked ? await documentPages(args.accountId, docs) : null;
+  const usdDocs = usdPages ? [...docs.keys()].filter((id) => /\bpolicy currency\b[^\n]{0,40}\b(?:USD|US dollars?|United States dollars?)\b|\bUS dollar denominated\b/i.test((usdPages.get(id) ?? []).map((p) => p.text).join("\n"))) : [];
+  const kindDocs = usdDocs.length ? usdDocs : plannedKinds.length ? [...docs.keys()].filter((id) => kindsOf(id).some((k) => plannedKinds.includes(k))) : [];
   // A group booklet holds several plans; it is "a hospital plan" for the
   // pages that are one (its GHS section), so it stays in scope for them.
   const guideHasKind = (docId: string) => isGuide(docId) && plannedKinds.some((k) => { const kind = TOPICS.find((t) => t.key === k)?.kind; return !!kind && (pagesByDocEarly.get(docId) ?? []).some((p) => kind.test(p.text.split(/\r?\n/).slice(0, 4).join(" "))); });
@@ -677,6 +764,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // Round 7: what each document itself says about whether it still covers anyone.
   const today = todayIso(now);
   const statusOf = new Map<string, PrintedStatus>([...docs.keys()].map((id) => [id, printedStatus(pagesByDoc.get(id) ?? [], docs.get(id)?.renewal_or_expiry_date ?? null, today)]));
+  // Round 7 (port): a lapse a later document of the same policy says was reinstated is not its status now.
+  applyReinstatements(statusOf, [...docs.values()].map((d) => ({ id: d.id, policy_number: d.policy_number ?? null })), (id) => pagesByDoc.get(id) ?? []);
   const inactive = (id: string) => ["lapsed", "ended"].includes(statusOf.get(id)?.state ?? "");
   const paymentOnly = (id: string) => PAYMENT_ONLY.test(docs.get(id)?.document_role ?? "");
   const tables = new Map([...pagesByDoc].map(([docId, pages]) => [docId, valueTables(pages)]));
@@ -696,7 +785,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   /** A rider's name as the document writes it in running text ("ShieldCare Plus Rider"). */
   const riderName = (docId: string, page: number) => {
     const pages = pagesByDoc.get(docId) ?? [];
-    const heading = (pages.find((p) => p.page === page)?.text.split(/\r?\n/).map((l) => l.trim()).find((l) => /\brider\b/i.test(l)) ?? "").split(/\s+[-–—]\s+/)[0].trim();
+    // (Round 7 port: not a letterhead line such as "Rider schedule (fictional)".)
+    const heading = (pages.find((p) => p.page === page)?.text.split(/\r?\n/).map((l) => l.trim()).find((l) => /\brider\b/i.test(l) && !/\((?:fictional|fictitious|synthetic)\)/i.test(l) && !/^rider schedule$/i.test(l) && !/[:\t]/.test(l)) ?? "").split(/\s+[-–—]\s+/)[0].trim();
     if (!heading) return docName(docId);
     const re = new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"), "gi");
     const mixed = pages.flatMap((p) => p.text.match(re) ?? []).find((m) => m !== m.toUpperCase());
@@ -711,7 +801,26 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     if (paymentOnly(docId)) continue;
     const topic = topicOf(row.label, row.line, docId, row.page);
     if (!topic) continue;
+    // Round 7: a table's own header ("Component | Amount") is not a fact, and
+    // how a premium is paid ("Payable in cash: S$1,150.00") is not cover.
+    if (/^(?:component|item|benefits?|description|details?|particulars)$/i.test(row.label.trim()) && /^(?:amount|value|limit|sum insured|details?|s\$|sgd)$/i.test(row.value.trim())) continue;
+    // A premium receipt is evidence of a payment, not of cover.
+    if (topic !== "premium" && /receipt/i.test(docs.get(docId)?.document_role ?? "")) continue;
+    if (topic !== "premium" && /^(?:payable|paid)\s+(?:in|from|by|via)\b|\b(?:medisave|cash)\s+(?:portion|payable|deductible)\b/i.test(row.label.trim())) continue;
     const printed = printedAmount(row.value);
+    // Round 7 (port): a row with a figure per column (Employee / Spouse / Child) is this person's column only, named;
+    // when their column is not known the row is left to the stored facts, never quoted with other columns' figures.
+    const figureCells = row.line.split(/\t| · |\s{3,}/).filter((cell) => /(?:S\$|SGD\s?|US\$|USD\s?)\s?\d/i.test(cell)).length;
+    if (figureCells >= 2) {
+      const column = columnsOf([docId]).map((c) => c.charAt(0).toUpperCase() + c.slice(1)).find((c) => printedCell(docId, row.page, row.label, c));
+      const cell = column ? printedCell(docId, row.page, row.label, column) : null;
+      if (!cell) continue;
+      const one = printedAmount(cell);
+      for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "row:" + docId + ":" + row.page + ":" + row.index, source: "row", topic, title: row.label, ownerName: personName(ownerId),
+        kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: row.page,
+        text: row.label + " (" + column + " column): " + cell, amount: one.amount, currency: one.amount != null ? one.currency : null, quote: row.line, start: null, end: null });
+      continue;
+    }
     for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "row:" + docId + ":" + row.page + ":" + row.index, source: "row", topic, title: row.label, ownerName: personName(ownerId),
       kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: row.page,
       text: row.label + ": " + row.value + (printed.bare ? " (no currency is printed for this amount)" : ""),
@@ -758,6 +867,25 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     // A multi-column table's columns are person classes / plan tiers only when
     // one of them is the person's own; then only that column is theirs.
     const tierOf = (b: CatalogBenefit) => typed.get(b.id)?.tier ?? null;
+    const pageOf = (docId: string, page: number | null) => (pagesByDocEarly.get(docId) ?? []).find((p) => p.page === page)?.text ?? "";
+    const employeeOnly = (docId: string, page: number | null) => /\bemployees?\s+only\b|\bcovers?\s+the\s+employee\s+only\b/i.test(pageOf(docId, page));
+    const isEmployee = (docId: string, ownerId: string) => {
+      const person = args.people.find((p) => p.id === ownerId); if (!person) return false;
+      const all = (pagesByDocEarly.get(docId) ?? []).map((p) => p.text).join("\n").replace(/[ \t]+/g, " ");
+      const name = person.display_name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp("\\b(?:eligible |insured )?employee(?: name)?\\s*:\\s*" + name, "i").test(all);
+    };
+    const planPrintedFor = (docId: string, ownerId: string) => {
+      // (Any document that prints the person's name beside a plan -- a
+      // booklet read without its role still says which column is theirs.)
+      const person = args.people.find((p) => p.id === ownerId); if (!person) return null;
+      const name = person.display_name.toLowerCase().replace(/\s+/g, " ");
+      for (const p of pagesByDocEarly.get(docId) ?? []) for (const line of p.text.split(/\n/)) {
+        const flat = line.replace(/\s+/g, " ");
+        if (flat.toLowerCase().includes(name)) { const m = flat.match(/\b(plan\s+[A-Z0-9]{1,3})\b/i); if (m) return m[1]; }
+      }
+      return null;
+    };
     const tableHasTier = (docId: string, page: number | null, tier: string) => catalog.some((x) => x.policyId === docId && x.sourcePage === page && tierApplies(tierOf(x), tier) && !!tierOf(x));
     for (const b of catalog) {
       const rowKind = typed.get(b.id)?.rowKind ?? null, tier = tierOf(b);
@@ -776,7 +904,18 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
         continue;
       }
       for (const ownerId of speaksFor.get(b.policyId) ?? []) {
-        const own = memberTier.get(b.policyId + "|" + ownerId) ?? null;
+        // Round 7: a booklet prints the employee's plan beside their name
+        // ("TAN WEI MING ... Benefit plan: Plan 2 (Managers)"): that is their
+        // column in the GTL / GPA tables, as the stored class (Employee) is in
+        // the hospital table.
+        // A booklet section for the employee only (GTL / GPA "cover the
+        // employee only") is never a dependant's cover.
+        if (employeeOnly(b.policyId, b.sourcePage) && !isEmployee(b.policyId, ownerId)) continue;
+        const stored = memberTier.get(b.policyId + "|" + ownerId) ?? null;
+        const printedPlan = planPrintedFor(b.policyId, ownerId);
+        // Round 7 (port): on the household's own group plan (its member is "self"), a spouse's or child's column by how they relate.
+        const related = args.people.length === 1 && ownerId === args.people[0].id ? columnsOf([b.policyId]) : [];
+        const own = [stored, printedPlan, ...related].find((t): t is string => !!t && tableHasTier(b.policyId, b.sourcePage, t)) ?? stored;
         // The person's own column only (Private hospital for a private-ward
         // plan, Child for a child); a person whose class is not known sees
         // every column, each labelled.
@@ -797,6 +936,15 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
         } else if (tier && (value == null || b.formulaKind === "none")) {
           const cell = printedCell(b.policyId, b.sourcePage, b.benefitName, tier);
           if (cell && !/^\d+(?:,\s*\d+)*$/.test(cell)) text += ": " + cell;
+        } else if ((value == null || b.formulaKind === "none") && b.quote && !tier) {
+          // Round 7: a benefit listed with no calculable rule shows the one
+          // figure its quoted line prints, as printed. A line read by OCR from
+          // a scanned page is shown with its misread dollar sign repaired and
+          // says it came from a scan. A line with several figures shows none.
+          const pageText = pageOf(b.policyId, b.sourcePage);
+          const scanned = looksScanned(b.quote) || ocrNoiseShare(pageText) > 0.3;
+          const figures = (scanned ? cleanScannedLine(b.quote) ?? "" : b.quote).match(/(?:S\$|US\$)\s?\d[\d,]*(?:\.\d+)?(?:\s+(?:per|a)\s+(?:day|visit|year|week|month))?/g) ?? [];
+          if (figures.length === 1) text += ": " + figures[0] + (scanned ? " (read from a scanned page; check it against the original)" : "");
         } else if (!b.needsConfirmation && value != null && value > 0) {
           if (b.formulaKind === "sum_insured") text += ": " + Math.round(value * 1000) / 10 + "% of the sum insured";
           else if (currency && (b.formulaKind === "fixed" || b.formulaKind === "expense_cap" || b.formulaKind === "daily")) {
@@ -872,6 +1020,19 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   // Ward class / plan tier: the person's own column, from the line of the
   // document that names it ("Plan: ShieldCare Premier (Private hospital)").
+  // Round 7 (port): "What's my dad's hospital plan?" asks which plan it is: the ward it entitles him to comes first, as printed.
+  if (/\bwhat(?:['’]s| is| are)\b[^?]{0,40}\b(?:hospital|shield) (?:plan|insurance|policy|cover)\s*\??\s*$/i.test(askedText) || topics.some((t) => t.key === "ward"))
+    for (const docId of docs.keys()) {
+      if (!(kindsOf(docId).includes("hospital") || /\bshield\b|\bhospital\b|\bhealth\b/i.test((docs.get(docId)?.product_name ?? "") + " " + (docs.get(docId)?.policy_type ?? ""))) || isGuide(docId)) continue;
+      for (const pg of pagesByDoc.get(docId) ?? []) for (const [i, raw] of pg.text.split(/\r?\n/).entries()) {
+        const l = raw.trim();
+        if (!(/^ward (?:entitlement|class|type)\s*[:\t]/i.test(l) || /^plan\s*[:\t].*\bward\b/i.test(l)) || l.length > 160) continue;
+        for (const ownerId of speaksFor.get(docId) ?? []) if (!candidates.some((c) => c.id === "wardline:" + docId + ":" + ownerId))
+          candidates.unshift({ id: "wardline:" + docId + ":" + ownerId, source: "row", topic: topics[0]?.key ?? "ward", title: "Ward entitlement", ownerName: personName(ownerId), kind: "policy_fact", subjectId: ownerId, policyId: docId,
+            documentHash: docs.get(docId)?.file_hash ?? null, page: pg.page, text: l.replace(/\t+/g, ": ").replace(/\s{2,}/g, " "), amount: null, currency: null, quote: raw, start: null, end: null });
+        void i;
+      }
+    }
   if (topics.some((t) => t.key === "ward")) {
     const tiers = await memberTiers(args.accountId, [...docs.keys()]);
     for (const docId of docs.keys()) {
@@ -963,7 +1124,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       const st = statusOf.get(docId);
       if (paymentOnly(docId) || !st || st.state === "unknown" || st.page == null || !st.line) continue;
       if (onlyEnded && st.state !== "lapsed" && st.state !== "ended") continue;
-      const text = st.state === "lapsed" ? "Lapsed on " + st.printed : st.state === "grace" ? "Grace period ends: " + st.printed : st.line.replace(/\t+/g, ": ").replace(/^(period of insurance|policy term)\s+/i, (m, x: string) => x + ": ");
+      // Round 7 (port): reinstated -- said from the reinstatement letter, cited there (once for both documents).
+      if (st.state === "reinstated" && st.byDocId && st.byDocId !== docId) continue;
+      const text = st.state === "reinstated" ? "Reinstated with effect from " + st.printed + "; in force" : st.state === "lapsed" ? "Lapsed on " + st.printed : st.state === "grace" ? "Grace period ends: " + st.printed : st.line.replace(/\t+/g, ": ").replace(/^(period of insurance|policy term)\s+/i, (m, x: string) => x + ": ");
       for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "status:" + docId, source: "row", topic: "status", title: "Status", ownerName: personName(ownerId),
         kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: st.page, text, amount: null, currency: null, quote: st.line, start: null, end: null });
     }
@@ -973,6 +1136,22 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     if (/\b(?:reinstat\w*|get it back|revive|restore)\b/i.test(askedText)) for (const [docId, pages] of read) if (inScope(docId) && statusOf.get(docId)?.state === "lapsed") for (const page of pages) for (const line of page.prose)
       if (/\breinstat/i.test(line.line) && !candidates.some((c) => c.quote === line.line)) for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "reinstate:" + docId + ":" + line.index, source: "row", topic: "status", title: "Printed", ownerName: personName(ownerId),
         kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: line.page, text: "“" + line.line.replace(/[.;:\s]+$/, "") + "”", amount: null, currency: null, quote: line.line, start: null, end: null });
+    // Round 7 (port): "How much did I pay to reinstate?", "the reinstatement interest": the reinstatement letter's own lines.
+    if (/\breinstat\w*/i.test(askedText)) {
+      const asks = new Set((askedText.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !STOP_WORDS.has(w) && !/^reinstat/.test(w)));
+      const paid = /\b(?:how much|pay|paid|cost|amount)\b/i.test(askedText);
+      for (const [docId, pages] of pagesByDoc) {
+        const st = statusOf.get(docId);
+        if (st?.state !== "reinstated" || st.byDocId !== docId || !inScope(docId)) continue;
+        for (const page of pages) for (const [i, raw] of page.text.split(/\r?\n/).entries()) {
+          const l = raw.replace(/\t+/g, " ").replace(/\s{2,}/g, " ").trim();
+          if (!/(?:S\$|SGD)\s?\d/.test(l) || candidates.some((c) => c.quote === raw)) continue;
+          if (![...asks].some((w) => l.toLowerCase().includes(w)) && !(paid && /\b(?:total|received)\b/i.test(l))) continue;
+          for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "reinstated:" + docId + ":" + page.page + ":" + i, source: "row", topic: "status", title: "Printed", ownerName: personName(ownerId),
+            kind: "policy_fact", subjectId: ownerId, policyId: docId, documentHash: docs.get(docId)?.file_hash ?? null, page: page.page, text: "“" + l.replace(/[.;:\s]+$/, "") + "”", amount: null, currency: null, quote: raw, start: null, end: null });
+        }
+      }
+    }
     // "Why did it lapse?": the sentence that says what was not paid.
     if (/\bwhy\b/i.test(askedText)) for (const [docId, pages] of read) if (inScope(docId) && statusOf.get(docId)?.state === "lapsed") for (const page of pages) for (const line of page.prose)
       if (/\b(?:not paid|unpaid|not received|because)\b/i.test(line.line)) for (const ownerId of speaksFor.get(docId) ?? []) candidates.push({ id: "why:" + docId + ":" + line.index, source: "row", topic: "status", title: "Printed", ownerName: personName(ownerId),
@@ -1036,9 +1215,11 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     const want = /\bunits?\b/i.test(askedText) ? /units/i : /\bbid|price\b/i.test(askedText) ? /price/i : /\bworth|fund value|value\b|how much\b/i.test(askedText) ? /value/i : null;
     const fund = askedText.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)*) (?:Fund|fund)\b/)?.[1];
     if (want) {
-      const kept = candidates.filter((c) => c.topic === "investment" && (want.test(c.tier ?? "") || (want.source === "value" && /fund value/i.test(c.title))) && (!fund || new RegExp(fund, "i").test(c.title)));
+      const kept = candidates.filter((c) => c.topic === "investment" && (want.test(c.tier ?? "") || (want.source === "value" && /fund value|account value/i.test(c.title))) && (!fund || new RegExp(fund, "i").test(c.title)));
       const total = want.source === "value" && !fund ? kept.filter((c) => /total/i.test(c.title)) : kept;
       if (total.length) candidates.splice(0, candidates.length, ...candidates.filter((c) => c.topic !== "investment" || c.id.startsWith("meta:")), ...total);
+      // Round 7 (port): a value is as at the statement's own date, said with it.
+      for (const id of new Set(total.map((c) => c.policyId))) { const d = docs.get(id); if (d?.document_date && /statement/.test(d.document_role ?? "")) valueTableNotes.push(docName(id) + " values are as at " + longDate(d.document_date) + ", the date of the statement.") }
     }
   }
   // "Which policies renew in the next 60 days?": only the ones whose period ends inside that window.
@@ -1056,11 +1237,11 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     }
   }
   // "Why did my term policy lapse?", "Has my term life ended?": the plan whose status is in question, not the others of its kind.
-  if (topics.some((t) => t.key === "status") && !/\b(?:which|list|any|all|every)\b/i.test(askedText) && candidates.some((c) => c.policyId && ["lapsed", "ended", "grace"].includes(statusOf.get(c.policyId)?.state ?? "")))
+  if (topics.some((t) => t.key === "status") && !/\b(?:which|list|any|all|every)\b/i.test(askedText) && candidates.some((c) => c.policyId && ["lapsed", "ended", "grace", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "")))
   {
     const kinds = topics.filter((t) => t.kind).map((t) => t.key);
     const ofKind = (id: string) => !kinds.length || kinds.some((k) => kindsOf(id).includes(k));
-    const keep = candidates.filter((c) => !c.policyId || (["lapsed", "ended", "grace"].includes(statusOf.get(c.policyId)?.state ?? "") && ofKind(c.policyId)));
+    const keep = candidates.filter((c) => !c.policyId || (["lapsed", "ended", "grace", "reinstated"].includes(statusOf.get(c.policyId)?.state ?? "") && ofKind(c.policyId)));
     if (keep.some((c) => c.policyId)) candidates.splice(0, candidates.length, ...keep);
   }
   // "Max co-pay with the rider?": the rider's premium line is not its benefits.
@@ -1117,14 +1298,14 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
         const whoseDocs = args.people.length === 1 && !isSelf(args.people[0].id) ? personName(args.people[0].id) + "’s" : "your";
         // Round 11: "giving birth" is printed as "childbirth", "asthma" as a pre-existing condition: that printed line, when there is one.
         const ruleDocs = new Map([...pagesByDoc].filter(([id]) => candidates.some((c) => c.policyId === id) && inScope(id)));
-        const rules = printedRuleLines(askedText, "", ruleDocs, docName, { ignore: [...nameWords], sameThingOnly: true });
+        const rules = printedRuleLines(askedText, "", ruleDocs, docName, { ignore: [...nameWords], sameThingOnly: true, columns: columnsOf(ruleDocs.keys()) });
         if (rules.length) {
           const named = [...new Set(rules.map((r) => r.citation.policyName))];
           const lead = "Here is what " + (args.people.length === 1 && !isSelf(args.people[0].id) ? personName(args.people[0].id) + "’s " : "your ") + (named.length === 1 ? named[0] : "documents") + " " + (named.length === 1 ? "prints" : "print") + " about that:";
           return result({ handled: true, answer: { mode: "answer", summary: lead, details: rules.map((r) => r.text), citations: rules.map((r) => r.citation), confidence: "partial_match", nextSteps: [], questions: [], policyStatedLimits: [], verifiedPolicyFactsOnly: true,
             verifiedPolicyFigures: [...new Set(rules.flatMap((r) => r.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []))] } });
         }
-        const summary = "DearPolicy didn’t find anything about " + span.trim() + " in " + whoseDocs + " " + (plans.length === 1 ? plans[0] + " documents" : "documents") + ". That is not the same as the policy saying it is excluded — the insurer can confirm.";
+        const summary = "DearPolicy didn’t find anything about " + span.trim() + " in " + whoseDocs + " " + (plans.length === 1 ? plans[0] + " documents" : "documents") + ". That does not mean the policy leaves it out — the insurer can confirm.";
         return result({ handled: true, answer: { mode: "answer", summary, details: [], citations: [], confidence: "insufficient_evidence", nextSteps: [], questions: [], policyStatedLimits: [], verifiedPolicyFactsOnly: true, verifiedPolicyFigures: [] }, notFound: [span] });
       }
       if (defining && prose.length) candidates.splice(0, candidates.length, ...prose);
@@ -1253,8 +1434,50 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const seen = new Set<string>();
   // The same value in two columns of one table is one line, without a column name.
   const firstOf = new Map<string, Candidate>();
+  const replacedNotes: { old: Candidate; byDocId: string; byDate: string; now?: { after: number; label: string; page: number; line: string } }[] = [];
   let kept = (keptRaw as Candidate[]).filter((a) => { const k = a.subjectId + "|" + a.policyId + "|" + normalPassage(a.text); const prev = firstOf.get(k);
     if (prev) { if (prev.tierLabel !== a.tierLabel) prev.tierLabel = null; return false; } if (seen.has(k)) return false; seen.add(k); firstOf.set(k, a); return true; });
+  // Round 7: a figure a later endorsement of the same policy replaced is not
+  // shown as current; the answer says which document replaced it.
+  {
+    const replaced = await replacedFigures(args.accountId, [...docs.keys()]).catch(() => new Map());
+    const gone = kept.filter((a) => a.amount != null && replaced.get(a.policyId)?.amounts.has(a.amount));
+    for (const a of gone) {
+      const rep = replaced.get(a.policyId)!;
+      // (With the figure the amendment prints in its place, when its Before / After row says so.)
+      const row = (rep.rows ?? []).find((r: { before: number }) => r.before === a.amount);
+      if (!replacedNotes.some((n) => n.old.policyId === a.policyId && n.old.amount === a.amount)) replacedNotes.push({ old: a, byDocId: rep.byDocId, byDate: rep.byDate, ...(row ? { now: row } : {}) });
+    }
+    kept = kept.filter((a) => !gone.includes(a));
+  }
+  // Round 7: rows a schedule prints per age band ("Deductible (A ward, age 80
+  // and below)" / "(age 81 and above)") apply to the person by their age on
+  // the day asked: from their date of birth on the Household page, else the
+  // date of birth the document prints for them. The other band is left out.
+  const ages = new Map<string, number>();
+  {
+    const dobs = await query<{ id: string; dob: string | null }>(`SELECT id::text AS id,date_of_birth::text AS dob FROM family_members WHERE account_id=$1 AND id::text=ANY($2::text[]) AND ${activePredicate()}`, [args.accountId, args.people.map((p) => p.id)]).catch(() => ({ rows: [] as { id: string; dob: string | null }[] }));
+    for (const r of dobs.rows) if (r.dob) ages.set(r.id, ageOn(r.dob, now));
+  }
+  const printedAge = (a: Candidate) => {
+    const text = (pagesByDocEarly.get(a.policyId) ?? []).map((p) => p.text).join("\n");
+    const m = text.match(/date of birth\s*[:\t]?\s*(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2})/i);
+    if (!m || (speaksFor.get(a.policyId)?.size ?? 0) !== 1) return null;
+    const d = new Date(m[1] + (/^\d{4}-/.test(m[1]) ? "T00:00:00Z" : " UTC"));
+    return Number.isNaN(d.getTime()) ? null : ageOn(d.toISOString().slice(0, 10), now);
+  };
+  const ageNotes = new Set<string>();
+  // "after Papa turns 81", "when I'm 70", "at age 66": the age asked about, not today's.
+  const askedAge = Number(askedText.match(/\b(?:turns?|turning|reach(?:es)?|when (?:\w+ (?:is|are)|i['’]?m|i am|he['’]?s|she['’]?s)|at(?: age)?|aged?|above|over|past)\s+(\d{2,3})\b/i)?.[1] ?? NaN);
+  kept = kept.filter((a) => {
+    const band = ageBand(a.title + " " + a.text);
+    if (!band) return true;
+    const age = Number.isFinite(askedAge) && askedAge >= 18 && askedAge <= 110 ? askedAge : ages.get(a.subjectId) ?? printedAge(a);
+    if (age == null) return true;
+    const fits = band.kind === "max" ? age <= band.age : age >= band.age;
+    if (fits) ageNotes.add(Number.isFinite(askedAge) && askedAge === age ? "At " + age + ", the row for " + band.text + " applies." : a.ownerName + " is " + age + ", so the row for " + band.text + " applies.");
+    return fits;
+  });
   // Pages of one policy that state different figures for the same thing
   // ("Sum insured: S$300,000" on p1, "Death benefit US$350,000" on p2) are a
   // conflict too, whether or not ingestion flagged it.
@@ -1267,12 +1490,39 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     const key = a.subjectId + "|" + policyKey(a.policyId) + "|" + sameThingKey(a.title) + "|" + (a.tier ?? "").toLowerCase();
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(a);
   }
-  const conflicting: Candidate[][] = [...groups.values()].filter((g) => new Set(g.map((a) => a.amount + "|" + a.currency)).size > 1);
+  let conflicting: Candidate[][] = [...groups.values()].filter((g) => new Set(g.map((a) => a.amount + "|" + a.currency)).size > 1);
+  // Round 7: two documents of the SAME policy that differ because the later
+  // one amends the earlier (an endorsement reducing the sum assured) are not
+  // a conflict: the amendment states the current figure, and the answer
+  // says which document replaced which. Anything less certain -- undated
+  // documents, two of the same date, an amendment that disagrees with
+  // itself -- stays a conflict and is shown as one.
+  const amendments: { current: Candidate[]; replaced: Candidate[] }[] = [];
+  {
+    const dateOfDoc = (id: string) => { const d = docs.get(id); return (d?.document_date ?? d?.effective_date ?? "").slice(0, 10) || null; };
+    const amends = (id: string) => docs.get(id)?.document_role === "endorsement" ||
+      /\bendorsement\s+no\b|\b(?:is|are|hereby|has been|have been)\s+(?:amended|altered|reduced|increased|replaced)\b|\bpolicy is altered\b|\b(?:reduction|increase) of sum (?:assured|insured)\b/i.test((pagesByDocEarly.get(id) ?? []).map((p) => p.text).join("\n"));
+    conflicting = conflicting.filter((group) => {
+      const ids = [...new Set(group.map((a) => a.policyId))];
+      if (ids.length < 2 || ids.some((id) => !dateOfDoc(id))) return true;
+      const ordered = [...ids].sort((a, b) => String(dateOfDoc(b)).localeCompare(String(dateOfDoc(a))));
+      const newest = ordered[0];
+      if (dateOfDoc(ordered[1])! >= dateOfDoc(newest)! || !amends(newest)) return true;
+      const current = group.filter((a) => a.policyId === newest);
+      if (new Set(current.map((a) => a.amount + "|" + a.currency)).size !== 1) return true;
+      amendments.push({ current, replaced: group.filter((a) => a.policyId !== newest && a.amount !== current[0].amount) });
+      return false;
+    });
+  }
+  const amendedIds = new Set(amendments.flatMap((m) => [...m.current, ...m.replaced]).map((a) => a.id + "|" + a.subjectId));
+  const replacedIds = new Set(amendments.flatMap((m) => m.replaced).map((a) => a.id + "|" + a.subjectId));
   const inConflict = new Set(conflicting.flat().map((a) => a.id + "|" + a.subjectId));
-  kept = kept.filter((a) => !inConflict.has(a.id + "|" + a.subjectId));
+  kept = kept.filter((a) => !inConflict.has(a.id + "|" + a.subjectId) && !replacedIds.has(a.id + "|" + a.subjectId));
+  for (const m of amendments) for (const a of m.current) if (!kept.some((k) => k.id === a.id && k.subjectId === a.subjectId)) kept.push(a);
+  void amendedIds;
   // The rows that name what was asked come first ("deductible" before the co-insurance printed beside it).
   const askedWords = (askedText.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []).filter((w) => !/^(?:what|which|does|have|with|that|this|much|when|from|about|plan|policy|policies|cover|covered|shield|pays?|there|their|would|should|could|also|please|insurance)$/.test(w));
-  const relevance = (a: Candidate) => askedWords.filter((w) => a.title.toLowerCase().includes(w.replace(/s$/, ""))).length + (a.tierLabel ? -0.5 : 0);
+  const relevance = (a: Candidate) => askedWords.filter((w) => a.title.toLowerCase().includes(w.replace(/s$/, ""))).length + (a.tierLabel ? -0.5 : 0) + (a.id.startsWith("wardline:") ? 5 : 0);
   kept = kept.map((a, i) => ({ a, i })).sort((x, y) => relevance(y.a) - relevance(x.a) || x.i - y.i).map((x) => x.a);
   // A conflict flag whose other side is not in this answer still withholds.
   const unresolved = rejected.filter((r) => r.reason.startsWith("conflict: ") && !inConflict.has((r.assertion as Candidate).id + "|" + r.assertion.subjectId));
@@ -1337,6 +1587,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       const at = text.indexOf(": ");
       text = at > 0 && at < 60 ? text.slice(0, at) + ": “" + text.slice(at + 2) + "”" : "“" + text + "”";
     }
+    // Round 7 (port): a line read by OCR from a scanned page is shown cleaned of
+    // the scanner's noise, and says it came from a scan.
+    if (looksScanned(text)) text = (cleanScannedLine(text) ?? a.title) + " (read from a scanned page; check it against the original)";
     return who + (a.page != null && riderPages.has(a.policyId + "#" + a.page) ? riderName(a.policyId, a.page) : docName(a.policyId)) + docKind(a.policyId, a.page) + " — " + text + " (page " + a.page + (dated && a.source !== "expiry" && outdated(a.policyId) ? ", document dated " + dated : "") + status + ").";
   };
   // One line for a fact several people share (a family travel plan), naming them all.
@@ -1362,6 +1615,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   for (const a of kept) {
     const citation = cite(a);
+    // (Round 7 port: a row of a table with a column per employee plan is not quoted
+    // whole as a limit card -- the quote would show another plan's figure.)
     // Round 11: one card for a figure several people share on the same plan (a family travel plan's row), naming them all.
     const same = limits.find((l) => l.benefitTitle === a.title && l.amount === a.amount && l.currency === a.currency && l.citation.policyId === a.policyId && l.citation.pageStart === a.page);
     if (same && a.ownerName && same.ownerName && !same.ownerName.split(/, | and /).includes(a.ownerName)) {
@@ -1370,7 +1625,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       continue;
     }
     if (same) continue;
-    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId))
+    if (a.source !== "premium" && a.source !== "expiry" && a.amount != null && a.currency && !isGuide(a.policyId) && !inactive(a.policyId) && !((a.tier && /^plan\b/i.test(a.tier)) || ((a.tier || a.tierLabel) && (a.passage ?? "").split(/\t| · |\s{3,}/).filter((cell) => /(?:S\$|US\$|SGD\s?|USD\s?)\s?\d/.test(cell)).length > 1)))
       limits.push({ kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: a.title,
         ownerName: a.ownerName || null, amount: a.amount, currency: a.currency, amountText: money(a.amount, a.currency), quote: a.passage, citation });
   }
@@ -1391,6 +1646,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const answeredTopics = new Set(shown.map((a) => a.topic));
   const conditionsShown = shown.some((a) => a.source === "condition");
   const notFound = conditionsShown ? [] : [...topics.filter((t) => !narrowAnswered && !answeredTopics.has(t.key) && !setAside.has(t.key) && !candidates.some((c) => c.topic === t.key) && !(t.key === "rider" && topics.some((x) => x.key === "premium") && shown.some((a) => a.topic === "premium")) && !shown.some((a) => a.policyId && kindsOf(a.policyId).includes(t.key))
+    // Round 7 (port): injured or ill overseas -- the travel plan's overseas medical cover shown answers it; "accident cover" is not "not found".
+    && !(/\b(?:overseas|abroad|on (?:a|the|my) trip|while travell?ing)\b/i.test(askedText) && ["accident", "hospital"].includes(t.key) && shown.some((a) => a.policyId && kindsOf(a.policyId).includes("travel") && /medical|hospital|evacuation/i.test(a.title)))
     // Round 10: "Accidental death: S$50,000" is shown -- death cover is not "not found".
     && !shown.some((a) => { const w = t.label.replace(/^(?:an?|the|any) /, "").split(/\s+/)[0]; return w === "death" && new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(a.title); })).map((t) => t.label),
     ...narrowMissing.filter(Boolean).map((w) => /^(?:deductible|co-?payment|co-?pay|pro-?ration|annual limit|policy[- ]year limit|overall limit|yearly limit)$/.test(w) ? (/^[aeiou]/.test(w) ? "an " : "a ") + w : w)];
@@ -1404,7 +1661,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     : (whose === "your" ? "Here is what your" : "Here is what " + whose) + " documents state" + (aboutLabels.length ? " about " + aboutLabels.join(" and ") : "") + ".");
   // Several people asked about: who has nothing on it is said, not left out.
   // A household's car or home policy, or a window of dates, is not something each person is missing.
-  if (args.people.length > 1 && shown.length && !conditionsShown && topics.length && !topics.some((t) => t.key === "status") && !windowAsked && !topics.some((t) => ["motor", "home"].includes(t.key)) && !namedDocs.length) {
+  if (args.people.length > 1 && shown.length && !conditionsShown && topics.length && !topics.some((t) => t.key === "status") && !windowAsked && !topics.some((t) => ["motor", "home"].includes(t.key)) && !namedDocs.length
+    // (Round 7 port: "ILP death benefit" is about the plan that is an ILP, not something everyone else lacks.)
+    && !(kindDocs.length && topics.some((t) => ["investment", "maturity"].includes(t.key)))) {
     // Round 11: someone with no readable document at all is not "missing" this cover -- saying so on every family answer is noise.
     const readable = new Set([...speaksFor.values()].flatMap((owners) => [...owners]));
     const missing = args.people.filter((p) => !withAnyLine.has(p.id) && readable.has(p.id)).map((p) => isSelf(p.id) ? "you" : personName(p.id));
@@ -1413,8 +1672,10 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   lines.push(...conflictText);
   // What each document says about whether it still covers anyone: lapsed, ended, or in its grace period.
-  const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "ended", "grace"].includes(statusOf.get(id)?.state ?? ""));
-  for (const docId of statusDocs) { const sentence = statusSentence(docName(docId), statusOf.get(docId)!); if (sentence) lines.push(sentence); }
+  // (A reinstatement is said when the question is about whether the policy is in force, not under every answer from it.)
+  const statusAsked = topics.some((t) => t.key === "status") || /\b(?:reinstat\w*|laps\w*|in force|active|valid)\b/i.test(askedText);
+  const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "ended", "grace"].includes(statusOf.get(id)?.state ?? "") || (statusAsked && statusOf.get(id)?.state === "reinstated"));
+  for (const docId of statusDocs) { const sentence = statusSentence(docName(docId), statusOf.get(docId)!); if (sentence && !lines.includes(sentence)) lines.push(sentence); }
   // "Is that per year?" about a premium printed for a whole period of cover.
   if (/\b(?:per|a|each|every) year\b|\byearly\b|\bannual(?:ly)?\b/i.test(askedText))
     for (const a of shown.filter((x) => x.source === "premium" && /for the period|single premium|one-off/i.test(x.title))) {
@@ -1435,6 +1696,33 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       else if (st.state === "ended") counts.push(docName(docId) + " expired on " + st.printed + ", " + days(-n) + " ago.");
     }
     if (counts.length) lines.splice(lines.length ? 1 : 0, 0, ...counts);
+  }
+  lines.push(...ageNotes);
+  // Round 7 product decision: death, accident and disability cover read from
+  // an employer's group benefits booklet is POSSIBLE cover -- the booklet is
+  // a summary, not the person's certificate -- so it is said to be confirmed
+  // with the employer's HR, every time it is shown.
+  {
+    const groupLines = shown.filter((a) => isGuide(a.policyId) && (/\b(?:death|accident\w*|disab\w*|tpd|life|dismember\w*)\b/i.test(a.title) || topics.some((t) => ["death", "accident", "disability"].includes(t.key))));
+    for (const docId of new Set(groupLines.map((a) => a.policyId))) {
+      const employer = (docs.get(docId) as (DocRow & { employer?: string | null }) | undefined)?.employer ?? null;
+      const owners = [...new Set(groupLines.filter((a) => a.policyId === docId).map((a) => a.subjectId))].map((id) => isSelf(id) ? "you are" : personName(id) + " is");
+      lines.push("The " + docName(docId) + " lines are possible cover — confirm with " + (employer ? employer + "’s HR" : "HR") + ".");
+      void owners;
+    }
+  }
+  // Figures replaced by a later endorsement, said once, never shown as current.
+  for (const n of replacedNotes) {
+    if (amendments.some((m) => m.replaced.some((x) => x.amount === n.old.amount))) continue;
+    const by = docs.get(n.byDocId);
+    // The old figure is quoted from its own page, so that page is cited.
+    cite(n.old);
+    lines.push(docName(n.old.policyId) + ": the " + money(n.old.amount!, n.old.currency!) + " for " + n.old.title.replace(/[.:;\s]+$/, "").toLowerCase() + " printed in the document dated " + (dateOf(n.old.policyId) ?? "earlier") +
+      " was replaced by the " + (by?.document_role === "endorsement" ? "endorsement" : "later document") + " dated " + (dateOf(n.byDocId) ?? n.byDate) + ", so it no longer applies."
+      + (n.now && n.old.currency ? " The " + (by?.document_role === "endorsement" ? "endorsement" : "later document") + " prints " + money(n.now.after, n.old.currency) + " for “" + n.now.label + "” from then (page " + n.now.page + ")." : ""));
+    if (n.now && !citations.some((c) => c.chunkId === "amended:" + n.byDocId + ":" + n.now!.page))
+      citations.push({ chunkId: "amended:" + n.byDocId + ":" + n.now.page, policyId: n.byDocId, policyName: by?.product_name ?? docName(n.old.policyId), insurer: by?.insurer ?? docs.get(n.old.policyId)?.insurer ?? undefined,
+        pageStart: n.now.page, pageEnd: n.now.page, personalEvidence: false, evidenceLabel: "Endorsement", excerpt: n.now.line.slice(0, 280), documentDate: dateOf(n.byDocId) ?? n.byDate, notConfirmedCurrent: false });
   }
   // Everything found comes from plans that no longer cover anyone: that comes first.
   if (shown.length && shown.every((a) => expired(a.policyId)) && !topics.some((t) => t.key === "status") && !namedDocs.length && !/\b(?:was|were|did|had|before|lapsed?|expired?|ended|old|previous|last|reinstat\w*)\b/i.test(askedText))
@@ -1459,7 +1747,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // Facts that exist but could not be verified are not an answer; the caller
   // may still read the documents. A conflict is an answer: shown, explained,
   // never resolved by reading again and picking one.
-  const handled = kept.some((a) => a.source !== "expiry") || conflicting.length > 0 || unresolved.length > 0;
+  const handled = kept.some((a) => a.source !== "expiry") || conflicting.length > 0 || unresolved.length > 0 || replacedNotes.length > 0;
   if (!handled) return result({ notFound: topics.map((t) => t.label), rejected });
   let summary = lines.join(" ");
   let narrated = false, modelCalls = 0;
@@ -1474,7 +1762,9 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // own wording, which verifyAssertions found in its cited passage. The live
   // monetary boundary shows exactly these figures for a policy-fact answer and
   // withholds any other (lib/chat/monetary-boundary.ts).
-  const figures = [...new Set([...shown.flatMap((a) => a.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []),
+  const figures = [...new Set([...replacedNotes.filter((n) => n.old.amount != null && n.old.currency).map((n) => money(n.old.amount!, n.old.currency!)),
+    ...replacedNotes.filter((n) => n.now && n.old.currency).map((n) => money(n.now!.after, n.old.currency!)),
+    ...shown.flatMap((a) => a.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []),
     ...shown.flatMap((a) => (narrowQuoted.get(a.id) ?? "").match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []),
     ...statusDocs.map((id) => statusOf.get(id)?.dueAmount).filter((x): x is string => !!x),
     ...shown.filter((a) => a.amount != null && a.currency).map((a) => money(a.amount!, a.currency!))])];
@@ -1491,12 +1781,26 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // about submitting or claiming, not one about which bills before or after a stay are covered.
   const asksSubmitting = /\b(?:submit\w*|claim\w*|lodg\w*|notif\w*|deadline|time limit|file (?:a|the|my))\b/i.test(askedText);
   const notADeadline = (r: { text: string }) => asksSubmitting || !SUBMIT_DEADLINE.test(r.text);
-  const repaired = relevanceRepair(withoutNames, [summary, ...details].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName).filter(notADeadline);
+  const repairColumns = columnsOf(answeredDocs);
+  const repaired = relevanceRepair(withoutNames, [summary, ...details].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName, repairColumns).filter(notADeadline);
   // Round 11: the printed sentence about the particular thing asked ("MediSave cannot be used", "Each trip may last up to 90 days",
   // "Plan: Annual multi-trip, Asia") when no line shown says it -- from the same documents.
   const personWords = args.people.flatMap((p) => (p.display_name + " " + (p.preferred_name ?? "")).split(/\s+/));
-  const rules = printedRuleLines(askedText, [summary, ...details, ...repaired.map((r) => r.text)].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName, { ignore: personWords })
+  const rules = printedRuleLines(askedText, [summary, ...details, ...repaired.map((r) => r.text)].join("\n"), new Map([...pagesByDoc].filter(([id]) => answeredDocs.has(id))), docName, { ignore: personWords, columns: repairColumns })
     .filter((r) => !repaired.some((x) => x.text === r.text)).filter(notADeadline);
+  // Round 7 (port): "what documents for a trip cancellation claim?": the sentence that lists what to submit, from the plans answered.
+  if (/\b(?:documents?|papers?|paperwork|what (?:do i|to) (?:need|submit|send|attach))\b/i.test(askedText) && /\bclaim\w*|\bsubmit\w*/i.test(askedText)) {
+    const LISTS = /\b(?:submit\w*|attach\w*|provide|send|enclose)\b[^.]{0,200}\b(?:invoices?|receipts?|certificates?|reports?|proof|bills?|claim forms?)\b/i;
+    const askedWords = [...wordsOf(withoutNames)].filter((w) => w.length >= 5 && !/^(?:documents?|claims?|submit|papers?|which|their)$/.test(w));
+    const found: { text: string; citation: ChatCitation; score: number }[] = [];
+    for (const [docId, pages] of pagesByDoc) if (answeredDocs.has(docId)) for (const p of pages) for (const piece of piecesOf(p.text)) {
+      if (!LISTS.test(piece) || found.some((f) => f.text.includes(piece))) continue;
+      const score = askedWords.filter((w) => wordsOf(piece).has(w)).length;
+      found.push({ text: docName(docId) + " — “" + piece.replace(/[.;\s]+$/, "") + "” (page " + p.page + ").", score, citation: { chunkId: "page:" + docId + ":" + p.page, policyId: docId, policyName: docName(docId), pageStart: p.page, pageEnd: p.page } });
+    }
+    const best = Math.max(0, ...found.map((f) => f.score));
+    for (const f of found.filter((x) => x.score === best).slice(0, 2).reverse()) if (!repaired.some((r) => r.text === f.text)) repaired.push(f);
+  }
   for (const r of repaired) {
     details.unshift(r.text);
     if (!citations.some((c) => c.policyId === r.citation.policyId && c.pageStart === r.citation.pageStart)) citations.push(r.citation);
@@ -1568,6 +1872,13 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // Every part of a several-part question keeps at least one line ("life cover and when does it expire and the premium").
   const severalParts = /\?.+\?|\band (?:how|what|when|which|is|are|does|do|can|will|who)\b/i.test(askedText);
   const keep = !severalParts ? [] : topics.map((t) => t.fact.source !== "(?!)" ? t.fact : t.key === "renewal" || t.key === "status" ? /\bexpir|\brenew|\bperiod of (?:insurance|cover)|\bend date|\bends\b|\bin force\b|\blapse|\bgrace\b/i : null).filter((re): re is RegExp => !!re);
+  // Round 7 (port): "cash portion", "the dependants' premium": a line naming the word asked comes before one that doesn't.
+  const distinctAsked = [...new Set((askedText.match(/\b(?:cash|medisave|rider|dependants?|spouse|child(?:ren)?|employee|panel|private|overseas)\b/gi) ?? []).map((w) => w.toLowerCase().replace(/s$|ren$/, "")))];
+  if (distinctAsked.length && !fullList) {
+    const names = (d: string) => distinctAsked.some((w) => new RegExp("\\b" + w, "i").test(d.replace(/^[^·—]*·\s/, "")));
+    const ranked = [...details.filter(names), ...details.filter((d) => !names(d))];
+    details.splice(0, details.length, ...ranked);
+  }
   conciseDetails(details, limits, { cap: fullList ? Infinity : broad || severalParts ? 8 : 5, keep });
   // One card per amount a person has, whichever of the policy's documents printed it (a contract and its statement).
   { const seenCard = new Set<string>(); limits.splice(0, limits.length, ...limits.filter((l) => { const k = (l.ownerName ?? "") + "|" + l.benefitTitle.toLowerCase() + "|" + l.amount + "|" + l.currency; if (seenCard.has(k)) return false; seenCard.add(k); return true; })); }
@@ -1617,7 +1928,7 @@ export function withoutListedLimitCards(details: string[], limits: { ownerName?:
 const SUBMIT_DEADLINE = /\b(?:submit\w*|notif\w*|lodg\w*|send|written notice|claims? must be)\b[^.]{0,160}\bwithin \d+ (?:days?|months?|weeks?)\b|\bwithin \d+ (?:days?|months?|weeks?)\b[^.]{0,80}\b(?:submit\w*|notif\w*|lodg\w*)\b/i;
 /** Round 12: the household asked for every line, not the short answer. */
 export const FULL_LIST = /\b(?:full list|full details|(?:all|every one) of (?:it|them|the lines)|all (?:the )?(?:lines|benefits|details|rows)|every (?:benefit|line|row)|everything|whole (?:list|table|schedule)|benefits? (?:table|schedule|list)|schedule of benefits|table of benefits|list (?:all|every|the benefits))\b/i;
-export const HOW_TO_CLAIM = /\bhow (?:do|can|should|to|would) (?:i |we |you )?(?:go about )?(?:make|file|submit|start|do|lodge) (?:a |the |my )?claim\b|\bhow (?:do|can|should|to) (?:i |we )?claim\b|\bclaims? (?:process|procedure|steps)\b|\bhow (?:long|many days) (?:do|does|have) (?:i|we) (?:have )?to (?:claim|submit)\b/i;
+export const HOW_TO_CLAIM = /\bhow (?:do|can|should|to|would) (?:i |we |you )?(?:go about )?(?:make|file|submit|start|do|lodge) (?:a |the |my )?claim\b|\bhow (?:do|can|should|to) (?:i |we )?claim\b|\bclaims? (?:process|procedure|steps)\b|\bhow (?:long|many days) (?:do|does|have) (?:i|we) (?:have )?to (?:claim|submit)\b|\bhow (?:long|many (?:days|weeks|months))\b[^?]{0,12}\bto (?:submit|claim|file|lodge|notify)\b|\bclaims? (?:deadline|time limit|period|window)\b|\bdeadline (?:for|to) (?:submit|claim|file)\w*|\b(?:what|which) (?:documents?|papers?|supporting documents?)\b[^?]{0,30}\bclaims?\b|\bdocuments? (?:needed|required|to submit) (?:for|to)\b[^?]{0,30}\bclaims?\b/i;
 export function factualEvenAsWhatIf(question: string) {
   if (HOW_TO_CLAIM.test(question)) return true;
   // Round 9: "how much life insurance does he have if anything happens to him", "how much a month if she cannot walk",
@@ -1649,7 +1960,7 @@ export function isFactualPolicyQuestion(question: string) {
 /** Round 10: what a question asks that its answer does not say, when a line of
  * the person's own documents does: at most two such lines, quoted verbatim. */
 const REPAIR_GENERIC = new Set("bill bills cover covered policy policies plan plans pay pays paid much insurance benefit benefits amount whole life many does still have has get what which mama papa your their his her hospital medical schedule document part kind type thing really also now one left".split(" ").map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
-export function relevanceRepair(question: string, answerText: string, pagesByDoc: Map<string, { page: number; text: string }[]>, docName: (id: string) => string) {
+export function relevanceRepair(question: string, answerText: string, pagesByDoc: Map<string, { page: number; text: string }[]>, docName: (id: string) => string, columns: string[] = []) {
   const said = wordsOf(answerText);
   const productWords = new Set([...pagesByDoc.keys()].flatMap((id) => [...wordsOf(docName(id))]));
   // "a day", "ICU", "GST": short words that still say what is asked.
@@ -1659,7 +1970,11 @@ export function relevanceRepair(question: string, answerText: string, pagesByDoc
   if (!missing.length) return [];
   const found: { text: string; citation: ChatCitation; score: number }[] = [];
   for (const [docId, pages] of pagesByDoc) {
-    for (const l of bestLines(pages, question, { limit: 2, min: 1.5 })) {
+    for (const best of bestLines(pages, question, { limit: 2, min: 1.5 })) {
+      // Round 7 (port): a per-column table row says only the column asked, or is not quoted.
+      const narrowed = narrowToColumn(best.line, question, columns);
+      if (!narrowed) continue;
+      const l = { ...best, line: narrowed };
       const missed = l.hits.filter((h) => missing.includes(h));
       if (!missed.length || l.hits.length < 2) continue;
       // A heading in capitals ("SHIELDCARE PREMIER - INTEGRATED SHIELD PLAN") names a section; it answers nothing.

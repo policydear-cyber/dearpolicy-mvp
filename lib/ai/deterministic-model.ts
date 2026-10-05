@@ -78,6 +78,61 @@ export function deterministicModelEnabled(env: NodeJS.ProcessEnv = process.env):
   return true;
 }
 
+/** Test-only reading oracles (Round 7 independent battery). A test harness
+ * can stand in for a competent reading model on documents it did not write
+ * with the DPTEST-EXTRACTION marker: given the document text the production
+ * code sent, the oracle returns the extraction such a model would return (or
+ * null). (Image-only pages are transcribed through SYNTHETIC_OCR_REGISTRY.) They are
+ * only ever consulted inside this stand-in, so they are as unreachable in
+ * production as the stand-in itself; registering one outside it throws. */
+export type DeterministicReadingOracle = (documentText: string) => unknown | null;
+let readingOracle: DeterministicReadingOracle | null = null;
+let capableReading = false;
+/** The catalogue oracle answers the per-page benefit-listing prompt for a
+ * page the stand-in's own rules cannot read (an OCR'd scan), as a competent
+ * model would: the printed benefit names with verbatim quotes. */
+export type DeterministicCatalogOracle = (page: { page?: number; text?: string }) => unknown | null;
+let catalogOracle: DeterministicCatalogOracle | null = null;
+/** `capable`: passages are read the way a competent model reads a schedule
+ * -- line by line, matching the question's distinctive words (with plural,
+ * tense and small-typo tolerance) -- rather than by two shared words per
+ * sentence. Off by default, so older suites keep their exact behaviour. */
+export function setDeterministicReadingOracles(oracles: { reading?: DeterministicReadingOracle | null; catalog?: DeterministicCatalogOracle | null; capable?: boolean }) {
+  if (!deterministicModelEnabled()) throw new Error("reading oracles exist only for the deterministic model stand-in");
+  if (oracles.reading !== undefined) readingOracle = oracles.reading;
+  if (oracles.capable !== undefined) capableReading = oracles.capable;
+  if (oracles.catalog !== undefined) catalogOracle = oracles.catalog;
+}
+const GENERIC = new Set(["policy", "policies", "plan", "plans", "cover", "covered", "coverage", "insurance", "insured", "claim", "claims", "much", "many", "what", "which", "when", "does", "have", "with", "from", "this", "that", "your", "mine", "there", "about", "please", "pls", "can", "got", "not", "how", "the", "and", "for", "any", "all", "now", "still", "will", "would", "should", "could", "lah", "leh", "anot", "also", "they", "them", "their", "his", "her", "him", "she", "dad", "mum", "wife", "husband", "kid", "kids", "son", "daughter", "pay", "paid", "get", "per", "amount", "benefit", "benefits", "page"]);
+const stem = (w: string) => w.replace(/(?:ies)$/, "y").replace(/(?:ing|ed|es|s)$/, "");
+function contentWords(text: string) { return [...new Set(text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w) && !GENERIC.has(w)).map(stem))]; }
+const near = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && a.slice(0, 5) === b.slice(0, 5));
+/** Lines (and sentences) of the passages that share the question's distinctive words. */
+function capableReadingOf(user: { question?: string; sources?: { id: string; text: string }[] }) {
+  const asked = contentWords(String(user.question ?? ""));
+  if (!asked.length) return { benefits: [], observations: [], nextSteps: [] };
+  const candidates: { score: number; order: number; text: string; sourceId: string }[] = [];
+  for (const source of user.sources ?? []) {
+    // A sentence wrapped over several printed lines is read whole, as a model would quote it.
+    const joined: string[] = [];
+    for (const line of String(source.text).split(/\n+/)) {
+      const prev = joined.at(-1);
+      if (prev && (/[,;(]$|\b(?:and|or|of|the|to|with|including|between|for|a|an|in|on|by|from|than|per)$/i.test(prev.trim()) || /^[a-z(]/.test(line.trim()) && !/[.!?:]$/.test(prev.trim()))) joined[joined.length - 1] = prev.trim() + " " + line.trim();
+      else joined.push(line);
+    }
+    const pieces = joined.flatMap((line) => line.split(/(?<=[.!?])\s+(?=[A-Z])/)).map((x) => x.trim());
+    for (const piece of pieces) {
+      if (piece.length < 12 || piece.length > 260 || piece.includes(SYNTHETIC_EXTRACTION_MARKER) || /SYNTHETIC TEST DOCUMENT|^Page \d+ of \d+$/i.test(piece)) continue;
+      const words = contentWords(piece);
+      const shared = asked.filter((a) => words.some((w) => near(a, w))).length;
+      if (shared >= (asked.length >= 4 ? 2 : 1)) candidates.push({ score: shared + (/\d/.test(piece) ? 0.25 : 0), order: candidates.length, text: piece, sourceId: source.id });
+    }
+  }
+  const observations = candidates.sort((a, b) => b.score - a.score || a.order - b.order).slice(0, 3)
+    .map((c) => ({ text: c.text, evidence: [{ sourceId: c.sourceId, quote: c.text }] }));
+  return { benefits: [], observations, nextSteps: [] };
+}
+
 export class DeterministicModelUnavailableError extends Error {
   constructor(what: string) { super(`deterministic stand-in does not implement ${what}`); this.name = "DeterministicModelUnavailableError"; }
 }
@@ -133,6 +188,16 @@ export function deterministicInterpretation(user: { currentMessage?: string; sub
     if (hours) add("flightDelayHours", Number(hours));
     scenario("Travel disruption", "travel", ["travel_disruption"]);
   }
+  // The capable stand-in (Round 7 harness) also reads an accident and a
+  // lasting injury the way a competent model does.
+  if (capableReading && /\b(?:accident|injur\w*|broke|fractur\w*|fell|lost the use|paralys\w*)\b/i.test(message) && !/\bif\b/i.test(message) && !facts.some((f) => f.key === "eventType")) {
+    const said = sentenceWith(/\b(?:accident|injur\w*|broke|fractur\w*|fell|lost the use|paralys\w*)\b/i);
+    intent = "claim"; add("eventType", "accident", said);
+    if (date) { add("eventDate", date, said); add("accidentDate", date, said); }
+    const lasting = /\b(?:permanent\w*|lost the use|paralys\w*|cannot work|can't work)\b/i.test(message);
+    if (lasting) add("permanentImpairment", true, said);
+    scenario(lasting ? "Permanent disablement after an accident" : "Accidental injury", lasting ? "disability" : "injury", lasting ? ["accident", "bodily_injury", "disability", "external", "sudden"] : ["accident", "bodily_injury", "external", "sudden"], said);
+  }
   return { intent, newTopic: false, searchTerms: ["critical illness", "hospital", "sum insured", "waiting period"], facts, scenarioCandidates };
 }
 
@@ -143,6 +208,7 @@ function words(text: string) { return new Set(text.toLowerCase().replace(/[^a-z0
  * content words with the question. Production code re-verifies each quote
  * against the stored page before it is cited. */
 export function deterministicReading(user: { question?: string; sources?: { id: string; text: string }[] }) {
+  if (capableReading) return capableReadingOf(user);
   const asked = words(String(user.question ?? ""));
   const candidates: { score: number; order: number; text: string; sourceId: string }[] = [];
   for (const source of user.sources ?? []) {
@@ -290,8 +356,11 @@ function syntheticHostedReply(args: { system: string; user: string }): HostedRep
     // browser journey can upload a personalised certificate and exercise
     // classification, verification and family linking through the REAL
     // pipeline. A document without the marker yields nothing.
-    value = syntheticExtractionFrom(args.user);
+    value = syntheticExtractionFrom(args.user) ?? readingOracle?.(args.user) ?? null;
     if (value == null) throw new DeterministicModelUnavailableError("policy extraction of a document without a synthetic extraction");
+  } else if (catalogOracle && args.system.startsWith("List the insurance benefits stated in this policy page")) {
+    value = catalogOracle(payload as { page?: number; text?: string });
+    if (value == null) throw new DeterministicModelUnavailableError("this page");
   } else if (typeof payload.summary === "string" && "benefitCount" in payload || typeof payload.whatTheyTold === "string") {
     value = { summary: String(payload.summary ?? "").slice(0, 900), details: [] };
   } else throw new DeterministicModelUnavailableError("this prompt");

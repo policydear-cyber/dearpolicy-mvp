@@ -8,7 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { readPolicyFile, savePolicyFile } from "@/lib/storage";
-import { extractPdfPages, type PdfPage } from "@/lib/documents/pdf";
+import { extractPdfPages, pdfDocumentTitle, type PdfPage } from "@/lib/documents/pdf";
 import { ACCEPTED_FORMATS_MESSAGE, docxToPages, imageToPdf, sniffFileFormat } from "@/lib/documents/formats";
 import { completePdfPagesWithOcr, pagesNeedingOcr } from "@/lib/documents/ocr";
 import { chunkPages } from "@/lib/documents/chunk";
@@ -113,6 +113,25 @@ async function scheduleDeferredRead(args: ProcessPolicyArgs): Promise<boolean> {
 /** V1.1 cross-check: a policy number or date the extraction reports is kept
  * only when it is printed in the document. What is not printed is not
  * usable; it becomes a document note instead of a fact. */
+/** Round 7: a premium the reading model reports is stored only when the
+ * document prints that amount in that currency. A misread or invented figure
+ * ("S$48,750 a year"), or a US-dollar premium relabelled S$, never becomes the
+ * household's premium. OCR's usual misreadings of "S$" ("$$", "5$", "SS") and
+ * a decimal comma count as printed. */
+export function premiumPrinted(amount: number | null, currency: string | null, text: string): boolean {
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return false;
+  const flat = text.replace(/\s+/g, " ");
+  const whole = Math.trunc(amount), cents = Math.round((amount - whole) * 100);
+  const digits = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, "[,.]?");
+  const tail = cents ? "[.,]" + String(cents).padStart(2, "0") : "(?:[.,]00)?";
+  const usd = (printedCurrencyCode(currency) ?? "SGD") === "USD";
+  const marker = usd ? "(?:US\\$|USD|US \\$)" : "(?:(?<![A-Z])S\\$|\\$\\$|5\\$|SS|SGD|(?<![A-Z$])\\$)";
+  if (new RegExp(marker + "\\s?" + digits + tail + "(?![\\d])", "i").test(flat)) return true;
+  // A Singapore-dollar document that prints its figures without a sign
+  // ("Annual premium  1,936.50"): the bare figure counts, unless the document
+  // also deals in US dollars.
+  return !usd && !/\bUS\$|\bUSD\b/i.test(flat) && new RegExp("(?<![\\d.,])" + digits + tail + "(?![\\d])").test(flat);
+}
 export function crossCheckPrintedFacts<T extends { policyNumber: string | null; startDate: string | null; renewalOrExpiryDate: string | null; documentNotes: string[] }>(extraction: T, pages: { text: string }[]): T {
   const notes = [...extraction.documentNotes];
   let { policyNumber, startDate, renewalOrExpiryDate } = extraction;
@@ -178,9 +197,9 @@ async function previousReading(args: ProcessPolicyArgs): Promise<PolicyExtractio
 /** Round 9: a reading as it may be stored -- roles by the document's own
  * wording, people and cover re-found on their pages, and every name, figure,
  * unit, date, number and role checked against the printed text. */
-export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string }[]): PolicyExtraction {
+export function verifiedExtraction(raw: PolicyExtraction, pages: { pageNumber: number; text: string }[], opts: { documentTitle?: string | null } = {}): PolicyExtraction {
   const roleFromReader = deterministicDocumentRole(pages, null) == null;
-  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages, { roleFromReader }).extraction;
+  const checked = factCheckExtraction(verifyExtractionEvidence(sanitizePolicyExtraction(raw, pages), pages), pages, { roleFromReader, documentTitle: opts.documentTitle }).extraction;
   return crossCheckPrintedFacts(checked, pages);
 }
 
@@ -359,6 +378,9 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // built from the uploaded image, or null for a .docx (pure text; there
     // is nothing to OCR).
     let ocrSourceBytes: Uint8Array | null = null;
+    // Round 7 (port): the title the PDF file itself carries (its document
+    // properties), one more place a document states its product's name.
+    let documentTitle: string | null = null;
     // Opening the file is local work on the stored bytes: if it fails, the
     // file itself cannot be opened (damaged, not really that format), which
     // no retry will change. The household is told what is unavailable; the
@@ -393,6 +415,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           await progress(args, "reading_pdf", pct, `Reading page ${completed} of ${total}…`, "extracting").catch(() => undefined);
         }
       }));
+      if (sniffed.format === "pdf") documentTitle = await pdfDocumentTitle(pdfBytes).catch(() => null);
     }
 
     const ocrPageNumbers = ocrSourceBytes ? pagesNeedingOcr(pages) : [];
@@ -524,7 +547,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     // Round 9: every name, figure, unit, date, person, number and role the
     // reading reports is re-found in the document's own pages (fact-check.ts);
     // what is not printed is not kept.
-    const extraction = verifiedExtraction(raw, pages);
+    const extraction = verifiedExtraction(raw, pages, { documentTitle });
     if (messyNotes.length) extraction.documentNotes = [...new Set([...extraction.documentNotes, ...messyNotes])];
     const noCover = NON_COVER_ROLES.has(extraction.documentRole ?? "");
     // The reading named people, and none of them is printed in the document:
@@ -632,7 +655,8 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     const matchedIds = [...new Set(detected.map((d) => d.matchedMemberId).filter((id): id is string => Boolean(id)))];
     const paymentSplit = paymentSplitNote(pages.map((p) => p.text).join("\n"));
     const unnamedPaymentTarget = matchedIds.length === 1 ? matchedIds[0] : (args.linkUploadMember && isPaymentDocument ? args.familyMemberId : null);
-    for (const [paymentIndex, payment] of extraction.paymentRecords.filter((p) => p.amount != null && !p.insuredPersonName).entries()) {
+    const printedText = pages.map((p) => p.text).join("\n");
+    for (const [paymentIndex, payment] of extraction.paymentRecords.filter((p) => p.amount != null && !p.insuredPersonName && premiumPrinted(p.amount, p.currency, printedText)).entries()) {
       if (!extraction.personalCoverageConfirmed && !["premium_receipt", "renewal_statement", "annual_statement"].includes(extraction.documentRole ?? "")) continue;
       const dedupeKey = premiumRecordDedupeKey([
         "payment", paymentIndex, unnamedPaymentTarget, payment.insurer ?? extraction.insurer, payment.productName ?? extraction.productName,
@@ -654,7 +678,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
           dedupeKey],
       );
     }
-    if (extraction.premium.amount != null && extraction.personalCoverageConfirmed && extraction.paymentRecords.length === 0) {
+    if (extraction.premium.amount != null && extraction.personalCoverageConfirmed && extraction.paymentRecords.length === 0 && premiumPrinted(extraction.premium.amount, extraction.premium.currency, printedText)) {
       const target = matchedIds.length === 1 ? matchedIds[0] : null;
       const dedupeKey = premiumRecordDedupeKey([
         "current_premium", target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,

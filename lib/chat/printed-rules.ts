@@ -9,8 +9,9 @@
  * matched against each printed line by word stem. Only lines the answer does
  * not already say are returned, quoted verbatim with their page.
  */
+import { cleanScannedLine, looksScanned } from "./scanned-text";
 import type { ChatCitation } from "@/types";
-import { piecesOf } from "./printed-lines";
+import { narrowToColumn, piecesOf } from "./printed-lines";
 
 /** The words documents print for what people say. */
 /** [what people say, what documents print, whether it is the same thing (true) or only related (false)] */
@@ -53,7 +54,7 @@ export type RuleLine = { text: string; citation: ChatCitation; score: number };
  * `ignore` holds words that only name a plan, a topic or a person.
  */
 export function printedRuleLines(question: string, answerText: string, pagesByDoc: Map<string, { page: number; text: string }[]>, docName: (id: string) => string,
-  opts: { ignore?: Iterable<string>; limit?: number; sameThingOnly?: boolean } = {}): RuleLine[] {
+  opts: { ignore?: Iterable<string>; limit?: number; sameThingOnly?: boolean; columns?: string[] } = {}): RuleLine[] {
   // Words that only say which kind of plan is meant ("his term policy", "our travel insurance") are not what is asked.
   const ignore = new Set([...(opts.ignore ?? []), "term", "life", "shield", "hospital", "travel", "accident", "group", "company", "employer", "home", "house", "motor", "integrated", "personal", "annual", "family", "bill"].map(stem));
   for (const id of pagesByDoc.keys()) for (const w of docName(id).split(/[^A-Za-z]+/)) if (w.length >= 4) ignore.add(stem(w));
@@ -78,12 +79,19 @@ export function printedRuleLines(question: string, answerText: string, pagesByDo
     for (let i = at - 1; i >= 0 && at > 0; i--) if (/[A-Z]{4,}/.test(rows[i]) && rows[i] === rows[i].toUpperCase() && !/\d{3,}/.test(rows[i])) return rows[i];
     return null;
   };
-  for (const [docId, pages] of pagesByDoc) for (const p of pages) for (const line of piecesOf(p.text)) {
+  for (const [docId, pages] of pagesByDoc) for (const p of pages) for (const piece of piecesOf(p.text)) {
+    let line = piece;
     if (line.length > 320 || line === line.toUpperCase() || /\((?:fictitious|synthetic)[^)]*\)\s*(?:Page \d+.*)?$/i.test(line) || /DPTEST|^[A-Za-z0-9+/=]{40,}$/.test(line)) continue;
     if (/subject to the general terms of the policy/i.test(line)) continue;
     // An address, a salutation or a table's heading row says nothing about cover.
     if (/^(?:to|from|attn)\s*:|^dear\b|\b(?:street|road|avenue|blk|block)\b.*\d|#\d{2}-\d|\bsingapore \d{6}\b|\b[A-Z]{2,3} \d{4}, [A-Z][a-z]+$/i.test(line)) continue;
     if (/ · /.test(line) && !/(?:S\$|SGD)\s?\d|\b\d+ (?:days?|months?|years?)\b/i.test(line)) continue;
+    // Round 7 (port): a row of a table with a column per plan or member type ("Daily room & board · S$500 · S$350 · S$300")
+    // quoted whole shows other columns' figures as if they were this person's; the person's own figure comes from the stored facts.
+    // (Narrowed to the column asked, or this person's, when the columns are named.)
+    const narrowed = narrowToColumn(line, question, opts.columns ?? []);
+    if (!narrowed) continue;
+    line = narrowed;
     pieces.push({ docId, page: p.page, line, st: stems(line, ignore), section: sectionOf(p.text, line.replace(/^[-•*]\s*/, "")) });
   }
   const spread = (s: string) => pieces.filter((p) => p.st.has(s)).length || 1;
@@ -98,7 +106,10 @@ export function printedRuleLines(question: string, answerText: string, pagesByDo
     if (saidNorm.includes(p.line.toLowerCase().replace(/\s+/g, " ").replace(/[.;\s]+$/, ""))) continue;
     const score = hits.length + rare.length * 0.5 + (MODAL.test(p.line) ? 0.5 : 0) + missed.length * 0.25;
     const listedUnder = p.section && /\bexclu/i.test(p.section) && !/\bexclu/i.test(p.line) ? " — listed under “" + p.section.charAt(0) + p.section.slice(1).toLowerCase() + "”" : "";
-    out.push({ text: docName(p.docId) + " — “" + p.line.replace(/^[-•*]\s*/, "").replace(/[.;\s]+$/, "") + "”" + listedUnder + " (page " + p.page + ").", score,
+    // Round 7 (port): a line OCR read from a scan is shown cleaned of the scanner's noise, and says so.
+    const scanned = looksScanned(p.line), shownLine = scanned ? cleanScannedLine(p.line) : p.line;
+    if (!shownLine) continue;
+    out.push({ text: docName(p.docId) + " — “" + shownLine.replace(/^[-•*]\s*/, "").replace(/[.;\s]+$/, "") + "”" + (scanned ? " (read from a scanned page; check it against the original)" : "") + listedUnder + " (page " + p.page + ").", score,
       citation: { chunkId: "page:" + p.docId + ":" + p.page, policyId: p.docId, policyName: docName(p.docId), pageStart: p.page, pageEnd: p.page } });
   }
   const best = out.sort((a, b) => b.score - a.score);

@@ -1,0 +1,926 @@
+{
+  "household_id": "H1-tan",
+  "household_name": "Tan household (multi-generation)",
+  "as_of_date": "2026-10-05",
+  "timezone": "Asia/Singapore",
+  "account_owner": "m_weiming",
+  "members": [
+    {
+      "id": "m_ahkow",
+      "display_name": "Tan Ah Kow",
+      "preferred_name": "Ah Kow",
+      "relationship": "parent",
+      "dob": "1951-03-14",
+      "age_on_2026-10-05": 75,
+      "notes": "Wei Ming's father; lives with the family"
+    },
+    {
+      "id": "m_weiming",
+      "display_name": "Tan Wei Ming",
+      "preferred_name": "Wei Ming",
+      "relationship": "self",
+      "dob": "1984-07-22",
+      "notes": "account owner; employee of Kallang Freight Logistics Pte. Ltd. (Grade M2)"
+    },
+    {
+      "id": "m_siewling",
+      "display_name": "Lee Siew Ling",
+      "preferred_name": "Siew Ling",
+      "relationship": "spouse",
+      "dob": "1986-11-02"
+    },
+    {
+      "id": "m_junhao",
+      "display_name": "Tan Jun Hao",
+      "preferred_name": "Jun Hao",
+      "relationship": "child",
+      "dob": "2013-05-09"
+    },
+    {
+      "id": "m_junhui",
+      "display_name": "Tan Jun Hui",
+      "preferred_name": "Jun Hui",
+      "relationship": "child",
+      "dob": "2016-08-30"
+    },
+    {
+      "id": "m_xinyi",
+      "display_name": "Tan Xin Yi",
+      "preferred_name": "Xin Yi",
+      "relationship": "child",
+      "dob": "2020-01-17"
+    }
+  ],
+  "traps": [
+    "Two children with similar names: Tan Jun Hao (endowment, born 2013) and Tan Jun Hui (ILP, born 2016). 'Jun' alone is ambiguous.",
+    "Ah Kow is 75: the S$3,500 deductible applies, NOT the S$5,250 (age 81+) row.",
+    "Group booklet is Plan 2 for Wei Ming: GTL S$200,000 / GPA S$250,000; Plan 1 figures (S$80,000 / S$100,000) must not be given as his cover.",
+    "GHS tiers: Child room & board S$300, overall S$18,000; Spouse S$350 / S$20,000; Employee S$500 / S$30,000.",
+    "ILP statement prints NO premium amount -> premium questions are not-found for that policy.",
+    "JuniorGuard PA is an image-only scan (no text layer); needs OCR. It covers Xin Yi only - dengue hospital cash must not be offered for Jun Hao/Jun Hui.",
+    "TravelEasy Bali policy is deleted; its amounts (S$7,500, S$380,000, S$4,200, S$187.40) must never be cited.",
+    "Ah Kow's IP has a specific exclusion for osteoarthritis of the right knee.",
+    "Ah Kow plan premium: S$4,250.00 total, S$3,100.00 MediSave, S$1,150.00 cash; rider S$1,968.00 cash only."
+  ],
+  "documents": [
+    {
+      "id": "h1_d1_ahkow_isp",
+      "filename": "harbourshield-advantage-tan-ah-kow-2026.pdf",
+      "title": "HarbourShield Advantage - Policy Schedule and Benefit Summary",
+      "letterhead": "Straits Harbour Assurance Ltd",
+      "insurer": "Straits Harbour Assurance Ltd",
+      "product_name": "HarbourShield Advantage",
+      "rider_name": "HarbourShield Co-Pay Rider",
+      "policy_number": "SHA-IP-4410287",
+      "policy_type": "Health",
+      "document_role": "certificate",
+      "covers": [
+        "m_ahkow"
+      ],
+      "policyholder": "m_weiming",
+      "effective_date": "2026-02-01",
+      "renewal_or_expiry_date": "2027-01-31",
+      "currency": "SGD",
+      "benefit_tier": "Restructured hospital (A ward)",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "insured",
+          "label": "Life assured",
+          "value": "TAN AH KOW",
+          "page": 1,
+          "member": "m_ahkow"
+        },
+        {
+          "id": "ward",
+          "label": "Ward entitlement",
+          "value": "Restructured hospital A ward",
+          "page": 1
+        },
+        {
+          "id": "period",
+          "label": "Policy period",
+          "value": "1 February 2026 to 31 January 2027",
+          "page": 1
+        },
+        {
+          "id": "prem_msl",
+          "label": "MediShield Life premium",
+          "value": "S$1,814.00",
+          "page": 1,
+          "line_contains": "MediShield Life premium"
+        },
+        {
+          "id": "prem_api",
+          "label": "Additional private insurance coverage premium",
+          "value": "S$2,436.00",
+          "page": 1,
+          "line_contains": "Additional private"
+        },
+        {
+          "id": "prem_total",
+          "label": "Total plan premium",
+          "value": "S$4,250.00",
+          "page": 1,
+          "line_contains": "Total HarbourShield"
+        },
+        {
+          "id": "prem_medisave",
+          "label": "Payable from MediSave",
+          "value": "S$3,100.00",
+          "page": 1,
+          "line_contains": "MediSave"
+        },
+        {
+          "id": "prem_cash",
+          "label": "Plan premium payable in cash",
+          "value": "S$1,150.00",
+          "page": 1,
+          "line_contains": "Payable in cash"
+        },
+        {
+          "id": "rider_prem",
+          "label": "Co-Pay Rider premium (cash)",
+          "value": "S$1,968.00",
+          "page": 1,
+          "line_contains": "Co-Pay Rider premium"
+        },
+        {
+          "id": "pyl",
+          "label": "Policy year limit",
+          "value": "S$600,000",
+          "page": 2,
+          "line_contains": "Policy year limit"
+        },
+        {
+          "id": "prehosp",
+          "label": "Pre-hospitalisation",
+          "value": "120 days",
+          "page": 2,
+          "line_contains": "Pre-hospitalisation"
+        },
+        {
+          "id": "posthosp",
+          "label": "Post-hospitalisation",
+          "value": "365 days",
+          "page": 2,
+          "line_contains": "Post-hospitalisation"
+        },
+        {
+          "id": "psych",
+          "label": "Inpatient psychiatric",
+          "value": "S$7,000 per policy year",
+          "page": 2
+        },
+        {
+          "id": "dialysis",
+          "label": "Outpatient kidney dialysis",
+          "value": "S$3,000 per month",
+          "page": 2
+        },
+        {
+          "id": "community",
+          "label": "Community hospital",
+          "value": "S$15,000 per policy year",
+          "page": 2
+        },
+        {
+          "id": "deductible_le80",
+          "label": "Deductible (A ward, age 80 and below) - applies to Ah Kow (75)",
+          "value": "S$3,500",
+          "page": 2,
+          "line_contains": "age 80 and below"
+        },
+        {
+          "id": "deductible_ge81",
+          "label": "Deductible (A ward, age 81+) - does NOT apply yet",
+          "value": "S$5,250",
+          "page": 2,
+          "line_contains": "age 81 and above"
+        },
+        {
+          "id": "coins",
+          "label": "Co-insurance",
+          "value": "10%",
+          "page": 2,
+          "line_contains": "Co-insurance"
+        },
+        {
+          "id": "excl_dental",
+          "label": "Dental excluded except accident",
+          "value": "Dental treatment, except dental surgery needed because of an accident",
+          "page": 3
+        },
+        {
+          "id": "excl_knee",
+          "label": "Specific exclusion: osteoarthritis of the right knee",
+          "value": "osteoarthritis of the right knee",
+          "page": 3
+        },
+        {
+          "id": "claim_deadline",
+          "label": "Claim within",
+          "value": "within 365 days from the date of discharge",
+          "page": 3
+        },
+        {
+          "id": "rider_share",
+          "label": "Rider pays share of deductible/co-insurance",
+          "value": "95%",
+          "page": 4
+        },
+        {
+          "id": "rider_copay",
+          "label": "Co-payment",
+          "value": "5% of total claimable bill",
+          "page": 4
+        },
+        {
+          "id": "rider_cap",
+          "label": "Co-payment cap (panel)",
+          "value": "S$3,000 per policy year",
+          "page": 4,
+          "line_contains": "panel or pre-authorised"
+        },
+        {
+          "id": "rider_nocap",
+          "label": "Non-panel co-payment cap",
+          "value": "No cap",
+          "page": 4
+        },
+        {
+          "id": "rider_prehosp",
+          "label": "Rider pre-hosp (panel)",
+          "value": "180 days",
+          "page": 4
+        }
+      ],
+      "file": "docs/harbourshield-advantage-tan-ah-kow-2026.pdf",
+      "file_b64": "docs/harbourshield-advantage-tan-ah-kow-2026.pdf.b64",
+      "sha256": "cbe40368665fc09fab7ffe395660483a88b2f85c74dad1bb05e9305ce6e78caa",
+      "page_count": 4,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Schedule: insured, plan, premiums incl. MediSave split, rider premium"
+        },
+        {
+          "page": 2,
+          "text_layer": true,
+          "summary": "Benefit table for A ward entitlement"
+        },
+        {
+          "page": 3,
+          "text_layer": true,
+          "summary": "Exclusions and specific endorsement for the life assured"
+        },
+        {
+          "page": 4,
+          "text_layer": true,
+          "summary": "Co-Pay Rider benefits"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d2_weiming_term",
+      "filename": "kranji-lifeguard-term65-tan-wei-ming.pdf",
+      "title": "LifeGuard Term to 65 - Policy Schedule",
+      "letterhead": "Kranji Life Assurance Pte Ltd",
+      "insurer": "Kranji Life Assurance Pte Ltd",
+      "product_name": "LifeGuard Term to 65",
+      "policy_number": "KLA-T65-338120",
+      "policy_type": "Life",
+      "document_role": "certificate",
+      "covers": [
+        "m_weiming"
+      ],
+      "policyholder": "m_weiming",
+      "effective_date": "2018-10-01",
+      "renewal_or_expiry_date": "2049-07-22",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "death",
+          "label": "Death sum assured",
+          "value": "S$500,000",
+          "page": 1,
+          "line_contains": "Death"
+        },
+        {
+          "id": "tpd",
+          "label": "TPD",
+          "value": "S$500,000",
+          "page": 1,
+          "line_contains": "Total and permanent"
+        },
+        {
+          "id": "ci",
+          "label": "CI accelerator",
+          "value": "S$150,000",
+          "page": 1,
+          "line_contains": "Critical illness"
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$1,236.00",
+          "page": 1
+        },
+        {
+          "id": "expiry",
+          "label": "Expiry",
+          "value": "22 July 2049",
+          "page": 1
+        },
+        {
+          "id": "nominee",
+          "label": "Nominee",
+          "value": "LEE SIEW LING",
+          "page": 1
+        }
+      ],
+      "file": "docs/kranji-lifeguard-term65-tan-wei-ming.pdf",
+      "file_b64": "docs/kranji-lifeguard-term65-tan-wei-ming.pdf.b64",
+      "sha256": "0c5ca58da363504a851947ac42daf5e88c90ecaa5cb3b5233db42125b80b71af",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Schedule and benefits"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d3_siewling_ci",
+      "filename": "orchid-bloomsecure-ci-lee-siew-ling.pdf",
+      "title": "BloomSecure Early Critical Illness - Policy Contract Summary",
+      "letterhead": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "insurer": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "product_name": "BloomSecure Early Critical Illness",
+      "policy_number": "OLI-CI-7720045",
+      "policy_type": "Critical illness",
+      "document_role": "certificate",
+      "covers": [
+        "m_siewling"
+      ],
+      "policyholder": "m_siewling",
+      "effective_date": "2021-03-15",
+      "renewal_or_expiry_date": "2051-03-15",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "early",
+          "label": "Early CI",
+          "value": "S$50,000",
+          "page": 1,
+          "line_contains": "Early stage"
+        },
+        {
+          "id": "inter",
+          "label": "Intermediate CI",
+          "value": "S$100,000",
+          "page": 1,
+          "line_contains": "Intermediate"
+        },
+        {
+          "id": "severe",
+          "label": "Severe CI",
+          "value": "S$200,000",
+          "page": 1,
+          "line_contains": "Severe stage"
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$1,512.60",
+          "page": 1
+        },
+        {
+          "id": "wait",
+          "label": "Waiting period",
+          "value": "90 days",
+          "page": 1
+        }
+      ],
+      "file": "docs/orchid-bloomsecure-ci-lee-siew-ling.pdf",
+      "file_b64": "docs/orchid-bloomsecure-ci-lee-siew-ling.pdf.b64",
+      "sha256": "c444341517f79beda6cfe71c78d975338ac8f16e48786d2bc3305375f0f9deb2",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Schedule"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d4_group_benefits",
+      "filename": "kallang-freight-employee-benefits-2026.pdf",
+      "title": "Kallang Freight Logistics - Employee Benefits Booklet 2026/27",
+      "letterhead": "Pasir Mutual Insurance Ltd - Group Insurance",
+      "insurer": "Pasir Mutual Insurance Ltd",
+      "product_name": "Kallang Freight Group Employee Benefits",
+      "policy_number": "G-KFL-2026-118",
+      "policy_type": "Group",
+      "document_role": "benefit_guide",
+      "covers": [
+        "m_weiming",
+        "m_siewling",
+        "m_junhao",
+        "m_junhui",
+        "m_xinyi"
+      ],
+      "policyholder": "employer: Kallang Freight Logistics Pte. Ltd.",
+      "member_tiers": {
+        "m_weiming": "Employee",
+        "m_siewling": "Spouse",
+        "m_junhao": "Child",
+        "m_junhui": "Child",
+        "m_xinyi": "Child"
+      },
+      "cover_by_member": {
+        "m_weiming": [
+          "GTL",
+          "GPA",
+          "GHS"
+        ],
+        "m_siewling": [
+          "GHS"
+        ],
+        "m_junhao": [
+          "GHS"
+        ],
+        "m_junhui": [
+          "GHS"
+        ],
+        "m_xinyi": [
+          "GHS"
+        ]
+      },
+      "effective_date": "2026-04-01",
+      "renewal_or_expiry_date": "2027-03-31",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "employee",
+          "label": "Employee",
+          "value": "TAN WEI MING",
+          "page": 1,
+          "member": "m_weiming"
+        },
+        {
+          "id": "plan",
+          "label": "Benefit plan",
+          "value": "Plan 2 (Managers)",
+          "page": 1
+        },
+        {
+          "id": "period",
+          "label": "Period",
+          "value": "1 April 2026 to 31 March 2027",
+          "page": 1
+        },
+        {
+          "id": "gtl_p2",
+          "label": "GTL death Plan 2 (applies)",
+          "value": "S$200,000",
+          "page": 2,
+          "line_contains": "Death (any cause)"
+        },
+        {
+          "id": "gtl_p1",
+          "label": "GTL death Plan 1 (does NOT apply)",
+          "value": "S$80,000",
+          "page": 2,
+          "line_contains": "Death (any cause)"
+        },
+        {
+          "id": "gpa_p2",
+          "label": "GPA accidental death Plan 2",
+          "value": "S$250,000",
+          "page": 2,
+          "line_contains": "Accidental death"
+        },
+        {
+          "id": "gpa_p1",
+          "label": "GPA accidental death Plan 1 (does NOT apply)",
+          "value": "S$100,000",
+          "page": 2,
+          "line_contains": "Accidental death"
+        },
+        {
+          "id": "gpa_med_p2",
+          "label": "GPA accident medical Plan 2",
+          "value": "S$2,000",
+          "page": 2,
+          "line_contains": "Accident medical"
+        },
+        {
+          "id": "gtl_age",
+          "label": "GTL ends",
+          "value": "age 70",
+          "page": 2
+        },
+        {
+          "id": "rb_emp",
+          "label": "Room & board Employee",
+          "value": "S$500",
+          "page": 3,
+          "line_contains": "Daily room",
+          "tier": "Employee"
+        },
+        {
+          "id": "rb_sp",
+          "label": "Room & board Spouse",
+          "value": "S$350",
+          "page": 3,
+          "line_contains": "Daily room",
+          "tier": "Spouse"
+        },
+        {
+          "id": "rb_ch",
+          "label": "Room & board Child",
+          "value": "S$300",
+          "page": 3,
+          "line_contains": "Daily room",
+          "tier": "Child"
+        },
+        {
+          "id": "icu_emp",
+          "label": "ICU Employee",
+          "value": "S$1,200",
+          "page": 3,
+          "line_contains": "Intensive care",
+          "tier": "Employee"
+        },
+        {
+          "id": "icu_ch",
+          "label": "ICU Child",
+          "value": "S$800",
+          "page": 3,
+          "line_contains": "Intensive care",
+          "tier": "Child"
+        },
+        {
+          "id": "misc_ch",
+          "label": "Hospital misc Child",
+          "value": "S$5,000",
+          "page": 3,
+          "line_contains": "miscellaneous",
+          "tier": "Child"
+        },
+        {
+          "id": "surg_emp",
+          "label": "Surgical Employee",
+          "value": "S$10,000",
+          "page": 3,
+          "line_contains": "Surgical",
+          "tier": "Employee"
+        },
+        {
+          "id": "ol_emp",
+          "label": "Overall limit Employee",
+          "value": "S$30,000",
+          "page": 3,
+          "line_contains": "Overall limit",
+          "tier": "Employee"
+        },
+        {
+          "id": "ol_sp",
+          "label": "Overall limit Spouse",
+          "value": "S$20,000",
+          "page": 3,
+          "line_contains": "Overall limit",
+          "tier": "Spouse"
+        },
+        {
+          "id": "ol_ch",
+          "label": "Overall limit Child",
+          "value": "S$18,000",
+          "page": 3,
+          "line_contains": "Overall limit",
+          "tier": "Child"
+        },
+        {
+          "id": "nodeduct",
+          "label": "No deductible/co-insurance",
+          "value": "No deductible. No co-insurance.",
+          "page": 3
+        },
+        {
+          "id": "prem_sp",
+          "label": "Spouse dependant premium",
+          "value": "S$612.00 per year",
+          "page": 3
+        },
+        {
+          "id": "prem_ch",
+          "label": "Child dependant premium",
+          "value": "S$298.00 per year",
+          "page": 3
+        },
+        {
+          "id": "claim30",
+          "label": "GHS claim deadline",
+          "value": "within 30 days of discharge",
+          "page": 4
+        },
+        {
+          "id": "hr_contact",
+          "label": "HR contact",
+          "value": "hr-benefits@kallangfreight.example",
+          "page": 4
+        }
+      ],
+      "file": "docs/kallang-freight-employee-benefits-2026.pdf",
+      "file_b64": "docs/kallang-freight-employee-benefits-2026.pdf.b64",
+      "sha256": "f00c4857484ea60ebbc49098d07059814d441cbf0da58d8609b0d2d674e44bb3",
+      "page_count": 4,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Member certificate: employee, plan, enrolled dependants"
+        },
+        {
+          "page": 2,
+          "text_layer": true,
+          "summary": "GTL and GPA by plan"
+        },
+        {
+          "page": 3,
+          "text_layer": true,
+          "summary": "GHS Plan 2 tier table Employee/Spouse/Child; dependant premiums"
+        },
+        {
+          "page": 4,
+          "text_layer": true,
+          "summary": "GHS exclusions and how to claim"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d5_junhao_endowment",
+      "filename": "kranji-kidsaver18-tan-jun-hao.pdf",
+      "title": "KidSaver 18 Endowment - Policy Illustration Summary",
+      "letterhead": "Kranji Life Assurance Pte Ltd",
+      "insurer": "Kranji Life Assurance Pte Ltd",
+      "product_name": "KidSaver 18 Endowment",
+      "policy_number": "KLA-END-209931",
+      "policy_type": "Endowment",
+      "document_role": "certificate",
+      "covers": [
+        "m_junhao"
+      ],
+      "policyholder": "m_weiming",
+      "effective_date": "2019-05-09",
+      "renewal_or_expiry_date": "2031-05-09",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "sa",
+          "label": "Guaranteed maturity",
+          "value": "S$50,000",
+          "page": 1
+        },
+        {
+          "id": "p425",
+          "label": "Projected 4.25%",
+          "value": "S$58,420",
+          "page": 1
+        },
+        {
+          "id": "p300",
+          "label": "Projected 3.00%",
+          "value": "S$53,960",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$3,480.00",
+          "page": 1
+        },
+        {
+          "id": "maturity",
+          "label": "Maturity date",
+          "value": "9 May 2031",
+          "page": 1
+        },
+        {
+          "id": "payor",
+          "label": "Payor benefit",
+          "value": "Future premiums waived",
+          "page": 1
+        }
+      ],
+      "file": "docs/kranji-kidsaver18-tan-jun-hao.pdf",
+      "file_b64": "docs/kranji-kidsaver18-tan-jun-hao.pdf.b64",
+      "sha256": "62f55e1bc0215e6daf26b17330ede0bb5ff892adeda6e3ed86013b00c2266751",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Schedule, maturity values, premium"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d6_junhui_ilp",
+      "filename": "orchid-wealthbuilder-ilp-statement-jun-hui.pdf",
+      "title": "Orchid WealthBuilder ILP - Annual Statement",
+      "letterhead": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "insurer": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "product_name": "Orchid WealthBuilder ILP",
+      "policy_number": "OLI-ILP-5530981",
+      "policy_type": "Investment-linked",
+      "document_role": "statement",
+      "covers": [
+        "m_junhui"
+      ],
+      "policyholder": "m_siewling",
+      "effective_date": "2022-09-01",
+      "renewal_or_expiry_date": null,
+      "currency": "SGD",
+      "fixture_state": "active",
+      "premium_printed": false,
+      "facts": [
+        {
+          "id": "acct",
+          "label": "Total account value",
+          "value": "S$21,385.40",
+          "page": 1
+        },
+        {
+          "id": "eq",
+          "label": "Equity fund value",
+          "value": "S$13,102.18",
+          "page": 1
+        },
+        {
+          "id": "bond",
+          "label": "Bond fund value",
+          "value": "S$8,283.22",
+          "page": 1
+        },
+        {
+          "id": "death",
+          "label": "Death benefit",
+          "value": "105% of account value",
+          "page": 1
+        },
+        {
+          "id": "units_eq",
+          "label": "Equity units",
+          "value": "4,812.337",
+          "page": 1
+        }
+      ],
+      "file": "docs/orchid-wealthbuilder-ilp-statement-jun-hui.pdf",
+      "file_b64": "docs/orchid-wealthbuilder-ilp-statement-jun-hui.pdf.b64",
+      "sha256": "03a894bf9f06274e9ce9f0b0a12c9eb9843a25007809172d80c70832f7e7940e",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Fund holdings at 30 June 2026; NO premium amount printed"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d7_xinyi_pa_scan",
+      "filename": "lioncity-juniorguard-pa-xin-yi-scan.pdf",
+      "title": "JuniorGuard Personal Accident Certificate (scanned)",
+      "letterhead": "Lion City General Insurance Pte Ltd",
+      "insurer": "Lion City General Insurance Pte Ltd",
+      "product_name": "JuniorGuard Personal Accident",
+      "policy_number": "LCG-PA-55120",
+      "policy_type": "Personal accident",
+      "document_role": "certificate",
+      "covers": [
+        "m_xinyi"
+      ],
+      "policyholder": "m_siewling",
+      "effective_date": "2026-01-10",
+      "renewal_or_expiry_date": "2027-01-09",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "image_only": true,
+      "facts": [
+        {
+          "id": "ad",
+          "label": "Accidental death",
+          "value": "S$50,000",
+          "page": 1
+        },
+        {
+          "id": "amr",
+          "label": "Accident medical",
+          "value": "S$3,000",
+          "page": 1
+        },
+        {
+          "id": "idhc",
+          "label": "Infectious disease hospital cash (incl. dengue)",
+          "value": "S$100 per day",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$168.00",
+          "page": 1
+        },
+        {
+          "id": "insured",
+          "label": "Insured child",
+          "value": "TAN XIN YI",
+          "page": 1
+        }
+      ],
+      "file": "docs/lioncity-juniorguard-pa-xin-yi-scan.pdf",
+      "file_b64": "docs/lioncity-juniorguard-pa-xin-yi-scan.pdf.b64",
+      "sha256": "f9c7b01fd7241a0af019663ba015fdc38adc8e653f31c4c41dcaab86e5623d85",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": false,
+          "summary": "IMAGE-ONLY scanned page (no text layer), skewed, noisy"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h1_d8_deleted_travel",
+      "filename": "equator-traveleasy-bali-2025.pdf",
+      "title": "TravelEasy Single Trip - Certificate",
+      "letterhead": "Equator General Insurance Ltd",
+      "insurer": "Equator General Insurance Ltd",
+      "product_name": "TravelEasy Single Trip",
+      "policy_number": "EGI-TR-901174",
+      "policy_type": "Travel",
+      "document_role": "certificate",
+      "covers": [
+        "m_weiming",
+        "m_siewling",
+        "m_junhao",
+        "m_junhui",
+        "m_xinyi"
+      ],
+      "policyholder": "m_weiming",
+      "effective_date": "2025-12-18",
+      "renewal_or_expiry_date": "2025-12-26",
+      "currency": "SGD",
+      "fixture_state": "deleted",
+      "fixture_note": "Upload, index, then soft-delete (user deleted it). Its amounts must never appear in answers.",
+      "facts": [
+        {
+          "id": "cancel",
+          "label": "Trip cancellation",
+          "value": "S$7,500",
+          "page": 1
+        },
+        {
+          "id": "med",
+          "label": "Overseas medical",
+          "value": "S$380,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Premium",
+          "value": "S$187.40",
+          "page": 1
+        }
+      ],
+      "file": "docs/equator-traveleasy-bali-2025.pdf",
+      "file_b64": "docs/equator-traveleasy-bali-2025.pdf.b64",
+      "sha256": "cd42732c989eff60c2e644b4d8a90115df97f9703e30f84d43fe350ff924bdc6",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Family trip to Bali Dec 2025"
+        }
+      ],
+      "facts_verified": true
+    }
+  ]
+}

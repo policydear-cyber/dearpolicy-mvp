@@ -1,3 +1,4 @@
+import { replacedFigures } from "./amendments";
 import { knownValue,normalText } from "@/lib/chat/facts";
 import { benefitTriggerEvents,coverKey,payingEvent,reportedClaimEvents,ruledOutByEvent,type ClaimEventType } from "@/lib/insurance/claim-events";
 import { explicitCurrency,numericTokens } from "@/lib/chat/policy-analysis";
@@ -1053,7 +1054,11 @@ export async function loadBenefitCatalog(accountId:string,policyIds:string[]){
   const r=await query<BenefitRow>(
     "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind FROM policy_benefits b WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) AND coalesce((to_jsonb(b)->>'duplicate_of_policy_id')::uuid<>ALL($2::uuid[]),true) ORDER BY benefit_name",
     [accountId,policyIds]);
-  return repairStoredRules(r.rows.map(toBenefit));
+  // Round 7: a figure a later endorsement of the same policy replaced is not
+  // current cover (lib/policies/amendments.ts).
+  const replaced=await replacedFigures(accountId,policyIds).catch(()=>new Map());
+  const rows=r.rows.filter(row=>{const rep=replaced.get(row.policy_id);return !rep||row.formula_value==null||!rep.amounts.has(Number(row.formula_value));});
+  return repairStoredRules(rows.map(toBenefit));
 }
 /** Rebuilds a document's rules, keeping every rule a person corrected.
  *

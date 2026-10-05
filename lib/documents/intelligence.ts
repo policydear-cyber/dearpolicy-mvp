@@ -77,6 +77,11 @@ export function deterministicDocumentRole(pages: PdfPage[], modelRole: PolicyExt
   const titled = personalDocumentTitle(fullText(pages, 2));
   if (titled) return titled;
   if (/certificate of insurance part 2|part 2:\s*highlights of cover/.test(text)) return "benefit_guide" as const;
+  // Round 7: an endorsement says it is one in its title ("ENDORSEMENT NO. 2",
+  // "Policy alteration") and usually tells the reader to keep it "with the
+  // policy schedule" -- which must not make it the schedule itself.
+  const opening = fullText(pages, 1).toLowerCase().split(/\n/).slice(0, 8).join("\n");
+  if (/\bendorsement\s+(?:no\.?|number)\s*\d|^\s*endorsement\b|\bpolicy alteration\b|\balteration (?:of|to) (?:the )?policy\b|\bpolicy amendment\b|\bamendment to (?:the )?policy\b/m.test(opening) && /(policy number|effective date|insured|life assured)/.test(text)) return "endorsement" as const;
   if (/policy schedule|schedule of insurance/.test(text) && /(policy number|sum assured|premium|insured)/.test(text)) return "personal_schedule" as const;
   if (/endorsement|policy amendment|amendment to policy/.test(text) && /(policy number|effective date|insured)/.test(text)) return "endorsement" as const;
   if (/renewal notice|renewal statement|renewal premium/.test(text)) return "renewal_statement" as const;
@@ -117,7 +122,9 @@ function deriveReferenceCoverages(pages: PdfPage[]) {
 export function enrolledNames(text: string): string[] {
   const flat = text.replace(/\s+/g, " ");
   const out: string[] = [];
-  const pattern = /\b(?:eligible\s+employee|insured\s+employee|employee\s+name|member\s+name|dependants?\s+enrolled|enrolled\s+dependants?|covered\s+(?:members?|dependants?)|insured\s+(?:members?|dependants?))\s*[:\-][^.]{3,240}/gi;
+  // Round 7: also "Employee: TAN WEI MING" and an enrolment table under a
+  // heading ("DEPENDANTS ENROLLED UNDER GROUP HOSPITAL & SURGICAL (GHS)").
+  const pattern = /\b(?:eligible\s+employee|insured\s+employee|employee(?:\s+name)?|member\s+name|dependants?\s+enrolled|enrolled\s+dependants?|covered\s+(?:members?|dependants?)|insured\s+(?:members?|dependants?))\s*(?:[:\-]|\bunder\b)[^.]{3,400}/gi;
   for (const match of flat.matchAll(pattern)) out.push(match[0].toLowerCase());
   return out;
 }

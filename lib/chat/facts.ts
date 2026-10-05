@@ -353,11 +353,58 @@ const INTERROGATIVE_START=/^\s*(?:and\s+|so\s+|then\s+)?(?:what|which|who|whom|w
  * overseas?"). It asks; it reports nothing. A "Question: answer" reply from
  * the chat's own question card has no question mark and is never this. */
 export function onlyAsksQuestions(message:string){
+  // Round 7: "unrelated - is my rider renewing?", "btw, ...": the lead-in
+  // is not part of the question.
+  message=message.trim().replace(/^(?:unrelated|by the way|btw|also|ok(?:ay)?|anyway|oh|separately|another (?:thing|question))\b\s*[-–—,:]?\s*/i,"");
+  // Round 7: people type questions without a question mark ("his company
+  // insurance how much", "who do I contact", "what documents needed"). One
+  // short sentence that opens like a question, or ends the way Singapore
+  // English asks one, asks; a "Question: answer" card reply never does.
+  const one=message.trim();
+  // "deadline?", "documents needed?": a short phrase asked as a question.
+  if(/^[^?:.!]{2,40}\?$/.test(one)&&one.split(/\s+/).length<=4&&!REPORTED_OR_CLAIMED.test(one)&&
+    !/\b(?:yes|yeah|yup|no|nope|not sure|maybe|ok|okay)\b/i.test(one)&&!/\d/.test(one))return true;
+  if(!one.includes("?")&&!one.includes(":")&&!/[.!]\s+\S/.test(one)&&one.split(/\s+/).length>=2&&one.split(/\s+/).length<=14&&!REPORTED_OR_CLAIMED.test(one)&&
+    !/\b(?:break|broke|fell|fall|admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|injured|hurt|sick|accident|lost|stolen|delayed)\b/i.test(one)&&
+    (INTERROGATIVE_START.test(one)||/\b(?:how much|how many|how long|or not|anot|right|which one|what about|when ah|how ah)\s*[!.]*$/i.test(one)))return true;
   if(!message.includes("?"))return false;
   // "btw what is my deductible?", "oh and does it cover TCM?": a filler first is still a question.
   const sentences=message.split(/(?<=[.!?])\s+|\n+/).map(s=>s.trim().replace(/^(?:(?:btw|by the way|oh|also|and|ok(?:ay)?|so|sorry|quick question|one more thing)[,:]?\s+)+/i,"")).filter(Boolean);
+  // "and his own LifeGuard policy, who is the nominee?": one question whose
+  // question word comes after what it is about.
+  if(sentences.length===1&&/\?\s*$/.test(sentences[0])&&/\b(?:who|whom|whose|what|which|when|where|why|how)\b/i.test(sentences[0])&&
+    !REPORTED_OR_CLAIMED.test(sentences[0])&&!/\b(?:i|we|he|she|my|our|his|her)\s+(?:had|have|got|went|was|were|am)\b/i.test(sentences[0]))return true;
   return sentences.length>0&&sentences.every(s=>INTERROGATIVE_START.test(s));
 }
+/** Words without which a message reports no event and starts no claim. The
+ * interpreter's "claim" label alone is not enough (Round 7: a misbehaving
+ * model labelled "and for Xin Yi?" a claim). Deliberately generous. */
+const EVENT_OR_CLAIM_WORDS=/\b(?:(?:i['’]?m|i am|she['’]?s|he['’]?s|is|was|am)\s+(?:now\s+)?(?:in|at)\s+(?:a|the)\s+(?:[\w-]+\s+){0,2}hospital|poison\w*|claim\w*|payouts?|reimburs\w*|admitted|admission|hospitali[sz]\w*|warded|discharged|died|dead|death|passed away|killed|murder\w*|diagnos\w*|cancer|stroke|heart attack|dengue|covid|accident\w*|injur\w*|broke|broken|fractur\w*|fell|fall|hurt|sick|ill|illness|surgery|operation|disabled|disability|cannot work|can['’]?t work|unable to work|delayed|delay|cancel\w*|lost|loss|stolen|theft|damaged?|crash\w*|collision|bills?|happened|baggage|luggage|flight|trip)\b/i;
+const REPORTED_OR_CLAIMED=/\b(?:claim\w*|admitted|hospitali[sz]ed|warded|discharged|died|passed away|killed|murdered|diagnosed|injured|broke|broken|fractured|fell|hurt|delayed|lost|stolen|crashed|happened|got (?:sick|ill|hurt)|disabled|cannot work|can['’]?t work)\b/i;
+/** A deterministic reading of a message that only asks something, used when
+ * the interpreter fails: a question carries no facts and no event, so nothing
+ * is lost by not asking the model. Returns null for anything that might
+ * report an event, answer a pending question or start a claim. */
+export function questionOnlyInterpretation(args:{message:string;state:ConversationState;pending:boolean}):Interpretation|null{
+  const message=args.message.trim();
+  if(!message||args.pending||args.state.intent==="claim"||REPORTED_OR_CLAIMED.test(message))return null;
+  // Only a message that plainly asks something: "I still don't know how many
+  // hospital nights" answers (or fails to answer) a claim question and gets
+  // the honest "couldn't read your message" reply instead.
+  if(!onlyAsksQuestions(message))return null;
+  const searchTerms=[...new Set((message.toLowerCase().match(/[a-z][a-z-]{3,}/g)??[]))].slice(0,8);
+  return {intent:args.state.intent?"follow_up":"policy_question",newTopic:false,searchTerms,facts:[],scenarioCandidates:[]};
+}
+const EVENT_KINDS:[string,RegExp][]=[
+  ["travel",/\b(?:trip|flight|luggage|baggage|travel\w*|departure|cancel\w*|delay\w*|overseas)\b/i],
+  ["death",/\b(?:died|passed away|death|deceased|killed)\b/i],
+  ["injury",/\b(?:accident|injur\w*|broke|broken|fractur\w*|fell|paralys\w*|crash\w*)\b/i],
+  ["illness",/\b(?:diagnos\w*|cancer|heart attack|stroke|dengue|fever|illness|sick)\b/i],
+  ["dental",/\b(?:dental|dentist|tooth|teeth|filling|scaling|braces)\b/i],
+  ["home",/\b(?:flood\w*|fire|burglar\w*|house|home contents)\b/i],
+];
+/** The kinds of event a message talks about. */
+function eventKinds(text:string){return new Set(EVENT_KINDS.filter(([,re])=>re.test(text)).map(([k])=>k));}
 /** Asking what an event already on file pays, rather than asking something new. */
 const CLAIM_MONEY_ASK=/\b(?:claim\w*|payouts?|pay\s*out|how much|reimburs\w*|entitled|get back|receive|compensat\w*|settle\w*)\b/i;
 export function mergeInterpretation(args: {
@@ -379,6 +426,15 @@ export function mergeInterpretation(args: {
   const otherEvents=homicideReport||fractureReport?[]:reportedEvents(args.message).filter(e=>!(e.kind==="injury"&&(injuryRetracted||fractureNegated)));
   const priorDiagnosis=args.subjectIds.length===1?knownValue(args.state.subjects[args.subjectIds[0]]??{},"diagnosis"):null;
   const conditionStartsTopic=!!conditionReport&&typeof priorDiagnosis==="string"&&normalText(priorDiagnosis)!==normalText(conditionReport.condition);
+  // Round 7: a different kind of event reported while a claim is open (a car
+  // accident after a trip cancellation) is a new claim, not an answer to the
+  // open claim's question, whatever the interpreter said.
+  const kindsNow=eventKinds(args.message),kindsOpen=eventKinds(args.state.activeClaimQuery??"");
+  // An earlier claim set aside for other questions counts too (a dentist
+  // visit reported after a trip claim and a few policy questions).
+  // A short reply to the open question ("Overseas" to "Where did the
+  // accident happen?") answers it; it reports no new event.
+  const differentEvent=!(args.state.pending&&args.message.trim().split(/\s+/).length<5)&&(args.state.intent==="claim"||!!args.state.activeClaimQuery)&&kindsNow.size>0&&kindsOpen.size>0&&[...kindsNow].every(k=>!kindsOpen.has(k))&&!onlyAsksQuestions(args.message);
   const reportsNothing=!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length);
   // Round 8: "a new topic" wipes the claim being gathered, so the model's say-so
   // needs an event in the household's own words -- never "dunno, since may".
@@ -387,7 +443,7 @@ export function mergeInterpretation(args: {
   const newEventToldNow=!!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length||affirmedDeathStatement(args.message))&&
     !/^\s*(?:actually|sorry|no|nope|not|wait|oops|correction)\b|\bnot an? (?:accident|illness)\b/i.test(args.message);
   const startsClaimTopic=(interpretation.newTopic&&EVENT_REPORT_WORDS.test(args.message)&&(args.state.intent!=="claim"||newEventToldNow)&&
-    !(reportsNothing&&(onlyAsksQuestions(args.message)||/^[^.!?\n]{1,60}\?\s*$/.test(args.message.trim()))))||conditionStartsTopic;
+    !(reportsNothing&&(onlyAsksQuestions(args.message)||/^[^.!?\n]{1,60}\?\s*$/.test(args.message.trim()))))||conditionStartsTopic||differentEvent;
   // A message that only asks questions reports no event, whatever label the
   // interpreter gave it or whatever it quoted from it. Mid-claim, asking what
   // the claim pays stays on the claim; any other question is answered as a
@@ -426,10 +482,31 @@ export function mergeInterpretation(args: {
   if((intent==="portfolio"||intent==="policy_question"||(intent==="follow_up"&&!args.state.intent))&&toldEvent&&!asksOnly&&!/\b(?:if|suppose|supposing|what if|assuming|in case|were to|would)\b/i.test(args.message)&&
     !/\b(?:what policies|portfolio|all (?:our|my|the) (?:policies|plans)|what (?:insurance|cover) do (?:we|i|they|you) have)\b/i.test(args.message))intent="claim";
   if(asksOnly&&(intent==="claim"||(intent==="follow_up"&&args.state.intent==="claim"))){
-    intent=args.state.intent==="claim"&&args.state.activeClaimQuery&&CLAIM_MONEY_ASK.test(args.message)?"claim":"policy_question";
+    // "How much can I get back?" asks about the claim; "his company insurance
+    // how much" names a plan and asks what THAT plan states.
+    const namesAPlan=/\b(?:company|group|employer|work|office|travel|hospital|shield|term|life|whole life|endowment|ilp|rider|accident|pa|ci|critical|policy|plan|insurance)\b/i.test(args.message)&&!/\bclaim\w*\b/i.test(args.message);
+    intent=args.state.intent==="claim"&&args.state.activeClaimQuery&&CLAIM_MONEY_ASK.test(args.message)&&!namesAPlan?"claim":"policy_question";
     if(interpretation.intent==="claim")interpretation={...interpretation,facts:[],scenarioCandidates:[]};
   }
-  if (startsClaimTopic && (intent === "claim" || homicideReport || conditionReport || fractureReport)) {
+  // Mid-claim, an answer to the open question is not a request for the
+  // policy list, whatever the interpreter labelled it.
+  if(intent==="portfolio"&&args.state.intent==="claim"&&!onlyAsksQuestions(args.message))intent="follow_up";
+  // A claim needs something to claim for: with no event or claim word in the
+  // message and no claim already open, the label is the model's alone.
+  // "ILP death benefit", "hospital income", "accidental death cover" name a
+  // benefit; they report nothing.
+  const coverWordsOnly=args.message.replace(/\b(?:accidental\s+)?(?:death|accident(?:al)?|disab\w*|permanent disablement|hospital|dengue|cancer|illness|injury|surgery|trip|travel|flight|baggage|luggage|critical illness|terminal illness)\s+(?:ben[ei]f[ie]ts?|cover(?:age)?|plans?|polic(?:y|ies)|polisy|insurance|insurans|income|cash|limits?|sum (?:assured|insured)|payouts?)\b|\baccidental death\b|\bpermanent disablement\b/gi," ");
+  if(intent==="claim"&&args.state.intent!=="claim"&&!(homicideReport||conditionReport||fractureReport||injuryReport)&&!EVENT_OR_CLAIM_WORDS.test(coverWordsOnly)){
+    // ("my daughter say i got insurance, what i got" asks for the policy list.)
+    intent=/\bwhat (?:insurance |cover |policies |plans )?(?:do )?(?:i|we) (?:got|have)\b|\bwhat (?:policies|insurance|plans) (?:do|does) /i.test(args.message)?"portfolio":args.state.intent?"follow_up":"policy_question";
+    interpretation={...interpretation,facts:[],scenarioCandidates:[]};
+  }
+  // A different kind of event reported while a claim is open is not an answer
+  // to that claim: the old claim's facts and question are set aside and the
+  // message is read as it would be in a new chat.
+  const freshTopic=differentEvent&&intent==="follow_up";
+  if(freshTopic)intent="policy_question";
+  if (freshTopic || startsClaimTopic && (intent === "claim" || homicideReport || conditionReport || fractureReport)) {
     for (const id of args.subjectIds){next.subjects[id] = {};next.scenarios![id]=[];}
     delete next.pending;
   }
@@ -442,6 +519,7 @@ export function mergeInterpretation(args: {
   const actualIntent = (homicideReport||conditionReport||fractureReport||otherEvents.length) && intent!=="portfolio" ? "claim" :
     intent === "follow_up" ? next.intent ?? "policy_question" : intent;
   next.intent = actualIntent;
+  if(freshTopic&&actualIntent!=="claim")delete next.activeClaimQuery;
   if (!next.activeQuery || startsClaimTopic || (intent !== "follow_up" && !(actualIntent==="claim"&&args.state.intent==="claim")) ||
     (intent==="follow_up"&&fullQuestion&&actualIntent!=="claim")) next.activeQuery = args.message;
   if(actualIntent==="claim"){

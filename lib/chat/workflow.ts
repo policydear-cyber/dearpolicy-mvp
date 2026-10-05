@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 import { householdModelFailure,readableModelFailure,structuredCompletion } from "@/lib/ai/llm";
@@ -54,7 +55,11 @@ function confirmStatedCause(answer:ChatAnswer,state:ConversationState,message:st
 const HYPOTHETICAL=new WeakMap<ChatAnswer,string>();
 /** Every answer is saved through here: a concluded claim answer gets its
  * last touches (employer group cover, lib/chat/claim-completion.ts) first. */
+const LANGUAGE_READING=new WeakMap<object,EnglishReading>();
 const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
+  // Round 7 (port): an answer to a question read from Malay or Chinese says so, and what it was read as.
+  const reading=LANGUAGE_READING.get(args.conversation);
+  if(reading){LANGUAGE_READING.delete(args.conversation);const note=languageNote(reading);if(!args.answer.summary.startsWith(note))args.answer.summary=note+" "+args.answer.summary;}
   // Round 9: a car or home damage event the claim interview found nothing for (or offered hospital cover
   // for) is answered from the car or home policy instead.
   const damage=DAMAGE_FALLBACK.get(args.conversation);
@@ -102,11 +107,12 @@ import { answerPolicyQuestion,conciseDetails,withoutListedLimitCards,FULL_LIST,i
 import { printedRuleLines } from "./printed-rules";
 import { conversationalReply,dishonestReply } from "./conversational";
 import { acknowledgeWhatIfReply,describesPlannedProcedure,readWhatIfReply,repliedWhatIf,whatIfAfterTurn } from "./what-if-replies";
-import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM } from "./premium-answer";
+import { englishReading,languageNote,type EnglishReading } from "./language";
+import { isPremiumQuestion,premiumAnswer,premiumAboutOnePlan,RANKED as RANKED_PREMIUM,dependantPremiumAnswer,DEPENDANT_PREMIUM_QUESTION } from "./premium-answer";
 import { documentQuestionAnswer, printedLinesAnswer, printedRepair, provenanceAnswer } from "./document-questions";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
-import { householdPersonFromWords,productOwner } from "./person-words";
+import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
 import { inactiveDocuments,inactiveList } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
@@ -121,6 +127,8 @@ export type ChatRequest={
   submittedQuestion?:string;
   /** Round 9: the household's message as typed, when the chat reads it in plainer words (lib/chat/plain-questions.ts). */
   displayQuestion?:string;
+  /** Round 7 (port): the English a Malay or Chinese question was read as (lib/chat/language.ts). */
+  languageReading?:EnglishReading;
 };
 export type ChatContext={
   request:ChatRequest;family:ClaimPerson[];people:ClaimPerson[];
@@ -169,7 +177,7 @@ function carriesToPlan(topics:{key:string}[],scope:string){
 /** A question that names a kind of plan ("her travel plan", "his car insurance"). */
 const NAMED_PLAN=/\b(?:travel|motor|car|home|hospital|shield|critical illness|personal accident|accident) (?:plan|policy|insurance|cover(?:age)?)\b/i;
 /** Words that report something happening, as opposed to asking about cover. */
-const REPORTS_AN_EVENT=/\b(?:admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|accident|injured|injury|broke|broken|fractured|delayed|lost|stolen|fell|fall|sick|surgery|operation|disabled|cannot work|can['’]?t work|unable to work|hurt|killed|sprain(?:ed|s)?|twisted|dislocated|bruised|needed stitches|knocked down|hit by a (?:car|bus|lorry|motorcycle|van)|run over|collapsed|unconscious|murdered|stabbed|shot dead|drowned|homicide)\b|\b(?:is|was) (?:now )?in (?:\w+ )?hospital\b/i;
+const REPORTS_AN_EVENT=/\b(?:caught|contracted|came down with|admitted|hospitali[sz]ed|warded|died|passed away|diagnosed|accident|injured|injury|broke|broken|fractured|delayed|lost|stolen|fell|fall|sick|surgery|operation|disabled|cannot work|can['’]?t work|unable to work|hurt|killed|sprain(?:ed|s)?|twisted|dislocated|bruised|needed stitches|knocked down|hit by a (?:car|bus|lorry|motorcycle|van)|run over|collapsed|unconscious|murdered|stabbed|shot dead|drowned|homicide)\b|\b(?:is|was) (?:now )?in (?:\w+ )?hospital\b/i;
 /** "What is X covered for?", "What am I covered for?", "Tell me about X's policies", "list all our policies". */
 const COVERAGE_OVERVIEW=/^\s*(?:(?:what|which) (?:is|are|am) (?:i|[\p{L}]+(?: [\p{L}]+){0,3}) (?:covered|insured) (?:for|with)|what (?:does|do) (?:my |our )?[\p{L}'’ -]{1,40} have|(?:tell me|show me|give me|can i (?:get|have)) (?:an? )?(?:quick |short |brief |full |simple |overall )?(?:overview|summary|rundown) of|(?:tell me )?everything (?:i['’]?m|i am|we['’]?re|we are|[\p{L}]+ is) (?:insured|covered) for|compare .{1,60}(?:cover|coverage|insurance|policies|plans)|what (?:cover|coverage|insurance|policies|plans?) (?:do|does) .{1,40} have|(?:tell me|show me|list|give me)(?: me)? (?:about )?(?:all )?(?:(?:my|our|his|her|their|the family['’]?s?|[\p{L}]+(?: [\p{L}]+)?['’]s) )?(?:family )?(?:policies|coverage|cover|insurance|portfolio|plans)|(?:all )?(?:my|our) (?:policies|coverage|cover|portfolio|insurance)|cover(?:age)?|policies|portfolio|what do (?:i|we) have|what (?:insurance |cover |policies |plans )?(?:do )?(?:i|we) (?:got|have)|who (?:is|are) (?:covered|insured|named) (?:under|by|in|on)|(?:which|who) (?:of us|in (?:the|my|our) family|in the household)(?: (?:has|have|is|are))? (?:no|not|without|doesn['’]?t have|don['’]?t have)(?: any)? (?:insurance|cover(?:ed)?|coverage|policies|policy|plans?))\b[^?]*\??\s*$/iu;
 function explicitPeople(message:string,family:ClaimPerson[]){
@@ -289,6 +297,9 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
         words=rest.split(/\s+/).filter(Boolean).length<=2&&!questionTopics(words).length?"What does the "+hits[0]+" cover?":words.replace(new RegExp("(?:\\b(?:policy|polisi)\\s*(?:no\\.?|number|#)?\\s*(?:is\\s*)?)?"+asked.token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"i"),"the "+hits[0]);
       }else if(!hits.length)unknownPolicyNumber=asked.token;
     }
+    // Round 7 (port): a question in Malay or Chinese is answered in English, from the English it was read as (said in the answer).
+    const reading=englishReading(typed);
+    if(reading&&!asked){words=reading.english;request={...request,languageReading:reading};}
     if(words!==typed)request={...request,question:words,displayQuestion:request.displayQuestion??typed};
   }
   const previousId=request.conversationId??request.claimSessionId;
@@ -330,7 +341,10 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   const outside=refersBack?priorOutside:!request.personChoiceId&&!tripReason&&!ownCoverAsked?outsideHouseholdSubject(personMessage,family):null;
   const familyWords=/\b(?:my family|our family|whole family|all family|everyone|all of us|family policies|family coverage|our policies|all our policies|policies do we have|do we pay|(?:cover|insurance|policies|plans?) do we have|(?:our|the family(?:['’]s)?) (?:total|premiums?|policies|cover(?:age)?|insurance|plans)|altogether|in total|combined|which of us|who in (?:the|my|our) family|^\s*(?:so\s+|and\s+|ok(?:ay)?[,\s]+)?who (?:has|have|owns|holds)\b|anyone in (?:the|my|our) family|each of us|for (?:the|my|our) family|family total)\b/i;
   // Round 11: "how much do we pay for Xin Yi's PA?" is about Xin Yi's plan, even said with "we".
-  const familyQuestion=familyWords.test(personMessage)&&!(mentioned.length===1&&new RegExp("\\b(?:"+[mentioned[0].display_name,mentioned[0].preferred_name??""].filter(Boolean).map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")['’]s\\b","i").test(personMessage)&&!/\b(?:my family|our family|whole family|all of us|everyone|each of us|which of us|altogether|in total|combined)\b/i.test(personMessage));
+  // Round 7 (port): "our travel plan", "our insurance": the household's, not the person last discussed.
+  // Round 7 (port): "If I pass away what will my family get?" is about the speaker's own cover; the family is who receives it.
+  const ownDeath=/\bif\s+(?:i|me)\s+(?:die|pass(?:es)?\s+away|am\s+gone|kick\s+the\s+bucket)\b|\bwhen\s+i\s+(?:die|pass\s+away)\b/i.test(personMessage);
+  const familyQuestion=!ownDeath&&(familyWords.test(personMessage)||/\bour\s+(?:[a-z-]+\s+){0,2}(?:plans?|polic(?:y|ies)|insurance|cover(?:age)?)\b/i.test(personMessage))&&!(mentioned.length===1&&new RegExp("\\b(?:"+[mentioned[0].display_name,mentioned[0].preferred_name??""].filter(Boolean).map(n=>n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")['’]s\\b","i").test(personMessage)&&!/\b(?:my family|our family|whole family|all of us|everyone|each of us|which of us|altogether|in total|combined)\b/i.test(personMessage));
   // Round 9: "both my husband and daughter": two people named by kinship, not by name.
   const kinNamed=mentioned.length<2&&/\b(?:and|both)\b/i.test(personMessage)&&/\b(?:if|what if|suppose|in case)\b/i.test(personMessage)
     ?[...personMessage.matchAll(/\b(?:my|our)\s+(\w+(?:\s*(?:,|and|&)\s*(?:my\s+)?\w+)*)/gi)].flatMap(m=>m[1].split(/\s*(?:,|\band\b|&)\s*(?:my\s+)?/i)).filter(w=>/^(?:husband|wife|spouse|son|daughter|mum|mom|mother|mak|dad|father|brother|sister|helper|maid|grandma|grandmother|grandpa|grandfather|child|kid)$/i.test(w))
@@ -376,6 +390,13 @@ export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
   // Nobody named, but a policy named by its product name that one person holds: that person.
   if(!chosen&&numberedPolicy?.owners.length===1&&(resolution.status!=="resolved"||!resolution.explicit)){
     const person=family.find(p=>p.id===numberedPolicy!.owners[0]);
+    if(person)resolution={status:"resolved",person,explicit:true};
+  }
+  // Round 7 (port): "the Pro" when the household holds "SecureCare Plus" and "SecureCare Pro": the word that tells two alike
+  // products apart names one, and the question is about its holder -- unless the message names a person or a relation.
+  if(!chosen&&!mentioned.length&&!/\b(?:my|our|his|her)\s+(?:wife|husband|son|daughter|mum|mom|mother|dad|father|parents?|kids?|children|child|brother|sister|helper|maid|grand\w+)\b/i.test(personMessage)){
+    const alike=alikeProductOwner(personMessage,holdings.map(h=>({productName:h.product_name,ownerIds:h.owners})));
+    const person=alike?family.find(p=>p.id===alike):undefined;
     if(person)resolution={status:"resolved",person,explicit:true};
   }
   if(!chosen&&(resolution.status==="resolved"&&!resolution.explicit||resolution.status==="unknown"&&resolution.name==="this person")){
@@ -803,6 +824,25 @@ function whatIfEvent(traits:string[]){
 }
 /** "her dental coverage" -> "dental cover": the thing asked about, not the
  * person's own words handed back with their pronouns. */
+/** Round 7 (port): words that set an open claim aside ("never mind the claim", "let's stop the claim for now"). */
+/** Round 7 (port): "how much can I get back?", "how much can she get", "total claimable" asked while a claim is open. */
+const CLAIM_MONEY_MID=/^\s*(?:so\s+|and\s+|ok(?:ay)?[,\s]+|then\s+)?(?:how much (?:can|could|will|would|do|does|did) (?:i|we|she|he|they|my \w+) (?:get|claim|receive|be paid|recover)(?: back)?|how much (?:is|will be) (?:the )?(?:payout|claimable)|total (?:claimable|payout|i can (?:get|claim))|what(?:['’]s| is) the (?:max(?:imum)?|most) (?:i|we|she|he|they) can (?:get|claim))\b/i;
+/** The benefit a claim's own words are about, asked as the policy question that gives its printed limit. */
+function claimMoneyKind(event:string):{question:string;label:string}|null{
+  const t=event.toLowerCase();
+  if(/\bcancel\w*/.test(t)&&/\b(?:trip|flight|travel|holiday|tour)\b/.test(t))return {question:"What is the trip cancellation limit?",label:"trip cancellation"};
+  if(/\bcurtail\w*|cut short/.test(t))return {question:"What is the trip curtailment limit?",label:"trip curtailment"};
+  if(/\bdelay\w*/.test(t)&&/\b(?:flight|trip|travel)\b/.test(t))return {question:"What is the travel delay limit?",label:"travel delay"};
+  if(/\b(?:baggage|luggage)\b/.test(t))return {question:"What is the baggage limit?",label:"baggage"};
+  if(/\b(?:cancer|heart attack|stroke|critical illness|diagnos\w*)\b/.test(t))return {question:"What is the critical illness sum assured?",label:"critical illness"};
+  if(/\b(?:permanent(?:ly)? disab\w*|tpd)\b/.test(t))return {question:"What is the total and permanent disability sum assured?",label:"total and permanent disability"};
+  if(/\b(?:died|death|passed away)\b/.test(t))return {question:"What is the death benefit?",label:"death"};
+  if(/\b(?:admitted|hospitali[sz]ed|warded|hospital stay)\b/.test(t))return {question:"What does the hospital plan pay?",label:"a hospital stay"};
+  if(/\b(?:accident|fractur\w*|broke|injur\w*)\b/.test(t))return {question:"What is the accident medical expenses limit?",label:"accident medical expenses"};
+  return null;
+}
+const CLAIM_SET_ASIDE=/\b(?:never\s?mind|forget(?: about)?|stop|cancel|drop|skip|leave|park|pause|hold off(?: on)?)\b[^.?!]{0,20}\b(?:the |this |that |my |our )?claim\b|\b(?:not|no longer) (?:making|filing|doing|pursuing) (?:a |the |this |that )?claim\b|\bdon['’]?t want to claim\b/i;
+const CLAIM_SET_ASIDE_ANSWERS=new WeakSet<ChatAnswer>();
 export function askedTopic(question:string,people:ClaimPerson[]=[]){
   const topics=coverageTopics(question);
   if(topics.length)return topics.map(t=>t.label).join(" or ");
@@ -820,6 +860,8 @@ export function askedTopic(question:string,people:ClaimPerson[]=[]){
     .replace(/\b(?:her|his|their|my|your|our)\b/gi,"the").replace(/\b(?:mum|mom|mother|mak|emak|ibu|dad|father|bapa|son|daughter|brother|sister|wife|husband|helper|maid|grand\w+|baby|kid|child|family|it|he|she)['’]s\b/gi,"the").replace(/^the\s+/i,"").replace(/\s+/g," ").trim();
   // What is left must read as a thing, not as the question handed back
   // ("When is the policy due for renewal", "can reduce or not").
+  // Round 7 (port): chat words left in the topic ("GTL ah, the wife ask") hand the question back garbled.
+  if(/\b(?:ah|lor|meh|mah|hor|sia|ask|asks|asked|asking|tell|pls|plz|thanks?|ok|okay)\b|,/i.test(topic))return "anything on this";
   if(/\d/.test(topic)||/^(?:when|what|which|who|why|how|where|does|do|is|are|can|could|should|would|will|has|have|and|then|also|but)\b|\b(?:or not|anot|lah|leh|pls|please)\b|\b(?:i|we|me|us)\b|[?]|\b(?:give|gives|pay|pays|cover|covers|have|has|include|includes|offer|offers|get|gets)$/i.test(topic)||topic.split(/\s+/).length>6)return "anything on this";
   return topic.length>=3&&topic.length<=60?topic:"anything on this";
 }
@@ -859,8 +901,11 @@ export function readableObservation(text:string){
   // A schedule's header block (insurer, insured, policy number, period, sum
   // insured) quoted whole is not an observation about the question.
   if((text.match(/\b(?:Insurer|Insured|Policy number|Period of insurance|Sum insured|Certificate number|Policyholder|Life assured)\b/g)??[]).length>=3)return "";
-  let out=text.replace(/\s+/g," ").replace(/\bPage \d+ of \d+\b/gi,"").replace(/SYNTHETIC(?:-[A-Z0-9-]+)? TEST DOCUMENT[^.]*?(?:POLICY|$)/gi,"")
-    .replace(/DPTEST[^\s]*/g,"").replace(/\s+/g," ").trim();
+  let out=text.replace(/\s+/g," ").replace(/\bPage \d+ of \d+\b/gi,"").replace(/(?:\b\d{1,2}\s+)?\bS[YV]N\w*(?:-[A-Z0-9-]+)?\s+T\w{2,4}\s+DOC\w*[^.]*?(?:POLICY\b(?:[\s,.;:]*Pag\S*\s*\S{0,3}\s*of\s*\S{0,3}(?:[^A-Za-z]*\b[a-z]{1,2}\b)?[^A-Za-z]*$)?|$)/gi,"")
+    .replace(/DPTEST[^\s]*/g,"").replace(/\s+/g," ").trim().replace(/^[.,;:]\s*/,"");
+  // Round 7 (port): a sentence read by OCR from a scanned page is cleaned of the
+  // scanner's noise, or left out when it is mostly noise.
+  if(looksScanned(out)){const clean=cleanScannedLine(out);if(!clean)return "";out=clean+" (read from a scanned page)";}
   if(out.length>280){const cut=out.slice(0,280);const stop=Math.max(cut.lastIndexOf(". "),cut.lastIndexOf("; "));
     out=(stop>120?cut.slice(0,stop+1):cut.slice(0,cut.lastIndexOf(" ")))+"…";}
   return out.length>=12?out:"";
@@ -871,6 +916,7 @@ export function readableObservation(text:string){
  * neither swallowed by the new question nor lost to it. */
 function resumePendingClaimQuestion(answer:ChatAnswer,before:ConversationState,state:ConversationState,family:ClaimPerson[]=[]){
   const pending=before.pending;
+  if(CLAIM_SET_ASIDE_ANSWERS.has(answer))return; // set aside in this very message
   if(before.intent!=="claim"||!pending||state.intent==="claim"||answer.questions.length||answer.mode!=="answer")return;
   if(state.subjects[pending.subjectId]?.[pending.factKey])return; // answered or deferred this turn
   state.intent="claim";state.pending=pending;
@@ -1146,7 +1192,7 @@ function plannedEventReply(person:ClaimPerson,message:string,earlier?:string){
 /** Round 9: the car or home answer to use if the claim interview finds nothing for a reported damage event. */
 const DAMAGE_FALLBACK=new WeakMap<Conversation,PlainAnswer>();
 const TERM_PRE_EXISTING=/\bpre-?\s?existing\b/i;
-type PlainAnswer={summary:string;details:string[];nextSteps:string[];citations:ChatCitation[];patch?:Partial<ConversationState>;hypothetical?:string};
+type PlainAnswer={summary:string;details:string[];nextSteps:string[];citations:ChatCitation[];patch?:Partial<ConversationState>;hypothetical?:string;limits?:PolicyStatedLimit[]};
 async function plainQuestionAnswer(context:ChatContext,state:ConversationState):Promise<PlainAnswer|null>{
   const {request,people}=context;
   // After a tap on "Who is this about?", the message is the one held for it, not the name tapped.
@@ -1231,6 +1277,24 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
     return {summary:"I’m sorry the claim was turned down. Only the insurer decides a claim; you can ask it to explain the decision in writing and to review it."+(own?.handled?" "+own.summary:""),
       details:[...(preExisting?[preExisting.meaning]:[]),...lines.map(l=>l.line),...(own?.handled?own.details.slice(0,6):[]),"If you still disagree after the review, FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore."],
       nextSteps:lines.length||own?.handled?[]:["Tell me what the claim was for and I’ll show what "+whose+" policy says about it."],citations:[...lines.map(l=>l.citation),...(own?.handled?own.citations:[])],hypothetical:"rejected claim"};
+  }
+  // Round 7 (port): mid-claim, "how much can I get back?", "total claimable": no estimate before the claim evidence is reviewed,
+  // but the most the policy states it pays for the benefits this claim is about -- each a policy-stated limit with its page --
+  // and the claim's question stays on screen.
+  // (Only while the interview is still open: once its facts are in, the question is answered by the claim assessment itself.)
+  if(state.intent==="claim"&&state.pending&&people.length===1&&CLAIM_MONEY_MID.test(text)){
+    const event=[state.activeClaimQuery??"",...Object.values(state.subjects?.[people[0].id]??{}).map(f=>typeof f?.value==="string"?f.value:"")].join(" ");
+    const kind=claimMoneyKind(event);
+    if(kind){
+      try{
+        const r=await answerPolicyQuestion({accountId:request.accountId,question:kind.question,people});
+        const limits=(r.answer.policyStatedLimits??[]).filter(isValidPolicyStatedLimit);
+        if(r.handled&&limits.length)
+          return {summary:"DearPolicy doesn’t estimate what the insurer will pay until the claim evidence has been reviewed. What "+whose+" "+(limits.length===1?"policy states":"policies state")+" as the most "+(limits.length===1?"it pays":"they pay")+" for "+kind.label+" is below — a limit, not what this claim will pay.",
+            // In a claim the figures are on the policy-stated-limit cards only, never in the prose.
+            details:[],nextSteps:[],citations:r.answer.citations,limits};
+      }catch{/* the claim goes on as before */}
+    }
   }
   // Mid-claim, "wait what's my deductible again?": answered, and the claim's question stays on screen.
   if(pendingOnlyDamage&&!damageEvent(text)&&adminKind(text)!=="late"){
@@ -1445,11 +1509,27 @@ async function plainQuestionAnswer(context:ChatContext,state:ConversationState):
   return null;
 }
 async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string}):Promise<ChatResult>{
-  const {request,conversation}=context;
+  const {conversation}=context;let {request}=context;
+  if(context.request.languageReading)LANGUAGE_READING.set(conversation,context.request.languageReading);
   const report=options?.report??(async()=>undefined);
   const check=options?.check??(async()=>undefined);
   await check();
   const answer=blankAnswer();let state=conversation.state;
+  // Round 7 (port): "never mind the claim. How much is her hospital cash?" sets the
+  // open claim aside -- its question is not asked again and the rest of the
+  // message is answered as the question it is. The facts stay on record.
+  // (Also when this person's chat has no claim open: the claim set aside may be in another person's chat.)
+  if(!request.personChoiceId&&(state.intent==="claim"||state.pending||CLAIM_SET_ASIDE.test(request.submittedQuestion??request.question))){
+    const sent=request.submittedQuestion??request.question;
+    const parts=sent.split(/(?<=[.!?])\s+/);
+    const rest=parts.filter(part=>!CLAIM_SET_ASIDE.test(part)).join(" ").replace(/^(?:actually|ok(?:ay)?|so|then|and)[,\s]+/i,"").trim();
+    if(parts.some(part=>CLAIM_SET_ASIDE.test(part))&&rest.split(/\s+/).length>=3){
+      CLAIM_SET_ASIDE_ANSWERS.add(answer);
+      state={...state,intent:"policy_question",claimSetAside:true};
+      delete state.pending;delete state.activeClaimQuery;delete state.claimConcluded;delete state.activeQuery;
+      request={...request,question:rest,submittedQuestion:rest};
+    }
+  }
   if(context.people.length>1)state.answerPeople=context.people.map(p=>p.id);else delete state.answerPeople;
   if(context.alsoInEvent?.length&&context.people.length===1){
     const name=(p:ClaimPerson)=>p.preferred_name?.trim()||p.display_name;
@@ -1508,7 +1588,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   // A question about the claim just concluded ("what should we keep for the claim?") is never small talk or advice.
   const conversational=whatIfReply||request.personChoiceId||(state.intent==="claim"&&claimFollowUpKind(request.submittedQuestion??request.question))
     ||(state.propertyEvent&&propertyFollowUp(state.propertyEvent,request.submittedQuestion??request.question))||context.outside?null:conversationalReply({message:request.submittedQuestion??request.question,
-    selected:context.people.length===1?context.people[0]:null,family:context.family,hasTopic:!!state.activeQuery,pending:!!state.pending});
+    selected:context.people.length===1?context.people[0]:null,family:context.family,hasTopic:!!state.activeQuery,pending:!!state.pending,products:context.holdings});
   // Round 10: "what reversionary bonus was added in 2024?" reads as off-topic to the small-talk
   // rules, but a line of the household's own documents answers it: that line is the answer.
   if(conversational&&/^I can only help with your household/.test(conversational.summary)&&!request.personChoiceId&&!/\b(?:should (?:i|we)|worth it|advi[cs]e|recommend)\b/i.test(request.submittedQuestion??request.question)){
@@ -1530,6 +1610,11 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
     if(bereaved&&/\bFor example:|tell me what happened/.test(answer.summary)){
       answer.summary=(/^You[’']re welcome/.test(answer.summary)?"You’re welcome. ":"")+"I’m here whenever you need me — for this claim, or any other question about your family’s policies. Take care.";answer.details=[];
     }
+    // Round 7 (port): thanks closes the turn -- the claim's facts stay saved, but its
+    // open question is not pushed onto whatever is asked next.
+    if(state.pending&&conversational.kind==="thanks"){state={...state};delete state.pending;}
+    // Round 7 (port): "hi" with no claim open starts afresh: the next short question ("equalife?") is not read as a follow-up to an earlier topic.
+    if(conversational.kind==="greeting"&&!state.pending&&state.intent!=="claim"){state={...state};delete state.activeQuery;delete state.intent;}
     if(state.pending){
       const {subjectId:_subject,factKey:_fact,...open}=state.pending;void _subject;void _fact;
       answer.mode="fact_finding";answer.questions=[open];answer.details.push("When you’re ready, here is the question I was on.");
@@ -1557,6 +1642,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
     if(plainAnswer){
       if(plainAnswer.patch)state={...state,...plainAnswer.patch};
       answer.mode="answer";answer.summary=plainAnswer.summary;answer.details=plainAnswer.details;answer.nextSteps=plainAnswer.nextSteps;answer.citations=plainAnswer.citations;answer.confidence=null;
+      if(plainAnswer.limits?.length)answer.policyStatedLimits=plainAnswer.limits;
       if(plainAnswer.hypothetical)HYPOTHETICAL.set(answer,plainAnswer.hypothetical);else if(state.hypothetical&&!plainAnswer.patch)HYPOTHETICAL.set(answer,state.hypothetical);
       // A question still open in the claim stays on screen (lib/chat/conversational.ts does the same).
       if(state.pending){const {subjectId:_s,factKey:_f,...open}=state.pending;void _s;void _f;answer.mode="fact_finding";answer.questions=[open];answer.details.push("When you’re ready, here is the question I was on.");}
@@ -1684,6 +1770,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
       state=mergeInterpretation({state,interpretation,message:request.question,subjectIds,
         subjectNames:Object.fromEntries(context.people.map(p=>[p.id,[p.display_name,p.preferred_name??""].filter(Boolean)])),now,timeZone:request.timeZone});
       state=applyExplicitDeferrals(state,request.question,subjectIds,now);
+      // Round 7 (port): the claim was set aside in this message and the rest only asks; it is not read as the claim going on.
+      if(CLAIM_SET_ASIDE_ANSWERS.has(answer)&&state.intent==="claim"&&!REPORTS_AN_EVENT.test(request.question))state.intent="policy_question";
       // A "Question: answer" message from the chat's own question card is
       // recorded deterministically -- the interpreter above may miss the
       // mapping, and a missed answer re-asks the same question forever.
@@ -1773,11 +1861,13 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
             if(state.intent==="policy_question"&&COVERAGE_OVERVIEW.test(state.activeQuery))state.intent="portfolio";
           }
         }
+        const otherPersonsPlan=(q:string)=>explicitPeople(q,context.family).some(p=>!context.people.some(x=>x.id===p.id));
         // Round 7: a short follow-up about one term ("what's the excess?", "how much is the premium?")
         // after a question about one plan is about that plan.
         if(!pendingBefore&&!reportsSomething&&!carriedQuestion&&before.activeQuery&&before.intent&&before.intent!=="claim"&&sentNow.split(/\s+/).length<=8&&
           (topicsNow.length||isPremiumQuestion(sentNow))&&!explicitPeople(sentNow,context.family).length){
-          const scope=planInScope(before.activeQuery,context.holdings);
+          // (Round 7 port: not another person's plan -- "what is my deductible?" after a question about Wei Jie's group plan.)
+          const scope=otherPersonsPlan(before.activeQuery)?null:planInScope(before.activeQuery,context.holdings);
           if(scope&&!latestPlan(sentNow,context.holdings)&&carriesToPlan(topicsNow,scope)){
             state.intent="policy_question";state.activeQuery=sentNow.replace(/[?.!\s]+$/,"")+" on the "+scope+"?";carriedQuestion=state.activeQuery;
             if(!before.activeClaimQuery)delete state.activeClaimQuery;
@@ -1789,7 +1879,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           (state.activeQuery===sentNow||!state.activeQuery||state.activeQuery===before.activeQuery)&&(topicsNow.length||/\bcover(?:ed|s)?\b/i.test(sentNow)||/^(?:what(?:['’]s| is| are)|how much|is there|are there|when|which)\b/i.test(sentNow))&&!latestPlan(sentNow,context.holdings)&&!explicitPeople(sentNow,context.family).length&&!COVERAGE_OVERVIEW.test(sentNow)
           // "is she covered for dementia?": a question about the person's cover, not about the plan just discussed.
           &&!/^(?:so\s+|and\s+)?(?:is|are|am) (?:she|he|they|i|we)\b(?: still| also)? (?:covered|insured)\b/i.test(sentNow)){
-          const scope=planInScope(before.activeQuery,context.holdings);
+          const scope=otherPersonsPlan(before.activeQuery)?null:planInScope(before.activeQuery,context.holdings);
           const kindOfScope=scope?POLICY_TOPICS.filter(t=>t.kind&&t.kind.test(scope)).map(t=>t.key):[];
           const otherKind=topicsNow.some(t=>POLICY_TOPICS.find(x=>x.key===t.key)?.kind&&!kindOfScope.includes(t.key))||(!!scope&&!carriesToPlan(topicsNow,scope));
           if(scope&&!otherKind){state.intent="policy_question";state.activeQuery=sentNow.replace(/[?.!\s]+$/,"")+" on the "+scope+"?";carriedQuestion=state.activeQuery;}
@@ -1797,7 +1887,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // "What is Xin Yi covered for?", "list all our policies": the policies on file, per person.
         if(!pendingBefore&&!reportsSomething&&COVERAGE_OVERVIEW.test(sentNow)&&!topicsNow.length&&!coverageTopics(sentNow).length){state.intent="portfolio";state.activeQuery=sentNow;}
         // Round 12: "show me the full list" after a short answer: the same question, every line.
-        if(!pendingBefore&&!reportsSomething&&before.activeQuery&&before.intent&&before.intent!=="claim"&&FULL_LIST_FOLLOW_UP.test(sentNow)&&sentNow.split(/\s+/).length<=8&&!explicitPeople(sentNow,context.family).length){
+        if(!pendingBefore&&!reportsSomething&&before.activeQuery&&before.intent&&before.intent!=="claim"&&FULL_LIST_FOLLOW_UP.test(sentNow)&&!COVERAGE_OVERVIEW.test(sentNow)&&sentNow.split(/\s+/).length<=8&&!explicitPeople(sentNow,context.family).length){
           state.intent="policy_question";state.activeQuery=before.activeQuery;carriedQuestion=before.activeQuery;wantsFullList=true;
           if(!before.activeClaimQuery)delete state.activeClaimQuery;
         }
@@ -1874,8 +1964,24 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // A premium question about one plan or a due date is answered from that plan's own printed lines (below).
         const namesAPlan=(q:string)=>context.holdings.some(h=>h.split(/[^\p{L}\p{N}]+/u).some(t=>t.length>=5&&!/\d/.test(t)&&!COMMON_PRODUCT_WORD.test(t)&&!/^(?:insurance|policy|plan)$/i.test(t)&&new RegExp("\\b"+t+"\\b","i").test(q)));
         const premiumOnly=(q:string)=>!/\b(?:still|stop\w*|completed?|no (?:more|longer)|already)\b/i.test(sentNow)&&(RANKED_PREMIUM.test(sentNow)||(isPremiumQuestion(q)&&questionTopics(q).every(t=>t.key==="premium")&&!premiumAboutOnePlan(q)&&!namesAPlan(q)));
+        // Round 7 (port): the dependants' premium of a group plan: its printed per-dependant rates, added up for the dependants it names.
+        if(!whatIfReply&&!pendingBefore&&state.intent!=="claim"&&!reportsSomething&&DEPENDANT_PREMIUM_QUESTION.test(sentNow)&&(isPremiumQuestion(sentNow)||/\bpay(?:ing)?\b/i.test(sentNow))){
+          const dependants=await dependantPremiumAnswer({accountId:request.accountId,question:sentNow}).catch(()=>null);
+          if(dependants){
+            state.intent="policy_question";state.activeQuery=sentNow;
+            answer.mode="answer";answer.summary=dependants.summary;answer.details=dependants.details;answer.citations=dependants.citations;answer.confidence="strong_match";
+            answer.knownFacts=context.people.flatMap(p=>[p.display_name,...factLabels(state.subjects[p.id]??{})]);
+            if(context.people.length===1)answer.resolvedFamilyMemberId=context.people[0].id;
+            answer.conversationId=conversation.id;answer.conversationRevision=conversation.revision+1;
+            await check();
+            await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:false}),jobId:options?.jobId});
+            return {answer,retrieved:[]};
+          }
+        }
         if(!whatIfReply&&!pendingBefore&&state.intent!=="claim"&&premiumOnly(state.activeQuery??sentNow)&&!reportsSomething){
           const premium=await premiumAnswer({accountId:request.accountId,people:context.people,question:state.activeQuery??sentNow});
+          // (Round 7 port: a premium question about one named plan that prints none is left to that plan's own pages below.)
+          if(premium.handled!==false&&premium.summary){
           state.intent="policy_question";
           answer.mode="answer";answer.summary=premium.summary;answer.details=premium.details;answer.citations=premium.citations;
           answer.confidence=premium.citations.length?"strong_match":"insufficient_evidence";
@@ -1885,6 +1991,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           await check();
           await saveTurn({conversation,token:context.token,state,message:request.submittedQuestion??request.question,answer:enforceLiveChatMonetaryBoundary(answer,{claimContext:liveClaimContext(state.intent,answer,request.question)}),jobId:options?.jobId});
           return {answer,retrieved:[]};
+          }
         }
         // The reply to a what-if's question goes back to that what-if, with
         // the reply noted and nothing the interpreter read into it kept.
@@ -2074,7 +2181,8 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
         // situation but reports no facts is a what-if however it was classified,
         // and misreading that in either direction is what sent a question about
         // a fall into a national health scheme's deductible table.
-        const reportsAnEvent=contracts.some(contract=>
+        if(state.intent==="claim")delete state.claimSetAside;
+        const reportsAnEvent=!state.claimSetAside&&contracts.some(contract=>
           eventTraits(state.subjects[contract.ownerId]??{},(state.scenarios?.[contract.ownerId]??[]).flatMap(s=>s.traits)).length>0);
         // The Coverage Ledger: one row per (person, plan, event, pays). A payout
         // question is a lookup in it — the same lookup for a what-if and for a

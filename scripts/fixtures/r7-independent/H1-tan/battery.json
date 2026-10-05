@@ -1,0 +1,4287 @@
+{
+ "household_id": "H1-tan",
+ "manifest": "manifest.json",
+ "as_of_date": "2026-10-05",
+ "default_asker": "m_weiming",
+ "global_forbidden": [
+  "S$7,500",
+  "S$380,000",
+  "S$4,200",
+  "S$187.40",
+  "EGI-TR-901174",
+  "Nur'Aisyah",
+  "Siti Hajar",
+  "Kah Seng",
+  "Pei Shan"
+ ],
+ "notes": [
+  "Signed-in user is Tan Wei Ming (owner) unless 'asker' says otherwise.",
+  "Ah Kow is 75 on 2026-10-05: deductible S$3,500 applies (S$5,250 row is age 81+).",
+  "Bill-share computations assume the whole bill is claimable; graders should accept answers that state that assumption."
+ ],
+ "singles": [
+  {
+   "id": "H1-S001",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's my dad's hospital plan?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "HarbourShield Advantage",
+    {
+     "any_of": [
+      "A ward",
+      "A-ward"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S002",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "how much is papa's shield premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$4,250.00"
+   ],
+   "forbidden": [
+    "S$7,350"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ],
+   "note": "May also mention rider S$1,968.00 separately; must not add the MediSave and cash parts on top of the total."
+  },
+  {
+   "id": "H1-S003",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much of Ah Kow's premium comes out of Medisave?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,100.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S004",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "cash portion for dad's insurance?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,150.00",
+    "S$1,968.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ],
+   "note": "Plan cash part S$1,150.00 plus rider S$1,968.00 (cash only) = S$3,118.00."
+  },
+  {
+   "id": "H1-S005",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Can the co-pay rider be paid with Medisave?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "cannot be paid using MediSave",
+      "cash only",
+      "cannot",
+      "can't",
+      "not"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S006",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Ah Kow deductible how much ah",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,500"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ],
+   "note": "Age 75 -> 'age 80 and below' row."
+  },
+  {
+   "id": "H1-S007",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's the co-insurance for my father?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "10%"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S008",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Ah Kow policy year limit?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$600,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S009",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Is dad's knee replacement covered?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "osteoarthritis",
+    {
+     "any_of": [
+      "right knee"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 3
+    }
+   ],
+   "note": "Specific exclusion endorsement for osteoarthritis of the right knee; a good answer asks/flags which knee & cause."
+  },
+  {
+   "id": "H1-S010",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does Ah Kow's plan cover dental?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "accident"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S011",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does dad's plan cover hearing aids?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "excluded",
+      "not pay",
+      "won't pay",
+      "will not pay",
+      "not covered"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S012",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How many days pre-hospitalisation for Ah Kow?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "120 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ],
+   "note": "Rider extends to 180 days for panel treatment."
+  },
+  {
+   "id": "H1-S013",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "post hosp days for dad?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "365 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S014",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Kidney dialysis limit for my father",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,000 per month"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S015",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "what if dad needs community hospital rehab after surgery",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$15,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S016",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Ah Kow fall sick in Malaysia, can claim?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "emergency"
+     ]
+    },
+    {
+     "any_of": [
+      "A ward"
+     ]
+    }
+   ],
+   "forbidden": [
+    "not covered"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S017",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "rider?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Co-Pay Rider"
+   ],
+   "forbidden": [],
+   "tags": [
+    "very-short"
+   ],
+   "note": "Only rider in the household."
+  },
+  {
+   "id": "H1-S018",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's the co-payment cap on the rider?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,000",
+    {
+     "any_of": [
+      "panel",
+      "pre-authorised"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 4
+    }
+   ]
+  },
+  {
+   "id": "H1-S019",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "When does dad's policy renew?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "31 January 2027",
+      "1 February 2027",
+      "1 February"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S020",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Who is the policyholder for Ah Kow's shield plan?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Tan Wei Ming",
+      "Wei Ming",
+      "you"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S021",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Psychiatric cover for dad?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$7,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S022",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How long do I have to submit dad's hospital claim?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "365 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S023",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Is Ah Kow covered for private hospital?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "A ward"
+     ]
+    }
+   ],
+   "forbidden": [
+    "is not covered",
+    "not covered at all"
+   ],
+   "tags": [
+    "silent-doc"
+   ],
+   "note": "Entitlement is restructured A ward; document does not describe pro-ration for private hospitals."
+  },
+  {
+   "id": "H1-S024",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's Ah Kow's date of birth on the policy?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "14 March 1951"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S025",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How old is my father?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "75"
+   ],
+   "forbidden": [],
+   "note": "Computed from DOB 14 March 1951 at 2026-10-05."
+  },
+  {
+   "id": "H1-S026",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's the rider number?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "SHA-CPR-4410287-01"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S027",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "what's the ward class for Ah Kow",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "A ward"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S028",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does Ah Kow's plan cover TCM?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H1-S029",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What does 'co-insurance' mean on dad's plan?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "10%"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d1_ahkow_isp",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S030",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much life insurance do I have?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$500,000",
+    "S$200,000"
+   ],
+   "forbidden": [
+    "S$80,000"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    },
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ],
+   "note": "Personal LifeGuard S$500,000 + group GTL Plan 2 S$200,000."
+  },
+  {
+   "id": "H1-S031",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "my term plan expire when",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "22 July 2049"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S032",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Who is the nominee on my LifeGuard policy?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Lee Siew Ling",
+      "Siew Ling"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S033",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does my term plan cover critical illness?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$150,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S034",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "premium for my LifeGuard",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,236.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S035",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "If I claim the 150k critical illness, what's left for death?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$350,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S036",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does my LifeGuard cover suicide?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "1 year"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "sensitive"
+   ],
+   "note": "Exclusion only within 1 year of 1 Oct 2018 commencement; answer factually and with care."
+  },
+  {
+   "id": "H1-S037",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What CI cover does my wife have?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "BloomSecure",
+    "S$50,000",
+    "S$200,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d3_siewling_ci",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S038",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Siew Ling's CI waiting period?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "90 days"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d3_siewling_ci",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S039",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does Siew Ling have a hospital plan?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "GHS",
+      "Group Hospital"
+     ]
+    },
+    {
+     "any_of": [
+      "Spouse"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$600,000",
+    "HarbourShield Advantage covers Siew Ling"
+   ],
+   "note": "No personal hospital plan; covered under Wei Ming's group GHS at Spouse tier."
+  },
+  {
+   "id": "H1-S040",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "how much she pay for her CI policy",
+   "expected_behaviour": "clarify-which-person",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "tags": [
+    "pronoun-no-context"
+   ],
+   "note": "'she' with no prior context; answering for Siew Ling (the only adult woman with a CI policy) is acceptable if it names her."
+  },
+  {
+   "id": "H1-S041",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Is my wife's CI premium payable by MediSave?",
+   "expected_behaviour": "not-found",
+   "must_include": [
+    "S$1,512.60"
+   ],
+   "forbidden": [
+    "yes, MediSave",
+    "can be paid from MediSave"
+   ],
+   "tags": [
+    "silent-doc"
+   ]
+  },
+  {
+   "id": "H1-S042",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Siew Ling's CI covers how many conditions?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "37"
+   ],
+   "note": "37 conditions belongs to Wei Ming's accelerator rider."
+  },
+  {
+   "id": "H1-S043",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Siew Ling ada hospital plan tak?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "GHS",
+      "Group Hospital",
+      "company"
+     ]
+    },
+    {
+     "any_of": [
+      "Spouse",
+      "S$350"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "malay"
+   ]
+  },
+  {
+   "id": "H1-S044",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "wife's CI how much ah, early stage one",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$50,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d3_siewling_ci",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S045",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Show me Siew Ling's ILP",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Jun Hui"
+     ]
+    }
+   ],
+   "forbidden": [
+    "Siew Ling's ILP is worth"
+   ],
+   "note": "She is the policyholder of Jun Hui's ILP; she is not the life assured."
+  },
+  {
+   "id": "H1-S046",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does Siew Ling get anything if I die?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$500,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d2_weiming_term",
+     "page": 1
+    }
+   ],
+   "note": "Nominee 100% on LifeGuard; GTL beneficiary not stated."
+  },
+  {
+   "id": "H1-S047",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What does my company insurance cover?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$200,000",
+    "S$250,000",
+    {
+     "any_of": [
+      "GHS",
+      "Hospital"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$80,000"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    },
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S048",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "group term life how much",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$200,000"
+   ],
+   "forbidden": [
+    "S$80,000"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S049",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Am I Plan 1 or Plan 2?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Plan 2"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S050",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "If Siew Ling hospitalised, what's the room and board limit under the company plan?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$350"
+   ],
+   "forbidden": [
+    "S$500 per day",
+    "S$300 per day"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S051",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Child room and board GHS?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$300"
+   ],
+   "forbidden": [
+    "S$350"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S052",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Overall limit for kids under company plan",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$18,000"
+   ],
+   "forbidden": [
+    "S$20,000 per child"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S053",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does my group plan cover my dad?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "not",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [
+    "Ah Kow is covered under GHS"
+   ],
+   "note": "Ah Kow is not an enrolled dependant."
+  },
+  {
+   "id": "H1-S054",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does GPA cover my wife?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "employee only",
+      "only the employee",
+      "not",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S055",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "GHS got deductible?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "No deductible",
+      "no deductible"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S056",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much am I paying for the dependants' GHS?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,506"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ],
+   "tags": [
+    "total"
+   ],
+   "note": "S$612.00 + 3 x S$298.00 = S$1,506.00"
+  },
+  {
+   "id": "H1-S057",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "ICU limit for Jun Hao under company plan",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$800"
+   ],
+   "forbidden": [
+    "S$1,200"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 3
+    }
+   ]
+  },
+  {
+   "id": "H1-S058",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "is maternity covered under my company GHS",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "pregnancy",
+      "childbirth"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 4
+    }
+   ]
+  },
+  {
+   "id": "H1-S059",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Wah the company insurance until when ah?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "31 March 2027"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S060",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "GPA medical expenses for me?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$2,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S061",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "outpatient GP visit can claim from company insurance?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "outpatient"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 4
+    }
+   ]
+  },
+  {
+   "id": "H1-S062",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "who to contact for company insurance claim",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "hr-benefits@kallangfreight.example",
+      "HR"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 4
+    }
+   ]
+  },
+  {
+   "id": "H1-S063",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "GTL until what age?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "70"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S064",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "how much is my group personal accident for permanent disablement",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$250,000"
+   ],
+   "forbidden": [
+    "S$100,000"
+   ],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S065",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Is Xin Yi covered under GPA?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "employee only",
+      "only",
+      "not",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d4_group_benefits",
+     "page": 2
+    }
+   ]
+  },
+  {
+   "id": "H1-S066",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "my boss company insurans cover my kids or not?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "GHS",
+      "Hospital"
+     ]
+    },
+    {
+     "any_of": [
+      "Child",
+      "S$300",
+      "S$18,000"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo",
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S067",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much is the GTL ah, my wife ask",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$200,000"
+   ],
+   "forbidden": [
+    "S$80,000"
+   ],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S068",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does the company GHS cover dad's cataract surgery?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "not",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "note": "Ah Kow not enrolled under GHS; his own HarbourShield may apply."
+  },
+  {
+   "id": "H1-S069",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "When does Jun Hao's endowment mature?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "9 May 2031"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d5_junhao_endowment",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S070",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much will Jun Hao get at maturity?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$50,000",
+    {
+     "any_of": [
+      "S$58,420",
+      "S$53,960"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d5_junhao_endowment",
+     "page": 1
+    }
+   ],
+   "note": "Projected values must be labelled non-guaranteed."
+  },
+  {
+   "id": "H1-S071",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "KidSaver premium?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,480.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d5_junhao_endowment",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S072",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What happens to the KidSaver if I die?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "waived"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d5_junhao_endowment",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S073",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Should I surrender Jun Hao's endowment?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": [
+    "you should surrender",
+    "I recommend surrendering"
+   ]
+  },
+  {
+   "id": "H1-S074",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Jun's endowment maturity",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "9 May 2031",
+    "Jun Hao"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "clarify-which-person"
+   ],
+   "tags": [
+    "ambiguous-jun"
+   ],
+   "note": "Only Jun Hao has an endowment, so answering is fine if it names Jun Hao."
+  },
+  {
+   "id": "H1-S075",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "jun hao's endownment premuim",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,480.00"
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo"
+   ]
+  },
+  {
+   "id": "H1-S076",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much is Jun Hui's ILP worth?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$21,385.40",
+    {
+     "any_of": [
+      "30 June 2026"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d6_junhui_ilp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S077",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What premium do we pay for Jun Hui's ILP?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "S$3,480",
+    "S$1,512.60"
+   ],
+   "tags": [
+    "no-premium-printed"
+   ]
+  },
+  {
+   "id": "H1-S078",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Jun Hui ILP funds?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Global Equity",
+    "Asia Bond",
+    "60%",
+    "40%"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d6_junhui_ilp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S079",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "ILP death benefit",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "105%"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d6_junhui_ilp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S080",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Is Jun Hui's ILP value guaranteed?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "not guaranteed",
+      "no"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d6_junhui_ilp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S081",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Should I switch Jun Hui's ILP to the bond fund?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S082",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Jun's policy how much",
+   "expected_behaviour": "clarify-which-person",
+   "must_include": [
+    {
+     "any_of": [
+      "Jun Hao"
+     ]
+    },
+    {
+     "any_of": [
+      "Jun Hui"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "ambiguous-jun"
+   ]
+  },
+  {
+   "id": "H1-S083",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Jun got hospital cover?",
+   "expected_behaviour": "clarify-which-person",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ],
+   "tags": [
+    "ambiguous-jun"
+   ],
+   "note": "Both Jun Hao and Jun Hui have GHS child tier; an answer is acceptable only if it names both children explicitly."
+  },
+  {
+   "id": "H1-S084",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Policy number for Jun Hui's ILP",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "OLI-ILP-5530981"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d6_junhui_ilp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S085",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "how many units of the equity fund does Jun Hui hold",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "4,812.337"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d6_junhui_ilp",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S086",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's the surrender value of Jun Hao's endowment now?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "surrender value is S$"
+   ]
+  },
+  {
+   "id": "H1-S087",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does the endowment have a critical illness benefit?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ]
+  },
+  {
+   "id": "H1-S088",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What does Xin Yi's PA cover?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$50,000",
+    "S$3,000",
+    "S$100"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d7_xinyi_pa_scan",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "scanned"
+   ]
+  },
+  {
+   "id": "H1-S089",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Xin Yi PA premium",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$168.00"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d7_xinyi_pa_scan",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "scanned"
+   ]
+  },
+  {
+   "id": "H1-S090",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does Xin Yi's policy cover dengue?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$100",
+    {
+     "any_of": [
+      "30 days"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d7_xinyi_pa_scan",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "scanned"
+   ]
+  },
+  {
+   "id": "H1-S091",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Xin Yi policy expiry",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "09 Jan 2027",
+      "9 January 2027",
+      "9 Jan 2027"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d7_xinyi_pa_scan",
+     "page": 1
+    }
+   ],
+   "tags": [
+    "scanned"
+   ]
+  },
+  {
+   "id": "H1-S092",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Does Xin Yi's PA cover sports injuries?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,000"
+   ],
+   "forbidden": [
+    "not covered",
+    "is excluded",
+    "isn't covered",
+    "is not covered"
+   ],
+   "tags": [
+    "silent-doc",
+    "scanned"
+   ],
+   "note": "Accident medical covers accidents; sports are not mentioned at all."
+  },
+  {
+   "id": "H1-S093",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Can Jun Hui claim the dengue hospital cash from Xin Yi's PA?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "Xin Yi"
+     ]
+    }
+   ],
+   "forbidden": [
+    "yes, Jun Hui can claim"
+   ],
+   "note": "PA insures Xin Yi only."
+  },
+  {
+   "id": "H1-S094",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "xin yi kena dengue last time, can claim from her PA?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$100"
+   ],
+   "forbidden": [],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S095",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Which of my kids have insurance?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "Jun Hao",
+    "Jun Hui",
+    "Xin Yi"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S096",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "List all policies for the family",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "HarbourShield",
+    "LifeGuard",
+    "BloomSecure",
+    "KidSaver",
+    "WealthBuilder",
+    "JuniorGuard",
+    {
+     "any_of": [
+      "Kallang Freight",
+      "group",
+      "G-KFL-2026-118"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S097",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Total premiums we pay in a year?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "S$14,120.60",
+      "S$12,614.60"
+     ]
+    },
+    {
+     "any_of": [
+      "ILP",
+      "WealthBuilder"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "total"
+   ],
+   "note": "4,250+1,968+1,236+1,512.60+3,480+168 = 12,614.60; +1,506 GHS dependants = 14,120.60. ILP premium not printed - must be flagged."
+  },
+  {
+   "id": "H1-S098",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "How much cash do we pay vs Medisave for dad?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,100",
+    {
+     "any_of": [
+      "S$3,118",
+      "S$1,150"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "total"
+   ]
+  },
+  {
+   "id": "H1-S099",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Compare my life cover vs my wife's",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$500,000",
+    {
+     "any_of": [
+      "BloomSecure",
+      "critical illness"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "comparison"
+   ]
+  },
+  {
+   "id": "H1-S100",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Which document is the newest?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "30 June 2026"
+     ]
+    },
+    {
+     "any_of": [
+      "WealthBuilder",
+      "ILP"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "note": "ILP annual statement as at 30 June 2026 is the most recently dated document."
+  },
+  {
+   "id": "H1-S101",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Which policies are paid with MediSave?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "HarbourShield",
+    "S$3,100"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S102",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Do we have travel insurance?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H1-S103",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What did our Bali travel insurance cover for trip cancellation?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H1-S104",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "I deleted the TravelEasy policy right? can still see the baggage limit?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": [],
+   "tags": [
+    "deleted-doc"
+   ]
+  },
+  {
+   "id": "H1-S105",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's my car insurance excess?",
+   "expected_behaviour": "not-found",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S106",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "wah my lao pa hospital bill how much i need to pay sia",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,500",
+    {
+     "any_of": [
+      "S$3,000",
+      "5%"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S107",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "ahkow insurans got cover ICU or not",
+   "expected_behaviour": "answer",
+   "must_include": [
+    {
+     "any_of": [
+      "as charged",
+      "As charged"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "tags": [
+    "typo",
+    "singlish"
+   ]
+  },
+  {
+   "id": "H1-S108",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Bapa saya punya insurance cover apa?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "HarbourShield"
+   ],
+   "forbidden": [],
+   "tags": [
+    "malay"
+   ]
+  },
+  {
+   "id": "H1-S109",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "我爸爸的保险 deductible 多少?",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$3,500"
+   ],
+   "forbidden": [],
+   "tags": [
+    "chinese"
+   ]
+  },
+  {
+   "id": "H1-S110",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Ah Kow 的 rider 保费多少",
+   "expected_behaviour": "answer",
+   "must_include": [
+    "S$1,968.00"
+   ],
+   "forbidden": [],
+   "tags": [
+    "chinese"
+   ]
+  },
+  {
+   "id": "H1-S111",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Should I upgrade dad to a private hospital plan?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S112",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Which insurer is best for kids?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": [],
+   "also_acceptable": [
+    "out-of-scope"
+   ]
+  },
+  {
+   "id": "H1-S113",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Is it worth keeping the Co-Pay rider since the premium so high?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S114",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Should I buy more life insurance?",
+   "expected_behaviour": "refuse-advice",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S115",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "hi",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S116",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "thanks lah",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S117",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "good morning! what can you do?",
+   "expected_behaviour": "greeting",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S118",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's the weather tomorrow?",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S119",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Help me write a resignation letter",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S120",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "What's the CPF interest rate for OA?",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S121",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Recommend a good restaurant in Bedok",
+   "expected_behaviour": "out-of-scope",
+   "must_include": [],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S122",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Dad admitted to SGH yesterday for pneumonia, how to claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "HarbourShield",
+    {
+     "any_of": [
+      "365 days",
+      "hospital to submit",
+      "submit the claim electronically"
+     ]
+    }
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S123",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Jun Hao got dengue and is warded at KKH, can claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    {
+     "any_of": [
+      "GHS",
+      "Group Hospital"
+     ]
+    },
+    {
+     "any_of": [
+      "S$300",
+      "S$18,000"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$100 per day"
+   ],
+   "note": "Xin Yi's PA dengue cash does not cover Jun Hao."
+  },
+  {
+   "id": "H1-S124",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "If I pass away what will my family get?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$500,000",
+    "S$200,000",
+    {
+     "any_of": [
+      "HR",
+      "employer"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$80,000"
+   ],
+   "also_acceptable": [
+    "answer"
+   ],
+   "note": "Group GTL should be mentioned as possible, to be confirmed with employer."
+  },
+  {
+   "id": "H1-S125",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Siew Ling diagnosed with early stage breast cancer, what can she claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$50,000"
+   ],
+   "forbidden": [],
+   "cite": [
+    {
+     "doc": "h1_d3_siewling_ci",
+     "page": 1
+    }
+   ]
+  },
+  {
+   "id": "H1-S126",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Xin Yi fell at the playground and broke her arm, which policy?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "JuniorGuard",
+    "S$3,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S127",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "Dad needs knee replacement for his osteoarthritis, claim from shield?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "osteoarthritis"
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ]
+  },
+  {
+   "id": "H1-S128",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "My wife gave birth, can claim from GHS?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    {
+     "any_of": [
+      "pregnancy",
+      "childbirth"
+     ]
+    }
+   ],
+   "forbidden": [],
+   "also_acceptable": [
+    "answer"
+   ]
+  },
+  {
+   "id": "H1-S129",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "I broke my leg in a cycling accident, what can I claim?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$2,000"
+   ],
+   "forbidden": []
+  },
+  {
+   "id": "H1-S130",
+   "kind": "single",
+   "asker": "m_weiming",
+   "scope": "household",
+   "message": "If I die, does the company pay anything?",
+   "expected_behaviour": "claim-question",
+   "must_include": [
+    "S$200,000",
+    {
+     "any_of": [
+      "HR",
+      "employer"
+     ]
+    }
+   ],
+   "forbidden": [
+    "S$80,000"
+   ],
+   "also_acceptable": [
+    "answer"
+   ]
+  }
+ ],
+ "conversations": [
+  {
+   "id": "H1-C01",
+   "kind": "conversation",
+   "title": "Elderly parent hospitalisation claim",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "elderly",
+    "correction"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "My father was admitted to Tan Tock Seng last night",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "HarbourShield"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "it's a fall, broke his hip",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "which ward is he entitled to?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "A ward"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "he's in B1 now, is that ok?",
+     "expected_behaviour": "answer",
+     "must_include": [],
+     "forbidden": [
+      "not covered"
+     ],
+     "tags": [
+      "silent-doc"
+     ],
+     "note": "Document does not discuss staying in a lower ward."
+    },
+    {
+     "turn": 5,
+     "message": "how much deductible he must pay",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "and co-insurance?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "10%"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "with the rider what's the max we pay?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "the bill estimate is $28,000, how much will we pay roughly?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$1,400"
+       ]
+      }
+     ],
+     "forbidden": [],
+     "note": "Rider: 5% of S$28,000 = S$1,400 (under S$3,000 cap). Without rider: S$3,500 + 10% x S$24,500 = S$5,950."
+    },
+    {
+     "turn": 9,
+     "message": "oh wait sorry, actually it's Changi General not TTS",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": [],
+     "note": "Correction mid-claim; nothing in the coverage changes."
+    },
+    {
+     "turn": 10,
+     "message": "how long after discharge to submit?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "365 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 11,
+     "message": "after discharge he needs physio for a few months, covered?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "365 days",
+        "S$15,000"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 12,
+     "message": "can use his medisave for the deductible?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [],
+     "tags": [
+      "silent-doc"
+     ]
+    },
+    {
+     "turn": 13,
+     "message": "ok thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C02",
+   "kind": "conversation",
+   "title": "Child dengue claim with ambiguous Jun",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "dengue",
+    "ambiguous-jun"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Jun has dengue, admitted to KKH",
+     "expected_behaviour": "clarify-which-person",
+     "must_include": [
+      {
+       "any_of": [
+        "Jun Hao"
+       ]
+      },
+      {
+       "any_of": [
+        "Jun Hui"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "Jun Hao",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      {
+       "any_of": [
+        "GHS",
+        "Group Hospital"
+       ]
+      }
+     ],
+     "forbidden": [
+      "S$100 per day"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "how much per day for the room?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300"
+     ],
+     "forbidden": [
+      "S$350",
+      "S$500"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "what if he needs ICU",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$800"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "Xin Yi's PA has dengue cover right, can use for him?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Xin Yi"
+       ]
+      }
+     ],
+     "forbidden": [
+      "yes, you can use"
+     ]
+    },
+    {
+     "turn": 6,
+     "message": "total max we can claim?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$18,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "need to pay anything first? deductible?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "No deductible",
+        "no deductible"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "how to claim",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "HR",
+        "Letter of Guarantee"
+       ]
+      },
+      {
+       "any_of": [
+        "30 days"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "his brother Jun Hui also feeling feverish, he covered too?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "Jun Hui",
+      {
+       "any_of": [
+        "Child",
+        "GHS"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "ok thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C03",
+   "kind": "conversation",
+   "title": "Death of the employee (asked by spouse)",
+   "asker": "m_siewling",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "death",
+    "group-cover"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "My husband Wei Ming passed away last week. What do I need to do?",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$500,000",
+      {
+       "any_of": [
+        "S$200,000",
+        "group",
+        "company"
+       ]
+      },
+      {
+       "any_of": [
+        "HR",
+        "employer"
+       ]
+      }
+     ],
+     "forbidden": [
+      "S$80,000"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "his company insurance how much",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$200,000",
+      {
+       "any_of": [
+        "HR",
+        "employer",
+        "confirm"
+       ]
+      }
+     ],
+     "forbidden": [
+      "S$80,000"
+     ]
+    },
+    {
+     "turn": 3,
+     "message": "it was a road accident",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": [
+      "S$100,000 accidental"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "who do I contact",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "hr-benefits@kallangfreight.example",
+        "HR"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "what documents needed",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "death certificate"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "and his own LifeGuard policy, who is the nominee?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Lee Siew Ling",
+        "you",
+        "Siew Ling"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "what happens to Jun Hao's KidSaver now?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "waived"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "will the kids still have the company hospital cover?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "employment ends"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "is there a deadline for the company claim?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "30 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "thank you",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C04",
+   "kind": "conversation",
+   "title": "Premium totals and pronoun follow-ups",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "totals",
+    "pronouns"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "What's the total premium for dad's policies?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$6,218"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "how much of that is cash?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,118"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "and medisave?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,100"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "compare that with what I pay for my own term plan",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,236"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "what about my wife?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,512.60"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "which is the most expensive single policy in the family?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "HarbourShield",
+        "S$4,250"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "is the ILP more expensive?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "S$3,480 for the ILP"
+     ]
+    },
+    {
+     "turn": 8,
+     "message": "ok what's its value then",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$21,385.40"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "whose policy is that again",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "Jun Hui"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C05",
+   "kind": "conversation",
+   "title": "Which Jun?",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "ambiguous-jun",
+    "pronouns"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "how much is Jun's policy worth",
+     "expected_behaviour": "clarify-which-person",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "the younger one",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$21,385.40"
+     ],
+     "forbidden": [],
+     "note": "Jun Hui (born 2016) is younger."
+    },
+    {
+     "turn": 3,
+     "message": "and the older one?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$50,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "when does his mature",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "9 May 2031"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "what about her?",
+     "expected_behaviour": "clarify-which-person",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "answer"
+     ],
+     "note": "'her' could be Xin Yi or Siew Ling."
+    },
+    {
+     "turn": 6,
+     "message": "Xin Yi",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "JuniorGuard",
+        "S$50,000",
+        "09 Jan 2027",
+        "9 January 2027"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "do any of the Juns have PA?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "no",
+        "only Xin Yi",
+        "Xin Yi"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok bye",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C06",
+   "kind": "conversation",
+   "title": "Asking about a deleted travel policy",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "deleted-doc"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I uploaded our Bali travel insurance last year, what was the cancellation limit?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "but I saw it before, can check again?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "ok so do we have any travel insurance now?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "if I go overseas and get injured, anything covers me?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "worldwide",
+        "GPA",
+        "Personal Accident"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "what about my dad if he falls sick overseas?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "emergency"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "should I buy an annual travel plan?",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "ok what documents do I have on file now",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "HarbourShield",
+      "JuniorGuard"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C07",
+   "kind": "conversation",
+   "title": "CI claim with change of subject",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "subject-change"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Siew Ling was just diagnosed with stage 1 colon cancer",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "BloomSecure"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "how much can she get",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$50,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "by the way when is dad's premium due?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "1 February"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "how much is it",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$4,250"
+     ],
+     "forbidden": [],
+     "note": "Pronoun refers to dad's premium (last topic)."
+    },
+    {
+     "turn": 5,
+     "message": "ok back to my wife's claim, is there a waiting period issue?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "90 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "and survival period?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "7 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "if later it becomes severe can claim again?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$200,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "will the company GHS cover her surgery?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$20,000",
+      {
+       "any_of": [
+        "Spouse"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "and the hospital room per day?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$350"
+     ],
+     "forbidden": [
+      "S$500"
+     ]
+    },
+    {
+     "turn": 10,
+     "message": "thanks lah",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C08",
+   "kind": "conversation",
+   "title": "Hospital claim with person correction",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "correction"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Need to claim for Jun Hui's hospital stay, he had appendicitis",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      {
+       "any_of": [
+        "GHS",
+        "Group Hospital"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "surgery fee limit?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$6,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "sorry I mean Jun Hao not Jun Hui",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "Jun Hao"
+     ],
+     "forbidden": [],
+     "note": "Correction mid-claim: same child tier."
+    },
+    {
+     "turn": 4,
+     "message": "does his endowment pay anything for hospital?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "not covered",
+      "is excluded",
+      "isn't covered",
+      "is not covered"
+     ]
+    },
+    {
+     "turn": 5,
+     "message": "misc hospital services limit?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$5,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "pre-hospital specialist visits covered?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "how long to submit",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "30 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "can I submit online?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C09",
+   "kind": "conversation",
+   "title": "Knee exclusion",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "exclusion"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "dad's knee pain getting worse, doctor says knee replacement",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "osteoarthritis"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "it's the right knee",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "excluded"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "what if it's the left knee?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "right knee"
+       ]
+      }
+     ],
+     "forbidden": [],
+     "note": "Specific exclusion names the right knee only."
+    },
+    {
+     "turn": 4,
+     "message": "can the rider pay instead?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "rider"
+       ]
+      }
+     ],
+     "forbidden": [
+      "the rider will pay"
+     ]
+    },
+    {
+     "turn": 5,
+     "message": "should we appeal to the insurer?",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "can the company GHS cover him?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "not",
+        "no"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "ok, what else does his plan exclude?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Cosmetic"
+       ]
+      },
+      {
+       "any_of": [
+        "hearing aids",
+        "Spectacles"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C10",
+   "kind": "conversation",
+   "title": "Singlish portfolio walk-through",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "singlish"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "eh can tell me what insurance my family got",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "HarbourShield",
+      "LifeGuard"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "wah so many. my one first",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "LifeGuard",
+      {
+       "any_of": [
+        "group",
+        "Kallang",
+        "company"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "the group one cover what ah",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$200,000",
+      "S$250,000"
+     ],
+     "forbidden": [
+      "S$80,000"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "my room and board how much",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "my wife leh",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$350"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "kids?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$300"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "dad?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "not",
+        "HarbourShield"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok and ICU for me",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,200"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "the group one got co-pay or not",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "No co-insurance",
+        "no co-insurance",
+        "no"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "my term plan nominee who",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "Siew Ling"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 11,
+     "message": "change nominee to my mother can or not",
+     "expected_behaviour": "out-of-scope",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "not-found"
+     ]
+    },
+    {
+     "turn": 12,
+     "message": "ok thank you ah",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C11",
+   "kind": "conversation",
+   "title": "Bill amount correction",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "correction",
+    "computation"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "Dad's bill came: $12,400, panel hospital",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "how much do we pay with the rider",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$620"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "sorry typo, it's $42,400",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$2,120"
+     ],
+     "forbidden": [
+      "S$620"
+     ]
+    },
+    {
+     "turn": 4,
+     "message": "what if it was not panel",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$2,120",
+        "No cap",
+        "no cap"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "and without the rider?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$7,390"
+     ],
+     "forbidden": [],
+     "note": "S$3,500 + 10% x S$38,900 = S$7,390"
+    },
+    {
+     "turn": 6,
+     "message": "unrelated - how much is Xin Yi's PA premium",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$168"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "back to dad, the tests 3 months before admission are claimable?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "120 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "and if it was 5 months before?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "180 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "how long to submit claim",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "365 days"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C12",
+   "kind": "conversation",
+   "title": "Group benefits deep dive",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "group-cover",
+    "totals"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "If I die, does the company insurance pay my wife?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$200,000",
+      {
+       "any_of": [
+        "HR",
+        "employer",
+        "confirm"
+       ]
+      }
+     ],
+     "forbidden": [
+      "S$80,000"
+     ],
+     "also_acceptable": [
+      "claim-question"
+     ]
+    },
+    {
+     "turn": 2,
+     "message": "plan 1 or 2",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "Plan 2"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "what's the plan 1 amount",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$80,000"
+     ],
+     "forbidden": [],
+     "note": "Explicitly asked - allowed here."
+    },
+    {
+     "turn": 4,
+     "message": "if I resign next month?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "employment ends"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "TPD from company?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$200,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "and my own term TPD?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "total if I'm totally and permanently disabled",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$700,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C13",
+   "kind": "conversation",
+   "title": "Newest documents and expiries",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "newest-doc",
+    "scanned"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "which of my documents is the newest",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "30 June 2026"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "and the oldest?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "LifeGuard"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "is dad's policy still active?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "31 January 2027"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "which policies end in the next 6 months?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "JuniorGuard",
+      "HarbourShield",
+      "31 March 2027"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "remind me when Xin Yi's is due",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "09 Jan 2027",
+        "9 January 2027",
+        "9 Jan 2027"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "can you renew it for me",
+     "expected_behaviour": "out-of-scope",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "what's on the scanned one again",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "JuniorGuard",
+      {
+       "any_of": [
+        "S$3,000",
+        "S$50,000"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C14",
+   "kind": "conversation",
+   "title": "Employee accident and disability",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "claim",
+    "disability",
+    "correction"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "I had a motorcycle accident, lost use of my left arm",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      "S$250,000"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "no, not racing, just riding to work",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "is it TPD for my term plan?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$500,000"
+     ],
+     "forbidden": [],
+     "note": "LifeGuard has a TPD benefit but no TPD definition printed."
+    },
+    {
+     "turn": 4,
+     "message": "hospital bill was 9k at a private hospital",
+     "expected_behaviour": "claim-question",
+     "must_include": [
+      {
+       "any_of": [
+        "S$10,000",
+        "S$8,000",
+        "S$30,000",
+        "S$500"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "can I claim both GHS and GPA medical?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [],
+     "tags": [
+      "silent-doc"
+     ]
+    },
+    {
+     "turn": 6,
+     "message": "what documents to submit?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "HR"
+       ]
+      },
+      {
+       "any_of": [
+        "30 days"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "I meant right arm actually",
+     "expected_behaviour": "claim-question",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "should I get a lawyer?",
+     "expected_behaviour": "refuse-advice",
+     "must_include": [],
+     "forbidden": [],
+     "also_acceptable": [
+      "out-of-scope"
+     ]
+    },
+    {
+     "turn": 9,
+     "message": "thanks",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  },
+  {
+   "id": "H1-C15",
+   "kind": "conversation",
+   "title": "Rapid-fire short messages",
+   "asker": "m_weiming",
+   "scope": "household",
+   "tags": [
+    "very-short",
+    "pronouns"
+   ],
+   "turns": [
+    {
+     "turn": 1,
+     "message": "hi",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 2,
+     "message": "dad deductible",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,500"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 3,
+     "message": "rider?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "95%",
+        "5%"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 4,
+     "message": "premium?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,968"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 5,
+     "message": "medisave can?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "cash",
+        "cannot",
+        "no"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 6,
+     "message": "wife?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,512.60"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 7,
+     "message": "me?",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$1,236"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 8,
+     "message": "jun",
+     "expected_behaviour": "clarify-which-person",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 9,
+     "message": "hao",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$3,480"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 10,
+     "message": "hui",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": [
+      "S$3,480"
+     ]
+    },
+    {
+     "turn": 11,
+     "message": "xin yi",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "S$168"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 12,
+     "message": "total",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$14,120.60",
+        "S$12,614.60"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 13,
+     "message": "wat about company",
+     "expected_behaviour": "answer",
+     "must_include": [
+      {
+       "any_of": [
+        "S$1,506",
+        "Company-paid"
+       ]
+      }
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 14,
+     "message": "ok and when all these renew",
+     "expected_behaviour": "answer",
+     "must_include": [
+      "1 February",
+      "31 March 2027"
+     ],
+     "forbidden": []
+    },
+    {
+     "turn": 15,
+     "message": "bali trip insurance?",
+     "expected_behaviour": "not-found",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 16,
+     "message": "ok",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    },
+    {
+     "turn": 17,
+     "message": "bye",
+     "expected_behaviour": "greeting",
+     "must_include": [],
+     "forbidden": []
+    }
+   ]
+  }
+ ],
+ "counts": {
+  "singles": 130,
+  "conversations": 15,
+  "conversation_turns": 150
+ }
+}

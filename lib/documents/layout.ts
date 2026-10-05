@@ -333,7 +333,12 @@ const WORDED_VALUE=/^(?:as\s+charged|not\s+covered|not\s+applicable|unlimited|co
 function valueLike(cell:string){return isValueCell(cell)||WORDED_VALUE.test(cell.trim())||/^(?:up to|you pay|co-?payment|reimbursed|per scale)\b/i.test(cell.trim())||AMOUNT.test(cell);}
 /** Payments the household makes, printed in schedules and notices. Never a
  * benefit, in a table or out of one. */
-const PAYMENT_LABEL=/\b(?:medisave|cash\s+payable|amount\s+(?:due|payable)|total\s+(?:cash\s+)?(?:payable|due)|payment\s+(?:due|mode|date)|giro|premium\s+payable)\b|^\s*less\s*:/i;
+const PAYMENT_LABEL=/\b(?:medisave|cash\s+payable|payable\s+(?:in|by|from|with)\s+(?:cash|medisave|cpf|giro|card)|amount\s+(?:due|payable)|total\s+(?:cash\s+)?(?:payable|due)|payment\s+(?:due|mode|date)|giro|premium\s+payable)\b|^\s*less\s*:/i;
+const REPLACED_COLUMN=/^(?:before|old|previous|original|existing|current|from)(?:\s+(?:amount|value|sum assured|cover|premium))?$/i;
+const AMENDED_COLUMN=/^(?:after|new|revised|amended|altered|updated|to)(?:\s+(?:amount|value|sum assured|cover|premium))?$/i;
+const COST_SHARING_LABEL=/\b(?:deductibles?|co-?insurance|co-?pay(?:ment)?(?:\s+cap)?|pro-?ration(?: factor)?)\b/i;
+const TWO_COLUMN_LABEL=/^(?:benefits?|items?|features?|description|cover(?:age)?|particulars|benefit\s*\(.*\))$/i;
+const TWO_COLUMN_VALUE=/^(?:limits?|amounts?|benefits?|sum (?:insured|assured)|values?|details?|coverage|maximum(?: limit)?|limit of liability|what we pay)$/i;
 type TableShape={header:string[];labelCol:number;rowNumberCol:number;valueCols:number[];from:number;to:number};
 /** Finds tables: a heading line of three or more cells with no amount in it,
  * followed by rows with the same number of column slots, at least one of
@@ -342,7 +347,11 @@ function findTables(lines:PageLine[]):TableShape[]{
   const tables:TableShape[]=[];
   for(let i=0;i<lines.length;i++){
     const head=lines[i].rawCells??lines[i].cells;
-    if(head.length<3||head.filter(Boolean).length<3)continue;
+    // Round 7: a two-column schedule says so in its heading ("Benefit | Limit",
+    // "Feature | Benefit"); its "As charged", "120 days" and cost-sharing
+    // rows are table rows like any other, not prose to skip.
+    const twoColumn=head.length===2&&TWO_COLUMN_LABEL.test(head[0]??"")&&TWO_COLUMN_VALUE.test(head[1]??"");
+    if(!twoColumn&&(head.length<3||head.filter(Boolean).length<3))continue;
     if(head.slice(1).some(cell=>cell&&valueLike(cell)))continue;
     let j=i+1;
     while(j<lines.length){
@@ -360,9 +369,17 @@ function findTables(lines:PageLine[]):TableShape[]{
     const valued=body.filter(cells=>cells.slice(1).some(cell=>cell&&valueLike(cell))).length;
     if(!valued||valued*2<=body.length)continue;
     let rowNumberCol=head.findIndex(cell=>ROW_NUMBER_HEADING.test(cell.replace(/\s+/g,"")));
+    // A heading such as "Item" over words ("Death sum assured") heads the
+    // label column, not a column of row numbers.
+    if(rowNumberCol>=0&&!body.every(cells=>!cells[rowNumberCol]||/^\(?\d{1,2}[a-z]?[.)]?$|^\(?[a-z][.)]$/i.test(cells[rowNumberCol]??"")))rowNumberCol=-1;
     if(rowNumberCol<0&&body.every(cells=>!cells[0]||/^\d{1,2}[a-z]?[.)]?$/i.test(cells[0])))rowNumberCol=0;
     const labelCol=rowNumberCol===0?1:0;
-    const valueCols=head.map((_,col)=>col).filter(col=>col!==labelCol&&col!==rowNumberCol&&!NOTES_HEADING.test(head[col].trim()));
+    let valueCols=head.map((_,col)=>col).filter(col=>col!==labelCol&&col!==rowNumberCol&&!NOTES_HEADING.test(head[col].trim()));
+    // Round 7: an endorsement's "Item | Before | After" table states what the
+    // policy says NOW in its "after" column; the "before" column is the
+    // replaced figure, not a second plan tier.
+    const after=valueCols.find(col=>AMENDED_COLUMN.test(head[col].trim()));
+    if(after!=null&&valueCols.some(col=>REPLACED_COLUMN.test(head[col].trim())))valueCols=[after];
     if(!valueCols.length)continue;
     tables.push({header:head,labelCol,rowNumberCol,valueCols,from:i,to:j});
     i=j-1;
@@ -406,7 +423,10 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
   };
   for(const table of tables){
     for(let i=table.from;i<table.to;i++)inTable.add(i);
-    if(!underExcludedHeading(table.from))rows.push(...tableRows(lines,table));
+    // Round 7 (port): in a two-column schedule a row that says the cover is not there ("Outpatient: Not included
+    // in this plan") is a line about what is excluded, not a benefit.
+    const twoColumn=table.header.length===2;
+    if(!underExcludedHeading(table.from))rows.push(...tableRows(lines,table).filter(row=>!(twoColumn&&/^(?:not (?:included|covered|applicable|available)|excluded|nil|none)\b/i.test(row.value.trim()))));
   }
   let stem:string|null=null,suppressed=false;
   // A two-column table states "Head" once and leaves the rows beneath it to
@@ -456,6 +476,27 @@ export function benefitRows(lines:PageLine[]):BenefitRow[]{
     rows.push({label,value:(line.cells[valueIndex].trim()+continued.valueSuffix).trim(),line:line.text,index});
   }
   return rows.sort((a,b)=>a.index-b.index);
+}
+
+/** Round 7: cost-sharing lines printed outside a table ("Deductible per
+ * policy year (A ward, age 80 and below)<TAB>S$3,500", "Co-insurance on
+ * claimable amount above the deductible<TAB>10%"). They are never benefits
+ * (benefitRows leaves them out); the catalog stores them as the schedule
+ * terms they are, typed by their label, so "what is dad's deductible?" can
+ * be answered from the page that prints it. */
+export function costSharingRowsFromText(text:string):BenefitRow[]{
+  const lines=linesFromStoredText(text);
+  const inTable=new Set<number>();
+  for(const table of findTables(lines))for(let i=table.from;i<table.to;i++)inTable.add(i);
+  const rows:BenefitRow[]=[];
+  for(const [index,line] of lines.entries()){
+    if(inTable.has(index)||line.cells.length!==2)continue;
+    const [label,value]=line.cells.map(c=>c.replace(/\s+/g," ").trim());
+    if(!COST_SHARING_LABEL.test(label)||PAYMENT_LABEL.test(label)||label.length>140)continue;
+    if(!(isValueCell(value)||/^\d{1,3}(?:\.\d+)?\s?%/.test(value)||WORDED_VALUE.test(value)))continue;
+    rows.push({label,value,line:line.text,index,tier:null,fromTable:false});
+  }
+  return rows;
 }
 
 /** Rebuilds lines and cells from stored page text.

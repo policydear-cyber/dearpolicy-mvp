@@ -49,6 +49,8 @@ export async function installDatabase(): Promise<PGlite> {
     catch (e) { console.log("SQL note: " + file + " not applied (" + (e as Error).message.slice(0, 120) + ")"); }
   }
   await db.exec("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;");
+  // As Supabase grants by default: the role that writes rows may use their id sequences.
+  await db.exec("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;");
   const { pool } = await import("@/lib/db/client");
   let tail = Promise.resolve();
   const acquire = async () => { const previous = tail; let release!: () => void; tail = new Promise<void>((res) => { release = res; }); await previous; return release; };
@@ -56,10 +58,33 @@ export async function installDatabase(): Promise<PGlite> {
     if (!params.length && text.includes(";")) { const rs = await db.exec(text); const last = rs.at(-1); return { rows: last?.rows ?? [], rowCount: last?.affectedRows ?? 0 }; }
     const res = await db.query(text, params); return { rows: res.rows, rowCount: res.affectedRows ?? res.rows.length };
   };
-  pool.query = (async (text: string, params: unknown[] = []) => { const release = await acquire(); try { return await execute(text, params); } finally { release(); } }) as typeof pool.query;
-  // A transaction holds the lock until release; nested pool.query calls from
-  // inside it would deadlock, so the client runs on the raw executor.
-  pool.connect = (async () => { const release = await acquire(); return { query: execute, release }; }) as typeof pool.connect;
+  // A transaction holds the lock until release. Code running inside it that
+  // calls pool.query directly (a deletion coordinator writing its audit row)
+  // would wait for that lock forever: PGlite is one connection, so a query
+  // that has waited this long while a transaction is open is treated as part
+  // of it and runs straight away, as the service role it would have on its
+  // own pooled connection.
+  let held = 0;
+  const nested = async (text: string, params: unknown[]) => {
+    const role = String(((await db.query<{ r: string }>("SELECT current_user AS r")).rows[0])?.r ?? "");
+    if (role === "authenticated") await db.exec("RESET ROLE");
+    try { return await execute(text, params); } finally { if (role === "authenticated") await db.exec("SET LOCAL ROLE authenticated"); }
+  };
+  pool.query = (async (text: string, params: unknown[] = []) => {
+    if (held) {
+      let release: (() => void) | null = null;
+      const got = await Promise.race([acquire().then((r) => { release = r; return true; }), new Promise<false>((res) => setTimeout(() => res(false), 300))]);
+      if (!got) {
+        // Still waiting: when the lock frees later, hand it straight back.
+        void (async () => { while (!release) await new Promise((r) => setTimeout(r, 5)); (release as () => void)(); })();
+        return nested(text, params);
+      }
+      try { return await execute(text, params); } finally { (release as unknown as () => void)(); }
+    }
+    const release = await acquire(); try { return await execute(text, params); } finally { release(); }
+  }) as typeof pool.query;
+  pool.connect = (async () => { const release = await acquire(); held++; let done = false;
+    return { query: execute, release: () => { if (done) return; done = true; held--; release(); } }; }) as typeof pool.connect;
   return db;
 }
 

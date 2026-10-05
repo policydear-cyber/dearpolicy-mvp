@@ -497,6 +497,17 @@ function answerValue(question: IndexedQuestion, raw: string, now: Date, strict: 
   if (question.type === "date") {
     const date = resolveClaimDate(said, { now });
     if (date && date.date <= claimLocalToday({ now })) return date.date;
+    // Round 7: a trip can still be ahead (a cancellation before departure):
+    // "departure is on 15 Oct 2026", "we leave in 10 days" are its dates.
+    if (/^trip(?:Start|End)Date$/.test(question.factKey)) {
+      if (date) return date.date;
+      const ahead = said.match(/\bin\s+(\d+|one|two|three|four|a)\s+(days?|weeks?)\b/i);
+      if (ahead) {
+        const n = ({ a: 1, one: 1, two: 2, three: 3, four: 4 } as Record<string, number>)[ahead[1].toLowerCase()] ?? Number(ahead[1]);
+        const d = new Date(claimLocalToday({ now }) + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n * (/^w/i.test(ahead[2]) ? 7 : 1));
+        return d.toISOString().slice(0, 10);
+      }
+    }
     return strict ? null : said;
   }
   if (question.factKey === "hospitalNights" || /Months$|Hours$|Nights$|Days$/.test(question.factKey)) {

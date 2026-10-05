@@ -1,0 +1,24 @@
+===== page 1 =====
+Harbourline International Life Ltd
+US Dollar denominated policy (fictional)
+
+
+
+POLICY DATA PAGE
+Insured: NUR'AISYAH BINTE ABDUL-RAHMAN                         Policy number: HIL-UL-0049917
+Policy currency: United States Dollars (USD)
+Policy date: 1 July 2024
+Item                                                                           Amount
+Death benefit (sum insured)                                                    US$250,000
+Planned annual premium                                                         US$3,120.00
+Guaranteed minimum crediting rate                                              2.00% p.a.
+Current crediting rate (non-guaranteed)                                        3.85% p.a.
+Surrender charge period                                                        15 years
+All benefits and premiums are payable in USD. Exchange rate movements may affect
+the value of the policy in your home currency.
+
+
+
+
+SYNTHETIC TEST DOCUMENT - fictional insurer and persons - not a real policy                    Page 1 of 1
+

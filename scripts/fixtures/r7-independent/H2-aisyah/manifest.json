@@ -1,0 +1,622 @@
+{
+  "household_id": "H2-aisyah",
+  "household_name": "Nur'Aisyah (single-person household)",
+  "as_of_date": "2026-10-05",
+  "timezone": "Asia/Singapore",
+  "account_owner": "m_aisyah",
+  "members": [
+    {
+      "id": "m_aisyah",
+      "display_name": "Nur'Aisyah Binte Abdul-Rahman",
+      "preferred_name": "Aisyah",
+      "relationship": "self",
+      "dob": "1991-02-27",
+      "notes": "single-person household; name contains an apostrophe and a hyphen"
+    }
+  ],
+  "traps": [
+    "Name with apostrophe and hyphen; preferred name 'Aisyah'. Nominee Siti Hajar is NOT a household member.",
+    "Orchid Whole Life Protector: lapse notice (2025-09-22) is superseded by reinstatement letter (2026-01-08): current status in force since 6 January 2026.",
+    "Reinstatement letter says next premium due 15 August 2026 - that date has passed (as of 2026-10-05); payment status is not in any document -> do not claim it was paid or missed.",
+    "USD policy: US$250,000 / US$3,120.00; no SGD equivalent is printed - must not invent an SGD figure.",
+    "Dental rider: base plan ActiveHealth Gold is NOT uploaded; old ActiveHealth Silver (2024) is DELETED - its S$275,000/S$2,750/S$1,066.00 must never appear.",
+    "Dental rider period ends 31 December 2026.",
+    "Travel trip cancellation is S$10,000 per trip; change of mind not covered.",
+    "Disability: CareShield S$662.00/month (3 of 6 ADLs, accredited assessor) and EquaTerm 30 TPD S$400,000 (6 months continuous)."
+  ],
+  "documents": [
+    {
+      "id": "h2_e1_careshield",
+      "filename": "careshield-life-policy-summary-aisyah.pdf",
+      "title": "CareShield Life - Policy Summary",
+      "letterhead": "CareShield Life Scheme - Policy Summary (synthetic sample)",
+      "insurer": "CareShield Life (national scheme)",
+      "product_name": "CareShield Life",
+      "policy_number": "CSL-S9100227Z-01",
+      "policy_type": "Long-term care",
+      "document_role": "certificate",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "effective_date": "2021-10-01",
+      "renewal_or_expiry_date": null,
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "payout",
+          "label": "Monthly payout",
+          "value": "S$662.00",
+          "page": 1
+        },
+        {
+          "id": "adl",
+          "label": "Disability definition",
+          "value": "Unable to perform 3 of 6 ADLs",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$289.47",
+          "page": 1,
+          "line_contains": "Annual premium"
+        },
+        {
+          "id": "prem_ms",
+          "label": "From MediSave",
+          "value": "S$289.47",
+          "page": 1,
+          "line_contains": "MediSave"
+        },
+        {
+          "id": "prem_cash",
+          "label": "Cash",
+          "value": "S$0.00",
+          "page": 1
+        },
+        {
+          "id": "assessor",
+          "label": "Assessment",
+          "value": "accredited severity assessor",
+          "page": 1
+        }
+      ],
+      "file": "docs/careshield-life-policy-summary-aisyah.pdf",
+      "file_b64": "docs/careshield-life-policy-summary-aisyah.pdf.b64",
+      "sha256": "10f21aac1a95c356213eff847cdda28dffc18fd635cb0130c3771accdbfa9451",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Coverage, payout, premium (MediSave)"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e2_term",
+      "filename": "equator-equaterm30-aisyah.pdf",
+      "title": "EquaTerm 30 - Policy Schedule",
+      "letterhead": "Equator Life Assurance Ltd",
+      "insurer": "Equator Life Assurance Ltd",
+      "product_name": "EquaTerm 30",
+      "policy_number": "EQL-T30-778120",
+      "policy_type": "Life",
+      "document_role": "certificate",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "effective_date": "2022-03-01",
+      "renewal_or_expiry_date": "2052-02-29",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "death",
+          "label": "Death",
+          "value": "S$400,000",
+          "page": 1,
+          "line_contains": "Death"
+        },
+        {
+          "id": "tpd",
+          "label": "TPD",
+          "value": "S$400,000",
+          "page": 1,
+          "line_contains": "Total and permanent"
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$684.00",
+          "page": 1
+        },
+        {
+          "id": "tpd_def",
+          "label": "TPD waiting",
+          "value": "continuous period of 6 months",
+          "page": 1
+        },
+        {
+          "id": "end",
+          "label": "Term end",
+          "value": "29 February 2052",
+          "page": 1
+        },
+        {
+          "id": "nominee",
+          "label": "Nominee",
+          "value": "SITI HAJAR BINTE ABDUL-RAHMAN",
+          "page": 1
+        }
+      ],
+      "file": "docs/equator-equaterm30-aisyah.pdf",
+      "file_b64": "docs/equator-equaterm30-aisyah.pdf.b64",
+      "sha256": "2866f09020d5e505e24b2945d67282d90c7ee80e73be62a58df2f88b893f0dc4",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Schedule"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e3_travel_annual",
+      "filename": "lioncity-wandersafe-annual-aisyah.pdf",
+      "title": "WanderSafe Annual Multi-Trip - Certificate",
+      "letterhead": "Lion City General Insurance Pte Ltd",
+      "insurer": "Lion City General Insurance Pte Ltd",
+      "product_name": "WanderSafe Annual Multi-Trip (Worldwide)",
+      "policy_number": "LCG-WS-AN-30417",
+      "policy_type": "Travel",
+      "document_role": "certificate",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "effective_date": "2026-05-15",
+      "renewal_or_expiry_date": "2027-05-14",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "med",
+          "label": "Overseas medical",
+          "value": "S$300,000",
+          "page": 1
+        },
+        {
+          "id": "evac",
+          "label": "Evacuation",
+          "value": "S$500,000",
+          "page": 1
+        },
+        {
+          "id": "cancel",
+          "label": "Trip cancellation",
+          "value": "S$10,000 per trip",
+          "page": 1,
+          "line_contains": "Trip cancellation"
+        },
+        {
+          "id": "curtail",
+          "label": "Trip curtailment",
+          "value": "S$10,000 per trip",
+          "page": 1,
+          "line_contains": "curtailment"
+        },
+        {
+          "id": "delay",
+          "label": "Travel delay",
+          "value": "S$100 per 6 hours, max S$1,000",
+          "page": 1
+        },
+        {
+          "id": "bag",
+          "label": "Baggage",
+          "value": "S$5,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$298.00",
+          "page": 1
+        },
+        {
+          "id": "maxtrip",
+          "label": "Max trip",
+          "value": "90 days",
+          "page": 1
+        },
+        {
+          "id": "cancel_window",
+          "label": "Cancel window",
+          "value": "within 30 days before departure",
+          "page": 2
+        },
+        {
+          "id": "change_mind",
+          "label": "Not covered: change of mind",
+          "value": "Change of mind or disinclination to travel",
+          "page": 2
+        },
+        {
+          "id": "claim30",
+          "label": "Claim deadline",
+          "value": "Submit within 30 days of the cancellation",
+          "page": 2
+        }
+      ],
+      "file": "docs/lioncity-wandersafe-annual-aisyah.pdf",
+      "file_b64": "docs/lioncity-wandersafe-annual-aisyah.pdf.b64",
+      "sha256": "06e42a32a1224788dbaec9d72e55b6d36abaf97cc2ffde7e0e98a08e79f5ebef",
+      "page_count": 2,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Certificate and benefit table"
+        },
+        {
+          "page": 2,
+          "text_layer": true,
+          "summary": "Trip cancellation conditions, exclusions, claims"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e4_dental_rider",
+      "filename": "pasir-smilecare-rider-aisyah-2026.pdf",
+      "title": "SmileCare Outpatient & Dental Rider - Rider Schedule",
+      "letterhead": "Pasir Mutual Insurance Ltd",
+      "insurer": "Pasir Mutual Insurance Ltd",
+      "product_name": "SmileCare Outpatient & Dental Rider",
+      "policy_number": "PMI-OD-60231",
+      "attached_to": "Pasir Mutual ActiveHealth Gold (base plan PMI-AH-60231 - base plan document NOT uploaded)",
+      "policy_type": "Health rider",
+      "document_role": "certificate",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "effective_date": "2026-01-01",
+      "renewal_or_expiry_date": "2026-12-31",
+      "currency": "SGD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "gp",
+          "label": "GP",
+          "value": "S$40 per visit, max 20 visits per year",
+          "page": 1
+        },
+        {
+          "id": "spec",
+          "label": "Specialist",
+          "value": "S$1,500 per policy year",
+          "page": 1
+        },
+        {
+          "id": "scale",
+          "label": "Scaling",
+          "value": "S$100 per visit, max 2 visits per year",
+          "page": 1
+        },
+        {
+          "id": "fill",
+          "label": "Fillings/extractions",
+          "value": "S$300 per policy year",
+          "page": 1
+        },
+        {
+          "id": "dental_overall",
+          "label": "Overall dental limit",
+          "value": "S$500 per policy year",
+          "page": 1
+        },
+        {
+          "id": "copay",
+          "label": "Dental co-payment",
+          "value": "20%",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Rider premium",
+          "value": "S$420.00",
+          "page": 1
+        },
+        {
+          "id": "excl",
+          "label": "Not covered",
+          "value": "orthodontics (braces), crowns, bridges, implants, whitening",
+          "page": 1
+        },
+        {
+          "id": "claim90",
+          "label": "Claim deadline",
+          "value": "within 90 days of the treatment date",
+          "page": 1
+        }
+      ],
+      "file": "docs/pasir-smilecare-rider-aisyah-2026.pdf",
+      "file_b64": "docs/pasir-smilecare-rider-aisyah-2026.pdf.b64",
+      "sha256": "ec21c06eb1d8d0e1e5e59035771caeaedce885a276028cf2e1e9b19ed9b7b430",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Rider schedule - outpatient and dental limits"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e5_wholelife_lapse_notice",
+      "filename": "orchid-wholelife-lapse-notice-2025.pdf",
+      "title": "Notice of Lapse - Orchid Whole Life Protector",
+      "letterhead": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "insurer": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "product_name": "Orchid Whole Life Protector",
+      "policy_number": "OLI-WL-33019",
+      "policy_type": "Life",
+      "document_role": "lapse_notice",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "document_date": "2025-09-22",
+      "effective_date": "2025-09-15",
+      "renewal_or_expiry_date": null,
+      "currency": "SGD",
+      "fixture_state": "active",
+      "status_per_document": "lapsed (superseded by reinstatement letter dated 2026-01-08)",
+      "facts": [
+        {
+          "id": "sa",
+          "label": "Sum assured",
+          "value": "S$100,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Annual premium",
+          "value": "S$1,140.00",
+          "page": 1
+        },
+        {
+          "id": "lapse_date",
+          "label": "Lapse date",
+          "value": "LAPSED on 15 September 2025",
+          "page": 1
+        },
+        {
+          "id": "due",
+          "label": "Missed due date",
+          "value": "15 August 2025",
+          "page": 1
+        },
+        {
+          "id": "notice_date",
+          "label": "Notice date",
+          "value": "22 September 2025",
+          "page": 1
+        }
+      ],
+      "file": "docs/orchid-wholelife-lapse-notice-2025.pdf",
+      "file_b64": "docs/orchid-wholelife-lapse-notice-2025.pdf.b64",
+      "sha256": "1217d94bb2a2da41c7c5b3c6503f5f0064632f5daa654d3944018fdc16e3acd6",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Lapse notice"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e6_wholelife_reinstatement",
+      "filename": "orchid-wholelife-reinstatement-2026.pdf",
+      "title": "Confirmation of Reinstatement - Orchid Whole Life Protector",
+      "letterhead": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "insurer": "Orchid Life Insurance Berhad (Singapore Branch)",
+      "product_name": "Orchid Whole Life Protector",
+      "policy_number": "OLI-WL-33019",
+      "policy_type": "Life",
+      "document_role": "endorsement",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "document_date": "2026-01-08",
+      "effective_date": "2026-01-06",
+      "renewal_or_expiry_date": null,
+      "currency": "SGD",
+      "fixture_state": "active",
+      "status_per_document": "in force (reinstated 6 January 2026)",
+      "facts": [
+        {
+          "id": "reinst_date",
+          "label": "Reinstated from",
+          "value": "6 January 2026 and is now in force",
+          "page": 1
+        },
+        {
+          "id": "letter_date",
+          "label": "Letter date",
+          "value": "8 January 2026",
+          "page": 1
+        },
+        {
+          "id": "interest",
+          "label": "Reinstatement interest",
+          "value": "S$18.24",
+          "page": 1
+        },
+        {
+          "id": "total",
+          "label": "Total received",
+          "value": "S$1,158.24",
+          "page": 1
+        },
+        {
+          "id": "sa",
+          "label": "Sum assured",
+          "value": "S$100,000",
+          "page": 1
+        },
+        {
+          "id": "excl_gap",
+          "label": "Gap-period exclusion",
+          "value": "between 15 September 2025 and",
+          "page": 1
+        },
+        {
+          "id": "next_due",
+          "label": "Next premium due",
+          "value": "due on 15 August 2026",
+          "page": 1
+        }
+      ],
+      "file": "docs/orchid-wholelife-reinstatement-2026.pdf",
+      "file_b64": "docs/orchid-wholelife-reinstatement-2026.pdf.b64",
+      "sha256": "ab489e3d3acb93122a07dca3424a7145d19a187f08f44afc6c2e19ec895e65a3",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Reinstatement letter"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e7_usd_ul",
+      "filename": "harbourline-global-legacy-usd-aisyah.pdf",
+      "title": "Global Legacy USD Universal Life - Policy Data Page",
+      "letterhead": "Harbourline International Life Ltd",
+      "insurer": "Harbourline International Life Ltd",
+      "product_name": "Global Legacy USD Universal Life",
+      "policy_number": "HIL-UL-0049917",
+      "policy_type": "Universal life",
+      "document_role": "certificate",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "effective_date": "2024-07-01",
+      "renewal_or_expiry_date": null,
+      "currency": "USD",
+      "fixture_state": "active",
+      "facts": [
+        {
+          "id": "db",
+          "label": "Death benefit",
+          "value": "US$250,000",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Planned annual premium",
+          "value": "US$3,120.00",
+          "page": 1
+        },
+        {
+          "id": "gmin",
+          "label": "Guaranteed crediting",
+          "value": "2.00% p.a.",
+          "page": 1
+        },
+        {
+          "id": "cur",
+          "label": "Current crediting",
+          "value": "3.85% p.a.",
+          "page": 1
+        },
+        {
+          "id": "sc",
+          "label": "Surrender charge period",
+          "value": "15 years",
+          "page": 1
+        }
+      ],
+      "file": "docs/harbourline-global-legacy-usd-aisyah.pdf",
+      "file_b64": "docs/harbourline-global-legacy-usd-aisyah.pdf.b64",
+      "sha256": "67cfa103a113280a3bff9011431c53fa341709de4eb7dccef9b07fcdbad7bfab",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "USD policy data page; no SGD equivalent printed"
+        }
+      ],
+      "facts_verified": true
+    },
+    {
+      "id": "h2_e8_deleted_hospital",
+      "filename": "pasir-activehealth-silver-2024.pdf",
+      "title": "ActiveHealth Silver - Schedule 2024",
+      "letterhead": "Pasir Mutual Insurance Ltd",
+      "insurer": "Pasir Mutual Insurance Ltd",
+      "product_name": "ActiveHealth Silver",
+      "policy_number": "PMI-AH-41007",
+      "policy_type": "Health",
+      "document_role": "certificate",
+      "covers": [
+        "m_aisyah"
+      ],
+      "policyholder": "m_aisyah",
+      "effective_date": "2024-01-01",
+      "renewal_or_expiry_date": "2024-12-31",
+      "currency": "SGD",
+      "fixture_state": "deleted",
+      "fixture_note": "Upload, index, then soft-delete. Amounts must never appear in answers.",
+      "facts": [
+        {
+          "id": "pyl",
+          "label": "PYL",
+          "value": "S$275,000",
+          "page": 1
+        },
+        {
+          "id": "ded",
+          "label": "Deductible",
+          "value": "S$2,750",
+          "page": 1
+        },
+        {
+          "id": "prem",
+          "label": "Premium",
+          "value": "S$1,066.00",
+          "page": 1
+        }
+      ],
+      "file": "docs/pasir-activehealth-silver-2024.pdf",
+      "file_b64": "docs/pasir-activehealth-silver-2024.pdf.b64",
+      "sha256": "a5315e0187e21df4602aa65741275bc453548d0697d6549b69c7d0267b5c7625",
+      "page_count": 1,
+      "pages": [
+        {
+          "page": 1,
+          "text_layer": true,
+          "summary": "Old hospital plan (deleted by user)"
+        }
+      ],
+      "facts_verified": true
+    }
+  ]
+}

@@ -100,3 +100,13 @@ export async function extractPdfPages(
     throw error;
   }
 }
+
+/** Round 7 (port): the Title in the PDF's own document properties, when it
+ * reads as one (not a generator's or a word processor's placeholder). */
+export async function pdfDocumentTitle(bytes: Uint8Array): Promise<string | null> {
+  const { PDFDocument } = await import("pdf-lib");
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+  const title = (doc.getTitle() ?? "").replace(/\s+/g, " ").trim();
+  if (title.length < 4 || title.length > 120 || /^(?:untitled|document\d*|microsoft word|scan\d*|img[_-]?\d+)/i.test(title) || /\.(?:pdf|docx?|jpe?g|png)$/i.test(title)) return null;
+  return title;
+}
