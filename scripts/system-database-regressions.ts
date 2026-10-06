@@ -389,7 +389,7 @@ async function main(){
         type==="Home"?"We reimburse replacement cost for stolen household contents up to S$100,000.":
         "This plan is assessed from its own terms and schedule.");
       for(const item of [{id,text:schedule,personal:true},{id:ref,text:wording,personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb,'scan_clean')",
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status,file_hash) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$10,'2022-01-01',$11::jsonb,'scan_clean','sha256:'||md5(random()::text||clock_timestamp()::text))",
           [item.id,account,p.id,name,"POLICY-"+i,type,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
         await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,p.id,account]);
         await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,1,$3)",[account,item.id,item.text]);
@@ -656,7 +656,7 @@ async function main(){
       const person=people[0],id=uuid(700100),ref=uuid(700200),name="Review Fixture Critical Illness";
       const schedule=person.display_name+" owns "+name+". Sum Insured SGD 350000.";
       for(const item of [{id,text:schedule,personal:true},{id:ref,text:"placeholder",personal:false}]){
-        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb,'scan_clean')",
+        await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status,file_hash) VALUES($1,$2,$3,'Example Insurer',$4,'REVIEW-1','Critical Illness',$5,$6,$7,'ready',$8,$8,'2022-01-01',$9::jsonb,'scan_clean','sha256:'||md5(random()::text||clock_timestamp()::text))",
           [item.id,account,person.id,name,item.personal?"personal_schedule":"policy_wording",item.personal,item.personal?95:60,item.id+".pdf",JSON.stringify({productsMentioned:[name]})]);
         await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)",[item.id,person.id,account]);
       }

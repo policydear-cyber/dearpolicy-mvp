@@ -24,7 +24,7 @@ import { loadPolicyInventory, prettifyFilename, type PolicyContract } from "@/li
 import { loadBenefitCatalog, type CatalogBenefit } from "@/lib/policies/benefit-catalog";
 import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
 import { MONEY_PATTERN, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE } from "@/lib/chat/monetary-boundary";
-import { amountAppears, dateAppears, normalPassage, rephrasingIsFaithful, verifyAssertions, type Assertion, type AssertionDocument, type Rejection } from "./assertions";
+import { amountAppears, dateAppears, normalPassage, rephrasingIsFaithful, verifyAssertions, withPrintedQualifiers, type Assertion, type AssertionDocument, type Rejection } from "./assertions";
 import type { ClaimPerson } from "@/lib/claims/person";
 import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
@@ -1420,7 +1420,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     // Only conditions the passage itself states are carried; anything else
     // would be a condition the answer introduced.
     const conditions = (storedConditions ?? []).filter((x) => normalPassage(passage).includes(normalPassage(x).replace(/[.;]+$/, "")));
-    return { ...c, passage, conditions };
+    // Round 16: a short line built from a stored benefit says the period and conditions its passage prints with it.
+    return { ...c, text: withPrintedQualifiers({ text: c.text, passage, amount: c.amount, conditions }), passage, conditions };
   });
   const documents: Record<string, AssertionDocument> = {};
   for (const [id, d] of docs) documents[id] = { id, accountId: d.account_id, lifecycleState: d.lifecycle_state, supersededAt: d.superseded_at,
@@ -1675,7 +1676,14 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // (A reinstatement is said when the question is about whether the policy is in force, not under every answer from it.)
   const statusAsked = topics.some((t) => t.key === "status") || /\b(?:reinstat\w*|laps\w*|in force|active|valid)\b/i.test(askedText);
   const statusDocs = [...new Set(shown.map((a) => a.policyId))].filter((id) => ["lapsed", "ended", "grace"].includes(statusOf.get(id)?.state ?? "") || (statusAsked && statusOf.get(id)?.state === "reinstated"));
-  for (const docId of statusDocs) { const sentence = statusSentence(docName(docId), statusOf.get(docId)!); if (sentence && !lines.includes(sentence)) lines.push(sentence); }
+  for (const docId of statusDocs) {
+    const st = statusOf.get(docId)!, sentence = statusSentence(docName(docId), st);
+    if (sentence && !lines.includes(sentence)) lines.push(sentence);
+    // Round 16: the lapse date a reinstatement sentence repeats is cited where it is printed (the lapse notice).
+    if (sentence && st.state === "reinstated" && st.lapsedPrinted && st.lapsedDocId && st.lapsedPage && docs.has(st.lapsedDocId) && !citations.some((c) => c.policyId === st.lapsedDocId && c.pageStart === st.lapsedPage))
+      citations.push({ chunkId: "lapsed:" + st.lapsedDocId + ":" + st.lapsedPage, policyId: st.lapsedDocId, policyName: docs.get(st.lapsedDocId)?.product_name ?? docName(st.lapsedDocId), insurer: docs.get(st.lapsedDocId)?.insurer ?? undefined,
+        pageStart: st.lapsedPage, pageEnd: st.lapsedPage, documentRole: docs.get(st.lapsedDocId)?.document_role ?? undefined });
+  }
   // "Is that per year?" about a premium printed for a whole period of cover.
   if (/\b(?:per|a|each|every) year\b|\byearly\b|\bannual(?:ly)?\b/i.test(askedText))
     for (const a of shown.filter((x) => x.source === "premium" && /for the period|single premium|one-off/i.test(x.title))) {
@@ -1910,6 +1918,14 @@ export function conciseDetails(details: string[], limits: { benefitTitle: string
   if (details.length <= opts.cap + 1) return;
   const chosen = details.slice(0, opts.cap);
   for (const re of opts.keep ?? []) if (!chosen.some((d) => re.test(d))) { const extra = details.slice(opts.cap).find((d) => re.test(d) && !chosen.includes(d)); if (extra) chosen.push(extra); }
+  // Round 16: lines now carry the period and conditions their passage prints ("per year", "up to 30 days"), so the
+  // short answer is also held to a word budget: the last lines move to "more lines" rather than over-run it.
+  const words = (xs: string[]) => xs.join(" ").split(/\s+/).length;
+  while (chosen.length > 3 && words(chosen) > 200) {
+    const fromEnd = [...chosen].reverse().findIndex((d) => !(opts.keep ?? []).some((re) => re.test(d)));
+    if (fromEnd < 0) break;
+    chosen.splice(chosen.length - 1 - fromEnd, 1);
+  }
   const more = details.length - chosen.length;
   if (more <= 0) return;
   details.splice(0, details.length, ...chosen, "There " + (more === 1 ? "is 1 more line" : "are " + more + " more lines") + " on this in the documents — ask for the full list to see " + (more === 1 ? "it" : "them") + ".");

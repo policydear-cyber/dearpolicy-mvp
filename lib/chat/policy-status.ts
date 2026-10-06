@@ -25,6 +25,8 @@ export type PrintedStatus = {
   lapsedPrinted?: string | null;
   /** reinstated: the document that says so (another document of the same policy). */
   byDocId?: string | null;
+  /** Round 16: for a reinstated policy, the lapse notice (document and page) that prints the lapse date the answer repeats. */
+  lapsedDocId?: string | null; lapsedPage?: number | null;
 };
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 const DATE = "(\\d{1,2})\\s+(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(\\d{4})";
@@ -103,7 +105,7 @@ export function applyReinstatements(statusOf: Map<string, PrintedStatus>, docs: 
       if (o.id === d.id || num(o.policy_number) !== num(d.policy_number)) continue;
       const r = printedReinstatement(pagesOf(o.id));
       if (!r || (st.date && r.iso < st.date)) continue;
-      const reinstated: PrintedStatus = { state: "reinstated", date: r.iso, printed: r.printed, page: r.page, line: r.line, lapsedPrinted: st.printed, byDocId: o.id };
+      const reinstated: PrintedStatus = { state: "reinstated", date: r.iso, printed: r.printed, page: r.page, line: r.line, lapsedPrinted: st.printed, byDocId: o.id, lapsedDocId: d.id, lapsedPage: st.page };
       statusOf.set(d.id, reinstated);
       if (["unknown", "in_force"].includes(statusOf.get(o.id)?.state ?? "unknown")) statusOf.set(o.id, reinstated);
       break;

@@ -213,6 +213,11 @@ function errorRecord(household: HouseholdId, item: Item, turn: number | null, e:
     cite: "n/a", detectorHits: [{ rule: "threw", text: (e instanceof Error ? e.stack ?? e.message : String(e)).slice(0, 400) }], summary: "", text: "", tags: item.tags ?? [] };
 }
 
+/** Round 16: a full pass is facts, nothing forbidden, the expected behaviour, no detector hit AND the citation
+ * check (an answer that cites none of the pages the item names is not a full pass; "n/a" when the item names none). */
+export function passed(r: Scored) {
+  return !r.missing.length && !r.forbiddenHits.length && r.behaviourOk && !r.detectorHits.length && r.cite !== "missing";
+}
 /** Per-household tallies. */
 export function tally(rows: Scored[]) {
   const items = rows.length;
@@ -226,7 +231,9 @@ export function tally(rows: Scored[]) {
     detectorHits: rows.reduce((n, r) => n + r.detectorHits.length, 0),
     itemsWithDetectorHits: rows.filter((r) => r.detectorHits.length).length,
     citeMissing: rows.filter((r) => r.cite === "missing").length,
-    fullPass: rows.filter((r) => !r.missing.length && !r.forbiddenHits.length && r.behaviourOk && !r.detectorHits.length).length,
+    fullPass: rows.filter(passed).length,
+    /** Full pass before Round 16 (no citation requirement), reported beside it. */
+    fullPassIgnoringCitation: rows.filter((r) => !r.missing.length && !r.forbiddenHits.length && r.behaviourOk && !r.detectorHits.length).length,
   };
 }
 export function percentile(values: number[], p: number) { const s = [...values].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; }

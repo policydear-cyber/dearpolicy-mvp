@@ -26,6 +26,17 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
 import { inactiveDocuments } from "./policy-status";
 import { replacedFigures } from "@/lib/policies/amendments";
+import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
+import { amountAppears, verifyAssertion, type AssertionDocument } from "./assertions";
+import { nameAppears } from "@/lib/documents/evidence";
+
+let flagColumns: Promise<Set<string>> | null = null;
+/** Which ingestion evidence flags policy_coverages has (added by ingestion; the totals use them when present). */
+function coverageFlagColumns(): Promise<Set<string>> {
+  flagColumns ??= query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name='policy_coverages' AND column_name IN ('passage_verified','conflict_note')`)
+    .then((r) => new Set(r.rows.map((x) => x.column_name))).catch(() => { flagColumns = null; return new Set<string>(); });
+  return flagColumns;
+}
 
 export type RegistryAnswer = { summary: string; details: string[]; citations: ChatCitation[]; personId: string | null; topic?: string; asked?: string;
   /** The chat's topic stays what it was (a date asked about the plan the chat is on). */
@@ -260,9 +271,18 @@ export async function registryAnswer(args: { accountId: string; question: string
   };
 
   // ---------------------------------------------------------------- cover added up, per person
+  // Round 16: every figure goes through the assertion verifier (lib/chat/assertions.ts) before it is said or
+  // added: the stored row must be confirmed and evidence-verified, not flagged unverifiable (passage_verified =
+  // false) or in conflict, its document current with a known version, the person on it, the amount and the
+  // currency printed beside each other on the cited page. A total adds only verified figures of one person in
+  // one currency; anything else is listed on its own with the reason, and different currencies are never added.
   if (coverTotal && coverKind) {
-    const rows = (await query<{ policy_id: string; member: string | null; category: string | null; amount: string; currency: string | null; notes: string | null }>(
-      `SELECT pc.policy_id::text, pc.family_member_id::text AS member, pc.category, pc.amount::text, pc.currency, pc.notes FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id
+    const flags = await coverageFlagColumns();
+    const rows = (await query<{ id: string; policy_id: string; member: string | null; category: string | null; amount: string; currency: string | null; notes: string | null; source_page: number | null; evidence_text: string | null;
+      confirmed: boolean | null; evidence_verified: boolean | null; passage_verified?: boolean | null; conflict_note?: string | null }>(
+      `SELECT pc.id::text, pc.policy_id::text, pc.family_member_id::text AS member, pc.category, pc.amount::text, pc.currency, pc.notes, pc.source_page, pc.evidence_text, pc.confirmed, pc.evidence_verified
+              ${flags.has("passage_verified") ? ", pc.passage_verified" : ""}${flags.has("conflict_note") ? ", pc.conflict_note" : ""}
+         FROM policy_coverages pc JOIN policies p ON p.id=pc.policy_id
         WHERE pc.account_id=$1 AND ${activePredicate("p")} AND p.processing_status='ready' AND p.superseded_at IS NULL AND pc.amount IS NOT NULL`, [args.accountId]).catch(() => ({ rows: [] }))).rows;
     const replaced = await replacedFigures(args.accountId).catch(() => new Map<string, { amounts: Set<number> }>());
     const kindOk = (cat: string | null) => coverKind === "ci" ? /critical/i.test(cat ?? "") : /^(?:life|death)/i.test(cat ?? "");
@@ -275,26 +295,69 @@ export async function registryAnswer(args: { accountId: string; question: string
     const dies = /\bif ([\p{L} ]{2,30}?) dies?\b/iu.exec(text)?.[1];
     const whom = dies ? namedPeople(dies, family) : people.length ? people : us ? family.filter((p) => usable.some((r) => r.member === p.id)) : args.people.length === 1 ? args.people : self ? [self] : [];
     if (!whom.length) return null;
-    const money = (n: number, cur: string) => (cur === "USD" ? "US$" : "S$") + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    const money = (n: number, cur: string | null) => formatMoney(n, cur).replace(/\.00$/, "");
     const letters = docs.filter(isPaper);
-    const letterText = new Map((await query<{ policy_id: string; text: string }>(`SELECT policy_id::text AS policy_id, string_agg(text, E'\\n' ORDER BY page_number) AS text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) GROUP BY 1`,
-      [args.accountId, [...letters.map((d) => d.id), ...new Set(usable.map((r) => r.policy_id))]]).catch(() => ({ rows: [] }))).rows.map((r) => [r.policy_id, r.text] as const));
-    // A figure is said only when its document prints it (a misread amount is never added up).
-    const printedOn = (id: string, n: number) => {
-      const t = letterText.get(id) ?? "";
-      const forms = [n.toLocaleString("en-US", { maximumFractionDigits: 2 }), String(n)].map((f) => f.replace(/[.,]/g, (c) => "\\" + c));
-      // (A table column headed "S$" prints its figures bare; a small number needs its currency beside it.)
-      return new RegExp((n >= 1000 ? "(?<![\\d,.])" : "(?:S\\$|SGD|US\\$|USD)\\s?") + "(?:" + forms.join("|") + ")(?:\\.00)?(?![\\d]|[,.]\\d)", "i").test(t);
+    const wantedIds = [...new Set([...letters.map((d) => d.id), ...usable.map((r) => r.policy_id)])];
+    const pageRows = (await query<{ policy_id: string; page_number: number; text: string }>(`SELECT policy_id::text AS policy_id, page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id::text=ANY($2::text[]) ORDER BY policy_id, page_number`,
+      [args.accountId, wantedIds]).catch(() => ({ rows: [] }))).rows;
+    const pagesOf = (id: string) => pageRows.filter((r) => r.policy_id === id);
+    const letterText = new Map(wantedIds.map((id) => [id, pagesOf(id).map((r) => r.text).join("\n")] as const));
+    // The verifier's view of each document: its household, state, release, version and the people it speaks for.
+    const docRows = (await query<{ id: string; account_id: string; lifecycle_state: string; superseded_at: string | null; quarantine_status: string | null; file_hash: string | null }>(
+      `SELECT id::text, account_id::text, lifecycle_state, superseded_at::text, quarantine_status, file_hash FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[])`, [args.accountId, wantedIds]).catch(() => ({ rows: [] }))).rows;
+    const documents: Record<string, AssertionDocument> = {};
+    for (const r of docRows) documents[r.id] = { id: r.id, accountId: r.account_id, lifecycleState: r.lifecycle_state, supersededAt: r.superseded_at, quarantineStatus: r.quarantine_status, fileHash: r.file_hash,
+      subjectIds: docs.find((d) => d.id === r.id)?.owners ?? [] };
+    const pageText = (id: string, page: number) => pagesOf(id).find((r) => r.page_number === page)?.text ?? null;
+    /** The page and line that print `amount` (the stored passage on its stored page first). */
+    const locate = (id: string, amount: number, page: number | null, evidence: string | null) => {
+      const ordered = [...pagesOf(id)].sort((a, b) => (a.page_number === page ? -1 : 0) - (b.page_number === page ? -1 : 0));
+      for (const pg of ordered) {
+        if (evidence && pg.page_number === page && pg.text.toLowerCase().replace(/\s+/g, " ").includes(evidence.toLowerCase().replace(/\s+/g, " ").trim()) && amountAppears(amount, evidence)) return { page: pg.page_number, passage: evidence.trim() };
+        const line = pg.text.split(/\n/).find((l) => amountAppears(amount, l));
+        if (line) return { page: pg.page_number, passage: (line.split(/(?<=[.;])\s+/).find((x) => amountAppears(amount, x)) ?? line).trim() };
+      }
+      return null;
+    };
+    const what1 = coverKind === "ci" ? "Critical illness cover" : "Death cover";
+    type Item = { d: Doc; amount: number; cur: string | null; joint: boolean; note: string | null; page: number | null; problem: string | null };
+    /** Why a figure is not added, in plain words. */
+    const plain = (reason: string) => /currency/i.test(reason) ? "its currency is missing beside it in the document"
+      : /version/i.test(reason) ? "the document’s version couldn’t be confirmed"
+      : /re-found|passage_verified|could not be re-found/i.test(reason) ? "the figure couldn’t be re-found in its document"
+      : /^conflict/i.test(reason) ? "the documents on file state different figures for it"
+      : /condition|period|unit/i.test(reason) ? "the document attaches a condition to it (" + (reason.match(/\(([^)]*)\)/)?.[1] ?? "see the page") + ")"
+      : /person|belong|someone/i.test(reason) ? "the document doesn’t name this person on it"
+      : "it couldn’t be matched to the page that prints it";
+    const verify = (p: ClaimPerson, d: Doc, amount: number, cur: string | null, at: { page: number; passage: string } | null, flagsOk: string | null, conflict: string | null): string | null => {
+      if (flagsOk) return flagsOk;
+      if (!at) return "the amount is not printed in the document";
+      return verifyAssertion({ kind: "policy_fact", text: what1 + ": " + (cur ? money(amount, cur) : amount.toLocaleString("en-US")), subjectId: p.id, policyId: d.id, documentHash: documents[d.id]?.fileHash ?? null,
+        page: at.page, passage: at.passage, amount, currency: cur, conflictNote: conflict },
+        { accountId: args.accountId, people: [p], household: family, documents, pageText });
     };
     const byPerson = whom.map((p) => {
-      const mine = new Map<string, { d: Doc; amount: number; cur: string; joint: boolean; note: string | null }>();
-      for (const r of usable.filter((x) => x.member === p.id && printedOn(x.policy_id, Number(x.amount)))) {
+      const mine = new Map<string, Item>();
+      for (const r of usable.filter((x) => x.member === p.id)) {
         const d = docs.find((x) => x.id === r.policy_id); if (!d) continue;
-        const k = policyKey(d), cur = (r.currency ?? "SGD").toUpperCase();
+        const k = policyKey(d), cur = statedCurrencyCode(r.currency), amount = Number(r.amount);
         const joint = coveredBy(policies.get(k) ?? [d]).length > 1;
+        const at = locate(d.id, amount, r.source_page, r.evidence_text);
+        // The stored verification flags are required: a row the household's own reading did not confirm is not a
+        // verified figure. passage_verified = false means ingestion could not re-find the amount, its currency AND
+        // the insured person's name in the row's passage; it stands only when that same check passes now on the
+        // cited page (the amount and currency beside each other in the passage -- the verifier below -- and the
+        // person's name printed on that page).
+        const nameOnPage = !!at && [p.display_name, p.preferred_name].some((n) => !!n && nameAppears(pageText(d.id, at.page) ?? "", n));
+        const flagsOk = r.confirmed === false || r.evidence_verified === false ? "the stored figure is not confirmed by its document"
+          : r.passage_verified === false && !nameOnPage ? "the stored figure could not be re-found in its passage" : null;
+        // (A misread figure the document does not print at all is not said: that is not an item, it is an error.)
+        if (!at) continue;
+        const problem = !cur ? "the currency of the amount is not stated" : verify(p, d, amount, cur, at, flagsOk, r.conflict_note ?? null);
+        const item: Item = { d, amount, cur, joint, note: r.notes, page: at.page, problem };
         const prev = mine.get(k);
-        // One figure per policy: the current document's (a later endorsement's) when there are two.
-        if (!prev || (dateOf(d) ?? "") > (dateOf(prev.d) ?? "")) mine.set(k, { d, amount: Number(r.amount), cur, joint, note: r.notes });
+        // One figure per policy: a verified one over an unverified one, then the current document's (a later endorsement's).
+        if (!prev || (!!prev.problem && !problem) || (!!prev.problem === !!problem && (dateOf(d) ?? "") > (dateOf(prev.d) ?? ""))) mine.set(k, item);
       }
       // A policy known only from the insurer's letters (a lapse notice, a reinstatement letter): the sum assured the latest of them states.
       for (const [k, ds] of policies) {
@@ -303,14 +366,22 @@ export async function registryAnswer(args: { accountId: string; question: string
         if (!ds.some((x) => kindRe.test((x.kind ?? "") + " " + (x.product ?? "")))) continue;
         // The insurer's own letters only: an app screenshot, a receipt or the family's notes never state cover.
         for (const d of ds.filter((x) => /^(?:insurer_letter|other|renewal_notice)$/.test(x.role ?? "")).sort((a, b) => (dateOf(b) ?? "").localeCompare(dateOf(a) ?? ""))) {
-          const text = letterText.get(d.id) ?? "";
-          const m = /sum (?:assured|insured)[^\n$]{0,30}?(S\$|SGD\s?|US\$|USD\s?)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(text);
-          if (m) { mine.set(k, { d, amount: Number(m[2].replace(/,/g, "")), cur: /^US/i.test(m[1]) ? "USD" : "SGD", joint: false, note: "as the insurer’s letter dated " + (dateOf(d) ? longDate(dateOf(d)!) : "on file") + " states" }); break; }
+          for (const pg of pagesOf(d.id)) {
+            const m = /sum (?:assured|insured)[^\n$]{0,30}?(S\$|SGD\s?|US\$|USD\s?|RM\s?|MYR\s?|HK\$|HKD\s?)\s?(\d[\d,]*(?:\.\d+)?)/i.exec(pg.text);
+            if (!m) continue;
+            const amount = Number(m[2].replace(/,/g, "")), cur = statedCurrencyCode(m[1].trim());
+            const line = pg.text.split(/\n/).find((l) => l.includes(m[0])) ?? m[0];
+            const problem = verify(p, d, amount, cur, { page: pg.page_number, passage: line.trim() }, null, null);
+            mine.set(k, { d, amount, cur, joint: false, note: "as the insurer’s letter dated " + (dateOf(d) ? longDate(dateOf(d)!) : "on file") + " states", page: pg.page_number, problem });
+            break;
+          }
+          if (mine.has(k)) break;
         }
       }
       const items = [...mine.values()];
-      const totals = new Map<string, number>(); for (const i of items) totals.set(i.cur, (totals.get(i.cur) ?? 0) + i.amount);
-      return { p, items, totals };
+      const verified = items.filter((i) => !i.problem && i.cur);
+      const totals = new Map<string, number>(); for (const i of verified) totals.set(i.cur!, Math.round(((totals.get(i.cur!) ?? 0) + i.amount) * 100) / 100);
+      return { p, items, verified, totals, counts: new Map([...totals.keys()].map((c) => [c, verified.filter((i) => i.cur === c).length])) };
     }).filter((x) => x.items.length);
     if (!byPerson.length) return null;
     const what = coverKind === "ci" ? "critical illness cover" : "death cover";
@@ -320,19 +391,30 @@ export async function registryAnswer(args: { accountId: string; question: string
     // then what it shows is the document questions' to say, not "none".
     const kindDoc = coverKind === "ci" ? /critical illness/i : /\blife\b|\bterm\b|whole life/i;
     if (none.some((p) => docs.some((d) => d.owners.includes(p.id) && kindDoc.test((d.kind ?? "") + " " + (d.product ?? ""))))) return null;
-    const totalText = (t: Map<string, number>) => [...t].map(([c, n]) => money(n, c)).join(" plus ") + (t.size > 1 ? " (each currency kept separate)" : "");
     const label = (note: string | null) => { const n = (note ?? "").split("·").at(-1)!.trim(); return n && !/^(?:death|life|ci amount|cover|death benefit)$/i.test(n) ? " (" + n.charAt(0).toLowerCase() + n.slice(1) + ")" : ""; };
     // Someone the question names by name is called by name ("compare Wei Jie and Mei Ling"), even the person asking.
     const byNameIds = new Set(family.filter((p) => [p.preferred_name ?? "", p.display_name].some((n) => n.trim().length >= 3 && (" " + text.toLowerCase().replace(/['’]s\b/g, " ") + " ").includes(" " + n.toLowerCase().trim() + " "))).map((p) => p.id));
     const you = (p: ClaimPerson) => isSelf(p) && !byNameIds.has(p.id);
-    const lines = byPerson.flatMap((x) => x.items.map((i) => (you(x.p) ? "You" : personName(x.p)) + " — " + (i.d.product ?? i.d.file) + ": " + money(i.amount, i.cur) + label(i.note) + (i.joint ? " (joint policy: paid once, on the first death of the people it covers)" : "") + "."));
-    const sentences = byPerson.map((x) => (you(x.p) ? "Your" : personName(x.p) + "’s") + " " + what + " on file " + (x.items.length > 1 ? "adds up to " + totalText(x.totals) + " across " + x.items.length + " policies" : "is " + totalText(x.totals) + " under " + (x.items[0].d.product ?? x.items[0].d.file)) + ".");
+    const lines = byPerson.flatMap((x) => x.items.map((i) => (you(x.p) ? "You" : personName(x.p)) + " — " + (i.d.product ?? i.d.file) + ": " + money(i.amount, i.cur) + label(i.note)
+      + (i.joint ? " (joint policy: paid once, on the first death of the people it covers)" : "")
+      + (!i.cur ? " — not added: the document prints no currency for this amount, and DearPolicy never assumes one" : i.problem ? " — not added: " + plain(i.problem) : "") + "."));
+    const sentences = byPerson.map((x) => {
+      const whose = you(x.p) ? "Your" : personName(x.p) + "’s";
+      const parts = [...x.totals].map(([c, n]) => money(n, c) + ((x.counts.get(c) ?? 0) > 1 ? " across " + x.counts.get(c) + " policies" : " under " + (x.verified.find((i) => i.cur === c)!.d.product ?? x.verified.find((i) => i.cur === c)!.d.file)));
+      const left = x.items.length - x.verified.length;
+      if (!parts.length) return whose + " " + what + " on file could not be verified against the documents, so it is not added up; each policy is listed with the reason.";
+      return whose + " " + what + " on file " + (x.verified.length > 1 && x.totals.size === 1 ? "adds up to " : "is ") + parts.join(", and ")
+        + (x.totals.size > 1 ? " — these are in different currencies, so they are listed separately and not added together" : "")
+        + "." + (left ? " " + left + (left === 1 ? " other figure is" : " other figures are") + " not added, because " + (left === 1 ? "it isn’t" : "they aren’t") + " verified in this currency; each is listed with the reason." : "");
+    });
     let lead = sentences.join(" ") + (none.length ? " " + listOf(none.map((p) => you(p) ? "you" : personName(p))).replace(/^\w/, (c) => c.toUpperCase()) + (none.length === 1 && !you(none[0]) ? " has" : " have") + " no " + what + " on file." : "");
-    if (byPerson.length === 2 && byPerson.every((x) => x.totals.size === 1 && x.totals.has("SGD"))) {
-      const [a, b] = byPerson; const ta = a.totals.get("SGD")!, tb = b.totals.get("SGD")!;
+    if (byPerson.length === 2 && byPerson.every((x) => x.totals.size === 1 && x.verified.length === x.items.length) && byPerson[0].totals.keys().next().value === byPerson[1].totals.keys().next().value) {
+      const [a, b] = byPerson; const ta = [...a.totals.values()][0], tb = [...b.totals.values()][0];
       if (ta !== tb) { const more = ta > tb ? a : b; lead += " " + (you(more.p) ? "You have" : personName(more.p) + " has") + " more."; }
     }
-    return { summary: lead + " These are the policy-stated amounts, not what a claim would pay.", details: lines, citations: [...new Set(byPerson.flatMap((x) => x.items.map((i) => i.d)))].map(cite), personId: byPerson.length === 1 ? byPerson[0].p.id : null };
+    const cited = new Map<string, ChatCitation>();
+    for (const x of byPerson) for (const i of x.items) { const c = i.page ? { ...cite(i.d), chunkId: "page:" + i.d.id + ":" + i.page, pageStart: i.page, pageEnd: i.page } : cite(i.d); cited.set(c.chunkId, c); }
+    return { summary: lead + " These are the policy-stated amounts, not what a claim would pay.", details: lines, citations: [...cited.values()], personId: byPerson.length === 1 ? byPerson[0].p.id : null };
   }
 
   // ---------------------------------------------------------------- one plan's start or end date
@@ -497,13 +579,19 @@ export async function registryAnswer(args: { accountId: string; question: string
 
   // ---------------------------------------------------------------- currency
   if (currencyAsked) {
-    const ps = [...policies.values()].map((ds) => ({ ds, d: lead(ds), cur: [...new Set(ds.flatMap((x) => x.currencies))] })).filter((x) => x.cur.length);
+    // Round 16: each policy's currencies as its records state them (never assumed); a policy with none stated is said to have none.
+    const all2 = [...policies.values()].map((ds) => ({ ds, d: lead(ds), cur: [...new Set(ds.flatMap((x) => x.currencies).map((c) => statedCurrencyCode(c)).filter((c): c is string => !!c))] }));
+    const ps = all2.filter((x) => x.cur.length), unknown = all2.filter((x) => !x.cur.length && !x.ds.every(isPaper));
     if (!ps.length) return null;
     const foreign = ps.filter((x) => x.cur.some((c) => c !== "SGD"));
     const named = /\b(?:usd|us\$|us dollars?|american)\b/i.test(text) ? ps.filter((x) => x.cur.includes("USD")) : foreign;
-    const word = (c: string) => c === "USD" ? "US dollars (USD)" : c === "SGD" ? "Singapore dollars (SGD)" : c;
-    return { summary: named.length ? listOf(named.map((x) => (x.d.product ?? x.d.file) + (x.d.insurer ? " (" + x.d.insurer + ")" : ""))) + (named.length === 1 ? " is" : " are") + " in " + listOf([...new Set(named.flatMap((x) => x.cur.filter((c) => c !== "SGD")))].map(word)) + "; " + (ps.length - named.length === 0 ? "there are no others." : "the other policies on file are in Singapore dollars.")
-        : "All the policies on file are in Singapore dollars (SGD); none is in another currency.",
+    const word = (c: string) => c === "USD" ? "US dollars (USD)" : c === "SGD" ? "Singapore dollars (SGD)" : c === "MYR" ? "Malaysian ringgit (MYR)" : c;
+    const rest = ps.filter((x) => !named.includes(x));
+    const restCur = [...new Set(rest.flatMap((x) => x.cur))];
+    const restText = !rest.length ? "there are no others" : "the other policies on file are in " + listOf(restCur.map(word));
+    const unknownText = unknown.length ? " " + listOf(unknown.map((x) => x.d.product ?? x.d.file)) + (unknown.length === 1 ? " shows" : " show") + " no currency in the pages read, so DearPolicy assumes none." : "";
+    return { summary: (named.length ? listOf(named.map((x) => (x.d.product ?? x.d.file) + (x.d.insurer ? " (" + x.d.insurer + ")" : ""))) + (named.length === 1 ? " is" : " are") + " in " + listOf([...new Set(named.flatMap((x) => x.cur.filter((c) => c !== "SGD")))].map(word)) + "; " + restText + "."
+        : "All the policies on file " + (unknown.length ? "that state a currency " : "") + "are in " + listOf(restCur.map(word)) + "; none is in another currency.") + unknownText,
       details: ps.map((x) => (x.d.product ?? x.d.file) + ": " + listOf(x.cur.map(word)) + "."), citations: (named.length ? named : ps).map((x) => cite(x.d)), personId: null };
   }
 

@@ -52,6 +52,9 @@ const FLOORS: Record<string, { facts: number; behaviour: number; fullPass: numbe
   "H2-aisyah": { facts: 195, behaviour: 221, fullPass: 172 }, // final 196 / 222 / 173 (main before: 175 / 184 / 128)
   "H3-ong": { facts: 196, behaviour: 216, fullPass: 179 }, // final 197 / 217 / 180 (main before: 149 / 163 / 113)
 };
+// Round 16: a full pass now also requires the citation check (scripts/r7-robust/battery.ts passed()). Floors unchanged.
+// Main before Round 16, rescored that way: 167 / 172 / 179 full pass (3 items failed only the citation check);
+// after Round 16: 168 / 173 / 179 (520/810); without the citation requirement 169 / 173 / 180 (522, was 521).
 /** Battery items that must pass completely (facts, forbidden, behaviour, detectors). */
 const TRAP_ITEMS: Record<string, string[]> = {
   // dad / papa resolve to Ah Kow (his ward, knee exclusion, MediSave/cash split); Jun Hao vs Jun Hui; Ah Kow's age
@@ -107,7 +110,8 @@ async function main() {
   const { DEGRADED: CHAOS_DEGRADED } = await import("./r8/detectors");
   const failures: string[] = [];
   const fail = (s: string) => { failures.push(s); };
-  const passed = (r: import("./r7-robust/battery").Scored) => !r.missing.length && !r.forbiddenHits.length && r.behaviourOk && !r.detectorHits.length;
+  // Round 16: the battery's own definition, which requires the citation check (scripts/r7-robust/battery.ts).
+  const passed = (r: import("./r7-robust/battery").Scored) => B.passed(r);
   const canary = await C.canaryDetector(visibleFields);
   const seeds = (process.env.R7R_SEEDS ?? "1,2,3,4,5,6").split(",").map(Number).filter((n) => Number.isInteger(n));
 
@@ -180,6 +184,7 @@ async function main() {
           log(`   < ${r.summary.slice(0, 300).replace(/\n/g, " ")}`);
           if (r.missing.length) log(`   missing: ${r.missing.join(" ; ")}`);
           if (r.forbiddenHits.length) log(`   FORBIDDEN: ${r.forbiddenHits.join(" ; ")}`);
+          if (r.cite === "missing") log("   citation check: none of the pages the item names is cited");
           for (const h of r.detectorHits.slice(0, 4)) log(`   detector ${h.rule}: ${h.text.slice(0, 200)}`);
         }
       }
@@ -198,7 +203,7 @@ async function main() {
     for (const [h, ids] of Object.entries(TRAP_ITEMS)) for (const id of ids) {
       const rows = byId(h, id.split("#")[0]).filter((r) => !id.includes("#") || String(r.turn) === id.split("#")[1]);
       if (!rows.length && built.households.some((x) => x.id === h)) fail(`trap item ${h} ${id} was not run`);
-      for (const r of rows) { checked++; if (!passed(r)) fail(`trap item ${h} ${id}${r.turn ? "#" + r.turn : ""} no longer passes: ${[...r.missing.map((m) => "missing " + m), ...r.forbiddenHits.map((f) => "forbidden " + f), r.behaviourOk ? "" : "behaviour " + r.behaviour, ...r.detectorHits.map((d) => d.rule)].filter(Boolean).join("; ")}`); }
+      for (const r of rows) { checked++; if (!passed(r)) fail(`trap item ${h} ${id}${r.turn ? "#" + r.turn : ""} no longer passes: ${[...r.missing.map((m) => "missing " + m), ...r.forbiddenHits.map((f) => "forbidden " + f), r.behaviourOk ? "" : "behaviour " + r.behaviour, ...r.detectorHits.map((d) => d.rule), r.cite === "missing" ? "citation check (none of the pages the item names is cited)" : ""].filter(Boolean).join("; ")}`); }
     }
     // Categorical checks over every answer.
     for (const r of allRows) {
@@ -231,7 +236,7 @@ async function main() {
         if (!alone) continue;
         const drift = LONG_CHAT_KNOWN.has(r.id + "#" + r.turn) ? (x: string) => log("  (known long-chat drift) " + x) : fail;
         if (alone.resolved && r.resolved && alone.resolved !== r.resolved && passed(alone)) drift(`long chat ${where}: answered about a different person than in a fresh chat`);
-        if (passed(alone) && !passed(r)) drift(`long chat ${where}: passes in a fresh chat but not late in a long one (${[...r.missing.map((m) => "missing " + m), r.behaviourOk ? "" : "behaviour " + r.behaviour].filter(Boolean).join("; ")})`);
+        if (passed(alone) && !passed(r)) drift(`long chat ${where}: passes in a fresh chat but not late in a long one (${[...r.missing.map((m) => "missing " + m), r.behaviourOk ? "" : "behaviour " + r.behaviour, r.cite === "missing" ? "citation check" : ""].filter(Boolean).join("; ")})`);
       }
       // A claim question from an earlier sub-conversation must not come back.
       const byChain = new Map<string, typeof rows>();

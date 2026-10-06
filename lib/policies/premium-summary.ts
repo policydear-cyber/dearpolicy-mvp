@@ -13,13 +13,15 @@
  */
 import { query } from "@/lib/db/client";
 import { annualisePremium } from "@/lib/insurance";
-import { normalizeCurrencyCode } from "@/lib/format/currency";
+import { normalizeCurrencyCode, statedCurrencyCode } from "@/lib/format/currency";
 import { loadPolicyInventory, normalizedIdentifier } from "@/lib/policies/inventory";
 import type { ClaimPerson } from "@/lib/claims/person";
 
 export type PremiumRecordRow = { id: string; policy_id: string | null; family_member_id: string | null; insurer: string | null; product_name: string | null; policy_number: string | null;
   amount: string; currency: string | null; frequency: string | null; payment_date: string | null; period_start: string | null; created_at: string; notes?: string | null };
 export type PremiumItem = Omit<PremiumRecordRow, "amount" | "currency"> & { amount: number; currency: string; shared: boolean;
+  /** Round 16: the record states its currency (false: `currency` is only this summary's display default, never a fact to total or show). */
+  currencyStated: boolean;
   /** What the record's amount is: the whole premium, or only the cash paid after MediSave. */
   cash: number | null; medisave: number | null; total: number; annual: number; monthly: number; cashAnnual: number | null; medisaveAnnual: number | null };
 export type PremiumSummary = { monthly: number; annual: number; cashAnnual: number | null; medisaveAnnual: number | null; items: PremiumItem[];
@@ -61,7 +63,7 @@ export function summariseRecords(rows: PremiumRecordRow[]): PremiumItem[] {
   return [...latest.values()].map((row) => {
     const amount = Number(row.amount), split = premiumSplit(amount, row.notes);
     const annual = annualisePremium(split.total, row.frequency);
-    return { ...row, amount, currency: normalizeCurrencyCode(row.currency, "SGD"), shared: row.family_member_id == null, cash: split.cash, medisave: split.medisave, total: split.total,
+    return { ...row, amount, currency: normalizeCurrencyCode(row.currency, "SGD"), currencyStated: !!statedCurrencyCode(row.currency), shared: row.family_member_id == null, cash: split.cash, medisave: split.medisave, total: split.total,
       annual, monthly: annual / 12, cashAnnual: split.cash == null ? null : annualisePremium(split.cash, row.frequency), medisaveAnnual: split.medisave == null ? null : annualisePremium(split.medisave, row.frequency) };
   });
 }

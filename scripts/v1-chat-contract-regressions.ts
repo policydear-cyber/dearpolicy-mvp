@@ -223,7 +223,7 @@ async function main() {
     const docs = plan.scheduleOnly ? [{ id: schedule, personal: true, pages: plan.scheduleOnly }]
       : [{ id: schedule, personal: true, pages: [{ page: 1, text: plan.schedule }] }, { id: wording, personal: false, pages: plan.wording }];
     for (const doc of docs) {
-      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$11,'2024-01-01',$12::jsonb,'scan_clean')",
+      await db.query("INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,extracted_json,quarantine_status,file_hash) VALUES($1,$2,$3,'Example Insurer',$4,$5,$6,$7,$8,$9,'ready',$10,$11,'2024-01-01',$12::jsonb,'scan_clean','sha256:'||md5(random()::text||clock_timestamp()::text))",
         [doc.id, plan.account, plan.member, plan.product, plan.number, plan.type, doc.personal ? "personal_schedule" : "policy_wording", doc.personal, doc.personal ? 95 : 60,
           plan.key + (doc.personal ? "-schedule.pdf" : "-wording.pdf"), "households/" + plan.account + "/" + doc.id + ".pdf", JSON.stringify({ productsMentioned: [plan.product] })]);
       await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [doc.id, plan.member, plan.account]);

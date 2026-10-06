@@ -10,6 +10,9 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { formatMoney } from "@/lib/format/currency";
+import { amountAppears, amountPrintedWith } from "./assertions";
+import { figuresIn } from "./answer-verification";
+import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { summarisePremiums, type PremiumItem } from "@/lib/policies/premium-summary";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatCitation } from "@/types";
@@ -35,13 +38,35 @@ export function premiumAboutOnePlan(question: string) {
 function money(amount: number, currency: string) { const text = formatMoney(amount, currency); return Number.isInteger(Math.round(amount * 100) / 100) ? text.replace(/\.00$/, "") : text; }
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
-type Line = { item: PremiumItem; docId: string | null; docName: string | null; page: number | null; role: string | null; insurer?: string | null; policyType?: string | null };
+type Line = { item: PremiumItem; docId: string | null; docName: string | null; page: number | null; role: string | null; insurer?: string | null; policyType?: string | null;
+  /** Round 16: the text of the cited page, so a line says "(page N)" only beside figures that page prints. */
+  pageText?: string | null };
+/** Every money figure of `text` is printed on `page` beside its currency (a yearly figure worked out from a monthly premium is not). */
+function allPrintedOn(text: string, page: string | null | undefined) {
+  if (!page) return false;
+  return figuresIn(text).every((f) => { const how = amountPrintedWith(f.value, f.currency, page); return how === "match" || (how === "bare" && currenciesStatedIn(page).includes(f.currency)); });
+}
 
 /** What the document behind a premium says about the policy now (lapsed, ended, in force).
  * Round 10: one read of a document's pages and dates per answer -- a household
  * total used to re-read the same pages for every premium line of every person. */
-type DocMemo = { pages: Map<string, Promise<{ page: number; text: string }[]>>; dates: Map<string, Promise<{ expiry: string | null; start: string | null }>> };
+type Sibling = { id: string; number: string; product_name: string | null; role: string | null; insurer: string | null; pages: { page: number; text: string }[] };
+type DocMemo = { pages: Map<string, Promise<{ page: number; text: string }[]>>; dates: Map<string, Promise<{ expiry: string | null; start: string | null }>>; siblings?: Promise<Sibling[]> };
 const newDocMemo = (): DocMemo => ({ pages: new Map(), dates: new Map() });
+const normalNumber = (n: string | null | undefined) => (n ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** Round 16: the documents of policies that have more than one document on file (a schedule and its renewal notice),
+ * with their pages -- one read per answer. */
+function siblingDocs(accountId: string, memo: DocMemo): Promise<Sibling[]> {
+  memo.siblings ??= query<{ id: string; num: string; product_name: string | null; role: string | null; insurer: string | null; page_number: number | null; text: string | null }>(
+    `WITH d AS (SELECT p.id, regexp_replace(upper(coalesce(p.policy_number,'')),'[^A-Z0-9]','','g') AS num, p.product_name, p.document_role AS role, p.insurer, p.created_at
+                  FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL AND p.processing_status='ready'),
+          m AS (SELECT num FROM d WHERE num<>'' GROUP BY num HAVING count(*)>1)
+     SELECT d.id::text AS id, d.num, d.product_name, d.role, d.insurer, pp.page_number, pp.text
+       FROM d JOIN m ON m.num=d.num LEFT JOIN policy_pages pp ON pp.policy_id=d.id AND pp.account_id=$1 ORDER BY d.created_at, d.id, pp.page_number`, [accountId])
+    .then((r) => { const out = new Map<string, Sibling>(); for (const x of r.rows) { const s = out.get(x.id) ?? out.set(x.id, { id: x.id, number: x.num, product_name: x.product_name, role: x.role, insurer: x.insurer, pages: [] }).get(x.id)!; if (x.page_number != null) s.pages.push({ page: x.page_number, text: x.text ?? "" }); } return [...out.values()]; })
+    .catch(() => []);
+  return memo.siblings;
+}
 function pagesOf(accountId: string, docId: string, memo: DocMemo) {
   let hit = memo.pages.get(docId);
   if (!hit) { hit = query<{ page_number: number; text: string }>(`SELECT page_number,text FROM policy_pages WHERE account_id=$1 AND policy_id::text=$2 ORDER BY page_number`, [accountId, docId]).then((r) => r.rows.map((x) => ({ page: x.page_number, text: x.text }))); memo.pages.set(docId, hit); }
@@ -132,20 +157,51 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
         const amountPage = docPages.find((p) => p.text.replace(/(\d),(?=\d{3}\b)/g, "$1").includes(String(item.amount)))?.page ?? byId.get(item.id)?.page ?? null;
         for (const page of new Set([amountPage, printedPeriodEnd(docPages)?.page ?? null]))
           if (docId && page) uncounted.push({ docId, page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id });
-        notCounted.push((item.product_name ?? "A policy") + " — a one-off premium of " + money(item.amount, item.currency) + (span ? " for " + span : "") + ", not a yearly one");
+        notCounted.push((item.product_name ?? "A policy") + " — a one-off premium of " + (item.currencyStated ? money(item.amount, item.currency) : formatMoney(item.amount, null)) + (span ? " for " + span : "") + ", not a yearly one");
         continue;
       }
       const src = byId.get(item.id)!;
       let page = src.page;
+      const planName = item.product_name ?? src.product_name ?? "A policy";
+      // Round 16: a premium is counted only when it is a verified figure -- its record states a currency (never
+      // assumed), and its document prints the amount beside that currency (or bare, under a heading that names
+      // it). Anything else is listed as not included, with the reason.
+      if (!item.currencyStated) {
+        if (src.doc_id && page) uncounted.push({ docId: src.doc_id, page, name: src.product_name ?? planName, insurer: src.insurer, id: item.id });
+        notCounted.push(planName + " — " + formatMoney(item.amount, null) + (item.frequency ? " (" + item.frequency + ")" : "") + ": the document prints no currency for it, and DearPolicy never assumes one");
+        continue;
+      }
+      let printedHow: "match" | "other" | "bare" | "absent" = "absent";
+      let pageText: string | null = null;
       // A premium read from the schedule carries no page: it is the page that prints it.
       if (src.doc_id) {
         const pages = (await pagesOf(args.accountId, src.doc_id, memo)).map((x) => ({ page_number: x.page, text: x.text }));
-        const printedOn = (p: { text: string }) => { const digits = p.text.replace(/(\d),(?=\d{3}\b)/g, "$1"); return new RegExp("(?:^|[^\\d.])" + String(item.amount).replace(".", "\\.") + "(?:\\.0+)?(?![\\d])").test(digits); };
+        // (Round 16: "86.40" prints the amount 86.4 -- a trailing zero is the same figure.)
+        const printedOn = (p: { text: string }) => amountAppears(item.amount, p.text);
+        const how = (p: { text: string }) => { const h = amountPrintedWith(item.amount, item.currency, p.text); return h === "bare" && currenciesStatedIn(p.text).includes(item.currency) ? "match" : h; };
+        printedHow = pages.some((p) => how(p) === "match") ? "match" : pages.some((p) => how(p) === "other") ? "other" : pages.some((p) => how(p) === "bare") ? "bare" : "absent";
         if (!page || !pages.some((p) => p.page_number === page && printedOn(p))) page = pages.find(printedOn)?.page_number ?? page;
+        pageText = pages.find((p) => p.page_number === page)?.text ?? null;
       }
-      lines.push({ item, docId: src.doc_id, docName: src.product_name, page, role: src.role, insurer: src.insurer, policyType: src.policy_type });
+      // The premium may be printed on another document of the same policy (a renewal notice prints the cash portion the
+      // schedule does not): it is verified -- and cited -- there.
+      let at = { docId: src.doc_id, name: src.product_name, role: src.role, insurer: src.insurer };
+      if (printedHow !== "match" && item.policy_number) {
+        const siblings = (await siblingDocs(args.accountId, memo)).filter((x) => x.id !== src.doc_id && x.number === normalNumber(item.policy_number));
+        for (const sib of siblings) {
+          const hit = sib.pages.find((p) => { const h = amountPrintedWith(item.amount, item.currency, p.text); return h === "match" || (h === "bare" && currenciesStatedIn(p.text).includes(item.currency)); });
+          if (hit) { printedHow = "match"; at = { docId: sib.id, name: sib.product_name ?? src.product_name, role: sib.role, insurer: sib.insurer }; page = hit.page; pageText = hit.text; break; }
+        }
+      }
+      if (printedHow !== "match") {
+        if (src.doc_id && page) uncounted.push({ docId: src.doc_id, page, name: src.product_name ?? planName, insurer: src.insurer, id: item.id });
+        notCounted.push(planName + " — " + money(item.amount, item.currency) + ": " + (printedHow === "other" ? "the document prints this amount in a different currency" : printedHow === "bare" ? "the document prints no currency beside this amount" : "the amount is missing from the document on file"));
+        continue;
+      }
+      lines.push({ item, docId: at.docId, docName: at.name, page, role: at.role, insurer: at.insurer, policyType: src.policy_type, pageText });
     }
-    const currency = lines[0]?.item.currency ?? "SGD";
+    // (Every counted line states its currency: see above.)
+    const currency = lines[0]?.item.currency ?? "";
     const sameCurrency = lines.every((l) => l.item.currency === currency);
     const annual = sameCurrency ? r2(lines.reduce((n, l) => n + l.item.annual, 0)) : NaN;
     // MediSave pays Singapore-dollar premiums only; the split is of those.
@@ -174,7 +230,8 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     for (const { p, l } of focusLines) {
       const i = l.item, name = i.product_name ?? l.docName ?? "the policy";
       const split = i.medisaveAnnual != null && i.cashAnnual != null ? " (" + money(i.medisaveAnnual, i.currency) + " from MediSave and " + money(i.cashAnnual, i.currency) + " in cash)" : "";
-      lines.push((args.people.length > 1 ? personName(p.person) + "’s " : "") + name + " premium is " + money(i.annual, i.currency) + " a year" + split + (l.page ? " (page " + l.page + ")" : "") + ".");
+      const said = (args.people.length > 1 ? personName(p.person) + "’s " : "") + name + " premium is " + money(i.annual, i.currency) + " a year" + split;
+      lines.push(said + (l.page && allPrintedOn(said, l.pageText) ? " (page " + l.page + ")" : "") + ".");
       if (l.docId && l.page && !citations.some((c) => c.policyId === l.docId && c.pageStart === l.page))
         citations.push({ chunkId: "premium:" + i.id, policyId: l.docId, policyName: l.docName ?? name, insurer: l.insurer ?? undefined, pageStart: l.page, pageEnd: l.page, evidenceLabel: /renewal/.test(l.role ?? "") ? "Renewal notice" : "Your policy document" });
     }
@@ -214,7 +271,8 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const where = l.page ? " (" + (/renewal/.test(l.role ?? "") ? "renewal notice, " : "") + "page " + l.page + ")" : "";
     const from = i.period_start && i.period_start.slice(0, 10) > new Date().toISOString().slice(0, 10) ? ", from " + new Date(i.period_start.slice(0, 10) + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : "";
     const monthly = /month/i.test(i.frequency ?? "") ? money(i.total, i.currency) + " a month (" + money(i.annual, i.currency) + " a year)" : money(i.annual, i.currency) + " a year";
-    return name + ": " + monthly + split + from + where + ".";
+    // (The page is cited either way; "(page N)" is written only beside figures that page prints.)
+    return name + ": " + monthly + split + from + (allPrintedOn(monthly + split, l.pageText) ? where : "") + ".";
   };
   const isSelf = (p: ClaimPerson) => /^self$/i.test(p.relationship ?? "");
   const family = args.people.length > 1;

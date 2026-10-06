@@ -187,6 +187,8 @@ jobs:
         run: npm run r11:blind-test
       - name: Round 7 chat robustness (three independently written households read through real ingestion -- a scanned page, an endorsement, a reinstatement, a group plan -- 800+ singles and multi-turn chats, long chats, the chaos model in chat and at upload; score floors and locked trap items)
         run: npm run r7:chat-robustness-test
+      - name: Answer verification (a reversal, an exclusion heading, a dropped condition, a swapped unit or period, a neighbouring row's amount, a swapped or missing currency, a missing hash, a superseded document or the wrong person never passes; true statements in many phrasings still do; totals add only verified figures in one currency; every answer path's figures checked at save)
+        run: npm run verify:assertions-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

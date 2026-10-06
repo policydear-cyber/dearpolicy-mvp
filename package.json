@@ -134,6 +134,7 @@
     "r10:perf-test": "node --import tsx scripts/r10-perf-regressions.ts",
     "r11:blind-test": "node --import tsx scripts/r11-blind-test.ts",
     "r7:chat-robustness-test": "node --import tsx scripts/r7-chat-robustness-regressions.ts",
+    "verify:assertions-test": "node --import tsx scripts/verify-assertions-regressions.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",

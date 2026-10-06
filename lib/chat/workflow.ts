@@ -101,6 +101,9 @@ const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   const hypothetical=HYPOTHETICAL.get(args.answer)??(args.answer.details.some(d=>/^This is a what-if\./.test(d))?args.state.whatIf?.query??args.state.activeQuery??"it":null);
   if(hypothetical)args.state.hypothetical=hypothetical;else if(args.state.plannedEvent&&args.state.intent!=="claim")args.state.hypothetical="planned "+args.state.plannedEvent;
   else if(args.state.hypothetical==="rejected claim"&&args.answer.mode==="answer"&&args.state.intent!=="claim"){/* still on the turned-down claim */}else delete args.state.hypothetical;
+  // Round 16: every answer path's figures and cover statements are checked against the cited pages (lib/chat/answer-verification.ts).
+  const figureProblems=await verifyAnswerFigures(args.answer,{accountId:args.conversation.account_id,userText:args.message});
+  if(figureProblems.length)((globalThis as {__dpVerifyDebug?:boolean}).__dpVerifyDebug?(m:string)=>process.stderr.write(m+"\n"):console.warn)("[figure-gate] "+JSON.stringify({problems:figureProblems.map(p=>({where:p.where,reason:p.reason}))}));
   return storeTurn(args);
 };
 import type { ChatResult,Conversation,ConversationState,HistoryToken,PolicyAnalysis,PolicyBenefit,PolicyObservation,PolicyReview,PolicySource,Progress,SubjectFacts } from "./types";
@@ -125,6 +128,7 @@ import { inactiveDocuments,inactiveList } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
+import { verifyAnswerFigures } from "./answer-verification";
 
 
 export type ChatRequest={
