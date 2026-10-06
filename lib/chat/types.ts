@@ -70,7 +70,10 @@ export type ConversationState = {
    * person at a time: they are acknowledged when named, and the next one is offered when this claim is done. */
   nextInEvent?: { lead: string; people: { id: string; name: string }[]; told?: boolean };
   /** Round 10: the last answer was about uploads (lib/chat/document-questions.ts): which kind, and which documents, so "and the photo?" follows on. */
-  documents?: { kind: "unreadable" | "uploads" | "correspondence" | "who"; role?: string; ids: string[] };
+  /** Round 15: the question last answered on the side of an open claim (lib/chat/workflow.ts), for its follow-ups. */
+  sideQuery?: string;
+  sidePerson?: string;
+  documents?: { kind: "unreadable" | "uploads" | "correspondence" | "who" | "registry"; role?: string; ids: string[]; asked?: string };
 };
 export type Conversation = {
   id: string; account_id: string; family_member_id: string | null;

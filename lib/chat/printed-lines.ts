@@ -44,6 +44,9 @@ const SYNONYMS: [RegExp, string[]][] = [
   [/\bicu\b|intensive care/i, ["intensive", "care", "unit", "maximum"]],
   [/\bhow many (?:days|conditions)|maximum days|per admission/i, ["maximum", "days", "admission", "conditions"]],
   [/\bwaiting period/i, ["waiting", "period"]],
+  // Round 15: "until what age?", "how many times can I claim?": the line that says when cover stops, or how many claims it pays.
+  [/\b(?:until|till|up to|to) what age\b|\bage limit\b|\bstops? at (?:what )?age\b/i, ["terminates", "terminate", "ends", "expiry", "age"]],
+  [/\bhow many times\b|\btwice\b|\bmore than once\b|\bnumber of claims\b|\bclaim again\b/i, ["number", "claims", "maximum", "once", "ends", "payout"]],
   [/\bpolicy number|policy no\b/i, ["policy", "number"]],
   [/\bbonus/i, ["bonus", "reversionary", "terminal", "added"]],
   [/\bguaranteed/i, ["guaranteed"]],
@@ -154,7 +157,9 @@ export function withoutBarePercent(piece: string): string {
   const at = piece.indexOf(": ");
   if (at < 0) return piece;
   const head = piece.slice(0, at).replace(/\s*\b\d+(?:\.\d+)?%/g, "").trim();
-  const kept = piece.slice(at + 2).split(/;\s*/).filter((seg) => !/\d%/.test(seg) || /(?:S\$|SGD)\s?\d/.test(seg))
+  // Round 15: a value with its share after a comma ("GOH MEI HUA (spouse), 100%") keeps the value; only the share goes.
+  const kept = piece.slice(at + 2).split(/;\s*/).map((seg) => /\p{L}{2}.*,\s*\d+(?:\.\d+)?%\s*$/u.test(seg) && !/(?:S\$|SGD)\s?\d/.test(seg) ? seg.replace(/,\s*\d+(?:\.\d+)?%\s*$/, "") : seg)
+    .filter((seg) => !/\d%/.test(seg) || /(?:S\$|SGD)\s?\d/.test(seg))
     .map((seg) => seg.replace(/\s*\b(?:rate\s+)?\d+(?:\.\d+)?%/g, "").trim()).filter(Boolean);
   return kept.length ? head + ": " + kept.join("; ") : head;
 }

@@ -122,7 +122,7 @@ function deriveReferenceCoverages(pages: PdfPage[]) {
 export function enrolledNames(text: string): string[] {
   const flat = text.replace(/\s+/g, " ");
   const out: string[] = [];
-  // Round 7: also "Employee: TAN WEI MING" and an enrolment table under a
+  // Round 7: also "Employee: LIM KOK WEI" and an enrolment table under a
   // heading ("DEPENDANTS ENROLLED UNDER GROUP HOSPITAL & SURGICAL (GHS)").
   const pattern = /\b(?:eligible\s+employee|insured\s+employee|employee(?:\s+name)?|member\s+name|dependants?\s+enrolled|enrolled\s+dependants?|covered\s+(?:members?|dependants?)|insured\s+(?:members?|dependants?))\s*(?:[:\-]|\bunder\b)[^.]{3,400}/gi;
   for (const match of flat.matchAll(pattern)) out.push(match[0].toLowerCase());
@@ -179,7 +179,7 @@ export function sanitizePolicyExtraction(raw: PolicyExtraction, pages: PdfPage[]
   // Reference documents explain products; they do not create family members or ownership links.
   // Round 5 exception: a group benefits booklet that prints who is ENROLLED
   // ("Eligible employee: Lim Wei Jie ... Dependants enrolled: spouse Tan Mei
-  // Ling; child Lim Xin Yi") links those people by name matching, exactly as
+  // Ling; child Lim Kai Ting") links those people by name matching, exactly as
   // a certificate does -- only names printed verbatim in such an enrolment
   // statement, and without confirming any personal cover amount.
   if (roleIsReference) {

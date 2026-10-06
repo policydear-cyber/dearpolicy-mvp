@@ -120,7 +120,8 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
 export async function documentQuestionAnswer(args: { accountId: string; question: string; family: ClaimPerson[]; current: ClaimPerson | null; state: ConversationState; subjects?: ClaimPerson[] }): Promise<DocumentAnswer | null> {
   const text = args.question.trim();
   if (!text || text.split(/\s+/).length > 60) return null;
-  const prior = args.state.documents;
+  // (A question about the policies as a set -- lib/chat/registry-answers.ts -- is not an upload to follow up on.)
+  const prior = args.state.documents?.kind === "registry" ? undefined : args.state.documents;
   const followUp = !!prior && text.split(/\s+/).length <= 10 && !/\b(?:cover\w*|pays?|premiums?|deductible|limit|benefit)\b/i.test(text)
     && (/^\s*(?:and|what about|how about|why not)\b/i.test(text) || /\b(?:photo|picture|pdf|file|letter|bill|scan|notes?|screenshot|upload|document)\b/i.test(text)
       || (prior.kind === "uploads" && /\b(?:which|ones?|current|same|older|newer|earlier|in it|in them)\b/i.test(text))
@@ -455,7 +456,10 @@ function howRead(d: Doc): string {
 function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, namedFiles: Doc[], ownerOf: (d: Doc) => ClaimPerson | null): DocumentAnswer {
   const forPerson = (d: Doc) => !person || d.owners.includes(person.id);
   const who = (d: Doc) => { const o = ownerOf(d); return o ? (isSelf(o) ? "you" : personName(o)) : "your household"; };
-  const done = (summary: string, details: string[], ids: string[], personId: string | null): DocumentAnswer => ({ summary, details, nextSteps: [], citations: [], personId, patch: { documents: { kind: "uploads", ids } } });
+  // Round 15: each upload listed is cited at its first page, as every other answer's documents are.
+  const listed = (ids: string[]): ChatCitation[] => docs.filter((d) => ids.includes(d.id) && d.status === "ready").slice(0, 20)
+    .map((d) => ({ chunkId: "page:" + d.id + ":1", policyId: d.id, policyName: d.product ?? d.file, ...(d.insurer ? { insurer: cleanInsurer(d.insurer) ?? undefined } : {}), pageStart: 1, pageEnd: 1, documentRole: d.role }));
+  const done = (summary: string, details: string[], ids: string[], personId: string | null): DocumentAnswer => ({ summary, details, nextSteps: [], citations: listed(ids), personId, patch: { documents: { kind: "uploads", ids } } });
   const copies = docs.filter((d) => d.superseded && d.notes.some((n) => /^Same schedule as|^An earlier schedule/.test(n)));
   const describeCopy = (d: Doc) => {
     const note = d.notes.find((n) => /^Same schedule as|^An earlier schedule/.test(n)) ?? "";
@@ -488,7 +492,11 @@ function uploadsAnswer(text: string, docs: Doc[], person: ClaimPerson | null, na
     const mine = [b, ...parts.filter((p) => p.file.startsWith(base + " — part "))];
     const n = mine.length;
     const lines = mine.map((d) => (d.product ?? d.file) + " — for " + who(d) + (d === b ? " (pages " + (b.notes.join(" ").match(/pages (\d+–\d+) are read here/)?.[1] ?? "1") + " of the file)" : " (" + (d.file.match(/\((pages [^)]+)\)/)?.[1] ?? "") + ")") + ".");
-    return done(q(b.file) + " held " + (n === 3 ? "three" : n === 2 ? "two" : String(n)) + " separate policies, so DearPolicy read each one on its own, as if they had been uploaded separately:", lines, mine.map((d) => d.id), null);
+    const count = n === 3 ? "three" : n === 2 ? "two" : String(n);
+    // "Which policies were in it?": the policies first, then how they were read.
+    const which = /\b(?:which|what)\b[^?]{0,20}\b(?:policies|plans|ones)\b/i.test(text);
+    return done(which ? "These " + count + " policies were in " + q(b.file) + " — DearPolicy read each one on its own, as if they had been uploaded separately:"
+      : q(b.file) + " held " + count + " separate policies, so DearPolicy read each one on its own, as if they had been uploaded separately:", lines, mine.map((d) => d.id), null);
   }
   // Pages out of order.
   const outOfOrder = docs.filter((d) => d.notes.some((n) => /out of order/i.test(n)) && forPerson(d));

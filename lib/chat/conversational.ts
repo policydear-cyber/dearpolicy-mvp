@@ -24,9 +24,9 @@ export const MALAY = /\b(?:apa|saya|anda|insurans|perlindungan|boleh(?:kah)?|tun
 const SPANISH_ETC = /\b(?:qu[eé]|cubre|p[oó]liza|seguro|cu[aá]nto|c[oó]mo|puedo|tengo|mi|mis|el|los|las|una?|est[aá]|por|para|quel|quelle|assurance|couvre|mon|wie|meine|versicherung)\b/gi;
 export const ENGLISH = /\b(?:what|is|are|my|the|claim|cover|covered|policy|insurance|hospital|premium|how|much|does|do|can|have|has|for|and|who|when|which|i|we|you|pay|plan|get|got|or|not|of|in|on)\b/gi;
 
-const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings|salam|assalamualaikum|selamat (?:pagi|petang|malam|tengah hari)|ni hao|你好)(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there))?[\s!.?]*$/i;
+const GREETING = /^(?:hi+|hello+|hey+|hiya|yo|good (?:morning|afternoon|evening|day)|morning|hola|greetings|salam|assalamualaikum|selamat (?:pagi|petang|malam|tengah hari)|ni hao|你好)(?:\s+(?:there|dearpolicy|all|lah|leh|ah))?(?:[\s,!.]+(?:(?:can|could) you help(?: me)?|help(?: me)?(?: pls| please)?|can help(?: me)?|how are you|are you there|what can you do|what do you do|how does (?:this|it) work))?[\s!.?]*$/i;
 const HELP_ONLY = /^(?:help|help me|can help(?: me)?|can you help(?: me)?|what can you do|how does this work|what do you do)[\s!.?]*$/i;
-const THANKS = /^(?:(?:ok(?:ay|ie)?|k|kk|alright|noted|got it|cool|great|nice|good|sure|fine|i see|oh|ah|ahh|lol|haha+|hehe+|wow|bye|goodbye|see you|cheers)[\s,!.]*)*(?:thanks?(?: you)?(?: (?:so much|very much|lah|ah|a lot))?|thank you|tq|ty|thx|tks|appreciate it)?[\s!.]*$/i;
+const THANKS = /^(?:(?:ok(?:ay|ie)?|k|kk|alright|noted|got it|cool|great|nice|good|sure|fine|i see|oh|ah|ahh|lol|haha+|hehe+|wow|bye|goodbye|see you|cheers)[\s,!.]*)*(?:thanks?(?: you)?(?: (?:so much|very much|lah|ah|a lot))?|thank you|tq|ty|thx|tks|appreciate it|terima kasih(?: (?:banyak|ya))?|xie xie|谢谢|多谢)?[\s!.]*$/i;
 /** Round 9: frustration or sarcasm with nothing asked. */
 const FRUSTRATION = /^(?:(?:wow|oh|ok(?:ay)?|so|great|lol|haha|sigh|eh)[\s,!.]*)*(?:thanks? for nothing|(?:so |very |damn |really )?useless(?: lah| app| one)?|you(?:['’]re| are) (?:useless|no help|not helping|hopeless)|not helpful|no help(?: at all)?|waste of (?:my )?time|great(?:,)? (?:just )?great|wow(?:,)? (?:great|thanks)|(?:oh )?great(?:,)? another app|what a joke|this is (?:useless|ridiculous|a joke)|ridiculous|hopeless)[\s!.?]*$/i;
 const THANKS_WORD = /\b(?:thanks?|thank you|tq|ty|thx|tks|appreciate|terima kasih|xie xie)\b|谢谢|多谢/i;
@@ -38,8 +38,14 @@ const ADVICE = /\bshould (?:i|we|my \w+)\b[^?.]*\b(?:buy|get|take up|add|cancel|
 /** Round 11: asking for help to misstate a claim or a record ("make the bill look bigger", "backdate the payment",
  * "write that he never had knee problems"): declined plainly, never answered with the policy's figures. */
 const DISHONEST = /\b(?:fake|forge|falsif\w*|fabricat\w*|doctor(?:ed)?|back-?dat\w*|inflat\w*|pad|exaggerat\w*|alter|tamper\w*)\b[^?.]{0,60}\b(?:bills?|receipts?|invoices?|claims?|dates?|payments?|documents?|records?|letters?|reports?|forms?|mcs?|medical certificates?|premiums?)\b|\bmake (?:my |the |our |his |her )?(?:hospital |medical )?(?:bill|receipt|invoice|claim|amount)s? (?:look |seem )?(?:bigger|higher|larger|more)\b|\b(?:look|seem) (?:bigger|higher|larger)\b[^?.]{0,40}\b(?:claim|pay)|\b(?:saying|say|says|claim(?:ing)?|pretend(?:ing)?|tell(?:ing)? (?:them|the insurer))\b[^?.]{0,40}\b(?:never had|did not have|didn['’]t have)\b|\bhide (?:the|my|his|her|a|that) (?:condition|illness|pre-?existing|diagnosis|claim)|\b(?:not|don['’]t|do not|without) (?:declare|declaring|disclose|disclosing|mention|mentioning)\b[^?.]{0,40}\b(?:condition|illness|diagnos\w*|pre-?existing)|\blie (?:to|on|about)\b/i;
+/** Round 15: a request for the chat to do something it cannot (send, book, remind, write, renew, pay). */
+const ACTION = /^(?:(?:please|pls|can you|could you|would you|will you|help me(?: to)?|i want you to|i need you to|ok(?:ay)?|kindly)[,\s]+)*(?:write|draft|compose|book|make (?:an? )?(?:appointment|booking|reservation)|e-?mail|send|forward|fax|print|call|phone|whatsapp|text|remind (?:me|us) to|set (?:up )?(?:a |an )?(?:reminder|alarm|alert)|transfer|buy|purchase|order)\b(?![^?]{0,20}\b(?:is|are|does|do)\b[^?]*\?)|^(?:(?:please|pls|ok(?:ay)?)[,\s]+)*(?:can|could|would|will) you (?:please |pls )?(?:renew|pay|cancel|submit|file|lodge|update|change|extend|top up|reinstate|surrender)\b[^?]{0,40}\bfor (?:me|us)\b/i;
+/** Round 15: plans or insurers on the market ("best CI plan in Singapore", "which travel insurance is cheapest"). */
+const MARKET = /\b(?:best|cheapest|cheaper|top|most popular|good|recommended)\b[^?]{0,40}\b(?:plans?|insurance|insurers?|polic(?:y|ies)|companies|company)\b[^?]{0,30}\b(?:in (?:singapore|sg|the market|malaysia)|to buy|on the market|out there)\b|\bwhich (?:travel |health |life |car |motor |home |ci |critical illness )?(?:insurance|insurer|plan|policy) (?:is|has) (?:the )?(?:cheapest|best|most popular)\b[^?]{0,30}\b(?:in (?:singapore|sg|the market|malaysia)|to buy|on the market|out there)\b/i;
+/** Round 15: "advice?", "was reducing my cover a mistake?", "should we appeal?", "should I complain to the airline?": a judgement asked for. */
+const JUDGEMENT = /^\s*(?:any\s+)?(?:advice|advise me|your (?:advice|opinion|recommendation)|what (?:do|would) you (?:recommend|suggest|advise|do))\s*[?.!]*\s*$|\b(?:a mistake|a good idea|a bad idea|the right (?:choice|decision|move|thing)|a wise (?:choice|decision|move))\b|^\s*(?:so\s+|and\s+|then\s+)?should (?:i|we|he|she|they|my \w+)\s+(?:appeal|complain|increase|decrease|reduce|raise|lower|use (?:it|the money|the payout)|invest|put|pay off|switch|move|buy|get (?:a|an|another|more)\b|take (?:a|an|another|up))\b/i;
 const LEGAL = /\b(?:sue|suing|lawsuit|lawyer|solicitor|legal action|take (?:them|the insurer) to court|small claims tribunal|is it (?:legal|lawful|allowed)|legally|against the law|my (?:legal )?rights)\b/i;
-const OFF_TOPIC = /\b(?:weather|forecast|poem|song|lyrics|joke|recipe|world cup|football|soccer|premier league|nba|movie|film|netflix|news|horoscope|lottery|4d|toto|translate|homework|essay|write (?:me )?(?:a|an) (?:poem|story|song|essay|email|letter)|code|python|javascript|capital of|president|prime minister|who (?:won|is the)|what(?:'s| is) the time|what day is)\b/i;
+const OFF_TOPIC = /\b(?:restaurants?|cafes?|hawker|places? to eat|weather|forecast|poem|song|lyrics|joke|recipe|world cup|football|soccer|premier league|nba|movie|film|netflix|news|horoscope|lottery|4d|toto|translate|homework|essay|write (?:me )?(?:a|an) (?:poem|story|song|essay|email|letter)|code|python|javascript|capital of|president|prime minister|who (?:won|is the)|what(?:'s| is) the time|what day is)\b/i;
 
 /** Round 11: a request to misstate a claim or record, recognised before any document is read for it. */
 export function dishonestReply(message: string): ConversationalReply | null {
@@ -79,7 +85,9 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
   // and carries on whenever its question is answered.
   if (THANKS.test(text) && THANKS_WORD.test(text) && text.length <= 40)
     return reply("thanks", args.pending ? "You’re welcome. What you’ve told me about the claim is saved — tell me more whenever you’re ready and I’ll carry on." : "You’re welcome. Ask me anything else about your policies, or tell me what happened if you need to make a claim.");
-  if (GREETING.test(text) && !args.pending) return reply("greeting", "Hi! " + whatICanDo);
+  // Round 15: a greeting is answered briefly -- what to ask, in one line, without a block of text.
+  const hello = "Hi! Ask me what anyone in your household is covered for — premiums, deductibles, renewal dates — or tell me what happened and I’ll help with a claim, one question at a time.";
+  if (GREETING.test(text) && !args.pending) return reply("greeting", hello);
   // Another script, or a Latin-script language with no English in it.
   const otherScript = (text.match(OTHER_SCRIPT) ?? []).length;
   const latinLetters = (text.match(/[A-Za-z]/g) ?? []).length;
@@ -100,10 +108,21 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
     return reply("approval", "I can’t approve a claim or promise a payout — the insurer decides that after it assesses the claim. I can show which of your benefits may apply and what the insurer will ask for.");
   const dishonest = dishonestReply(text);
   if (dishonest) return dishonest;
+  // Round 15: "book a doctor appointment", "email me the receipt", "set a reminder", "help me write a resignation letter",
+  // "can you renew it for me": things the chat cannot do -- said plainly, with what it can do instead.
+  if (ACTION.test(text) && !/\b(?:what|which|how|when|where|why|who)\b[^?]{0,40}\b(?:documents?|forms?|papers?)\b/i.test(text))
+    return reply("off_topic", "I can’t do that from the chat — I can’t send emails, book appointments, set reminders, write letters or make changes to a policy for you. "
+      + "What I can do is answer questions about your household’s insurance documents: " + whatICanDo.charAt(0).toLowerCase() + whatICanDo.slice(1));
+  // Round 15: "recommend a good restaurant": nothing to do with insurance, whatever word asks for it.
+  if (/\b(?:restaurants?|cafes?|hawker(?: centre)?|places? to eat|food court|movies?|holiday spots?)\b/i.test(text) && !INSURANCE_WORDS.test(text))
+    return reply("off_topic", "I can only help with your household’s insurance policies and claims, so I can’t answer that. " + whatICanDo);
+  // "Which travel insurance is cheapest in Singapore?", "best CI plan in Singapore?": the market, not the household's documents.
+  if (MARKET.test(text))
+    return reply("off_topic", "I can only see the policies your household has uploaded, so I can’t compare plans or insurers on the market, and I can’t recommend one — a licensed financial adviser can help with that. I can tell you exactly what your own policies cover and cost.");
   if (LEGAL.test(text) && !/\b(?:exclu\w*|waiting period|what does (?:my|the) policy say)\b/i.test(text))
     return reply("legal", "I can’t give legal advice. If an insurer turns down a claim, you can ask it to explain the decision in writing and to review it; if you still disagree, FIDReC (the Financial Industry Disputes Resolution Centre) handles disputes with insurers in Singapore, and a lawyer can advise you on your rights.",
       ["What I can do is show exactly what your policies say — for example their premiums, exclusions and conditions — so you have the facts in front of you."]);
-  if (ADVICE.test(text))
+  if (ADVICE.test(text) || JUDGEMENT.test(text))
     return reply("advice", "I can’t recommend whether to buy, keep, change or cancel a policy, or where to put your money — that is financial advice, and a licensed financial adviser can help with it.",
       ["What I can do is show exactly what your current policies cover and cost, so you can take that to the adviser. For example: “What am I covered for?” or “How much do we pay in premiums a year?”"]);
 
@@ -114,12 +133,14 @@ export function conversationalReply(args: { message: string; selected: ClaimPers
   if (/^(?:h+m+|erm+|um+|uh+|huh|eh+|meh)[\s?!.]*$/i.test(text))
     return pick(reply("unclear", "Sorry, I didn’t catch that. " + whatICanDo));
   if (GREETING.test(text) || HELP_ONLY.test(text))
-    return pick(reply("greeting", "Hi! " + whatICanDo));
+    return pick(reply("greeting", /\bwhat can you do|how does (?:this|it) work|what do you do|\bhelp\b/i.test(text) ? "Hi! " + whatICanDo : hello));
   // Round 9: "thanks for nothing", "so useless", "wow great": frustration, said back plainly, never read as a claim.
   if (FRUSTRATION.test(text) && !INSURANCE_WORDS.test(text.replace(FRUSTRATION, "")) && text.length <= 80)
     return pick(reply("frustration", "I’m sorry this hasn’t helped yet. Tell me what you need — for example what a policy pays for something, or what happened — and I’ll answer it straight from your documents."));
   if (THANKS.test(text) && text.length <= 40)
-    return pick(reply("thanks", THANKS_WORD.test(text) ? "You’re welcome. Ask me anything else about your policies, or tell me what happened if you need to make a claim." : "Is there anything else I can help with? " + whatICanDo));
+    return pick(reply("thanks", THANKS_WORD.test(text) ? "You’re welcome. Ask me anything else about your policies, or tell me what happened if you need to make a claim."
+      : /\b(?:bye|goodbye|see you|cya)\b/i.test(text) ? "Take care — I’m here whenever you need help with your policies or a claim."
+      : "No problem — ask me anything else about your policies whenever you’re ready, or tell me what happened if you need to make a claim."));
   // Keyboard mashing: short, no word I know, and a run of consonants no word has.
   const words = text.toLowerCase().split(/[^a-z]+/).filter(Boolean);
   if (words.length && words.length <= 5 && !INSURANCE_WORDS.test(text) && words.some((w) => /[bcdfghjklmnpqrstvwxz]{5,}/.test(w) || (w.length >= 4 && !/[aeiouy]/.test(w))) && english === 0)

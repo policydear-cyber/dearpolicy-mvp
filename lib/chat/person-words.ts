@@ -41,12 +41,12 @@ const KIN: { re: RegExp; group: (p: ClaimPerson) => boolean; gender: Gender; lab
 ];
 /** "my car", "my home insurance", "my deductible": the speaker's own policy, whoever else the sentence mentions. */
 const OWN_THING = /\bmy (?:own )?(?:car|vehicle|motor|home|house|flat|hdb|ilp|shield|mediguard|hospital plan|polic(?:y|ies)|plans?|insurance|excess|deductible|premiums?|rider)\b/i;
-/** Another person's relative ("his wife", "Aisyah's mother", "her brother"): the claims resolver anchors those. */
+/** Another person's relative ("his wife", "Farah's mother", "her brother"): the claims resolver anchors those. */
 const RELATIVE_OF = /\b(?:his|her|their|(?!(?:what|that|it|who|there|here|he|she|let|where|how)['’]s)[\p{L}]+['’]s)\s+(?:mak|emak|ibu|mum|mom|mother|mama|dad|father|son|daughter|brother|sister|helper|maid|wife|husband)\b/iu;
 
 export function householdPersonFromWords(message: string, family: ClaimPerson[], products: string[] = [], selectedId = ""): ClaimPersonResolution | null {
   const text = nameKey(message);
-  // 1. A full name as the household writes it ("Nur Aisyah binti Rahman", "Maria D'Souza-Reyes").
+  // 1. A full name as the household writes it ("Nur Farah binti Rahman", "Maria D'Souza-Reyes").
   const full = family.filter((p) => text.includes(nameKey(p.display_name)));
   if (full.length) {
     const longest = full.sort((a, b) => nameKey(b.display_name).length - nameKey(a.display_name).length);
@@ -123,11 +123,11 @@ export function productOwner(message: string, holdings: { productName: string; o
   }
   return matched && owners.size === 1 ? [...owners][0] : null;
 }
-/** Round 7 (port): two products named alike ("SecureCare Plus", "SecureCare Pro"): the word that tells them
+/** Round 7 (port): two products named alike ("CarePlan Plus", "CarePlan Pro"): the word that tells them
  * apart ("the Pro") says which one -- when only one of the alike products has it, and one person holds it. */
 export function alikeProductOwner(message: string, holdings: { productName: string; ownerIds: string[] }[]): string | null {
-  // Round 7 (port): two products named alike ("SecureCare Plus", "SecureCare Pro"): the word that tells them
-  // apart ("the Pro", "my SecureCare Plus") says which one -- when only one of the alike products has it.
+  // Round 7 (port): two products named alike ("CarePlan Plus", "CarePlan Pro"): the word that tells them
+  // apart ("the Pro", "my CarePlan Plus") says which one -- when only one of the alike products has it.
   const words = (name: string) => name.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !/\d/.test(t)).map((t) => t.toLowerCase());
   for (const h of holdings) {
     const mine = words(h.productName);

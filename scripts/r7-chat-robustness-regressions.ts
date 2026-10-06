@@ -30,7 +30,7 @@
  * R7R_HOUSEHOLDS=H1-tan,... R7R_ONLY=<id regex> R7R_DUMP=<file> R7R_DUMP_LONG=<file> R7R_REPORT=1 (print
  * every failing item, no assertions) R7R_SEEDS=1,2,3 (chaos seeds).
  */
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { ChatAnswer } from "@/types";
 
 process.env.DEARPOLICY_DETERMINISTIC_MODEL = "synthetic-e2e";
@@ -44,13 +44,13 @@ process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "sk-test-not-used";
 process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "ci";
 delete process.env.PINECONE_API_KEY; delete process.env.SUPABASE_URL;
 
-/** Floors from this round's final run on main (deterministic: fixed seeds, PGlite, no network), two below the
- * final scores: a change that answers fewer battery items correctly than this fails CI. In brackets, main before
- * this round with the same harness (facts / behaviour). */
-const FLOORS: Record<string, { facts: number; behaviour: number }> = {
-  "H1-tan": { facts: 170, behaviour: 185 }, // final 172 / 187 (main before: 134 / 121)
-  "H2-aisyah": { facts: 173, behaviour: 182 }, // final 175 / 184 (main before: 143 / 160)
-  "H3-ong": { facts: 147, behaviour: 161 }, // final 149 / 163 (main before: 128 / 143)
+/** Floors from this round's final run on main (deterministic: fixed seeds, PGlite, no network), one below the
+ * final strict scores (EXCLUDED items included): a change that answers fewer battery items correctly than this
+ * fails CI. In brackets, main before this round with the same harness (facts / behaviour / full pass). */
+const FLOORS: Record<string, { facts: number; behaviour: number; fullPass: number }> = {
+  "H1-tan": { facts: 189, behaviour: 219, fullPass: 167 }, // final 190 / 220 / 168 (main before: 172 / 187 / 130)
+  "H2-aisyah": { facts: 195, behaviour: 221, fullPass: 172 }, // final 196 / 222 / 173 (main before: 175 / 184 / 128)
+  "H3-ong": { facts: 196, behaviour: 216, fullPass: 179 }, // final 197 / 217 / 180 (main before: 149 / 163 / 113)
 };
 /** Battery items that must pass completely (facts, forbidden, behaviour, detectors). */
 const TRAP_ITEMS: Record<string, string[]> = {
@@ -111,6 +111,25 @@ async function main() {
   const canary = await C.canaryDetector(visibleFields);
   const seeds = (process.env.R7R_SEEDS ?? "1,2,3,4,5,6").split(",").map(Number).filter((n) => Number.isInteger(n));
 
+  // ------------------------------------------------------------------ fixture names in product code
+  // Round 15: no rule may be written for these households -- their people, insurers, products, policy numbers and files
+  // never appear in lib/ or app/ (scripts/r7-robust/leak-check.ts).
+  {
+    const { fixtureLeaks } = await import("./r7-robust/leak-check");
+    const leaks = await fixtureLeaks();
+    log(`fixture names in product code: ${leaks.length}`);
+    for (const l of leaks) fail("fixture-specific string in product code: " + l);
+  }
+  // Round 15: items an independent review may judge mis-specified (R7R_DISPUTES=<jsonl of {household,id,turn,...}>): the
+  // score is reported twice -- strict (every item) and excluding the disputed ones. Floors and failures use strict.
+  const disputed = new Set<string>();
+  const disputesFile = process.env.R7R_DISPUTES;
+  if (disputesFile && existsSync(disputesFile)) for (const line of readFileSync(disputesFile, "utf8").split("\n").filter((x) => x.trim())) {
+    const d = JSON.parse(line) as { household: string; id: string; turn?: number | null };
+    disputed.add(d.household + "|" + d.id + "|" + (d.turn ?? ""));
+  }
+  const strictTotals = { items: 0, fullPass: 0 }, undisputedTotals = { items: 0, fullPass: 0 };
+
   const built = await buildHouseholds(only);
   log(`households loaded through ingestion in ${built.ingestMs} ms`);
   for (const hh of built.households) for (const [doc, why] of Object.entries(hh.readFailures)) log(`  ${hh.id}: ${doc} could not be read: ${why.slice(0, 160)}`);
@@ -126,18 +145,25 @@ async function main() {
     guard.guardInterventions.length = 0;
     for (const hh of built.households) {
       const t0 = Date.now();
-      const rows = await runOn(hh);
+      const every = await runOn(hh);
+      // Items the suite does not score (EXCLUDED) count in the strict score only.
+      const rows = every.filter((r) => !r.excluded);
       allRows.push(...rows);
       for (const r of rows) standalone.set(r.household + "|" + r.id + "|" + (r.turn ?? ""), r);
-      const t = B.tally(rows);
+      const t = B.tally(every);
+      const undisputed = B.tally(every.filter((r) => !disputed.has(r.household + "|" + r.id + "|" + (r.turn ?? ""))));
+      strictTotals.items += t.items; strictTotals.fullPass += t.fullPass; undisputedTotals.items += undisputed.items; undisputedTotals.fullPass += undisputed.fullPass;
       log(`\n=== ${hh.id}: ${t.items} items in ${Date.now() - t0} ms`);
-      log(JSON.stringify(t));
+      log("strict: " + JSON.stringify(t));
+      log(`excluding disputed (${t.items - undisputed.items}): ` + JSON.stringify(undisputed));
       const byRule = new Map<string, number>();
       for (const r of rows) for (const h of r.detectorHits) byRule.set(h.rule, (byRule.get(h.rule) ?? 0) + 1);
       for (const [k, v] of [...byRule].sort((a, b) => b[1] - a[1])) log(`  ${String(v).padStart(4)}  ${k}`);
       const floor = FLOORS[hh.id];
       if (!onlyIds) {
-        if (t.forbiddenHits) fail(`${hh.id}: ${t.forbiddenHits} forbidden facts shown (wrong facts, deleted documents or other households)`);
+        // (Over the scored items: an EXCLUDED item counts in the strict score above, never as a failure here.)
+        const scoredForbidden = B.tally(rows).forbiddenHits;
+        if (scoredForbidden) fail(`${hh.id}: ${scoredForbidden} forbidden facts shown (wrong facts, deleted documents or other households)`);
         // Framing notes ("answered as a claim", "what-if framing") are reported;
         // rubbish (garbled text, leaks, invented or foreign figures, other
         // households, deleted documents, "not covered") fails.
@@ -145,6 +171,7 @@ async function main() {
         for (const x of severe) fail(`${hh.id}: rubbish detector: ${x}`);
         if (floor && t.factsCorrect < floor.facts) fail(`${hh.id}: facts correct ${t.factsCorrect} < floor ${floor.facts}`);
         if (floor && t.behaviourCorrect < floor.behaviour) fail(`${hh.id}: behaviour correct ${t.behaviourCorrect} < floor ${floor.behaviour}`);
+        if (floor && t.fullPass < floor.fullPass) fail(`${hh.id}: full pass ${t.fullPass} < floor ${floor.fullPass}`);
       }
       for (const r of rows) {
         const bad = !passed(r);
@@ -157,6 +184,8 @@ async function main() {
         }
       }
     }
+    const pct = (x: { items: number; fullPass: number }) => x.items ? (100 * x.fullPass / x.items).toFixed(1) + "%" : "n/a";
+    log(`\nfull pass, strict: ${strictTotals.fullPass}/${strictTotals.items} (${pct(strictTotals)}); excluding disputed: ${undisputedTotals.fullPass}/${undisputedTotals.items} (${pct(undisputedTotals)})`);
     const ms = allRows.map((r) => r.ms);
     log(`\nturn time: median ${B.percentile(ms, 0.5)} ms, p95 ${B.percentile(ms, 0.95)} ms, max ${Math.max(...ms)} ms`);
     if (guard.guardInterventions.length) fail(`the output guard had to act ${guard.guardInterventions.length} times on the deterministic model: ` + guard.guardInterventions.slice(0, 3).map((g) => "«" + g.before.slice(0, 160) + "» -> «" + g.after.slice(0, 160) + "»").join(" | "));
@@ -192,7 +221,8 @@ async function main() {
       const battery = await B.readBattery(hh.id);
       const chains = chainConversations(battery.conversations);
       for (const ch of chains) if (ch.turns.length < 30) fail(`long chat ${ch.id} has only ${ch.turns.length} turns`);
-      const rows = await runOn(hh, { dump: process.env.R7R_DUMP_LONG, noSingles: true, conversationsOverride: chains });
+      // (EXCLUDED items are left out here, as the battery left them out before it began scoring them for the strict score.)
+      const rows = (await runOn(hh, { dump: process.env.R7R_DUMP_LONG, noSingles: true, conversationsOverride: chains })).filter((r) => !r.excluded);
       longRows.push(...rows);
       for (const r of rows) {
         const alone = standalone.get(r.household + "|" + r.id + "|" + (r.turn ?? ""));
@@ -238,7 +268,7 @@ async function main() {
       guard.guardInterventions.length = 0;
       for (const hh of built.households) {
         const rows = await runOn(hh, { dump: undefined, singles: (i) => Number(i.id.replace(/\D/g, "")) % seeds.length === n, conversations: (c) => Number(c.id.replace(/\D/g, "")) % seeds.length === n,
-          extra: (a, q) => canary(a, q) });
+          extra: (a, q) => canary(a, q) }).then((x) => x.filter((r) => !r.excluded));
         turns += rows.length;
         for (const r of rows) {
           if (/couldn[’']t read your message just now|ran out of room part-way|couldn[’']t (?:put|check)|try again/i.test(r.summary)) honest++;

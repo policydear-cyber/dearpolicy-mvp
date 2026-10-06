@@ -311,7 +311,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
   // A name the reader got wrong (or could not give) is replaced only by the one the document prints as its own title or letterhead.
   const insurer = printedOr(raw.insurer, "an insurer name") ?? letterheadInsurer(pages);
   // Round 7 (port): the PDF's own Title property is the document speaking too
-  // ("LifeGuard Term to 65 - Policy Schedule"), for the product's name only.
+  // ("TermGuard 65 - Policy Schedule"), for the product's name only.
   const titled = opts.documentTitle && !looksLikeInjectedInstruction(opts.documentTitle) ? opts.documentTitle : "";
   const productName = (raw.productName && titled && !namePrinted(fullText, raw.productName) && namePrinted(titled, raw.productName) ? raw.productName : null)
     ?? printedOr(raw.productName, "a product name") ?? titleProductName(pages) ?? productFromDocumentTitle(titled);
@@ -371,7 +371,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
     if (same) { same.coverages.push(...coverages); same.relationshipHint ??= hint; }
     else people.push({ ...person, relationshipHint: hint, coverages });
   }
-  // Round 7 (port): someone the document names only as its policyholder or payer ("Policyholder: ONG KAH SENG" on his
+  // Round 7 (port): someone the document names only as its policyholder or payer ("Policyholder: GOH BOON HOCK" on his
   // wife's schedule) is not one of its insured people when the document names someone else as insured.
   {
     const flat = fullText.replace(/\s+/g, " ");
@@ -381,7 +381,7 @@ export function factCheckExtraction(raw: PolicyExtraction, pages: Page[], opts: 
       const labels = [...flat.matchAll(re)].map((m) => flat.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0).match(LABEL)?.[1]?.toLowerCase() ?? null);
       return labels.length > 0 && labels.every((l) => !!l && /^(?:policyholder|policy owner|proposer|payer|paid by|premium payer|owner)$/.test(l));
     };
-    // Someone else is printed as the insured ("Life assured: CHUA PEI SHAN RACHEL"): the payer is not.
+    // Someone else is printed as the insured ("Life assured: TEO HUI MIN GRACE"): the payer is not.
     const insuredElsewhere = (name: string) => [...flat.matchAll(/\b(?:life assured|insured(?: person| child| spouse)?|name of (?:the )?insured)\s*[:\-]\s*([A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){0,4})/g)]
       .some((m) => !m[1].toLowerCase().startsWith(name.trim().toLowerCase().split(/\s+/)[0]));
     const keep = people.filter((p) => !(payerOnly(p.name) && (people.length > 1 || insuredElsewhere(p.name))));
@@ -489,8 +489,8 @@ export function titleProductName(pages: Page[]): string | null {
   }
   return null;
 }
-/** Round 7 (port): the product a PDF's Title property names ("EquaLife Protect -
- * Endorsement No. 2", "Notice of Lapse - Orchid Whole Life Protector"). */
+/** Round 7 (port): the product a PDF's Title property names ("LifeShield Protect -
+ * Endorsement No. 2", "Notice of Lapse - Lotus Whole Life Plan"). */
 export function productFromDocumentTitle(title: string | null | undefined): string | null {
   const parts = String(title ?? "").replace(/\\?\(scanned\\?\)/gi, "").split(/\s+[-–:|]\s+/).map((x) => x.trim()).filter(Boolean);
   const kind = /^(?:notice of lapse|lapse notice|confirmation of reinstatement|reinstatement|official receipt|receipt|premium (?:notice|reminder)|renewal notice|annual statement|statement|policy (?:schedule|summary|data page|illustration summary|contract summary|statement)|schedule(?: \d{4})?|certificate|rider schedule|endorsement(?: no\.? ?\d+)?|benefit summary|policy schedule \(\d{4}\)|employee benefits booklet.*)$/i;

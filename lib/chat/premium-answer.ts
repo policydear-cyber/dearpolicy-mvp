@@ -157,7 +157,7 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
   // One policy covering two people is paid once: it is counted under the first of them.
   const seenItems = new Set<string>();
   for (const p of perPerson) { p.lines = p.lines.filter((l) => !seenItems.has(l.item.id) && !!seenItems.add(l.item.id)); p.annual = r2(p.lines.reduce((n, l) => n + l.item.annual, 0)); }
-  // Round 7: "What premium do we pay for Jun Hui's ILP?", "EquaLife premium
+  // Round 7: "What premium do we pay for Jia Hui's ILP?", "LifeShield premium
   // now", "careshield premium how much" ask about ONE plan. Answer that plan
   // -- or say plainly that no premium is printed for it -- instead of the
   // household's whole bill with other people's premiums in it.
@@ -192,7 +192,7 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
   const named = (await query<{ product_name: string; policy_type: string | null; document_role: string | null }>(`SELECT DISTINCT product_name,policy_type,document_role FROM policies p WHERE account_id=$1 AND ${activePredicate("p")} AND product_name IS NOT NULL`, [args.accountId]).catch(() => ({ rows: [] as { product_name: string; policy_type: string | null; document_role: string | null }[] }))).rows
     .filter((d) => namesPlan(args.question, d.product_name, d.policy_type) || (/\breceipt\b/i.test(args.question) && d.document_role === "premium_receipt") || (/\b(?:ghs|gtl|gpa|group|company|employer|dependants?)\b/i.test(args.question) && /group/i.test(d.policy_type ?? "")));
   if (!RANKED.test(args.question) && named.length) return { summary: "", details: [] as string[], citations: [] as ChatCitation[], handled: false };
-  // A kind of plan asked about that no document on file is ("Jun Hui's ILP"
+  // A kind of plan asked about that no document on file is ("Jia Hui's ILP"
   // when its statement could not be read): say so, not the household total.
   const askedKind = KIND_WORDS.find(([asks]) => asks.test(args.question));
   if (!RANKED.test(args.question) && askedKind) return { summary: "No premium for that plan is printed in the documents on file" + (args.people.length === 1 ? " for " + (isSelfP(args.people[0]) ? "you" : personName(args.people[0])) : "") + ", so DearPolicy can’t say what it costs.", details: [] as string[], citations: [] as ChatCitation[], handled: true };
@@ -250,7 +250,7 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
   }
   if (!withPremiums.length) {
     summary = family ? "No premium amounts are printed in the documents on file for your household, so DearPolicy can’t total them. A renewal notice or premium receipt shows the premium; upload one and ask again."
-      // Round 11: which policy has no premium printed is named ("Xin Yi's PA Guardian"), not only whose.
+      // Round 11: which policy has no premium printed is named ("Kai Ting's PA Guardian"), not only whose.
       : "No premium amount is printed in the documents on file for " + (isSelf(args.people[0]) ? "you" : personName(args.people[0])) + ((perPerson[0]?.missing ?? []).length ? (isSelf(args.people[0]) ? "r " : "’s ") + [...new Set(perPerson[0].missing)].join(" or ") : "") + ". A renewal notice or premium receipt shows it; upload one and ask again.";
   } else if (!family) {
     const p = withPremiums[0];

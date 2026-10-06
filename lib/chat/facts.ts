@@ -378,7 +378,7 @@ export function onlyAsksQuestions(message:string){
 }
 /** Words without which a message reports no event and starts no claim. The
  * interpreter's "claim" label alone is not enough (Round 7: a misbehaving
- * model labelled "and for Xin Yi?" a claim). Deliberately generous. */
+ * model labelled "and for Kai Ting?" a claim). Deliberately generous. */
 const EVENT_OR_CLAIM_WORDS=/\b(?:(?:i['’]?m|i am|she['’]?s|he['’]?s|is|was|am)\s+(?:now\s+)?(?:in|at)\s+(?:a|the)\s+(?:[\w-]+\s+){0,2}hospital|poison\w*|claim\w*|payouts?|reimburs\w*|admitted|admission|hospitali[sz]\w*|warded|discharged|died|dead|death|passed away|killed|murder\w*|diagnos\w*|cancer|stroke|heart attack|dengue|covid|accident\w*|injur\w*|broke|broken|fractur\w*|fell|fall|hurt|sick|ill|illness|surgery|operation|disabled|disability|cannot work|can['’]?t work|unable to work|delayed|delay|cancel\w*|lost|loss|stolen|theft|damaged?|crash\w*|collision|bills?|happened|baggage|luggage|flight|trip)\b/i;
 const REPORTED_OR_CLAIMED=/\b(?:claim\w*|admitted|hospitali[sz]ed|warded|discharged|died|passed away|killed|murdered|diagnosed|injured|broke|broken|fractured|fell|hurt|delayed|lost|stolen|crashed|happened|got (?:sick|ill|hurt)|disabled|cannot work|can['’]?t work)\b/i;
 /** A deterministic reading of a message that only asks something, used when
@@ -473,7 +473,7 @@ export function mergeInterpretation(args: {
   // Round 8: mid-claim, a reply that is not a question ("sorry, it was her
   // right arm not left") continues the claim, whatever label it was given.
   if(args.state.intent==="claim"&&(intent==="policy_question"||intent==="portfolio")&&!asksOnly&&!/\?/.test(args.message)&&!INTERROGATIVE_START.test(args.message))intent="follow_up";
-  // ...and an event told in plain words ("Xin Yi was admitted to KKH for dengue
+  // ...and an event told in plain words ("Kai Ting was admitted to KKH for dengue
   // on 2026-09-12") is a claim, not a request for the policy list or a
   // what-if, unless the message itself asks for the list or supposes.
   const toldEvent=!!(homicideReport||conditionReport||fractureReport||injuryReport||otherEvents.length||affirmedDeathStatement(args.message)||

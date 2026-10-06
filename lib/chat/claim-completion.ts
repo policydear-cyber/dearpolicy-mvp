@@ -205,7 +205,9 @@ export function claimFollowUpKind(message: string): ClaimFollowUp | null {
   if (/\b(?:confirm(?:ed)?|guarantee\w*|sure|definitely|for sure|100%|will (?:they|the insurer|we|i) (?:pay|get paid)|get paid|approved?)\b/i.test(t) && /\b(?:paid|pay|payout|claim|get|approve\w*|covered)\b/i.test(t)) return "confirmed";
   if (/\bhow much\b[^?]{0,30}\b(?:can|could|will|do|would)\b[^?]{0,20}\b(?:claim|get|receive)\b|^\s*how much (?:can )?claim\b/i.test(t)) return "amount";
   if (/\b(?:more than one|several|two|both|all (?:the|my|our)?\s*)\s*(?:policies|policy|plans?|insurers?)\b|\bclaim (?:from )?(?:both|each|every)\b|\bdouble claim\b/i.test(t)) return "several";
-  if (/\b(?:how long|deadline|by when|time limit|when (?:must|should|do) (?:i|we) (?:submit|claim|send|file))\b/i.test(t)) return "deadline";
+  // ("How long is the recovery?" asks about the recovery, not the claim's time limit.)
+  if (/\b(?:how long|deadline|by when|time limit|when (?:must|should|do) (?:i|we) (?:submit|claim|send|file))\b/i.test(t)
+    && !/\bhow long (?:is|was|will|would|does|did) (?:the|my|his|her|their|it|a|an) (?!claim|deadline|time|period|window|limit|grace|notice)\w+/i.test(t)) return "deadline";
   if (/\b(?:who do (?:i|we) (?:send|give|submit)|where (?:do|should|can) (?:i|we) (?:send|submit)|send (?:it|them|the forms?) to|call the insurer)\b/i.test(t)) return "send";
   if (/\b(?:anything else|what else|what (?:should|do|must) (?:i|we) do(?: now| next)?|next steps?|what now|what(?:'s| is) next)\b/i.test(t)) return "next";
   return null;

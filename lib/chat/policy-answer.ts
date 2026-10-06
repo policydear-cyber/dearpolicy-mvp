@@ -587,7 +587,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   const started = Date.now(), now = args.now ?? new Date();
   const empty = (): PolicyAnswer => ({ mode: "answer", summary: "", details: [], citations: [], confidence: "insufficient_evidence", nextSteps: [], questions: [], policyStatedLimits: [] });
   const topics = questionTopics(askedText);
-  // Round 7 (port): "tell me about SecureCare", "show me Siew Ling's ILP" ask what a named plan states.
+  // Round 7 (port): "tell me about CarePlan", "show me Hui Min's ILP" ask what a named plan states.
   const aboutPlan = !GENERAL.test(askedText) && ABOUT_PLAN.test(askedText);
   let general = GENERAL.test(askedText) || aboutPlan;
   // "what's the security bond?", "how long is the deferment?": one named term of the person's plans, asked plainly.
@@ -641,7 +641,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   }
   for (const id of [...speaksFor.keys()]) if (!docs.has(id)) speaksFor.delete(id);
   // Round 7 (port): a premium receipt or notice speaks for the people its policy insures, not for whoever paid it
-  // ("Kah Seng CI premium" is not the receipt he paid for his wife's plan) -- when that policy is on file.
+  // ("Boon Hock CI premium" is not the receipt he paid for his wife's plan) -- when that policy is on file.
   {
     const payments = [...docs.values()].filter((d) => PAYMENT_ONLY.test(d.document_role ?? "") && (d.policy_number || d.product_name));
     if (payments.length) {
@@ -726,7 +726,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
     .some((token) => token.length >= 5 && !/^(?:synthetic|dptest|policy|insurance|plan)$/i.test(token) && !COMMON_PRODUCT_WORD.test(token) && !/\d/.test(token) && new RegExp("\\b" + token + "\\b", "i").test(args.question))
       // Round 9: a product named in full ("the PA Guardian") even when each of its words is a common one.
       || (d.product_name ?? "").length >= 6 && /\s/.test(d.product_name ?? "") && args.question.toLowerCase().includes((d.product_name ?? "").toLowerCase())).map((d) => d.id);
-  // Round 7 (port): "the Pro" when the household also holds "SecureCare Plus": the word that tells two alike products apart names one.
+  // Round 7 (port): "the Pro" when the household also holds "CarePlan Plus": the word that tells two alike products apart names one.
   if (!namedDocs.length && args.question.trim().split(/\s+/).length <= 6) {
     const allNames = (await query<{ product_name: string }>(`SELECT DISTINCT p.product_name FROM policies p WHERE p.account_id=$1 AND p.product_name IS NOT NULL AND ${activePredicate("p")}`, [args.accountId]).catch(() => ({ rows: [] as { product_name: string }[] }))).rows.map((r) => r.product_name);
     const words = (name: string) => name.split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2 && !/\d/.test(t)).map((t) => t.toLowerCase());
@@ -905,7 +905,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
       }
       for (const ownerId of speaksFor.get(b.policyId) ?? []) {
         // Round 7: a booklet prints the employee's plan beside their name
-        // ("TAN WEI MING ... Benefit plan: Plan 2 (Managers)"): that is their
+        // ("LIM KOK WEI ... Benefit plan: Plan 2 (Managers)"): that is their
         // column in the GTL / GPA tables, as the stored class (Employee) is in
         // the hospital table.
         // A booklet section for the employee only (GTL / GPA "cover the
@@ -1082,7 +1082,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // row of a table does ("Water damage from a sudden burst pipe is covered.",
   // "You may apply to reinstate the policy until 16 March 2028."). Never an
   // address, a salutation or a date line.
-  // Round 11: anyone in the household named in the question ("Aisyah scratched the car") is who, never what is asked.
+  // Round 11: anyone in the household named in the question ("Farah scratched the car") is who, never what is asked.
   const householdNames = (await query<{ n: string }>("SELECT display_name || ' ' || coalesce(preferred_name,'') n FROM family_members WHERE account_id=$1 AND " + activePredicate(), [args.accountId]).catch(() => ({ rows: [] as { n: string }[] }))).rows.map((r) => r.n);
   const nameWords = new Set([...args.people.map((p) => p.display_name + " " + (p.preferred_name ?? "")), ...householdNames].flatMap((n) => n.toLowerCase().split(/\s+/)).filter(Boolean));
   const proseFor = (): RawCandidate[] => {

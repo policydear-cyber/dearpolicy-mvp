@@ -93,7 +93,9 @@ export function behaviourOk(expected: string, acceptable: string[], got: string,
 // ------------------------------------------------------------------ running
 export type Scored = { household: HouseholdId; id: string; turn: number | null; message: string; status: number; ms: number; expected: string; behaviour: string; behaviourOk: boolean;
   missing: string[]; forbiddenHits: string[]; qualifyReview: string[]; cite: "ok" | "missing" | "n/a"; detectorHits: Hit[]; summary: string; text: string; tags: string[]; error?: string;
-  resolved?: string | null; questions?: string[] };
+  resolved?: string | null; questions?: string[];
+  /** Round 15: an item the suite does not score (EXCLUDED), kept so the strict score counts every item. */
+  excluded?: boolean };
 
 export type RunOpts = {
   hh: LoadedHousehold; others: LoadedHousehold[]; db: { query: <T>(text: string, params?: unknown[]) => Promise<{ rows: T[] }> };
@@ -171,8 +173,8 @@ export async function runBattery(o: RunOpts): Promise<Scored[]> {
     }
     const detectorHits = a ? [...o.detect(a, { question: item.message, userText, claimTurn, ms: r.ms }, g), ...(o.extra?.(a, item.message) ?? [])]
       : [{ rule: "HTTP " + r.status, text: String(r.data?.error ?? "") }];
-    if (o.exclude?.(item.id, turn)) return a;
-    const s: Scored = { household: o.hh.id, id: item.id, turn, message: item.message, status: r.status, ms: r.ms, expected: item.expected_behaviour, behaviour, behaviourOk: ok,
+    const excluded = !!o.exclude?.(item.id, turn);
+    const s: Scored = { ...(excluded ? { excluded: true } : {}), household: o.hh.id, id: item.id, turn, message: item.message, status: r.status, ms: r.ms, expected: item.expected_behaviour, behaviour, behaviourOk: ok,
       missing, forbiddenHits, qualifyReview, cite, detectorHits, summary: a?.summary ?? "", text, tags: item.tags ?? [],
       resolved: a?.resolvedFamilyMemberId ?? null, questions: a ? [...(a.questions ?? []).map((q) => q.text), ...(a.factFinding ?? []).flatMap((p) => p.nextQuestions.map((q) => q.text))] : [] };
     out.push(s); o.onTurn?.(s);

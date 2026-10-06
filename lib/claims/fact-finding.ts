@@ -603,7 +603,7 @@ export function recordDirectFactAnswer(args: {
     const asked = message.slice(0, colon).trim().replace(/\?\s*$/, "").toLowerCase();
     match = questionIndex().get(asked);
     raw = message.slice(colon + 1).trim();
-    // The card's question as shown to the family ("On what date was Xin Yi
+    // The card's question as shown to the family ("On what date was Kai Ting
     // discharged ...?") is the pending question in its personal wording.
     if (!match && args.pending && asked.length >= 12 && /^(?:what|when|on what|which|was|were|is|are|has|have|how|where|did|do|does|briefly|for how|from what)\b/.test(asked)) {
       const declared = questionForKey(args.pending.factKey);

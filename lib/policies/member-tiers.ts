@@ -6,7 +6,7 @@
  * states it as a table row ("Policy year limit S$2,000,000").
  *
  * The choice is read from the document itself: the clause that names the
- * person ("Lim Xin Yi (child)", "Eligible employee: Lim Wei Jie, ..., Plan A",
+ * person ("Lim Kai Ting (child)", "Eligible employee: Lim Wei Jie, ..., Plan A",
  * "Dependants enrolled: spouse Tan Mei Ling") or the plan particulars line
  * ("Plan ShieldCare Premier (Private hospital) ..."). Nothing is guessed: a
  * person whose tier is not printed keeps benefit_tier NULL and every column

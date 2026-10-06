@@ -90,7 +90,7 @@ function relationGroup(word: string): RelationGroup {
     : /sister|brother|sibling/i.test(word) ? "sibling" : "parent";
 }
 /** Family relationships are stored relative to the account holder ("self");
- * "his wife" / "Xin Yi's mum" is relative to another person. */
+ * "his wife" / "Kai Ting's mum" is relative to another person. */
 function relativesOf(anchor: ClaimPerson, group: RelationGroup, family: ClaimPerson[]): ClaimPerson[] {
   const rel = (p: ClaimPerson) => normalized(p.relationship);
   const of = (...rels: string[]) => family.filter((p) => p.id !== anchor.id && rels.includes(rel(p)));
@@ -103,7 +103,7 @@ function relativesOf(anchor: ClaimPerson, group: RelationGroup, family: ClaimPer
     default: return [];
   }
 }
-/** "and his wife?" after a question about Wei Jie, or "Xin Yi's mum": the
+/** "and his wife?" after a question about Wei Jie, or "Kai Ting's mum": the
  * person is found through the named (or previous) person's relationship. */
 export function resolveRelativePerson(text: string, family: ClaimPerson[], anchorId: string): ClaimPersonResolution | null {
   const m = text.match(RELATIVE);
@@ -145,6 +145,8 @@ function plausibleName(candidate: string | null, original: string, family: Claim
   // A family member's name, or a close typo of one, is always a name.
   if (family.some((p) => [p.display_name, p.preferred_name ?? ""].some((x) => x && (includesName(normalized(x), n) || includesName(n, normalized(x)) || fuzzyIncludesName(n, normalized(x)))))) return name;
   if (words.some((w) => COMMON_WORD.test(w) && !/^ah$/i.test(w))) return null;
+  // Round 15: "my flight from Tokyo got delayed", "warded in Gleneagles": a place after a preposition, not a person.
+  if (new RegExp("\\b(?:from|to|in|at|via|near|around|inside|outside|into|towards?)\\s+" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(original)) return null;
   // "dad", "papa", "my wife" name a relationship, resolved further on.
   if (words.every((w) => /^(?:my|our|the)$/i.test(w) || RELATION_WORD.test(w.replace(/['’]s$/i, "")))) return null;
   // Someone who writes in sentence case capitalises a name ("Siti Hajar",
@@ -171,6 +173,14 @@ const FIRST_PERSON = /\b(?:i|i['’]m|im|i['’]ve|i['’]d|i['’]ll|me|my|mine
 
 /** Explicit names take precedence over the UI selection; ambiguity never loads policies. */
 export function resolveClaimPerson(text: string, family: ClaimPerson[], selectedId: string): ClaimPersonResolution {
+  // Round 15: "Mrs Ong" when Ong is the account holder's family name and not the spouse's own: the spouse, by marriage.
+  const mrs = text.match(/\bmrs\.?\s+(\p{L}{2,})\b/iu)?.[1]?.toLowerCase();
+  if (mrs) {
+    const holder = family.filter((p) => /^self$/i.test(p.relationship ?? ""));
+    const spouses = family.filter((p) => /^(?:spouse|wife|husband)$/i.test(p.relationship ?? ""));
+    const has = (p: ClaimPerson) => normalized(p.display_name).split(" ").includes(mrs);
+    if (holder.length === 1 && has(holder[0]) && spouses.length === 1 && !has(spouses[0])) return { status: "resolved", person: spouses[0], explicit: true };
+  }
   const relative = resolveRelativePerson(text, family, selectedId);
   if (relative) return relative;
   const subject = plausibleName(subjectName(text), text, family) ?? plausibleName(questionSubjectName(text), text, family);
@@ -202,7 +212,7 @@ export function resolveClaimPerson(text: string, family: ClaimPerson[], selected
   if (matches.length) {
     const rank = Math.max(...matches.map(m => m.rank));
     let strongest = matches.filter(m => m.rank === rank);
-    // "it was Xin Yi, not Mei Ling": the person named after "not" is the one it is NOT about.
+    // "it was Kai Ting, not Mei Ling": the person named after "not" is the one it is NOT about.
     if (strongest.length === 2) {
       const negated = strongest.filter(m => [m.person.display_name, m.person.preferred_name ?? ""].filter(Boolean)
         .some(name => new RegExp("\\bnot\\s+(?:about\\s+|for\\s+)?" + normalized(name).replace(/\s+/g, "\\s+") + "\\b").test(message)));
@@ -295,7 +305,7 @@ export function outsideHouseholdSubject(text: string, family: ClaimPerson[]): { 
   const rel = (p: ClaimPerson) => (p.relationship ?? "").toLowerCase();
   if (/helper|maid/.test(relation) ? family.some((p) => /helper|maid|domestic/.test(rel(p))) : family.some((p) => rel(p) === relation)) return null;
   const before = text.slice(0, m.index ?? 0);
-  // "Wei Jie's colleague" is still not in the household, but "Xin Yi and my friend" names Xin Yi.
+  // "Wei Jie's colleague" is still not in the household, but "Kai Ting and my friend" names Kai Ting.
   const named = family.some((p) => [p.display_name, p.preferred_name].filter(Boolean).some((n) => new RegExp("\\b" + normalized(n!).replace(/\s+/g, "\\s+") + "\\b(?!['’]s)").test(normalized(before))));
   if (named) return null;
   // Round 9: a name is written with a capital ("my colleague just got cancer" names nobody).

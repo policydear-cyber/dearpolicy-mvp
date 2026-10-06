@@ -59,7 +59,7 @@ export function applyMessageFacts(args: { message: string; facts: SubjectFacts; 
     if (changed.length) correction = to.toLowerCase() + " " + part.toLowerCase();
   }
 
-  // A broken bone in the household's own words: "broke her left arm", "xin yi break arm".
+  // A broken bone in the household's own words: "broke her left arm", "kai ting break arm".
   const broke = text.match(new RegExp(`\\b(?:broke|break|broken|breaks|fractured?|cracked)\\s+(?:(?:her|his|my|their|a|the|one)\\s+)?(?:(left|right)\\s+)?(${BODY})\\b`, "i"));
   if (broke && unset("fractureBodyPart") && !facts.fractureBodyPart) {
     if (unset("injured")) set("injured", true);

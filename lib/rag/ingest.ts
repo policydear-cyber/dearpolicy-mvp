@@ -60,6 +60,33 @@ export type ProcessPolicyArgs = {
  * prints ("Less: MediSave deduction S$1,050.00", "cash payable S$362.00",
  * "Total cash payable S$1,120.00"), as one note for its premium records.
  * Only printed figures, copied as printed; null when none is printed. */
+/** Round 15: a schedule's premium table read as a person reads it. When it prints a total premium for the policy and the
+ * premium read from it is one component of that total ("MediShield Life premium S$1,814.00" above "Total ... premium
+ * S$4,250.00"), the total is the policy's premium; the MediSave and cash parts printed under it are its split; and a
+ * rider's own premium line ("... Rider premium (cash only) S$1,968.00") is a premium of its own. Only figures printed on
+ * the page are used. */
+export function printedPremiumTable(text: string, amount: number | null): { total: number | null; split: string | null; riders: { name: string; amount: number }[] } {
+  const figure = (line: string) => { const m = line.match(/(?:S\$|SGD\s?)\s?(\d[\d,]*(?:\.\d{1,2})?)/i); return m ? Number(m[1].replace(/,/g, "")) : null; };
+  const lines = text.split(/\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const totalLine = lines.find((l) => /\btotal\b[^$]{0,80}\bpremium\b/i.test(l) && !/\bcash\b|\bmedisave\b|\brider\b|\bdependant/i.test(l) && figure(l) != null);
+  const total = totalLine ? figure(totalLine) : null;
+  const component = amount != null && lines.some((l) => /\bpremium\b/i.test(l) && l !== totalLine && figure(l) === amount);
+  const usedTotal = total != null && amount != null && total > amount && component ? total : null;
+  const medisave = lines.find((l) => /\b(?:payable )?(?:from|by|via|using) medisave\b/i.test(l) && !/\bcannot\b|\brider\b/i.test(l));
+  const cash = lines.find((l) => /\bpayable in cash\b|\bcash portion\b/i.test(l) && !/\brider\b|\btotal\b/i.test(l));
+  const m = medisave ? figure(medisave) : null, c = cash ? figure(cash) : null;
+  const split = usedTotal != null && m != null && c != null && Math.abs(m + c - usedTotal) < 0.01
+    ? "of which MediSave pays S$" + m.toLocaleString("en-US", { minimumFractionDigits: 2 }) + " and cash S$" + c.toLocaleString("en-US", { minimumFractionDigits: 2 }) : null;
+  const riders: { name: string; amount: number }[] = [];
+  for (const l of lines) {
+    if (!/\brider\b[^$]{0,80}\bpremium\b/i.test(l) || /\btotal\b/i.test(l)) continue;
+    const v = figure(l);
+    if (v == null || v === amount || v === total) continue;
+    const name = l.replace(/\s*\bpremium\b.*$/i, "").replace(/[:\s]+$/, "").trim();
+    if (name.length >= 4 && !riders.some((r) => r.name === name)) riders.push({ name, amount: v });
+  }
+  return { total: usedTotal, split, riders: usedTotal != null || riders.length ? riders : [] };
+}
 export function paymentSplitNote(text: string): string | null {
   const amountOn = (pattern: RegExp) => {
     for (const line of text.split(/\n/)) {
@@ -680,6 +707,18 @@ export async function processPolicy(args: ProcessPolicyArgs) {
     }
     if (extraction.premium.amount != null && extraction.personalCoverageConfirmed && extraction.paymentRecords.length === 0 && premiumPrinted(extraction.premium.amount, extraction.premium.currency, printedText)) {
       const target = matchedIds.length === 1 ? matchedIds[0] : null;
+      // Round 15: the printed total, its MediSave / cash split, and each rider's own premium (printedPremiumTable).
+      const table = printedCurrencyCode(extraction.premium.currency) === "SGD" ? printedPremiumTable(printedText, extraction.premium.amount) : { total: null, split: null, riders: [] };
+      if (table.total != null) extraction.premium.amount = table.total;
+      for (const rider of table.riders) {
+        await query(
+          `INSERT INTO premium_records(account_id,policy_id,family_member_id,insurer,product_name,policy_number,amount,currency,frequency,source_document_id,notes,dedupe_key)
+           VALUES($1,$2,$3,$4,$5,$6,$7,'SGD',$8,$9,$10,$11)
+           ON CONFLICT (source_document_id,dedupe_key) WHERE dedupe_key IS NOT NULL DO UPDATE SET family_member_id=EXCLUDED.family_member_id, amount=EXCLUDED.amount, notes=EXCLUDED.notes`,
+          [args.accountId, args.policyId, target, extraction.insurer, rider.name, extraction.policyNumber, rider.amount, extraction.premium.frequency, args.policyId,
+            "Rider premium printed on the schedule of " + (extraction.productName ?? "the policy"), premiumRecordDedupeKey(["rider_premium", target, rider.name, rider.amount])],
+        );
+      }
       const dedupeKey = premiumRecordDedupeKey([
         "current_premium", target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
         printedCurrencyCode(extraction.premium.currency), extraction.premium.frequency,
@@ -693,7 +732,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
            notes=EXCLUDED.notes`,
         [args.accountId, args.policyId, target, extraction.insurer, extraction.productName, extraction.policyNumber, extraction.premium.amount,
           printedCurrencyCode(extraction.premium.currency), extraction.premium.frequency, args.policyId,
-          target ? "Extracted current premium from personalised policy document" : "Shared/aggregate premium across linked insured people",
+          [target ? "Extracted current premium from personalised policy document" : "Shared/aggregate premium across linked insured people", table.split].filter(Boolean).join(" · "),
           dedupeKey],
       );
     }
