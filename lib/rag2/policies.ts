@@ -30,7 +30,7 @@ const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const normNo = (s: string | null) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const INSURED = /\b(?:life assured|lives? insured|insured persons?|persons? insured|the insured\b|insured members?|insured:|insured\s{2,}|covered (?:persons?|members?)|members? covered|dependants? (?:enrolled|covered)|enrolled|enrolment|employee name|member name|insured adult|insured child|category)\b/i;
 const NOMINEE = /\bnominees?\b/i, ASSIGNEE = /\bassignees?\b|\bassigned to\b|\babsolute assignment\b/i, BENEFICIARY = /\bbeneficiar(?:y|ies)\b/i;
-const OWNER = /\bpolicy ?(?:owner|holder)\b|\bproposer\b|\bpayor\b|\bpayer\b|\bowner\b/i;
+const OWNER = /\bpolicy ?(?:owner|holder)\b|\bproposer\b|\bpayor\b|\bpayer\b|\bowner\b|\bemployer\b|\bplanholder\b/i;
 const ENROLMENT = /\benrol(?:l)?ment confirmation\b|\bconfirmation of enrol(?:l)?ment\b|\benrol(?:l)?ment (?:summary|statement)\b/i;
 const BOOKLET = /\bbenefits? booklet\b|\bemployee benefits? (?:guide|handbook|summary)\b|\bscheme booklet\b/i;
 const PERIOD = /\b(?:period of (?:insurance|cover)|policy period|cover(?:age)? period|plan year|policy term|period)\b[^\n]*?(\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4}|\d{4}-\d{2}-\d{2})\s*(?:to|until|-|–)\s*(\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4}|\d{4}-\d{2}-\d{2})/i;
@@ -65,7 +65,11 @@ function namedLinesOf(d: DocRow, pages: Map<number, string>, names: string[], su
 
 function roleFrom(named: Named[], names: string[]): { role: CoverRole; ev: EvidenceRef[] } {
   const strip = (l: string) => l.replace(new RegExp(names.map(esc).join("|") || "$^", "gi"), " ");
-  const ins = named.filter((n) => INSURED.test(strip(n.line)) || (INSURED.test(n.context) && !OWNER.test(strip(n.line)) && !NOMINEE.test(strip(n.line)) && !ASSIGNEE.test(strip(n.line)) && !BENEFICIARY.test(strip(n.line))));
+  // The line itself says so ("Life assured: X", "Insured persons: X (child)"), or it is a row of a table headed as a
+  // list of insured persons ("Insured persons" / "Name  Category" above "X   Insured Child").
+  const tableRow = (l: string) => /\t|\S {2,}\S/.test(l.trim());
+  const other = (l: string) => OWNER.test(l) || NOMINEE.test(l) || ASSIGNEE.test(l) || BENEFICIARY.test(l);
+  const ins = named.filter((n) => INSURED.test(strip(n.line)) || (tableRow(n.line) && INSURED.test(n.context.split("\n").slice(0, -1).join("\n")) && !other(strip(n.line))));
   if (ins.length) return { role: "insured", ev: ins.map((n) => n.ref) };
   const by = (re: RegExp) => named.filter((n) => re.test(strip(n.line)));
   if (by(NOMINEE).length) return { role: "nominee", ev: by(NOMINEE).map((n) => n.ref) };

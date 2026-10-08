@@ -19,6 +19,7 @@ import { evidenceAt, type AppliesTo, type EvidenceRef } from "./evidence";
 import { tokens } from "./search";
 import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
 import { relationOf, type RelationClass } from "./people";
+import { personClause } from "@/lib/policies/member-tiers";
 
 export type ColumnKind = "label" | "condition" | "amount" | "percent" | "count" | "unit" | "notes";
 export type Cell = { text: string; start: number; end: number };
@@ -389,7 +390,10 @@ export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: C
   }
   // A document naming the person with exactly one of the columns' classes / tiers ("Kavya Nair   Child").
   const docMatches = new Map<number, { line: string; ref: EvidenceRef }>();
-  for (const nl of hints.namedLines) {
+  for (const named of hints.namedLines) {
+    // Only the clause of the line that names the person ("Koh Jun Hao (child)" of "A (adult); Koh Jun Hao (child)").
+    const clause = hints.names.map((n) => personClause(named.line, n)).find((c): c is string => !!c) ?? named.line;
+    const nl = { ...named, line: clause };
     const fits = classed.filter((c) => {
       const words = [c.appliesTo!.value, c.leaf, c.heading ?? ""].filter((w) => w && w.length >= 3);
       return words.some((w) => new RegExp("(?<![\\w])" + esc(flat(w.replace(/^insured\s+/i, ""))) + "(?![\\w])", "i").test(nl.line.replace(new RegExp(hints.names.map(esc).join("|") || "$^", "gi"), " ")))
@@ -522,6 +526,13 @@ function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnH
   const distinct = new Map<string, SelectedValue>();
   for (const r of results) { const k = `${r.valueKind}|${r.value}|${r.currency}|${r.period}`; if (!distinct.has(k)) distinct.set(k, r); }
   if (distinct.size === 1) return [...distinct.values()][0];
+  // "The recuperation benefit" with no kind asked: one amount and day / visit counts tied with it -> the amount, the
+  // counts kept as its conditions (they are its limits, printed on their own rows).
+  const money = [...distinct.values()].filter((r) => r.valueKind === "money");
+  if (want === "any" && money.length === 1 && [...distinct.values()].every((r) => r.valueKind === "money" || r.valueKind === "count")) {
+    const counts = [...distinct.values()].filter((r) => r.valueKind === "count");
+    return { ...money[0], conditions: [...money[0].conditions, ...counts.map((c) => `${c.rowLabel}: ${fmt(c)} (page ${c.evidence.passage.onPage})`)] };
+  }
   if (distinct.size > 1) return { status: "ambiguous", options: [...distinct.values()].map((r) => ({ label: r.rowLabel + (r.columnHeader ? " — " + r.columnHeader : ""), detail: `${fmt(r)} (page ${r.evidence.passage.onPage})`, evidence: r.evidence })), question: `${L.doc.productName ?? "The document"} prints more than one row for “${benefit}”: ${[...distinct.values()].map((r) => `${r.rowLabel} (${fmt(r)})`).join(" or ")}. Which one do you mean?`, reason: "more than one table row fits the benefit equally well" };
   return problems[0];
 }

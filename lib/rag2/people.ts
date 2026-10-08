@@ -67,8 +67,8 @@ const NEAR: Partial<Record<RelationClass, RelationClass[]>> = {
 const SELF = /^(?:i|me|my|myself|mine|my own|myself only|self|own)$/i;
 const THIRD = /^(?:he|him|his|she|her|hers|they|them|their|theirs)$/i;
 const GROUP = /^(?:we|us|our|ours|everyone|the family|family|all of us)$/i;
-const FEMALE = /\b(?:mother|mum|mom|wife|daughter|sister|grandmother|grandma|aunt|niece|she|her|female|girl|woman)\b/i;
-const MALE = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle|nephew|he|him|male|boy|man)\b/i;
+const FEMALE = /\b(?:mother|mum|mom|wife|daughter|sister|grandmother|grandma|aunt|niece|female|girl|woman)\b/i;
+const MALE = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle|nephew|male|boy|man)\b/i;
 
 /** The fine relation of a stored member: relationship plus what their notes say ("mother-in-law", "stepson", "helper"). */
 export function relationOf(m: Pick<MemberRow, "relationship" | "notes">): { relation: RelationClass; gender: Gender } {

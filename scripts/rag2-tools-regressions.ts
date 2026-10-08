@@ -220,6 +220,9 @@ async function main() {
     for (const k of ["ENDT", "ENROL"]) assert.ok(!covering.includes(doc(k).id), k + " listed as its own policy");
     const motor = r.notCovering.find((p) => p.policyId === doc("MOTOR").id)!;
     assert.ok(motor && motor.insures === "motor" && motor.reasons.some((x) => /motor/.test(x)));
+    const helper = r.notCovering.find((p) => p.policyId === doc("HELPER").id)!;
+    assert.ok(helper && helper.role === "owner_only", "the employer of an insured helper is not insured: " + JSON.stringify(helper && [helper.role, helper.reasons]));
+    assert.ok(!r.covering.some((p) => p.policyId === doc("HELPER").id));
     const pa = r.covering.find((p) => p.policyId === doc("PA").id)!;
     assert.equal(pa.inForce.status, "in_force"); assert.equal(pa.inForce.from, "2026-03-01"); assert.equal(pa.inForce.to, "2027-02-28");
     for (const ev of pa.evidence) exact(ev, "PA");
@@ -341,10 +344,21 @@ async function main() {
   await check("T7 reordered columns (Child before Adult) are read by header, not position", async () => {
     const jun = okv(await value("CASH", "hospital cash", M.junhao.id));
     assert.deepEqual([jun.value, jun.columnHeader, jun.period], [80, "Child", "day"]);
+    assert.equal(jun.columnBasis.basis, "document", "the clause naming Jun Hao says (child)"); assert.match(jun.columnBasis.detail, /Koh Jun Hao \(child\)/);
     const dar = okv(await value("CASH", "hospital cash", M.darren.id));
     assert.deepEqual([dar.value, dar.columnHeader], [150, "Adult"]);
     const days = okv(await value("CASH", "maximum days per admission", M.junhao.id, "count"));
     assert.deepEqual([days.value, days.valueKind, days.unit], [30, "count", "day"]);
+  });
+  await check("T7b a table continued on the next page without a repeated header keeps its columns (Child S$50, page range 1-2)", async () => {
+    const rec = okv(await value("CASH", "recuperation benefit", M.junhao.id));
+    assert.deepEqual([rec.value, rec.columnHeader, rec.period], [50, "Child", "day"]);
+    assert.deepEqual([rec.evidence.page.start, rec.evidence.page.end, rec.evidence.passage.onPage], [1, 2, 2]);
+    exact(rec.evidence, "CASH");
+    assert.ok(rec.conditions.some((c) => /^Maximum recuperation days: 10 day/.test(c)), "the tied day-count row is kept as a condition: " + JSON.stringify(rec.conditions));
+    assert.equal(rec.evidence.table!.cell!.start, cellAt("CASH", 2, "Recuperation benefit", "S$50").cellStart);
+    const adultDays = okv(await value("CASH", "maximum recuperation days", M.darren.id, "count"));
+    assert.deepEqual([adultDays.value, adultDays.columnHeader], [14, "Adult"]);
   });
   await check("T8 merged headings: 'Insured Child' spanning 'Limit | Co-pay' -> child limit S$1,200, co-pay 10%; adult co-pay 20%", async () => {
     const lim = okv(await value("OUTPT", "outpatient fracture treatment", M.yixuan.id, "amount"));

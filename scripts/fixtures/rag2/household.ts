@@ -153,6 +153,14 @@ const CASH_P1 = [
   row(["ICU cash per day", "S$160", "S$300"], HW),
   row(["Maximum days per admission", "30 days", "60 days"], HW),
 ].join("\n");
+// Page 2 continues the same table straight on, without repeating its header.
+const CASH_P2 = [
+  "Mistral Bay General Insurance - DailyCare Hospital Cash (continued)",
+  row(["Recuperation benefit per day", "S$50", "S$100"], HW),
+  row(["Maximum recuperation days", "10 days", "14 days"], HW),
+  "",
+  "Hospital cash is payable from the first full day of admission.",
+].join("\n");
 
 const OW = [37, 15, 14, 15];
 const OUTPT_P1 = [
@@ -220,7 +228,7 @@ export const DOCS: FxDoc[] = [
   { key: "ENROL", id: id(104), owner: M.darren.id, members: [{ id: M.darren.id }], insurer: "Ardent Peak Holdings", product: "Enrolment Confirmation", policyNumber: "AP-GHS-5521", policyType: "Group Hospital & Surgical", role: "enrolment_confirmation", personal: true, hash: "sha256:rag2-enrol", pages: { 1: ENROL_P1 } },
   { key: "TERM", id: id(105), owner: M.darren.id, members: [{ id: M.darren.id }], insurer: "Tidewell Insurance", product: "TermSecure", policyNumber: "TW-TL-440187", policyType: "Term Life", role: "schedule", personal: true, hash: "sha256:rag2-term", effective: "2024-01-10", pages: { 1: TERM_P1 } },
   { key: "ENDT", id: id(106), owner: M.darren.id, members: [{ id: M.darren.id }], insurer: "Tidewell Insurance", product: "TermSecure Endorsement 2", policyNumber: "TW-TL-440187", policyType: "Term Life", role: "endorsement", personal: true, hash: "sha256:rag2-endt", effective: "2026-07-01", documentDate: "2026-06-15", pages: { 1: ENDT_P1 } },
-  { key: "CASH", id: id(107), owner: M.darren.id, members: [{ id: M.darren.id }, { id: M.junhao.id }], insurer: "Mistral Bay General Insurance", product: "DailyCare Hospital Cash", policyNumber: "MB-HC-118230", policyType: "Hospital Cash", role: "schedule", personal: true, hash: "sha256:rag2-cash", pages: { 1: CASH_P1 } },
+  { key: "CASH", id: id(107), owner: M.darren.id, members: [{ id: M.darren.id }, { id: M.junhao.id }], insurer: "Mistral Bay General Insurance", product: "DailyCare Hospital Cash", policyNumber: "MB-HC-118230", policyType: "Hospital Cash", role: "schedule", personal: true, hash: "sha256:rag2-cash", pages: { 1: CASH_P1, 2: CASH_P2 } },
   { key: "OUTPT", id: id(108), owner: M.melissa.id, members: [{ id: M.melissa.id }, { id: M.yixuan.id }], insurer: "Tidewell Insurance", product: "OutpatientPlus", policyNumber: "TW-OP-602214", policyType: "Outpatient", role: "schedule", personal: true, hash: "sha256:rag2-outpt", pages: { 1: OUTPT_P1 } },
   { key: "DENTAL", id: id(109), owner: M.darren.id, members: [{ id: M.darren.id }], insurer: "Ardent Peak Holdings", product: "Dental Rider", policyNumber: "AP-DN-7781", policyType: "Dental", role: "schedule", personal: true, hash: "sha256:rag2-dental", pages: { 1: DENTAL_P1 } },
   { key: "MOTOR", id: id(110), owner: M.darren.id, members: [{ id: M.darren.id }], insurer: "Tidewell Insurance", product: "DriveSafe Motor", policyNumber: "TW-MT-339120", policyType: "Motor", role: "certificate", personal: true, hash: "sha256:rag2-motor", pages: { 1: MOTOR_P1 } },
