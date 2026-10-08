@@ -88,6 +88,10 @@ export type ClaimFacts = {
    * remaining lifetime capacity when wording establishes a lifetime cap
    * and no entry exists here for that policy. */
   priorPaidAmounts?: Record<string, { amount: number; currency: string; recordedAt: string }>;
+  /** Agent G: the amount the household says it is claiming -- their own figure, in their words, never a bill total,
+   * a printed limit or a calculated estimate (each of those has its own field / record). Recorded so the claim pack
+   * can list it as reported and ask for the receipts behind it; never a calculation input. */
+  claimedAmount?: ReportedClaimAmount | null;
   /** Chat-REPORTED admission/discharge dates -- never treated as verified.
    * lib/claims/medical-rules.ts prefers the VERIFIED equivalents on
    * `verifiedMedicalBillFacts` when present, and only ever falls back to
@@ -182,6 +186,20 @@ export type ClaimEvidence = {
   evidenceLabel?: string;
 };
 
+/** Agent G: a household-reported claimed amount with its provenance. `currency` is null when they gave none. */
+export type ReportedClaimAmount = {
+  kind: "user_reported_claim_amount";
+  amount: number; currency: string | null;
+  source: "user_reported";
+  /** The household's own words, verbatim. */
+  words: string;
+  /** The conversation turn it was said in (null outside a conversation). */
+  turn: number | null;
+  recordedAt: string;
+  /** Earlier amounts the household corrected, oldest first. */
+  previous?: { amount: number; currency: string | null; words: string; turn: number | null }[];
+};
+
 export type ClaimAssessmentItem = {
   id: string;
   title: string;
@@ -199,6 +217,9 @@ export type ClaimAssessmentItem = {
   aggregation?: "additive" | "reimbursement";
   /** Another benefit under the same cover pays instead of this one. */
   supersededBy?: string;
+  /** Agent G: this item was worked out from something since corrected (the person, an amount, a date) or from a source
+   * since deleted / superseded; kept on record, marked, and no longer applies. */
+  withdrawn?: { cause: "person" | "fact" | "source"; reason: string; key?: string | null; at: string };
   /** The cover this figure is paid out of, as the certificate names it. */
   coverLabel?: string;
   ruleEvidence?: ClaimEvidence;

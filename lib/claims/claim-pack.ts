@@ -43,6 +43,10 @@ function eventLines(facts:ClaimFacts){
   if(facts.hospitalBill!=null)add("Hospital bill",reported(facts.hospitalBill));
   if(facts.ambulanceBill!=null)add("Ambulance bill",reported(facts.ambulanceBill));
   if(facts.outOfPocket!=null)add("Paid out of pocket",reported(facts.outOfPocket));
+  // Agent G: the amount the household says it is claiming -- their figure, in the currency they gave (none if they gave
+  // none), never the bill or an estimate.
+  const claimed=facts.claimedAmount;
+  if(claimed&&Number.isFinite(claimed.amount))add("Amount being claimed",(claimed.currency?claimed.currency+" ":"")+claimed.amount.toLocaleString("en-SG")+" as you reported it"+(claimed.currency?"":" (currency not stated)")+" — to be verified from the receipts");
   return lines;
 }
 /** What an insurer asks for, decided by what actually happened. Generic enough
@@ -67,7 +71,7 @@ export function documentsToAttach(facts:ClaimFacts){
   if(facts.surgery)documents.push("Operation report");
   if(facts.ambulanceUsed||facts.ambulanceBill!=null)documents.push("Ambulance invoice");
   if(facts.permanentImpairment)documents.push("Attending doctor's assessment of permanent impairment");
-  if(facts.hospitalBill!=null||facts.outOfPocket!=null||facts.ambulanceBill!=null)
+  if(facts.hospitalBill!=null||facts.outOfPocket!=null||facts.ambulanceBill!=null||facts.claimedAmount!=null)
     documents.push("Original receipts for every amount being claimed");
   return [...new Set(documents)];
 }

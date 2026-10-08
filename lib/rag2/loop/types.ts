@@ -34,10 +34,21 @@ export interface LoopModel { readonly id: string; readonly kind: "hosted" | "scr
  * Facts saved before provenance existed have neither field and count as user_reported / stated. */
 export type LoopFact = { value: string | number | boolean; words: string; turn: number; source?: "user_reported" | "document" | "medical_evidence"; basis?: "stated" | "paraphrased"; evidenceIds?: string[];
   previous?: { value: string | number | boolean; words: string; turn: number; source?: LoopFact["source"]; basis?: LoopFact["basis"] }[] };
-export type LoopClaim = { subjectId: string | null; facts: Record<string, LoopFact>; derived: LoopDerived[] };
+export type LoopClaim = { subjectId: string | null; facts: Record<string, LoopFact>; derived: LoopDerived[];
+  /** Agent G: the calculations worked out for this claim (by calc id), with the facts and evidence each rests on, so a
+   * correction or a deleted source withdraws exactly the ones that depended on it -- in the loop and on the claim
+   * record (lib/rag2/calc/claim-record.ts syncLoopClaimState). */
+  calcs?: Record<string, LoopCalcRef>;
+  /** Agent G: facts that were only supported by a document that has since been deleted or superseded. */
+  invalidated?: { key: string; value: string | number | boolean; words: string; reason: string; turn: number }[] };
 /** A statement derived from claim facts in an earlier answer (an indicative estimate), kept so a correction can
  * withdraw it. */
-export type LoopDerived = { sentence: string; factKeys: string[]; turn: number };
+export type LoopDerived = { sentence: string; factKeys: string[]; turn: number;
+  /** Agent G: the evidence the statement cites (a deleted source withdraws it unless another live source prints the same). */
+  evidenceIds?: string[] };
+/** Agent G: one calculation of a claim and what it rests on. */
+export type LoopCalcRef = { calcId: string; kind: string; policyId: string; benefit: string; factKeys: string[]; evidenceIds: string[]; turn: number;
+  withdrawn?: { cause: "person" | "fact" | "source"; reason: string; key?: string | null; turn: number } | null };
 export type LoopPending =
   | { kind: "person"; question: string; mention: string | null; options: { id: string; label: string }[]; turn: number;
       /** "speaker": who is typing (a shared household login); "subject": who the question is about (default). */
@@ -83,6 +94,10 @@ export type RagLoopState = {
   /** Agent F (D6): product names of the documents evidence was read from, remembered while they were readable (so a
    * later turn can say which document is no longer available without reading a deleted record). */
   docNames?: Record<string, string>;
+  /** Agent G: who the claim was moved from when the household corrected the person (newest last). */
+  claimMoves?: { from: string; to: string; turn: number }[];
+  /** Agent G: the claim record (claim_sessions) this conversation's claim is written to, once one exists. */
+  claimRecord?: { id: string; memberId: string } | null;
   history: { user: string; assistant: string }[];
   turns: TraceTurn[];
 };

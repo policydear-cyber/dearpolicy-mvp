@@ -32,7 +32,7 @@ export const DOCS: GDoc[] = [
   { key: "HARBOUR", id: did(1), account: ACCOUNT_L, owner: M.daniel.id, insurer: "Harbour Assurance", product: "Harbour Family PA", policyNumber: "HB-1001", type: "personal_accident", hash: "h-harbour-1",
     members: [M.grace.id, M.ivy.id, M.marcus.id, M.wei.id],
     pages: { 1: ["Harbour Assurance", "Harbour Family PA - Policy Schedule", "Insured persons: Daniel Lim Wen Jie; Grace Tan Hui Ling; Ivy Lim Xin Yi; Marcus Ong Jia Hao; Lim Wei Ming", "",
-      pad(["Benefit", "Adult", "Child"], W3), pad(["Accidental medical expenses (per accident)", "S$2,000", "S$1,000"], W3), pad(["Daily hospital income", "S$100", "S$50"], W3)].join("\n") } },
+      pad(["Benefit", "Adult", "Child"], W3), pad(["Accidental medical expenses (per accident)", "S$2,000", "S$1,000"], W3), pad(["Daily hospital income", "S$100", "S$50"], W3), "", "Daily hospital income is paid for each night spent in hospital."].join("\n") } },
   // "Life Assured" / "Juvenile" headers.
   { key: "GUARD", id: did(2), account: ACCOUNT_L, owner: M.daniel.id, insurer: "Harbour Assurance", product: "Harbour Guardian Plan", policyNumber: "HB-2002", type: "personal_accident", hash: "h-guard-1",
     members: [M.grace.id, M.ivy.id],
@@ -53,7 +53,7 @@ export const DOCS: GDoc[] = [
   { key: "MERIDIAN_HOSP", id: did(12), account: ACCOUNT_R, owner: M.faridah.id, insurer: "Meridian General", product: "Meridian Family Hospital", policyNumber: "MG-12", type: "hospital_cash", hash: "h-mhosp-1",
     members: [M.imran.id, M.zara.id, M.adam.id],
     pages: { 1: ["Meridian Family Hospital - Schedule", "", pad(["Benefit", "Adult", "Child"], W3), pad(["Daily ward allowance", "S$150", "S$90"], W3)].join("\n"),
-      2: ["Glossary", "Child includes a step-child or adopted child of the Insured, aged up to 18 years.", ""].join("\n") } },
+      2: ["Glossary", "Child includes a step-child or adopted child of the Insured, aged up to 18 years.", "The daily ward allowance is payable for each night spent in hospital."].join("\n") } },
   // Rahman: two documents printing the same row (an enrolment copy) -- one is deleted in the source tests.
   { key: "MERIDIAN_COPY", id: did(13), account: ACCOUNT_R, owner: M.faridah.id, insurer: "Meridian General", product: "Meridian Family Hospital (enrolment copy)", policyNumber: "MG-12", type: "hospital_cash", hash: "h-mcopy-1",
     members: [M.imran.id, M.zara.id, M.adam.id],

@@ -1,4 +1,4 @@
-import { EMPTY_CLAIM_FACTS,type ClaimAssessmentItem,type ClaimDecisionPacket,type ClaimFacts,type ClaimQuestion } from "./types";
+import { EMPTY_CLAIM_FACTS,type ClaimAssessmentItem,type ClaimDecisionPacket,type ClaimFacts,type ClaimQuestion,type ReportedClaimAmount } from "./types";
 import { createClaimSession,getClaimSession,saveClaimSession } from "./session";
 import { documentsToAttach } from "./claim-pack";
 import { looksLikeInterviewReply } from "./event-name";
@@ -99,8 +99,11 @@ export async function recordClaimProgress(args:{accountId:string;familyMemberId:
  * conversation already recorded is updated rather than a new one created. */
 export async function recordClaim(args:{accountId:string;familyMemberId:string;existingId?:string|null;
   facts:SubjectFacts;eventSummary:string;items:ClaimItem[];citations:ChatCitation[];knownFacts:string[];missingFacts:string[];
-  complete:boolean;nextSteps:string[];conversationId?:string|null;claimCategory?:string|null}){
+  complete:boolean;nextSteps:string[];conversationId?:string|null;claimCategory?:string|null;
+  /** Agent G: the amount the household says it is claiming (their figure, with provenance); kept apart from the bill. */
+  claimedAmount?:ReportedClaimAmount|null}){
   const facts=claimFactsFromSubject(args.facts);
+  if(args.claimedAmount!==undefined)facts.claimedAmount=args.claimedAmount;
   await ensureClaimRecordSchema();
   const session=await findClaimFor(args)??await createClaimSession(args.accountId,args.familyMemberId);
   const eventSummary=eventNameToStore(args.eventSummary,session.event_summary);

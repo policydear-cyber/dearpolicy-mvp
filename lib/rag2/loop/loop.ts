@@ -16,14 +16,15 @@ import { loadDocs, loadPages } from "../store";
 import { calcOutcomes } from "../calc/tool";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
-import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, factConcept, householdOperandProblem, knownFactFor, MECHANISM, normalizeKey, quotedFrom } from "./facts";
+import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
+import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, relevantEvidence } from "./questions";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
 import { composeFinal, evidenceIdOf, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
-import type { LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
+import type { EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
 
 export type LoopPerson = { id: string; name: string; relationship: string };
 export type LoopInput = { accountId: string; message: string; state: RagLoopState; people: LoopPerson[];
@@ -44,7 +45,11 @@ export type LoopReply =
 export type LoopCorrection = { key: string; from: unknown; to: unknown; withdrawn: string[];
   /** Agent F: the facts the withdrawn estimates were worked out from (said back without their figures). */
   about?: string[] };
-export type LoopOutput = { state: RagLoopState; reply: LoopReply; trace: TraceTurn; tools: ToolContext; corrections: LoopCorrection[]; reasked: LoopPending | null };
+/** Agent G: what a deleted / superseded source took with it (only what it alone supported). */
+export type SourceInvalidation = { kind: "fact" | "estimate" | "calculation"; subjectId: string | null; key?: string; sentence?: string; calcId?: string; reason: string };
+export type LoopOutput = { state: RagLoopState; reply: LoopReply; trace: TraceTurn; tools: ToolContext; corrections: LoopCorrection[]; reasked: LoopPending | null;
+  /** Agent G: conclusions withdrawn this turn because the only source supporting them was deleted or superseded. */
+  invalidated?: SourceInvalidation[] };
 
 /** Agent F (D23): the turn used every lookup step it is allowed: said as what happened (a limit), not "ask again". */
 export const FALLBACK_TEXT = "I couldn’t finish: looking this up needed more steps than the limit set for a single question, so I stopped before answering. Asking about one policy or one person at a time usually stays within it.";
@@ -161,6 +166,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     state.history = state.history.map((h) => ({ ...h, assistant: swap(h.assistant) }));
     for (const m of messages) if ((m.role === "assistant" || m.role === "system") && typeof m.content === "string") m.content = swap(m.content);
   };
+  // Agent G (deleted / superseded sources): only what such a source ALONE supported is withdrawn -- a fact or a
+  // conclusion also printed by another live document stays (re-pointed to it); the household's own facts never depend
+  // on a document and always stay.
+  const invalidated = invalidateStaleSupport(state, stale);
+  {
+    const gone = invalidated.filter((x) => x.kind === "estimate" && x.sentence).map((x) => x.sentence!);
+    if (gone.length) scrubWithdrawn(gone);
+  }
   /** Agent F (D9 / S6a): the household corrected WHO the claim is about ("it was Chloe, not Ethan"): estimates worked
    * out for the first person are withdrawn, and the reply says which one and why. */
   const personCorrection = (to: string) => {
@@ -169,9 +182,25 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const withdrawn = from.derived.map((d) => d.sentence);
     const about = [...new Set(from.derived.flatMap((d) => d.factKeys))];
     from.derived = [];
+    // Agent G: every calculation worked out for the person first named is withdrawn, and the claim (and its record)
+    // moves to the corrected person.
+    for (const r of Object.values(from.calcs ?? {})) if (!r.withdrawn) r.withdrawn = { cause: "person", reason: `the claim is about ${nameOf(to)}, not ${nameOf(from.subjectId)}`, turn: state.turn };
+    if (!(state.claimMoves ?? []).some((m) => m.from === from.subjectId && m.to === to && m.turn === state.turn)) (state.claimMoves ??= []).push({ from: from.subjectId, to, turn: state.turn });
     if (corrections.some((c) => c.key === "person" && c.to === nameOf(to))) return;
     corrections.push({ key: "person", from: nameOf(from.subjectId), to: nameOf(to), withdrawn, about });
     if (withdrawn.length) scrubWithdrawn(withdrawn);
+  };
+  /** Agent G: the household corrected who the claim is about: the corrected person's claim becomes the active one and
+   * takes the event as the household described it (their own reported facts; nothing a document or a calculation
+   * produced for the person first named). The first person's claim is kept aside, its calculations withdrawn. */
+  const moveClaimTo = (to: string) => {
+    const from = state.claim;
+    if (!from?.subjectId || from.subjectId === to) return;
+    (state.otherClaims ??= {})[from.subjectId] = from;
+    const next: LoopClaim = state.otherClaims[to] ?? { subjectId: to, facts: {}, derived: [] };
+    delete state.otherClaims[to];
+    for (const [k, f] of Object.entries(from.facts)) if ((f.source ?? "user_reported") === "user_reported" && !next.facts[k]) next.facts[k] = structuredClone(f);
+    state.claim = next;
   };
   /** The claim kept for `subject` (created if new). The active claim moves to it unless a question about another
    * member's claim is pending -- a side remark about someone else never displaces that claim. */
@@ -193,7 +222,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const setSubject = (id: string, viaSelf: boolean) => {
     const otherClaimOpen = (state.claim?.subjectId && state.claim.subjectId !== id) || (state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== id);
     if (viaSelf && otherClaimOpen) return;
-    if (state.claim?.subjectId && state.claim.subjectId !== id) personCorrection(id);
+    if (state.claim?.subjectId && state.claim.subjectId !== id) { personCorrection(id); if (PERSON_CORRECTION.test(input.message)) moveClaimTo(id); }
     state.subjectId = id;
     state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5);
   };
@@ -267,10 +296,17 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const value = f.currency ? `${String(f.value)} ${f.currency.toUpperCase()}` : String(f.value);
         const words = docText != null ? (f.words?.trim() || state.evidence[docIds[0]].passage.text.slice(0, 160)) : String(f.words);
         const entry = { value, words, turn: state.turn, source: chk.source, basis: chk.basis, ...(docIds.length ? { evidenceIds: docIds } : {}) };
-        const old = claim.facts[key];
+        // Agent G: the same fact recorded earlier under another key (admission_date / admitted_at, bill / bill_amount,
+        // claim_amount / amount_claimed) with another value is a correction of it, not a second fact.
+        const oldKey = claim.facts[key] ? key : sameFactKey(claim, key, value);
+        const old = oldKey ? claim.facts[oldKey] : undefined;
         if (old && String(old.value) !== value) {
-          const withdrawn = claim.derived.filter((d) => d.factKeys.includes(key)).map((d) => d.sentence);
-          claim.derived = claim.derived.filter((d) => !d.factKeys.includes(key));
+          const hit = (ks: string[]) => ks.includes(key) || (!!oldKey && ks.includes(oldKey));
+          const withdrawn = claim.derived.filter((d) => hit(d.factKeys)).map((d) => d.sentence);
+          claim.derived = claim.derived.filter((d) => !hit(d.factKeys));
+          // Every calculation worked out from the old value is withdrawn (and marked so on the claim record).
+          for (const r of Object.values(claim.calcs ?? {})) if (!r.withdrawn && hit(r.factKeys)) r.withdrawn = { cause: "fact", key, reason: `${key.replace(/_/g, " ")} was corrected (from ${String(old.value)} to ${value})`, turn: state.turn };
+          if (oldKey && oldKey !== key) delete claim.facts[oldKey];
           claim.facts[key] = { ...entry, previous: [...(old.previous ?? []), { value: old.value, words: old.words, turn: old.turn, source: old.source, basis: old.basis }] };
           corrected.push({ key, from: old.value, to: value, withdrawn });
           if (withdrawn.length) scrubWithdrawn(withdrawn);
@@ -332,7 +368,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const estimates = ((a.sentences as Record<string, unknown>[]) ?? []).some((x) => typeof x.result_id === "string" && (ctx.results.get(x.result_id)?.kind === "indicative_estimate" || calcOutcomes(ctx).get(x.result_id)?.kind === "indicative_estimate"));
     const cause = estimates ? causeOpen(answerSubject) : null;
     if (cause) return { result: { ok: false, error: `an estimate for this event depends on how it happened (the documents distinguish accidents), which is not known: ask how it happened first (fact_key how_it_happened, citing ${cause.slice(0, 3).join(", ")})` } };
-    const composed = composeFinal({ sentences: a.sentences as Record<string, unknown>[], nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, { state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+    // Agent G: a sentence citing a deleted / superseded passage AND (or only) a live document printing the same passage
+    // rests on the live one; a sentence with no live equivalent is left to the composer, which refuses it.
+    const sentencesIn = ((a.sentences as Record<string, unknown>[]) ?? []).map((x) => {
+      const ids = Array.isArray(x?.evidence_ids) ? (x.evidence_ids as string[]) : null;
+      if (!ids || !ids.some((id) => stale.has(id))) return x;
+      const mapped = ids.map((id) => (stale.has(id) ? liveEquivalent(state, stale, id) ?? id : id));
+      return { ...x, evidence_ids: [...new Set(mapped)] };
+    });
+    const composed = composeFinal({ sentences: sentencesIn, nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, { state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
     if (!composed.sentences.length && !composed.dropped.length) return { result: { ok: false, error: "final_answer needs at least one sentence" } };
     return { result: { ok: true }, terminal: { kind: "final", composed } };
   };
@@ -433,7 +477,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
     if (c.subjectId) setSubject(c.subjectId, c.subjectId === state.speakerId);
     // Derived statements are remembered with the facts they used, so a correction can withdraw them.
-    if (state.claim) for (const s of c.sentences) if (s.estimate && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn });
+    if (state.claim) for (const s of c.sentences) if (s.estimate && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn, evidenceIds: s.evidenceIds });
+    // Agent G: each calculation of the claim, with the facts and evidence it rests on (what a correction or a deleted
+    // source withdraws, here and on the claim record).
+    if (state.claim?.subjectId) for (const k of c.calcs) if (k.subjectId === state.claim.subjectId) (state.claim.calcs ??= {})[k.calcId] = calcRef(k, state.claim, (k.evidence ?? []).map((e) => evidenceIdOf(state, e, "calculate")), state.turn);
     // An interruption: the claim question still open is put back to the household after the side answer.
     if (state.pending?.kind === "person") state.pending = null;
     if (!state.pending && state.parkedPending) { state.pending = state.parkedPending; state.parkedPending = null; }
@@ -448,7 +495,90 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
   // Agent F (D6): remember the names of the documents this turn's evidence came from (readable now).
   for (const e of Object.values(state.evidence)) { const n = policyNames.get(e.policyId); if (n) (state.docNames ??= {})[e.policyId] = n; }
-  return { state, reply: final, trace, tools: ctx, corrections, reasked };
+  // Agent G: a correction or a withdrawn source reaches the PERSISTED claim too (only a record this conversation already
+  // has; never creates one).
+  if (state.claimRecord && (corrections.length || invalidated.length)) await syncLoopClaimState({ accountId: input.accountId, state }).catch(() => null);
+  return { state, reply: final, trace, tools: ctx, corrections, reasked, invalidated };
+}
+
+const squashText = (t: string) => t.toLowerCase().normalize("NFKC").replace(/\s+/g, " ").trim();
+/** Agent G: a live evidence entry printing the same passage (same row and column for a table) for the same person as
+ * the stale entry `id` -- e.g. an enrolment copy of a deleted schedule. Null when none. */
+export function liveEquivalent(state: RagLoopState, stale: Map<string, string>, id: string): string | null {
+  const e = state.evidence[id];
+  if (!e) return null;
+  const text = (x: EvidenceEntry) => squashText(x.support?.text ?? x.passage.text);
+  const want = text(e);
+  if (want.length < 8) return null;
+  for (const x of Object.values(state.evidence)) {
+    if (x.id === id || stale.has(x.id) || x.policyId === e.policyId) continue;
+    if ((x.subjectId ?? null) !== (e.subjectId ?? null) && x.subjectId && e.subjectId) continue;
+    if (e.table && (!x.table || squashText(x.table.rowLabel) !== squashText(e.table.rowLabel) || squashText(x.table.columnHeader) !== squashText(e.table.columnHeader) || squashText(x.table.cell?.text ?? "") !== squashText(e.table.cell?.text ?? ""))) continue;
+    if (text(x) === want || squashText(x.passage.text).includes(want)) return x.id;
+  }
+  return null;
+}
+/** Agent G: withdraws what deleted / superseded evidence alone supported, across the active and parked claims: a
+ * document-sourced fact (re-pointed to a live equivalent, else removed and listed as invalidated), an earlier estimate
+ * and a calculation citing it. Facts the household reported are never touched. */
+export function invalidateStaleSupport(state: RagLoopState, stale: Map<string, string>): SourceInvalidation[] {
+  const out: SourceInvalidation[] = [];
+  if (!stale.size) return out;
+  const keep = (ids: string[]) => { const mapped = ids.map((id) => (stale.has(id) ? liveEquivalent(state, stale, id) : id)); return mapped.every((x) => !!x) ? [...new Set(mapped as string[])] : null; };
+  for (const claim of [state.claim, ...Object.values(state.otherClaims ?? {})]) {
+    if (!claim) continue;
+    const gone: string[] = [];
+    for (const [key, f] of Object.entries(claim.facts)) {
+      const ids = f.evidenceIds ?? [];
+      if (!ids.length || !ids.some((id) => stale.has(id))) continue;
+      const live = ids.filter((id) => !stale.has(id));
+      const moved = ids.filter((id) => stale.has(id)).map((id) => liveEquivalent(state, stale, id)).filter((x): x is string => !!x);
+      const now = [...new Set([...live, ...moved])];
+      if (now.length) { f.evidenceIds = now; continue; }
+      const reason = stale.get(ids.find((id) => stale.has(id))!)!;
+      delete claim.facts[key];
+      (claim.invalidated ??= []).push({ key, value: f.value, words: f.words, reason, turn: state.turn });
+      out.push({ kind: "fact", subjectId: claim.subjectId, key, reason });
+      gone.push(key);
+    }
+    claim.derived = claim.derived.filter((d) => {
+      const ids = d.evidenceIds ?? [];
+      const byFact = d.factKeys.some((k) => gone.includes(k));
+      const kept = ids.some((id) => stale.has(id)) ? keep(ids) : ids;
+      if (!byFact && kept) { d.evidenceIds = kept; return true; }
+      out.push({ kind: "estimate", subjectId: claim.subjectId, sentence: d.sentence, reason: byFact ? "it was worked out from a fact only a deleted or replaced document supported" : stale.get(ids.find((id) => stale.has(id))!)! });
+      return false;
+    });
+    for (const r of Object.values(claim.calcs ?? {})) {
+      if (r.withdrawn) continue;
+      const byFact = r.factKeys.some((k) => gone.includes(k));
+      const kept = r.evidenceIds.some((id) => stale.has(id)) ? keep(r.evidenceIds) : r.evidenceIds;
+      if (!byFact && kept) { r.evidenceIds = kept; continue; }
+      const reason = byFact ? "it was worked out from a fact only a deleted or replaced document supported" : stale.get(r.evidenceIds.find((id) => stale.has(id))!)!;
+      r.withdrawn = { cause: "source", reason, turn: state.turn };
+      out.push({ kind: "calculation", subjectId: claim.subjectId, calcId: r.calcId, reason });
+    }
+  }
+  return out;
+}
+
+/** Agent G: the key an earlier value of the same fact is recorded under (another key for the same admission / discharge
+ * date-time, bill, or claimed amount) when the new value differs from it; null otherwise. */
+function sameFactKey(claim: LoopClaim, key: string, value: string): string | null {
+  const c = factConcept(key).concept;
+  const claimed = CLAIMED_AMOUNT_KEY.test(key);
+  for (const [k, f] of Object.entries(claim.facts)) {
+    if (k === key) continue;
+    if (c === "admission" || c === "discharge") {
+      if (factConcept(k).concept !== c) continue;
+      const a = isoParts(String(f.value)), b = isoParts(value);
+      if (a && b && (a.hh == null) === (b.hh == null) && String(f.value) !== value) return k;
+    } else if ((c === "bill" && factConcept(k).concept === "bill" && !CLAIMED_AMOUNT_KEY.test(k)) || (claimed && CLAIMED_AMOUNT_KEY.test(k))) {
+      const a = numbersIn(String(f.value)), b = numbersIn(value);
+      if (a.length && b.length && a[0] !== b[0]) return k;
+    }
+  }
+  return null;
 }
 
 /** Agent F: the names a sentence may use for a member ("Ethan Tan Jun Kai (Ethan)" -> full name, "Ethan"). */
