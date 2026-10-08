@@ -32,7 +32,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
-import type { BoundFigure, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
+import type { BoundFigure, CalculationRecord, CalcOperand, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
+import { recomputeCalculation } from "@/lib/claims/calc-record";
+import { dayRuleFromWording } from "@/lib/claims/day-count";
 import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
@@ -320,13 +322,14 @@ export function periodFactor(from: FigurePeriod, to: FigurePeriod): number | nul
 
 type Doc = { id: string; owner: string; members: Set<string>; fileHash: string | null; superseded: boolean; usable: boolean; pages: Map<number, string> };
 type Person = { id: string; names: string[]; relationship: string };
-type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[] };
+type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[] };
 
 function bindingsOf(answer: ChatAnswer): FigureBinding[] {
   const out: FigureBinding[] = [...(answer.figureBindings ?? [])];
   for (const l of answer.policyStatedLimits ?? []) if (l?.binding) out.push(l.binding);
   const walk = (r: ComputationRecord | undefined, depth: number) => { if (!r || depth > 3) return; for (const o of r.operands ?? []) { if (o?.binding) out.push(o.binding); if (o?.computation) walk(o.computation, depth + 1); } };
   for (const c of answer.computations ?? []) walk(c, 0);
+  for (const k of answer.calculations ?? []) for (const o of k?.operands ?? []) if (o?.source === "document" && o.binding) out.push(o.binding);
   return out;
 }
 
@@ -350,12 +353,19 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
   }
   const people = (await query<{ id: string; display_name: string | null; preferred_name: string | null; relationship: string | null }>(`SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship FROM family_members f WHERE f.account_id=$1 AND ${activePredicate("f")}`, [accountId]).catch(() => ({ rows: [] }))).rows
     .map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => n.trim()), relationship: p.relationship ?? "" }));
-  return { docs, people, userFigures: moneyFiguresIn(userText), userNumbers: (userText.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number) };
+  // The household's own messages in this conversation (only read when the answer carries a benefit calculation whose
+  // household inputs must be quoted from them).
+  const householdTexts = [userText];
+  if (answer.calculations?.length && answer.conversationId) {
+    const rows = (await query<{ content: string }>(`SELECT content FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role='user' ORDER BY created_at`, [accountId, answer.conversationId]).catch(() => ({ rows: [] as { content: string }[] }))).rows;
+    householdTexts.push(...rows.map((r) => r.content ?? ""));
+  }
+  return { docs, people, userFigures: moneyFiguresIn(userText), userNumbers: (userText.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number), userText, householdTexts };
 }
 
 /** The column check: where the row that prints the amount has one value cell per person or tier, the amount must be in
  * the binding's column, and that column must be the person's class (an employee is not the spouse column). */
-function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined): string | null {
+function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean } = {}): string | null {
   const rows = passageRows(b.passage).filter((r) => amountAppears(value, r));
   if (!rows.length) return "the amount is not printed in the cited passage";
   if (rows.some((r) => rowCells(r).length < 3)) return null; // a row with one value prints one figure for everyone it covers
@@ -374,7 +384,7 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
     if (j < 0 || k <= 0) continue;
     const cell = cells[k] ?? "";
     if (!amountAppears(value, cell)) return "the figure is printed in another person’s or tier’s column, not the one it is stated for";
-    const how = amountPrintedWith(value, currency, cell);
+    const how = opts.count ? "match" : amountPrintedWith(value, currency, cell);
     if (how === "other" || (how === "bare" && !currenciesStatedIn(head[j] + " " + b.passage).includes(currency))) return "the currency printed in the column is not the figure’s";
     const want = classOf(head[j]), is = subject ? classOf(subject.relationship) ?? (/^self$/i.test(subject.relationship) ? "self" : null) : null;
     if (want && is && want !== is) return "the figure is printed in the " + want + " column, not the column for the person it is stated for";
@@ -550,6 +560,138 @@ function computationProblem(r: ComputationRecord, f: StatedFigure, sentence: str
   return "error" in c ? c.error : null;
 }
 
+// ---- rule 4: benefit calculations (CalculationRecord, types/index.ts) -------------------------------------------
+// An illustration or indicative estimate of a benefit stands only with a record the gate re-runs here: every step
+// recomputed with the claim calculators' own arithmetic (lib/claims/calc-record.ts); every document operand grounded
+// under rule 1 AND bound to the record's person, policy and version, on its row and in its column; every household
+// input quoted verbatim from the household's own messages; every condition's status checked (an estimate needs every
+// condition established or not applicable; a day-count step must use the rule the cited wording states); and the
+// sentence worded as what it is (an estimate says so and is never a payout or a total; an illustration says "if" and
+// answers a what-if the household asked). A number merely printed on the cited page never validates a calculation.
+const CALC_PAYOUT = /\bpay-?outs?\b|\bwill (?:be )?pa(?:y|id)\b|\byou(?:’|')?ll (?:get|receive)\b|\byou will (?:get|receive)\b|\bguarantee\w*\b/i;
+const CALC_TOTAL = /\b(?:totals?|totall?ing|altogether|combined|in all|add(?:s|ed)? up)\b/i;
+const CALC_ATTRIBUTED = /\byour (?:own )?(?:figures?|bill|amount|dates?|times?|words)\b|\b(?:as )?you (?:gave|told|said|mentioned|quoted|wrote)\b|\bthe (?:bill|amount|dates?|times?) you\b/i;
+const WHAT_IF = /\bwhat if\b|\bif\b|\bsuppose\b|\bsupposing\b|\bhypothetical\w*\b|\bwere to\b|\bsay (?:he|she|they|i|we)\b/i;
+const squash = (t: string) => normalPassage(t ?? "").replace(/\s+/g, " ").trim();
+const numsOf = (t: string) => (t.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+function quotedBy(words: string, texts: string[]): boolean {
+  const w = squash(words);
+  return w.length >= 2 && texts.some((t) => squash(t).includes(w));
+}
+function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: CalculationRecord, ctx: Ctx): string | null {
+  const b = o.binding;
+  if (!b) return `${o.label}: a document figure without its own binding`;
+  if (b.policyId !== r.policyId) return `${o.label}: bound to another document than the calculation’s`;
+  if (b.subjectId !== r.subjectId) return `${o.label}: bound to another person than the calculation’s`;
+  if ((b.documentHash ?? null) !== (r.documentHash ?? null)) return `${o.label}: bound to another version than the calculation’s`;
+  if ((o.column ?? null) !== (b.column ?? null)) return `${o.label}: the stated column is not the binding’s`;
+  if (o.row && !squash(b.passage).includes(squash(o.row).slice(0, 40))) return `${o.label}: the stated row is not the bound passage`;
+  // A column printed for a class of person (Adult / Child) must be the person's own class.
+  const colClass = /\b(?:child(?:ren)?|kids?|juvenile)\b/i.test(b.column ?? "") ? "child" : /\badults?\b/i.test(b.column ?? "") ? "adult" : null;
+  const who = ctx.people.find((p) => p.id === b.subjectId);
+  const personClass = who ? (/\b(?:child|son|daughter|kid)\b/i.test(who.relationship) ? "child" : "adult") : null;
+  if (colClass && personClass && colClass !== personClass) return `${o.label}: the figure is printed in the ${colClass} column, not the column for the person it is used for`;
+  if (o.unit === "money") {
+    if (o.currency !== r.currency) return `${o.label}: in another currency than the calculation`;
+    const g = groundProblem(b, o.value, o.currency ?? "", ctx, null, { benefit: b.benefit });
+    return g ? `${o.label}: ${g}` : null;
+  }
+  // A printed count (days) or percentage: the same document checks, the number printed in the passage, in the column.
+  const doc = ctx.docs.get(b.policyId);
+  if (!doc || !doc.usable) return `${o.label}: the cited document is not one of this household’s released documents`;
+  if (!b.documentHash || b.documentHash !== doc.fileHash) return `${o.label}: the cited version of the document is not the one on file`;
+  if (doc.superseded) return `${o.label}: the cited document has been superseded`;
+  if (!doc.members.has(b.subjectId)) return `${o.label}: the cited document does not speak for the person`;
+  const range: string[] = [];
+  for (let p = b.pageStart; p <= b.pageEnd; p++) { const t = doc.pages.get(p); if (t == null) return `${o.label}: a cited page’s text is not stored`; range.push(t); }
+  if (!norm(range.join("\n")).includes(norm(b.passage))) return `${o.label}: the cited passage is not on the cited pages`;
+  if (!numsOf(b.passage).some((n) => same(n, o.value as number))) return `${o.label}: the number is not printed in the cited passage`;
+  if (o.unit === "percent" && !new RegExp("(?<![\\d.])" + String(o.value).replace(".", "\\.") + "\\s?%").test(b.passage)) return `${o.label}: the percentage is not printed as a percentage`;
+  const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true });
+  return col ? `${o.label}: ${col}` : null;
+}
+/** Re-runs one benefit calculation for one sentence; null when it stands. */
+export function calculationProblem(r: CalculationRecord, sentence: string, ctx: Ctx): string | null {
+  if (!r || typeof r !== "object" || !Array.isArray(r.operands) || !Array.isArray(r.conditions)) return "the calculation record is malformed";
+  if (r.kind !== "indicative_estimate" && r.kind !== "conditional_illustration") return "the calculation’s kind is not an illustration or an indicative estimate";
+  if (!r.subjectId || !r.policyId || !r.benefit) return "the calculation does not name its person, policy and benefit";
+  // Wording.
+  if (CALC_PAYOUT.test(sentence)) return "a calculated benefit is stated as a payout";
+  if (r.kind === "indicative_estimate") {
+    if (!/\bindicative estimate\b/i.test(sentence)) return "an indicative estimate is not labelled as one";
+    if (CALC_TOTAL.test(sentence)) return "an indicative estimate is stated as (part of) a total";
+  } else {
+    if (!/\bif\b/i.test(sentence)) return "an illustration does not state its what-if";
+    if (!WHAT_IF.test(ctx.userText)) return "an illustration is given though the household did not ask a what-if";
+  }
+  // Operands.
+  for (const o of r.operands) {
+    if (!o || typeof o !== "object") return "an operand is malformed";
+    if (o.source === "document") { const p = docOperandProblem(o, r, ctx); if (p) return p; continue; }
+    if (o.source !== "household" && o.source !== "assumption") return "an operand is neither a document figure nor the household’s own";
+    if (!o.attribution?.trim()) return `${o.label}: the household’s words are not recorded`;
+    if (o.source === "assumption") {
+      if (r.kind !== "conditional_illustration") return `${o.label}: an assumed figure in an estimate`;
+      if (!quotedBy(o.attribution, [ctx.userText])) return `${o.label}: the what-if is not in the household’s message`;
+    } else if (!quotedBy(o.attribution, ctx.householdTexts)) return `${o.label}: the household’s words are not in their messages`;
+    if (o.unit === "money" || o.unit === "count") {
+      if (!numsOf(o.attribution).some((n) => same(n, o.value as number))) return `${o.label}: the figure is not the one in the household’s words`;
+      if (o.unit === "money" && moneyFiguresIn(sentence).some((f) => same(f.value, o.value as number)) && !CALC_ATTRIBUTED.test(sentence) && !ATTRIBUTION.test(sentence) && o.source === "household") return `${o.label}: the household’s figure is stated without saying it is theirs`;
+    } else {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.value));
+      if (!m || !numsOf(o.attribution).some((n) => n === Number(m[3]))) return `${o.label}: the date is not the one in the household’s words`;
+    }
+  }
+  // Steps.
+  const re = recomputeCalculation(r);
+  if (!re.ok) return re.error;
+  // Conditions.
+  const ruleCond = r.conditions.find((c) => c.kind === "day_count_rule");
+  for (const c of r.conditions) {
+    if (!c || !["established", "unresolved", "not_applicable"].includes(c.status)) return "a condition has no status";
+    if (c.status === "unresolved") { if (r.kind === "indicative_estimate") return `a condition is unresolved: ${c.text}`; continue; }
+    if (c.basis === "document") {
+      const doc = ctx.docs.get(r.policyId);
+      if (!c.passage || c.passage.policyId !== r.policyId || !doc) return `a condition’s passage is not from the calculation’s document: ${c.text}`;
+      const pages: string[] = []; for (let p = c.passage.pageStart; p <= c.passage.pageEnd; p++) pages.push(doc.pages.get(p) ?? "");
+      if (!norm(pages.join("\n")).includes(norm(c.passage.text))) return `a condition’s passage is not on its page: ${c.text}`;
+    } else if (c.basis === "household") {
+      if (!c.householdWords || !quotedBy(c.householdWords, ctx.householdTexts)) return `a condition settled by the household is not in their messages: ${c.text}`;
+    } else if (c.basis === "derived") {
+      if (c.kind !== "minimum_stay" || !c.passage) return `a condition cannot be derived: ${c.text}`;
+      const hours = numsOf(c.passage.text)[0];
+      const adm = r.operands.find((o) => o.role === "admission"), dis = r.operands.find((o) => o.role === "discharge");
+      const span = adm && dis ? (Date.parse(String(dis.value)) - Date.parse(String(adm.value))) / 3_600_000 : NaN;
+      if (!(span >= hours)) return `the minimum stay is not met: ${c.text}`;
+    } else if (c.basis === "absent") {
+      if (c.status !== "not_applicable") return `a condition the document does not print is marked established: ${c.text}`;
+    } else return `a condition has no basis: ${c.text}`;
+  }
+  for (const st of r.steps) {
+    if (st.op === "day_count") {
+      if (!ruleCond || ruleCond.status !== "established" || ruleCond.basis !== "document" || !ruleCond.passage) return "the day count uses a rule the cited wording does not establish";
+      const said = dayRuleFromWording(ruleCond.passage.text);
+      if (!said || said.rule !== st.rule) return "the day count uses another rule than the cited wording states";
+    }
+    if (st.op === "days_after_waiting") {
+      const w = r.conditions.find((c) => c.kind === "waiting_period" && c.status === "established" && c.basis === "document");
+      if (!w?.passage || !numsOf(w.passage.text).some((n) => n === st.waitingDays || n === st.waitingDays + 1)) return "the waiting days are not the ones the cited wording prints";
+    }
+  }
+  // Any day count must come from dates (never a household number of nights).
+  if (r.calculator === "hospital_cash" && !r.steps.some((st) => st.op === "day_count")) return "hospital cash days are not counted from the admission and discharge under the policy’s rule";
+  return null;
+}
+/** Money figures a verified calculation states: its result, its document amounts, its steps' amounts, and the
+ * household's own amounts. */
+function calculationFigures(r: CalculationRecord): number[] {
+  const re = recomputeCalculation(r);
+  const out: number[] = [r.result.value];
+  for (const o of r.operands) if (o.unit === "money" && typeof o.value === "number") out.push(o.value);
+  if (re.ok) for (const [, v] of re.values) if (v.unit === "money") out.push(v.n / 100);
+  return out;
+}
+
 type Page = { policyId: string; page: number; text: string; current: boolean };
 export type FigureProblem = { where: string; figure: string; sentence: string; reason: string };
 
@@ -579,11 +721,19 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
     if (why && debug) process.stderr.write("[figure-gate-card] " + JSON.stringify([l.benefitTitle, l.ownerName, l.amount, l.citation?.pageStart, (l.quote ?? "").slice(0, 100), l.binding ? [l.binding.benefit, l.binding.passage.slice(0, 80)] : null]) + "\n");
     return !why || !!opts.report;
   });
-  const bindings = answer.figureBindings ?? [], computations = answer.computations ?? [];
+  const bindings = answer.figureBindings ?? [], computations = answer.computations ?? [], calculations = answer.calculations ?? [];
+  const verdicts = new Map<CalculationRecord, string | null>();
+  const calcVerdict = (k: CalculationRecord, sentence: string) => { if (!verdicts.has(k)) verdicts.set(k, calculationProblem(k, sentence, ctx)); return verdicts.get(k)!; };
+  // A sentence whose calculation fails is replaced by that calculation's specific unresolved requirement.
+  const requirements = new Map<string, string>();
+  const requirementFor = (x: { sentence: string }, k: CalculationRecord) => { const t = (k.unresolvedText ?? "").trim(); if (t && !moneyFiguresIn(t).length && !/\d{2,}/.test(t.replace(/\b(?:19|20)\d{2}\b/g, ""))) requirements.set(x.sentence, t); };
   const drop = new Map<typeof fields[number], Set<string>>();
   const bad = (x: typeof all[number], figure: string, reason: string) => { problems.push({ where: x.field.where, figure, sentence: x.sentence, reason }); (drop.get(x.field) ?? drop.set(x.field, new Set()).get(x.field)!).add(x.sentence); };
   for (const x of all) {
     const key = norm(x.sentence);
+    // A sentence labelled as an indicative estimate stands only with a calculation (or computation) record of its own:
+    // a number merely printed on a cited page never validates a calculation.
+    if (x.figures.length && /^\s*indicative estimate\b/i.test(x.sentence) && !calculations.some((k) => k && norm(k.sentence) === key) && !computations.some((c) => c && norm(c.sentence) === key)) { bad(x, x.figures[0].raw, "an indicative estimate is stated without a calculation record"); continue; }
     for (const f of x.figures) {
       const own = bindings.filter((b) => b && norm(b.sentence) === key && same(b.value, f.value) && b.currency === f.currency);
       const reasons: string[] = [];
@@ -592,6 +742,13 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
       if (ok) continue;
       for (const c of computations.filter((c) => c && norm(c.sentence) === key)) { const p = computationProblem(c, f, x.sentence, ctx); if (!p) { ok = true; break; } if (same(c.result?.value, f.value)) reasons.push(p); }
       if (ok) continue;
+      for (const k of calculations.filter((k) => k && norm(k.sentence) === key)) {
+        const p = calcVerdict(k, x.sentence);
+        if (!p && calculationFigures(k).some((v) => same(v, f.value)) && f.currency === k.currency) { ok = true; break; }
+        if (p) { reasons.push(p); requirementFor(x, k); } else if (same(k.result?.value, f.value)) reasons.push("the sentence’s figure is not the calculation’s");
+      }
+      if (ok) continue;
+      if (calculations.some((k) => k && norm(k.sentence) === key)) { bad(x, f.raw, reasons[0] ?? "the figure is not part of the calculation the sentence states"); break; }
       const u = userProblem(f, x.sentence, ctx);
       if (!u) continue;
       bad(x, f.raw, reasons[0] ?? u);
@@ -618,12 +775,12 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   if (debug && problems.length) process.stderr.write("[figure-gate-debug] " + JSON.stringify(problems.map((p) => [p.where, p.figure, p.reason, p.sentence.slice(0, 160)])) + "\n");
   if (opts.report || !problems.length) return problems;
   for (const [field, sentences] of drop) {
-    const kept = sentencesOf(field.get()).filter((s) => !sentences.has(s)).join(" ").trim();
+    const kept = sentencesOf(field.get()).map((s) => (sentences.has(s) ? requirements.get(s) ?? null : s)).filter((s): s is string => !!s).join(" ").trim();
     field.set(kept);
   }
   answer.details = (answer.details ?? []).filter((d) => d && d.trim());
   answer.nextSteps = (answer.nextSteps ?? []).filter((d) => d && d.trim());
-  const textProblems = problems.filter((p) => p.where !== "policyStatedLimits");
+  const textProblems = problems.filter((p) => p.where !== "policyStatedLimits" && !requirements.has(p.sentence));
   if (!textProblems.length) return problems;
   const note = textProblems.every((p) => p.reason === "the cited page says the opposite") ? CLAIM_LEFT_OUT_NOTE : FIGURE_LEFT_OUT_NOTE;
   if (!answer.summary.trim()) answer.summary = note;
