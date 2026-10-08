@@ -40,7 +40,7 @@ export function numbersIn(t: string): number[] {
 }
 const STOP = new Set("a an the and or of to in on at for with from by his her their its my our your he she they it was were is are be been has had have did do does not no yes this that these those as about after before during per".split(" "));
 const stem = (w: string) => w.replace(/'s$/, "").replace(/(?:ing|ed|es|s)$/, "");
-const contentWords = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !STOP.has(w)).map(stem);
+export const contentWords = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !STOP.has(w)).map(stem);
 
 /** Policy-defined classifications: recorded only when the household used the term itself. */
 const POLICY_TERM = /\b(?:accident(?:al|ally|s)?|illness(?:es)?|sickness|disease|critical illness|pre-?existing|permanent (?:total )?disab\w*|disablement|diagnos\w*)\b/i;

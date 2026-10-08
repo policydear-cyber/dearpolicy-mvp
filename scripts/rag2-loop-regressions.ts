@@ -307,6 +307,24 @@ async function main() {
     assert.ok(t.trace.dropped.some((d: any) => /not a fact the household has given/.test(d.reason)) && t.trace.dropped.some((d: any) => /payout/.test(d.reason)));
     assert.deepEqual(t.trace.gate, [], JSON.stringify(t.trace.gate));
   });
+  // Integration (agent C's request 2): a sentence that only says back what the household said needs no citation; one
+  // that adds a figure or a cover statement is still dropped.
+  const SB = await run([
+    { steps: [
+      () => [call("resolve_person", { mention: "Jun Hao" })],
+      () => [call("final_answer", { subject_id: M.junhao.id, sentences: [
+        { text: "You told me Jun Hao was warded for 2 nights after he fell." },
+        { text: "You told me Jun Hao was warded for 3 nights." },
+        { text: "You said Jun Hao is covered for this." },
+      ] })],
+    ] },
+  ], ["Jun Hao was warded for 2 nights after he fell at school."]);
+  await check("N3b a clearly attributed statement of what the household said is kept without a citation; an added figure or a cover statement is not", () => {
+    const t = SB.turns[0], v = visible(t.saved.answer);
+    assert.match(v, /You told me Jun Hao was warded for 2 nights after he fell\./);
+    assert.doesNotMatch(v, /3 nights|covered/);
+    assert.equal(t.trace.dropped.length, 2, JSON.stringify(t.trace.dropped));
+  });
   const P = await run([
     { steps: [() => [call("resolve_person", { mention: "my son" })], (v) => [call("ask_user", { kind: "person", question: pick(v, "resolve_person").question, options: pick(v, "resolve_person").options.map((o: any) => o.id) })]] },
     { steps: [() => [call("ask_user", { kind: "person", question: "Which son do you mean?", options: [M.junhao.id, M.junwei.id] })], () => [call("resolve_person", { mention: "the younger one" })], (v) => [call("final_answer", { sentences: [{ text: "Thanks, I'll look at the youngest." }] })]] },

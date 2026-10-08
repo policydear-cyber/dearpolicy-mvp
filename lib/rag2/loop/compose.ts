@@ -18,6 +18,7 @@ import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
+import { confirmed, contentWords, numbersIn } from "./facts";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
 export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement" };
@@ -57,7 +58,38 @@ function gateOperand(o: TableValueOperand, subjectId: string): ComputationOperan
   return { value, currency: o.currency, period: printed ? (FIG_PERIOD[printed] ?? (printed as FigurePeriod)) : (o.period ? FIG_PERIOD[o.period] ?? null : null), role: "benefit", binding };
 }
 
-type Ctx = { state: RagLoopState; tools: ToolContext; computeCalls: Map<string, ComputeCall>; householdIds: Set<string>; userText: string };
+type Ctx = {
+  state: RagLoopState; tools: ToolContext; computeCalls: Map<string, ComputeCall>; householdIds: Set<string>; userText: string;
+  /** Every household message of this conversation (earlier user turns + this one); defaults to [userText]. */
+  userTexts?: string[];
+  /** Household members' names (a sentence saying back what the household said may name the person). */
+  names?: string[];
+};
+
+const sq = (t: string) => t.toLowerCase().normalize("NFKC").replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().replace(/^["']+|["'.,!?;:]+$/g, "").trim();
+/** The household's words for a figure match a recorded fact's quoted words (one contains the other). */
+const wordsMatch = (attribution: string, factWords: string) => { const a = sq(attribution), w = sq(factWords); return a.length >= 2 && w.length >= 2 && (w.includes(a) || a.includes(w)); };
+
+/** Integration (agent C's request 2): a sentence that only says back what the household told us -- it begins with an
+ * attribution ("You said / told me / mentioned ..."), every number and content word in it comes from the household's
+ * own messages (names of household members and relation words aside), and it states no cover, benefit, limit, payment
+ * or approval. Such a sentence needs no document citation and is never a cover statement. */
+const ATTRIBUTED_START = /^(?:you(?:['’]ve| have)? (?:said|told (?:me|us)|mentioned|wrote|reported|let me know)|as you (?:said|mentioned|told me))\b[\s,:]*(?:that\s+)?/i;
+const NEVER_SAID_BACK = /\b(?:cover\w*|insur\w*|pays?|paid|payable|pay-?outs?|benefits?|limits?|capped|maximum|excluded|exclusions?|eligib\w*|claimable|entitle\w*|reimburs\w*|deductible|co-?insurance|sum assured|premiums?|approv\w*|confirm\w*|guarantee\w*|qualif\w*|accept\w*|will (?:get|receive))\b/i;
+const RELATION_WORDS = new Set(["son", "daughter", "child", "children", "kid", "wife", "husband", "spouse", "partner", "mother", "father", "mum", "mom", "dad", "stepson", "stepdaughter", "brother", "sister", "told", "said", "mentioned", "you", "your", "she", "her", "him", "his", "they", "them"].map((w) => w.replace(/(?:ing|ed|es|s)$/, "")));
+function saidBackOnly(text: string, ctx: Ctx): boolean {
+  const m = text.match(ATTRIBUTED_START); if (!m) return false;
+  if (sentencesOf(text).length !== 1) return false;
+  const rest = text.slice(m[0].length);
+  if (!rest.trim() || NEVER_SAID_BACK.test(rest) || PAYOUT.test(rest)) return false;
+  const said = (ctx.userTexts?.length ? ctx.userTexts : [ctx.userText]).join("\n");
+  const saidNums = new Set(numbersIn(said));
+  if (!numbersIn(rest).every((n) => saidNums.has(n))) return false;
+  if (moneyFiguresIn(rest).some((f) => !moneyFiguresIn(said).some((u) => same(u.value, f.value) && u.currency === f.currency))) return false;
+  const saidWords = new Set(contentWords(said));
+  const nameWords = new Set((ctx.names ?? []).flatMap((n) => contentWords(n)));
+  return contentWords(rest).every((w) => saidWords.has(w) || nameWords.has(w) || RELATION_WORDS.has(w));
+}
 
 /** A gate record for an indicative per-day / multiple estimate: a printed per-period amount times a whole count the
  * household gave (after any printed day cap). The gate recomputes it and checks the sentence states the count. */
@@ -81,14 +113,17 @@ function estimateRecord(result: ComputeOk, call: ComputeCall | undefined, ctx: C
   return { operand: op, record: { result: { value: result.amount, currency: result.currency }, operation: "product", operands: [op], factor: used, period: op.period, currency: result.currency, rounding: { mode: "half_up", precision: 2 }, scope: "person" } };
 }
 
-/** Which recorded claim facts a computation's household figures are, or why one is not (missing / since corrected). */
+/** Which recorded claim facts a computation's household figures are, or why one is not (missing / since corrected).
+ * Integration (agent C's request 1): only a confirmed fact (stated by the household, not a paraphrase) whose value is
+ * the figure AND whose quoted words the figure's attribution comes from -- never any fact that happens to share the
+ * number. (The loop already refuses such a compute call before it runs; this is defence in depth.) */
 function householdInputs(result: ComputeOk, ctx: Ctx): { keys: string[]; problem: string | null } {
   const facts = ctx.state.claim?.facts ?? {};
   const keys: string[] = [];
   for (const h of result.householdFigures) {
-    const want = h.count != null ? String(h.count) : h.cents != null ? String(h.cents / 100) : h.ppm != null ? String(h.ppm / 10000) : null;
-    const hit = Object.entries(facts).find(([, f]) => want != null && Number(String(f.value).replace(/[^\d.]/g, "")) === Number(want));
-    if (!hit) return { keys, problem: `the estimate uses ${h.label} = ${want}, which is not a fact the household has given (or it has since been corrected)` };
+    const want = h.count != null ? h.count : h.cents != null ? h.cents / 100 : h.ppm != null ? h.ppm / 10000 : null;
+    const hit = want == null ? undefined : Object.entries(facts).find(([, f]) => confirmed(f) && numbersIn(String(f.value)).some((n) => same(n, want)) && wordsMatch(h.attribution ?? "", f.words));
+    if (!hit) return { keys, problem: `the estimate uses ${h.label} = ${want}, which is not a fact the household has given (or it has since been corrected, or the words it is attributed to are not the ones recorded for it)` };
     keys.push(hit[0]);
   }
   return { keys, problem: null };
@@ -114,6 +149,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (resultId && !result) { drop(text, "cites a computation that was not made in this turn"); continue; }
     const figures = moneyFiguresIn(text);
     if (!evIds.length && !values.length && !result) {
+      if (saidBackOnly(text, ctx)) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
       if (figures.length || /\d/.test(text) || COVERISH.test(text)) { drop(text, "states cover or a figure without citing evidence"); continue; }
       out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] });
       continue;
@@ -190,8 +226,9 @@ function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: stri
   const keys: string[] = [];
   for (const o of c.record?.operands ?? []) {
     if (o.source !== "household") continue;
-    const sq = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
-    const hit = Object.entries(facts).find(([, f]) => (typeof o.value === "number" && Number(String(f.value).replace(/[^\d.]/g, "")) === o.value) || sq(f.words).includes(sq(o.attribution)) || sq(o.attribution).includes(sq(f.words)) || String(f.value) === String(o.value));
+    // Integration (agent C's request 1): a confirmed fact, the household's words for this input matching the words
+    // recorded for it, and -- for a number -- the same value.
+    const hit = Object.entries(facts).find(([, f]) => confirmed(f) && wordsMatch(o.attribution, f.words) && (typeof o.value !== "number" || numbersIn(String(f.value)).some((n) => same(n, o.value as number)) || String(f.value) === String(o.value)));
     if (!hit) return { keys, problem: `the calculation uses the household’s ${o.label} (“${o.attribution}”), which is not a fact the household has given (or it has since been corrected)` };
     keys.push(hit[0]);
   }
