@@ -13,6 +13,9 @@ import { resolvePerson, type ConversationContext } from "./people";
 import { policiesFor } from "./policies";
 import { readPage, searchPassages } from "./search";
 import { selectTableValue, type SelectedValue, type Want } from "./tables";
+// --- Agent K: calculation tool (separate block; coordinator merges) ---
+import { CALC_TOOLS } from "./calc/tool";
+// --- end Agent K ---
 import { coInsurance, deductible, difference, householdFigure, minCap, perDay, percentage, product, sum, type ComputeOk, type Operand, type TableValueOperand } from "./compute";
 
 export type JsonSchema = { type: string; description?: string; properties?: Record<string, JsonSchema>; required?: string[]; items?: JsonSchema; enum?: string[]; additionalProperties?: boolean; minimum?: number; maximum?: number; oneOf?: JsonSchema[] };
@@ -125,6 +128,9 @@ export const RAG_TOOLS: ToolDef[] = [
       return ok({ ...r, resultId }, r.evidence);
     },
   },
+  // --- Agent K: the `calculate` tool (lib/rag2/calc/tool.ts) ---
+  ...CALC_TOOLS,
+  // --- end Agent K ---
 ];
 
 /** Minimal JSON-schema check of a tool call's arguments (required keys, types, no unknown keys, enums). */
