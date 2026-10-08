@@ -18,7 +18,7 @@
 import { evidenceAt, type AppliesTo, type EvidenceRef } from "./evidence";
 import { tokens } from "./search";
 import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
-import { relationOf, type RelationClass } from "./people";
+import { columnApplicability, columnFitProblem, personApplicability, relationOf, type PersonApplicability, type RelationClass } from "./people";
 import { personClause } from "@/lib/policies/member-tiers";
 
 export type ColumnKind = "label" | "condition" | "amount" | "percent" | "count" | "unit" | "notes";
@@ -40,11 +40,11 @@ type Line = { page: number; text: string; start: number; end: number; cells: Cel
 const MONEY = /(?:\b(?:SGD|USD|MYR|HKD|AUD|EUR|GBP)\s?|\b(?:S|SG|US|HK|A)\$\s?|\bRM\s?|[€£])\d[\d,]*(?:\.\d+)?/i;
 const AMOUNTISH = /^(?:(?:SGD|USD|MYR|HKD|AUD|EUR|GBP|S\$|SG\$|US\$|HK\$|A\$|RM|€|£)\s?)?\d[\d,]*(?:\.\d+)?\s?(?:%|k|m)?(?:\s.*)?$/i;
 const TEXT_VALUE = /^(?:as charged|not covered|n\.?a\.?|nil|none|-|–|—|included|covered|unlimited|full cost|not applicable)$/i;
-const HEADER_WORD = /\b(?:benefits?|amounts?|limits?|cover(?:age)?|adults?|child(?:ren)?|employees?|spouses?|members?|plans?|wards?|stages?|conditions?|groups?|%|percent(?:age)?|before|after|names?|category|categories|items?|descriptions?|options?|tiers?|insured|class|payable|sum|days?|notes?|remarks?|basis|dependants?|parents?|self|co-?pay(?:ment)?|co-?insurance|deductible|maximum|max|sub-?limit|type|private|restructured|old|new|revised|current|previous|effective|relationship|units?|visits?|rate|premium)\b|^%$/i;
+const HEADER_WORD = /\b(?:benefits?|amounts?|limits?|cover(?:age)?|adults?|child(?:ren)?|employees?|spouses?|members?|plans?|wards?|stages?|conditions?|groups?|%|percent(?:age)?|before|after|names?|category|categories|items?|descriptions?|options?|tiers?|insured|class|payable|sum|days?|notes?|remarks?|basis|dependants?|parents?|self|co-?pay(?:ment)?|co-?insurance|deductible|maximum|max|sub-?limit|type|private|restructured|old|new|revised|current|previous|effective|relationship|units?|visits?|rate|premium|seniors?|juniors?|juveniles?|grown-?ups?|youths?|minors?|infants?|elderly|life assured|policy ?holders?)\b|^%$/i;
 const CLASS_RES: [string, RegExp][] = [
-  ["child", /\bchild(?:ren)?\b|\bdependant child\b|\bkids?\b/i], ["spouse", /\bspouses?\b|\bwife\b|\bhusband\b/i],
+  ["child", /\bchild(?:ren)?\b|\bdependant child\b|\bkids?\b|\bjuveniles?\b|\bminors?\b|\binfants?\b/i], ["spouse", /\bspouses?\b|\bwife\b|\bhusband\b/i],
   ["employee", /\bemployees?\b|\bstaff\b|\bprincipal\b|\bmember\b(?! of)/i], ["parent", /\bparents?\b/i],
-  ["adult", /\badults?\b/i], ["dependant", /\bdependants?\b/i], ["self", /\bself\b|\bpolicyholder\b|\blife assured\b/i],
+  ["adult", /\badults?\b|\bgrown-?ups?\b/i], ["dependant", /\bdependants?\b/i], ["self", /\bself\b|\bpolicy ?holder\b|\bpolicy ?owner\b|\blife (?:assured|insured)\b|\bmain insured\b|\bproposer\b/i],
 ];
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const flat = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -316,7 +316,7 @@ export type SelectedValue = {
   currency: string | null; unit: string | null; period: Period; conditions: string[];
   benefit: string; rowLabel: string; columnHeader: string;
   /** How the subject's column was decided, and the evidence for it when a document says so. */
-  columnBasis: { basis: "only_column" | "explicit_tier" | "document" | "recorded_tier" | "relation" | "version_after"; detail: string; evidence: EvidenceRef | null };
+  columnBasis: { basis: "only_column" | "explicit_tier" | "document" | "recorded_tier" | "relation" | "version_after" | "definition"; detail: string; evidence: EvidenceRef | null };
   evidence: EvidenceRef;
   amendedFrom?: { value: number; currency: string | null; evidence: EvidenceRef; note: string } | null;
   notes: string[];
@@ -324,7 +324,9 @@ export type SelectedValue = {
 export type TableSelection =
   | SelectedValue
   | { status: "ambiguous"; options: { label: string; detail: string; evidence: EvidenceRef | null }[]; question: string; reason: string }
-  | { status: "missing"; reason: string; evidence?: EvidenceRef | null };
+  | { status: "missing"; reason: string; evidence?: EvidenceRef | null;
+      /** Agent G: what is still unresolved about WHO the column is for (only this value is withheld; nothing else). */
+      unresolved?: { kind: "person_class" | "stepchild_class"; needs: string } | null };
 
 const GENERIC = new Set(["benefit", "limit", "amount", "cover", "sum", "payable", "max", "maximum", "plan", "per", "of", "which", "the", "value", "much", "how"]);
 const tokMatch = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && (a.startsWith(b.slice(0, 5)) && b.startsWith(a.slice(0, 5))) && (a.startsWith(b) || b.startsWith(a)));
@@ -366,7 +368,32 @@ export type SubjectColumnHints = {
   isDocOwner: boolean; ownerIsSelf: boolean; age: number | null;
   /** Lines of this document (and of documents of the same policy / scheme, e.g. an enrolment confirmation) naming the person. */
   namedLines: { line: string; ref: EvidenceRef }[];
+  /** Agent G: the person's class for Adult / Child columns, explicit (adult / child / unknown) with its basis. */
+  applicability?: PersonApplicability | null;
+  /** Agent G: the document's own definition of a Child (step-children included / excluded / not mentioned). */
+  childDefinition?: ChildDefinition | null;
+  /** The document's name, for reasons. */
+  docName?: string | null;
 };
+
+/** Agent G: a document's definition of “Child”, read from its wording -- whether it includes step-children, whether a
+ * child must be named on the document, and any age limit. */
+export type ChildDefinition = { text: string; ref: EvidenceRef | null; step: "included" | "excluded" | "silent"; requiresNamed: boolean; ageLimit: { age: number; inclusive: boolean } | null };
+const DEFINES_CHILD = /(?:^|[\n.;:]\s*)((?:the\s+)?["“‘']?(?:insured\s+|dependa?n[ct]\s+)?child(?:ren)?["”’']?\s*(?:means|shall mean|refers to|is defined as|will mean|includes?)\b[^\n]*)/i;
+const STEP = /\bstep[- ]?(?:child|children|sons?|daughters?|kids?)\b/i;
+export function childDefinitionIn(text: string): (Omit<ChildDefinition, "ref"> & { start: number; end: number }) | null {
+  const m = DEFINES_CHILD.exec(text);
+  if (!m) return null;
+  const start = m.index + m[0].indexOf(m[1]), def = m[1].trim(), end = start + m[1].length;
+  const first = def.split(/(?<=\.)\s+/)[0] ?? def;
+  const excluded = /\b(?:not include|does not cover|excludes?|excluding|other than|except)\b[^.]*\bstep[- ]?/i.test(def) || (!STEP.test(first) && /\b(?:natural|biological|legitimate|(?:legally )?adopted)\b/i.test(first));
+  const step = excluded ? "excluded" as const : STEP.test(first) ? "included" as const : "silent" as const;
+  const requiresNamed = /\b(?:named|listed|shown|specified|stated|identified|declared)\b/i.test(first);
+  const lim = first.match(/\b(?:under|below|younger than|less than)\s+(?:the\s+)?(?:age\s+(?:of\s+)?)?(\d{1,2})\b/i) ?? null;
+  const inc = lim ? null : first.match(/\b(?:up to|not (?:more|older) than|no older than|aged?\s+\d{1,2}\s*(?:days?|months?|years?)?\s*(?:to|-|and)|or younger than)\s*(?:the\s+)?(?:age\s+(?:of\s+)?)?(\d{1,2})\b/i);
+  const ageLimit = lim ? { age: Number(lim[1]), inclusive: false } : inc ? { age: Number(inc[1]), inclusive: true } : null;
+  return { text: first, start, end: start + first.length || end, step, requiresNamed, ageLimit };
+}
 
 const classOfText = (t: string) => CLASS_RES.find(([, re]) => re.test(t))?.[0] ?? null;
 const sameTier = (a: string, b: string) => { const x = flat(a).toLowerCase(), y = flat(b).toLowerCase(); return x === y || (x.length >= 4 && y.length >= 4 && (x.includes(y) || y.includes(x))); };
@@ -387,7 +414,7 @@ function listLabel(line: string, names: string[]): string | null {
 }
 
 /** Decides which of `cols` applies to the subject. */
-export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: Column; basis: SelectedValue["columnBasis"] } | { ambiguous: Column[]; reason: string } | { none: string } {
+export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: Column; basis: SelectedValue["columnBasis"] } | { ambiguous: Column[]; reason: string } | { none: string } | { unresolved: string; needs: string; kind: "person_class" | "stepchild_class" } {
   if (!cols.length) return { none: "the table prints no value column for that" };
   const version = cols.filter((c) => c.appliesTo?.kind === "version");
   if (version.length && version.length === cols.length) {
@@ -398,7 +425,8 @@ export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: C
   if (cols.length === 1 && !classed.length) return { ok: cols[0], basis: { basis: "only_column", detail: "the row prints one value for everyone it covers", evidence: null } };
   if (!classed.length) return { ambiguous: cols, reason: "the row prints more than one value and the columns do not say who each applies to" };
   const byTier = (tier: string) => classed.filter((c) => sameTier(c.appliesTo!.value, tier) || sameTier(c.header, tier) || (c.appliesTo!.personClass && c.appliesTo!.personClass === classOfText(tier)) || sameTier(c.leaf, tier));
-  if (hints.tier) {
+  // (A stepchild's Child column is never taken from a tier the model passes: the document decides, below.)
+  if (hints.tier && !(String(hints.relation ?? "") === "step_child" && byTier(hints.tier).some((c) => c.appliesTo!.personClass === "child"))) {
     const m = byTier(hints.tier);
     if (m.length === 1) return { ok: m[0], basis: { basis: "explicit_tier", detail: `the “${m[0].header}” column (tier given: ${hints.tier})`, evidence: null } };
     if (m.length > 1) return { ambiguous: m, reason: `more than one column fits “${hints.tier}”` };
@@ -431,6 +459,27 @@ export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: C
   }
   // The person's relation, only where the table's classes make it unambiguous.
   const rel = String(hints.relation ?? "");
+  // Agent G (stepchild): whether a step-child is in a Child column is decided by the document's own definition of a
+  // Child (and whether it names the person) -- never by the household's word "son". When the wording does not settle
+  // it, only this value is withheld, with what is missing.
+  const childCols = classed.filter((c) => c.appliesTo!.personClass === "child");
+  if (rel === "step_child" && childCols.length) {
+    const d = hints.childDefinition ?? null, doc = hints.docName ?? "the document";
+    const app = hints.applicability ?? null;
+    if (!d || d.step === "silent") return { unresolved: `${hints.name} is recorded as a stepchild, and ${doc} ${d ? `defines a Child as “${d.text}” without saying whether step-children are included` : "does not define who counts as a Child"} or list ${hints.name} under a category, so which column applies is not settled`, needs: `whether ${doc} covers ${hints.name} as a child (the insurer's confirmation, or a schedule listing ${hints.name} as an insured child)`, kind: "stepchild_class" };
+    if (d.step === "excluded") {
+      const adult = classed.filter((c) => c.appliesTo!.personClass === "adult");
+      if (app?.cls === "adult" && adult.length === 1) return { ok: adult[0], basis: { basis: "relation", detail: `${hints.name} is ${app.detail}; ${doc}'s definition of a Child (“${d.text}”) does not include step-children`, evidence: d.ref } };
+      return { none: `${hints.name} is recorded as a stepchild, and ${doc} defines a Child as “${d.text}”, which does not include step-children, so its Child column does not apply to ${hints.name}` };
+    }
+    if (d.requiresNamed && !hints.namedLines.length) return { none: `${doc} counts a step-child as a Child only when named on it (“${d.text}”), and ${hints.name} is not named on it` };
+    if (d.ageLimit) {
+      if (hints.age == null) return { unresolved: `${doc} counts a child only ${d.ageLimit.inclusive ? "up to" : "under"} age ${d.ageLimit.age} (“${d.text}”), and no date of birth is on file for ${hints.name}`, needs: `${hints.name}'s date of birth`, kind: "person_class" };
+      if (d.ageLimit.inclusive ? hints.age > d.ageLimit.age : hints.age >= d.ageLimit.age) return { none: `${doc} counts a child only ${d.ageLimit.inclusive ? "up to" : "under"} age ${d.ageLimit.age} (“${d.text}”), and ${hints.name} is ${hints.age}` };
+    }
+    if (childCols.length === 1) return { ok: childCols[0], basis: { basis: "definition", detail: `${doc} defines a Child as “${d.text}”, which includes step-children${d.requiresNamed ? `, and names ${hints.name}` : ""}`, evidence: d.ref } };
+    return { ambiguous: childCols, reason: "more than one child column fits" };
+  }
   const want: string[] = [];
   const hasClass = (k: string) => classed.some((c) => c.appliesTo!.personClass === k);
   if (rel === "child") { if (hints.age != null && hints.age >= 18) return { ambiguous: classed, reason: `${hints.name} is recorded as a child but is ${hints.age}; the document does not say which column applies` }; want.push(hasClass("child") ? "child" : "dependant"); }
@@ -502,9 +551,15 @@ export async function selectTableValue(args: { accountId: string; policyId: stri
     }
   }
   const self = members.find((m) => relationOf(m).relation === "self");
+  // Agent G: the document's own definition of a Child (this document first, then documents of the same policy).
+  let childDefinition: ChildDefinition | null = null;
+  for (const L of [base, ...family.map(load)]) { for (const [page, text] of [...L.pages].sort((a, b) => a[0] - b[0])) { const d = childDefinitionIn(text); if (d) { childDefinition = { text: d.text, step: d.step, requiresNamed: d.requiresNamed, ageLimit: d.ageLimit, ref: evidenceAt({ policyId: L.doc.id, documentHash: L.doc.fileHash, page, pageText: text, start: d.start, end: d.end, subjectId: subject.id }) }; break; } } if (childDefinition) break; }
+  const relation = args.subject.relation ?? relationOf(subject).relation;
+  const applicability = personApplicability({ relationship: subject.relationship, notes: subject.notes, dateOfBirth: subject.dateOfBirth }, { asOf, category: link?.tier ?? null });
   const hints: SubjectColumnHints = {
-    memberId: subject.id, name: subject.displayName, names, relation: args.subject.relation ?? relationOf(subject).relation, tier: args.subject.tier ?? null, recordedTier: link?.tier ?? null,
+    memberId: subject.id, name: subject.displayName, names, relation, tier: args.subject.tier ?? null, recordedTier: link?.tier ?? null,
     isDocOwner: doc.ownerId === subject.id, ownerIsSelf: !!self && doc.ownerId === self.id, age: ageOn(subject.dateOfBirth, asOf), namedLines,
+    applicability, childDefinition, docName: doc.productName ?? null,
   };
   const picked = pickValue(base, args.benefit, want, hints, subject.id);
   if (picked.status !== "ok") return picked;
@@ -565,8 +620,24 @@ function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hint
   // The subject's column first; only then the value in it.
   const choice = chooseColumn(cols, hints);
   if ("none" in choice) return { status: "missing", reason: choice.none, evidence: ev(t, r, null, null) };
+  if ("unresolved" in choice) return { status: "missing", reason: choice.unresolved, evidence: ev(t, r, null, null), unresolved: { kind: choice.kind, needs: choice.needs } };
   if ("ambiguous" in choice) return { status: "ambiguous", options: choice.ambiguous.map((c) => ({ label: c.header, detail: r.cells[c.index]?.text ?? "(blank)", evidence: ev(t, r, c, r.cells[c.index]) })), question: `Which column of the ${r.label} row applies to ${hints.name} — ${choice.ambiguous.map((c) => c.header).join(" or ")}?`, reason: choice.reason };
   const col = choice.ok;
+  // Agent G: the chosen column's class is checked against the person's explicit class -- unless the document itself
+  // (its list of insured persons, the recorded insured category, its definition of a Child) settled the column.
+  const app = columnApplicability(col.header);
+  const settledByDocument = ["document", "recorded_tier", "version_after", "definition"].includes(choice.basis.basis);
+  // (A tier the household gave explicitly is honoured for a child -- some plans enrol a child at an adult tier -- but never
+  // lets an adult, or a person of unknown class, take a child's or another class's column.)
+  const honouredTier = choice.basis.basis === "explicit_tier" && hints.applicability?.cls === "child";
+  if (!settledByDocument && !honouredTier && (app.kind === "class" || (choice.basis.basis !== "only_column" && app.kind !== "none")) && hints.applicability) {
+    const why = columnFitProblem(app, hints.applicability, { isOwner: hints.isDocOwner, header: col.header });
+    if (why) {
+      const classed = cols.filter((c) => columnApplicability(c.header).kind !== "none");
+      if (hints.applicability.cls === "unknown" && classed.length > 1) return { status: "ambiguous", options: classed.map((c) => ({ label: c.header, detail: r.cells[c.index]?.text ?? "(blank)", evidence: ev(t, r, c, r.cells[c.index]) })), question: `Which column of the ${r.label} row applies to ${hints.name} — ${classed.map((c) => c.header).join(" or ")}?`, reason: `${hints.name}: ${why}` };
+      return { status: "missing", reason: `${hints.name}: ${why}`, evidence: ev(t, r, col, r.cells[col.index]), unresolved: hints.applicability.cls === "unknown" ? { kind: "person_class", needs: `whether ${hints.name} is covered as an adult or a child (a date of birth on file, or the schedule's category for them)` } : null };
+    }
+  }
   const cell = r.cells[col.index];
   if (!cell || NOT_A_VALUE.test(cell.text)) return { status: "missing", reason: cell ? `the ${col.header} column prints “${cell.text}” for ${r.label}` : `the ${col.header} column prints nothing for ${r.label}`, evidence: ev(t, r, col, cell) };
   const context = [r.label, col.header, r.parent ?? "", r.section ?? ""].join(" ");

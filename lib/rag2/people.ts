@@ -15,8 +15,9 @@
  */
 import { loadMembers, type MemberRow } from "./store";
 
-export type RelationClass = "self" | "spouse" | "child" | "step_child" | "child_in_law" | "parent" | "step_parent" | "parent_in_law" | "sibling" | "sibling_in_law" | "grandparent" | "grandchild" | "helper" | "dependant" | "other";
-export type Gender = "f" | "m" | null;
+import { memberRelation, type MemberGender, type MemberRelation } from "@/lib/claims/person";
+export type RelationClass = MemberRelation;
+export type Gender = MemberGender;
 export type Person = { id: string; name: string; preferredName: string | null; relationship: string; relation: RelationClass; gender: Gender; dateOfBirth: string | null;
   /** The recorded relation in words, from the speaker's side ("son", "stepson", "mother-in-law"), for labelling options. */
   relationLabel?: string };
@@ -81,28 +82,10 @@ const NEAR: Partial<Record<RelationClass, RelationClass[]>> = {
 const SELF = /^(?:i|me|my|myself|mine|my own|myself only|self|own)$/i;
 const THIRD = /^(?:he|him|his|she|her|hers|they|them|their|theirs)$/i;
 const GROUP = /^(?:we|us|our|ours|everyone|the family|family|all of us)$/i;
-const FEMALE = /\b(?:mother|mum|mom|wife|daughter|sister|grandmother|grandma|aunt|niece|female|girl|woman)\b/i;
-const MALE = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle|nephew|male|boy|man)\b/i;
 
 /** The fine relation of a stored member: relationship plus what their notes say ("mother-in-law", "stepson", "helper"). */
 export function relationOf(m: Pick<MemberRow, "relationship" | "notes">): { relation: RelationClass; gender: Gender } {
-  const rel = (m.relationship ?? "").toLowerCase().trim(), notes = (m.notes ?? "").toLowerCase();
-  const both = rel + " " + notes;
-  // Gender from the relation words, reading "stepson" / "step-daughter" as son / daughter.
-  const plain = both.replace(/\bstep[- ]?/g, "");
-  const g: Gender = FEMALE.test(plain) && !MALE.test(plain) ? "f" : MALE.test(plain) && !FEMALE.test(plain) ? "m" : null;
-  if (rel === "helper" || /\bhelper\b|\bmaid\b|\bdomestic\b|\bnanny\b|\bcaregiver\b/.test(both)) return { relation: "helper", gender: g };
-  if (/in[- ]law/.test(both)) {
-    if (/\b(?:mother|father|parent)s?[- ]in[- ]law\b/.test(both) || rel === "parent") return { relation: "parent_in_law", gender: g };
-    if (/\b(?:son|daughter)[- ]in[- ]law\b/.test(both) || rel === "child") return { relation: "child_in_law", gender: g };
-    return { relation: "sibling_in_law", gender: g };
-  }
-  if (/\bstep[- ]?/.test(both)) {
-    if (rel === "parent" || /\bstep[- ]?(?:mother|father|mum|dad|parent)/.test(both)) return { relation: "step_parent", gender: g };
-    return { relation: "step_child", gender: g };
-  }
-  const map: Record<string, RelationClass> = { self: "self", spouse: "spouse", wife: "spouse", husband: "spouse", partner: "spouse", child: "child", son: "child", daughter: "child", parent: "parent", mother: "parent", father: "parent", sibling: "sibling", brother: "sibling", sister: "sibling", grandparent: "grandparent", dependant: "dependant", dependent: "dependant" };
-  return { relation: map[rel] ?? "other", gender: g };
+  return memberRelation(m.relationship, m.notes);
 }
 
 const REL_LABEL: Record<RelationClass, [string, string, string]> = {
@@ -222,3 +205,9 @@ export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: 
   if (byName.length > 1) return { status: "ambiguous", options: byName, question: `Which do you mean — ${listOf(byName)}?`, reason: "more than one household member has that name" };
   return { status: "unknown", reason: `nobody in the household is called “${mention}”`, question: `I can't find “${mention}” in your household. Who do you mean?` };
 }
+
+
+// Agent G: applicability classes (who a column is printed for, which class a person is in) live in lib/claims/person.ts
+// so the save-time gate (lib/chat) can use them without importing lib/rag2; re-exported here for the rag2 tools.
+export { columnApplicability, columnFitProblem, personApplicability } from "@/lib/claims/person";
+export type { ApplicabilityClass, ColumnApplicability, ColumnClass, PersonApplicability } from "@/lib/claims/person";

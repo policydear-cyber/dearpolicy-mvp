@@ -38,6 +38,7 @@ import { dayEdgeExceptionsFromWording, dayRuleFromWording } from "@/lib/claims/d
 import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
+import { columnApplicability, columnFitProblem, personApplicability } from "@/lib/claims/person";
 
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
@@ -321,7 +322,17 @@ export function periodFactor(from: FigurePeriod, to: FigurePeriod): number | nul
 // ---------------------------------------------------------------------------------------------------------
 
 type Doc = { id: string; owner: string; members: Set<string>; fileHash: string | null; superseded: boolean; usable: boolean; pages: Map<number, string> };
-type Person = { id: string; names: string[]; relationship: string };
+type Person = { id: string; names: string[]; relationship: string; notes?: string | null; dateOfBirth?: string | null };
+/** Agent G: a column printed for a class of person (Adult / Child / Insured Child / Juvenile / Spouse / Life Assured
+ * ...) supports a figure only for a person established to be in that class; an ambiguous or unrecognised person column
+ * supports nobody's figure, and a person whose class is not established never passes a class-specific column. */
+function classProblem(column: string | null | undefined, subject: Person | undefined, ownerId: string | null): string | null {
+  const col = columnApplicability(column);
+  if (col.kind === "none") return null;
+  const p = subject ? personApplicability({ relationship: subject.relationship, notes: subject.notes ?? null, dateOfBirth: subject.dateOfBirth ?? null }) : { cls: "unknown" as const, relation: "other" as const, age: null, basis: "none" as const, detail: "the person is not one of this household's members" };
+  const why = columnFitProblem(col, p, { isOwner: subject && ownerId ? subject.id === ownerId : null, header: column ?? null });
+  return why ? "the figure cannot be used for this person: " + why : null;
+}
 type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[] };
 
 function bindingsOf(answer: ChatAnswer): FigureBinding[] {
@@ -351,8 +362,8 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
       for (const p of pages) docs.get(p.policy_id)?.pages.set(p.page_number, p.text ?? "");
     }
   }
-  const people = (await query<{ id: string; display_name: string | null; preferred_name: string | null; relationship: string | null }>(`SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship FROM family_members f WHERE f.account_id=$1 AND ${activePredicate("f")}`, [accountId]).catch(() => ({ rows: [] }))).rows
-    .map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => n.trim()), relationship: p.relationship ?? "" }));
+  const people = (await query<{ id: string; display_name: string | null; preferred_name: string | null; relationship: string | null; notes: string | null; date_of_birth: string | null }>(`SELECT f.id::text AS id, f.display_name, f.preferred_name, f.relationship, f.notes, to_char(f.date_of_birth, 'YYYY-MM-DD') AS date_of_birth FROM family_members f WHERE f.account_id=$1 AND ${activePredicate("f")}`, [accountId]).catch(() => ({ rows: [] }))).rows
+    .map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => n.trim()), relationship: p.relationship ?? "", notes: p.notes ?? null, dateOfBirth: p.date_of_birth ?? null }));
   // The household's own messages in this conversation (only read when the answer carries a benefit calculation whose
   // household inputs must be quoted from them).
   const householdTexts = [userText];
@@ -365,7 +376,7 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
 
 /** The column check: where the row that prints the amount has one value cell per person or tier, the amount must be in
  * the binding's column, and that column must be the person's class (an employee is not the spouse column). */
-function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean } = {}): string | null {
+function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null } = {}): string | null {
   const rows = passageRows(b.passage).filter((r) => amountAppears(value, r));
   if (!rows.length) return "the amount is not printed in the cited passage";
   if (rows.some((r) => rowCells(r).length < 3)) return null; // a row with one value prints one figure for everyone it covers
@@ -386,9 +397,8 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
     if (!amountAppears(value, cell)) return "the figure is printed in another person’s or tier’s column, not the one it is stated for";
     const how = opts.count ? "match" : amountPrintedWith(value, currency, cell);
     if (how === "other" || (how === "bare" && !currenciesStatedIn(head[j] + " " + b.passage).includes(currency))) return "the currency printed in the column is not the figure’s";
-    const want = classOf(head[j]), is = subject ? classOf(subject.relationship) ?? (/^self$/i.test(subject.relationship) ? "self" : null) : null;
-    if (want && is && want !== is) return "the figure is printed in the " + want + " column, not the column for the person it is stated for";
-    return null;
+    // Agent G: the column's class against the person's established class (an unknown class never passes).
+    return classProblem(head[j], subject, opts.ownerId ?? null);
   }
   return "the table column the figure is stated for is not printed above its row";
 }
@@ -436,7 +446,7 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   if (!benefit) return "the figure is not bound to a benefit";
   if (sentence != null && !namesBenefit(sentence, benefit)) return "the sentence does not name the benefit the figure is printed for";
   const row = benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
-  const column = columnProblem(b, value, currency, rangeText, subject);
+  const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner });
   if (row) {
     // A table whose rows are not benefits (a value table: one row per policy year, one column per value): the figure's
     // benefit is its own column (checked above), and the sentence names its row (the row's first cell).
@@ -587,10 +597,10 @@ function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: C
   if ((o.column ?? null) !== (b.column ?? null)) return `${o.label}: the stated column is not the binding’s`;
   if (o.row && !squash(b.passage).includes(squash(o.row).slice(0, 40))) return `${o.label}: the stated row is not the bound passage`;
   // A column printed for a class of person (Adult / Child) must be the person's own class.
-  const colClass = /\b(?:child(?:ren)?|kids?|juvenile)\b/i.test(b.column ?? "") ? "child" : /\badults?\b/i.test(b.column ?? "") ? "adult" : null;
-  const who = ctx.people.find((p) => p.id === b.subjectId);
-  const personClass = who ? (/\b(?:child|son|daughter|kid)\b/i.test(who.relationship) ? "child" : "adult") : null;
-  if (colClass && personClass && colClass !== personClass) return `${o.label}: the figure is printed in the ${colClass} column, not the column for the person it is used for`;
+  // Agent G: explicit classes -- an adult never takes a child / ambiguous / unrecognised column, and a person whose class
+  // is not established never takes a class-specific one.
+  const cls = classProblem(b.column, ctx.people.find((p) => p.id === b.subjectId), ctx.docs.get(b.policyId)?.owner ?? null);
+  if (cls) return `${o.label}: ${cls}`;
   if (o.unit === "money") {
     if (o.currency !== r.currency) return `${o.label}: in another currency than the calculation`;
     const g = groundProblem(b, o.value, o.currency ?? "", ctx, null, { benefit: b.benefit });
@@ -607,7 +617,7 @@ function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: C
   if (!norm(range.join("\n")).includes(norm(b.passage))) return `${o.label}: the cited passage is not on the cited pages`;
   if (!numsOf(b.passage).some((n) => same(n, o.value as number))) return `${o.label}: the number is not printed in the cited passage`;
   if (o.unit === "percent" && !new RegExp("(?<![\\d.])" + String(o.value).replace(".", "\\.") + "\\s?%").test(b.passage)) return `${o.label}: the percentage is not printed as a percentage`;
-  const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true });
+  const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true, ownerId: doc.owner });
   return col ? `${o.label}: ${col}` : null;
 }
 /** Re-runs one benefit calculation for one sentence; null when it stands. */

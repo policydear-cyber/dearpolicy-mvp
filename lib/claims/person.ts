@@ -312,3 +312,119 @@ export function outsideHouseholdSubject(text: string, family: ClaimPerson[]): { 
   const name = m[2] && /^(?:ah\s+)?\p{Lu}/u.test(m[2]) && !/^(?:was|is|has|had|died|passed|fell|got|broke|just|also|who|said|says|told|already|recently)$/i.test(m[2].split(/\s+/)[0]) ? m[2].replace(/\s+(?:was|is|has|had|died|passed|fell|got|broke)\b.*$/i, "").trim() : null;
   return { relation: m[1].toLowerCase(), name };
 }
+
+
+// ---------------------------------------------------------------------------------------------------------------
+// Agent G: a member's recorded relation (relationship plus notes), shared with the conversational path's people module.
+// ---------------------------------------------------------------------------------------------------------------
+export type MemberRelation = "self" | "spouse" | "child" | "step_child" | "child_in_law" | "parent" | "step_parent" | "parent_in_law" | "sibling" | "sibling_in_law" | "grandparent" | "grandchild" | "helper" | "dependant" | "other";
+export type MemberGender = "f" | "m" | null;
+const FEMALE_WORD = /\b(?:mother|mum|mom|wife|daughter|sister|grandmother|grandma|aunt|niece|female|girl|woman)\b/i;
+const MALE_WORD = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle|nephew|male|boy|man)\b/i;
+/** The fine relation of a stored member: relationship plus what their notes say ("mother-in-law", "stepson", "helper"). */
+export function memberRelation(relationship: string | null | undefined, notesIn: string | null | undefined): { relation: MemberRelation; gender: MemberGender } {
+  const rel = (relationship ?? "").toLowerCase().trim(), notes = (notesIn ?? "").toLowerCase();
+  const both = rel + " " + notes;
+  // Gender from the relation words, reading "stepson" / "step-daughter" as son / daughter.
+  const plain = both.replace(/\bstep[- ]?/g, "");
+  const g: MemberGender = FEMALE_WORD.test(plain) && !MALE_WORD.test(plain) ? "f" : MALE_WORD.test(plain) && !FEMALE_WORD.test(plain) ? "m" : null;
+  if (rel === "helper" || /\bhelper\b|\bmaid\b|\bdomestic\b|\bnanny\b|\bcaregiver\b/.test(both)) return { relation: "helper", gender: g };
+  if (/in[- ]law/.test(both)) {
+    if (/\b(?:mother|father|parent)s?[- ]in[- ]law\b/.test(both) || rel === "parent") return { relation: "parent_in_law", gender: g };
+    if (/\b(?:son|daughter)[- ]in[- ]law\b/.test(both) || rel === "child") return { relation: "child_in_law", gender: g };
+    return { relation: "sibling_in_law", gender: g };
+  }
+  if (/\bstep[- ]?/.test(both)) {
+    if (rel === "parent" || /\bstep[- ]?(?:mother|father|mum|dad|parent)/.test(both)) return { relation: "step_parent", gender: g };
+    return { relation: "step_child", gender: g };
+  }
+  const map: Record<string, MemberRelation> = { self: "self", spouse: "spouse", wife: "spouse", husband: "spouse", partner: "spouse", child: "child", son: "child", daughter: "child", parent: "parent", mother: "parent", father: "parent", sibling: "sibling", brother: "sibling", sister: "sibling", grandparent: "grandparent", dependant: "dependant", dependent: "dependant" };
+  return { relation: map[rel] ?? "other", gender: g };
+}
+const MEMBER_RELATION_NOUN: Record<MemberRelation, string> = { self: "you", spouse: "spouse", child: "child", step_child: "stepchild", child_in_law: "child-in-law", parent: "parent", step_parent: "step-parent", parent_in_law: "parent-in-law", sibling: "sibling", sibling_in_law: "sibling-in-law", grandparent: "grandparent", grandchild: "grandchild", helper: "helper", dependant: "dependant", other: "household member" };
+
+// ---------------------------------------------------------------------------------------------------------------
+// Agent G: applicability classes -- who a table column is printed for, and which class a person is in.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The class a person is in for an Adult / Child column: established from the policy's own insured-persons category
+ * when one is recorded, else the date of birth, else the relationship -- and "unknown" when none of them establishes
+ * it (a sibling or "other" member with no date of birth, a son aged 18 to 25 whose policy may still count him as a
+ * child). Unknown never passes against a class-specific column. */
+export type ApplicabilityClass = "adult" | "child" | "unknown";
+export type PersonApplicability = { cls: ApplicabilityClass; relation: MemberRelation; age: number | null; basis: "category" | "date_of_birth" | "relationship" | "none"; detail: string };
+/** Who a column's values are printed for. "none": the column names no class of person (one value for everyone, a plan,
+ * tier, ward or version); "ambiguous": it names more than one class; "unrecognised": it names people in words that
+ * map to no known class ("Insured persons", "Junior", "Family"). */
+export type ColumnClass = "adult" | "child" | "spouse" | "owner" | "parent" | "dependant";
+export type ColumnApplicability = { kind: "none" } | { kind: "class"; cls: ColumnClass } | { kind: "ambiguous"; classes: ColumnClass[] } | { kind: "unrecognised"; words: string };
+
+const COL_CLASS: [ColumnClass, RegExp][] = [
+  ["child", /\b(?:child(?:ren)?|kids?|juveniles?|minors?|infants?|sons?|daughters?)\b/i],
+  ["adult", /\badults?\b|\bgrown-?ups?\b/i],
+  ["spouse", /\b(?:spouses?|wife|wives|husbands?|partners?)\b/i],
+  ["parent", /\b(?:parents?|fathers?|mothers?)\b/i],
+  ["owner", /\b(?:policy ?holders?|policy ?owners?|life (?:assured|insured)|main insured|principal(?: insured)?|employees?|staff|self|proposer|(?<!family )members?(?! of))\b/i],
+  ["dependant", /\bdependa?n[ct]s?\b/i],
+];
+/** Words that name people without naming a class this code knows. ("Sum insured" / "amount insured" are amounts.) */
+const PERSONISH = /\b(?:insured|assured|covered|persons?|people|individuals?|famil(?:y|ies)|category|categories|relationship|juniors?|youths?|teen\w*|seniors?|elderly|students?|retirees?|beneficiar\w*|nominees?|helpers?|domestic|named)\b/i;
+const AMOUNT_PHRASE = /\b(?:sum|amount|value)s? (?:insured|assured|covered)\b|\b(?:insured|assured|covered) (?:sum|amount|value)s?\b/gi;
+
+export function columnApplicability(header: string | null | undefined): ColumnApplicability {
+  const h = String(header ?? "").replace(AMOUNT_PHRASE, " ").replace(/\s+/g, " ").trim();
+  if (!h) return { kind: "none" };
+  let classes = COL_CLASS.filter(([, re]) => re.test(h)).map(([c]) => c);
+  if (/\bfamily members?\b/i.test(h)) classes = classes.filter((c) => c !== "owner");
+  // A dependant child is a child; a dependant spouse is a spouse.
+  if (classes.length > 1 && classes.includes("dependant")) classes = classes.filter((c) => c !== "dependant");
+  const uniq = [...new Set(classes)];
+  if (uniq.length === 1) return { kind: "class", cls: uniq[0] };
+  if (uniq.length > 1) return { kind: "ambiguous", classes: uniq };
+  const p = h.match(PERSONISH);
+  return p ? { kind: "unrecognised", words: h } : { kind: "none" };
+}
+
+const CHILD_RELATIONS: MemberRelation[] = ["child", "step_child", "grandchild"];
+const ADULT_RELATIONS: MemberRelation[] = ["self", "spouse", "parent", "parent_in_law", "step_parent", "grandparent", "sibling_in_law", "child_in_law", "helper"];
+const ageAt = (dob: string, asOf: string) => { const [y, m, d] = dob.slice(0, 10).split("-").map(Number), [Y, M, D] = asOf.slice(0, 10).split("-").map(Number); return Y - y - (M < m || (M === m && D < d) ? 1 : 0); };
+
+/** The person's class for Adult / Child columns (see ApplicabilityClass). `category` is a policy insured-persons
+ * category recorded for them (a benefit tier, the category the document lists them under). */
+export function personApplicability(m: { relationship: string | null; notes?: string | null; dateOfBirth?: string | null }, opts: { asOf?: string | null; category?: string | null } = {}): PersonApplicability {
+  const { relation } = memberRelation(m.relationship, m.notes);
+  const asOf = (opts.asOf ?? new Date().toISOString()).slice(0, 10);
+  const age = m.dateOfBirth && /^\d{4}-\d{2}-\d{2}/.test(m.dateOfBirth) ? ageAt(m.dateOfBirth, asOf) : null;
+  const cat = opts.category ? columnApplicability(opts.category) : null;
+  if (cat?.kind === "class" && (cat.cls === "child" || cat.cls === "adult")) return { cls: cat.cls, relation, age, basis: "category", detail: `listed by the policy as ${opts.category}` };
+  if (age != null) {
+    if (age < 18) return { cls: "child", relation, age, basis: "date_of_birth", detail: `aged ${age}` };
+    if (age >= 26 || !CHILD_RELATIONS.includes(relation)) return { cls: "adult", relation, age, basis: "date_of_birth", detail: `aged ${age}` };
+    return { cls: "unknown", relation, age, basis: "none", detail: `aged ${age}: an adult by age, but the policy's own definition decides whether a ${MEMBER_RELATION_NOUN[relation]} of that age is still covered as a child` };
+  }
+  if (CHILD_RELATIONS.includes(relation)) return { cls: "child", relation, age, basis: "relationship", detail: `recorded as ${MEMBER_RELATION_NOUN[relation]}` };
+  if (ADULT_RELATIONS.includes(relation)) return { cls: "adult", relation, age, basis: "relationship", detail: `recorded as ${relation === "self" ? "you" : MEMBER_RELATION_NOUN[relation]}` };
+  return { cls: "unknown", relation, age, basis: "none", detail: "no date of birth or relationship on file says whether they are an adult or a child" };
+}
+
+/** Why a value printed in a column of class `col` cannot be used for this person (null when it can). `isOwner`: the
+ * person is the document's policyholder / main insured (null when not known). */
+export function columnFitProblem(col: ColumnApplicability, p: PersonApplicability, ctx: { isOwner: boolean | null; header?: string | null }): string | null {
+  const where = ctx.header ? `the “${ctx.header}” column` : "the column";
+  if (col.kind === "none") return null;
+  if (col.kind === "ambiguous") return `${where} is printed for more than one class of person (${col.classes.join(" / ")}), so it does not say it applies to this person`;
+  if (col.kind === "unrecognised") return `${where} does not say which class of person it applies to`;
+  switch (col.cls) {
+    case "adult": case "child":
+      if (p.cls === "unknown") return `${where} is printed for ${col.cls === "adult" ? "adults" : "children"}, and whether this person is an adult or a child is not established (${p.detail})`;
+      return p.cls === col.cls ? null : `${where} is printed for ${col.cls === "adult" ? "adults" : "children"}, not for this person (${p.detail})`;
+    case "spouse":
+      return p.relation === "spouse" && p.cls !== "child" ? null : `${where} is printed for a spouse, and this person is not recorded as the spouse`;
+    case "owner":
+      return ctx.isOwner === true ? null : `${where} is printed for the policyholder / main insured, and this person is not the document's policyholder`;
+    case "parent":
+      return ["parent", "parent_in_law", "step_parent"].includes(p.relation) ? null : `${where} is printed for parents, and this person is not recorded as a parent`;
+    case "dependant":
+      return ctx.isOwner === false && p.relation !== "other" ? null : `${where} is printed for dependants, and this person is not established as a dependant on this document`;
+  }
+}
