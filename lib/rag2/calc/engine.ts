@@ -87,7 +87,7 @@ function finish(o: Omit<CalcOutcome, "calcId" | "unresolvedText"> & { who: strin
   // illustration) whose sentence fails verification says so -- never "I still need information".
   const unresolvedText = o.kind === "not_payable" ? `${o.product} ${o.benefit.toLowerCase()} does not apply to these facts: ${o.reason ?? "see the policy wording"}.`
     : o.kind === "unresolved" ? `To work out ${o.who}’s ${o.benefit.toLowerCase()} under ${o.product}, I still need ${need}.`
-    : `I worked out ${o.who}’s ${o.benefit.toLowerCase()} under ${o.product}, but the figure could not be verified against your documents, so I left it out.`;
+    : `I worked out ${o.who}’s ${o.benefit.toLowerCase()} under ${o.product}, but I couldn’t confirm the figure against your documents.`;
   if (o.record) {
     const rec = recomputeCalculation(o.record);
     if (!rec.ok) return { refused: "internal: the calculation record does not re-run: " + rec.error };

@@ -43,8 +43,8 @@ import { columnApplicability, columnFitProblem, personApplicability } from "@/li
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
 
-export const FIGURE_LEFT_OUT_NOTE = "A figure that couldn’t be matched to the cited page of your documents was left out of this answer.";
-export const CLAIM_LEFT_OUT_NOTE = "A statement that the cited page of your documents doesn’t support was left out of this answer.";
+export const FIGURE_LEFT_OUT_NOTE = "I couldn’t confirm one of the figures against the cited page of your documents.";
+export const CLAIM_LEFT_OUT_NOTE = "I couldn’t confirm one of the statements against the cited page of your documents.";
 
 const FIGURE = /(?:\b(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\s?|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(RM)\s?|([€£¥₱])\s?)(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|million|thousand|bn|billion)\b)?|(\d[\d,]*(?:\.\d+)?)\s?(SGD|USD|MYR|HKD|AUD|EUR|GBP)\b/g;
 const SYMBOL: Record<string, string> = { S: "SGD", SG: "SGD", US: "USD", HK: "HKD", A: "AUD", AU: "AUD", NZ: "NZD", RM: "MYR", "€": "EUR", "£": "GBP", "¥": "JPY", "₱": "PHP" };
@@ -745,8 +745,8 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const requirementFor = (x: { sentence: string }, k: CalculationRecord, why?: string) => {
     const resolved = k.kind === "indicative_estimate" || k.kind === "conditional_illustration";
     let t = (k.unresolvedText ?? "").trim();
-    if (resolved && (!t || /\bI still need\b/i.test(t))) t = "I worked out that figure, but it could not be verified against your documents, so I left it out.";
-    if (resolved && why) { const w = why.trim().replace(/[.\s]+$/, ""); const withWhy = t.replace(/, so I left (it|the figure) out\.$/, ` (${w}), so I left $1 out.`); if (withWhy !== t && safeText(withWhy)) t = withWhy; }
+    if (resolved && (!t || /\bI still need\b/i.test(t))) t = "I worked out that figure, but I couldn’t confirm it against your documents.";
+    if (resolved && why) { const w = why.trim().replace(/[.\s]+$/, ""); const withWhy = t.replace(/ against your documents\.$/, ` against your documents (${w}).`); if (withWhy !== t && safeText(withWhy)) t = withWhy; }
     if (safeText(t)) requirements.set(x.sentence, t);
   };
   const drop = new Map<typeof fields[number], Set<string>>();

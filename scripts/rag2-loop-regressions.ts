@@ -249,9 +249,11 @@ async function main() {
   await check("N1 a figure printed in none of its evidence, evidence no tool returned and an unevidenced cover statement are all dropped, with an honest note", () => {
     const t = N.turns[0], v = visible(t.saved.answer);
     assert.doesNotMatch(v, /9,999|S\$300|every sport/);
-    assert.equal(t.trace.dropped.length, 3);
+    // Integration (round 3, agent P): the figure-free commentary sentence "Here is what his documents say." is now
+    // dropped too (it says nothing once the rest is gone), so nothing is left and the one honest note is the answer.
+    assert.equal(t.trace.dropped.length, 4);
     assert.ok(t.trace.dropped.some((d: any) => /printed in none/.test(d.reason)) && t.trace.dropped.some((d: any) => /no tool returned/.test(d.reason)) && t.trace.dropped.some((d: any) => /without citing evidence/.test(d.reason)));
-    assert.match(t.saved.answer.summary, /Here is what his documents say\./); assert.ok(t.saved.answer.details.includes(DROPPED_NOTE));
+    assert.equal(t.saved.answer.summary, DROPPED_NOTE); assert.doesNotMatch(v, /Here is what/);
   });
   const G = await run([
     { steps: [

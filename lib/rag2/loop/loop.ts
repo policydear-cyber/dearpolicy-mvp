@@ -18,7 +18,7 @@ import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext }
 import { loopLimits } from "@/lib/ai/usage";
 import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
-import { compoundQuestion, relevantEvidence } from "./questions";
+import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
 import { composeFinal, evidenceIdOf, type ComputeCall, type Composed } from "./compose";
@@ -46,6 +46,8 @@ export type LoopCorrection = { key: string; from: unknown; to: unknown; withdraw
   /** Agent F: the facts the withdrawn estimates were worked out from (said back without their figures). */
   about?: string[] };
 /** Agent G: what a deleted / superseded source took with it (only what it alone supported). */
+/** A clock time in the household's words (9.30pm, 21:30, 9 am, noon, midnight). */
+const CLOCK_TIME = /\b\d{1,2}(?:[.:]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}[:.]\d{2}\b|\bnoon\b|\bmidnight\b/i;
 export type SourceInvalidation = { kind: "fact" | "estimate" | "calculation"; subjectId: string | null; key?: string; sentence?: string; calcId?: string; reason: string };
 export type LoopOutput = { state: RagLoopState; reply: LoopReply; trace: TraceTurn; tools: ToolContext; corrections: LoopCorrection[]; reasked: LoopPending | null;
   /** Agent G: conclusions withdrawn this turn because the only source supporting them was deleted or superseded. */
@@ -346,6 +348,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       // Agent F (D15): the same fact under another key (admitted_at / admission_time, how_it_happened / cause) is known.
       const known = claim ? knownFactFor(key, claim.facts) : null;
       if (known) return { result: { ok: false, error: `${key} is already recorded${known.key !== key ? ` (as ${known.key})` : ""} (${String(known.fact.value)}, "${known.fact.words}"); do not ask again` } };
+      // Integration (round 3): a fact the household's current message already gives is recorded, never asked for.
+      // A question for the TIME is not answered by a date alone ("admitted on Saturday" -> "what time on Saturday?").
+      const wantsTime = /time/i.test(key) || /\bwhat time\b/i.test(question);
+      const said = statedInMessage(key, input.message);
+      if (said && (!wantsTime || CLOCK_TIME.test(said))) return { result: { ok: false, error: `the household's message already gives ${key} ("${said}"): record it with note_facts instead of asking` } };
       // The calculation's own missing inputs drive the next question: ask exactly those, one at a time, in order.
       const stillNeeded = (subject ? calcMissing.get(subject) ?? [] : []).filter((m) => !(claim && knownFactFor(m.key, claim.facts)));
       const sameFact = (a: string, b: string) => a === b || (!factConcept(a).concept.startsWith("key:") && factConcept(a).concept === factConcept(b).concept);
@@ -600,15 +607,15 @@ export async function revalidateEvidence(accountId: string, state: RagLoopState)
   const policyNames = new Map((docs ?? []).map((d) => [d.id, d.productName ?? d.insurer ?? "Policy document"]));
   const entries = Object.values(state.evidence);
   if (!entries.length) return { stale, policyNames };
-  if (!docs) { for (const e of entries) stale.set(e.id, "I couldn’t confirm that the documents an earlier answer relied on are still current, so I left out what they said."); return { stale, policyNames }; }
+  if (!docs) { for (const e of entries) stale.set(e.id, "I couldn’t confirm that the documents an earlier answer relied on are still current, so I can’t rely on what they said."); return { stale, policyNames }; }
   const live = new Map(docs.map((d) => [d.id, d]));
   // The names of documents read earlier are remembered from when they were readable (never re-read once deleted).
   const names = (state.docNames ??= {});
   for (const e of entries) { const d = live.get(e.policyId); if (d?.productName) names[e.policyId] = d.productName; }
   for (const e of entries) {
     const d = live.get(e.policyId);
-    if (!d) { const n = names[e.policyId]; stale.set(e.id, `${n ? `The ${n} document` : "A document"} an earlier answer relied on has since been deleted or replaced by a newer version, so I left out what it said.`); continue; }
-    if (e.documentHash && d.fileHash && e.documentHash !== d.fileHash) stale.set(e.id, `The ${d.productName ?? "policy"} document has changed since I read it, so I left out what the earlier version said.`);
+    if (!d) { const n = names[e.policyId]; stale.set(e.id, `${n ? `The ${n} document` : "A document"} an earlier answer relied on has since been deleted or replaced by a newer version, so I can no longer use what it said.`); continue; }
+    if (e.documentHash && d.fileHash && e.documentHash !== d.fileHash) stale.set(e.id, `The ${d.productName ?? "policy"} document has changed since I read it, so I can no longer use what the earlier version said.`);
   }
   return { stale, policyNames };
 }

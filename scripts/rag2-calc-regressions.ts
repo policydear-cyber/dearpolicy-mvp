@@ -322,7 +322,7 @@ async function main() {
       assert.match(problems[0].reason, want);
       // Never silently dropped. Integration (D29): a resolved calculation that fails verification is replaced by the
       // specific verification failure -- never by a claim that information is missing (nothing is).
-      assert.ok(/could not be verified against your documents/.test(a.summary) || a.summary.includes("does not apply"), "the verification failure is stated: " + a.summary);
+      assert.ok(/couldn’t confirm (?:it|the figure) against your documents/.test(a.summary) || a.summary.includes("does not apply"), "the verification failure is stated: " + a.summary);
       if (c.kind === "indicative_estimate" || c.kind === "conditional_illustration") assert.doesNotMatch(a.summary, /I still need/);
       assert.ok(!a.summary.includes("S$"), "no figure is left");
       assert.ok(!a.details.includes(FIGURE_LEFT_OUT_NOTE), "the specific requirement replaces the generic note");

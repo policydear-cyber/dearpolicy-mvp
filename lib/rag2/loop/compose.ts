@@ -571,7 +571,7 @@ function settleAnswer(out: Composed, drops: DropInfo[], conditioned: { at: numbe
   // Notes: caveats the household needs (never "I left out ..."), or one accurate explanation when nothing is left.
   const notes: string[] = [];
   const add = (n: string | null | undefined) => { if (n && !notes.includes(n)) notes.push(n); };
-  for (const d of drops) if (d.cat === "stale") add(d.note ? d.note.replace(/,? so I left out what (?:it|they|the earlier version) said\.$/, ", so I can no longer use what it said.") : null);
+  for (const d of drops) if (d.cat === "stale") add(d.note); // user-facing at the source (loop.ts revalidateEvidence)
   if (drops.some((d) => d.cat === "decision")) add(DECISION_NOTE);
   if (drops.some((d) => d.cat === "payout")) add(PAYOUT_NOTE);
   if (drops.some((d) => d.cat === "sum")) add(SUM_NOTE);

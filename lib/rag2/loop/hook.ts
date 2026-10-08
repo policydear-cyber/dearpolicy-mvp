@@ -15,7 +15,7 @@ import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import { DROPPED_NOTE } from "./compose";
-import { syncCalcClaimRecord } from "../calc/claim-record";
+import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
 import { emptyLoopState, type RagLoopState, type TraceTurn } from "./types";
@@ -89,6 +89,10 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   const speakerId = selves.length === 1 ? selves[0].id : null;
   const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel(), personChoiceId: request.personChoiceId ?? null });
   const { state, reply, trace } = out;
+  // Integration (round 3): a correction or a deleted / superseded source updates this conversation's EXISTING claim
+  // record (agent G); syncLoopClaimState only reads and updates claim_sessions rows -- it never creates a claim, so an
+  // ordinary question is unaffected -- and runs only on a turn that changed something.
+  if (state.claim?.subjectId && (out.corrections.length || out.invalidated?.length)) await syncLoopClaimState({ accountId: request.accountId, state, conversationId: conversation.id }).catch(() => null);
   const answer = blank();
   const notes: string[] = [];
   const named = context.family.map((p) => ({ label: label(p), short: p.preferred_name && p.preferred_name !== p.display_name ? p.preferred_name : p.display_name }));
@@ -111,6 +115,10 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     notes.push(`Updated: ${words(c.key)} is now ${show(c.to)} (you said ${show(c.from)} at first).`);
     if (c.withdrawn.length) notes.push("The earlier estimate worked out from it no longer applies.");
   }
+  // Integration (round 3): what a deleted / replaced document alone supported no longer applies -- said once, plainly.
+  const lost = out.invalidated ?? [];
+  if (lost.some((x) => x.kind !== "fact")) notes.push("An earlier estimate no longer applies because the document it relied on was deleted or replaced.");
+  else if (lost.length) notes.push("Something I noted earlier from a document no longer applies because that document was deleted or replaced.");
   if (reply.kind === "ask") {
     const p = reply.pending;
     const q: ChatQuestion = p.kind === "person"
