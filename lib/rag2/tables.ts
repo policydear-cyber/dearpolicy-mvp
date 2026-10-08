@@ -371,6 +371,21 @@ export type SubjectColumnHints = {
 const classOfText = (t: string) => CLASS_RES.find(([, re]) => re.test(t))?.[0] ?? null;
 const sameTier = (a: string, b: string) => { const x = flat(a).toLowerCase(), y = flat(b).toLowerCase(); return x === y || (x.length >= 4 && y.length >= 4 && (x.includes(y) || y.includes(x))); };
 
+/** The label of a list the person is named in ("Insured children" of "Insured children: A; B"): the last "<label>:"
+ * before the name in the same sentence / line, with only plain names (no per-person brackets) between it and the name. */
+function listLabel(line: string, names: string[]): string | null {
+  for (const n of names) {
+    const i = n ? line.toLowerCase().indexOf(flat(n).toLowerCase()) : -1;
+    if (i < 0) continue;
+    const seg = line.slice(0, i).split(/\.\s|\n/).pop() ?? "";
+    const c = seg.lastIndexOf(":");
+    if (c < 0) continue;
+    const label = (seg.slice(0, c).split(/[;,]/).pop() ?? "").trim();
+    if (label.length >= 3 && label.length <= 40 && !/[()]/.test(seg.slice(c + 1))) return label;
+  }
+  return null;
+}
+
 /** Decides which of `cols` applies to the subject. */
 export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: Column; basis: SelectedValue["columnBasis"] } | { ambiguous: Column[]; reason: string } | { none: string } {
   if (!cols.length) return { none: "the table prints no value column for that" };
@@ -392,7 +407,11 @@ export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: C
   const docMatches = new Map<number, { line: string; ref: EvidenceRef }>();
   for (const named of hints.namedLines) {
     // Only the clause of the line that names the person ("Koh Jun Hao (child)" of "A (adult); Koh Jun Hao (child)").
-    const clause = hints.names.map((n) => personClause(named.line, n)).find((c): c is string => !!c) ?? named.line;
+    const clause0 = hints.names.map((n) => personClause(named.line, n)).find((c): c is string => !!c) ?? named.line;
+    // Integration (agent C's request 4): a person named inside a labelled list ("Insured children: A; B") takes the
+    // list's label, even when the clause around the name is just "B".
+    const label = listLabel(named.line, hints.names);
+    const clause = label && !clause0.toLowerCase().includes(label.toLowerCase()) ? `${label}: ${clause0}` : clause0;
     const nl = { ...named, line: clause };
     const fits = classed.filter((c) => {
       const words = [c.appliesTo!.value, c.leaf, c.heading ?? ""].filter((w) => w && w.length >= 3);

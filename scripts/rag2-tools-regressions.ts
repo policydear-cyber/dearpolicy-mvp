@@ -399,6 +399,13 @@ async function main() {
     const cols = T.parseTables("x", [{ page: 1, text: page("PA", 1) }]).find((tb) => tb.rows.some((r) => r.label === "Mobility aids"))!.columns.filter((c) => c.kind === "amount");
     const ch = T.chooseColumn(cols, hints);
     assert.ok("ambiguous" in ch, JSON.stringify(ch));
+    // Integration (agent C's request 4): a stepchild named only in a labelled list sentence ("Insured children: A; X")
+    // takes the list's class; named in no list, still ambiguous.
+    const ref = (await value("OUTPT", "specialist consultation", M.yixuan.id, "amount", { tier: "Insured Adult" }) as any).evidence;
+    const listed = T.chooseColumn(cols, { ...hints, relation: "stepchild", namedLines: [{ line: "Insured children: Koh Jun Hao; X", ref }] });
+    assert.ok("ok" in listed && /child/i.test(listed.ok.header), JSON.stringify(listed));
+    const unlisted = T.chooseColumn(cols, { ...hints, relation: "stepchild", namedLines: [{ line: "Correspondence to X at the address above", ref }] });
+    assert.ok("ambiguous" in unlisted, JSON.stringify(unlisted));
   });
 
   // ---------------------------------------------------------------- K: compute
