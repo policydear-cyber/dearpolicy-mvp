@@ -8,7 +8,7 @@
  */
 import { query } from "@/lib/db/client";
 import { pineconeEnabled, searchPolicyPassages } from "@/lib/rag/pinecone";
-import { evidenceAt, type EvidenceRef } from "./evidence";
+import { evidenceAt, refineEvidence, type EvidenceRef } from "./evidence";
 import { loadDocs, loadLinks, loadPages, type DocRow } from "./store";
 
 export type PassageHit = {
@@ -111,12 +111,17 @@ export async function searchPassages(args: { accountId: string; query: string; s
     .filter((x) => x.lex > 0)
     .sort((a, b) => b.score - a.score || a.u.policyId.localeCompare(b.u.policyId) || a.u.page - b.u.page || a.u.start - b.u.start)
     .slice(0, k);
+  const byPolicy = new Map<string, Map<number, string>>();
+  for (const p of pages) { if (!byPolicy.has(p.policyId)) byPolicy.set(p.policyId, new Map()); byPolicy.get(p.policyId)!.set(p.page, p.text); }
   const hits: PassageHit[] = ranked.map(({ u, score }) => {
     const d = byId.get(u.policyId)!;
+    // The passage is the retrieval unit; `support` pins the sentence / row in it that matches the query, with the
+    // table header, continued header or footnote it needs (lib/rag2/evidence.ts refineEvidence).
+    const evidence = refineEvidence(evidenceAt({ policyId: u.policyId, documentHash: d.fileHash, page: u.page, pageText: pageText.get(u.policyId + "#" + u.page)!, start: u.start, end: u.end, subjectId: args.subjectId ?? null }), byPolicy.get(u.policyId)!, args.query);
     return {
       policyId: u.policyId, productName: d.productName, insurer: d.insurer, page: u.page, text: u.text, score: Math.round(score * 1e4) / 1e4,
       matched: [...new Set(u.toks.filter((t) => qs.has(t)))],
-      evidence: evidenceAt({ policyId: u.policyId, documentHash: d.fileHash, page: u.page, pageText: pageText.get(u.policyId + "#" + u.page)!, start: u.start, end: u.end, subjectId: args.subjectId ?? null }),
+      evidence,
     };
   });
   return { query: args.query, retrieval: semantic ? "lexical+semantic" : "lexical", hits, searchedPolicyIds: docs.map((d) => d.id) };

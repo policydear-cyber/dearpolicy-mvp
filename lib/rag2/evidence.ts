@@ -32,6 +32,12 @@ export type EvidencePassage = {
   onPage: number;
 };
 
+/** A verbatim span of one stored page (text === pageText.slice(start, end) of `onPage`). */
+export type EvidenceSpan = { text: string; start: number; end: number; onPage: number };
+/** Text that must travel with a supporting span for it to be read correctly: the header row of the table the row is
+ * in, the header of a table continued from the previous page, or a footnote the span's marker points to. */
+export type EvidenceContext = EvidenceSpan & { role: "table_header" | "continuation_header" | "footnote" };
+
 export type EvidenceRef = {
   policyId: string;
   /** policies.file_hash of the version read (null when the document has none on file). */
@@ -40,6 +46,11 @@ export type EvidenceRef = {
   passage: EvidencePassage;
   subjectId?: string | null;
   table?: EvidenceTableRef | null;
+  /** The exact sentence or table row inside `passage` that supports the statement (internal precision; the page stays
+   * the household-facing link). Absent when no single sentence / row has been identified yet. */
+  support?: EvidenceSpan | null;
+  /** What the support needs to be read correctly (table header, continued header, footnote). */
+  context?: EvidenceContext[] | null;
 };
 
 export type Span = { start: number; end: number; text: string };
@@ -114,4 +125,117 @@ export function toFigureBinding(ref: EvidenceRef, benefit: string, value: number
     passage: ref.passage.text,
     column: ref.table ? (ref.table.columnLeaf || ref.table.columnHeader || null) : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Precision: the supporting sentence / row inside a passage, and what it needs (header, continuation, footnote).
+// ---------------------------------------------------------------------------
+type Line = { start: number; end: number; text: string };
+/** The page's lines with their offsets. */
+export function linesOf(pageText: string): Line[] {
+  const out: Line[] = [];
+  let at = 0;
+  for (const raw of (pageText ?? "").split("\n")) { out.push({ start: at, end: at + raw.length, text: raw }); at += raw.length + 1; }
+  return out;
+}
+/** A line laid out as table cells (a tab, or three or more spaces between two cells). */
+export function isTableLine(text: string): boolean { return /\t/.test(text.trim()) || /\S {3,}\S/.test(text.trim()); }
+const FOOT_MARK = /(?:[*†‡§¶]+|[¹²³⁴⁵⁶⁷⁸⁹]|\((?:\d{1,2}|[a-h])\))/;
+const hasFigure = (t: string) => /\d/.test(t);
+const words = (t: string) => new Set((t.toLowerCase().match(/[a-z]{3,}|\d+(?:[.,]\d+)*/g) ?? []).map((w) => w.replace(/,/g, "").replace(/(?:es|s)$/, "")));
+
+/** Candidate supporting units of a passage: each table line whole, each prose line cut into sentences. */
+function unitsOf(ref: EvidenceRef, pageText: string): EvidenceSpan[] {
+  const out: EvidenceSpan[] = [];
+  for (const l of linesOf(pageText)) {
+    if (l.end <= ref.passage.start || l.start >= ref.passage.end || !l.text.trim()) continue;
+    const lead = l.text.length - l.text.trimStart().length, start = l.start + lead, end = l.start + l.text.trimEnd().length;
+    if (isTableLine(l.text)) { out.push({ text: pageText.slice(start, end), start, end, onPage: ref.passage.onPage }); continue; }
+    const body = pageText.slice(start, end);
+    const re = /[^.!?]+(?:[.!?]+(?=\s|$)|$)/g;
+    for (const m of body.matchAll(re)) {
+      const t = m[0], a = start + m.index! + (t.length - t.trimStart().length), b = start + m.index! + t.trimEnd().length;
+      if (b > a) out.push({ text: pageText.slice(a, b), start: a, end: b, onPage: ref.passage.onPage });
+    }
+  }
+  return out;
+}
+
+/** The sentence / row of `ref`'s passage that best supports `about` (a query or the sentence being said), or -- for a
+ * table value -- the row holding the value cell. Null when nothing in the passage shares a word with `about`. */
+export function supportSpan(ref: EvidenceRef, pageText: string, about?: string | null): EvidenceSpan | null {
+  if (!pageText) return null;
+  const units = unitsOf(ref, pageText);
+  if (ref.table?.cell) {
+    const c = ref.table.cell;
+    const row = units.find((u) => u.start <= c.start && u.end >= c.end);
+    if (row) return row;
+  }
+  if (units.length === 1) return units[0];
+  const want = words(about ?? "");
+  if (!want.size) return null;
+  let best: EvidenceSpan | null = null, score = 0;
+  for (const u of units) {
+    const have = words(u.text);
+    let s = 0;
+    for (const w of want) if (have.has(w)) s += /^\d/.test(w) ? 3 : 1;
+    if (s > score) { score = s; best = u; }
+  }
+  return best;
+}
+
+/** What the support needs to be read correctly: the header row of its table (walking up through the table block), or,
+ * when the block starts the page with no header, the header of the table on the previous page (a continuation); and
+ * any footnote a marker in the support points to (on the same page). `pages` maps page number -> stored text. */
+export function contextFor(support: EvidenceSpan, pages: Map<number, string>): EvidenceContext[] {
+  const out: EvidenceContext[] = [];
+  const text = pages.get(support.onPage);
+  if (!text) return out;
+  const lines = linesOf(text);
+  const at = lines.findIndex((l) => l.start <= support.start && l.end >= support.start);
+  const span = (l: Line, page: number, role: EvidenceContext["role"]): EvidenceContext => {
+    const lead = l.text.length - l.text.trimStart().length;
+    return { role, onPage: page, start: l.start + lead, end: l.start + l.text.trimEnd().length, text: l.text.trim() };
+  };
+  if (at >= 0 && isTableLine(lines[at].text)) {
+    let header: Line | null = null, top = at;
+    for (let i = at - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (!l.text.trim() || !isTableLine(l.text)) break;
+      top = i;
+      if (!hasFigure(l.text)) { header = l; break; }
+    }
+    if (header) out.push(span(header, support.onPage, "table_header"));
+    else {
+      // Nothing above but (at most) a running title: a table continued from the previous page.
+      const above = lines.slice(0, top).filter((l) => l.text.trim());
+      const prev = pages.get(support.onPage - 1);
+      if (above.length <= 1 && prev) {
+        const pl = linesOf(prev);
+        const cells = (t: string) => t.trim().split(/\t| {3,}/).length;
+        const want = cells(lines[at].text);
+        for (let i = pl.length - 1; i >= 0; i--) if (isTableLine(pl[i].text) && !hasFigure(pl[i].text) && cells(pl[i].text) === want) { out.push(span(pl[i], support.onPage - 1, "continuation_header")); break; }
+      }
+    }
+  }
+  const mark = support.text.match(new RegExp("\\S(" + FOOT_MARK.source + ")(?=\\s|$)"));
+  if (mark) {
+    const m = mark[1];
+    const foot = lines.find((l) => l.start !== lines[at]?.start && l.text.trimStart().startsWith(m));
+    if (foot) out.push(span(foot, support.onPage, "footnote"));
+  }
+  return out;
+}
+
+/** Sets `support` (and `context`) on a ref in place, when it has none yet. Returns the ref. */
+export function refineEvidence(ref: EvidenceRef, pages: Map<number, string>, about?: string | null): EvidenceRef {
+  if (ref.support) return ref;
+  const pageText = pages.get(ref.passage.onPage);
+  if (!pageText || !verifyEvidence(ref, pageText)) return ref;
+  const support = supportSpan(ref, pageText, about);
+  if (!support) return ref;
+  ref.support = support;
+  const context = contextFor(support, pages);
+  ref.context = context.length ? context : null;
+  return ref;
 }
