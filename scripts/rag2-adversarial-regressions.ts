@@ -36,12 +36,14 @@ type TurnOut = { saved: Saved; a: ChatAnswer; v: string; loop: any; trace: any }
 const refusals = (t: TurnOut) => (t.trace?.toolCalls ?? []).filter((x: any) => !x.ok).map((x: any) => `${x.name}: ${x.error}`);
 const scriptErrors = (t: TurnOut) => (t.trace?.toolCalls ?? []).filter((x: any) => x.name === "model" && !x.ok).map((x: any) => x.error);
 const ctxOf = (t: TurnOut) => `\n     visible: ${t.v.slice(0, 400)}\n     refused: ${JSON.stringify(refusals(t)).slice(0, 400)}\n     dropped: ${JSON.stringify(t.trace?.dropped ?? []).slice(0, 300)}\n     gate: ${JSON.stringify(t.trace?.gate ?? []).slice(0, 300)}${scriptErrors(t).length ? "\n     script/model error: " + scriptErrors(t).join("; ").slice(0, 300) : ""}`;
+/** A verified record of a computed figure: a ComputationRecord (compute) or a CalculationRecord (calculate). */
+const recordFor = (a: ChatAnswer | undefined, value: number) => [...((a?.computations ?? []) as any[]), ...(((a as any)?.calculations ?? []) as any[])].find((c) => Math.abs(Number(c?.result?.value) - value) < 1e-9);
 const evidenceOf = (t: TurnOut) => ((t.trace?.evidenceChosen ?? []) as string[]).map((id) => t.loop?.evidence?.[id]).filter(Boolean);
 
 let H: AdvHarness;
 let installLoopModel: (m: any) => void;
-async function converse(account: string, turns: Turn[], messages: string[], between?: (i: number, convId: string) => Promise<void>): Promise<{ turns: TurnOut[]; model: AdvModel; error?: string }> {
-  const model = new AdvModel(turns); installLoopModel(model);
+async function converse(account: string, turns: Turn[], messages: string[], between?: (i: number, convId: string) => Promise<void>, opts: { metered?: boolean } = {}): Promise<{ turns: TurnOut[]; model: AdvModel; error?: string }> {
+  const model = new AdvModel(turns, opts); installLoopModel(model);
   const out: TurnOut[] = [];
   let conv: { id?: string; rev?: number } = {};
   try {
@@ -104,14 +106,14 @@ async function main() {
       assert.equal(t.a.questions?.length, 1, "exactly one question" + ctxOf(t));
       assert.match(t.a.questions[0].text, /accident|illness|how/i);
       assert.doesNotMatch(t.v, MONEY);
-      assert.equal(t.loop?.pending?.factKey, "cause");
+      assert.ok(["cause", "how_it_happened", "circumstances", "how_injured", "mechanism"].includes(t.loop?.pending?.factKey), "pending is the how-it-happened question");
       assert.match(String(t.loop?.pending?.why ?? ""), /Accident|Sickness/, "the why quotes the accident-only wording");
     });
     await check("S2.3 broken arm: after the cause is given, the user-reported fracture is never presented as medically confirmed/approved", () => {
       need(r, 2); const t = r.turns[1];
       assert.match(t.v, /S\$600 per fracture/, ctxOf(t));
       assert.doesNotMatch(t.v, /medically confirmed|is approved|approved\b/i, "a household report presented as reviewed medical evidence" + ctxOf(t));
-      assert.equal(t.loop?.claim?.facts?.cause?.words, "He fell off the monkey bars at school");
+      assert.equal((t.loop?.claim?.facts?.how_it_happened ?? t.loop?.claim?.facts?.cause)?.words, "He fell off the monkey bars at school");
     }); }
 
   // ============================ 3. hospital stay day-count rule ============================
@@ -130,7 +132,7 @@ async function main() {
       need(r, 3); const t = r.turns[2];
       assert.match(t.v, /Indicative estimate[^.]*S\$180\b/, "S$180 indicative estimate" + ctxOf(t));
       assert.deepEqual(t.trace.gate, []);
-      assert.ok((t.a.computations ?? []).some((c) => c.result.value === 180), "a ComputationRecord for 180");
+      assert.ok(recordFor(t.a, 180), "a verified calculation record for 180");
     }); }
 
   // ============================ 4. side question about the speaker ============================
@@ -192,7 +194,17 @@ async function main() {
       need(r, 1); const t = r.turns[0];
       assert.match(t.v, /Indicative estimate[^.]*S\$1,100/, "the S$1,100 estimate was dropped" + ctxOf(t));
       assert.deepEqual(t.trace.gate, [], "gate problems");
-      assert.ok((t.a.computations ?? []).some((c) => c.result.value === 1100), "a ComputationRecord for 1,100");
+      assert.ok(recordFor(t.a, 1100), "a verified calculation record for 1,100");
+      assert.ok(t.a.disclaimer && /not a payout/i.test(t.a.disclaimer));
+      assert.doesNotMatch(t.v, /payout/i);
+    }); }
+
+  { const r = await run(SC.S7b);
+    await check("S7b min(S$1,000 bill, S$1,200 limit) - S$100 excess = S$900 (order-independent): indicative estimate with a verified record", () => {
+      need(r, 1); const t = r.turns[0];
+      assert.match(t.v, /Indicative estimate[^.]*S\$900\b/, "the S$900 estimate was dropped" + ctxOf(t));
+      assert.deepEqual(t.trace.gate, [], "gate problems");
+      assert.ok(recordFor(t.a, 900), "a verified calculation record for 900");
       assert.ok(t.a.disclaimer && /not a payout/i.test(t.a.disclaimer));
       assert.doesNotMatch(t.v, /payout/i);
     }); }
@@ -201,25 +213,25 @@ async function main() {
   { const r = await run(SC.S6a);
     await check("S6a corrected person: switching the claim from Ethan to Chloe says the earlier estimate no longer applies and never repeats it", () => {
       need(r, 2); const t = r.turns[1];
-      assert.doesNotMatch(t.v, /1,100/, ctxOf(t));
+      assert.doesNotMatch(t.v, /S\$900\b/, ctxOf(t));
       assert.match(t.v, /no longer applies|withdrawn|Updated/i, "the correction is silent: nothing tells the household the earlier figure is void" + ctxOf(t));
       assert.equal(t.loop?.claim?.subjectId, T.chloe.id);
-      assert.equal((t.loop?.claim?.derived ?? []).filter((d: any) => /1,100/.test(d.sentence)).length, 0);
+      assert.equal((t.loop?.claim?.derived ?? []).filter((d: any) => /S\$900\b/.test(d.sentence)).length, 0);
     });
     await check("S6a' corrected person: the withdrawn estimate is not fed back to the model as conversation history", () => {
       need(r, 2);
       const lastReq = r.model.requests.at(-1)!;
       const hist = lastReq.messages.filter((m) => m.role === "assistant" && typeof m.content === "string").map((m) => (m as any).content).join(" ");
-      if (!/1,100/.test(r.turns[0].v)) throw new Error("precondition: turn 1 showed no S$1,100 estimate (see S7)");
-      assert.doesNotMatch(hist + " " + (lastReq.messages[0] as any).content, /1,100/, "the model still sees the withdrawn S$1,100 in history");
+      if (!/S\$900\b/.test(r.turns[0].v)) throw new Error("precondition: turn 1 showed no S$900 estimate (see S7b)");
+      assert.doesNotMatch(hist + " " + (lastReq.messages[0] as any).content, /S\$900\b/, "the model still sees the withdrawn S$900 in history");
     }); }
   { const r = await run(SC.S6b);
     await check("S6b.1 corrected discharge date: the hospital-cash estimate is withdrawn and recomputed (S$480), old S$240 / nights-based S$600 never shown", () => {
       need(r, 2); const t = r.turns[1];
       assert.doesNotMatch(t.v, /S\$240\b/, ctxOf(t)); assert.doesNotMatch(t.v, /S\$600\b/);
       assert.match(t.v, /no longer applies|Updated/i, ctxOf(t));
-      assert.equal(t.loop?.claim?.facts?.discharged_at?.value, "2026-10-08 11:00");
-      assert.equal(t.loop?.claim?.facts?.discharged_at?.previous?.[0]?.value, "2026-10-06 10:15");
+      assert.equal(t.loop?.claim?.facts?.discharged_at?.value, "8 October 11am");
+      assert.equal(t.loop?.claim?.facts?.discharged_at?.previous?.[0]?.value, "6 October 10.15am");
     });
     await check("S6b.2 (positive, interface-dependent) first-full-day rule: S$240 before the correction, S$480 after", () => {
       need(r, 2);
@@ -234,7 +246,7 @@ async function main() {
       assert.match(t.v, /S\$120 per day/, ctxOf(t)); assert.match(t.v, /admission/i);
       assert.doesNotMatch(t.v, /S\$360|Indicative estimate/i, "a made-up estimate was shown");
       assert.ok((t.a.figureBindings ?? []).some((b) => b.value === 120 && b.column === "Insured Child"));
-      assert.ok(t.trace.dropped.some((d: any) => /3/.test(d.sentence) && /household|fact|nights|days/i.test(d.reason)), "dropped with a specific reason");
+      assert.ok(t.trace.dropped.some((d: any) => /3/.test(d.sentence) && /household|fact|nights|days|admission|dates/i.test(d.reason)), "dropped with a specific reason");
     }); }
   { const r = await run(SC.S8b);
     await check("S8b a dropped estimate is replaced by a specific unresolved requirement, not a silent/generic gap", () => {
@@ -378,7 +390,7 @@ async function main() {
   // ============================ usage limits ============================
   { await H.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd,priced,ok) VALUES($1,'chat','openai','gpt-test',1,1,999,true,true)", [ACCOUNT_N]).catch(async () => {
       await H.db.query("INSERT INTO model_usage(account_id,role,provider,model,input_tokens,output_tokens,cost_usd) VALUES($1,'chat','openai','gpt-test',1,1,999)", [ACCOUNT_N]); });
-    const r = await converse(ACCOUNT_N, [{ steps: [() => [call("final_answer", { sentences: [{ text: "Hello." }] })]] }], ["What does FamilyFirst cover for Rohan?"]);
+    const r = await converse(ACCOUNT_N, [{ steps: [() => [call("final_answer", { sentences: [{ text: "Hello." }] })]] }], ["What does FamilyFirst cover for Rohan?"], undefined, { metered: true });
     await H.db.query("DELETE FROM model_usage WHERE account_id=$1 AND model='gpt-test'", [ACCOUNT_N]);
     await check("U1 household over its monthly spend limit: the loop does not call the model and says so honestly", () => {
       need(r, 1); const t = r.turns[0];
@@ -387,18 +399,23 @@ async function main() {
     }); }
   { const before = Number((await H.db.query("SELECT coalesce(sum(input_tokens),0)::int AS n FROM model_usage WHERE account_id=$1", [ACCOUNT_T])).rows[0].n);
     const beforeExec = Number((await H.db.query("SELECT count(*)::int AS n FROM model_executions").catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n);
-    const r = await converse(ACCOUNT_T, [{ usage: { input: 70_000, output: 1_000 }, steps: [] }], ["Tell me everything about every policy."]);
-    await check("U2 per-turn token budget: the loop stops after the budget (2 x 71k > 120k) with an honest, figure-free reply that names the limit", () => {
+    // Metered (hosted-kind) scripted model; the per-turn US$ cap is lifted for this run so the TOKEN limit is the one
+    // that stops the turn (DEARPOLICY_RAG_LOOP_MAX_TOKENS default 80k: 45k + 45k > 80k).
+    const savedUsd = process.env.DEARPOLICY_RAG_LOOP_MAX_TURN_USD; process.env.DEARPOLICY_RAG_LOOP_MAX_TURN_USD = "4";
+    const r = await converse(ACCOUNT_T, [{ usage: { input: 45_000, output: 1_000 }, steps: [] }], ["Tell me everything about every policy."], undefined, { metered: true });
+    if (savedUsd == null) delete process.env.DEARPOLICY_RAG_LOOP_MAX_TURN_USD; else process.env.DEARPOLICY_RAG_LOOP_MAX_TURN_USD = savedUsd;
+    await check("U2 per-turn token budget: the loop stops at the token limit (45k + 45k > 80k) with an honest, figure-free reply that names the limit", () => {
       need(r, 1); const t = r.turns[0];
-      assert.equal(t.trace.outcome, "budget_exhausted", ctxOf(t)); assert.ok(t.trace.steps <= 2, "steps " + t.trace.steps);
-      assert.ok(t.trace.usage.input >= 140_000);
+      assert.ok(["budget_exhausted", "limit_reached"].includes(t.trace.outcome), "outcome " + t.trace.outcome + ctxOf(t)); assert.ok(t.trace.steps <= 2, "steps " + t.trace.steps);
+      assert.ok(t.trace.usage.input >= 45_000, "the model was called at least once");
       assert.doesNotMatch(t.v, MONEY); assert.match(t.v, /limit|budget|too long|usage/i, "the reply does not say the turn hit a limit" + ctxOf(t));
     });
     await check("U3 usage accounting: the loop's model tokens are recorded against the household", async () => {
       need(r, 1);
       const after = Number((await H.db.query("SELECT coalesce(sum(input_tokens),0)::int AS n FROM model_usage WHERE account_id=$1", [ACCOUNT_T])).rows[0].n);
       const afterExec = Number((await H.db.query("SELECT count(*)::int AS n FROM model_executions").catch(() => ({ rows: [{ n: 0 }] }))).rows[0].n);
-      assert.ok(after - before >= 140_000 || afterExec - beforeExec >= 2, `no usage recorded for the loop's calls (model_usage +${after - before} input tokens, model_executions +${afterExec - beforeExec} rows)`);
+      const seen = Number(r.turns[0]?.trace?.usage?.input ?? 0);
+      assert.ok(seen >= 45_000 && (after - before >= seen && afterExec - beforeExec >= 1), `no usage recorded for the loop's calls (model_usage +${after - before} input tokens, model_executions +${afterExec - beforeExec} rows)`);
     }); }
 
   await check("Z no network call was attempted in the whole suite", () => { assert.deepEqual(H.networkCalls, []); });

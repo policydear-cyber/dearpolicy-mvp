@@ -80,7 +80,7 @@ const KIDSAFE_P2 = [
   "",
   "Hospital income is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
   "",
-  "Accident medical reimbursement pays the reasonable medical expenses incurred for one Accident, up to the limit per accident shown in the Schedule, after deducting the Excess.",
+  "Accident medical reimbursement pays the reasonable medical expenses incurred for one Accident, up to the limit per accident shown in the Schedule. The Excess is then deducted from that amount, after the limit per accident has been applied.",
   "",
   "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
 ].join("\n");

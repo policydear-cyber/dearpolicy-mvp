@@ -9,6 +9,7 @@
  * Ids (evidence, values, results, candidates) always come from what the tools returned, or are deliberately forged
  * by an adversarial script.
  */
+import type { ModelChoice } from "@/lib/ai/providers";
 import type { LoopMessage, LoopModel, LoopToolSpec, ModelTurnInput, ModelTurnOutput, ToolCall } from "@/lib/rag2/loop/types";
 
 export type Obs = { name: string; args: Record<string, unknown>; ok: boolean; result: Record<string, any> };
@@ -18,13 +19,22 @@ export type Step = (v: View) => Call[];
 export type Turn = { user?: string | RegExp; steps: Step[]; usage?: { input: number; output: number } };
 export const call = (name: string, args: Record<string, unknown>): Call => ({ name, arguments: args });
 
+/** A test-only stand-in that presents itself as a HOSTED model (kind "hosted" with a model choice) so the loop's
+ * usage meter applies the household spend cap and records its tokens exactly as for a real provider call. It never
+ * touches the network: its replies are the script's. */
+export const ADV_HOSTED_CHOICE: ModelChoice = { provider: "openai", model: "adv-scripted-metered-test" };
+
 export class AdvModel implements LoopModel {
-  readonly id = "dearpolicy-adversarial-scripted-test-v1";
-  readonly kind = "scripted" as const;
+  readonly id: string;
+  readonly kind: "hosted" | "scripted";
+  readonly choice?: ModelChoice;
   turnIndex = -1;
   private lastKey = "";
   readonly requests: ModelTurnInput[] = [];
-  constructor(private readonly turns: Turn[]) {
+  constructor(private readonly turns: Turn[], opts: { metered?: boolean } = {}) {
+    this.kind = opts.metered ? "hosted" : "scripted";
+    this.id = opts.metered ? "openai:" + ADV_HOSTED_CHOICE.model : "dearpolicy-adversarial-scripted-test-v1";
+    if (opts.metered) this.choice = ADV_HOSTED_CHOICE;
     if (process.env.NODE_ENV === "production" || (process.env.VERCEL ?? "").trim() || (process.env.VERCEL_ENV ?? "").trim()) throw new Error("test-only model refused in a production build");
   }
   get started() { return this.turnIndex + 1; }

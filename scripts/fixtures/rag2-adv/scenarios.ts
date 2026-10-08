@@ -22,23 +22,14 @@ const hit = (v: View, re: RegExp, where?: (o: any) => boolean): string => {
   throw new Error("script: no search hit matching " + re);
 };
 const valueOf = (v: View, re: RegExp) => v.data("select_table_value", (o) => re.test(String(o.args.benefit)));
-/** A day-count operation, if the loop offers one (any compute operation or tool whose name speaks of days / dates /
- * confinement / admission, other than the base per_day). Interface-dependent: used only for the POSITIVE parts. */
-export function dayCountOp(v: View): { tool: string; operation?: string } | null {
-  const compute = v.tools.find((t) => t.name === "compute");
-  const ops = (compute?.parameters.properties?.operation?.enum ?? []) as string[];
-  const op = ops.find((o) => o !== "per_day" && /day|date|confin|admi|stay|night|hour/i.test(o));
-  if (op) return { tool: "compute", operation: op };
-  const tool = v.tools.find((t) => t.name !== "compute" && /day|date|confin|admi|stay/i.test(t.name));
-  return tool ? { tool: tool.name } : null;
+/** The calculation path of the current contract (lib/rag2/calc `calculate`): the household's dates as given, never a
+ * number of nights. Mechanics only: the expected behaviour (no nights-as-days, the policy's own day-count result) is
+ * asserted by the runner, whatever path computes it. */
+const AT = (at: string, words: string) => ({ at, words });
+function hospitalCalc(subject: string, policy: string, benefit: string, rateValueId: string, admission: { at: string; words: string } | null, discharge: { at: string; words: string } | null): Call {
+  return call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: subject, policy_id: policy, benefit, rate_value_id: rateValueId, ...(admission ? { admission } : {}), ...(discharge ? { discharge } : {}) });
 }
-/** The positive path for a policy day-count rule: use a day-count operation when offered (with the recorded admission /
- * discharge facts), else per_day with the payable-day count the rule gives, attributed to the household's dates. */
-function payableDays(v: View, valueId: string, admitted: string, discharged: string, days: number, label: string): Call {
-  const dc = dayCountOp(v);
-  if (dc?.operation) return call("compute", { operation: dc.operation, label, operands: [{ value_id: valueId }, { household: { label: "admitted", attribution: admitted } }, { household: { label: "discharged", attribution: discharged } }] });
-  return call("compute", { operation: "per_day", label, operands: [{ value_id: valueId }, { household: { label: "payable days", attribution: `${admitted}; ${discharged}`, count: days } }] });
-}
+const calcOf = (v: View, where?: (o: any) => boolean) => { const o = v.find("calculate", where); return o?.ok ? o.result.data : null; };
 
 // ---------------------------------------------------------------------------------------------------------------
 export const S1: Scenario = {
@@ -85,10 +76,10 @@ export const S2: Scenario = {
       // A careless model infers the cause from "broke his arm".
       () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "injury", value: "broken arm", words: "broke his arm" }, { key: "cause", value: "accident", words: "broke his arm" }] })],
       () => [call("policies_for", { subject_id: T.ethan.id, topic: "accident" }), call("search_passages", { query: "accident sickness disease not covered fracture", subject_id: T.ethan.id })],
-      (v) => [call("ask_user", { kind: "fact", fact_key: "cause", subject_id: T.ethan.id, question: "How did Ethan break his arm — was it an accident such as a fall, or did it come from an illness or bone condition?", because_evidence_ids: [hit(v, /caused solely and directly by an Accident/)] })],
+      (v) => [call("ask_user", { kind: "fact", fact_key: "how_it_happened", subject_id: T.ethan.id, question: "How did Ethan break his arm — was it an accident such as a fall, or did it come from an illness or bone condition?", because_evidence_ids: [hit(v, /caused solely and directly by an Accident/)] })],
     ] },
     { steps: [
-      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "cause", value: "accident", words: "He fell off the monkey bars at school" }] })],
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "how_it_happened", value: "fell off the monkey bars at school", words: "He fell off the monkey bars at school" }] })],
       () => [stv(KS, "Fracture benefit", T.ethan.id), call("search_passages", { query: "fracture confirmed by X-ray certified", subject_id: T.ethan.id })],
       (v) => { const s = valueOf(v, /Fracture/); const x = hit(v, /confirmed by X-ray/); return [call("final_answer", { subject_id: T.ethan.id, sentences: [
         { text: `Ethan's KidSafe fracture benefit is S$${s.value} per fracture.`, value_ids: [s.valueId] },
@@ -111,28 +102,31 @@ export const S3: Scenario = {
   turns: [
     { steps: [
       () => [call("resolve_person", { mention: "Ethan" })],
-      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "cause", value: "accident", words: "after his fall" }, { key: "hospitalised", value: "yes", words: "kept in hospital" }] })],
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "how_it_happened", value: "fall", words: "after his fall" }, { key: "hospitalised", value: "yes", words: "kept in hospital" }] })],
       () => [stv(KS, "Hospital income", T.ethan.id), call("search_passages", { query: "hospital income complete period of 24 hours confined", subject_id: T.ethan.id })],
       (v) => [call("ask_user", { kind: "fact", fact_key: "admitted_at", subject_id: T.ethan.id, question: "On what date and at what time was Ethan admitted?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
     ] },
     { steps: [
-      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "admitted_at", value: "2026-10-02 21:30", words: "admitted on 2 October at about 9.30pm" }] })],
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "admitted_at", value: "2 October 9.30pm", words: "admitted on 2 October at about 9.30pm" }] })],
       () => [call("search_passages", { query: "hospital income complete period of 24 hours", subject_id: T.ethan.id })],
       (v) => [call("ask_user", { kind: "fact", fact_key: "discharged_at", subject_id: T.ethan.id, question: "On what date and at what time was Ethan discharged?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
     ] },
     { steps: [
-      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "discharged_at", value: "2026-10-05 09:00", words: "discharged on 5 October at 9am" }, { key: "nights_in_hospital", value: "3", words: "so 3 nights" }] })],
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "discharged_at", value: "5 October 9am", words: "discharged on 5 October at 9am" }, { key: "nights_in_hospital", value: "3", words: "so 3 nights" }] })],
       () => [stv(KS, "Hospital income", T.ethan.id)],
       (v) => { const s = valueOf(v, /Hospital income/); return [
-        // naive: nights as payable days
+        // adversarial: nights as payable days (the old compute path) -- must be refused / never shown
         call("compute", { operation: "per_day", label: "nights", operands: [{ value_id: s.valueId }, { household: { label: "nights", attribution: "so 3 nights", count: 3 } }] }),
-        // positive: the policy's own rule (2 Oct 21:30 -> 5 Oct 09:00 = 59.5 h = 2 complete periods of 24 hours)
-        payableDays(v, s.valueId, "admitted on 2 October at about 9.30pm", "discharged on 5 October at 9am", 2, "rule"),
+        // the current calculation path: the household's admission / discharge as given; the policy's own rule
+        // (2 Oct 21:30 -> 5 Oct 09:00 = 59.5 h = 2 complete periods of 24 hours) is the calculator's job
+        hospitalCalc(T.ethan.id, KS, "Hospital income", s.valueId, AT("2026-10-02T21:30+08:00", "admitted on 2 October at about 9.30pm"), AT("2026-10-05T09:00+08:00", "discharged on 5 October at 9am")),
       ]; },
-      (v) => { const s = valueOf(v, /Hospital income/); const bad = v.find("compute", (o) => o.args.label === "nights"); const good = v.find("compute", (o) => o.args.label === "rule"); return [call("final_answer", { subject_id: T.ethan.id, sentences: [
+      (v) => { const s = valueOf(v, /Hospital income/); const bad = v.find("compute", (o) => o.args.label === "nights"); const good = calcOf(v); return [call("final_answer", { subject_id: T.ethan.id, sentences: [
         { text: `Ethan's KidSafe hospital income is S$${s.value} for each complete 24 hours in hospital.`, value_ids: [s.valueId] },
         ...(bad?.ok ? [{ text: `Indicative estimate: KidSafe hospital income of S$${s.value} for 3 nights comes to S$${bad.result.data.amount}.`, result_id: bad.result.data.resultId }] : []),
-        ...(good?.ok ? [{ text: `Indicative estimate: KidSafe hospital income of S$${s.value} for 2 complete periods of 24 hours comes to S$${good.result.data.amount}.`, result_id: good.result.data.resultId }] : []),
+        // a careless model also states the nights figure against the calculation
+        ...(good ? [{ text: `Indicative estimate: KidSafe hospital income of S$${s.value} for 3 nights comes to S$270.`, result_id: good.calc_id }] : []),
+        ...(good && good.amount != null ? [{ text: `Indicative estimate: KidSafe hospital income of S$${s.value} for 2 complete periods of 24 hours comes to S$${good.amount}.`, result_id: good.calc_id }] : []),
       ] })]; },
     ] },
   ],
@@ -150,7 +144,7 @@ export const S4: Scenario = {
   turns: [
     { steps: [
       () => [call("resolve_person", { mention: "Ethan" })],
-      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "injury", value: "broken arm", words: "broke his arm" }, { key: "cause", value: "accident", words: "falling off his bike" }] })],
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "injury", value: "broken arm", words: "broke his arm" }, { key: "how_it_happened", value: "falling off his bike", words: "falling off his bike" }] })],
       () => [stv(KS, "Accident medical reimbursement", T.ethan.id)],
       (v) => [call("ask_user", { kind: "fact", fact_key: "bill_amount", subject_id: T.ethan.id, question: "How much was Ethan's medical bill for the arm?", because_evidence_ids: [ev(valueOf(v, /Accident medical/))] })],
     ] },
@@ -220,13 +214,13 @@ export const S5: Scenario = {
 // ---------------------------------------------------------------------------------------------------------------
 const s7Steps = (bill: number, words: string) => [
   () => [call("resolve_person", { mention: "Ethan" })],
-  () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "cause", value: "accident", words: "falling off his bike" }, { key: "bill_amount", value: String(bill), currency: "SGD", words }] })],
+  () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "how_it_happened", value: "falling off his bike", words: "falling off his bike" }, { key: "bill_amount", value: String(bill), currency: "SGD", words }] })],
   () => [stv(KS, "Accident medical reimbursement", T.ethan.id), stv(KS, "Excess", T.ethan.id)],
-  (v: View) => [call("compute", { operation: "min_cap", label: "capped", operands: [{ household: { label: "medical bill", attribution: words, amount: bill, currency: "SGD" } }, { value_id: valueOf(v, /Accident medical/).valueId }] })],
-  (v: View) => [call("compute", { operation: "deductible", label: "after excess", operands: [{ result_id: v.data("compute", (o) => o.args.label === "capped").resultId }, { value_id: valueOf(v, /Excess/).valueId }] })],
-  (v: View) => { const r = v.data("compute", (o) => o.args.label === "after excess"); const a = valueOf(v, /Accident medical/), x = valueOf(v, /Excess/); return [call("final_answer", { subject_id: T.ethan.id, sentences: [
+  // the current calculation path: the bill against the per-accident limit, then the printed excess as the deductible
+  (v: View) => [call("calculate", { calculator: "bill_reimbursement", purpose: "claim", subject_id: T.ethan.id, policy_id: KS, benefit: "Accident medical reimbursement", bill: { amount: bill, currency: "SGD", words }, limit_value_ids: [valueOf(v, /Accident medical/).valueId], deductible_value_id: valueOf(v, /Excess/).valueId })],
+  (v: View) => { const r = v.data("calculate"); const a = valueOf(v, /Accident medical/), x = valueOf(v, /Excess/); return [call("final_answer", { subject_id: T.ethan.id, sentences: [
     { text: `Ethan's accident medical reimbursement limit is S$${Number(a.value).toLocaleString("en-SG")} per accident, after an excess of S$${x.value}.`, value_ids: [a.valueId, x.valueId] },
-    { text: `Indicative estimate: the smaller of the S$${bill.toLocaleString("en-SG")} bill and the S$${Number(a.value).toLocaleString("en-SG")} limit, less the S$${x.value} excess, comes to S$${Number(r.amount).toLocaleString("en-SG")}.`, result_id: r.resultId, value_ids: [a.valueId, x.valueId] },
+    { text: `Indicative estimate: the smaller of the bill you told me about (S$${bill.toLocaleString("en-SG")}) and the S$${Number(a.value).toLocaleString("en-SG")} limit, less the S$${x.value} excess, comes to S$${Number(r.amount ?? 0).toLocaleString("en-SG")}.`, result_id: r.calc_id, value_ids: [a.valueId, x.valueId] },
   ] })]; },
 ];
 export const S7: Scenario = {
@@ -240,20 +234,31 @@ export const S7: Scenario = {
   },
 };
 
+export const S7b: Scenario = {
+  id: "S7b", account: "T", title: "a cap + excess estimate whose result does not depend on the order of deductions survives the verifier",
+  messages: ["Ethan fractured his arm falling off his bike; the clinic bill came to S$1,000. What can we claim back for the bill?"],
+  turns: [{ steps: s7Steps(1000, "the clinic bill came to S$1,000") }],
+  expect: {
+    visible: ["'Indicative estimate' ... S$900", "limit S$1,200 and excess S$100 cited", "estimate notice; no 'payout'"],
+    evidence: ["KidSafe v2 p1 AMR / Child S$1,200", "KidSafe v2 p1 Excess / Child S$100"],
+    calculation: "min(S$1,000 [household], S$1,200) - S$100 = S$900.00 = min(S$1,000 - S$100, S$1,200): either order gives S$900; a CalculationRecord the gate re-runs",
+  },
+};
+
 export const S6a: Scenario = {
   id: "S6a", account: "T", title: "corrected person (Ethan -> Chloe) withdraws the estimate worked out for Ethan",
-  messages: ["Ethan fractured his arm falling off his bike; the clinic bill came to S$1,500. What can we claim back for the bill?", "Sorry, I mixed them up - it was Chloe, not Ethan."],
+  messages: ["Ethan fractured his arm falling off his bike; the clinic bill came to S$1,000. What can we claim back for the bill?", "Sorry, I mixed them up - it was Chloe, not Ethan."],
   turns: [
-    { steps: s7Steps(1500, "the clinic bill came to S$1,500") },
+    { steps: s7Steps(1000, "the clinic bill came to S$1,000") },
     { steps: [
       () => [call("resolve_person", { mention: "Chloe" })],
-      () => [call("note_facts", { subject_id: T.chloe.id, facts: [{ key: "cause", value: "accident", words: "falling off his bike" }, { key: "bill_amount", value: "1500", currency: "SGD", words: "the clinic bill came to S$1,500" }] })],
+      () => [call("note_facts", { subject_id: T.chloe.id, facts: [{ key: "how_it_happened", value: "falling off his bike", words: "falling off his bike" }, { key: "bill_amount", value: "1000", currency: "SGD", words: "the clinic bill came to S$1,000" }] })],
       () => [call("policies_for", { subject_id: T.chloe.id, topic: "accident" }), call("search_passages", { query: "Insured persons Name Category Date of birth", policy_ids: [KS] })],
       (v) => [call("final_answer", { subject_id: T.chloe.id, sentences: [{ text: "Chloe is not listed among the insured persons on the KidSafe Family Accident Plan.", evidence_ids: [hit(v, /Insured persons/)] }] })],
     ] },
   ],
   expect: {
-    visible: ["turn 2: says the earlier estimate (worked out for Ethan) no longer applies", "turn 2 never repeats S$1,100", "Chloe not insured on KidSafe (cited)"],
+    visible: ["turn 2: says the earlier estimate (worked out for Ethan, S$900) no longer applies", "turn 2 never repeats S$900", "Chloe not insured on KidSafe (cited)"],
     evidence: ["KidSafe v2 p1 insured persons list (Chloe absent)"],
   },
 };
@@ -264,20 +269,20 @@ export const S6b: Scenario = {
   turns: [
     { steps: [
       () => [call("resolve_person", { mention: "Rohan" })],
-      () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "admitted_at", value: "2026-10-03 21:40", words: "admitted on 3 October at 9.40pm" }, { key: "discharged_at", value: "2026-10-06 10:15", words: "discharged on 6 October at 10.15am" }] })],
+      () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "admitted_at", value: "3 October 9.40pm", words: "admitted on 3 October at 9.40pm" }, { key: "discharged_at", value: "6 October 10.15am", words: "discharged on 6 October at 10.15am" }] })],
       () => [stv(FF, "Daily hospital cash", N.rohan.id)],
-      (v) => [payableDays(v, valueOf(v, /hospital cash/i).valueId, "admitted on 3 October at 9.40pm", "discharged on 6 October at 10.15am", 2, "est")],
-      (v) => { const s = valueOf(v, /hospital cash/i); const r = v.find("compute", (o) => o.args.label === "est"); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
+      (v) => [hospitalCalc(N.rohan.id, FF, "Daily hospital cash", valueOf(v, /hospital cash/i).valueId, AT("2026-10-03T21:40+08:00", "admitted on 3 October at 9.40pm"), AT("2026-10-06T10:15+08:00", "discharged on 6 October at 10.15am"))],
+      (v) => { const s = valueOf(v, /hospital cash/i); const r = calcOf(v); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
         { text: `Rohan's FamilyFirst daily hospital cash is S$${s.value} per day.`, value_ids: [s.valueId] },
-        ...(r?.ok ? [{ text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 2 payable days comes to S$${r.result.data.amount}.`, result_id: r.result.data.resultId }] : []),
+        ...(r && r.amount != null ? [{ text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 2 payable days comes to S$${r.amount}.`, result_id: r.calc_id }] : []),
       ] })]; },
     ] },
     { steps: [
-      () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "discharged_at", value: "2026-10-08 11:00", words: "discharged on 8 October at 11am" }] })],
+      () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "discharged_at", value: "8 October 11am", words: "discharged on 8 October at 11am" }] })],
       () => [stv(FF, "Daily hospital cash", N.rohan.id)],
-      (v) => [payableDays(v, valueOf(v, /hospital cash/i).valueId, "admitted on 3 October at 9.40pm", "discharged on 8 October at 11am", 4, "est2")],
-      (v) => { const s = valueOf(v, /hospital cash/i); const r = v.find("compute", (o) => o.args.label === "est2"); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
-        ...(r?.ok ? [{ text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 4 payable days comes to S$${r.result.data.amount}.`, result_id: r.result.data.resultId }] : [{ text: `Rohan's FamilyFirst daily hospital cash is S$${s.value} per day.`, value_ids: [s.valueId] }]),
+      (v) => [hospitalCalc(N.rohan.id, FF, "Daily hospital cash", valueOf(v, /hospital cash/i).valueId, AT("2026-10-03T21:40+08:00", "admitted on 3 October at 9.40pm"), AT("2026-10-08T11:00+08:00", "discharged on 8 October at 11am"))],
+      (v) => { const s = valueOf(v, /hospital cash/i); const r = calcOf(v); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
+        ...(r && r.amount != null ? [{ text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 4 payable days comes to S$${r.amount}.`, result_id: r.calc_id }] : [{ text: `Rohan's FamilyFirst daily hospital cash is S$${s.value} per day.`, value_ids: [s.valueId] }]),
       ] })]; },
     ] },
   ],
@@ -294,14 +299,14 @@ export const S8: Scenario = {
   messages: ["Rohan was in hospital with dengue. How much will FamilyFirst pay?"],
   turns: [{ steps: [
     () => [call("resolve_person", { mention: "Rohan" })],
-    () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "cause", value: "illness (dengue)", words: "in hospital with dengue" }] })],
+    () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "how_it_happened", value: "dengue", words: "in hospital with dengue" }] })],
     () => [stv(FF, "Daily hospital cash", N.rohan.id), call("search_passages", { query: "first full day of admission day of discharge not counted", subject_id: N.rohan.id })],
-    // The careless model guesses three nights.
-    (v) => [call("compute", { operation: "per_day", label: "guess", operands: [{ value_id: valueOf(v, /hospital cash/i).valueId }, { household: { label: "days", attribution: "about 3 nights I think", count: 3 } }] })],
-    (v) => { const s = valueOf(v, /hospital cash/i), g = v.data("compute"); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
+    // The careless model guesses three nights (old compute path), and also calls the calculator without the dates.
+    (v) => [call("compute", { operation: "per_day", label: "guess", operands: [{ value_id: valueOf(v, /hospital cash/i).valueId }, { household: { label: "days", attribution: "about 3 nights I think", count: 3 } }] }), hospitalCalc(N.rohan.id, FF, "Daily hospital cash", valueOf(v, /hospital cash/i).valueId, null, null)],
+    (v) => { const s = valueOf(v, /hospital cash/i), c = calcOf(v); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
       { text: `Rohan's FamilyFirst daily hospital cash is S$${s.value} per day.`, value_ids: [s.valueId] },
       { text: "To work out the days payable I need Rohan's admission date and time and his discharge date.", evidence_ids: [hit(v, /first full day of admission/)] },
-      { text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 3 days comes to S$${g.amount}.`, result_id: g.resultId },
+      { text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 3 days comes to S$360.`, ...(c ? { result_id: c.calc_id } : {}) },
     ] })]; },
   ] }],
   expect: { visible: ["S$120 per day (Insured Child) cited", "names the missing admission/discharge dates and time", "no S$360 or other amount"], evidence: ["FamilyFirst p1 Daily hospital cash / Insured Child", "FamilyFirst p2 day-count rule"] },
@@ -314,10 +319,11 @@ export const S8b: Scenario = {
     () => [call("resolve_person", { mention: "Rohan" })],
     () => [call("note_facts", { subject_id: N.rohan.id, facts: [{ key: "nights_in_hospital", value: "3", words: "3 nights in hospital" }] })],
     () => [stv(FF, "Daily hospital cash", N.rohan.id)],
-    (v) => [call("compute", { operation: "per_day", label: "nights", operands: [{ value_id: valueOf(v, /hospital cash/i).valueId }, { household: { label: "nights", attribution: "3 nights in hospital", count: 3 } }] })],
-    (v) => { const s = valueOf(v, /hospital cash/i), g = v.data("compute"); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
-      { text: `Rohan's FamilyFirst daily hospital cash is S$${s.value} per day.`, value_ids: [s.valueId] },
-      { text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 3 nights comes to S$${g.amount}.`, result_id: g.resultId },
+    (v) => [call("compute", { operation: "per_day", label: "nights", operands: [{ value_id: valueOf(v, /hospital cash/i).valueId }, { household: { label: "nights", attribution: "3 nights in hospital", count: 3 } }] }), hospitalCalc(N.rohan.id, FF, "Daily hospital cash", valueOf(v, /hospital cash/i).valueId, null, null)],
+    (v) => { const s = valueOf(v, /hospital cash/i), c = calcOf(v); return [call("final_answer", { subject_id: N.rohan.id, sentences: [
+      // the rate is cited against the calculation (the model omits any "what is missing" sentence of its own)
+      { text: `Rohan's FamilyFirst daily hospital cash is S$${s.value} per day.`, value_ids: [s.valueId], ...(c ? { result_id: c.calc_id } : {}) },
+      { text: `Indicative estimate: FamilyFirst daily hospital cash of S$${s.value} per day for 3 nights comes to S$360.`, ...(c ? { result_id: c.calc_id } : {}) },
     ] })]; },
   ] }],
   expect: { visible: ["S$120 per day cited", "no S$360 (nights are not payable days under 'first full day ... discharge not counted')", "the reply itself names what is missing (admission / discharge date or time, or the payable days)"], evidence: ["FamilyFirst p1/p2"] },
@@ -423,7 +429,7 @@ export const X6: Scenario = {
   id: "X6", account: "T", title: "two questions in one ask_user (one question mark)",
   messages: ["Ethan was in hospital after a fall."],
   turns: [{ steps: [
-    () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "cause", value: "accident", words: "after a fall" }] }), call("search_passages", { query: "hospital income complete period of 24 hours", subject_id: T.ethan.id })],
+    () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "how_it_happened", value: "fall", words: "after a fall" }] }), call("search_passages", { query: "hospital income complete period of 24 hours", subject_id: T.ethan.id })],
     (v) => [call("ask_user", { kind: "fact", fact_key: "admitted_at", subject_id: T.ethan.id, question: "When was Ethan admitted, and when was he discharged?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
     (v) => [call("ask_user", { kind: "fact", fact_key: "admitted_at", subject_id: T.ethan.id, question: "Which hospital was it and what time was he admitted?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
     (v) => [call("ask_user", { kind: "fact", fact_key: "admitted_at", subject_id: T.ethan.id, question: "On what date and at what time was Ethan admitted?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
@@ -435,7 +441,7 @@ export const X7: Scenario = {
   id: "X7", account: "T", title: "re-asking a recorded fact under another key; a question whose cited evidence does not make it matter",
   messages: ["Ethan was admitted on 2 October at 9.30pm after a fall."],
   turns: [{ steps: [
-    () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "admitted_at", value: "2026-10-02 21:30", words: "admitted on 2 October at 9.30pm" }, { key: "how_it_happened", value: "fall", words: "after a fall" }] }), stv(KS, "Fracture benefit", T.ethan.id), call("search_passages", { query: "hospital income complete period of 24 hours", subject_id: T.ethan.id })],
+    () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "admitted_at", value: "2 October 9.30pm", words: "admitted on 2 October at 9.30pm" }, { key: "how_it_happened", value: "fall", words: "after a fall" }] }), stv(KS, "Fracture benefit", T.ethan.id), call("search_passages", { query: "hospital income complete period of 24 hours", subject_id: T.ethan.id })],
     (v) => [call("ask_user", { kind: "fact", fact_key: "admission_time", subject_id: T.ethan.id, question: "What time was Ethan admitted?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
     (v) => [call("ask_user", { kind: "fact", fact_key: "cause", subject_id: T.ethan.id, question: "Was it an accident?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
     (v) => [call("ask_user", { kind: "fact", fact_key: "school_name", subject_id: T.ethan.id, question: "Which school does Ethan go to?", because_evidence_ids: [ev(valueOf(v, /Fracture/))] })],
@@ -466,4 +472,4 @@ export const X10: Scenario = {
   expect: { visible: ["never 'fully covered' / 'expect the money'", "the neutral step may stay"], evidence: [] },
 };
 
-export const ALL: Scenario[] = [S1, S1b, S1c, S2, S3, S4, S4b, S5, S7, S6a, S6b, S8, S8b, S9loop, S10, X1, X2, X3, X4, X6, X7, X9, X10];
+export const ALL: Scenario[] = [S1, S1b, S1c, S2, S3, S4, S4b, S5, S7, S7b, S6a, S6b, S8, S8b, S9loop, S10, X1, X2, X3, X4, X6, X7, X9, X10];
