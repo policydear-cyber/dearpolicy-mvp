@@ -52,11 +52,15 @@ async function main() {
       out("**Evidence the reply rests on:**"); out();
       if (!trace.evidenceChosen.length) out("- (none: no statement about cover or figures in this reply)");
       const shown = [saved.answer.summary, ...saved.answer.details].join(" ");
+      const visibleText = [shown, ...(saved.answer.questions ?? []).map((q: any) => q.text + " " + q.why)].join(" ");
       const excerpt = (text: string) => {
         // A long passage (a whole page) is shown by the lines that print a figure the reply states.
         if (text.length <= 220) return text.replace(/\s+/g, " ");
         const figs = (shown.match(/S\$[\d,]+/g) ?? []);
-        const lines = text.split(/\n/).filter((l) => figs.some((f) => l.includes(f)));
+        const words = new Set((visibleText.toLowerCase().match(/[a-z]{5,}/g) ?? []));
+        const byFigure = text.split(/\n/).filter((l) => figs.some((f) => l.includes(f)));
+        const byWords = text.split(/\n/).map((l) => ({ l, n: (l.toLowerCase().match(/[a-z]{5,}/g) ?? []).filter((w) => words.has(w)).length })).filter((x) => x.n >= 2).sort((a, b) => b.n - a.n).slice(0, 1).map((x) => x.l);
+        const lines = byFigure.length ? byFigure : byWords;
         return (lines.length ? lines.join(" … ") : text.slice(0, 220) + " …").replace(/\s+/g, " ");
       };
       for (const id of trace.evidenceChosen) { const e = loop.evidence[id]; out(`- ${id}: ${product(e.policyId)}, page ${e.passage.onPage}${e.table ? `, row “${e.table.rowLabel}”, column “${e.table.columnHeader}”` : ""} — “${excerpt(e.passage.text)}”`); }
@@ -67,7 +71,7 @@ async function main() {
       const a = saved.answer;
       out("> " + a.summary);
       for (const d of a.details) out("> " + d);
-      for (const q of a.questions ?? []) out(`> **Question:** ${q.text}${q.options?.length ? ` (options: ${q.options.join(" / ")})` : ""}`);
+      for (const q of a.questions ?? []) out(`> **Question:** ${q.text}${q.options?.length ? ` (options: ${q.options.join(" / ")})` : ""} — _why: ${q.why}_`);
       for (const s of a.nextSteps ?? []) out(`> **Next step:** ${s}`);
       if (a.disclaimer) out(`> _${a.disclaimer}_`);
       if (a.citations?.length) out(`> Sources: ${[...new Set(a.citations.map((x: any) => `${x.policyName} p.${x.pageStart}`))].join("; ")}`);
