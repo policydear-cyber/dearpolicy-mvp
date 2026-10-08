@@ -1,14 +1,25 @@
 /**
  * Conversational RAG: who a mention means. resolvePerson() maps "my daughter", "Mei", "my wife's mother", "she" or
  * "me" to one active household member -- or says it cannot: `ambiguous` (the options and one question to ask) or
- * `unknown` (nobody in the household fits). It never silently picks: a stepson is not "my son", a mother-in-law is
- * not "my mother", a helper is not family, and a pronoun means only the person the conversation was last about.
+ * `unknown` (nobody in the household fits). It never silently picks: a stepson is never silently taken as "my son"
+ * (nor silently left out of it), a mother-in-law is not "my mother", a helper is not family, and a pronoun means only
+ * the person the conversation was last about.
+ *
+ * Why a stepson used to be omitted from "my son" (fixed here): the relation lookup matched only the exact relation
+ * class (`child`), and offered the step class (`step_child`) only when NO exact match existed. So with one or more
+ * sons on file, "my son" was answered from the sons alone -- one son was picked outright, two were offered -- and a
+ * stepson, whom many households call "my son", was silently excluded. Now the commonly-shared step relation (child ->
+ * step_child, parent -> step_parent) is offered BESIDE the exact matches, each candidate labelled with its recorded
+ * relation ("your son", "your stepson"), and the household is asked which one they mean. Who a policy covers is a
+ * separate question, answered by policies_for only after the person is resolved.
  */
 import { loadMembers, type MemberRow } from "./store";
 
 export type RelationClass = "self" | "spouse" | "child" | "step_child" | "child_in_law" | "parent" | "step_parent" | "parent_in_law" | "sibling" | "sibling_in_law" | "grandparent" | "grandchild" | "helper" | "dependant" | "other";
 export type Gender = "f" | "m" | null;
-export type Person = { id: string; name: string; preferredName: string | null; relationship: string; relation: RelationClass; gender: Gender; dateOfBirth: string | null };
+export type Person = { id: string; name: string; preferredName: string | null; relationship: string; relation: RelationClass; gender: Gender; dateOfBirth: string | null;
+  /** The recorded relation in words, from the speaker's side ("son", "stepson", "mother-in-law"), for labelling options. */
+  relationLabel?: string };
 export type ConversationContext = {
   /** The household member who is speaking ("me" / "my"); defaults to the member whose relationship is self. */
   speakerId?: string | null;
@@ -58,6 +69,9 @@ const REL_WORDS: RelWord[] = [
   { re: /\bsister\b/i, cls: "sibling", g: "f", word: "sister" },
   { re: /\bsiblings?\b/i, cls: "sibling", g: null, word: "sibling" },
 ];
+/** Step relations households commonly name with the plain word ("my son" for a stepson, "my mum" for a stepmother):
+ * offered beside the exact class, labelled, and asked about -- never silently excluded and never silently picked. */
+const ALSO: Partial<Record<RelationClass, RelationClass[]>> = { child: ["step_child"], parent: ["step_parent"] };
 /** Classes that are close to, but never the same as, a mentioned class: offered as a question, never picked. */
 const NEAR: Partial<Record<RelationClass, RelationClass[]>> = {
   child: ["step_child", "child_in_law", "dependant", "grandchild"], step_child: ["child"],
@@ -74,7 +88,9 @@ const MALE = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle|neph
 export function relationOf(m: Pick<MemberRow, "relationship" | "notes">): { relation: RelationClass; gender: Gender } {
   const rel = (m.relationship ?? "").toLowerCase().trim(), notes = (m.notes ?? "").toLowerCase();
   const both = rel + " " + notes;
-  const g: Gender = FEMALE.test(both) && !MALE.test(both) ? "f" : MALE.test(both) && !FEMALE.test(both) ? "m" : null;
+  // Gender from the relation words, reading "stepson" / "step-daughter" as son / daughter.
+  const plain = both.replace(/\bstep[- ]?/g, "");
+  const g: Gender = FEMALE.test(plain) && !MALE.test(plain) ? "f" : MALE.test(plain) && !FEMALE.test(plain) ? "m" : null;
   if (rel === "helper" || /\bhelper\b|\bmaid\b|\bdomestic\b|\bnanny\b|\bcaregiver\b/.test(both)) return { relation: "helper", gender: g };
   if (/in[- ]law/.test(both)) {
     if (/\b(?:mother|father|parent)s?[- ]in[- ]law\b/.test(both) || rel === "parent") return { relation: "parent_in_law", gender: g };
@@ -89,11 +105,23 @@ export function relationOf(m: Pick<MemberRow, "relationship" | "notes">): { rela
   return { relation: map[rel] ?? "other", gender: g };
 }
 
+const REL_LABEL: Record<RelationClass, [string, string, string]> = {
+  self: ["you", "you", "you"], spouse: ["wife", "husband", "spouse"], child: ["daughter", "son", "child"], step_child: ["stepdaughter", "stepson", "stepchild"],
+  child_in_law: ["daughter-in-law", "son-in-law", "child-in-law"], parent: ["mother", "father", "parent"], step_parent: ["stepmother", "stepfather", "step-parent"],
+  parent_in_law: ["mother-in-law", "father-in-law", "parent-in-law"], sibling: ["sister", "brother", "sibling"], sibling_in_law: ["sister-in-law", "brother-in-law", "sibling-in-law"],
+  grandparent: ["grandmother", "grandfather", "grandparent"], grandchild: ["granddaughter", "grandson", "grandchild"], helper: ["helper", "helper", "helper"],
+  dependant: ["dependant", "dependant", "dependant"], other: ["household member", "household member", "household member"],
+};
+/** The relation of a member in words ("son", "stepson", "mother-in-law"). */
+export function relationWord(relation: RelationClass, gender: Gender): string { const l = REL_LABEL[relation]; return gender === "f" ? l[0] : gender === "m" ? l[1] : l[2]; }
+
 export function toPerson(m: MemberRow): Person {
   const { relation, gender } = relationOf(m);
-  return { id: m.id, name: m.displayName, preferredName: m.preferredName, relationship: m.relationship, relation, gender, dateOfBirth: m.dateOfBirth };
+  return { id: m.id, name: m.displayName, preferredName: m.preferredName, relationship: m.relationship, relation, gender, dateOfBirth: m.dateOfBirth, relationLabel: relationWord(relation, gender) };
 }
 const label = (p: Person) => p.preferredName && p.preferredName !== p.name ? `${p.name} (${p.preferredName})` : p.name;
+const relLabel = (p: Person) => `${p.name} (${p.preferredName && p.preferredName !== p.name ? p.preferredName + ", " : ""}your ${p.relationLabel ?? relationWord(p.relation, p.gender)})`;
+const listRel = (ps: Person[]) => ps.length <= 1 ? ps.map(relLabel).join("") : ps.slice(0, -1).map(relLabel).join(", ") + " or " + relLabel(ps[ps.length - 1]);
 const listOf = (ps: Person[]) => ps.length <= 1 ? ps.map(label).join("") : ps.slice(0, -1).map(label).join(", ") + " or " + label(ps[ps.length - 1]);
 const RELATION_NOUN: Record<RelationClass, string> = { self: "you", spouse: "spouse", child: "child", step_child: "stepchild", child_in_law: "child-in-law", parent: "parent", step_parent: "step-parent", parent_in_law: "parent-in-law", sibling: "sibling", sibling_in_law: "sibling-in-law", grandparent: "grandparent", grandchild: "grandchild", helper: "helper", dependant: "dependant", other: "household member" };
 const nameWords = (s: string) => (s.toLowerCase().normalize("NFKC").match(/[\p{L}]+/gu) ?? []).filter((w) => w.length >= 2);
@@ -106,7 +134,8 @@ export async function resolvePerson(args: { accountId: string; mention: string; 
 }
 
 /** resolvePerson() over an already-loaded household (pure). */
-export function resolvePersonAmong(people: Person[], mentionRaw: string, ctx: ConversationContext | null): PersonResolution {
+export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: ConversationContext | null): PersonResolution {
+  let people = peopleIn;
   const mention = (mentionRaw ?? "").trim().replace(/[?.!,]+$/g, "");
   if (!people.length) return { status: "unknown", reason: "the household has no people on file", question: "Who would you like to ask about? You can add them on the Family page." };
   if (!mention) return { status: "ambiguous", options: people, question: `Who do you mean — ${listOf(people)}?`, reason: "no person was named" };
@@ -114,9 +143,13 @@ export function resolvePersonAmong(people: Person[], mentionRaw: string, ctx: Co
   const speaker = byId(ctx?.speakerId) ?? (people.filter((p) => p.relation === "self").length === 1 ? people.find((p) => p.relation === "self")! : null);
   if (SELF.test(mention)) {
     if (speaker) return { status: "ok", person: speaker, via: "self" };
+    // A shared household login: who is typing is not known. Ask once, offering the members who could be typing (those
+    // recorded as self, else the adults), never assume.
     const selves = people.filter((p) => p.relation === "self");
-    return selves.length ? { status: "ambiguous", options: selves, question: `Which of these is you — ${listOf(selves)}?`, reason: "more than one member is recorded as self" }
-      : { status: "unknown", reason: "no household member is recorded as you", question: "Which member of the household are you?" };
+    const adults = people.filter((p) => !["child", "step_child", "grandchild", "helper"].includes(p.relation));
+    const options = selves.length >= 2 ? selves : adults.length >= 2 ? adults : people;
+    if (options.length >= 2) return { status: "ambiguous", options, question: `Who is asking — ${listOf(options)}?`, reason: selves.length >= 2 ? "more than one member is recorded as self, and the person typing has not said who they are" : "no household member is recorded as you, and the person typing has not said who they are" };
+    return { status: "unknown", reason: "no household member is recorded as you", question: "Which member of the household are you?" };
   }
   if (GROUP.test(mention)) return { status: "ambiguous", options: people, question: `Who in the household do you mean — ${listOf(people)}, or everyone?`, reason: "the mention is the whole household" };
   if (THIRD.test(mention)) {
@@ -146,12 +179,30 @@ export function resolvePersonAmong(people: Person[], mentionRaw: string, ctx: Co
   const named = words.length ? people.map((p) => ({ p, s: nameScore(p) })).filter((x) => x.s > 0) : [];
   const best = named.length ? Math.max(...named.map((x) => x.s)) : 0;
   const byName = named.filter((x) => x.s === best).map((x) => x.p);
+  // Relations are recorded from the household's "self" member's side. When the person typing is that member's spouse,
+  // "my mother" is the self member's mother-in-law (and so on): the speaker's relation word is translated before
+  // matching, and candidates are labelled from the speaker's side.
+  if (rel && speaker && speaker.relation === "spouse") {
+    const SWAP: Partial<Record<RelationClass, RelationClass>> = { parent: "parent_in_law", parent_in_law: "parent", sibling: "sibling_in_law", sibling_in_law: "sibling" };
+    const to = SWAP[rel.cls];
+    if (to) rel = { ...rel, cls: to };
+    people = people.map((p) => { const back = SWAP[p.relation]; return back ? { ...p, relationLabel: relationWord(back, p.gender) } : p; });
+  }
   const relFits = (p: Person) => !!rel && p.relation === rel.cls && (!rel.g || !p.gender || p.gender === rel.g);
   const relNear = (p: Person) => !!rel && (NEAR[rel.cls] ?? []).includes(p.relation) && (!rel.g || !p.gender || p.gender === rel.g);
+
+  const relAlso = (p: Person) => !!rel && (ALSO[rel.cls] ?? []).includes(p.relation) && (!rel.g || !p.gender || p.gender === rel.g);
 
   if (rel) {
     const pool = byName.length ? byName : people;
     let exact = pool.filter(relFits);
+    // The step relation the household may also mean ("my son" -> sons AND stepsons): offered beside the exact
+    // matches, each labelled with its recorded relation, and asked about -- never left out, never picked.
+    const also = byName.length ? [] : pool.filter(relAlso);
+    if (exact.length && also.length) {
+      const options = [...exact, ...also];
+      return { status: "ambiguous", options, question: `Which ${rel.word} do you mean — ${listRel(options)}?`, reason: `more than one household member may be meant by “${rel.word}” (including a ${also.map((p) => p.relationLabel ?? relationWord(p.relation, p.gender)).filter((w, i, a) => a.indexOf(w) === i).join(" / ")})` };
+    }
     if (byName.length && !exact.length) {
       const near = byName.filter(relNear);
       if (near.length) return { status: "ambiguous", options: near, question: `Do you mean ${listOf(near)}? ${near.length === 1 ? "They are" : "They are each"} recorded as your ${near.map((p) => RELATION_NOUN[p.relation]).join(" / ")}, not your ${rel.word}.`, reason: `nobody named so is recorded as your ${rel.word}` };

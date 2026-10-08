@@ -72,7 +72,9 @@ export const RAG_TOOLS: ToolDef[] = [
     parameters: { type: "object", properties: { mention: str("The words used for the person.") }, required: ["mention"], additionalProperties: false },
     handler: async (ctx, a) => {
       const r = await resolvePerson({ accountId: ctx.accountId, mention: String(a.mention), conversationContext: ctx.conversation });
-      if (r.status === "ok") { ctx.conversation.recentSubjectIds = [r.person.id, ...(ctx.conversation.recentSubjectIds ?? []).filter((x) => x !== r.person.id)].slice(0, 5); ctx.conversation.lastSubjectId = r.person.id; }
+      // "me" / "my" is the speaker, not who the conversation is about: a side question about the speaker never moves
+      // what "he" / "she" refers to (the claim's subject).
+      if (r.status === "ok" && r.via !== "self") { ctx.conversation.recentSubjectIds = [r.person.id, ...(ctx.conversation.recentSubjectIds ?? []).filter((x) => x !== r.person.id)].slice(0, 5); ctx.conversation.lastSubjectId = r.person.id; }
       return ok(r, []);
     },
   },

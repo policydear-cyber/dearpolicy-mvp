@@ -122,7 +122,7 @@ async function main() {
     const offenders: string[] = [];
     for (const f of files) {
       const rel = path.relative(path.resolve("."), f);
-      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/")) continue;
+      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/") || rel.startsWith("scripts/fixtures/rag2-conv/")) continue;
       const text = await readFile(f, "utf8").catch(() => "");
       // Prompt 2: the one flagged hook -- lib/chat/workflow.ts imports only the loop's flag, and loads the loop's hook
       // only behind ragLoopEnabled() (DEARPOLICY_RAG_LOOP, default off).
@@ -193,7 +193,7 @@ async function main() {
   const okp = async (mention: string, want: string, ctx: import("@/lib/rag2/people").ConversationContext | null = null) => { const r = await person(mention, ctx); assert.equal(r.status, "ok", mention + " -> " + JSON.stringify(r).slice(0, 300)); assert.equal((r as { person: { id: string } }).person.id, want, mention); };
   await check("P1 names, preferred names, self words and relations resolve to one member", async () => {
     await okp("Yi Xuan", M.yixuan.id); await okp("Koh Jun Hao", M.junhao.id); await okp("me", M.darren.id); await okp("my wife", M.melissa.id);
-    await okp("my daughter", M.yixuan.id); await okp("my son", M.junhao.id); await okp("my stepson", M.ryan.id); await okp("my mother-in-law", M.ahmui.id);
+    await okp("my daughter", M.yixuan.id); await okp("my son Jun Hao", M.junhao.id); await okp("my stepson", M.ryan.id); await okp("my mother-in-law", M.ahmui.id);
     await okp("my wife's mother", M.ahmui.id); await okp("our helper", M.rosalind.id); await okp("my daughter Yi Xuan", M.yixuan.id);
   });
   await check("P2 never a silent pick: ambiguous names, step/in-law near-misses and missing relations ask", async () => {
@@ -205,6 +205,12 @@ async function main() {
     assert.equal(mum.status, "ambiguous", "a mother-in-law is not silently 'my mother'"); assert.deepEqual((mum as { options: { id: string }[] }).options.map((o) => o.id), [M.ahmui.id]);
     const husband = await person("my husband");
     assert.notEqual(husband.status, "ok");
+    // Expectation changed (agent C): "my son" used to resolve straight to Jun Hao, silently leaving out Ryan, whom the
+    // household records as a stepson. A stepson is commonly called "my son": both are offered, labelled, and asked.
+    const son = await person("my son");
+    assert.equal(son.status, "ambiguous", "a stepson is never silently left out of 'my son'");
+    assert.deepEqual((son as { options: { id: string; relationLabel?: string }[] }).options.map((o) => [o.id, o.relationLabel]), [[M.junhao.id, "son"], [M.ryan.id, "stepson"]]);
+    assert.match((son as { question: string }).question, /Ryan .*your stepson/);
     const ryanAsSon = await person("my son Ryan");
     assert.equal(ryanAsSon.status, "ambiguous", "a stepson named as 'my son' is asked about, not picked");
     const nobody = await person("Uncle Bernard");
@@ -508,7 +514,10 @@ async function main() {
   });
   await check("R2 a conversation through the registry: person -> value -> compute, all with evidence", async () => {
     const ctx = R.createToolContext({ accountId: ACCOUNT, speakerId: M.darren.id, asOf: ASOF });
-    const who = await R.runTool(ctx, "resolve_person", { mention: "my son" }, ON);
+    // Expectation changed (agent C): "my son" is now ambiguous (son + stepson); the household's answer resolves it.
+    const ask = await R.runTool(ctx, "resolve_person", { mention: "my son" }, ON);
+    assert.ok(ask.ok); assert.equal((ask as { data: { status: string } }).data.status, "ambiguous");
+    const who = await R.runTool(ctx, "resolve_person", { mention: "Jun Hao" }, ON);
     assert.ok(who.ok); assert.equal(ctx.conversation.lastSubjectId, M.junhao.id);
     const v = await R.runTool(ctx, "select_table_value", { policy_id: doc("CASH").id, benefit: "hospital cash", subject_id: M.junhao.id }, ON);
     assert.ok(v.ok && v.evidence.length >= 1); const vid = ((v as { data: { valueId: string } }).data).valueId;
