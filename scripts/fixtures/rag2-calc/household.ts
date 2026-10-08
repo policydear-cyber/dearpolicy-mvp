@@ -40,6 +40,11 @@ export const DOCS: Doc[] = [
     1: ["Aster Life", "Aster Hospital Plan - Schedule", "Life assured: Ana Wong Mei Lin", "", "Benefit\tLimit", "Deductible (per policy year)\tS$2,000", "Co-insurance\t10%", "Annual claim limit\tS$500,000"].join("\n") } },
   { key: "CI", id: id(108), owner: M.ana.id, members: [M.ana.id], product: "Mariner Critical Care", insurer: "Mariner Life", type: "Critical illness", hash: "sha256:calc-ci", pages: {
     1: ["Mariner Life", "Mariner Critical Care - Benefit Schedule", "Life assured: Ana Wong Mei Lin", "", "Benefit\tAmount", "Sum assured\tS$150,000", "Early stage critical illness\t25%", "Early stage cap\tS$50,000"].join("\n") } },
+  // Integration (D28): an excess and a per-visit limit; XS1 is silent on their order, XS2 states it.
+  { key: "XS1", id: id(110), owner: M.carl.id, members: [M.carl.id], product: "Pebble Outpatient Accident", insurer: "Pebble General", type: "Personal accident", hash: "sha256:calc-xs1", pages: {
+    1: ["Pebble General", "Pebble Outpatient Accident - Schedule", "Insured: Carl Wong Kai", row(["Benefit", "Amount"], [44]), row(["Outpatient accident treatment (per visit)", "S$1,200"], [44]), row(["Excess (per visit)", "S$100"], [44])].join("\n") } },
+  { key: "XS2", id: id(111), owner: M.carl.id, members: [M.carl.id], product: "Pebble Outpatient Accident Plus", insurer: "Pebble General", type: "Personal accident", hash: "sha256:calc-xs2", pages: {
+    1: ["Pebble General", "Pebble Outpatient Accident Plus - Schedule", "Insured: Carl Wong Kai", row(["Benefit", "Amount"], [44]), row(["Outpatient accident treatment (per visit)", "S$1,200"], [44]), row(["Excess (per visit)", "S$100"], [44]), "", "The limit per visit applies after the Excess has been deducted from the bill."].join("\n") } },
   { key: "TRAVEL", id: id(109), owner: M.ana.id, members: [M.ana.id], product: "Wayfarer Travel Guard", insurer: "Wayfarer Insurance", type: "Travel", hash: "sha256:calc-travel", pages: {
     1: ["Wayfarer Insurance", "Wayfarer Travel Guard - Schedule", "Insured: Ana Wong Mei Lin", "", "Benefit\tLimit", "Overseas medical expenses\tUS$50,000"].join("\n") } },
 ];

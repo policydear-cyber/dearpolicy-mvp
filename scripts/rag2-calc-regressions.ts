@@ -225,6 +225,16 @@ async function main() {
     const c = await calc(ctx, { calculator: "bill_reimbursement", purpose: "question", subject_id: M.ana.id, policy_id: doc("SHIELD2").id, benefit: "Hospital bill", bill: { amount: 9000, currency: "SGD", words: "S$9,000 bill" }, deductible_value_id: d.valueId, co_insurance_value_id: ci.valueId });
     assert.ok(!("refused" in c)); expectRow("order unresolved", "unresolved", c.kind); assert.match(c.unresolvedText, /deductible or the co-insurance first/);
   });
+  await check("B8 order of the excess and the limit follows the wording: silent and it matters -> unresolved; silent and it does not -> estimate; stated (excess first) -> applied as stated", async () => {
+    const run = async (key: string, bill: number) => { const ctx = ctxFor(); const l = await sel(ctx, key, "Outpatient accident treatment", M.carl.id, "amount"), x = await sel(ctx, key, "Excess", M.carl.id, "amount");
+      return calc(ctx, { calculator: "bill_reimbursement", purpose: "question", subject_id: M.carl.id, policy_id: doc(key).id, benefit: "Outpatient accident treatment", bill: { amount: bill, currency: "SGD", words: `the bill was S$${bill}` }, limit_value_ids: [l.valueId], deductible_value_id: x.valueId }); };
+    const silent = await run("XS1", 1500); assert.ok(!("refused" in silent), JSON.stringify(silent));
+    expectRow("silent, order matters (S$1,100 vs S$1,200)", "unresolved", silent.kind); assert.match(silent.unresolvedText, /before or after applying the limit/);
+    const same = await run("XS1", 1000); assert.ok(!("refused" in same)); expectRow("silent, either order S$900", "indicative_estimate 900", `${same.kind} ${same.amount}`);
+    const stated = await run("XS2", 1500); assert.ok(!("refused" in stated), JSON.stringify(stated));
+    expectRow("excess first, then the S$1,200 limit: min(1,400, 1,200)", "indicative_estimate 1200", `${stated.kind} ${stated.amount}`);
+    assert.equal(stated.conditions.find((c) => c.id === "c_limit_order")?.status, "established");
+  });
   await check("B7 mixed currency refused: an SGD bill against a US$ limit -> unresolved; compute sum of SGD + USD refused", async () => {
     const ctx = ctxFor(); const l = await sel(ctx, "TRAVEL", "Overseas medical expenses", M.ana.id, "amount");
     const c = await calc(ctx, { calculator: "bill_reimbursement", purpose: "question", subject_id: M.ana.id, policy_id: doc("TRAVEL").id, benefit: "Overseas medical expenses", bill: { amount: 3000, currency: "SGD", words: "S$3,000 at the clinic" }, limit_value_ids: [l.valueId] });

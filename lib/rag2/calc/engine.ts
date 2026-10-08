@@ -212,11 +212,27 @@ export function billReimbursement(a: {
     else conds.push({ id: "c_order", kind: "deduction_order", text: "The stored wording does not say whether the deductible or the co-insurance is applied first, which changes the result.", status: "unresolved", basis: "none", needs: `whether ${product} applies the deductible or the co-insurance first (the stored wording does not say; only the insurer can confirm it)` });
   }
   t.exclusions.forEach((x, i) => conds.push({ id: "c_excl_" + (i + 1), kind: "exclusion", text: `Exclusion: “${x.evidence.passage.text}”`, status: "unresolved", basis: "none", passage: passageOf(x.evidence), needs: `whether this applies to ${a.who}’s bill: “${x.evidence.passage.text}”` }));
+  // Integration (D28): the order of the excess / deductible and the limit follows the wording. Stated -> applied as
+  // stated; silent or contradictory -> unresolved, but only when the order changes the result for this bill.
+  let limitFirst = false;
+  const dedMinor = a.deductible?.operand.cents ?? null, limMinor = a.limits.length ? Math.min(...a.limits.map((v) => v.operand.cents!)) : null;
+  if (dedMinor != null && limMinor != null && !a.coInsurance) {
+    const b = a.bill && typeof a.bill.value === "number" ? Math.round(a.bill.value * 100) : null;
+    const subCap0 = a.subLimits.length ? Math.min(...a.subLimits.map((v) => v.operand.cents!)) : null;
+    const base0 = b == null ? null : subCap0 != null ? Math.min(b, subCap0) : b;
+    const matters = base0 == null || Math.max(0, Math.min(base0, limMinor) - dedMinor) !== Math.min(Math.max(0, base0 - dedMinor), limMinor);
+    if (t.limitOrder && !t.limitOrderConflict.length) {
+      limitFirst = t.limitOrder.value === "limit_first";
+      conds.push({ id: "c_limit_order", kind: "deduction_order", text: `Order of the ${a.deductible!.operand.benefit.toLowerCase()} and the limit: “${t.limitOrder.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(t.limitOrder.evidence) });
+    } else if (matters) {
+      conds.push({ id: "c_limit_order", kind: "deduction_order", text: t.limitOrderConflict.length ? "The stored wording states the order of the excess and the limit in two different ways, which changes the result." : "The stored wording does not say whether the excess is deducted before or after the limit is applied, which changes the result.", status: "unresolved", basis: "none", needs: `whether ${product} deducts the ${a.deductible!.operand.benefit.toLowerCase()} before or after applying the limit (the stored wording ${t.limitOrderConflict.length ? "is contradictory" : "does not say"}; only the insurer can confirm it)` });
+    }
+  }
   applySettled(conds, a.settled ?? []);
   const billOk = !!a.bill && typeof a.bill.value === "number" && Number.isFinite(a.bill.value) && a.bill.value >= 0 && !!a.bill.currency && !!a.bill.words?.trim();
   if (!billOk) reqs.push(`the amount of ${a.who}’s bill, with its currency`);
   for (const c of conds) if (c.status === "unresolved" && c.needs) reqs.push(c.needs);
-  const evidence = printed.map((p) => p.evidence).concat(t.deductionOrder ? [t.deductionOrder.evidence] : []);
+  const evidence = printed.map((p) => p.evidence).concat(t.deductionOrder ? [t.deductionOrder.evidence] : []).concat(limitFirst || conds.some((c) => c.id === "c_limit_order" && c.status === "established") ? [t.limitOrder!.evidence] : []);
   const evidenceRequirements = [`the itemised hospital or clinic bill (the insurer reviews the bill itself; the amount you gave is not a reviewed bill)`, `the ${product} claim form`];
   const base = { calculator: "bill_reimbursement" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
   const unresolved = () => finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: cur, record: null, steps: [] });
@@ -226,7 +242,10 @@ export function billReimbursement(a: {
   // The claims calculator does the arithmetic (one engine): the household's bill as one eligible line.
   const billMinor = Math.round(Number(a.bill!.value) * 100);
   const minor = (v: DocValue) => v.operand.cents!;
-  const subCap = a.subLimits.length ? Math.min(...a.subLimits.map(minor)) : null;
+  const subCap0 = a.subLimits.length ? Math.min(...a.subLimits.map(minor)) : null;
+  // Limit applied before the deductions (as the wording states): it acts as a cap on the eligible bill.
+  const limCap = a.limits.length ? Math.min(...a.limits.map(minor)) : null;
+  const subCap = limitFirst && limCap != null ? (subCap0 != null ? Math.min(subCap0, limCap) : limCap) : subCap0;
   const deductionSteps: DeductionStep[] = [];
   const ref = (v: DocValue) => ({ policyId: t.policyId, pageStart: v.operand.evidence.page.start, pageEnd: v.operand.evidence.page.end, label: v.operand.benefit });
   const dedStep = a.deductible ? { kind: "deductible" as const, amountMinor: minor(a.deductible), evidence: ref(a.deductible) } : null;
@@ -239,7 +258,7 @@ export function billReimbursement(a: {
     // No panel restriction is part of this calculation (the wording read prints none for it): the panel step leaves the amount unchanged.
     panelRestriction: { panelStatus: "panel", nonPanelFactor: null, evidence: anyRef },
     deductionSteps, deductionOrderEvidenced: deductionSteps.length <= 1 || !!t.deductionOrder,
-    perAdmissionCap: a.limits.length ? { amountMinor: Math.min(...a.limits.map(minor)), evidence: anyRef } : null,
+    perAdmissionCap: a.limits.length && !limitFirst ? { amountMinor: Math.min(...a.limits.map(minor)), evidence: anyRef } : null,
     thirdPartyCoordination: null, thirdPartyPayments: [], remainingLimits: [], ownership: { contractId: t.policyId, label: product }, ruleEvidence: anyRef, ownershipEvidence: anyRef, unresolvedConditions: [] });
   if (mr.status === "blocked") { reqs.push(mr.message); return unresolved(); }
   // A co-insurance cap is applied by the shared deduction core (the claims calculator has no cap on the share).
@@ -249,7 +268,7 @@ export function billReimbursement(a: {
   const lines: string[] = [`the bill you gave: ${money(billMinor, cur)}`];
   const addDoc = (id: string, role: Extract<CalcOperand, { source: "document" }>["role"], v: DocValue) => { const o = docOperand(id, role, v, a.subjectId); if (typeof o === "string") throw new Error(o); ops.push(o); return o; };
   try {
-    if (a.subLimits.length) { const ids = a.subLimits.map((v, i) => addDoc("sub" + (i + 1), "limit", v).id); running = Math.min(running, subCap!); steps.push({ id: "s_sub", op: "min", inputs: [last, ...ids], out: running }); last = "s_sub"; lines.push(`up to the sub-limit${ids.length > 1 ? "s" : ""}: ${money(running, cur)}`); }
+    if (a.subLimits.length) { const ids = a.subLimits.map((v, i) => addDoc("sub" + (i + 1), "limit", v).id); running = Math.min(running, subCap0!); steps.push({ id: "s_sub", op: "min", inputs: [last, ...ids], out: running }); last = "s_sub"; lines.push(`up to the sub-limit${ids.length > 1 ? "s" : ""}: ${money(running, cur)}`); }
     const applyDed = () => { if (!a.deductible) return; const d = addDoc("deductible", "deductible", a.deductible); running = Math.max(0, running - minor(a.deductible)); steps.push({ id: "s_ded", op: "deductible", inputs: [last, d.id], out: running }); last = "s_ded"; lines.push(`less the deductible ${money(minor(a.deductible), cur)}: ${money(running, cur)}`); };
     const applyCo = () => {
       if (!a.coInsurance) return; const p = addDoc("co_insurance", "co_insurance", a.coInsurance); const capO = a.coInsuranceCap ? addDoc("co_cap", "co_insurance_cap", a.coInsuranceCap) : null;
@@ -261,8 +280,10 @@ export function billReimbursement(a: {
       steps.push({ id: "s_co", op: "co_insurance", inputs: capO ? [last, p.id, capO.id] : [last, p.id], out: running }); last = "s_co";
       lines.push(`less your ${a.coInsurance.operand.ppm! / 10_000}% co-insurance share ${money(cappedShare, cur)}${capO && cappedShare < share ? ` (capped at ${money(minor(a.coInsuranceCap!), cur)})` : ""}: ${money(running, cur)}`);
     };
+    const applyLim = () => { if (!a.limits.length) return;  const ids = a.limits.map((v, i) => addDoc("lim" + (i + 1), "limit", v).id); running = Math.min(running, ...a.limits.map(minor)); steps.push({ id: "s_lim", op: "min", inputs: [last, ...ids], out: running }); last = "s_lim"; lines.push(`up to the limit${ids.length > 1 ? "s" : ""}: ${money(running, cur)}`); };
+    if (limitFirst) applyLim();
     if (coFirst) { applyCo(); applyDed(); } else { applyDed(); applyCo(); }
-    if (a.limits.length) { const ids = a.limits.map((v, i) => addDoc("lim" + (i + 1), "limit", v).id); running = Math.min(running, ...a.limits.map(minor)); steps.push({ id: "s_lim", op: "min", inputs: [last, ...ids], out: running }); last = "s_lim"; lines.push(`up to the limit${ids.length > 1 ? "s" : ""}: ${money(running, cur)}`); }
+    if (!limitFirst) applyLim();
   } catch (e) { return { refused: e instanceof Error ? e.message : String(e) }; }
   // One engine: without a co-insurance cap, the steps must reproduce the claims calculator exactly.
   const mrMinor = mr.status === "calculated" ? Math.round(mr.potentialAmount * 100) : 0;

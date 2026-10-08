@@ -20,6 +20,11 @@ export type BenefitTerms = {
   exclusions: Term<string>[];
   /** "deductible applies before co-insurance" style wording. */
   deductionOrder: Term<"deductible_first" | "co_insurance_first"> | null;
+  /** Integration (D28): where the excess / deductible is taken relative to the benefit's limit, as the wording states
+   * it ("the Excess is then deducted ... after the limit per accident has been applied"). Null when not stated. */
+  limitOrder: Term<"limit_first" | "deductible_first"> | null;
+  /** Two passages stating opposite orders (never resolved by picking one). */
+  limitOrderConflict: EvidenceRef[];
 };
 
 const GENERIC = new Set(["benefit", "benefits", "limit", "amount", "cover", "payable", "maximum", "per", "day", "days", "each", "the", "and", "for", "policy", "year", "plan", "insured", "under", "with", "from", "sum"]);
@@ -43,6 +48,19 @@ const MIN_STAY = /\b(?:minimum|at\s+least)\s+(?:of\s+)?(\d{1,3})\s+(?:consecutiv
 const DAY_CAP = /\bmax(?:imum)?\.?\s+(?:of\s+)?(\d{1,4})\s+days?\b|\bup\s+to\s+(\d{1,4})\s+days?\b|\b(\d{1,4})\s+days?\s+(?:maximum|max)\b/i;
 const EXCLUSION = /\b(?:not\s+payable|is\s+not\s+covered|are\s+not\s+covered|excluded|does\s+not\s+(?:pay|cover|apply))\b/i;
 const DED_FIRST = /\bdeductible\b[^.]{0,80}\b(?:before|then)\b[^.]{0,40}\bco-?insurance\b|\bco-?insurance\b[^.]{0,60}\b(?:after|on\s+the\s+(?:amount|balance)\s+(?:above|after|exceeding))\b[^.]{0,30}\bdeductible\b/i;
+const DED_WORD = String.raw`(?:excess|deductible)`, LIM_WORD = String.raw`(?:limit|maximum|sum insured|cap)`;
+/** The excess / deductible is taken from what is left after the limit. */
+const LIMIT_FIRST = new RegExp([
+  String.raw`\b${DED_WORD}\b[^.]{0,80}\b(?:deducted|applied|taken|subtracted)\b[^.]{0,80}\bafter\b[^.]{0,60}\b${LIM_WORD}\b`,
+  String.raw`\b${LIM_WORD}\b[^.]{0,60}\b(?:is\s+)?(?:applied|taken)\s+(?:first|before)\b[^.]{0,60}\b${DED_WORD}\b`,
+  String.raw`\b${DED_WORD}\b[^.]{0,40}\b(?:from|on)\s+the\s+(?:amount|benefit)\s+(?:payable\s+)?after\s+the\s+${LIM_WORD}\b`,
+].join("|"), "i");
+/** The limit applies to what is left after the excess / deductible. */
+const DEDUCTIBLE_FIRST_OF_LIMIT = new RegExp([
+  String.raw`\b${DED_WORD}\b[^.]{0,80}\b(?:deducted|applied|taken|subtracted)\b[^.]{0,40}\b(?:first|before)\b[^.]{0,60}\b${LIM_WORD}\b`,
+  String.raw`\b${LIM_WORD}\b[^.]{0,60}\bappl(?:y|ies)\b[^.]{0,40}\bafter\b[^.]{0,40}\b${DED_WORD}\b`,
+  String.raw`\b${LIM_WORD}\b[^.]{0,60}\b(?:net\s+of|less)\s+the\s+${DED_WORD}\b`,
+].join("|"), "i");
 const CO_FIRST = /\bco-?insurance\b[^.]{0,80}\b(?:before|then)\b[^.]{0,40}\bdeductible\b|\bdeductible\b[^.]{0,60}\bafter\b[^.]{0,30}\bco-?insurance\b/i;
 
 export async function readBenefitTerms(args: { accountId: string; policyId: string; benefit: string; subjectId: string; rowLabel?: string | null }): Promise<BenefitTerms | null> {
@@ -50,9 +68,15 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
   if (!doc) return null;
   const pages = await pageMap(args.accountId, args.policyId);
   const want = [...new Set(words(args.benefit).map(stem))];
-  const terms: BenefitTerms = { policyId: doc.id, documentHash: doc.fileHash, productName: doc.productName, dayRule: null, dayRuleConflict: [], waitingDays: null, minimumStayHours: null, dayCap: null, exclusions: [], deductionOrder: null };
+  const terms: BenefitTerms = { policyId: doc.id, documentHash: doc.fileHash, productName: doc.productName, dayRule: null, dayRuleConflict: [], waitingDays: null, minimumStayHours: null, dayCap: null, exclusions: [], deductionOrder: null, limitOrder: null, limitOrderConflict: [] };
   const ev = (page: number, text: string, start: number) => evidenceFor({ policyId: doc.id, documentHash: doc.fileHash, page, pageText: pages.get(page) ?? "", passage: text, near: start, subjectId: args.subjectId });
   const rules: Term<PolicyDayRule>[] = [];
+  const limitOrders: Term<"limit_first" | "deductible_first">[] = [];
+  const noteLimitOrder = (page: number, s: { text: string; start: number }) => {
+    const lf = LIMIT_FIRST.test(s.text), df = DEDUCTIBLE_FIRST_OF_LIMIT.test(s.text);
+    if (lf === df) return; // neither, or both in one sentence (ambiguous): not a statement of the order
+    const e = ev(page, s.text, s.start); if (e) limitOrders.push({ value: lf ? "limit_first" : "deductible_first", words: s.text, evidence: e });
+  };
   for (const [page, text] of [...pages].sort((a, b) => a[0] - b[0])) {
     for (const s of sentencesOfPage(text)) {
       const own = new Set(words(s.text).map(stem));
@@ -62,6 +86,8 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
         // Deduction order is a plan-level statement (it names the deductible and co-insurance, not the benefit).
         const d = DED_FIRST.test(s.text) ? "deductible_first" : CO_FIRST.test(s.text) ? "co_insurance_first" : null;
         if (d && !terms.deductionOrder) { const e = ev(page, s.text, s.start); if (e) terms.deductionOrder = { value: d, words: s.text, evidence: e }; }
+        // A plan-level statement of the order of the excess and the limit counts only when it names no other benefit.
+        if (!/\bbenefit\b|\breimbursement\b|\bcash\b|\bincome\b/i.test(s.text)) noteLimitOrder(page, s);
         continue;
       }
       const e = ev(page, s.text, s.start);
@@ -77,8 +103,12 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
       if (EXCLUSION.test(s.text)) terms.exclusions.push({ value: s.text, words: s.text, evidence: e });
       const d = DED_FIRST.test(s.text) ? "deductible_first" : CO_FIRST.test(s.text) ? "co_insurance_first" : null;
       if (d && !terms.deductionOrder) terms.deductionOrder = { value: d, words: s.text, evidence: e };
+      noteLimitOrder(page, s);
     }
   }
+  const orders = new Set(limitOrders.map((o) => o.value));
+  if (orders.size === 1) terms.limitOrder = limitOrders[0];
+  else if (orders.size > 1) terms.limitOrderConflict = limitOrders.map((o) => o.evidence);
   const distinct = new Set(rules.map((r) => r.value));
   if (distinct.size === 1) terms.dayRule = rules[0];
   else if (distinct.size > 1) terms.dayRuleConflict = rules.map((r) => r.evidence);
