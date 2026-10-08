@@ -83,8 +83,11 @@ function applySettled(conds: CalcCondition[], settled: { id: string; status: "es
 function finish(o: Omit<CalcOutcome, "calcId" | "unresolvedText"> & { who: string; product: string }): CalcOutcome | Refusal {
   const calcId = idOf([o.calculator, o.policyId, o.benefit, o.subjectId, o.record?.operands, o.record?.steps, o.conditions.map((c) => [c.id, c.status])]);
   const need = o.requirements.length ? o.requirements.join("; and ") : "information the documents do not give";
+  // Integration (D29): only an unresolved calculation says something is missing. A resolved one (an estimate or an
+  // illustration) whose sentence fails verification says so -- never "I still need information".
   const unresolvedText = o.kind === "not_payable" ? `${o.product} ${o.benefit.toLowerCase()} does not apply to these facts: ${o.reason ?? "see the policy wording"}.`
-    : `To work out ${o.who}’s ${o.benefit.toLowerCase()} under ${o.product}, I still need ${need}.`;
+    : o.kind === "unresolved" ? `To work out ${o.who}’s ${o.benefit.toLowerCase()} under ${o.product}, I still need ${need}.`
+    : `I worked out ${o.who}’s ${o.benefit.toLowerCase()} under ${o.product}, but the figure could not be verified against your documents, so I left it out.`;
   if (o.record) {
     const rec = recomputeCalculation(o.record);
     if (!rec.ok) return { refused: "internal: the calculation record does not re-run: " + rec.error };

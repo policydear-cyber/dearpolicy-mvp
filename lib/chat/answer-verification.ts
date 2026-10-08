@@ -726,7 +726,16 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const calcVerdict = (k: CalculationRecord, sentence: string) => { if (!verdicts.has(k)) verdicts.set(k, calculationProblem(k, sentence, ctx)); return verdicts.get(k)!; };
   // A sentence whose calculation fails is replaced by that calculation's specific unresolved requirement.
   const requirements = new Map<string, string>();
-  const requirementFor = (x: { sentence: string }, k: CalculationRecord) => { const t = (k.unresolvedText ?? "").trim(); if (t && !moneyFiguresIn(t).length && !/\d{2,}/.test(t.replace(/\b(?:19|20)\d{2}\b/g, ""))) requirements.set(x.sentence, t); };
+  // Integration (D29): the replacement text claims missing information only for an unresolved calculation; for a
+  // resolved one (estimate / illustration) it names the specific verification failure.
+  const safeText = (t: string) => !!t && !moneyFiguresIn(t).length && !/\d{2,}/.test(t.replace(/\b(?:19|20)\d{2}\b/g, ""));
+  const requirementFor = (x: { sentence: string }, k: CalculationRecord, why?: string) => {
+    const resolved = k.kind === "indicative_estimate" || k.kind === "conditional_illustration";
+    let t = (k.unresolvedText ?? "").trim();
+    if (resolved && (!t || /\bI still need\b/i.test(t))) t = "I worked out that figure, but it could not be verified against your documents, so I left it out.";
+    if (resolved && why) { const w = why.trim().replace(/[.\s]+$/, ""); const withWhy = t.replace(/, so I left (it|the figure) out\.$/, ` (${w}), so I left $1 out.`); if (withWhy !== t && safeText(withWhy)) t = withWhy; }
+    if (safeText(t)) requirements.set(x.sentence, t);
+  };
   const drop = new Map<typeof fields[number], Set<string>>();
   const bad = (x: typeof all[number], figure: string, reason: string) => { problems.push({ where: x.field.where, figure, sentence: x.sentence, reason }); (drop.get(x.field) ?? drop.set(x.field, new Set()).get(x.field)!).add(x.sentence); };
   for (const x of all) {
@@ -745,7 +754,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
       for (const k of calculations.filter((k) => k && norm(k.sentence) === key)) {
         const p = calcVerdict(k, x.sentence);
         if (!p && calculationFigures(k).some((v) => same(v, f.value)) && f.currency === k.currency) { ok = true; break; }
-        if (p) { reasons.push(p); requirementFor(x, k); } else if (same(k.result?.value, f.value)) reasons.push("the sentence’s figure is not the calculation’s");
+        if (p) { reasons.push(p); requirementFor(x, k, p); } else if (same(k.result?.value, f.value)) reasons.push("the sentence’s figure is not the calculation’s");
       }
       if (ok) continue;
       if (calculations.some((k) => k && norm(k.sentence) === key)) { bad(x, f.raw, reasons[0] ?? "the figure is not part of the calculation the sentence states"); break; }
