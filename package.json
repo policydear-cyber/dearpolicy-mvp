@@ -142,6 +142,7 @@
     "rag2:loop-demo": "node --import tsx scripts/rag2-loop-demo.ts",
     "rag2:conv-test": "node --import tsx scripts/rag2-conv-regressions.ts",
     "rag2:adversarial-test": "node --import tsx scripts/rag2-adversarial-regressions.ts",
+    "rag2:fix-test": "node --import tsx scripts/rag2-fix-regressions.ts",
     "e2e:rag2-conversation": "playwright test -c e2e/support/playwright.rag2.config.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",

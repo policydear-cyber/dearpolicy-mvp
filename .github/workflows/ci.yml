@@ -200,6 +200,8 @@ jobs:
 
       - name: Benefit calculation contract (the claim calculators behind the calculate tool -- the policy's own day-count rule from admission and discharge, never nights for days; deductibles, co-insurance and caps on the household's bill; mixed currencies refused; a missing condition gives the printed figure plus the specific requirement, never an estimate; every calculation record re-run by the save-time gate; claim records only in a claim scenario)
         run: npm run rag2:calc-test
+      - name: Conversational RAG adversarial-review fixes (instruction text in a document is never evidence and passage figures bind only to the passage's own label; payout and claim-decision wording refused in every sentence, estimate and next step; sums of limits never a claimable total; household figures never policy operands; remembered evidence re-validated every turn; figure-free statements checked against their evidence; a corrected person withdraws and names the estimate; compound and re-asked questions refused; the day-count rule end to end through calculate; spend cap and metering before every loop model call)
+        run: npm run rag2:fix-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

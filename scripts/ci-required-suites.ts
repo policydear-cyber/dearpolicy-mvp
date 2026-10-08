@@ -108,4 +108,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "rag2:loop-test",
   "rag2:conv-test",
   "rag2:calc-test",
+  "rag2:fix-test",
 ];
