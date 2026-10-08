@@ -80,6 +80,9 @@ export type RagLoopState = {
   /** Claims about other members, kept (not overwritten) while the active claim is pending. */
   otherClaims?: Record<string, LoopClaim>;
   evidence: Record<string, EvidenceEntry>;
+  /** Agent F (D6): product names of the documents evidence was read from, remembered while they were readable (so a
+   * later turn can say which document is no longer available without reading a deleted record). */
+  docNames?: Record<string, string>;
   history: { user: string; assistant: string }[];
   turns: TraceTurn[];
 };

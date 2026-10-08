@@ -13,7 +13,6 @@
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import { loadDocs, loadPages } from "../store";
-import { query } from "@/lib/db/client";
 import { calcOutcomes } from "../calc/tool";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
@@ -447,6 +446,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const id of trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
   }
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
+  // Agent F (D6): remember the names of the documents this turn's evidence came from (readable now).
+  for (const e of Object.values(state.evidence)) { const n = policyNames.get(e.policyId); if (n) (state.docNames ??= {})[e.policyId] = n; }
   return { state, reply: final, trace, tools: ctx, corrections, reasked };
 }
 
@@ -471,11 +472,12 @@ export async function revalidateEvidence(accountId: string, state: RagLoopState)
   if (!entries.length) return { stale, policyNames };
   if (!docs) { for (const e of entries) stale.set(e.id, "I couldn’t confirm that the documents an earlier answer relied on are still current, so I left out what they said."); return { stale, policyNames }; }
   const live = new Map(docs.map((d) => [d.id, d]));
-  const gone = [...new Set(entries.filter((e) => !live.has(e.policyId)).map((e) => e.policyId))];
-  const names = gone.length ? new Map((await query<{ id: string; product_name: string | null }>(`SELECT id::text AS id, product_name FROM policies WHERE account_id=$1 AND id::text = ANY($2::text[])`, [accountId, gone]).catch(() => ({ rows: [] as { id: string; product_name: string | null }[] }))).rows.map((r) => [r.id, r.product_name])) : new Map<string, string | null>();
+  // The names of documents read earlier are remembered from when they were readable (never re-read once deleted).
+  const names = (state.docNames ??= {});
+  for (const e of entries) { const d = live.get(e.policyId); if (d?.productName) names[e.policyId] = d.productName; }
   for (const e of entries) {
     const d = live.get(e.policyId);
-    if (!d) { const n = names.get(e.policyId); stale.set(e.id, `${n ? `The ${n} document` : "A document"} an earlier answer relied on has since been deleted or replaced by a newer version, so I left out what it said.`); continue; }
+    if (!d) { const n = names[e.policyId]; stale.set(e.id, `${n ? `The ${n} document` : "A document"} an earlier answer relied on has since been deleted or replaced by a newer version, so I left out what it said.`); continue; }
     if (e.documentHash && d.fileHash && e.documentHash !== d.fileHash) stale.set(e.id, `The ${d.productName ?? "policy"} document has changed since I read it, so I left out what the earlier version said.`);
   }
   return { stale, policyNames };
