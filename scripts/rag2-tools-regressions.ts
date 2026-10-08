@@ -122,8 +122,16 @@ async function main() {
     const offenders: string[] = [];
     for (const f of files) {
       const rel = path.relative(path.resolve("."), f);
-      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/")) continue;
+      if (rel.startsWith("lib/rag2/") || /^scripts\/rag2-/.test(rel) || rel.startsWith("scripts/fixtures/rag2/") || rel.startsWith("scripts/fixtures/rag2-loop/")) continue;
       const text = await readFile(f, "utf8").catch(() => "");
+      // Prompt 2: the one flagged hook -- lib/chat/workflow.ts imports only the loop's flag, and loads the loop's hook
+      // only behind ragLoopEnabled() (DEARPOLICY_RAG_LOOP, default off).
+      if (rel === "lib/chat/workflow.ts") {
+        const refs = text.match(/[@\w./-]*lib\/rag2[\w./-]*/g) ?? [];
+        const loads = text.match(/await import\("@\/lib\/rag2\/loop\/hook"\)/g) ?? [];
+        const guarded = text.match(/if\(ragLoopEnabled\(\)\)return \(await import\("@\/lib\/rag2\/loop\/hook"\)\)/g) ?? [];
+        if (refs.every((r) => ["@/lib/rag2/loop/flag", "@/lib/rag2/loop/hook", "lib/rag2/loop/hook.ts"].includes(r)) && loads.length === guarded.length && !/["']\.\.?\/rag2\//.test(text)) continue;
+      }
       if (/lib\/rag2\b|["']\.\.?\/rag2\//.test(text)) offenders.push(rel);
     }
     assert.deepEqual(offenders, []);
