@@ -1,0 +1,4835 @@
+{
+  "household_id": "H6",
+  "as_of": "2026-10-06",
+  "timezone": "Asia/Singapore",
+  "behaviour_types": {
+    "answer": "Direct factual answer grounded in an uploaded document; must state the expected facts.",
+    "compute": "Answer needs arithmetic or date reasoning over document facts (as-of 2026-10-06, Asia/Singapore); must state the computed figure(s).",
+    "clarify": "Question is genuinely ambiguous (which person / which policy / missing key fact). Must ask a clarifying question and must NOT commit to one interpretation's figure.",
+    "not_uploaded": "Asks about a policy/document the household has not uploaded. Must say it is not among the uploaded documents (and may suggest uploading); must not invent terms.",
+    "not_covered": "The uploaded documents show the person/event is not covered (not named, excluded, not elected, wrong policy type). Must say so plainly.",
+    "expired": "The relevant policy has expired / is not in force on the relevant date. Must say so with the end date.",
+    "unreadable": "The relevant document could not be read (garbled / password protected). Must say it cannot be read and ask for a readable copy; must not invent contents.",
+    "out_of_scope": "Not an insurance-document question (or asks for something the app cannot do). Brief polite redirect; no invented policy facts.",
+    "advice_decline": "Asks for a personal recommendation (buy / surrender / switch / which is better for me). May give the relevant document facts but must not make the decision; suggests a licensed adviser or the insurer.",
+    "claim_start": "User starts a claim. Must pick the right policy/person and ask the next single needed question (or state what is needed).",
+    "claim_step": "Continuation of a claim flow; must use earlier turns, ask the next question or give the estimate when enough facts are in.",
+    "correction": "User corrects an earlier fact (person, date, amount). Must update the answer to the corrected facts and drop the old figure."
+  },
+  "matching": "expected = list of groups; each group passes if ANY alternative appears in the reply (case-insensitive; S$/$ and thousand separators normalised; numbers matched on digit boundaries). forbidden = strings a correct reply to THIS message must not contain.",
+  "counts": {
+    "singles": 153,
+    "conversations": 15,
+    "conversation_turns": 133
+  },
+  "singles": [
+    {
+      "id": "H6-S001",
+      "intent": "fb_hosp",
+      "message": "What hospital cover did I choose under my company benefits?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Ward A"
+        ],
+        [
+          "80,000"
+        ]
+      ],
+      "forbidden": [
+        "150,000"
+      ],
+      "fact_refs": [
+        "en_h2",
+        "fb_h2"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S002",
+      "intent": "fb_hosp",
+      "message": "my company hospital plan which ward ah",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Ward A"
+        ],
+        [
+          "80,000"
+        ]
+      ],
+      "forbidden": [
+        "150,000"
+      ],
+      "fact_refs": [
+        "en_h2",
+        "fb_h2"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S003",
+      "intent": "fb_hosp",
+      "message": "Am I on H2 or H3 for hospitalisation?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Ward A"
+        ],
+        [
+          "80,000"
+        ]
+      ],
+      "forbidden": [
+        "150,000"
+      ],
+      "fact_refs": [
+        "en_h2",
+        "fb_h2"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S004",
+      "intent": "fb_private",
+      "message": "Does my company insurance cover a private hospital?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Ward A"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_h2",
+        "fb_h3"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S005",
+      "intent": "fb_private",
+      "message": "can go private hosp using company insurance?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Ward A"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_h2",
+        "fb_h3"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S006",
+      "intent": "fb_ci",
+      "message": "Do I have group critical illness cover through work?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Not elected"
+        ]
+      ],
+      "forbidden": [
+        "covered for S$50,000"
+      ],
+      "fact_refs": [
+        "en_ci_not",
+        "fb_ci_only_elected"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S007",
+      "intent": "fb_ci",
+      "message": "company got CI cover for me anot",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Not elected"
+        ]
+      ],
+      "forbidden": [
+        "covered for S$50,000"
+      ],
+      "fact_refs": [
+        "en_ci_not",
+        "fb_ci_only_elected"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S008",
+      "intent": "fb_ci",
+      "message": "The booklet says Group CI S$50,000 - so I'm covered for that right?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Not elected"
+        ]
+      ],
+      "forbidden": [
+        "covered for S$50,000"
+      ],
+      "fact_refs": [
+        "en_ci_not",
+        "fb_ci_only_elected"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S009",
+      "intent": "fb_gtl",
+      "message": "How much group term life do I have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "200,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_gtl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S010",
+      "intent": "fb_gtl",
+      "message": "company life insurance how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "200,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_gtl"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S011",
+      "intent": "fb_gtl_nominee",
+      "message": "Who's the nominee for my group term life?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "none recorded",
+          "no nominee"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_nominee"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S012",
+      "intent": "fb_dental",
+      "message": "How much dental benefit do I have this year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_dental"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S013",
+      "intent": "fb_dental",
+      "message": "dental claim limit for me",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_dental"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S014",
+      "intent": "fb_optical",
+      "message": "Can I claim for new glasses?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "200"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_optical"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S015",
+      "intent": "fb_wellness",
+      "message": "How much is in my wellness spending account?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "264"
+        ]
+      ],
+      "forbidden": [
+        "330 dollars",
+        "S$330"
+      ],
+      "fact_refs": [
+        "en_wellness",
+        "dv_wellness_check"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S016",
+      "intent": "fb_wellness",
+      "message": "wellness $$ how much left",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "264"
+        ]
+      ],
+      "forbidden": [
+        "330 dollars",
+        "S$330"
+      ],
+      "fact_refs": [
+        "en_wellness",
+        "dv_wellness_check"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S017",
+      "intent": "fb_wellness_why",
+      "message": "Why is my wellness credit only $264 when I have 330 points left?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "0.80",
+          "80 cents"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_remaining",
+        "fb_conversion"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S018",
+      "intent": "fb_wellness_deadline",
+      "message": "When's the deadline to claim my wellness credit?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "31 Jan 2027",
+          "31 Jan 2027",
+          "31 January 2027",
+          "31 January 2027",
+          "January 31, 2027",
+          "Jan 31, 2027",
+          "2027-01-31",
+          "31/1/2027",
+          "31/01/2027",
+          "2027年1月31日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_wellness_deadline"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S019",
+      "intent": "fb_points",
+      "message": "How many FlexPoints did I use and how many are left?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "670"
+        ],
+        [
+          "330"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_used",
+        "en_remaining"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S020",
+      "intent": "fb_change",
+      "message": "Can I switch to H3 now?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "30 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_locked"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S021",
+      "intent": "fb_change",
+      "message": "can change my flexben now? want upgrade hospital",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "30 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_locked"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S022",
+      "intent": "fb_h3_cost",
+      "message": "How many extra points would H3 have cost me compared with H2?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "240"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_h3_extra_points",
+        "fb_h3"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S023",
+      "intent": "fb_if_ci",
+      "message": "If I had also picked Group CI, what would my wellness credit have been?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "104"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_if_ci_wellness"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S024",
+      "intent": "fb_gp",
+      "message": "How much do I pay per GP visit with the company plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "10"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_gp"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S025",
+      "intent": "fb_nonpanel",
+      "message": "Can I claim a GP visit at a non-panel clinic?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "panel"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_panel"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S026",
+      "intent": "fb_deductible",
+      "message": "Is there a deductible for the company hospital plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "no deductible"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_no_deductible"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S027",
+      "intent": "fb_preex",
+      "message": "Are pre-existing conditions covered under the company hospital plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "12 months"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_preex_12m"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S028",
+      "intent": "fb_leave_job",
+      "message": "If I resign in December, when does my company cover stop?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "last day of employment"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_ends_employment"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S029",
+      "intent": "fb_bt",
+      "message": "Am I covered when I travel for work?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_bt"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S030",
+      "intent": "mr_now",
+      "message": "How much would my mortgage insurance pay if I died today?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "424,920"
+        ]
+      ],
+      "forbidden": [
+        "480,000 now"
+      ],
+      "fact_refs": [
+        "mr_y5",
+        "mr_rule"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S031",
+      "intent": "mr_now",
+      "message": "homeshield payout now how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "424,920"
+        ]
+      ],
+      "forbidden": [
+        "480,000 now"
+      ],
+      "fact_refs": [
+        "mr_y5",
+        "mr_rule"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S032",
+      "intent": "mr_now",
+      "message": "What's the current sum assured on my HomeShield policy?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "424,920"
+        ]
+      ],
+      "forbidden": [
+        "480,000 now"
+      ],
+      "fact_refs": [
+        "mr_y5",
+        "mr_rule"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S033",
+      "intent": "mr_why_less",
+      "message": "Why isn't it 480k? That's what I bought.",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "480,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_rule",
+        "mr_y5",
+        "mr_initial"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S034",
+      "intent": "mr_why_less",
+      "message": "why my mortgage policy cover drop??",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "480,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_rule",
+        "mr_y5",
+        "mr_initial"
+      ],
+      "tags": [
+        "why",
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S035",
+      "intent": "mr_y6",
+      "message": "What will the sum assured be from June 2027?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "410,100"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_y6"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S036",
+      "intent": "mr_jan2030",
+      "message": "If something happened to me in January 2030, what would HomeShield pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "379,120"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_y8"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S037",
+      "intent": "mr_jul2030",
+      "message": "And in July 2030?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "362,930"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_y9"
+      ],
+      "tags": [],
+      "note": "Standalone single; July 2030 falls in policy year 9."
+    },
+    {
+      "id": "H6-S038",
+      "intent": "mr_last",
+      "message": "What's the sum assured in the final policy year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "26,760"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_y25",
+        "mr_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S039",
+      "intent": "mr_drop_next",
+      "message": "How much does my mortgage cover drop at the next policy anniversary?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "14,820"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_mr_y5_to_y6"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S040",
+      "intent": "mr_end",
+      "message": "When does my mortgage reducing term end?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "31 May 2047",
+          "31 May 2047",
+          "31 May 2047",
+          "31 May 2047",
+          "May 31, 2047",
+          "May 31, 2047",
+          "2047-05-31",
+          "31/5/2047",
+          "31/05/2047",
+          "2047年5月31日",
+          "2047"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S041",
+      "intent": "mr_premium",
+      "message": "How much is my HomeShield premium and does it go down too?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "588"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S042",
+      "intent": "mr_premium",
+      "message": "mortgage insurance premium per year",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "588"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_premium"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S043",
+      "intent": "mr_tpd",
+      "message": "Does my mortgage policy cover disability?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "65"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_benefits"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S044",
+      "intent": "mr_fire",
+      "message": "My kitchen caught fire - can I claim from my mortgage insurance?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "does not pay for damage to the property"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_not_fire"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S045",
+      "intent": "mr_rate",
+      "message": "What interest rate does the HomeShield schedule assume?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3.0%",
+          "3%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_rate"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S046",
+      "intent": "mr_assigned",
+      "message": "Is my mortgage policy assigned to the bank?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Not assigned"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_not_assigned"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S047",
+      "intent": "mr_year_now",
+      "message": "Which policy year am I in on HomeShield now?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "5"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_mr_policy_year_now",
+        "mr_y5"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S048",
+      "intent": "pet_ethan_bite",
+      "message": "Mochi bit me and I needed stitches. Can I claim my clinic bill from the pet insurance?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "does not cover medical expenses of the policyholder"
+        ]
+      ],
+      "forbidden": [
+        "840"
+      ],
+      "fact_refs": [
+        "pet_not_person"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S049",
+      "intent": "pet_ethan_bite",
+      "message": "kena bitten by my own dog, pet insurance cover my doctor bill?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "does not cover medical expenses of the policyholder"
+        ]
+      ],
+      "forbidden": [
+        "840"
+      ],
+      "fact_refs": [
+        "pet_not_person"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S050",
+      "intent": "pet_bite_other",
+      "message": "Mochi bit my neighbour's kid at the void deck. Am I covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_tpl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S051",
+      "intent": "pet_bite_other",
+      "message": "my dog bite someone, insurance pay?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_tpl"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S052",
+      "intent": "pet_1200",
+      "message": "Mochi's vet bill for an ear infection is S$1,200. How much will PawSure pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "840"
+        ]
+      ],
+      "forbidden": [
+        "1,050"
+      ],
+      "fact_refs": [
+        "dv_pet_1200",
+        "pet_excess",
+        "pet_copay"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S053",
+      "intent": "pet_1200",
+      "message": "vet bill 1.2k for mochi how much claimable",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "840"
+        ]
+      ],
+      "forbidden": [
+        "1,050"
+      ],
+      "fact_refs": [
+        "dv_pet_1200",
+        "pet_excess",
+        "pet_copay"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S054",
+      "intent": "pet_3000",
+      "message": "If Mochi needs S$3,000 surgery after an accident, what's the payout?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "2,280"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pet_3000"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S055",
+      "intent": "pet_limit",
+      "message": "What's the annual vet limit for Mochi?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "8,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_limit"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S056",
+      "intent": "pet_patella",
+      "message": "Mochi needs surgery for his left hind knee (luxating patella). Is it covered?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "patellar luxation"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_preex"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S057",
+      "intent": "pet_vaccine",
+      "message": "Can I claim Mochi's yearly vaccination?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "routine vaccinations"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_exclusions"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S058",
+      "intent": "pet_vaccine",
+      "message": "mochi jab can claim?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "routine vaccinations"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_exclusions"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S059",
+      "intent": "pet_boarding",
+      "message": "If I'm hospitalised, does the pet insurance pay for Mochi's boarding?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_boarding"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S060",
+      "intent": "pet_expiry",
+      "message": "When does Mochi's insurance expire?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "19 Mar 2027",
+          "19 Mar 2027",
+          "19 March 2027",
+          "19 March 2027",
+          "March 19, 2027",
+          "Mar 19, 2027",
+          "2027-03-19",
+          "19/3/2027",
+          "19/03/2027",
+          "2027年3月19日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_period"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S061",
+      "intent": "pet_age",
+      "message": "How old is Mochi?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "4"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pet_age",
+        "pet_dob"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S062",
+      "intent": "pet_cremation",
+      "message": "Does PawSure pay anything for cremation?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_cremation"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S063",
+      "intent": "pet_waiting",
+      "message": "Is there a waiting period on Mochi's policy?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "14 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_waiting"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S064",
+      "intent": "pet_hospital_ethan",
+      "message": "I'm going to hospital - can I use PawSure for my bill?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "DailyCare",
+          "hospital cash",
+          "Pelican"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_not_person",
+        "hc_policy"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S065",
+      "intent": "car_excess",
+      "message": "What's my car insurance excess?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "750"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_od_excess"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S066",
+      "intent": "car_excess",
+      "message": "own damage excess how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "750"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_od_excess"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S067",
+      "intent": "car_friend",
+      "message": "My 25-year-old friend borrowed my car and crashed it. What excess do I pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,750"
+        ]
+      ],
+      "forbidden": [
+        "750 only"
+      ],
+      "fact_refs": [
+        "dv_car_unnamed_young",
+        "car_cumulative"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S068",
+      "intent": "car_friend",
+      "message": "fren age 25 drive my car kena accident, excess total how much?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,750"
+        ]
+      ],
+      "forbidden": [
+        "750 only"
+      ],
+      "fact_refs": [
+        "dv_car_unnamed_young",
+        "car_cumulative"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S069",
+      "intent": "car_friend_older",
+      "message": "What if the friend driving was 35 and had a licence for 10 years?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_car_unnamed_older"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S070",
+      "intent": "car_nonauth",
+      "message": "If I repair my car at my uncle's workshop (not Tembusu authorised) after an accident, what's my excess?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,750"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_car_ethan_nonauth"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S071",
+      "intent": "car_ncd",
+      "message": "What's my NCD now?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "30%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_ncd"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S072",
+      "intent": "car_ncd_claim",
+      "message": "If I make an at-fault claim, what happens to my NCD?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "0%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_ncd_drop",
+        "car_ncd_protector"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S073",
+      "intent": "car_ncd_claim",
+      "message": "claim one time NCD drop to how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "0%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_ncd_drop",
+        "car_ncd_protector"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S074",
+      "intent": "car_windscreen",
+      "message": "Cracked windscreen - will claiming affect my NCD and what's the excess?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_ws_ncd",
+        "car_windscreen"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S075",
+      "intent": "car_expiry",
+      "message": "When is my car insurance due?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "30 Nov 2026",
+          "30 Nov 2026",
+          "30 November 2026",
+          "30 November 2026",
+          "November 30, 2026",
+          "Nov 30, 2026",
+          "2026-11-30",
+          "30/11/2026",
+          "30/11/2026",
+          "2026年11月30日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S076",
+      "intent": "car_expiry",
+      "message": "car insurance expire when",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "30 Nov 2026",
+          "30 Nov 2026",
+          "30 November 2026",
+          "30 November 2026",
+          "November 30, 2026",
+          "Nov 30, 2026",
+          "2026-11-30",
+          "30/11/2026",
+          "30/11/2026",
+          "2026年11月30日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_end"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S077",
+      "intent": "car_days",
+      "message": "How many days until my motor policy expires?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "55"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_car_days_left"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S078",
+      "intent": "car_premium",
+      "message": "How much is my car insurance premium?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,486.20"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S079",
+      "intent": "car_report",
+      "message": "How soon must I report an accident to Tembusu?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "24 hours"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_report"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S080",
+      "intent": "car_tppd",
+      "message": "If I hit someone's Ferrari, how much third-party property damage cover do I have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,000,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_tppd"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S081",
+      "intent": "car_pa",
+      "message": "Does my car insurance have personal accident cover for me?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "20,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_pa"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S082",
+      "intent": "car_named",
+      "message": "Who are the named drivers on my car policy?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Ethan Yeo Zhi Hao only",
+          "only"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_named"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S083",
+      "intent": "hc_5",
+      "message": "If I'm hospitalised for 5 days in a normal ward for an illness, how much hospital cash do I get?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "750"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hc_5",
+        "hc_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S084",
+      "intent": "hc_5",
+      "message": "warded 5 days, dailycare pay how much",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "750"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hc_5",
+        "hc_ward"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S085",
+      "intent": "hc_icu",
+      "message": "2 days ICU then 3 days normal ward - total hospital cash?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,050"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hc_icu2_ward3"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S086",
+      "intent": "hc_8",
+      "message": "What if I'm in a normal ward for 8 days?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,700"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hc_8",
+        "hc_recup"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S087",
+      "intent": "hc_6",
+      "message": "6 days in hospital - do I get the recuperation benefit?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "900"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hc_6"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S088",
+      "intent": "hc_waiting_sep",
+      "message": "I was hospitalised for dengue on 5 Sep 2026. Can I claim DailyCare?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "14 Sep 2026",
+          "14 Sep 2026",
+          "14 September 2026",
+          "14 September 2026",
+          "September 14, 2026",
+          "Sep 14, 2026",
+          "2026-09-14",
+          "14/9/2026",
+          "14/09/2026",
+          "2026年9月14日"
+        ]
+      ],
+      "forbidden": [
+        "750"
+      ],
+      "fact_refs": [
+        "hc_waiting"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S089",
+      "intent": "hc_waiting_sep",
+      "message": "warded early sept for fever, hospital cash can claim?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "14 Sep 2026",
+          "14 Sep 2026",
+          "14 September 2026",
+          "14 September 2026",
+          "September 14, 2026",
+          "Sep 14, 2026",
+          "2026-09-14",
+          "14/9/2026",
+          "14/09/2026",
+          "2026年9月14日"
+        ]
+      ],
+      "forbidden": [
+        "750"
+      ],
+      "fact_refs": [
+        "hc_waiting"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S090",
+      "intent": "hc_accident_aug",
+      "message": "I broke my leg in an accident on 20 Aug and was warded. Is that covered by DailyCare?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Accidents are covered from the commencement date"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_accident_day1"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S091",
+      "intent": "hc_preex",
+      "message": "I had a slipped disc treated last year. If I'm hospitalised for it now, will DailyCare pay?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "14 Aug 2028",
+          "14 Aug 2028",
+          "14 August 2028",
+          "14 August 2028",
+          "August 14, 2028",
+          "Aug 14, 2028",
+          "2028-08-14",
+          "14/8/2028",
+          "14/08/2028",
+          "2028年8月14日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_preex"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S092",
+      "intent": "hc_daysurgery",
+      "message": "Does DailyCare pay for day surgery?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Day surgery without an overnight admission is not covered"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_day_rule"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S093",
+      "intent": "hc_premium",
+      "message": "How much is my hospital cash premium?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "324"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S094",
+      "intent": "hc_start",
+      "message": "When did my DailyCare start?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15 Aug 2026",
+          "15 Aug 2026",
+          "15 August 2026",
+          "15 August 2026",
+          "August 15, 2026",
+          "Aug 15, 2026",
+          "2026-08-15",
+          "15/8/2026",
+          "15/08/2026",
+          "2026年8月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_start"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S095",
+      "intent": "hc_max",
+      "message": "Is there a maximum number of days for hospital cash?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "180"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_max"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S096",
+      "intent": "hosp_combined",
+      "message": "If I'm warded 5 days in Ward A for appendicitis next month, what can I get from all my policies?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "750"
+        ],
+        [
+          "Ward A"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_h2",
+        "dv_hc_5"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S097",
+      "intent": "tv_expired",
+      "message": "I'm flying to Tokyo next week for holiday. Am I covered by my travel insurance?",
+      "behaviour": "expired",
+      "expected": [
+        [
+          "15 Sep 2026",
+          "15 Sep 2026",
+          "15 September 2026",
+          "15 September 2026",
+          "September 15, 2026",
+          "Sep 15, 2026",
+          "2026-09-15",
+          "15/9/2026",
+          "15/09/2026",
+          "2026年9月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S098",
+      "intent": "tv_expired",
+      "message": "going bkk next week, my travelease still ok?",
+      "behaviour": "expired",
+      "expected": [
+        [
+          "15 Sep 2026",
+          "15 Sep 2026",
+          "15 September 2026",
+          "15 September 2026",
+          "September 15, 2026",
+          "Sep 15, 2026",
+          "2026-09-15",
+          "15/9/2026",
+          "15/09/2026",
+          "2026年9月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_end"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S099",
+      "intent": "tv_expired",
+      "message": "Is my annual travel plan still active?",
+      "behaviour": "expired",
+      "expected": [
+        [
+          "15 Sep 2026",
+          "15 Sep 2026",
+          "15 September 2026",
+          "15 September 2026",
+          "September 15, 2026",
+          "Sep 15, 2026",
+          "2026-09-15",
+          "15/9/2026",
+          "15/09/2026",
+          "2026年9月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S100",
+      "intent": "tv_business",
+      "message": "My trip to Jakarta next week is a company business trip. Am I covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "authorised"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_bt",
+        "fb_bt_personal"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S101",
+      "intent": "tv_leisure_company",
+      "message": "Can I use the company business travel cover for my personal holiday?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Personal leisure travel is not covered"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_bt_personal",
+        "tv_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S102",
+      "intent": "tv_days_since",
+      "message": "How many days ago did my travel insurance expire?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "21"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_tv_days_since",
+        "tv_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S103",
+      "intent": "tv_trip_started",
+      "message": "My trip started on 10 Sep and I came back on 20 Sep - was the whole trip covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15 Sep 2026",
+          "15 Sep 2026",
+          "15 September 2026",
+          "15 September 2026",
+          "September 15, 2026",
+          "Sep 15, 2026",
+          "2026-09-15",
+          "15/9/2026",
+          "15/09/2026",
+          "2026年9月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_trips_start",
+        "tv_end"
+      ],
+      "tags": [],
+      "note": "Trips that start during the period are covered; trip started 10 Sep (before expiry 15 Sep)."
+    },
+    {
+      "id": "H6-S104",
+      "intent": "tv_med",
+      "message": "What was the overseas medical limit on my old TravelEase plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "200,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_med",
+        "tv_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S105",
+      "intent": "tv_auto_renew",
+      "message": "Didn't my TravelEase renew automatically?",
+      "behaviour": "expired",
+      "expected": [
+        [
+          "does not renew automatically"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_trips_start",
+        "tv_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S106",
+      "intent": "gb_what",
+      "message": "What's in scan_0915?",
+      "behaviour": "unreadable",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "gb_unreadable"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S107",
+      "intent": "gb_what",
+      "message": "the scan i uploaded on 15 sep what policy is it",
+      "behaviour": "unreadable",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "gb_unreadable"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S108",
+      "intent": "gb_what",
+      "message": "Can you summarise the last PDF I uploaded, the scan?",
+      "behaviour": "unreadable",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "gb_unreadable"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S109",
+      "intent": "gb_travel",
+      "message": "Is the scan_0915 document my company travel insurance? What does it cover?",
+      "behaviour": "unreadable",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "gb_unreadable"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S110",
+      "intent": "gb_password",
+      "message": "The scan was password protected - can you still read it?",
+      "behaviour": "unreadable",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "gb_unreadable"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S111",
+      "intent": "age",
+      "message": "How old am I according to my policies?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "31"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ethan_age"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S112",
+      "intent": "renewals",
+      "message": "Which of my policies expires next?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "30 Nov 2026",
+          "30 Nov 2026",
+          "30 November 2026",
+          "30 November 2026",
+          "November 30, 2026",
+          "Nov 30, 2026",
+          "2026-11-30",
+          "30/11/2026",
+          "30/11/2026",
+          "2026年11月30日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_end",
+        "pet_period",
+        "tv_end"
+      ],
+      "tags": [],
+      "note": "Car (30 Nov 2026) is next; TravelEase already expired 15 Sep 2026."
+    },
+    {
+      "id": "H6-S113",
+      "intent": "fb_wellness_uses",
+      "message": "What can I spend my wellness credit on?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "gym"
+        ],
+        [
+          "health screening"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_wellness_uses"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S114",
+      "intent": "fb_wellness_uses",
+      "message": "wellness account can use for what",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "gym"
+        ],
+        [
+          "health screening"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_wellness_uses"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S115",
+      "intent": "fb_h1_default",
+      "message": "What would I have got for hospital cover if I hadn't made any election?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "40,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_h1"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S116",
+      "intent": "fb_elect_date",
+      "message": "When did I confirm my FlexBen choices?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "28 Nov 2025",
+          "28 Nov 2025",
+          "28 November 2025",
+          "28 November 2025",
+          "November 28, 2025",
+          "Nov 28, 2025",
+          "2025-11-28",
+          "28/11/2025",
+          "28/11/2025",
+          "2025年11月28日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "en_date"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S117",
+      "intent": "fb_life_event",
+      "message": "I'm getting married in November. Can I change my FlexBen options?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "marriage"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "fb_locked"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S118",
+      "intent": "mr_premiums_left",
+      "message": "How many more HomeShield premiums do I have to pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "17",
+          "2043"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_mr_premiums_left",
+        "dv_mr_last_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S119",
+      "intent": "mr_initial",
+      "message": "What was the starting sum assured on HomeShield?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "480,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_initial"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S120",
+      "intent": "pet_after_840",
+      "message": "If PawSure pays $840 for Mochi's ear infection, how much of his annual limit is left (no other claims)?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "7,160"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pet_after_840"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S121",
+      "intent": "pet_bite_mine",
+      "message": "Does Mochi's insurance cover me if I trip over him and sprain my ankle?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "does not cover medical expenses of the policyholder"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_not_person"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S122",
+      "intent": "pet_boarding_2",
+      "message": "If I'm hospitalised 2 days, how much boarding for Mochi can I claim?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "100"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_boarding_2"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S123",
+      "intent": "car_unnamed_only",
+      "message": "What's the extra excess if someone not named on the policy drives?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_unnamed"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S124",
+      "intent": "car_young_rule",
+      "message": "Is there an extra excess for young drivers?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_young"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S125",
+      "intent": "car_young_rule",
+      "message": "young driver excess how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_young"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S126",
+      "intent": "hc_2",
+      "message": "Hospital cash for a 2-day stay after a road accident?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hc_2"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S127",
+      "intent": "hc_declared",
+      "message": "Did I declare any medical conditions when I bought DailyCare?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "None"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_declared"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S128",
+      "intent": "own_premiums",
+      "message": "How much do I pay in total per year for the policies I bought myself (mortgage, pet, car, hospital cash)?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,010.20"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_own_premiums"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S129",
+      "intent": "hc_preex_days",
+      "message": "Until when are pre-existing conditions excluded under DailyCare?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "14 Aug 2028",
+          "14 Aug 2028",
+          "14 August 2028",
+          "14 August 2028",
+          "August 14, 2028",
+          "Aug 14, 2028",
+          "2028-08-14",
+          "14/8/2028",
+          "14/08/2028",
+          "2028年8月14日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hc_preex"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S130",
+      "intent": "tv_area",
+      "message": "Did my old TravelEase cover Australia?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Australia"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_area"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S131",
+      "intent": "tv_cancel",
+      "message": "What was the trip cancellation limit on my old travel plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tv_cancel"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S132",
+      "intent": "mr_disability_age",
+      "message": "Until what age is TPD covered on HomeShield?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "65"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "mr_benefits"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S133",
+      "intent": "car_vehicle",
+      "message": "Which car is insured under my motor policy?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "SNE4821K"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_vehicle"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S134",
+      "intent": "clarify_excess",
+      "message": "How much is my excess?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "750 per",
+        "150 per"
+      ],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Car (S$750) vs pet (S$150). Listing both and asking is acceptable."
+    },
+    {
+      "id": "H6-S135",
+      "intent": "clarify_excess",
+      "message": "excess how much ah",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "750 per",
+        "150 per"
+      ],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Car (S$750) vs pet (S$150). Listing both and asking is acceptable."
+    },
+    {
+      "id": "H6-S136",
+      "intent": "clarify_claim",
+      "message": "I want to make a claim.",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S137",
+      "intent": "clarify_claim",
+      "message": "can help me claim",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S138",
+      "intent": "clarify_limit",
+      "message": "What's my annual limit?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Company hospital S$80,000 vs pet S$8,000 etc."
+    },
+    {
+      "id": "H6-S139",
+      "intent": "clarify_hosp_days",
+      "message": "I was in hospital last month, how much can I get?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "750"
+      ],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Need dates/days/cause - waiting period cut-off 14 Sep 2026 matters."
+    },
+    {
+      "id": "H6-S140",
+      "intent": "nu_shield",
+      "message": "What does my Integrated Shield plan cover?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S141",
+      "intent": "nu_shield",
+      "message": "my IP plan deductible how much",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H6-S142",
+      "intent": "nu_loan",
+      "message": "How much is left on my HDB loan?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S143",
+      "intent": "nu_home",
+      "message": "Is my home contents insured?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S144",
+      "intent": "nu_mum",
+      "message": "What insurance does my mum have?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S145",
+      "intent": "oos",
+      "message": "What's the COE price this month?",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S146",
+      "intent": "oos",
+      "message": "Recommend a good vet near Tampines.",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S147",
+      "intent": "oos",
+      "message": "Can you transfer money to my wellness account?",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S148",
+      "intent": "adv_ci",
+      "message": "Should I buy my own critical illness plan since I didn't pick it at work?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S149",
+      "intent": "adv_ci",
+      "message": "worth to get CI on my own or not",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H6-S150",
+      "intent": "adv_ncd",
+      "message": "Should I claim for a small dent or just pay myself to protect my NCD?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S151",
+      "intent": "adv_mrt",
+      "message": "Should I switch my mortgage insurance to a level term plan?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H6-S152",
+      "intent": "claim_car",
+      "message": "I just had an accident in my car. How do I claim?",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "24 hours",
+          "DriveSafe",
+          "TG-MV-7745310"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "car_policy",
+        "car_report"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H6-S153",
+      "intent": "claim_pet",
+      "message": "I want to claim Mochi's vet bill.",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "PawSure",
+          "TG-PET-2290174",
+          "150"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pet_policy",
+        "pet_excess"
+      ],
+      "tags": []
+    }
+  ],
+  "conversations": [
+    {
+      "id": "H6-C01",
+      "title": "Car accident with a friend driving",
+      "tags": [
+        "motor",
+        "correction",
+        "why"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Had a car accident yesterday, my friend was driving",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "unnamed",
+              "named driver",
+              "Ethan Yeo Zhi Hao only"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_named",
+            "car_policy"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "He's 25",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "3,750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_car_unnamed_young"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "why so much??",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "2,500"
+            ],
+            [
+              "500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_cumulative",
+            "car_young",
+            "car_unnamed"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Sorry he's actually 28, I mixed him up with his brother",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "1,250"
+            ]
+          ],
+          "forbidden": [
+            "3,750"
+          ],
+          "fact_refs": [
+            "dv_car_unnamed_older"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "He's had his licence for 6 years",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,250"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_car_unnamed_older"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "If we use his cousin's workshop (not authorised)?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_nonauth",
+            "dv_car_unnamed_older"
+          ],
+          "note": "1,250 + 1,000 = 2,250."
+        },
+        {
+          "turn": 7,
+          "user": "What happens to my NCD?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "0%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_ncd_drop"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "I didn't buy NCD protector right?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Not purchased"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_ncd_protector"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Deadline to report?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "24 hours"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_report"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "Should I just settle privately?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C02",
+      "title": "Mochi vet claim then owner injury",
+      "tags": [
+        "pet",
+        "not-covered"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mochi ate something and needed the vet, bill S$1,200",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "840"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pet_1200"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "How did you get 840?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150"
+            ],
+            [
+              "20%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_excess",
+            "pet_copay"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "He also bit me while at the vet - can I claim my tetanus jab?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "does not cover medical expenses of the policyholder"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_not_person"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Can my hospital cash cover it?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "each full 24 hours"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_day_rule"
+          ],
+          "note": "Outpatient jab is not a hospital admission."
+        },
+        {
+          "turn": 5,
+          "user": "What about the company GP benefit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "10"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_gp",
+            "fb_panel"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "How much vet limit does Mochi have left this year?",
+          "behaviour": "clarify",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_limit"
+          ],
+          "note": "Previous claims this year are not on file; annual limit S$8,000 minus earlier claims - must ask or state assumption."
+        },
+        {
+          "turn": 7,
+          "user": "No other claims this year",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "7,160"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pet_after_840",
+            "pet_limit"
+          ],
+          "note": "8,000 - 840 = 7,160 (benefit paid counts towards limit)."
+        },
+        {
+          "turn": 8,
+          "user": "When does his policy renew?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "19 Mar 2027",
+              "19 Mar 2027",
+              "19 March 2027",
+              "19 March 2027",
+              "March 19, 2027",
+              "Mar 19, 2027",
+              "2027-03-19",
+              "19/3/2027",
+              "19/03/2027",
+              "2027年3月19日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_period"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C03",
+      "title": "Hospital cash with date correction",
+      "tags": [
+        "hospital-cash",
+        "correction",
+        "date-reasoning",
+        "why"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "I was warded for 5 days for a bad flu",
+          "behaviour": "clarify",
+          "expected": [],
+          "forbidden": [
+            "750"
+          ],
+          "fact_refs": [],
+          "note": "Need admission date (waiting period cut-off 14 Sep 2026)."
+        },
+        {
+          "turn": 2,
+          "user": "Admitted 20 Sep",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_hc_5",
+            "hc_waiting"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Oh wait, it was 10 Sep, not 20 Sep",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "14 Sep 2026",
+              "14 Sep 2026",
+              "14 September 2026",
+              "14 September 2026",
+              "September 14, 2026",
+              "Sep 14, 2026",
+              "2026-09-14",
+              "14/9/2026",
+              "14/09/2026",
+              "2026年9月14日"
+            ]
+          ],
+          "forbidden": [
+            "750"
+          ],
+          "fact_refs": [
+            "hc_waiting"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Why does 10 days make a difference?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_waiting",
+            "hc_start"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "What about the company hospital plan?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Ward A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2",
+            "fb_no_deductible"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Any deductible there?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "no deductible"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_no_deductible"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "If I'm warded again next month for 8 days?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,700"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_hc_8"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Does the recuperation benefit apply for 6 days?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "7"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_recup"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C04",
+      "title": "Mortgage insurance deep dive",
+      "tags": [
+        "mrt",
+        "date-reasoning",
+        "why"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "How much is my HomeShield cover now?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "424,920"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_y5"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Why not 480k?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "480,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_rule",
+            "mr_initial"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Which policy year am I in?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "5"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_mr_policy_year_now"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "When does it drop next?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "01 Jun 2027",
+              "1 Jun 2027",
+              "1 June 2027",
+              "01 June 2027",
+              "June 1, 2027",
+              "Jun 1, 2027",
+              "2027-06-01",
+              "1/6/2027",
+              "01/06/2027",
+              "2027年6月1日",
+              "01 Jun 2027",
+              "1 Jun 2027"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_y6"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "To how much?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "410,100"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_y6"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "And in 2031 August?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "346,250"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_y10"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Does the premium reduce too?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "588"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_premium"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How many more years of premiums?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "17",
+              "2043"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_mr_premiums_left",
+            "dv_mr_last_premium",
+            "mr_premium"
+          ],
+          "note": "22 annual premiums from 01 Jun 2022: 5 paid (2022-2026), 17 left, last on 01 Jun 2043."
+        },
+        {
+          "turn": 9,
+          "user": "Does it pay if my flat floods?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "does not pay for damage to the property"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_not_fire"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "Should I top up with term life?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C05",
+      "title": "Company benefits confusion",
+      "tags": [
+        "flexben",
+        "not-covered"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "The booklet says I can get Group CI of $50k. How do I claim it?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Not elected"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_ci_not",
+            "fb_ci_only_elected"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Can I add it now?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_locked"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "I'm getting married next month - does that count?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "marriage"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_locked"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "What did I actually choose?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Ward A"
+            ],
+            [
+              "600"
+            ],
+            [
+              "200"
+            ],
+            [
+              "200,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2",
+            "en_dental",
+            "en_optical",
+            "en_gtl"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "How many points left?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "330"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_remaining"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "So 330 dollars in wellness?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "264"
+            ]
+          ],
+          "forbidden": [
+            "S$330 in wellness"
+          ],
+          "fact_refs": [
+            "en_wellness",
+            "fb_conversion"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Deadline to use it?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "31 Jan 2027",
+              "31 Jan 2027",
+              "31 January 2027",
+              "31 January 2027",
+              "January 31, 2027",
+              "Jan 31, 2027",
+              "2027-01-31",
+              "31/1/2027",
+              "31/01/2027",
+              "2027年1月31日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_wellness_deadline"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Can I use it for my dog's vet bill?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "gym",
+              "health screening",
+              "sports"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_wellness_uses"
+          ],
+          "note": "Booklet lists gym, health screening, sports equipment; vet not listed."
+        },
+        {
+          "turn": 9,
+          "user": "Recommend which option I should pick next year?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C06",
+      "title": "Travel planning after expiry",
+      "tags": [
+        "travel",
+        "expired",
+        "unreadable"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "I'm going Japan for holiday on 20 Oct",
+          "behaviour": "expired",
+          "expected": [
+            [
+              "15 Sep 2026",
+              "15 Sep 2026",
+              "15 September 2026",
+              "15 September 2026",
+              "September 15, 2026",
+              "Sep 15, 2026",
+              "2026-09-15",
+              "15/9/2026",
+              "15/09/2026",
+              "2026年9月15日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tv_end"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "But I had an annual plan?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "does not renew automatically"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tv_trips_start",
+            "tv_end"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "How long ago did it expire?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "21"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_tv_days_since"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "What about the company travel insurance?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Personal leisure travel is not covered"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_bt_personal"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "What about the scan I uploaded, isn't that travel insurance?",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Can you guess what it is?",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "OK, what did my old plan cover for medical?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "200,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tv_med"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Which travel insurer is cheapest?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 9,
+          "user": "Next month I also have a work trip to Sydney",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "500,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_bt"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C07",
+      "title": "Unreadable scan handling",
+      "tags": [
+        "unreadable"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What policy is scan_0915?",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "It's from my company I think",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "The password is my birthday, try that",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ],
+          "note": "App cannot unlock; ask for an unlocked copy."
+        },
+        {
+          "turn": 4,
+          "user": "Fine. What else do I have uploaded?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "HomeShield"
+            ],
+            [
+              "PawSure"
+            ],
+            [
+              "DriveSafe"
+            ],
+            [
+              "DailyCare"
+            ],
+            [
+              "FlexBen",
+              "Ward A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_policy",
+            "pet_policy",
+            "car_policy",
+            "hc_policy",
+            "en_h2"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Do I have travel cover?",
+          "behaviour": "expired",
+          "expected": [
+            [
+              "15 Sep 2026",
+              "15 Sep 2026",
+              "15 September 2026",
+              "15 September 2026",
+              "September 15, 2026",
+              "Sep 15, 2026",
+              "2026-09-15",
+              "15/9/2026",
+              "15/09/2026",
+              "2026年9月15日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tv_end"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Then the scan must be travel insurance?",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "ok I'll re-upload later",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 8,
+          "user": "Meanwhile when does my car insurance expire?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30 Nov 2026",
+              "30 Nov 2026",
+              "30 November 2026",
+              "30 November 2026",
+              "November 30, 2026",
+              "Nov 30, 2026",
+              "2026-11-30",
+              "30/11/2026",
+              "30/11/2026",
+              "2026年11月30日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_end"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C08",
+      "title": "Dog bite third-party",
+      "tags": [
+        "pet",
+        "third-party",
+        "not-covered"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mochi bit a jogger at the park",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "100,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_tpl"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Does it cover the jogger's hospital bill?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "third-party liability"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_tpl",
+            "pet_not_person"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "And my own scratches from pulling Mochi away?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "does not cover medical expenses of the policyholder"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_not_person"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Can my DailyCare pay if I'm warded?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_accident_day1",
+            "hc_ward"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Warded 2 days",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "300"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_hc_2",
+            "hc_ward"
+          ],
+          "note": "2 x 150 = 300."
+        },
+        {
+          "turn": 6,
+          "user": "Who looks after Mochi meanwhile, is boarding covered?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "50"
+            ],
+            [
+              "500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_boarding"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "2 days boarding?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "100"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_boarding_2",
+            "pet_boarding"
+          ],
+          "note": "2 x S$50."
+        },
+        {
+          "turn": 8,
+          "user": "Should I also buy personal accident insurance?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C09",
+      "title": "Singlish quick checks",
+      "tags": [
+        "singlish"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "my car NCD how much now",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_ncd"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "claim windscreen will drop NCD anot",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "do not affect the NCD"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_ws_ncd"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "company hosp plan which ward",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Ward A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "got CI from company?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Not elected"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_ci_not"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "mochi insurance limit",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "8,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_limit"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "travel insurance still ok?",
+          "behaviour": "expired",
+          "expected": [
+            [
+              "15 Sep 2026",
+              "15 Sep 2026",
+              "15 September 2026",
+              "15 September 2026",
+              "September 15, 2026",
+              "Sep 15, 2026",
+              "2026-09-15",
+              "15/9/2026",
+              "15/09/2026",
+              "2026年9月15日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tv_end"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "hospital cash per day",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_ward"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "ok tq",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C10",
+      "title": "Overview and totals",
+      "tags": [
+        "overview",
+        "totals"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Give me a summary of all my coverage.",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Ward A"
+            ],
+            [
+              "HomeShield"
+            ],
+            [
+              "DriveSafe"
+            ],
+            [
+              "PawSure"
+            ],
+            [
+              "DailyCare"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2",
+            "mr_policy",
+            "mr_y5",
+            "car_policy",
+            "pet_policy",
+            "hc_policy"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Total death cover from life policies?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "200,000"
+            ],
+            [
+              "424,920"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_gtl",
+            "mr_y5"
+          ],
+          "note": "Group term life S$200,000 + HomeShield S$424,920 (HomeShield repays mortgage)."
+        },
+        {
+          "turn": 3,
+          "user": "Total yearly premiums I pay myself?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "3,010.20"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_own_premiums",
+            "mr_premium",
+            "pet_premium",
+            "car_premium",
+            "hc_premium"
+          ],
+          "note": "588 + 612 + 1,486.20 + 324 = 3,010.20 (FlexBen is employer-paid)."
+        },
+        {
+          "turn": 4,
+          "user": "Which one is the most expensive?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "1,486.20",
+              "car",
+              "DriveSafe"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_premium"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Is Mochi covered for death?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "300"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_cremation"
+          ],
+          "note": "Only cremation/burial S$300; no death benefit."
+        },
+        {
+          "turn": 6,
+          "user": "Which expire in the next 3 months?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "30 Nov 2026",
+              "30 Nov 2026",
+              "30 November 2026",
+              "30 November 2026",
+              "November 30, 2026",
+              "Nov 30, 2026",
+              "2026-11-30",
+              "30/11/2026",
+              "30/11/2026",
+              "2026年11月30日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_end",
+            "fb_wellness_deadline"
+          ],
+          "note": "Car 30 Nov 2026; FlexBen plan year ends 31 Dec 2026."
+        },
+        {
+          "turn": 7,
+          "user": "Do I have life insurance besides work and mortgage?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 8,
+          "user": "How about the scan?",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C11",
+      "title": "Hospital stay across policies",
+      "tags": [
+        "hospital",
+        "correction"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "I'm being admitted for appendicitis tomorrow, Ward A",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "Ward A",
+              "80,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2",
+            "hc_policy"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "What does the company plan pay?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "80,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2",
+            "fb_no_deductible"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "And DailyCare?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_ward",
+            "hc_waiting"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Expected stay 3 days",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "450"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_hc_3",
+            "hc_ward"
+          ],
+          "note": "3 x 150."
+        },
+        {
+          "turn": 5,
+          "user": "Doctor now says maybe 2 days ICU first, then 3 days ward",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "1,050"
+            ]
+          ],
+          "forbidden": [
+            "450"
+          ],
+          "fact_refs": [
+            "dv_hc_icu2_ward3"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Any waiting period issue? My plan started in August",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "14 Sep 2026",
+              "14 Sep 2026",
+              "14 September 2026",
+              "14 September 2026",
+              "September 14, 2026",
+              "Sep 14, 2026",
+              "2026-09-14",
+              "14/9/2026",
+              "14/09/2026",
+              "2026年9月14日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_waiting"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Is appendicitis pre-existing?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "12 months"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_preex"
+          ],
+          "note": "Only if signs/symptoms/treatment in the 12 months before 15 Aug 2026."
+        },
+        {
+          "turn": 8,
+          "user": "Can PawSure pay Mochi's boarding while I'm in?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_boarding"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Should I upgrade to H3 for next year?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C12",
+      "title": "Not uploaded and scope",
+      "tags": [
+        "not-uploaded"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What's my Integrated Shield deductible?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "I thought I uploaded it",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [],
+          "note": "May mention scan_0915 is unreadable, but must not claim it is an IP."
+        },
+        {
+          "turn": 3,
+          "user": "How much CPF do I have?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 4,
+          "user": "What's the COE premium now?",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 5,
+          "user": "OK what's my company hospital limit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "80,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "And under H3?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_h3"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Which do I have?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "H2",
+              "Ward A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_h2"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Thanks",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H6-C13",
+      "title": "Why did figures change",
+      "tags": [
+        "why"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Last year HomeShield said 439k, now 425k. Why?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "424,920"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_rule",
+            "mr_y5"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "By how much did it fall since the start?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "55,080"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_mr_y5_drop"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Why did my car premium show NCD 30%?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_ncd"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Why is wellness 264 not 330?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "0.80",
+              "80 cents"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_wellness",
+            "fb_conversion"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Why does PawSure pay 840 for a 1,200 bill?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150"
+            ],
+            [
+              "20%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_excess",
+            "pet_copay"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Why didn't DailyCare pay my early-September stay?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "14 Sep 2026",
+              "14 Sep 2026",
+              "14 September 2026",
+              "14 September 2026",
+              "September 14, 2026",
+              "Sep 14, 2026",
+              "2026-09-14",
+              "14/9/2026",
+              "14/09/2026",
+              "2026年9月14日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hc_waiting"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Why can't I use company travel for my holiday?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Personal leisure travel is not covered"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "fb_bt_personal"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Why is my group life 200k?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "1 top-up",
+              "top-up"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_gtl"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C14",
+      "title": "Pet illness timeline",
+      "tags": [
+        "pet",
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mochi got sick on 25 Mar 2026, is that covered?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "14 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_waiting",
+            "dv_pet_waiting_end"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Policy started 20 Mar right?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "20 Mar 2026",
+              "20 Mar 2026",
+              "20 March 2026",
+              "20 March 2026",
+              "March 20, 2026",
+              "Mar 20, 2026",
+              "2026-03-20",
+              "20/3/2026",
+              "20/03/2026",
+              "2026年3月20日",
+              "20 Mar 2026"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_period"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "When did the waiting period end?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "03 Apr 2026",
+              "3 Apr 2026",
+              "3 April 2026",
+              "03 April 2026",
+              "April 3, 2026",
+              "Apr 3, 2026",
+              "2026-04-03",
+              "3/4/2026",
+              "03/04/2026",
+              "2026年4月3日",
+              "03 Apr 2026",
+              "3 Apr"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pet_waiting_end"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "He got sick again in June, bill S$3,000 after an accident actually",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "2,280"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pet_3000"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Remaining limit after that?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "5,720"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pet_after_2280",
+            "pet_limit"
+          ],
+          "note": "8,000 - 2,280 (assuming no other claims)."
+        },
+        {
+          "turn": 6,
+          "user": "Is his knee problem covered?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "patellar luxation"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_preex"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Can I claim his sterilisation?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "sterilisation"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_exclusions"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How old is he?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "4"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pet_age"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H6-C15",
+      "title": "Long mixed session with corrections",
+      "tags": [
+        "long",
+        "correction"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Hi, quick questions about my insurance",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "What's my car excess?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "car_od_excess"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "If my sister drives? She's 24, licence 3 years",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "3,750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_car_unnamed_young"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Sorry she's 29",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "1,250"
+            ]
+          ],
+          "forbidden": [
+            "3,750"
+          ],
+          "fact_refs": [
+            "dv_car_unnamed_older"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "My HomeShield cover now?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "424,920"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "mr_y5"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Hospital cash for 5 days illness admitted 1 Oct?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_hc_5"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Sorry admitted 1 Sep",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "14 Sep 2026",
+              "14 Sep 2026",
+              "14 September 2026",
+              "14 September 2026",
+              "September 14, 2026",
+              "Sep 14, 2026",
+              "2026-09-14",
+              "14/9/2026",
+              "14/09/2026",
+              "2026年9月14日"
+            ]
+          ],
+          "forbidden": [
+            "750"
+          ],
+          "fact_refs": [
+            "hc_waiting"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Is Group CI part of my benefits?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Not elected"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "en_ci_not"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Mochi bit me, can PawSure pay?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "does not cover medical expenses of the policyholder"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pet_not_person"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "Japan trip next week covered?",
+          "behaviour": "expired",
+          "expected": [
+            [
+              "15 Sep 2026",
+              "15 Sep 2026",
+              "15 September 2026",
+              "15 September 2026",
+              "September 15, 2026",
+              "Sep 15, 2026",
+              "2026-09-15",
+              "15/9/2026",
+              "15/09/2026",
+              "2026年9月15日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tv_end"
+          ]
+        },
+        {
+          "turn": 11,
+          "user": "And that scan?",
+          "behaviour": "unreadable",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "gb_unreadable"
+          ]
+        },
+        {
+          "turn": 12,
+          "user": "Should I buy new travel insurance?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 13,
+          "user": "When does car insurance expire, in days?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "55"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_car_days_left"
+          ]
+        },
+        {
+          "turn": 14,
+          "user": "ok thanks",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5168 @@
+{
+  "household_id": "H4",
+  "as_of": "2026-10-06",
+  "timezone": "Asia/Singapore",
+  "behaviour_types": {
+    "answer": "Direct factual answer grounded in an uploaded document; must state the expected facts.",
+    "compute": "Answer needs arithmetic or date reasoning over document facts (as-of 2026-10-06, Asia/Singapore); must state the computed figure(s).",
+    "clarify": "Question is genuinely ambiguous (which person / which policy / missing key fact). Must ask a clarifying question and must NOT commit to one interpretation's figure.",
+    "not_uploaded": "Asks about a policy/document the household has not uploaded. Must say it is not among the uploaded documents (and may suggest uploading); must not invent terms.",
+    "not_covered": "The uploaded documents show the person/event is not covered (not named, excluded, not elected, wrong policy type). Must say so plainly.",
+    "expired": "The relevant policy has expired / is not in force on the relevant date. Must say so with the end date.",
+    "unreadable": "The relevant document could not be read (garbled / password protected). Must say it cannot be read and ask for a readable copy; must not invent contents.",
+    "out_of_scope": "Not an insurance-document question (or asks for something the app cannot do). Brief polite redirect; no invented policy facts.",
+    "advice_decline": "Asks for a personal recommendation (buy / surrender / switch / which is better for me). May give the relevant document facts but must not make the decision; suggests a licensed adviser or the insurer.",
+    "claim_start": "User starts a claim. Must pick the right policy/person and ask the next single needed question (or state what is needed).",
+    "claim_step": "Continuation of a claim flow; must use earlier turns, ask the next question or give the estimate when enough facts are in.",
+    "correction": "User corrects an earlier fact (person, date, amount). Must update the answer to the corrected facts and drop the old figure."
+  },
+  "matching": "expected = list of groups; each group passes if ANY alternative appears in the reply (case-insensitive; S$/$ and thousand separators normalised; numbers matched on digit boundaries). forbidden = strings a correct reply to THIS message must not contain.",
+  "counts": {
+    "singles": 163,
+    "conversations": 15,
+    "conversation_turns": 137
+  },
+  "singles": [
+    {
+      "id": "H4-S001",
+      "intent": "hosp_marcus_plan",
+      "message": "What hospital plan is Marcus on now?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "hg_marcus_unchanged",
+        "hg_std_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S002",
+      "intent": "hosp_marcus_plan",
+      "message": "marcus hosp plan still the standard one or got upgrade?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "hg_marcus_unchanged",
+        "hg_std_ward"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S003",
+      "intent": "hosp_marcus_plan",
+      "message": "Did my husband's hospital plan also get upgraded in July?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "hg_marcus_unchanged",
+        "hg_std_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S004",
+      "intent": "hosp_marcus_plan",
+      "message": "wat ward class is marcus entitled to under healthguard",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "hg_marcus_unchanged",
+        "hg_std_ward"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S005",
+      "intent": "hosp_priya_now",
+      "message": "Which HealthGuard plan is Priya on currently?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Premier"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_priya_new_plan",
+        "hg_upgrade_date",
+        "hg_prem_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S006",
+      "intent": "hosp_priya_now",
+      "message": "my wife hospital plan now is which one ah",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Premier"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_priya_new_plan",
+        "hg_upgrade_date",
+        "hg_prem_ward"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S007",
+      "intent": "hosp_priya_now",
+      "message": "Is Priya covered for a private hospital now?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Premier"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_priya_new_plan",
+        "hg_upgrade_date",
+        "hg_prem_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S008",
+      "intent": "hosp_upgrade_date",
+      "message": "From what date did Priya's upgrade take effect?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "01 Jul 2026",
+          "1 Jul 2026",
+          "1 July 2026",
+          "01 July 2026",
+          "July 1, 2026",
+          "Jul 1, 2026",
+          "2026-07-01",
+          "1/7/2026",
+          "01/07/2026",
+          "2026年7月1日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_upgrade_date"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S009",
+      "intent": "hosp_upgrade_date",
+      "message": "when did the premier upgrade start",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "01 Jul 2026",
+          "1 Jul 2026",
+          "1 July 2026",
+          "01 July 2026",
+          "July 1, 2026",
+          "Jul 1, 2026",
+          "2026-07-01",
+          "1/7/2026",
+          "01/07/2026",
+          "2026年7月1日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_upgrade_date"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S010",
+      "intent": "hosp_why_limit_changed",
+      "message": "Why does Priya's annual limit show $2 million in one document but $500k in the January schedule?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,000,000",
+          "2 million",
+          "2m",
+          "2mil"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_upgrade_date",
+        "hg_prem_limit",
+        "hg_std_limit"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S011",
+      "intent": "hosp_why_limit_changed",
+      "message": "eh why priya limit jump from 500k to 2 mil??",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,000,000",
+          "2 million",
+          "2m",
+          "2mil"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_upgrade_date",
+        "hg_prem_limit",
+        "hg_std_limit"
+      ],
+      "tags": [
+        "singlish",
+        "why"
+      ]
+    },
+    {
+      "id": "H4-S012",
+      "intent": "hosp_why_limit_changed",
+      "message": "The two Kestrel documents give different hospital limits for my wife. Which one is right today?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,000,000",
+          "2 million",
+          "2m",
+          "2mil"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_upgrade_date",
+        "hg_prem_limit",
+        "hg_std_limit"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S013",
+      "intent": "hosp_priya_may_16k",
+      "message": "Priya was admitted to a private hospital on 12 May 2026 and the bill was S$16,000. It's her first claim this policy year. Roughly how much will Kestrel pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "4,050"
+        ]
+      ],
+      "forbidden": [
+        "11,250"
+      ],
+      "fact_refs": [
+        "hg_rule_admission_before",
+        "hg_std_proration",
+        "hg_std_deductible",
+        "hg_coins",
+        "dv_priya_may_16k"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S014",
+      "intent": "hosp_priya_may_16k",
+      "message": "priya warded private hosp in may, bill 16k, never claim before this yr. how much can get back?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "4,050"
+        ]
+      ],
+      "forbidden": [
+        "11,250"
+      ],
+      "fact_refs": [
+        "hg_rule_admission_before",
+        "hg_std_proration",
+        "hg_std_deductible",
+        "hg_coins",
+        "dv_priya_may_16k"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S015",
+      "intent": "hosp_priya_aug_16k",
+      "message": "If Priya is admitted to a private hospital in August 2026 for a new condition with a S$16,000 bill (no earlier claim this year), what would Kestrel pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "11,250"
+        ]
+      ],
+      "forbidden": [
+        "4,050"
+      ],
+      "fact_refs": [
+        "hg_upgrade_date",
+        "hg_prem_noproration",
+        "hg_prem_deductible",
+        "hg_coins",
+        "dv_priya_aug_16k"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S016",
+      "intent": "hosp_priya_aug_16k",
+      "message": "aug private hospital 16k bill for priya, new illness, first claim - payout?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "11,250"
+        ]
+      ],
+      "forbidden": [
+        "4,050"
+      ],
+      "fact_refs": [
+        "hg_upgrade_date",
+        "hg_prem_noproration",
+        "hg_prem_deductible",
+        "hg_coins",
+        "dv_priya_aug_16k"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S017",
+      "intent": "hosp_marcus_private_16k",
+      "message": "If Marcus goes to a private hospital next month and the bill is S$16,000 (no claim yet this year), how much does his plan pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "4,050"
+        ]
+      ],
+      "forbidden": [
+        "11,250"
+      ],
+      "fact_refs": [
+        "hg_marcus_unchanged",
+        "hg_std_proration",
+        "hg_std_deductible",
+        "hg_coins",
+        "dv_marcus_private_16k"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S018",
+      "intent": "hosp_marcus_private_16k",
+      "message": "marcus private hosp 16k next mth how much claimable",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "4,050"
+        ]
+      ],
+      "forbidden": [
+        "11,250"
+      ],
+      "fact_refs": [
+        "hg_marcus_unchanged",
+        "hg_std_proration",
+        "hg_std_deductible",
+        "hg_coins",
+        "dv_marcus_private_16k"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S019",
+      "intent": "hosp_marcus_classA_12k",
+      "message": "Marcus stays in a Class A ward at a restructured hospital, bill S$12,000, first claim of the year. Estimated payout?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "7,650"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_std_ward",
+        "hg_std_deductible",
+        "hg_coins",
+        "dv_marcus_classA_12k"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S020",
+      "intent": "hosp_marcus_classA_12k",
+      "message": "class A restructured, 12k bill, marcus, how much kestrel pay",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "7,650"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_std_ward",
+        "hg_std_deductible",
+        "hg_coins",
+        "dv_marcus_classA_12k"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S021",
+      "intent": "hosp_straddle",
+      "message": "Priya was admitted on 28 June and discharged on 3 July. Is that stay under Standard or Premier?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [
+        "11,250"
+      ],
+      "fact_refs": [
+        "hg_rule_admission_before"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S022",
+      "intent": "hosp_straddle",
+      "message": "admitted 28 jun discharge 3 jul for my wife - old plan or new plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [
+        "11,250"
+      ],
+      "fact_refs": [
+        "hg_rule_admission_before"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S023",
+      "intent": "hosp_preexisting_upgrade",
+      "message": "Priya's knee pain started in March and she's planning surgery at a private hospital in November. Will Premier cover it in full?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_rule_preexisting_upgrade",
+        "hg_std_proration"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S024",
+      "intent": "hosp_preexisting_upgrade",
+      "message": "knee problem since march, op in nov at private hosp - can use the new premier benefits?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Standard"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_rule_preexisting_upgrade",
+        "hg_std_proration"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S025",
+      "intent": "hosp_deductible",
+      "message": "What's the deductible on our HealthGuard plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_std_deductible",
+        "hg_prem_deductible"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S026",
+      "intent": "hosp_deductible",
+      "message": "deductable for kestrel hospital plan how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_std_deductible",
+        "hg_prem_deductible"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S027",
+      "intent": "hosp_deductible",
+      "message": "Did the deductible change when Priya upgraded?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_std_deductible",
+        "hg_prem_deductible"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S028",
+      "intent": "hosp_deductible_carry",
+      "message": "Priya already paid her deductible in May. Does she have to pay a new deductible under Premier this year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "counts towards"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_rule_deductible_carry"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S029",
+      "intent": "hosp_coins",
+      "message": "What co-insurance percentage applies on the Kestrel plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "10%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_coins"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S030",
+      "intent": "hosp_coins",
+      "message": "coinsurance for hospital plan how many percent",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "10%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_coins"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S031",
+      "intent": "hosp_post_both",
+      "message": "How long after discharge are follow-up visits covered under our hospital plan, for each of us?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "180"
+        ],
+        [
+          "365"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_std_post",
+        "hg_prem_post"
+      ],
+      "tags": [],
+      "note": "Both 180 days (Marcus, Standard) and 365 days (Priya, Premier) should be stated."
+    },
+    {
+      "id": "H4-S032",
+      "intent": "hosp_post_priya",
+      "message": "How many days of post-hospital treatment does Priya get now?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "365"
+        ]
+      ],
+      "forbidden": [
+        "180 days"
+      ],
+      "fact_refs": [
+        "hg_prem_post"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S033",
+      "intent": "hosp_post_priya",
+      "message": "post hosp for priya how many days",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "365"
+        ]
+      ],
+      "forbidden": [
+        "180 days"
+      ],
+      "fact_refs": [
+        "hg_prem_post"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S034",
+      "intent": "hosp_pre_marcus",
+      "message": "How many days before admission are Marcus's pre-hospital bills covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "90"
+        ]
+      ],
+      "forbidden": [
+        "180 days"
+      ],
+      "fact_refs": [
+        "hg_std_pre"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S035",
+      "intent": "hosp_upgrade_cost",
+      "message": "How much extra are we paying for Priya's upgrade?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "656",
+          "1,312"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_additional_premium",
+        "dv_priya_premium_increase"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S036",
+      "intent": "hosp_upgrade_cost",
+      "message": "upgrade cost how much more",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "656",
+          "1,312"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_additional_premium",
+        "dv_priya_premium_increase"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S037",
+      "intent": "hosp_total_premium",
+      "message": "What's the total annual HealthGuard premium for both of us now?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,704"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hosp_premium_total_now",
+        "hg_priya_new_premium",
+        "hg_marcus_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S038",
+      "intent": "hosp_total_premium",
+      "message": "total hosp premium per yr for marcus + priya now",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,704"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_hosp_premium_total_now",
+        "hg_priya_new_premium",
+        "hg_marcus_premium"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S039",
+      "intent": "hosp_limit_marcus",
+      "message": "What's Marcus's annual claim limit?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500,000"
+        ]
+      ],
+      "forbidden": [
+        "2,000,000"
+      ],
+      "fact_refs": [
+        "hg_std_limit",
+        "hg_marcus_plan"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S040",
+      "intent": "hosp_claim_deadline",
+      "message": "How soon after discharge must we submit a hospital claim to Kestrel?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "90 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_claims_deadline"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S041",
+      "intent": "hosp_kids",
+      "message": "Are Kavya and Rohan covered under the HealthGuard hospital plan?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Marcus",
+          "Priya"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "hg_priya_plan_jan"
+      ],
+      "tags": [],
+      "note": "Only Marcus and Priya are insured persons on the HealthGuard schedule."
+    },
+    {
+      "id": "H4-S042",
+      "intent": "hosp_kids",
+      "message": "kids got hospital plan under kestrel or not",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Marcus",
+          "Priya"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "hg_priya_plan_jan"
+      ],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Only Marcus and Priya are insured persons on the HealthGuard schedule."
+    },
+    {
+      "id": "H4-S043",
+      "intent": "hosp_policy_no",
+      "message": "What's our Kestrel hospital policy number?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "KL-HG-5520417"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_policy_no"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S044",
+      "intent": "ci_sa",
+      "message": "What's the sum assured on Marcus's critical illness plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "200,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_sa"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S045",
+      "intent": "ci_sa",
+      "message": "marcus CI cover how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "200,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_sa"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S046",
+      "intent": "ci_early",
+      "message": "How much does the CI MultiProtect pay for an early-stage illness?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "50,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_early"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S047",
+      "intent": "ci_early",
+      "message": "early stage CI payout?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "50,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_early"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S048",
+      "intent": "ci_inter",
+      "message": "What does Marcus get for an intermediate-stage condition?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_inter"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S049",
+      "intent": "ci_severe_after_early",
+      "message": "If Marcus is first diagnosed with carcinoma in situ and later it becomes major cancer, how much would the severe-stage claim pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "150,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ci_severe_after_early",
+        "ci_rule_offset"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S050",
+      "intent": "ci_severe_after_early",
+      "message": "early cancer claim first then later severe same cancer - how much more can get?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "150,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ci_severe_after_early",
+        "ci_rule_offset"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S051",
+      "intent": "ci_angio",
+      "message": "How much is the angioplasty benefit on Marcus's CI plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "20,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_angio"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S052",
+      "intent": "ci_angio",
+      "message": "if marcus do angioplasty how much payout",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "20,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_angio"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S053",
+      "intent": "ci_cap",
+      "message": "What's the maximum total the CI MultiProtect can ever pay out?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_cap"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S054",
+      "intent": "ci_cap",
+      "message": "overall cap for multi pay CI",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_cap"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S055",
+      "intent": "ci_cap_left",
+      "message": "After an early-stage payout, how much of the overall CI cap would be left?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "550,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ci_cap_left_after_early"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S056",
+      "intent": "ci_waiting_passed",
+      "message": "Does the cancer waiting period still apply to Marcus's CI policy?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "90"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_start",
+        "ci_waiting",
+        "dv_ci_wait_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S057",
+      "intent": "ci_waiting_passed",
+      "message": "still got waiting period for heart attack claim on marcus CI?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "90"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_start",
+        "ci_waiting",
+        "dv_ci_wait_end"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S058",
+      "intent": "ci_gap",
+      "message": "After one CI claim, how long before Marcus can claim for a different, unrelated illness?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "12 months"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_gap"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S059",
+      "intent": "ci_recur",
+      "message": "If the same cancer comes back, when can it be claimed again?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "24 months"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_recur"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S060",
+      "intent": "ci_survival",
+      "message": "Is there a survival period on the CI plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "7 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_survival"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S061",
+      "intent": "ci_dengue",
+      "message": "Marcus got dengue and was warded 4 days. Can he claim on his CI plan?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not covered"
+        ]
+      ],
+      "forbidden": [
+        "50,000",
+        "200,000"
+      ],
+      "fact_refs": [
+        "ci_dengue_excluded"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S062",
+      "intent": "ci_dengue",
+      "message": "dengue considered critical illness or not??",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not covered"
+        ]
+      ],
+      "forbidden": [
+        "50,000",
+        "200,000"
+      ],
+      "fact_refs": [
+        "ci_dengue_excluded"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S063",
+      "intent": "ci_end",
+      "message": "Until when is Marcus covered under the Orchidia CI plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "01 Apr 2054",
+          "1 Apr 2054",
+          "1 April 2054",
+          "01 April 2054",
+          "April 1, 2054",
+          "Apr 1, 2054",
+          "2054-04-01",
+          "1/4/2054",
+          "01/04/2054",
+          "2054年4月1日",
+          "2054"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S064",
+      "intent": "ci_premium",
+      "message": "How much is the CI premium each year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,976"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S065",
+      "intent": "ci_priya_insured",
+      "message": "Is Priya covered under the Orchidia CI plan? Her name is on it.",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Marcus"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_life_assured",
+        "ci_nominee"
+      ],
+      "tags": [],
+      "note": "Priya is only the nominee; Marcus is the life assured."
+    },
+    {
+      "id": "H4-S066",
+      "intent": "ci_priya_insured",
+      "message": "priya name inside the CI doc, means she also covered right?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Marcus"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_life_assured",
+        "ci_nominee"
+      ],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Priya is only the nominee; Marcus is the life assured."
+    },
+    {
+      "id": "H4-S067",
+      "intent": "ci_nominee",
+      "message": "Who is the nominee on Marcus's CI policy?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Priya"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_nominee"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S068",
+      "intent": "ci_stroke_partial",
+      "message": "Marcus had a stroke with partial deficit. Which stage is that and how much would it pay?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ci_stroke_partial",
+        "ci_inter"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S069",
+      "intent": "pa_rohan_remaining",
+      "message": "How much accident medical cover does Rohan have left this year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "860"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_remaining",
+        "cl_paid"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S070",
+      "intent": "pa_rohan_remaining",
+      "message": "rohan accident medical balance left how much ah",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "860"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_remaining",
+        "cl_paid"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S071",
+      "intent": "pa_rohan_remaining",
+      "message": "how much left on rohans PA after the wrist claim",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "860"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_remaining",
+        "cl_paid"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S072",
+      "intent": "pa_rohan_remaining",
+      "message": "We already claimed for Rohan's wrist. What's left of his accidental medical expenses limit?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "860"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_remaining",
+        "cl_paid"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S073",
+      "intent": "pa_rohan_why_860",
+      "message": "Why does Rohan only have $860 left when the PA schedule says children get $1,500?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "640"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_remaining",
+        "cl_paid",
+        "pa_ame_child"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S074",
+      "intent": "pa_rohan_why_860",
+      "message": "why rohan limit not 1500??",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "640"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_remaining",
+        "cl_paid",
+        "pa_ame_child"
+      ],
+      "tags": [
+        "why",
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S075",
+      "intent": "pa_rohan_physio",
+      "message": "How much can Rohan still claim for physio?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_physio_remaining"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S076",
+      "intent": "pa_rohan_physio",
+      "message": "rohan physio limit still have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_physio_remaining"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S077",
+      "intent": "pa_rohan_new_420",
+      "message": "If Rohan has another S$420 follow-up bill for the wrist, how much accident medical limit is left after that?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "440"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_rohan_after_420",
+        "cl_rohan_remaining"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S078",
+      "intent": "pa_kavya_ame",
+      "message": "How much accidental medical cover does Kavya have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_ame_child",
+        "pa_aggregate_rule"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S079",
+      "intent": "pa_kavya_ame",
+      "message": "kavya PA medical limit",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_ame_child",
+        "pa_aggregate_rule"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S080",
+      "intent": "pa_kids_compare",
+      "message": "Which of the two younger kids has more accident medical limit left this year?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "Kavya"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_kids_ame_compare",
+        "cl_rohan_remaining"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S081",
+      "intent": "pa_aiden",
+      "message": "Aiden fell skateboarding in Melbourne. Can we claim under FamilyPA?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not named",
+          "only persons named"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_named_only",
+        "pa_insured_list",
+        "tr_med"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S082",
+      "intent": "pa_aiden",
+      "message": "aiden is 20 and full time student, so FamilyPA covers him right?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not named",
+          "only persons named"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_named_only",
+        "pa_insured_list",
+        "tr_med"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S083",
+      "intent": "pa_aiden",
+      "message": "Is Aiden one of the insured persons on the Harbourline PA?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not named",
+          "only persons named"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_named_only",
+        "pa_insured_list",
+        "tr_med"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S084",
+      "intent": "pa_maricel",
+      "message": "If our helper slips in the kitchen, can she claim under our family PA?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "HelperCare",
+          "maid insurance"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_named_only",
+        "md_insured",
+        "md_pa"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S085",
+      "intent": "pa_maricel",
+      "message": "maricel fall down at home, use FamilyPA can?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "HelperCare",
+          "maid insurance"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_named_only",
+        "md_insured",
+        "md_pa"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S086",
+      "intent": "pa_illness",
+      "message": "Kavya was warded 2 days for food poisoning. Can we claim daily hospital income from FamilyPA?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "accident"
+        ]
+      ],
+      "forbidden": [
+        "200"
+      ],
+      "fact_refs": [
+        "pa_accident_only"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S087",
+      "intent": "pa_illness",
+      "message": "can claim PA for fever hospitalisation?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "accident"
+        ]
+      ],
+      "forbidden": [
+        "200"
+      ],
+      "fact_refs": [
+        "pa_accident_only"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S088",
+      "intent": "pa_rohan_dhi_3",
+      "message": "If Rohan is hospitalised 3 days after an accident, how much daily hospital income can we claim?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_rohan_dhi_3",
+        "pa_dhi"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S089",
+      "intent": "pa_adb",
+      "message": "What's the accidental death benefit for adults and children on FamilyPA?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "150,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_adb_adult",
+        "pa_adb_child"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S090",
+      "intent": "pa_family_total",
+      "message": "Add up the accidental death cover for everyone insured on FamilyPA. What's the total?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "360,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pa_family_adb_total"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S091",
+      "intent": "pa_family_total",
+      "message": "total accidental death payout whole family if all on the PA",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "360,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pa_family_adb_total"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S092",
+      "intent": "pa_adults_total",
+      "message": "Combined accidental death cover for Marcus and me on the PA?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "300,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pa_adults_adb_total"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S093",
+      "intent": "pa_end",
+      "message": "When does the FamilyPA policy expire?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "31 Jan 2027",
+          "31 Jan 2027",
+          "31 January 2027",
+          "31 January 2027",
+          "January 31, 2027",
+          "Jan 31, 2027",
+          "2027-01-31",
+          "31/1/2027",
+          "31/01/2027",
+          "2027年1月31日",
+          "01 Feb 2027",
+          "1 Feb 2027",
+          "1 February 2027",
+          "01 February 2027",
+          "February 1, 2027",
+          "Feb 1, 2027",
+          "2027-02-01",
+          "1/2/2027",
+          "01/02/2027",
+          "2027年2月1日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S094",
+      "intent": "pa_end",
+      "message": "PA renewal when",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "31 Jan 2027",
+          "31 Jan 2027",
+          "31 January 2027",
+          "31 January 2027",
+          "January 31, 2027",
+          "Jan 31, 2027",
+          "2027-01-31",
+          "31/1/2027",
+          "31/01/2027",
+          "2027年1月31日",
+          "01 Feb 2027",
+          "1 Feb 2027",
+          "1 February 2027",
+          "01 February 2027",
+          "February 1, 2027",
+          "Feb 1, 2027",
+          "2027-02-01",
+          "1/2/2027",
+          "01/02/2027",
+          "2027年2月1日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_end"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S095",
+      "intent": "pa_days_left",
+      "message": "How many days until the FamilyPA period ends?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "117"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_pa_days_left",
+        "pa_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S096",
+      "intent": "pa_notify",
+      "message": "How soon after an accident do we have to notify Harbourline?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "30 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_notify"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S097",
+      "intent": "pa_policyholder",
+      "message": "Who is the policyholder of the FamilyPA?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Priya"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_policyholder"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S098",
+      "intent": "pa_kavya_age_limit",
+      "message": "Until what age is Kavya covered as a child on the PA?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "18"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_child_age",
+        "dv_kavya_child_until"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S099",
+      "intent": "pa_mobility",
+      "message": "Does FamilyPA pay for crutches or a wheelchair?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_mobility"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S100",
+      "intent": "pa_kids_covered",
+      "message": "Which of the kids are covered for accidents?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Kavya"
+        ],
+        [
+          "Rohan"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_insured_list"
+      ],
+      "tags": [],
+      "note": "Kavya and Rohan are named; Aiden is not."
+    },
+    {
+      "id": "H4-S101",
+      "intent": "pa_kids_covered",
+      "message": "kids all covered for accident or not",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Kavya"
+        ],
+        [
+          "Rohan"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "pa_insured_list"
+      ],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Kavya and Rohan are named; Aiden is not."
+    },
+    {
+      "id": "H4-S102",
+      "intent": "pa_xray",
+      "message": "How much did Harbourline pay for Rohan's X-ray?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "95"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_xray"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S103",
+      "intent": "pa_settle_date",
+      "message": "When was Rohan's wrist claim paid?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "18 Apr 2026",
+          "18 Apr 2026",
+          "18 April 2026",
+          "18 April 2026",
+          "April 18, 2026",
+          "Apr 18, 2026",
+          "2026-04-18",
+          "18/4/2026",
+          "18/04/2026",
+          "2026年4月18日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_settle_date"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S104",
+      "intent": "tr_med",
+      "message": "How much overseas medical cover does Aiden have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "250,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_med"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S105",
+      "intent": "tr_med",
+      "message": "aiden student insurance medical limit",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "250,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_med"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S106",
+      "intent": "tr_oshc_balance",
+      "message": "Aiden had a S$4,000 hospital bill in Melbourne and OSHC paid S$3,100. How much can we get from the Crestbay plan?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "800"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_aiden_oshc_balance",
+        "tr_oshc",
+        "tr_excess"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S107",
+      "intent": "tr_oshc_balance",
+      "message": "4k bill, OSHC cover 3.1k, crestbay pay the rest?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "800"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_aiden_oshc_balance",
+        "tr_oshc",
+        "tr_excess"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S108",
+      "intent": "tr_laptop",
+      "message": "Aiden's S$2,200 laptop was stolen from his dorm. How much can he claim?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_laptop_2200_paid",
+        "tr_laptop"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S109",
+      "intent": "tr_phone",
+      "message": "His S$1,100 phone was stolen too - how much for that?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "750"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_phone_1100_paid",
+        "tr_item"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S110",
+      "intent": "tr_in_sg",
+      "message": "Aiden is coming home to Singapore for Christmas. If he falls sick here, does the student plan pay?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "suspended"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_sg_suspended"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S111",
+      "intent": "tr_in_sg",
+      "message": "aiden back in sg for holidays, his travel insurance still cover him here?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "suspended"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_sg_suspended"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S112",
+      "intent": "tr_bali",
+      "message": "Aiden wants to go to Bali for 2 weeks during term break. Is he covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "21 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_third_country"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S113",
+      "intent": "tr_end",
+      "message": "When does Aiden's student plan end?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "09 Feb 2027",
+          "9 Feb 2027",
+          "9 February 2027",
+          "09 February 2027",
+          "February 9, 2027",
+          "Feb 9, 2027",
+          "2027-02-09",
+          "9/2/2027",
+          "09/02/2027",
+          "2027年2月9日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S114",
+      "intent": "tr_days_left",
+      "message": "How many days of cover are left on Aiden's student plan?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "126"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_tr_days_left",
+        "tr_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S115",
+      "intent": "tr_days_left",
+      "message": "how many days more aiden insurance",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "126"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_tr_days_left",
+        "tr_end"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S116",
+      "intent": "tr_excess",
+      "message": "What's the excess for a medical claim on Aiden's plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_excess"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S117",
+      "intent": "tr_study",
+      "message": "If Aiden has to drop out of a semester because he's sick, is the tuition covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_study"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S118",
+      "intent": "tr_liability",
+      "message": "Does Aiden's plan cover him if he accidentally damages his landlord's property?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_liability"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S119",
+      "intent": "tr_compassionate",
+      "message": "If Aiden is hospitalised in Australia, is there cover for me to fly over?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "7,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_compassionate"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S120",
+      "intent": "tr_policyholder",
+      "message": "Who bought Aiden's student plan - whose name is the policyholder?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Marcus"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_policyholder",
+        "m_aiden_dob"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S121",
+      "intent": "tr_aiden_age_end",
+      "message": "How old will Aiden be when his student plan ends?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "20"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_aiden_age_tr_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S122",
+      "intent": "tr_preexisting",
+      "message": "Aiden has had eczema since he was a kid. If it flares up in Melbourne, does Crestbay pay?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not covered"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_preexisting"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S123",
+      "intent": "md_hosp",
+      "message": "What's Maricel's hospital and surgical limit?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_hosp"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S124",
+      "intent": "md_hosp",
+      "message": "helper hospital cover how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_hosp"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S125",
+      "intent": "md_outpatient",
+      "message": "Can Maricel's maid insurance pay for her GP visit for flu?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Not covered"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_outpatient"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S126",
+      "intent": "md_outpatient",
+      "message": "maid see doctor for cough, can claim insurance?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "Not covered"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_outpatient"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S127",
+      "intent": "md_reset",
+      "message": "When does Maricel's hospital limit reset?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15 Nov 2026",
+          "15 Nov 2026",
+          "15 November 2026",
+          "15 November 2026",
+          "November 15, 2026",
+          "Nov 15, 2026",
+          "2026-11-15",
+          "15/11/2026",
+          "15/11/2026",
+          "2026年11月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_year2_start"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S128",
+      "intent": "md_reset_days",
+      "message": "How many days are left in Maricel's first year of cover?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "39"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_md_year1_days_left",
+        "md_year1_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S129",
+      "intent": "md_end",
+      "message": "When does the maid insurance end?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "14 Jan 2028",
+          "14 Jan 2028",
+          "14 January 2028",
+          "14 January 2028",
+          "January 14, 2028",
+          "Jan 14, 2028",
+          "2028-01-14",
+          "14/1/2028",
+          "14/01/2028",
+          "2028年1月14日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S130",
+      "intent": "md_end",
+      "message": "helpercare expiry date",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "14 Jan 2028",
+          "14 Jan 2028",
+          "14 January 2028",
+          "14 January 2028",
+          "January 14, 2028",
+          "Jan 14, 2028",
+          "2028-01-14",
+          "14/1/2028",
+          "14/01/2028",
+          "2028年1月14日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_end"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S131",
+      "intent": "md_wages",
+      "message": "If Maricel is hospitalised 5 days, how much wage and levy reimbursement can I get?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "200"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_md_wages_5",
+        "md_wages"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S132",
+      "intent": "md_pa",
+      "message": "What's the personal accident cover for our helper?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "60,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_pa"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S133",
+      "intent": "md_bond",
+      "message": "Does the HelperCare policy include the security bond?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_bond"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S134",
+      "intent": "md_employer",
+      "message": "Whose name is the maid insurance under?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Marcus"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_employer"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S135",
+      "intent": "md_pregnancy",
+      "message": "If Maricel gets pregnant, are her hospital bills covered by HelperCare?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "excluded"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_exclusions"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S136",
+      "intent": "md_family",
+      "message": "Can Kavya claim under the maid insurance if she gets hurt with the helper?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "not insured"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_family_not"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S137",
+      "intent": "marcus_policies",
+      "message": "List all the policies Marcus is insured under.",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "HealthGuard"
+        ],
+        [
+          "MultiProtect",
+          "critical illness",
+          "Orchidia"
+        ],
+        [
+          "FamilyPA",
+          "personal accident",
+          "Harbourline"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "ci_life_assured",
+        "pa_insured_list"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S138",
+      "intent": "marcus_policies",
+      "message": "wat policies cover marcus",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "HealthGuard"
+        ],
+        [
+          "MultiProtect",
+          "critical illness",
+          "Orchidia"
+        ],
+        [
+          "FamilyPA",
+          "personal accident",
+          "Harbourline"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "hg_marcus_plan",
+        "ci_life_assured",
+        "pa_insured_list"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S139",
+      "intent": "aiden_policies",
+      "message": "What insurance does Aiden have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Student Abroad",
+          "Crestbay"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "tr_cert",
+        "pa_named_only"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S140",
+      "intent": "ages",
+      "message": "How old are Kavya and Rohan now?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "14"
+        ],
+        [
+          "11"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_kavya_age",
+        "dv_rohan_age"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S141",
+      "intent": "marcus_age",
+      "message": "How old is Marcus as of today?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "47"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_marcus_age"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S142",
+      "intent": "clarify_my_son",
+      "message": "My son broke his arm playing football. How much can I claim?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "860",
+        "250,000"
+      ],
+      "fact_refs": [
+        "pa_insured_list",
+        "m_aiden_dob"
+      ],
+      "tags": [],
+      "note": "Shared login: 'my son' could be Aiden (Marcus) or Rohan (Priya); the right policy differs."
+    },
+    {
+      "id": "H4-S143",
+      "intent": "clarify_my_son",
+      "message": "my boy fell down and fracture, how much can claim",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "860",
+        "250,000"
+      ],
+      "fact_refs": [
+        "pa_insured_list",
+        "m_aiden_dob"
+      ],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Shared login: 'my son' could be Aiden (Marcus) or Rohan (Priya); the right policy differs."
+    },
+    {
+      "id": "H4-S144",
+      "intent": "clarify_i_hospital",
+      "message": "I was hospitalised last week. How much can I claim?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "4,050",
+        "11,250",
+        "7,650"
+      ],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Who is 'I' and what bill/ward is unknown."
+    },
+    {
+      "id": "H4-S145",
+      "intent": "clarify_i_hospital",
+      "message": "i kena warded last week, how much can claim back",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "4,050",
+        "11,250",
+        "7,650"
+      ],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Who is 'I' and what bill/ward is unknown."
+    },
+    {
+      "id": "H4-S146",
+      "intent": "clarify_my_limit",
+      "message": "What's my annual hospital limit?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Marcus S$500,000 vs Priya S$2,000,000. Listing both and asking which person is acceptable."
+    },
+    {
+      "id": "H4-S147",
+      "intent": "clarify_daughter_claim",
+      "message": "Can I claim for my kid's hospital stay?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "300",
+        "500"
+      ],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Which child, accident or illness, and how many days are unknown."
+    },
+    {
+      "id": "H4-S148",
+      "intent": "nu_oshc",
+      "message": "What's the excess on Aiden's OSHC policy?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S149",
+      "intent": "nu_oshc",
+      "message": "how much OSHC cover aiden got",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S150",
+      "intent": "nu_medishield",
+      "message": "How much will MediShield Life pay for Kavya's hospital stay?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S151",
+      "intent": "nu_car",
+      "message": "When is our car insurance due for renewal?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S152",
+      "intent": "nu_car",
+      "message": "car insurance NCD how much now",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H4-S153",
+      "intent": "nu_priya_life",
+      "message": "How much life insurance does Priya have?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S154",
+      "intent": "nu_school",
+      "message": "What does Rohan's school insurance cover?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S155",
+      "intent": "oos_permit",
+      "message": "Can you help me renew Maricel's work permit?",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S156",
+      "intent": "oos_permit",
+      "message": "What's the weather like in Melbourne this week?",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S157",
+      "intent": "oos_permit",
+      "message": "Write me a birthday message for Kavya.",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S158",
+      "intent": "adv_upgrade_marcus",
+      "message": "Should Marcus also upgrade to Premier?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S159",
+      "intent": "adv_upgrade_marcus",
+      "message": "worth it to upgrade marcus hospital plan or not",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H4-S160",
+      "intent": "adv_ci_priya",
+      "message": "Should I buy a critical illness plan for Priya too?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S161",
+      "intent": "adv_cancel_travel",
+      "message": "Should we cancel Aiden's Crestbay plan since he has OSHC anyway?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H4-S162",
+      "intent": "claim_rohan_physio",
+      "message": "I want to claim for Rohan's physio sessions for his wrist.",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cl_rohan_physio_remaining",
+        "pa_policy_no"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H4-S163",
+      "intent": "claim_maricel_hosp",
+      "message": "Our helper was admitted to hospital yesterday. I want to start a claim.",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "HelperCare",
+          "KG-MI-8806521"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "md_hosp",
+        "md_policy"
+      ],
+      "tags": []
+    }
+  ],
+  "conversations": [
+    {
+      "id": "H4-C01",
+      "title": "Rohan wrist follow-up claim",
+      "tags": [
+        "claim",
+        "pa",
+        "remaining-limit"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Hi, Rohan needs physio for the wrist he broke in April. Can we claim?",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "300"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cl_rohan_physio_remaining",
+            "cl_desc"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Which policy is that under?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "FamilyPA",
+              "HG-PA-3309184"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_policy_no",
+            "cl_no"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "How much did we already claim for the wrist?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "640"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cl_paid"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "So how much accident medical is left for him?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "860"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cl_rohan_remaining"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "The physio clinic billed S$250 for 5 sessions.",
+          "behaviour": "claim_step",
+          "expected": [
+            [
+              "250"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_rohan_physio_250_left",
+            "cl_rohan_physio_remaining"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "How much physio limit does he have after that?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "50"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_rohan_physio_250_left"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "And the overall accident medical balance after this?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "610"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_rohan_after_physio_250"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Until when can we claim follow-up for this accident?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "31 Jan 2027",
+              "31 Jan 2027",
+              "31 January 2027",
+              "31 January 2027",
+              "January 31, 2027",
+              "Jan 31, 2027",
+              "2027-01-31",
+              "31/1/2027",
+              "31/01/2027",
+              "2027年1月31日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cl_followup"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "What if he needs 3 more sessions next month at S$150?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "50"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_rohan_physio_250_left"
+          ],
+          "note": "Only S$50 physio sub-limit remains."
+        },
+        {
+          "turn": 10,
+          "user": "ok thanks",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H4-C02",
+      "title": "Switching child mid-claim (Rohan -> Aiden)",
+      "tags": [
+        "claim",
+        "correction",
+        "switch-person",
+        "travel"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "My son got injured, want to claim",
+          "behaviour": "clarify",
+          "expected": [],
+          "forbidden": [
+            "860",
+            "250,000"
+          ],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "Rohan",
+          "behaviour": "claim_step",
+          "expected": [
+            [
+              "860"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_insured_list",
+            "cl_rohan_remaining"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Wait sorry, not Rohan. It's Aiden, he sprained his ankle in Melbourne",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "Student Abroad",
+              "Crestbay"
+            ]
+          ],
+          "forbidden": [
+            "860"
+          ],
+          "fact_refs": [
+            "tr_med",
+            "pa_named_only"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Isn't he under the FamilyPA too?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "not named",
+              "only persons named"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_named_only",
+            "pa_insured_list"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "The clinic bill was S$4,000 and OSHC paid S$3,100",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "800"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_aiden_oshc_balance"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "why not 900?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "100"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_excess"
+          ],
+          "note": "why-question about changed figure: S$100 excess."
+        },
+        {
+          "turn": 7,
+          "user": "What's his OSHC excess by the way?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 8,
+          "user": "Is there a deadline for the claim?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [],
+          "note": "Claim deadline for the Crestbay plan is not stated in the uploaded certificate."
+        },
+        {
+          "turn": 9,
+          "user": "ok and if he flies back to SG and gets worse here?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "suspended"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_sg_suspended"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C03",
+      "title": "Priya hospital stay - date correction",
+      "tags": [
+        "hospital",
+        "correction",
+        "why",
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Priya was in a private hospital for a new condition, bill S$16,000, first claim this year. Admitted 10 August.",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "11,250"
+            ]
+          ],
+          "forbidden": [
+            "4,050"
+          ],
+          "fact_refs": [
+            "dv_priya_aug_16k"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Sorry I got the date wrong, she was admitted 28 June and discharged 3 July.",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "4,050"
+            ]
+          ],
+          "forbidden": [
+            "11,250"
+          ],
+          "fact_refs": [
+            "hg_rule_admission_before",
+            "dv_priya_may_16k"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Why did the amount drop so much?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "50%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_rule_admission_before",
+            "hg_std_proration"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "But her Premier started on 1 July and she was still in hospital then",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Standard"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_rule_admission_before"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "So how much do we pay out of pocket?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "11,950"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_priya_may_16k_oop"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "What's the deductible in that calculation?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_std_deductible"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "If she goes back to hospital in November for the same problem, is that Premier?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Standard"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_rule_preexisting_upgrade"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Does she need to pay the deductible again in November?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "counts towards"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_rule_deductible_carry"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C04",
+      "title": "Marcus CI multi-pay walkthrough",
+      "tags": [
+        "ci",
+        "multi-pay",
+        "advice"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Marcus just got diagnosed with carcinoma in situ. Is that covered?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "50,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_cancer_early",
+            "ci_early"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Any waiting period problem? Policy started in 2023.",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "90"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_waiting",
+            "ci_start"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Does the policy end after we claim?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "600,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_cap"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "If it progresses to major cancer later, how much more?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "150,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ci_severe_after_early"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Why not the full 200k?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "less any early-stage or intermediate-stage amount already paid"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_rule_offset"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "And if he has a heart attack two years later?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "200,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_severe",
+            "ci_gap"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "What's the minimum gap between unrelated claims?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "12 months"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_gap"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How much cap is left after the first early-stage payout?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "550,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ci_cap_left_after_early"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Should we make the claim now or wait until it's severe?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 10,
+          "user": "Who would receive the money?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Marcus",
+              "Priya"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_life_assured",
+            "ci_nominee"
+          ],
+          "note": "Living benefit is paid to the policy owner (Marcus); Priya is nominee."
+        }
+      ]
+    },
+    {
+      "id": "H4-C05",
+      "title": "Helper matters",
+      "tags": [
+        "maid",
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Maricel has a fever and needs to see a GP. Can I claim?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Not covered"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_outpatient"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "What if she ends up hospitalised?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "15,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_hosp"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Do I get anything for her days off?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "40"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_wages"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "She might be in hospital 5 days",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "200"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_md_wages_5"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Can she use our FamilyPA if it was a fall?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "HelperCare",
+              "maid insurance"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_named_only",
+            "md_insured",
+            "md_pa"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "When does her hospital limit refresh?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "15 Nov 2026",
+              "15 Nov 2026",
+              "15 November 2026",
+              "15 November 2026",
+              "November 15, 2026",
+              "Nov 15, 2026",
+              "2026-11-15",
+              "15/11/2026",
+              "15/11/2026",
+              "2026年11月15日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_year2_start"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "How many days from today?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "39"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_md_year1_days_left"
+          ],
+          "note": "Year 1 ends 14 Nov 2026 (39 days); new limit 15 Nov."
+        },
+        {
+          "turn": 8,
+          "user": "And the whole policy ends when?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "14 Jan 2028",
+              "14 Jan 2028",
+              "14 January 2028",
+              "14 January 2028",
+              "January 14, 2028",
+              "Jan 14, 2028",
+              "2028-01-14",
+              "14/1/2028",
+              "14/01/2028",
+              "2028年1月14日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_end"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Can you remind me to renew her work permit?",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H4-C06",
+      "title": "Why did the hospital figures change",
+      "tags": [
+        "hospital",
+        "why",
+        "comparison"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Why are there two Kestrel hospital documents?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Premier"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_upgrade_date",
+            "hg_priya_new_plan"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "What changed for Marcus?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Standard"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_marcus_unchanged"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "What's Priya's limit now vs before?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "2,000,000"
+            ],
+            [
+              "500,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_prem_limit",
+            "hg_std_limit"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "why priya premium so high now",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "2,416"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_priya_new_premium",
+            "hg_upgrade_date"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "How much more is that per year?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,312"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_priya_premium_increase"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "and the bill we already paid for this year?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "656"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_additional_premium"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Total hospital premium for both of us per year now?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "3,704"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_hosp_premium_total_now"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Is pro-ration still applied to Priya at private hospitals?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "no pro-ration",
+              "None"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_prem_noproration"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "And to Marcus?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "50%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_std_proration"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C07",
+      "title": "Aiden overseas student questions",
+      "tags": [
+        "travel",
+        "date-reasoning",
+        "not-uploaded"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What insurance does Aiden have in Australia?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Student Abroad",
+              "Crestbay"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_cert",
+            "tr_country"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Medical limit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "250,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_med"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Does he need OSHC as well?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "OSHC"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_oshc"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "What does his OSHC cover?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 5,
+          "user": "He's planning a 2-week Bali trip in the break",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "21 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_third_country"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "What about a 4-week Japan trip instead?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "21 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_third_country"
+          ],
+          "note": "Only first 21 days per trip covered."
+        },
+        {
+          "turn": 7,
+          "user": "When does the plan end?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "09 Feb 2027",
+              "9 Feb 2027",
+              "9 February 2027",
+              "09 February 2027",
+              "February 9, 2027",
+              "Feb 9, 2027",
+              "2027-02-09",
+              "9/2/2027",
+              "09/02/2027",
+              "2027年2月9日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_end"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How many days from today?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "126"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_tr_days_left"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "If he stops full-time study in December, what happens?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_fulltime"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "Should we buy a cheaper plan next year?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H4-C08",
+      "title": "Family overview and totals",
+      "tags": [
+        "overview",
+        "totals",
+        "comparison"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Give me a quick overview of who is covered by what.",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "HealthGuard"
+            ],
+            [
+              "FamilyPA",
+              "personal accident",
+              "Harbourline"
+            ],
+            [
+              "Student Abroad",
+              "Crestbay"
+            ],
+            [
+              "HelperCare"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_marcus_plan",
+            "pa_insured_list",
+            "tr_cert",
+            "md_insured"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Which policies cover Kavya?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "FamilyPA",
+              "personal accident",
+              "Harbourline"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_insured_list"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Does she have any hospital plan?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [],
+          "note": "No hospital plan for Kavya among uploaded docs."
+        },
+        {
+          "turn": 4,
+          "user": "Total accidental death cover for everyone on the PA?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "360,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_pa_family_adb_total"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Why isn't Aiden included in that?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "not named",
+              "only persons named"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_named_only"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Which kid has more accident medical left?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "Kavya"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_kids_ame_compare"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "By how much?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "640"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_kids_ame_compare",
+            "cl_rohan_remaining"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "What does the family pay for FamilyPA per year?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "486"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_premium"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C09",
+      "title": "Mixed not-uploaded and out-of-scope",
+      "tags": [
+        "not-uploaded",
+        "out-of-scope"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What does our car insurance cover?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "Ok what about MediShield Life for the kids?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 3,
+          "user": "Then what CAN you see?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "HealthGuard"
+            ],
+            [
+              "MultiProtect",
+              "critical illness",
+              "Orchidia"
+            ],
+            [
+              "FamilyPA",
+              "personal accident",
+              "Harbourline"
+            ],
+            [
+              "Student Abroad",
+              "Crestbay"
+            ],
+            [
+              "HelperCare"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_policy_no",
+            "ci_sa",
+            "pa_policy_no",
+            "tr_cert",
+            "md_policy"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "can you file the claim with Harbourline directly for me?",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 5,
+          "user": "What's the best insurance company in Singapore?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 6,
+          "user": "ok then how much is Priya's accident death benefit",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "150,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_adb_adult"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "and her life insurance?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 8,
+          "user": "thanks lah",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H4-C10",
+      "title": "Advice requests",
+      "tags": [
+        "advice"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Should I upgrade Marcus to Premier too?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "Ok just tell me the difference in limits then",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "500,000"
+            ],
+            [
+              "2,000,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_std_limit",
+            "hg_prem_limit"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "And how much more would it cost?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [],
+          "note": "Marcus's Premier premium is not in any uploaded document; Priya's figures are hers."
+        },
+        {
+          "turn": 4,
+          "user": "Priya's upgrade cost how much extra per year?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,312"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_priya_premium_increase"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Is the CI plan good value?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 6,
+          "user": "What's the CI premium?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "2,976"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_premium"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "And sum assured?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "200,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_sa"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Should we surrender it?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H4-C11",
+      "title": "Dengue for Marcus",
+      "tags": [
+        "hospital",
+        "ci",
+        "not-covered",
+        "claim"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Marcus has dengue and is warded in a Class A ward at a restructured hospital.",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "HealthGuard"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_marcus_plan",
+            "hg_std_ward"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Can he claim critical illness too?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "not covered"
+            ]
+          ],
+          "forbidden": [
+            "50,000"
+          ],
+          "fact_refs": [
+            "ci_dengue_excluded"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "What about the accident plan?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "accident"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_accident_only"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Bill is likely S$12,000, his first claim this year",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "7,650"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_marcus_classA_12k"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "How was that worked out?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,500"
+            ],
+            [
+              "10%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_std_deductible",
+            "hg_coins"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "If he had gone private instead with the same 12k bill?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "50%"
+            ]
+          ],
+          "forbidden": [
+            "7,650"
+          ],
+          "fact_refs": [
+            "hg_std_proration",
+            "hg_std_deductible"
+          ],
+          "note": "6,000 - 3,500 = 2,500 less 10% = 2,250."
+        },
+        {
+          "turn": 7,
+          "user": "How long after discharge are follow-ups covered?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "180"
+            ]
+          ],
+          "forbidden": [
+            "365"
+          ],
+          "fact_refs": [
+            "hg_std_post"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Deadline to submit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "90 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_claims_deadline"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C12",
+      "title": "Kavya accident claim",
+      "tags": [
+        "claim",
+        "pa"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Kavya fell off her bike and was admitted to hospital",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "FamilyPA",
+              "personal accident",
+              "Harbourline"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_insured_list",
+            "pa_ame_child"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "She stayed 5 days",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_kavya_dhi_5"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Plus medical bills of S$1,200",
+          "behaviour": "claim_step",
+          "expected": [
+            [
+              "1,200",
+              "1,500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_ame_child"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Has she claimed anything before this year?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "1,500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_ame_child",
+            "cl_rohan_remaining"
+          ],
+          "note": "No Kavya claim on file; only Rohan's."
+        },
+        {
+          "turn": 5,
+          "user": "What's her limit for physio afterwards?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "300"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_physio_child"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Can her hospital stay be claimed on Kestrel too?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Marcus",
+              "Priya"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_marcus_plan",
+            "hg_priya_plan_jan"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Within how many days must we notify?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "30 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_notify"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "She's 14 right? Until when is she a 'child' on this?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "18"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_child_age",
+            "dv_kavya_age"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C13",
+      "title": "Singlish rapid-fire",
+      "tags": [
+        "singlish"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "eh marcus hosp plan which one",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Standard"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_marcus_plan"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "priya leh",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Premier"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_priya_new_plan"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "since when",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "01 Jul 2026",
+              "1 Jul 2026",
+              "1 July 2026",
+              "01 July 2026",
+              "July 1, 2026",
+              "Jul 1, 2026",
+              "2026-07-01",
+              "1/7/2026",
+              "01/07/2026",
+              "2026年7月1日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_upgrade_date"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "rohan PA balance how much",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "860"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cl_rohan_remaining"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "aiden can use PA anot",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "not named",
+              "only persons named"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_named_only"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "maid GP visit can claim?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Not covered"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_outpatient"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "CI got cover dengue?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "not covered"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_dengue_excluded"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "aiden insurance end when",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "09 Feb 2027",
+              "9 Feb 2027",
+              "9 February 2027",
+              "09 February 2027",
+              "February 9, 2027",
+              "Feb 9, 2027",
+              "2027-02-09",
+              "9/2/2027",
+              "09/02/2027",
+              "2027年2月9日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_end"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "ok can help me book doctor?",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H4-C14",
+      "title": "Renewals and dates",
+      "tags": [
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Which of our policies expire or renew in the next 4 months?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "31 Jan 2027",
+              "31 Jan 2027",
+              "31 January 2027",
+              "31 January 2027",
+              "January 31, 2027",
+              "Jan 31, 2027",
+              "2027-01-31",
+              "31/1/2027",
+              "31/01/2027",
+              "2027年1月31日",
+              "01 Feb 2027",
+              "1 Feb 2027",
+              "1 February 2027",
+              "01 February 2027",
+              "February 1, 2027",
+              "Feb 1, 2027",
+              "2027-02-01",
+              "1/2/2027",
+              "01/02/2027",
+              "2027年2月1日"
+            ],
+            [
+              "31 Dec 2026",
+              "31 Dec 2026",
+              "31 December 2026",
+              "31 December 2026",
+              "December 31, 2026",
+              "Dec 31, 2026",
+              "2026-12-31",
+              "31/12/2026",
+              "31/12/2026",
+              "2026年12月31日",
+              "01 Jan 2027",
+              "1 Jan 2027",
+              "1 January 2027",
+              "01 January 2027",
+              "January 1, 2027",
+              "Jan 1, 2027",
+              "2027-01-01",
+              "1/1/2027",
+              "01/01/2027",
+              "2027年1月1日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_end",
+            "hg_policy_year_end"
+          ],
+          "note": "HealthGuard renews 01 Jan 2027 (policy year ends 31 Dec 2026); FamilyPA ends 31 Jan 2027. Aiden's plan (09 Feb 2027) is just over 4 months."
+        },
+        {
+          "turn": 2,
+          "user": "When does Aiden's plan end?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "09 Feb 2027",
+              "9 Feb 2027",
+              "9 February 2027",
+              "09 February 2027",
+              "February 9, 2027",
+              "Feb 9, 2027",
+              "2027-02-09",
+              "9/2/2027",
+              "09/02/2027",
+              "2027年2月9日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_end"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "So which ends first, PA or Aiden's plan?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "FamilyPA",
+              "personal accident",
+              "Harbourline"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_end",
+            "tr_end"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "When did Marcus's CI start?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "01 Apr 2023",
+              "1 Apr 2023",
+              "1 April 2023",
+              "01 April 2023",
+              "April 1, 2023",
+              "Apr 1, 2023",
+              "2023-04-01",
+              "1/4/2023",
+              "01/04/2023",
+              "2023年4月1日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_start"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "How old will Marcus be when it ends?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "75"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_end"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "When does the helper's first year of cover end?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "14 Nov 2026",
+              "14 Nov 2026",
+              "14 November 2026",
+              "14 November 2026",
+              "November 14, 2026",
+              "Nov 14, 2026",
+              "2026-11-14",
+              "14/11/2026",
+              "14/11/2026",
+              "2026年11月14日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "md_year1_end"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "How old is Aiden now?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "20"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_aiden_age"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "And Priya?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "43"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_priya_age"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H4-C15",
+      "title": "Long mixed session with corrections",
+      "tags": [
+        "long",
+        "correction",
+        "persona"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Hi, I'm Priya.",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "What's my hospital limit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "2,000,000"
+            ]
+          ],
+          "forbidden": [
+            "500,000 per"
+          ],
+          "fact_refs": [
+            "hg_prem_limit"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "And my deductible?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_prem_deductible"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Am I covered for accidents?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "FamilyPA",
+              "personal accident",
+              "Harbourline"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_insured_list",
+            "pa_adb_adult"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "What's my accident medical limit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "pa_ame_adult"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "And for my son?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "860"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cl_rohan_remaining"
+          ],
+          "note": "Priya's son is Rohan (Aiden is her step-son)."
+        },
+        {
+          "turn": 7,
+          "user": "No I meant my stepson",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "Student Abroad",
+              "Crestbay",
+              "not named"
+            ]
+          ],
+          "forbidden": [
+            "860"
+          ],
+          "fact_refs": [
+            "pa_named_only",
+            "tr_med"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "ok what's his medical limit overseas",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "250,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "tr_med"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Am I covered under critical illness?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Marcus"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_life_assured",
+            "ci_nominee"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "So what happens to the CI money if Marcus passes away?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Priya"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ci_nominee"
+          ]
+        },
+        {
+          "turn": 11,
+          "user": "If I get hospitalised in a private hospital next week with a new illness, bill S$16,000 and no claim this year?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "11,250"
+            ]
+          ],
+          "forbidden": [
+            "4,050"
+          ],
+          "fact_refs": [
+            "dv_priya_aug_16k"
+          ]
+        },
+        {
+          "turn": 12,
+          "user": "Actually the condition started in May",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "4,050"
+            ]
+          ],
+          "forbidden": [
+            "11,250"
+          ],
+          "fact_refs": [
+            "hg_rule_preexisting_upgrade",
+            "dv_priya_may_16k"
+          ]
+        },
+        {
+          "turn": 13,
+          "user": "why so different",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Standard"
+            ],
+            [
+              "50%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "hg_rule_preexisting_upgrade",
+            "hg_std_proration"
+          ]
+        },
+        {
+          "turn": 14,
+          "user": "Should I switch insurer?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 15,
+          "user": "Ok thanks bye",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    }
+  ]
+}

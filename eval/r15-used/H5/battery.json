@@ -1,0 +1,4750 @@
+{
+  "household_id": "H5",
+  "as_of": "2026-10-06",
+  "timezone": "Asia/Singapore",
+  "behaviour_types": {
+    "answer": "Direct factual answer grounded in an uploaded document; must state the expected facts.",
+    "compute": "Answer needs arithmetic or date reasoning over document facts (as-of 2026-10-06, Asia/Singapore); must state the computed figure(s).",
+    "clarify": "Question is genuinely ambiguous (which person / which policy / missing key fact). Must ask a clarifying question and must NOT commit to one interpretation's figure.",
+    "not_uploaded": "Asks about a policy/document the household has not uploaded. Must say it is not among the uploaded documents (and may suggest uploading); must not invent terms.",
+    "not_covered": "The uploaded documents show the person/event is not covered (not named, excluded, not elected, wrong policy type). Must say so plainly.",
+    "expired": "The relevant policy has expired / is not in force on the relevant date. Must say so with the end date.",
+    "unreadable": "The relevant document could not be read (garbled / password protected). Must say it cannot be read and ask for a readable copy; must not invent contents.",
+    "out_of_scope": "Not an insurance-document question (or asks for something the app cannot do). Brief polite redirect; no invented policy facts.",
+    "advice_decline": "Asks for a personal recommendation (buy / surrender / switch / which is better for me). May give the relevant document facts but must not make the decision; suggests a licensed adviser or the insurer.",
+    "claim_start": "User starts a claim. Must pick the right policy/person and ask the next single needed question (or state what is needed).",
+    "claim_step": "Continuation of a claim flow; must use earlier turns, ask the next question or give the estimate when enough facts are in.",
+    "correction": "User corrects an earlier fact (person, date, amount). Must update the answer to the corrected facts and drop the old figure."
+  },
+  "matching": "expected = list of groups; each group passes if ANY alternative appears in the reply (case-insensitive; S$/$ and thousand separators normalised; numbers matched on digit boundaries). forbidden = strings a correct reply to THIS message must not contain.",
+  "counts": {
+    "singles": 151,
+    "conversations": 15,
+    "conversation_turns": 136
+  },
+  "singles": [
+    {
+      "id": "H5-S001",
+      "intent": "ipa_plan",
+      "message": "What Shield plan does my dad have?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Plan A"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_plan",
+        "ipa_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S002",
+      "intent": "ipa_plan",
+      "message": "dad's integrated shield is which plan ah",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Plan A"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_plan",
+        "ipa_ward"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S003",
+      "intent": "ipa_plan",
+      "message": "Which ward is Mr Teo entitled to?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Plan A"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_plan",
+        "ipa_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S004",
+      "intent": "ipb_plan",
+      "message": "What Shield plan is my mum on?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Plan B"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_plan",
+        "ipb_ward"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S005",
+      "intent": "ipb_plan",
+      "message": "mum IP plan which ward entitled",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Plan B"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_plan",
+        "ipb_ward"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S006",
+      "intent": "ipa_ascharged",
+      "message": "Is Dad's plan as-charged even at a private hospital?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "As charged"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_ascharged",
+        "ipa_noproration"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S007",
+      "intent": "ipa_ascharged",
+      "message": "dad go private hospital got pro-rate or not",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "As charged"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_ascharged",
+        "ipa_noproration"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S008",
+      "intent": "ipb_proration_private",
+      "message": "If Mum goes to a private hospital, what pro-ration applies?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "55%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_pr_private"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S009",
+      "intent": "ipb_proration_private",
+      "message": "mum private hosp pro ration how much percent",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "55%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_pr_private"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S010",
+      "intent": "ipb_proration_private",
+      "message": "What's the pro-ration factor for Lau Siew Lan in a private hospital?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "55%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_pr_private"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S011",
+      "intent": "ipb_proration_ds",
+      "message": "What about day surgery at a private hospital for Mum?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "65%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_pr_ds"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S012",
+      "intent": "ipb_proration_community",
+      "message": "Is there pro-ration if Mum goes to a community hospital?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "100%",
+          "no pro-ration"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_pr_community"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S013",
+      "intent": "lau_private_20k",
+      "message": "Mum was warded at a private hospital, bill S$20,000, first claim this policy year. How much will Lumina pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "6,750"
+        ]
+      ],
+      "forbidden": [
+        "14,850"
+      ],
+      "fact_refs": [
+        "dv_lau_private_20k",
+        "ipb_pr_private",
+        "ipb_ded_A",
+        "ipb_coins"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S014",
+      "intent": "lau_private_20k",
+      "message": "mum private hospital 20k bill, how much can claim from IP?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "6,750"
+        ]
+      ],
+      "forbidden": [
+        "14,850"
+      ],
+      "fact_refs": [
+        "dv_lau_private_20k",
+        "ipb_pr_private",
+        "ipb_ded_A",
+        "ipb_coins"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S015",
+      "intent": "lau_private_oop",
+      "message": "And how much would we have to pay ourselves on that S$20,000 private bill for Mum?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "13,250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_private_20k_oop"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S016",
+      "intent": "lau_ds_8k",
+      "message": "Mum had cataract day surgery at a private hospital, S$8,000. First claim this year. Estimate?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,530"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_ds_8k",
+        "ipb_pr_ds"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S017",
+      "intent": "lau_b1_9k",
+      "message": "If Mum stays in a B1 ward at a restructured hospital and the bill is S$9,000, what's the payout?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "5,850"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_b1_9k",
+        "ipb_ded_B1"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S018",
+      "intent": "lau_b1_9k",
+      "message": "b1 ward 9k bill for mum, first claim, how much claimable",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "5,850"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_b1_9k",
+        "ipb_ded_B1"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S019",
+      "intent": "lau_classA_20k",
+      "message": "Same S$20,000 bill but Mum stays in Class A at a restructured hospital - how much would Lumina pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "14,850"
+        ]
+      ],
+      "forbidden": [
+        "6,750"
+      ],
+      "fact_refs": [
+        "dv_lau_classA_20k"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S020",
+      "intent": "teo_private_20k",
+      "message": "Dad was in a private hospital with a S$20,000 bill, first claim this year. How much does his Shield pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "14,850"
+        ]
+      ],
+      "forbidden": [
+        "6,750"
+      ],
+      "fact_refs": [
+        "dv_teo_private_20k",
+        "ipa_noproration"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S021",
+      "intent": "teo_private_20k",
+      "message": "dad private hosp 20k, how much IP cover",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "14,850"
+        ]
+      ],
+      "forbidden": [
+        "6,750"
+      ],
+      "fact_refs": [
+        "dv_teo_private_20k",
+        "ipa_noproration"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S022",
+      "intent": "teo_C_6k",
+      "message": "If Dad chooses a Class C ward and the bill is S$6,000, how much can he claim?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "4,050"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_C_6k",
+        "ipa_ded_C"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S023",
+      "intent": "why_diff",
+      "message": "Why would Mum get so much less than Dad for the same private hospital bill?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "55%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_noproration",
+        "ipb_pr_private"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S024",
+      "intent": "why_diff",
+      "message": "why mum claim so little compared to dad for same bill??",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "55%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_noproration",
+        "ipb_pr_private"
+      ],
+      "tags": [
+        "why",
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S025",
+      "intent": "ded_table",
+      "message": "What are the deductibles on the Lumina Shield plans?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3,500"
+        ],
+        [
+          "1,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_ded_A",
+        "ipa_ded_B1",
+        "ipa_ded_C"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S026",
+      "intent": "ded_table",
+      "message": "deductable for shield plan how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3,500"
+        ],
+        [
+          "1,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_ded_A",
+        "ipa_ded_B1",
+        "ipa_ded_C"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S027",
+      "intent": "ded_b1",
+      "message": "What's the deductible if Mum stays in a B1 ward?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "2,500"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_ded_B1"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S028",
+      "intent": "ded_81",
+      "message": "What happens to Dad's Class A deductible once he's above 80?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_ded_A_81",
+        "ip_age_rule"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S029",
+      "intent": "teo_81_when",
+      "message": "Roughly when will Dad move into the 81-and-above deductible bracket?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "2034"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_81_date",
+        "ipa_ded_A_81"
+      ],
+      "tags": [],
+      "note": "He turns 81 on 11 Jun 2034; the rule uses age next birthday at the start of the policy year, so the higher bracket applies from a policy year starting in 2034 (15 Feb 2034, ANB 81)."
+    },
+    {
+      "id": "H5-S030",
+      "intent": "ipa_limit",
+      "message": "What's Dad's annual claim limit?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,500,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_limit"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S031",
+      "intent": "ipb_limit",
+      "message": "What's Mum's annual claim limit under her Shield plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_limit"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S032",
+      "intent": "ipb_limit",
+      "message": "mum IP yearly limit",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_limit"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S033",
+      "intent": "ipa_post",
+      "message": "How long after discharge are Dad's follow-up visits covered?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "365"
+        ]
+      ],
+      "forbidden": [
+        "180 days"
+      ],
+      "fact_refs": [
+        "ipa_post"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S034",
+      "intent": "ipb_pre",
+      "message": "How many days of pre-hospital treatment does Mum's plan cover?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "90"
+        ]
+      ],
+      "forbidden": [
+        "180 days"
+      ],
+      "fact_refs": [
+        "ipb_pre"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S035",
+      "intent": "coins",
+      "message": "Is there co-insurance on my parents' Shield plans?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "10%"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_coins",
+        "ipb_coins"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S036",
+      "intent": "ipa_premium",
+      "message": "How much is Dad's Shield premium this year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,210"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_total",
+        "ipa_cash"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S037",
+      "intent": "ipa_premium",
+      "message": "dad IP premium how much per year",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,210"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_total",
+        "ipa_cash"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S038",
+      "intent": "ipa_cash",
+      "message": "How much of Dad's Shield premium has to be paid in cash?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "3,046"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_cash",
+        "ipa_awl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S039",
+      "intent": "ipb_cash",
+      "message": "How much cash does Mum need to pay for her Shield plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "788"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_cash",
+        "ipb_awl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S040",
+      "intent": "ip_total_premium",
+      "message": "Total Shield premiums for both of them this year?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "7,640"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ip_total_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S041",
+      "intent": "ip_total_premium",
+      "message": "total IP premium mum + dad",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "7,640"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ip_total_premium"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S042",
+      "intent": "ip_cash_total",
+      "message": "How much cash in total for both Shield plans?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,834"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ip_cash_total"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S043",
+      "intent": "ipa_renewal",
+      "message": "When is Dad's Shield plan renewal?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "14 Feb 2027",
+          "14 Feb 2027",
+          "14 February 2027",
+          "14 February 2027",
+          "February 14, 2027",
+          "Feb 14, 2027",
+          "2027-02-14",
+          "14/2/2027",
+          "14/02/2027",
+          "2027年2月14日",
+          "15 Feb"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_year"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S044",
+      "intent": "ipb_renewal",
+      "message": "When does Mum's Shield policy year renew?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "01 Apr",
+          "1 Apr",
+          "31 Mar 2027",
+          "31 Mar 2027",
+          "31 March 2027",
+          "31 March 2027",
+          "March 31, 2027",
+          "Mar 31, 2027",
+          "2027-03-31",
+          "31/3/2027",
+          "31/03/2027",
+          "2027年3月31日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_year"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S045",
+      "intent": "ms_awl_teo",
+      "message": "How much of Dad's Shield premium can MediSave cover?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "900"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_awl",
+        "ms_awl_71"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S046",
+      "intent": "ms_awl_teo",
+      "message": "medisave can pay how much for dad shield",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "900"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_awl",
+        "ms_awl_71"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S047",
+      "intent": "ms_awl_lau",
+      "message": "How much can Mum use MediSave for her Shield additional premium?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_awl",
+        "ms_awl_41_70"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S048",
+      "intent": "ms_awl_lau_2027",
+      "message": "Will Mum be able to use more MediSave for her Shield premium next year?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "900"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_awl_2027",
+        "dv_lau_anb_2027",
+        "ms_awl_71"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S049",
+      "intent": "ms_awl_lau_2027",
+      "message": "next year mum medisave limit for IP go up anot",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "900"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_awl_2027",
+        "dv_lau_anb_2027",
+        "ms_awl_71"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S050",
+      "intent": "ms_why_600_vs_900",
+      "message": "Why can Dad use S$900 of MediSave but Mum only S$600?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "600"
+        ],
+        [
+          "900"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_awl_41_70",
+        "ms_awl_71",
+        "ms_awl_rule"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S051",
+      "intent": "ms_daily",
+      "message": "How much MediSave can be used per day for a hospital stay?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "450"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_daily"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S052",
+      "intent": "ms_4days",
+      "message": "If Mum is in hospital 4 days, what's the most MediSave can pay for daily ward charges?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,800"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ms_4days"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S053",
+      "intent": "ms_ds",
+      "message": "What's the MediSave limit for day surgery?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_ds"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S054",
+      "intent": "ms_surgical",
+      "message": "What's the MediSave range for surgical operations?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "7,550"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_surgical"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S055",
+      "intent": "ms_flexi",
+      "message": "Can Dad use MediSave for his GP visits? He's above 60.",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_flexi"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S056",
+      "intent": "ms_flexi",
+      "message": "flexi medisave for elderly how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_flexi"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S057",
+      "intent": "ms_chronic",
+      "message": "How much MediSave can be used for Mum's diabetes check-ups at the polyclinic?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "500",
+          "700"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_500700"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S058",
+      "intent": "ms_community",
+      "message": "MediSave limit per day for a community hospital?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_community"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S059",
+      "intent": "ms_balance",
+      "message": "How much is left in Dad's MediSave?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_disclaimer"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S060",
+      "intent": "ms_balance",
+      "message": "mum medisave balance how much",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_disclaimer"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S061",
+      "intent": "teo_es",
+      "message": "What does Dad's ElderShield pay?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "400"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "es_payout",
+        "es_months"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S062",
+      "intent": "teo_es",
+      "message": "eldershield dad monthly payout",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "400"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "es_payout",
+        "es_months"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S063",
+      "intent": "teo_ev",
+      "message": "What does Dad's EverCare supplement pay per month?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,200"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ev_payout"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S064",
+      "intent": "teo_3adl",
+      "message": "If Dad can't do 3 ADLs, how much will he get per month in total?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,600"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_3adl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S065",
+      "intent": "teo_3adl",
+      "message": "dad cannot bathe, dress and walk, how much monthly from all his care plans",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,600"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_3adl"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S066",
+      "intent": "teo_2adl",
+      "message": "If Dad can only not do 2 ADLs, what does he get?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,200"
+        ]
+      ],
+      "forbidden": [
+        "1,600"
+      ],
+      "fact_refs": [
+        "dv_teo_2adl",
+        "es_trigger"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S067",
+      "intent": "teo_first_month",
+      "message": "Is there any lump sum when Dad first claims EverCare?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_first_month_3adl",
+        "ev_initial"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S068",
+      "intent": "lau_cs",
+      "message": "How much does Mum's CareShield Life pay?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "690"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cs_payout",
+        "cs_lifetime"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S069",
+      "intent": "lau_cs",
+      "message": "careshield mum how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "690"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cs_payout",
+        "cs_lifetime"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S070",
+      "intent": "lau_3adl",
+      "message": "If Mum is severely disabled (3 ADLs), monthly total from CareShield and her supplement?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "1,490"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_3adl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S071",
+      "intent": "lau_2adl",
+      "message": "Mum can't toilet or transfer on her own (2 ADLs). What can she claim monthly?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "800"
+        ]
+      ],
+      "forbidden": [
+        "1,490"
+      ],
+      "fact_refs": [
+        "dv_lau_2adl",
+        "cs_trigger"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S072",
+      "intent": "couple_3adl",
+      "message": "If both of them became severely disabled (3 ADLs), how much per month combined?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "3,090"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_couple_3adl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S073",
+      "intent": "es_max",
+      "message": "What's the maximum Dad's ElderShield could pay in total?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "28,800"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_es_max_total"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S074",
+      "intent": "ev_months",
+      "message": "How long does the EverCare supplement pay for?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "120"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ev_months"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S075",
+      "intent": "cs_lifetime",
+      "message": "Is Mum's CareShield payout for life or limited years?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "life"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "cs_lifetime"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S076",
+      "intent": "adl_list",
+      "message": "What are the 6 ADLs?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "dressing"
+        ],
+        [
+          "transferring"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "adl_list"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S077",
+      "intent": "adl_list",
+      "message": "what count as ADL ah",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "dressing"
+        ],
+        [
+          "transferring"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "adl_list"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S078",
+      "intent": "supp_cash",
+      "message": "How much cash does Dad pay for EverCare after using MediSave?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "548"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_ev_cash",
+        "supp_medisave"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S079",
+      "intent": "supp_cash_lau",
+      "message": "And Mum's CareBoost - cash portion after MediSave?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "336"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_cb_cash"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S080",
+      "intent": "es_defer",
+      "message": "Is there a waiting period before ElderShield starts paying?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "90 days"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "es_defer"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S081",
+      "intent": "wl_sv_now",
+      "message": "What's the current surrender value of Dad's whole life plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "76,320"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_now"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S082",
+      "intent": "wl_sv_now",
+      "message": "if dad surrender the banyan policy now get how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "76,320"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_now"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S083",
+      "intent": "wl_sv_y29",
+      "message": "What will the surrender value be at the end of this policy year?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "78,810"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_y29"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S084",
+      "intent": "wl_sv_y29",
+      "message": "SV end of policy year 29 how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "78,810"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_y29"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S085",
+      "intent": "wl_sv_y30",
+      "message": "What's the surrender value in July 2028?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "81,300"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_y30"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S086",
+      "intent": "wl_sv_y33",
+      "message": "What would the surrender value be when Dad is 78?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "88,770"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_y33"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S087",
+      "intent": "wl_sv_y40",
+      "message": "What's the surrender value at age 85?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "106,200"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sv_y40"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S088",
+      "intent": "wl_sv_increase",
+      "message": "How much does the surrender value go up between the end of year 28 and the end of year 29?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "2,490"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_wl_sv_increase_y29"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S089",
+      "intent": "wl_gsv_y29",
+      "message": "How much of the year-29 surrender value is guaranteed?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "47,760"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_gsv_y29"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S090",
+      "intent": "wl_db",
+      "message": "How much would the whole life plan pay if Dad passes away?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "139,650"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_db",
+        "wl_gdb",
+        "wl_tb"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S091",
+      "intent": "wl_db",
+      "message": "dad whole life death benefit how much",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "139,650"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_db",
+        "wl_gdb",
+        "wl_tb"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S092",
+      "intent": "wl_gdb",
+      "message": "How much of the death benefit is guaranteed?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "121,250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_gdb"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S093",
+      "intent": "wl_why_db_up",
+      "message": "Why is the paid-up additions figure higher than last year's statement?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,640"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_bonus_2026",
+        "wl_pua_prev",
+        "wl_pua"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S094",
+      "intent": "wl_why_db_up",
+      "message": "why the bonus amount increase this yr",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,640"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_bonus_2026",
+        "wl_pua_prev",
+        "wl_pua"
+      ],
+      "tags": [
+        "why",
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S095",
+      "intent": "wl_pua",
+      "message": "How much paid-up additions has Dad's whole life accumulated?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "41,250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_pua"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S096",
+      "intent": "wl_premium_status",
+      "message": "Does Dad still need to pay premiums for the Banyan whole life?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Fully paid",
+          "no further premiums"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_paid_up",
+        "wl_last_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S097",
+      "intent": "wl_total_premiums",
+      "message": "How much premium did Dad pay in total over the life of the Banyan whole life?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "42,800"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_wl_total_premiums"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S098",
+      "intent": "wl_sa",
+      "message": "What's the basic sum assured on the whole life?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "80,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_sa"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S099",
+      "intent": "wl_policy_year",
+      "message": "Which policy year is the whole life in now?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "29"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_wl_policy_year_now",
+        "wl_start"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S100",
+      "intent": "wl_funeral",
+      "message": "Does Dad's whole life have a funeral benefit?",
+      "behaviour": "not_covered",
+      "expected": [
+        [
+          "does not include a separate funeral benefit"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "wl_no_funeral"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S101",
+      "intent": "as_who_gets",
+      "message": "If Dad passes away, who gets the whole life payout?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Straits Harbour Bank"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_payable",
+        "as_bank"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S102",
+      "intent": "as_who_gets",
+      "message": "dad pass away the banyan money go to who",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Straits Harbour Bank"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_payable",
+        "as_bank"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S103",
+      "intent": "as_nominee",
+      "message": "Isn't Mum the nominee on Dad's whole life?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "revoked"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_nom_revoked"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S104",
+      "intent": "as_nominee",
+      "message": "mum still nominee for dad policy right",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "revoked"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_nom_revoked"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S105",
+      "intent": "as_surrender",
+      "message": "Can Dad just surrender the whole life to get cash?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "consent"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_consent",
+        "wl_consent"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S106",
+      "intent": "as_loan_amount",
+      "message": "How much does Dad still owe the bank?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "as_no_amount"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S107",
+      "intent": "as_loan_amount",
+      "message": "loan balance with straits harbour how much",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [
+        "as_no_amount"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S108",
+      "intent": "as_when",
+      "message": "When was the policy assigned to the bank?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "20 May 2019",
+          "20 May 2019",
+          "20 May 2019",
+          "20 May 2019",
+          "May 20, 2019",
+          "May 20, 2019",
+          "2019-05-20",
+          "20/5/2019",
+          "20/05/2019",
+          "2019年5月20日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_date"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S109",
+      "intent": "as_after_loan",
+      "message": "What happens to the assignment once the loan is paid off?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "re-assign",
+          "new nomination"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_reassign"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S110",
+      "intent": "as_type",
+      "message": "What kind of assignment is it?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Absolute assignment"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "as_type"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S111",
+      "intent": "ff_explain",
+      "message": "Mum's funeral policy is in Chinese. Can you explain what it covers in English?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15,000"
+        ],
+        [
+          "5,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_sa",
+        "ff_advance",
+        "ff_policy"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S112",
+      "intent": "ff_explain",
+      "message": "the chinese document for mum, what does it say?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15,000"
+        ],
+        [
+          "5,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_sa",
+        "ff_advance",
+        "ff_policy"
+      ],
+      "tags": [
+        "typo"
+      ]
+    },
+    {
+      "id": "H5-S113",
+      "intent": "ff_advance",
+      "message": "How fast does the funeral plan pay out for funeral costs?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,000"
+        ],
+        [
+          "3"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_advance",
+        "ff_advance_days"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S114",
+      "intent": "ff_advance",
+      "message": "got funeral cash advance or not, how many days",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "5,000"
+        ],
+        [
+          "3"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_advance",
+        "ff_advance_days"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S115",
+      "intent": "ff_extra",
+      "message": "So in total we get S$20,000 from Mum's funeral plan - S$5,000 advance plus S$15,000?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "10,000"
+        ]
+      ],
+      "forbidden": [
+        "20,000 in total"
+      ],
+      "fact_refs": [
+        "ff_advance_deducted",
+        "dv_ff_balance_after_advance"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S116",
+      "intent": "ff_extra",
+      "message": "advance 5k is on top of the 15k right?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "10,000"
+        ]
+      ],
+      "forbidden": [
+        "20,000 in total"
+      ],
+      "fact_refs": [
+        "ff_advance_deducted",
+        "dv_ff_balance_after_advance"
+      ],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S117",
+      "intent": "ff_accident",
+      "message": "If Mum dies in an accident, how much does the Final Farewell Plan pay?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "30,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ff_accidental_total"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S118",
+      "intent": "ff_nominee",
+      "message": "Who is the nominee on Mum's funeral plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "Mei Ling",
+          "张美玲"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_nominee"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S119",
+      "intent": "ff_waiting",
+      "message": "Is there still a waiting period on Mum's funeral plan?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "24"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_waiting",
+        "dv_ff_wait_end"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S120",
+      "intent": "ff_premium",
+      "message": "How much is the premium for Mum's funeral plan and until when?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "468"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S121",
+      "intent": "ff_pay_until",
+      "message": "In what year does Mum stop paying for the funeral plan?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "2041"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_ff_pay_until",
+        "ff_premium"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S122",
+      "intent": "ff_start",
+      "message": "When did Mum's Final Farewell Plan start?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "15 Mar 2021",
+          "15 Mar 2021",
+          "15 March 2021",
+          "15 March 2021",
+          "March 15, 2021",
+          "Mar 15, 2021",
+          "2021-03-15",
+          "15/3/2021",
+          "15/03/2021",
+          "2021年3月15日"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_start"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S123",
+      "intent": "ff_teo",
+      "message": "Does Dad have a funeral plan too?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [],
+      "note": "No funeral plan for Teo is uploaded; his whole life has no funeral benefit."
+    },
+    {
+      "id": "H5-S124",
+      "intent": "ages",
+      "message": "How old are my parents now?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "73"
+        ],
+        [
+          "69"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_teo_age",
+        "dv_lau_age"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S125",
+      "intent": "lau_anb",
+      "message": "What age is used for Mum's MediSave limit this policy year?",
+      "behaviour": "compute",
+      "expected": [
+        [
+          "70"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "dv_lau_anb_2026",
+        "ms_awl_41_70"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S126",
+      "intent": "ipa_lifetime",
+      "message": "Is there a lifetime limit on Dad's Shield plan?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "No limit",
+          "no lifetime limit"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipa_lifetime"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S127",
+      "intent": "ms_psych",
+      "message": "How much MediSave per day for psychiatric treatment?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "150"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_psych"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S128",
+      "intent": "ms_hospice",
+      "message": "Can MediSave be used for inpatient hospice care, and how much per day?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "250"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_hospice"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S129",
+      "intent": "ms_mshl_full",
+      "message": "Is Dad's MediShield Life portion fully payable by MediSave?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,264"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ms_awl_rule",
+        "ipa_mshl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S130",
+      "intent": "ipa_mshl_lau",
+      "message": "How much is the MediShield Life part of Mum's premium?",
+      "behaviour": "answer",
+      "expected": [
+        [
+          "1,042"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_mshl"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S131",
+      "intent": "clarify_hosp_claim",
+      "message": "How much can I claim for my hospital bill of $20k?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "6,750",
+        "14,850"
+      ],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Which parent and which hospital/ward are unknown."
+    },
+    {
+      "id": "H5-S132",
+      "intent": "clarify_hosp_claim",
+      "message": "parent warded, bill 20k, how much can claim?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "6,750",
+        "14,850"
+      ],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ],
+      "note": "Which parent and which hospital/ward are unknown."
+    },
+    {
+      "id": "H5-S133",
+      "intent": "clarify_my_plan",
+      "message": "Is my Shield plan as-charged?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [],
+      "note": "'My' is ambiguous (Teo Plan A vs Lau Plan B). Answering both and asking is acceptable."
+    },
+    {
+      "id": "H5-S134",
+      "intent": "clarify_deductible_ward",
+      "message": "How much is the deductible for Mum's upcoming surgery?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [
+        "3,500 for"
+      ],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Depends on ward class stayed; must ask."
+    },
+    {
+      "id": "H5-S135",
+      "intent": "clarify_sv_when",
+      "message": "What's the surrender value next time?",
+      "behaviour": "clarify",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [],
+      "note": "Unclear which date/policy year."
+    },
+    {
+      "id": "H5-S136",
+      "intent": "nu_mshl",
+      "message": "Can you show me Dad's MediShield Life certificate details?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S137",
+      "intent": "nu_home",
+      "message": "Is our HDB flat covered for fire?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S138",
+      "intent": "nu_home",
+      "message": "home insurance got or not",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S139",
+      "intent": "nu_daughter",
+      "message": "What insurance does Mei Ling have?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S140",
+      "intent": "nu_mum_wl",
+      "message": "What's the surrender value of Mum's whole life policy?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S141",
+      "intent": "nu_travel",
+      "message": "My parents are going to Taiwan next month - are they covered for travel?",
+      "behaviour": "not_uploaded",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S142",
+      "intent": "oos",
+      "message": "Can you apply for the Silver Support scheme for my parents?",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S143",
+      "intent": "oos",
+      "message": "Book a polyclinic appointment for Mum tomorrow.",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S144",
+      "intent": "oos",
+      "message": "What's a good Chinese restaurant near Toa Payoh?",
+      "behaviour": "out_of_scope",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S145",
+      "intent": "adv_surrender",
+      "message": "Should Dad surrender the whole life to pay off the bank loan?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S146",
+      "intent": "adv_surrender",
+      "message": "better to surrender or keep the banyan policy?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": [
+        "singlish"
+      ]
+    },
+    {
+      "id": "H5-S147",
+      "intent": "adv_upgrade_mum",
+      "message": "Should Mum upgrade to Plan A?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S148",
+      "intent": "adv_drop_supp",
+      "message": "Is it worth keeping Mum's CareBoost supplement?",
+      "behaviour": "advice_decline",
+      "expected": [],
+      "forbidden": [],
+      "fact_refs": [],
+      "tags": []
+    },
+    {
+      "id": "H5-S149",
+      "intent": "claim_lau_hosp",
+      "message": "Mum is being admitted to hospital tomorrow, I want to start a claim.",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "Plan B",
+          "LH-IS-2047720"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ipb_plan",
+        "ipb_policy"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S150",
+      "intent": "claim_funeral",
+      "message": "I need to claim the funeral advance on my mother's Banyan plan.",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "5,000"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "ff_advance",
+        "ff_policy"
+      ],
+      "tags": []
+    },
+    {
+      "id": "H5-S151",
+      "intent": "claim_ltc_teo",
+      "message": "Dad can't walk or dress himself anymore. How do we start a long-term care claim?",
+      "behaviour": "claim_start",
+      "expected": [
+        [
+          "2 of 6",
+          "3 of 6"
+        ]
+      ],
+      "forbidden": [],
+      "fact_refs": [
+        "es_trigger",
+        "ev_trigger"
+      ],
+      "tags": []
+    }
+  ],
+  "conversations": [
+    {
+      "id": "H5-C01",
+      "title": "Mum private hospital claim with correction",
+      "tags": [
+        "claim",
+        "correction",
+        "pro-ration"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mum was admitted to hospital last week, I want to claim",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "Plan B",
+              "LH-IS-2047720"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_plan",
+            "ipb_policy"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "It was a private hospital, Mount something",
+          "behaviour": "claim_step",
+          "expected": [
+            [
+              "55%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_private"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Bill is S$20,000. First claim this year.",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "6,750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_private_20k"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Why so little??",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "55%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_private",
+            "ipb_pr_rule",
+            "ipb_ded_A"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Sorry, I checked - it was actually a restructured hospital, Class A ward.",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "14,850"
+            ]
+          ],
+          "forbidden": [
+            "6,750"
+          ],
+          "fact_refs": [
+            "dv_lau_classA_20k"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "So no pro-ration now?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "no pro-ration",
+              "100%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_restructured"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "How much do we pay ourselves then?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "5,150"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_classA_20k_oop"
+          ],
+          "note": "20,000 - 14,850 = 5,150."
+        },
+        {
+          "turn": 8,
+          "user": "Can MediSave pay part of that?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "450"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_daily"
+          ],
+          "note": "MediSave can be used within withdrawal limits; balance not uploaded."
+        },
+        {
+          "turn": 9,
+          "user": "How much is in her MediSave?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_disclaimer"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "Within how many days after discharge are her follow-ups covered?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "180"
+            ]
+          ],
+          "forbidden": [
+            "365 days"
+          ],
+          "fact_refs": [
+            "ipb_post"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C02",
+      "title": "Comparing parents' Shield plans",
+      "tags": [
+        "comparison",
+        "totals",
+        "advice"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What Shield plans do my parents have?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Plan A"
+            ],
+            [
+              "Plan B"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_plan",
+            "ipb_plan"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "What's the difference in ward entitlement?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Private hospital"
+            ],
+            [
+              "Class A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_ward",
+            "ipb_ward"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "And annual limits?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "1,500,000"
+            ],
+            [
+              "600,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_limit",
+            "ipb_limit"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Same 20k private hospital bill, who gets more?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "14,850"
+            ],
+            [
+              "6,750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_private_20k",
+            "dv_lau_private_20k"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "why the difference",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "55%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_private",
+            "ipa_noproration"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Do they have the same deductible?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_ded_A",
+            "ipb_ded_A"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Total premiums for both?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "7,640"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ip_total_premium"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How much of that is cash?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "3,834"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ip_cash_total"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Should Mum switch to Plan A?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H5-C03",
+      "title": "Whole life surrender questions",
+      "tags": [
+        "whole-life",
+        "two-page-table",
+        "assignment"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Dad wants to know what his Banyan whole life is worth now",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "76,320"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_sv_now",
+            "wl_db"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "And if he waits until end of this policy year?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "78,810"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_sv_y29"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "That's on which page? I only see up to year 28",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "78,810"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_sv_y29"
+          ],
+          "note": "Row is on page 4 (Table 3 continued)."
+        },
+        {
+          "turn": 4,
+          "user": "How much more is that?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "2,490"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_wl_sv_increase_y29"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Is that guaranteed?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "47,760"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_gsv_y29"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Can he surrender now?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "consent"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_consent",
+            "as_bank"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Why does the bank have a say?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Absolute assignment"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_type",
+            "as_date"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How much does he owe the bank?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "as_no_amount"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Should he surrender then?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 10,
+          "user": "What would the value be at 80?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "93,750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_sv_y35"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C04",
+      "title": "Who gets the money - nominees and assignment",
+      "tags": [
+        "nominee",
+        "assignment",
+        "chinese-doc"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "If Dad passes, does Mum get his whole life money?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Straits Harbour Bank"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_payable",
+            "as_nom_revoked"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "But she was the nominee",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "revoked"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_nom_revoked"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "When was that nomination made?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "12 Sep 2004",
+              "12 Sep 2004",
+              "12 September 2004",
+              "12 September 2004",
+              "September 12, 2004",
+              "Sep 12, 2004",
+              "2004-09-12",
+              "12/9/2004",
+              "12/09/2004",
+              "2004年9月12日",
+              "2004"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_nom_revoked"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "What happens after the loan is cleared?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "re-assign",
+              "new nomination"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_reassign"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "And Mum's funeral plan, who's the nominee?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Mei Ling",
+              "张美玲"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_nominee"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "How much would Mei Ling get?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "15,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_db"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Does the 5k advance come on top?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "10,000"
+            ]
+          ],
+          "forbidden": [
+            "20,000 in total"
+          ],
+          "fact_refs": [
+            "ff_advance_deducted",
+            "dv_ff_balance_after_advance"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "And if it's an accident?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "30,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ff_accidental_total"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Can Mum change the nominee?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "可撤销",
+              "revocable"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_nominee"
+          ],
+          "note": "Nomination is revocable."
+        }
+      ]
+    },
+    {
+      "id": "H5-C05",
+      "title": "Long-term care scenario",
+      "tags": [
+        "ltc",
+        "correction",
+        "totals"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Dad had a stroke, he can't dress or bathe himself",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "2 of 6"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ev_trigger",
+            "es_trigger"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Which plans can pay?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "EverCare"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ev_payout",
+            "es_trigger"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "How much per month?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,200"
+            ]
+          ],
+          "forbidden": [
+            "1,600"
+          ],
+          "fact_refs": [
+            "dv_teo_2adl"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Why not ElderShield?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3 of 6"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "es_trigger"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "The doctor now says he also can't walk on his own",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "1,600"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_3adl"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Any lump sum?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ev_initial"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "When does it start paying?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "90 days"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "es_defer"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How long will ElderShield pay?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "72"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "es_months"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "And EverCare?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "120"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ev_months"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "If Mum also needs care later with 3 ADLs, combined monthly?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "3,090"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_couple_3adl"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C06",
+      "title": "Chinese funeral plan walkthrough",
+      "tags": [
+        "chinese-doc",
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mum has a Chinese policy document. What is it?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Final Farewell",
+              "身后事保障计划"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_policy",
+            "ff_sa"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "What's the sum assured?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "15,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_sa"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Premium?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "468"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_premium"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Until what age?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "85"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_premium"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Which year is that?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "2041"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ff_pay_until"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Is there a waiting period?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "24"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_waiting"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Has it passed?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "15 Mar 2023",
+              "15 Mar 2023",
+              "15 March 2023",
+              "15 March 2023",
+              "March 15, 2023",
+              "Mar 15, 2023",
+              "2023-03-15",
+              "15/3/2023",
+              "15/03/2023",
+              "2023年3月15日",
+              "2023"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ff_wait_end"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "What's excluded?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "war"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_war"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "How do we claim?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_advance_days"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C07",
+      "title": "MediSave questions",
+      "tags": [
+        "medisave",
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Can my parents use MediSave for their Shield premiums?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "900"
+            ],
+            [
+              "600"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_awl",
+            "ipb_awl"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Why different?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "age"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_awl_rule",
+            "ms_awl_41_70",
+            "ms_awl_71"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "When does Mum's go up?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "01 Apr 2027",
+              "1 Apr 2027",
+              "1 April 2027",
+              "01 April 2027",
+              "April 1, 2027",
+              "Apr 1, 2027",
+              "2027-04-01",
+              "1/4/2027",
+              "01/04/2027",
+              "2027年4月1日",
+              "2027"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_awl_2027",
+            "ipb_year"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "How much will it be then?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "900"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_awl_2027"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "If her additional premium stays the same, how much cash will she pay next year?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "488"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_cash_2027_if_same"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "And for the CareBoost supplement?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "600"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "supp_medisave"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Cash for CareBoost then?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "336"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_cb_cash"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "How much MediSave do they have left?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_disclaimer"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C08",
+      "title": "Dad hospital claim walkthrough",
+      "tags": [
+        "claim",
+        "hospital",
+        "clarify"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Dad needs a knee operation",
+          "behaviour": "clarify",
+          "expected": [],
+          "forbidden": [
+            "14,850"
+          ],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "Private hospital, estimated S$20,000, no claims yet this year",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "14,850"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_private_20k"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Any pro-ration?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "No pro-ration"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_noproration"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Deductible?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3,500"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_ded_A"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "If he chooses a C ward instead with a 6k bill?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "4,050"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_C_6k"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Pre-op tests 3 months before - covered?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "180"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_pre"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Physio after - how long?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "365"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_post"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "MediSave limit for the surgery itself?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "7,550"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_surgical"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "And what will the hospital give him in cash per day?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [],
+          "note": "No hospital cash policy uploaded."
+        }
+      ]
+    },
+    {
+      "id": "H5-C09",
+      "title": "Singlish auntie questions",
+      "tags": [
+        "singlish",
+        "persona"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "my husband insurance got cover private hospital or not",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Private hospital"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_ward"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "mine leh",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Class A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_ward",
+            "ipb_pr_private"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "if i go private how many percent they pay",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "55%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_private"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "aiyo so little. then day surgery?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "65%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_ds"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "my funeral one the advance how much",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "5,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_advance"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "give to who",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Mei Ling",
+              "张美玲"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_nominee"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "my careshield how much a month",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "690"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cs_payout"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "can help me buy more insurance?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H5-C10",
+      "title": "Mixed not-uploaded and scope",
+      "tags": [
+        "not-uploaded",
+        "out-of-scope"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What does MediShield Life pay for Dad?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "What's in the uploaded documents then?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Lumina Shield"
+            ],
+            [
+              "Heritage Whole Life",
+              "Banyan"
+            ],
+            [
+              "Final Farewell",
+              "身后事保障计划"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_policy",
+            "ipb_policy",
+            "wl_policy",
+            "ff_policy"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Do they have travel insurance?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 4,
+          "user": "Is our home insured?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 5,
+          "user": "Can you call Lumina for me?",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 6,
+          "user": "OK what's Dad's Shield policy number",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "LH-IS-2047719"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_policy"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "And Mum's?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "LH-IS-2047720"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_policy"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Thanks",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    },
+    {
+      "id": "H5-C11",
+      "title": "Why did the numbers change",
+      "tags": [
+        "why"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Last year's statement said paid-up additions S$39,610, now it's S$41,250. Why?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "1,640"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_bonus_2026"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Is that bonus guaranteed?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "guaranteed"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_pua_guaranteed"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "What about the terminal bonus?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "18,400"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_tb"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "So guaranteed death benefit is?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "121,250"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_gdb"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Explain how you got that",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "80,000"
+            ],
+            [
+              "41,250"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_wl_gdb_check",
+            "wl_sa",
+            "wl_pua"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Difference between death benefit and surrender value now?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "63,330"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_wl_db_minus_sv"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Why is Mum's MediSave limit only 600 when Dad's is 900?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "600"
+            ],
+            [
+              "900"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_awl_41_70",
+            "ms_awl_71"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Why is Mum's private hospital estimate lower than Dad's?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "55%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_private"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C12",
+      "title": "Mum day surgery then switch to Dad",
+      "tags": [
+        "switch-person",
+        "correction"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mum is doing cataract day surgery at a private clinic hospital, about S$8,000",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,530"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_ds_8k"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Why only 1.5k?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "65%"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_pr_ds",
+            "ipb_ded_A"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "MediSave for day surgery limit?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "300"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ms_ds"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Actually it's Dad having the surgery, not Mum",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "No pro-ration",
+              "as charged"
+            ]
+          ],
+          "forbidden": [
+            "1,530"
+          ],
+          "fact_refs": [
+            "ipa_noproration",
+            "ipa_ded_A"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "So how much for Dad with 8k?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "4,050"
+            ]
+          ],
+          "forbidden": [
+            "1,530"
+          ],
+          "fact_refs": [
+            "dv_teo_8k",
+            "ipa_ded_A",
+            "ipa_coins"
+          ],
+          "note": "8,000 - 3,500 = 4,500 less 10% = 4,050."
+        },
+        {
+          "turn": 6,
+          "user": "Pre-surgery consults 2 months before ok?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "180"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_pre"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Follow-up eye drops for 6 months?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "365"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_post"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Do we need to tell the bank since his policy is assigned?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Straits Harbour Bank"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_payable"
+          ],
+          "note": "Assignment covers the Banyan whole life only, not the Shield plan."
+        }
+      ]
+    },
+    {
+      "id": "H5-C13",
+      "title": "Renewal and date reasoning",
+      "tags": [
+        "date-reasoning"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "When do my parents' Shield plans renew?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "15 Feb",
+              "14 Feb 2027",
+              "14 Feb 2027",
+              "14 February 2027",
+              "14 February 2027",
+              "February 14, 2027",
+              "Feb 14, 2027",
+              "2027-02-14",
+              "14/2/2027",
+              "14/02/2027",
+              "2027年2月14日"
+            ],
+            [
+              "01 Apr",
+              "1 Apr",
+              "31 Mar 2027",
+              "31 Mar 2027",
+              "31 March 2027",
+              "31 March 2027",
+              "March 31, 2027",
+              "Mar 31, 2027",
+              "2027-03-31",
+              "31/3/2027",
+              "31/03/2027",
+              "2027年3月31日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_year",
+            "ipb_year"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "Which comes first?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Dad",
+              "Teo",
+              "15 Feb",
+              "Plan A"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_year"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "How old will Mum be at her next renewal, for MediSave purposes?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "71"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_anb_2027"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "When did Mum join CareShield?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "01 Oct 2021",
+              "1 Oct 2021",
+              "1 October 2021",
+              "01 October 2021",
+              "October 1, 2021",
+              "Oct 1, 2021",
+              "2021-10-01",
+              "1/10/2021",
+              "01/10/2021",
+              "2021年10月1日"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "cs_joined"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "When did the whole life start?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "01 Aug 1998",
+              "1 Aug 1998",
+              "1 August 1998",
+              "01 August 1998",
+              "August 1, 1998",
+              "Aug 1, 1998",
+              "1998-08-01",
+              "1/8/1998",
+              "01/08/1998",
+              "1998年8月1日",
+              "1998"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_start"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Last premium paid when?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "01 Aug 2017",
+              "1 Aug 2017",
+              "1 August 2017",
+              "01 August 2017",
+              "August 1, 2017",
+              "Aug 1, 2017",
+              "2017-08-01",
+              "1/8/2017",
+              "01/08/2017",
+              "2017年8月1日",
+              "2017"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_last_premium"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "How old are they now?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "73"
+            ],
+            [
+              "69"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_age",
+            "dv_lau_age"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "When does Dad hit the over-80 deductible?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "2034"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_81_date"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H5-C14",
+      "title": "Funeral claim flow",
+      "tags": [
+        "claim",
+        "funeral",
+        "chinese-doc"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Mum passed away yesterday. What do we need to do for her insurance?",
+          "behaviour": "claim_start",
+          "expected": [
+            [
+              "Final Farewell",
+              "BM-FF-5521046",
+              "5,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_advance",
+            "ff_policy"
+          ]
+        },
+        {
+          "turn": 2,
+          "user": "How fast is the funeral money?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "3"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_advance_days",
+            "ff_advance"
+          ]
+        },
+        {
+          "turn": 3,
+          "user": "Who receives it?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Mei Ling",
+              "张美玲"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_nominee"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Total payable?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "15,000"
+            ]
+          ],
+          "forbidden": [
+            "20,000 in total"
+          ],
+          "fact_refs": [
+            "ff_db",
+            "ff_advance_deducted"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Balance after the advance?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "10,000"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_ff_balance_after_advance"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "What about her Shield plan and CareShield?",
+          "behaviour": "not_covered",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": [],
+          "note": "No death benefit under those; app should not invent one."
+        },
+        {
+          "turn": 7,
+          "user": "Documents needed?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "死亡证明",
+              "death certificate"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_advance_days"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Does Dad's whole life pay anything because Mum died?",
+          "behaviour": "not_covered",
+          "expected": [
+            [
+              "Teo Boon Huat",
+              "Heritage Whole Life",
+              "Banyan"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_policy"
+          ],
+          "note": "Dad is the life assured; nothing payable on Mum's death."
+        }
+      ]
+    },
+    {
+      "id": "H5-C15",
+      "title": "Long mixed session",
+      "tags": [
+        "long",
+        "correction",
+        "persona"
+      ],
+      "turns": [
+        {
+          "turn": 1,
+          "user": "Hi, I'm Mei Ling, their daughter.",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 2,
+          "user": "What's my insurance?",
+          "behaviour": "not_uploaded",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 3,
+          "user": "Ok, my parents' then. Dad first.",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Plan A"
+            ],
+            [
+              "Heritage Whole Life",
+              "Banyan"
+            ],
+            [
+              "ElderShield"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipa_plan",
+            "wl_policy",
+            "es_payout"
+          ]
+        },
+        {
+          "turn": 4,
+          "user": "Mum?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Plan B"
+            ],
+            [
+              "CareShield"
+            ],
+            [
+              "Final Farewell",
+              "身后事保障计划"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ipb_plan",
+            "cs_payout",
+            "ff_policy"
+          ]
+        },
+        {
+          "turn": 5,
+          "user": "Am I nominee on anything?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "Final Farewell",
+              "身后事保障计划",
+              "BM-FF-5521046"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "ff_nominee",
+            "ff_policy"
+          ]
+        },
+        {
+          "turn": 6,
+          "user": "Mum private hospital S$20k, first claim, payout?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "6,750"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_private_20k"
+          ]
+        },
+        {
+          "turn": 7,
+          "user": "Dad same?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "14,850"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_private_20k"
+          ]
+        },
+        {
+          "turn": 8,
+          "user": "Dad's whole life SV now?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "76,320"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "wl_sv_now"
+          ]
+        },
+        {
+          "turn": 9,
+          "user": "Can I surrender it on his behalf?",
+          "behaviour": "answer",
+          "expected": [
+            [
+              "consent"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "as_consent"
+          ]
+        },
+        {
+          "turn": 10,
+          "user": "Should we?",
+          "behaviour": "advice_decline",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        },
+        {
+          "turn": 11,
+          "user": "Dad's long-term care if 3 ADLs?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "1,600"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_teo_3adl"
+          ]
+        },
+        {
+          "turn": 12,
+          "user": "Sorry I meant Mum",
+          "behaviour": "correction",
+          "expected": [
+            [
+              "1,490"
+            ]
+          ],
+          "forbidden": [
+            "1,600"
+          ],
+          "fact_refs": [
+            "dv_lau_3adl"
+          ]
+        },
+        {
+          "turn": 13,
+          "user": "MediSave for Mum's Shield next year?",
+          "behaviour": "compute",
+          "expected": [
+            [
+              "900"
+            ]
+          ],
+          "forbidden": [],
+          "fact_refs": [
+            "dv_lau_awl_2027"
+          ]
+        },
+        {
+          "turn": 14,
+          "user": "Thanks!",
+          "behaviour": "out_of_scope",
+          "expected": [],
+          "forbidden": [],
+          "fact_refs": []
+        }
+      ]
+    }
+  ]
+}
