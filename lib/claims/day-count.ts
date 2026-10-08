@@ -54,6 +54,10 @@ export type DayCountInput = {
   /** Waiting/deferred days before EITHER benefit starts paying, evidenced
    * from policy wording. Zero is a valid, explicit answer. */
   waitingDays: number | null;
+  /** Additive: which calendar a calendar_day count uses. "utc" (the default, unchanged) counts UTC calendar dates;
+   * "recorded_offset" counts the calendar dates at the offset each timestamp was recorded in (the hospital's local
+   * dates -- a Singapore admission at 01:00 +08:00 is on that local date, not the previous UTC date). */
+  calendarBasis?: "utc" | "recorded_offset";
 };
 
 export type DayCountBlockReasonCode =
@@ -97,6 +101,19 @@ function parseIsoWithOffset(value: string): Date | null {
 function utcCalendarDate(d: Date): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
+/** Minutes east of UTC an ISO timestamp was recorded at ("Z" = 0). */
+export function recordedOffsetMinutes(iso: string): number | null {
+  const m = OFFSET_RE.exec(iso);
+  if (!m) return null;
+  if (m[1] === "Z") return 0;
+  const t = m[1].replace(":", "");
+  const sign = t[0] === "-" ? -1 : 1;
+  return sign * (Number(t.slice(1, 3)) * 60 + Number(t.slice(3, 5)));
+}
+/** The calendar date (as a UTC-midnight ms value) of an instant at a fixed offset. */
+function calendarDateAt(ms: number, offsetMinutes: number): number {
+  return utcCalendarDate(new Date(ms + offsetMinutes * 60_000));
+}
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -104,10 +121,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * edge inclusion is applied once, to the OUTER admission/discharge range,
  * by the caller (computeHospitalDays), not re-applied per ICU sub-period,
  * so a multi-period stay never double-counts a shared boundary night. */
-function rawNights(rule: DayCountRule, startMs: number, endMs: number): number {
+function rawNights(rule: DayCountRule, startMs: number, endMs: number, offsets: [number, number] | null = null): number {
   if (rule === "completed_24h_period") {
     return Math.floor((endMs - startMs) / MS_PER_DAY);
   }
+  if (offsets) return Math.round((calendarDateAt(endMs, offsets[1]) - calendarDateAt(startMs, offsets[0])) / MS_PER_DAY);
   // calendar_day: count distinct UTC calendar dates spanned, minus one
   // (a same-day admission and discharge spans 1 calendar date -> 0 nights
   // unless the rule's edge inclusion says otherwise).
@@ -137,7 +155,9 @@ export function computeHospitalDays(input: DayCountInput): DayCountResult {
   // has no edge-inclusion concept at all (a period is a period), so
   // edgeInclusion is validated as present above but only ever consulted
   // for calendar_day.
-  let grossNights = rawNights(input.rule, admission.getTime(), discharge.getTime());
+  const local = input.calendarBasis === "recorded_offset";
+  const offsetsOf = (a: string, b: string): [number, number] | null => (local ? [recordedOffsetMinutes(a) ?? 0, recordedOffsetMinutes(b) ?? 0] : null);
+  let grossNights = rawNights(input.rule, admission.getTime(), discharge.getTime(), offsetsOf(input.admissionISO, input.dischargeISO));
   if (input.rule === "calendar_day") {
     const bothIncluded = input.edgeInclusion.admissionDayIncluded && input.edgeInclusion.dischargeDayIncluded;
     const neitherIncluded = !input.edgeInclusion.admissionDayIncluded && !input.edgeInclusion.dischargeDayIncluded;
@@ -157,7 +177,7 @@ export function computeHospitalDays(input: DayCountInput): DayCountResult {
       if (icuEnd.getTime() < icuStart.getTime() || icuStart.getTime() < admission.getTime() || icuEnd.getTime() > discharge.getTime()) {
         return { status: "blocked", reasonCode: "INVALID_ICU_PERIOD", message: "An ICU period falls outside the reported admission/discharge range." };
       }
-      icuNights += Math.max(0, rawNights(input.rule, icuStart.getTime(), icuEnd.getTime()));
+      icuNights += Math.max(0, rawNights(input.rule, icuStart.getTime(), icuEnd.getTime(), offsetsOf(period.admissionISO, period.dischargeISO)));
     }
   }
 
@@ -170,4 +190,49 @@ export function computeHospitalDays(input: DayCountInput): DayCountResult {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Additive: the day-count rule a policy's OWN wording states, and the payable-day count under it.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** How a per-day benefit counts its days, as policy wording states it:
+ *  first_full_day         "payable from the first full day of admission" -- whole local calendar days inside the stay;
+ *  completed_24h          "for each complete period of 24 hours" -- completed 24-hour periods from admission;
+ *  per_night              "for each night" -- local midnights spent in hospital;
+ *  calendar_day_inclusive "each day or part of a day" -- every local calendar date of the stay, both ends included. */
+export type PolicyDayRule = "first_full_day" | "completed_24h" | "per_night" | "calendar_day_inclusive";
+
+const RULE_WORDING: [PolicyDayRule, RegExp][] = [
+  ["first_full_day", /\bfirst\s+(?:full|complete|whole)\s+(?:calendar\s+)?day\b|\b(?:each|every|per)\s+(?:full|complete|whole)\s+(?:calendar\s+)?day\b/i],
+  ["completed_24h", /\b(?:each|every|per)\s+(?:complete(?:d)?\s+|full\s+|continuous\s+)?(?:period\s+of\s+)?(?:24|twenty[- ]four)[- ]hours?\b|\bcomplete(?:d)?\s+(?:period\s+of\s+)?(?:24|twenty[- ]four)[- ]hours?\b/i],
+  ["per_night", /\b(?:each|every|per)\s+night\b|\bnights?\s+(?:spent|stayed)\s+in\s+hospital\b|\bper\s+overnight\b/i],
+  ["calendar_day_inclusive", /\b(?:each|every|per)\s+(?:calendar\s+)?day\s+or\s+part\s+(?:of\s+a\s+day|thereof)\b|\bpart\s+of\s+a\s+day\s+(?:counts|is\s+counted)\s+as\s+a\s+(?:full\s+)?day\b/i],
+];
+/** The day-count rule `text` states, with the matched words; null when it states none (or states two different ones). */
+export function dayRuleFromWording(text: string): { rule: PolicyDayRule; words: string } | null {
+  const found = RULE_WORDING.map(([rule, re]) => { const m = re.exec(text ?? ""); return m ? { rule, words: m[0] } : null; }).filter((x): x is { rule: PolicyDayRule; words: string } => !!x);
+  const rules = new Set(found.map((f) => f.rule));
+  return rules.size === 1 ? found[0] : null;
+}
+/** Whether a rule needs the admission and discharge TIMES (not only the dates). */
+export function dayRuleNeedsTimes(rule: PolicyDayRule): boolean {
+  return rule === "first_full_day" || rule === "completed_24h";
+}
+const LOCAL_MIDNIGHT = /T00:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+/** Payable days under a policy's rule, through computeHospitalDays (waiting days are applied by the hospital-cash
+ * calculator's own offset, so 0 here). Calendar dates are the hospital's local dates (the recorded offset). */
+export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null): DayCountResult {
+  const map: Record<PolicyDayRule, { rule: DayCountRule; edge: DayCountEdgeInclusion }> = {
+    first_full_day: { rule: "calendar_day", edge: { admissionDayIncluded: false, dischargeDayIncluded: false } },
+    completed_24h: { rule: "completed_24h_period", edge: { admissionDayIncluded: false, dischargeDayIncluded: false } },
+    per_night: { rule: "calendar_day", edge: { admissionDayIncluded: true, dischargeDayIncluded: false } },
+    calendar_day_inclusive: { rule: "calendar_day", edge: { admissionDayIncluded: true, dischargeDayIncluded: true } },
+  };
+  const m = map[rule];
+  const r = computeHospitalDays({ admissionISO, dischargeISO, rule: m.rule, edgeInclusion: m.edge, icuPeriods: [], icuMode: null, waitingDays: 0, calendarBasis: "recorded_offset" });
+  if (r.status !== "calculated" || rule !== "first_full_day") return r;
+  // A stay that begins exactly at local midnight makes the admission day itself a full day.
+  if (admissionISO && LOCAL_MIDNIGHT.test(admissionISO)) return { ...r, grossNights: r.grossNights + 1, wardNights: r.wardNights + 1 };
+  return r;
 }

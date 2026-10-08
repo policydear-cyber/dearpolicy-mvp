@@ -243,6 +243,66 @@ export type ComputationRecord = {
   scope?:"person"|"household";
 };
 
+/** Agent K (calculation contract): a benefit calculation the save-time gate re-runs step by step
+ * (lib/chat/answer-verification.ts). Produced only by lib/rag2/calc through the deterministic claim calculators. */
+export type CalcResultKind = "printed_limit"|"conditional_illustration"|"indicative_estimate"|"unresolved";
+/** One input of a calculation. Document figures carry their own binding (row + column + person + version); the
+ * household's own figures carry their words, verbatim, and are never presented as document facts. */
+export type CalcOperand =
+  | { id:string; source:"document"; role:"rate"|"limit"|"cap"|"day_cap"|"deductible"|"co_insurance"|"co_insurance_cap"|"sum_insured"|"percent";
+      label:string; unit:"money"|"percent"|"count"; value:number; currency:string|null; period:string|null;
+      row:string; column:string|null; binding:FigureBinding }
+  | { id:string; source:"household"; role:"bill"|"admission"|"discharge"|"days"|"amount"|"count"|"other";
+      label:string; unit:"money"|"count"|"datetime"|"date"; value:number|string; currency:string|null;
+      /** The household's own words, quoted verbatim from their messages. */
+      attribution:string }
+  | { id:string; source:"assumption"; role:"admission"|"discharge"|"days"|"bill"|"amount"|"count"|"other";
+      label:string; unit:"money"|"count"|"datetime"|"date"; value:number|string; currency:string|null;
+      /** A what-if the household asked about, in their words ("if he stays 5 nights"). */
+      attribution:string };
+/** One eligibility condition of the benefit, with what settles it. */
+export type CalcCondition = {
+  id:string; kind:"day_count_rule"|"waiting_period"|"minimum_stay"|"day_cap"|"exclusion"|"definition"|"eligibility"|"deduction_order"|"currency";
+  text:string; status:"established"|"unresolved"|"not_applicable";
+  /** How it is settled: "document" (a passage of the version used), "household" (their words), "derived" (worked out
+   * from the operands, e.g. a stay's length), "absent" (the stored document prints no such condition). */
+  basis:"document"|"household"|"derived"|"absent"|"none";
+  passage?:{ policyId:string; pageStart:number; pageEnd:number; text:string }|null;
+  householdWords?:string|null;
+  /** What would settle it, in the household's terms ("Jun Hao's admission and discharge dates and times"). */
+  needs?:string|null;
+};
+/** One recomputable step. Inputs name operand ids or earlier step ids; values are integer minor units for money,
+ * whole numbers for counts, ppm for percentages. */
+export type CalcStep =
+  | { id:string; op:"day_count"; rule:"first_full_day"|"completed_24h"|"per_night"|"calendar_day_inclusive"; inputs:[string,string]; out:number }
+  | { id:string; op:"days_after_waiting"; inputs:[string]; waitingDays:number; out:number }
+  | { id:string; op:"min_count"; inputs:string[]; out:number }
+  | { id:string; op:"multiply"; inputs:[string,string]; out:number }
+  | { id:string; op:"min"; inputs:string[]; out:number }
+  | { id:string; op:"deductible"; inputs:[string,string]; out:number }
+  | { id:string; op:"co_insurance"; inputs:[string,string]|[string,string,string]; out:number }
+  | { id:string; op:"percent_of"; inputs:[string,string]; out:number };
+export type CalculationRecord = {
+  /** The exact sentence that states the result. */
+  sentence:string;
+  id:string;
+  calculator:"hospital_cash"|"bill_reimbursement"|"lump_sum";
+  kind:"conditional_illustration"|"indicative_estimate";
+  subjectId:string; policyId:string; benefit:string; documentHash:string|null;
+  operands:CalcOperand[]; steps:CalcStep[];
+  result:{ value:number; currency:string };
+  currency:string;
+  rounding:{ mode:"half_up"|"half_even"|"down"|"up"; precision:number; source:"policy"|"default" };
+  conditions:CalcCondition[];
+  /** Evidence the existing claim workflow will still need (reviewed bill, discharge summary...): kept, never waived. */
+  evidenceRequirements:string[];
+  /** conditional_illustration only: the what-if, in the household's words. */
+  assumption?:string|null;
+  /** Shown instead of the sentence if the record fails verification: the specific unresolved requirement (no figures). */
+  unresolvedText:string;
+};
+
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -299,4 +359,6 @@ export type ChatAnswer = {
   figureBindings?:BoundFigure[];
   /** Gate R17: explicit records of every computed figure the answer's text states. */
   computations?:ComputationRecord[];
+  /** Agent K: verified benefit calculations (illustrations / indicative estimates), one per stated result. */
+  calculations?:CalculationRecord[];
 };
