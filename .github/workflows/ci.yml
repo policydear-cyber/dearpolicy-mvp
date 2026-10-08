@@ -167,7 +167,7 @@ jobs:
       - name: Round 6 chat quality (250+ messages, no garbled, leaky, repetitive or ungrounded text; output guard never needed)
         run: npm run r6:chat-quality-test
 
-      - name: Round 7 answers (second household: 300+ messages, 10 long conversations, bilingual and lapsed documents)
+      - name: "Round 7 answers (second household: 300+ messages, 10 long conversations, bilingual and lapsed documents)"
         run: npm run r7:answers-test
       - name: Round 7 claim conversations (51 full interviews and 7 what-ifs, one question per turn, "not sure" accepted and never asked again, fitting benefits only, employer group cover shown separately)
         run: npm run r7:claims-test
