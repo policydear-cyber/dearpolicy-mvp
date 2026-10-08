@@ -34,7 +34,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { BoundFigure, CalculationRecord, CalcOperand, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
-import { dayRuleFromWording } from "@/lib/claims/day-count";
+import { dayEdgeExceptionsFromWording, dayRuleFromWording } from "@/lib/claims/day-count";
 import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
@@ -672,6 +672,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       if (!ruleCond || ruleCond.status !== "established" || ruleCond.basis !== "document" || !ruleCond.passage) return "the day count uses a rule the cited wording does not establish";
       const said = dayRuleFromWording(ruleCond.passage.text);
       if (!said || said.rule !== st.rule) return "the day count uses another rule than the cited wording states";
+      // Integration (D30): every admission / discharge-day exception applied must be stated by an established passage.
+      const stated = r.conditions.filter((c) => c.kind === "day_count_rule" && c.status === "established" && c.basis === "document" && c.passage).flatMap((c) => dayEdgeExceptionsFromWording(c.passage!.text));
+      for (const e of st.edges ?? []) if (!stated.some((x) => x.edge === e.edge && x.when === e.when && x.minutes === e.minutes)) return `the day count applies a ${e.edge}-day exception the cited wording does not state`;
     }
     if (st.op === "days_after_waiting") {
       const w = r.conditions.find((c) => c.kind === "waiting_period" && c.status === "established" && c.basis === "document");

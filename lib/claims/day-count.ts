@@ -215,6 +215,39 @@ export function dayRuleFromWording(text: string): { rule: PolicyDayRule; words: 
   const rules = new Set(found.map((f) => f.rule));
   return rules.size === 1 ? found[0] : null;
 }
+/** Integration (D30): an exception the wording states for the admission or discharge day of a calendar-day rule, e.g.
+ * "The day of admission counts as a full day only if admission is before 12:00 noon" -> admission, before, 720 min.
+ * `minutes` is the local time of day (the hospital's recorded offset). */
+export type DayEdgeException = { edge: "admission" | "discharge"; when: "before" | "after"; minutes: number };
+const TIME_RE = String.raw`(?:(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?|noon|midday|hrs|hours)?|(noon|midday|midnight))`;
+const EDGE_DAY = /\b(?:(?:the\s+)?day\s+of\s+(admission|discharge)|(admission|discharge)\s+day)\b/i;
+const FULL_DAY = /\b(?:counts?|counted|is\s+treated|treated|is\s+regarded|regarded|is\s+considered|considered|will\s+count)\s+as\s+(?:a\s+)?(?:full|whole|complete)\s+day\b/i;
+const WHEN_TIME = new RegExp(String.raw`\b(before|after|by|earlier\s+than|later\s+than)\s+` + TIME_RE, "i");
+function minutesOf(m: RegExpExecArray, at: number): number | null {
+  const word = (m[at + 3] ?? m[at + 2] ?? "").toLowerCase().replace(/\./g, "");
+  if (m[at + 3]) return m[at + 3].toLowerCase() === "midnight" ? 0 : 720;
+  if (m[at] == null) return null;
+  let h = Number(m[at]); const min = m[at + 1] ? Number(m[at + 1]) : 0;
+  if (h > 24 || min > 59) return null;
+  if (word === "noon" || word === "midday") { if (h !== 12) return null; }
+  else if (word === "pm" && h < 12) h += 12;
+  else if (word === "am" && h === 12) h = 0;
+  return h * 60 + min;
+}
+/** The admission / discharge day exceptions a passage states (each sentence read on its own); none when it states none. */
+export function dayEdgeExceptionsFromWording(text: string): DayEdgeException[] {
+  const out: DayEdgeException[] = [];
+  for (const sentence of (text ?? "").split(/(?<=\.)\s+|\n+/)) {
+    const d = EDGE_DAY.exec(sentence), full = FULL_DAY.test(sentence), w = WHEN_TIME.exec(sentence);
+    if (!d || !full || !w) continue;
+    if (/\bnot\s+(?:be\s+)?(?:count|counted|treated|regarded|considered)\b/i.test(sentence)) continue;
+    const minutes = minutesOf(w, 2); if (minutes == null) continue;
+    const word = w[1].toLowerCase();
+    out.push({ edge: (d[1] ?? d[2]).toLowerCase() as "admission" | "discharge", when: word === "after" || word.startsWith("later") ? "after" : "before", minutes });
+  }
+  return out;
+}
+const localMinutes = (iso: string | null) => { const m = /T(\d{2}):(\d{2})/.exec(iso ?? ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 /** Whether a rule needs the admission and discharge TIMES (not only the dates). */
 export function dayRuleNeedsTimes(rule: PolicyDayRule): boolean {
   return rule === "first_full_day" || rule === "completed_24h";
@@ -222,7 +255,24 @@ export function dayRuleNeedsTimes(rule: PolicyDayRule): boolean {
 const LOCAL_MIDNIGHT = /T00:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 /** Payable days under a policy's rule, through computeHospitalDays (waiting days are applied by the hospital-cash
  * calculator's own offset, so 0 here). Calendar dates are the hospital's local dates (the recorded offset). */
-export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null): DayCountResult {
+export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null, edges: DayEdgeException[] = []): DayCountResult {
+  const r0 = payableDaysUnderRuleBase(rule, admissionISO, dischargeISO);
+  if (r0.status !== "calculated" || rule !== "first_full_day" || !edges.length) return r0;
+  // Stated exceptions for the admission / discharge day (first-full-day wording only, where those days are otherwise
+  // never counted). A same-day stay has no separate edge days.
+  const sameDay = (admissionISO ?? "").slice(0, 10) === (dischargeISO ?? "").slice(0, 10);
+  if (sameDay) return r0;
+  let extra = 0;
+  const midnight = !!admissionISO && LOCAL_MIDNIGHT.test(admissionISO);
+  for (const e of edges) {
+    const t = localMinutes(e.edge === "admission" ? admissionISO : dischargeISO);
+    if (t == null) return { status: "blocked", reasonCode: "MISSING_EDGE_INCLUSION", message: `the ${e.edge} time is needed: the wording counts the day of ${e.edge} as a full day only ${e.when} a stated time` };
+    if (e.edge === "admission" && midnight) continue; // already a full day
+    if (e.when === "before" ? t < e.minutes : t > e.minutes) extra++;
+  }
+  return extra ? { ...r0, grossNights: r0.grossNights + extra, wardNights: r0.wardNights + extra } : r0;
+}
+function payableDaysUnderRuleBase(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null): DayCountResult {
   const map: Record<PolicyDayRule, { rule: DayCountRule; edge: DayCountEdgeInclusion }> = {
     first_full_day: { rule: "calendar_day", edge: { admissionDayIncluded: false, dischargeDayIncluded: false } },
     completed_24h: { rule: "completed_24h_period", edge: { admissionDayIncluded: false, dischargeDayIncluded: false } },

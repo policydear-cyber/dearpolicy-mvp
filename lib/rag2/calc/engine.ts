@@ -160,21 +160,24 @@ export function hospitalCash(a: {
     else return finish({ kind: "not_payable", calculator: "hospital_cash", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, conditions: conds, requirements: [], amount: null, currency: r.currency, record: null, steps: [], reason: `the stay lasted ${Math.floor(hours)} hours and the wording requires at least ${t.minimumStayHours!.value}`, evidence: [r.evidence, t.minimumStayHours!.evidence], evidenceRequirements: [], who: a.who, product });
   }
   for (const c of conds) if (c.status === "unresolved" && c.needs && c.kind !== "day_count_rule" && c.kind !== "minimum_stay") reqs.push(c.needs);
-  const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : t.dayCap ? [t.dayCap.evidence] : [])];
+  const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : t.dayCap ? [t.dayCap.evidence] : [])];
   const evidenceRequirements = [`the hospital’s discharge summary or bill showing ${a.who}’s admission and discharge dates and times`, `the ${product} claim form`];
   const base = { calculator: "hospital_cash" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
   const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds));
   if (unresolvedNow) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
 
   // Payable days under the wording's rule, then the hospital-cash calculator.
-  const days = payableDaysUnderRule(rule!, String(a.admission!.value), String(a.discharge!.value));
+  // Integration (D30): the wording's own exceptions for the admission / discharge day (first-full-day rule only).
+  const edges = rule === "first_full_day" ? t.dayEdges : [];
+  edges.forEach((d, i) => conds.push({ id: "c_day_edge_" + (i + 1), kind: "day_count_rule", text: `The day of ${d.value.edge} is counted as the wording states: “${d.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(d.evidence) }));
+  const days = payableDaysUnderRule(rule!, String(a.admission!.value), String(a.discharge!.value), edges.map((d) => d.value));
   if (days.status !== "calculated") return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [`${a.who}’s admission and discharge dates and times (${days.message})`], amount: null, currency: r.currency, record: null, steps: [] });
   const waiting = t.waitingDays?.value ?? 0;
   const hc = calculateHospitalCash({ dailyRate: r.cents / 100, currency: r.currency, hospitalStayOngoing: false, hospitalNights: days.grossNights, offsetDays: waiting, maximumDays: capOp ? Number(capOp.value) : days.grossNights,
     ownership: { contractId: t.policyId, label: product }, ruleEvidence: { policyId: t.policyId, pageStart: r.evidence.page.start, pageEnd: r.evidence.page.end, label: a.benefit }, ownershipEvidence: { policyId: t.policyId, pageStart: r.evidence.page.start, pageEnd: r.evidence.page.end, label: "insured person's column" }, unresolvedConditions: [] });
   if (hc.status === "blocked") return { refused: "the hospital cash calculator blocked: " + hc.message };
   const ops: CalcOperand[] = [rateOp, householdOperand("admission", "admission", "admission", ISO_DT.test(String(a.admission!.value)) ? "datetime" : "date", a.admission!), householdOperand("discharge", "discharge", "discharge", ISO_DT.test(String(a.discharge!.value)) ? "datetime" : "date", a.discharge!)];
-  const steps: CalcStep[] = [{ id: "s_days", op: "day_count", rule: rule!, inputs: ["admission", "discharge"], out: days.grossNights }];
+  const steps: CalcStep[] = [{ id: "s_days", op: "day_count", rule: rule!, inputs: ["admission", "discharge"], out: days.grossNights, ...(edges.length ? { edges: edges.map((d) => d.value) } : {}) }];
   let last = "s_days";
   if (waiting > 0) { steps.push({ id: "s_after_wait", op: "days_after_waiting", inputs: [last], waitingDays: waiting, out: Math.max(0, days.grossNights - waiting) }); last = "s_after_wait"; }
   if (capOp) { ops.push(capOp); steps.push({ id: "s_capped", op: "min_count", inputs: [last, capOp.id], out: hc.payableDays }); last = "s_capped"; }

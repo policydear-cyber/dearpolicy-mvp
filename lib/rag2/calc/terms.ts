@@ -4,7 +4,7 @@
  * the verbatim passage (an EvidenceRef on the stored page of the version read). Read from the household's readable
  * pages only (lib/rag2/store.ts). Nothing is defaulted: what the wording does not state is reported as not stated.
  */
-import { dayRuleFromWording, type PolicyDayRule } from "@/lib/claims/day-count";
+import { dayEdgeExceptionsFromWording, dayRuleFromWording, type DayEdgeException, type PolicyDayRule } from "@/lib/claims/day-count";
 import { evidenceFor, type EvidenceRef } from "../evidence";
 import { loadDocs, pageMap } from "../store";
 
@@ -25,6 +25,8 @@ export type BenefitTerms = {
   limitOrder: Term<"limit_first" | "deductible_first"> | null;
   /** Two passages stating opposite orders (never resolved by picking one). */
   limitOrderConflict: EvidenceRef[];
+  /** Integration (D30): admission / discharge day exceptions of the day-count rule, each with its passage. */
+  dayEdges: Term<DayEdgeException>[];
 };
 
 const GENERIC = new Set(["benefit", "benefits", "limit", "amount", "cover", "payable", "maximum", "per", "day", "days", "each", "the", "and", "for", "policy", "year", "plan", "insured", "under", "with", "from", "sum"]);
@@ -68,10 +70,16 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
   if (!doc) return null;
   const pages = await pageMap(args.accountId, args.policyId);
   const want = [...new Set(words(args.benefit).map(stem))];
-  const terms: BenefitTerms = { policyId: doc.id, documentHash: doc.fileHash, productName: doc.productName, dayRule: null, dayRuleConflict: [], waitingDays: null, minimumStayHours: null, dayCap: null, exclusions: [], deductionOrder: null, limitOrder: null, limitOrderConflict: [] };
+  const terms: BenefitTerms = { policyId: doc.id, documentHash: doc.fileHash, productName: doc.productName, dayRule: null, dayRuleConflict: [], waitingDays: null, minimumStayHours: null, dayCap: null, exclusions: [], deductionOrder: null, limitOrder: null, limitOrderConflict: [], dayEdges: [] };
   const ev = (page: number, text: string, start: number) => evidenceFor({ policyId: doc.id, documentHash: doc.fileHash, page, pageText: pages.get(page) ?? "", passage: text, near: start, subjectId: args.subjectId });
   const rules: Term<PolicyDayRule>[] = [];
   const limitOrders: Term<"limit_first" | "deductible_first">[] = [];
+  const noteEdges = (page: number, s: { text: string; start: number }) => {
+    for (const x of dayEdgeExceptionsFromWording(s.text)) {
+      if (terms.dayEdges.some((d) => d.value.edge === x.edge)) continue;
+      const e = ev(page, s.text, s.start); if (e) terms.dayEdges.push({ value: x, words: s.text, evidence: e });
+    }
+  };
   const noteLimitOrder = (page: number, s: { text: string; start: number }) => {
     const lf = LIMIT_FIRST.test(s.text), df = DEDUCTIBLE_FIRST_OF_LIMIT.test(s.text);
     if (lf === df) return; // neither, or both in one sentence (ambiguous): not a statement of the order
@@ -87,7 +95,7 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
         const d = DED_FIRST.test(s.text) ? "deductible_first" : CO_FIRST.test(s.text) ? "co_insurance_first" : null;
         if (d && !terms.deductionOrder) { const e = ev(page, s.text, s.start); if (e) terms.deductionOrder = { value: d, words: s.text, evidence: e }; }
         // A plan-level statement of the order of the excess and the limit counts only when it names no other benefit.
-        if (!/\bbenefit\b|\breimbursement\b|\bcash\b|\bincome\b/i.test(s.text)) noteLimitOrder(page, s);
+        if (!/\bbenefit\b|\breimbursement\b|\bcash\b|\bincome\b/i.test(s.text)) { noteLimitOrder(page, s); noteEdges(page, s); }
         continue;
       }
       const e = ev(page, s.text, s.start);
@@ -104,6 +112,7 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
       const d = DED_FIRST.test(s.text) ? "deductible_first" : CO_FIRST.test(s.text) ? "co_insurance_first" : null;
       if (d && !terms.deductionOrder) terms.deductionOrder = { value: d, words: s.text, evidence: e };
       noteLimitOrder(page, s);
+      noteEdges(page, s);
     }
   }
   const orders = new Set(limitOrders.map((o) => o.value));

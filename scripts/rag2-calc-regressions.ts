@@ -109,6 +109,17 @@ async function main() {
   });
 
   // --------------------------------------------------------------------------------------------- H: hospital cash
+  await check("D3 first-full-day exceptions stated in the wording (admission before 12:00 noon counts as a full day) are honoured; none stated -> never assumed", () => {
+    const ff = "Daily hospital cash is payable for each day of inpatient confinement starting from the first full day of admission. The day of admission counts as a full day only if admission is before 12:00 noon. The day of discharge is not counted.";
+    assert.deepEqual(DC.dayEdgeExceptionsFromWording(ff), [{ edge: "admission", when: "before", minutes: 720 }]);
+    assert.deepEqual(DC.dayEdgeExceptionsFromWording("The day of discharge counts as a full day if discharge is after 3pm."), [{ edge: "discharge", when: "after", minutes: 900 }]);
+    assert.deepEqual(DC.dayEdgeExceptionsFromWording("The day of admission is not counted as a full day."), []);
+    const n = (a: string, b: string, e = DC.dayEdgeExceptionsFromWording(ff)) => { const r = DC.payableDaysUnderRule("first_full_day", a, b, e); return r.status === "calculated" ? r.grossNights : r.status; };
+    expectRow("morning admission 09:00 3 Oct -> 6 Oct 10:15: 3, 4, 5 Oct", 3, n("2026-10-03T09:00+08:00", "2026-10-06T10:15+08:00"));
+    expectRow("evening admission 21:40 3 Oct -> 6 Oct 10:15: 4, 5 Oct", 2, n("2026-10-03T21:40+08:00", "2026-10-06T10:15+08:00"));
+    expectRow("exactly 12:00 is not before noon", 2, n("2026-10-03T12:00+08:00", "2026-10-06T10:15+08:00"));
+    expectRow("no exception stated -> admission day never counted", 2, n("2026-10-03T09:00+08:00", "2026-10-06T10:15+08:00", []));
+  });
   await check("H1 complete-24-hour rule: 63 h stay -> 2 periods x S$120 = S$240 indicative estimate (record re-runs)", async () => {
     const ctx = ctxFor(); const v = await sel(ctx, "H24", "Daily hospital income", M.ana.id, "amount");
     const c = await calc(ctx, { calculator: "hospital_cash", purpose: "question", subject_id: M.ana.id, policy_id: doc("H24").id, benefit: "Daily hospital income", rate_value_id: v.valueId, admission: at("2026-03-01T22:00+08:00", "admitted on 1 March at 10pm"), discharge: at("2026-03-04T09:00+08:00", "discharged on 4 March at 9am") });
@@ -138,6 +149,19 @@ async function main() {
     assert.ok(!("refused" in c), JSON.stringify(c));
     expectRow("FFD settled: amount (2 full days)", 160, c.amount);
     assert.equal(c.conditions.find((x) => x.kind === "minimum_stay")?.status, "established");
+  });
+  await check("H10 first full day with the wording's noon exception: admitted 09:00 1 March, discharged 11:00 4 March -> 1, 2, 3 March x S$80 = S$240 (record re-runs, the gate keeps it; a tampered exception is rejected)", async () => {
+    const ctx = ctxFor(); const v = await sel(ctx, "FFD", "Hospital cash per day", M.ben.id, "amount");
+    const c = await calc(ctx, { calculator: "hospital_cash", purpose: "question", subject_id: M.ben.id, policy_id: doc("FFD").id, benefit: "Hospital cash per day", rate_value_id: v.valueId, admission: at("2026-03-01T09:00+08:00", "admitted 1 March 9am"), discharge: at("2026-03-04T11:00+08:00", "discharged 4 March 11am"), settled: [{ condition_id: "c_excl_1", status: "not_applicable", words: "not day surgery" }] });
+    assert.ok(!("refused" in c), JSON.stringify(c));
+    expectRow("noon exception applied", "indicative_estimate 240", `${c.kind} ${c.amount}`);
+    const text = "Indicative estimate: Ben's hospital cash under Kestrel DayCare Cash comes to S$240 for the full days of his stay.";
+    const user = "admitted 1 March 9am and discharged 4 March 11am; not day surgery";
+    const mk = (rec: Omit<import("@/types").CalculationRecord, "sentence">) => ({ mode: "answer", summary: text, details: [], claimItems: [], nextSteps: [], confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], calculations: [{ ...rec, sentence: text }] } as unknown as import("@/types").ChatAnswer);
+    expectRow("gate keeps the estimate", 0, (await verifyAnswerFigures(mk(c.record!), { accountId: ACCOUNT, userText: user })).length);
+    const bad = structuredClone(c.record!); (bad.steps[0] as { edges?: { minutes: number }[] }).edges![0].minutes = 900;
+    const p = await verifyAnswerFigures(mk(bad), { accountId: ACCOUNT, userText: user });
+    assert.ok(p.length && /exception the cited wording does not state|not the calculation|does not re-run|day count/.test(p[0].reason), JSON.stringify(p));
   });
   await check("H4 day cap hit exactly: 30 full days (cap 30) -> S$2,400; 31 full days -> still S$2,400", async () => {
     const ctx = ctxFor(); const v = await sel(ctx, "FFD", "Hospital cash per day", M.ben.id, "amount");

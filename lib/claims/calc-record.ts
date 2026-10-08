@@ -68,7 +68,7 @@ export function recomputeCalculation(r: Pick<CalculationRecord, "operands" | "st
       case "day_count": {
         const a = get(s.inputs[0], ["datetime", "date"]), b = get(s.inputs[1], ["datetime", "date"]);
         if (typeof a === "string") return { ok: false, error: a }; if (typeof b === "string") return { ok: false, error: b };
-        const d = payableDaysUnderRule(s.rule, a.s ?? null, b.s ?? null);
+        const d = payableDaysUnderRule(s.rule, a.s ?? null, b.s ?? null, Array.isArray(s.edges) ? s.edges : []);
         if (d.status !== "calculated") return { ok: false, error: `the day count cannot be worked out: ${d.message}` };
         out = { unit: "count", n: d.grossNights }; break;
       }
