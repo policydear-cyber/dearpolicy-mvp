@@ -81,11 +81,18 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   // ABOUT (the initial active subject), never who is typing.
   const selves = context.family.filter((p) => /^self$/i.test(p.relationship ?? ""));
   const speakerId = selves.length === 1 ? selves[0].id : null;
-  const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel() });
+  const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel(), personChoiceId: request.personChoiceId ?? null });
   const { state, reply, trace } = out;
   const answer = blank();
   const notes: string[] = [];
   for (const c of out.corrections) {
+    if (c.key === "person") {
+      // Agent F (S6a): who the claim is about was corrected -- say so, and say which estimate no longer applies and
+      // why (described by what it was worked out from, never by repeating its figure).
+      notes.push(`Updated: this is about ${show(c.to)}, not ${show(c.from)}.`);
+      if (c.withdrawn.length) notes.push(`The earlier ${c.withdrawn.length > 1 ? "estimates" : "estimate"} I worked out for ${show(c.from)}${c.about?.length ? ` from the ${c.about.map(words).join(" and ")}` : ""} no longer ${c.withdrawn.length > 1 ? "apply" : "applies"}, because ${c.withdrawn.length > 1 ? "they were" : "it was"} worked out for ${show(c.from)}'s policy, not ${show(c.to)}'s.`);
+      continue;
+    }
     notes.push(`Updated: ${words(c.key)} is now ${show(c.to)} (you said ${show(c.from)} at first).`);
     if (c.withdrawn.length) notes.push("The earlier estimate worked out from it no longer applies.");
   }
@@ -104,10 +111,13 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     const texts = c.sentences.map((s) => s.text);
     // A correction is said first (what changed, and what no longer applies), then the answer.
     const lead = notes.length ? [notes.join(" "), ...texts] : texts;
-    answer.summary = lead[0] ?? (c.dropped.length ? DROPPED_NOTE : FALLBACK_TEXT);
+    // Agent F (D24): what was left out is said specifically (a document no longer available, a payout or decision
+    // the insurer makes, a fact still missing), not as one generic note.
+    const leftOut = c.notes?.length ? c.notes : [DROPPED_NOTE];
+    answer.summary = lead[0] ?? (c.dropped.length ? leftOut.join(" ") : FALLBACK_TEXT);
     answer.details = lead.slice(1);
     if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;
-    if (c.dropped.length && texts.length) answer.details.push(DROPPED_NOTE);
+    if (c.dropped.length && texts.length) answer.details.push(...leftOut);
     answer.nextSteps = c.nextSteps;
     answer.figureBindings = c.figureBindings;
     answer.computations = c.computations;

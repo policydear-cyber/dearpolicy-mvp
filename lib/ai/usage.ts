@@ -204,3 +204,6 @@ export async function loopHouseholdSpendThisMonth(accountId: string, fallback: L
     [pseudonymizeId(accountId), startOfMonth().toISOString(), fallback.input, fallback.output]);
   return { calls: Number(r.rows[0]?.calls ?? 0), usd: Number(r.rows[0]?.usd ?? 0) };
 }
+
+/** Agent F (D22): the provider name recorded for a loop model that has no priced provider (the test-only scripted model). */
+export const SCRIPTED_PROVIDER = "scripted";

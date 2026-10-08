@@ -10,21 +10,24 @@
  *    when the turn is cancelled;
  *  - records every attempt of a hosted model, succeeded or failed, in the ledger (model_usage, recordUsage) and the
  *    provenance table (model_executions, operation rag_answer, prompt version rag2-loop-*), with tokens and priced
- *    cost; the scripted test model is counted in the turn's trace but never written to the usage tables.
+ *    cost; a model with no priced provider (the test-only scripted model) is recorded in model_executions at zero
+ *    cost (provider "scripted"), so its calls and tokens are counted too (agent F, D22).
  * Nothing here is a provider-side spend cap: these are DearPolicy's own limits, kept beneath the owner's budget.
  */
 import { randomUUID } from "node:crypto";
 import { costUsd } from "@/lib/ai/providers";
 import { recordUsage, assertUnderSpendCap, SpendCapReached } from "@/lib/ai/ledger";
 import { recordModelExecution } from "@/lib/ai/provenance";
-import { addLoopRunUsage, budgetCostUsd, loopHouseholdSpendThisMonth, loopRunUsage, remainingModelTimeMs, type LoopLimits } from "@/lib/ai/usage";
+import { addLoopRunUsage, budgetCostUsd, loopHouseholdSpendThisMonth, loopRunUsage, remainingModelTimeMs, SCRIPTED_PROVIDER, type LoopLimits } from "@/lib/ai/usage";
 import type { LoopModel, ModelTurnInput, ModelTurnOutput, TraceTurn } from "./types";
 
-export type MeterStopKind = "turn_calls" | "turn_tokens" | "turn_usd" | "turn_time" | "household_allowance" | "household_spend_cap" | "run_budget" | "timeout" | "cancelled" | "model_error";
+export type MeterStopKind = "turn_calls" | "turn_tokens" | "turn_tokens_used" | "turn_usd" | "turn_time" | "household_allowance" | "household_spend_cap" | "run_budget" | "timeout" | "cancelled" | "model_error";
 export type MeterStop = { kind: MeterStopKind; detail: string };
 export type MeterResult = { ok: true; out: ModelTurnOutput } | { ok: false; stop: MeterStop };
 type Call = NonNullable<TraceTurn["calls"]>[number];
 
+/** The fewest output tokens a call is ever offered (a call that cannot even answer is not worth making). */
+const MIN_OUTPUT_TOKENS = 256;
 class CallTimeout extends Error { constructor(ms: number) { super(`model call timed out after ${ms} ms`); this.name = "CallTimeout"; } }
 class CallCancelled extends Error { constructor() { super("model call cancelled"); this.name = "CallCancelled"; } }
 const RETRYABLE = /timed out|connection|ECONNRESET|ECONNREFUSED|fetch failed|socket|busy|\(429\)|\(5\d\d\)/i;
@@ -59,14 +62,18 @@ export class LoopUsageMeter {
     if (this.o.signal?.aborted) return { kind: "cancelled", detail: "the turn was cancelled" };
     if (this.calls.length >= L.maxCallsPerTurn) return { kind: "turn_calls", detail: `${this.calls.length} of ${L.maxCallsPerTurn} model calls for this turn used` };
     const used = this.usage.input + this.usage.output, next = estimateTokens(input) + input.maxOutputTokens;
+    // Agent F (D23): a budget already spent (a call reported more than was left) is "used up"; a call that would pass
+    // what is left is refused before it is made. Either way no further call is made.
+    if (used >= L.maxTokensPerTurn) return { kind: "turn_tokens_used", detail: `${used} tokens used this turn: the limit of ${L.maxTokensPerTurn} is used up` };
     if (used + next > L.maxTokensPerTurn) return { kind: "turn_tokens", detail: `${used} tokens used this turn; the next call (about ${next}) would pass the limit of ${L.maxTokensPerTurn}` };
     if (this.remainingMs() < 1_000) return { kind: "turn_time", detail: "the time set aside for this turn's model calls is used up" };
+    // Agent F (D21): the household's plan hard stop is checked before EVERY model call, whichever model it is.
+    try { await assertUnderSpendCap(this.o.accountId); }
+    catch (error) { if (error instanceof SpendCapReached) return { kind: "household_spend_cap", detail: error.message }; throw error; }
     if (!this.hosted) return null;
     if (this.usd >= L.maxTurnUsd) return { kind: "turn_usd", detail: `US$${this.usd.toFixed(4)} of US$${L.maxTurnUsd} for this turn used` };
     const run = loopRunUsage();
     if (run.calls >= L.runMaxCalls || run.usd >= L.runMaxUsd) return { kind: "run_budget", detail: `run budget used: ${run.calls} of ${L.runMaxCalls} calls, US$${run.usd.toFixed(4)} of US$${L.runMaxUsd}` };
-    try { await assertUnderSpendCap(this.o.accountId); }
-    catch (error) { if (error instanceof SpendCapReached) return { kind: "household_spend_cap", detail: error.message }; throw error; }
     if (this.householdUsd == null) this.householdUsd = (await loopHouseholdSpendThisMonth(this.o.accountId, L.fallbackPrice).catch(() => ({ usd: Number.POSITIVE_INFINITY }))).usd;
     if (this.householdUsd + this.usd >= L.householdMonthlyUsd) return { kind: "household_allowance", detail: `this household's monthly conversation allowance (US$${L.householdMonthlyUsd}) is used up` };
     return null;
@@ -74,7 +81,19 @@ export class LoopUsageMeter {
 
   private async record(call: Call, out: ModelTurnOutput | null, error: unknown, requestedAt: Date, attemptIndex: number) {
     const choice = this.o.model.choice;
-    if (!this.hosted || !choice) return;
+    if (!this.hosted || !choice) {
+      // Agent F (D22): a model without a priced provider (the test-only scripted model) is still metered: each call
+      // and its tokens are recorded in the provenance table (model_executions, rag_answer) at zero cost, so the
+      // household's loop accounting sees every call. (The spend ledger, model_usage, holds priced provider calls.)
+      await recordModelExecution({
+        attemptGroupId: this.attemptGroupId, attemptIndex, operation: "rag_answer", role: "chat", householdId: this.o.accountId,
+        requested: { provider: SCRIPTED_PROVIDER as unknown as NonNullable<LoopModel["choice"]>["provider"], model: this.o.model.id, capability: "chat", promptVersion: this.o.promptVersion },
+        requestedAt, resolved: out ? { resolvedModel: out.resolvedModel ?? out.modelId ?? null, providerRequestId: null, finishReason: null, region: null } : null,
+        status: call.ok ? "succeeded" : "failed", errorCategory: call.ok ? null : error instanceof CallTimeout ? "timeout" : error instanceof CallCancelled ? "cancelled" : "model_provider",
+        usage: { input: call.input, output: call.output }, costUsd: 0, latencyMs: call.latencyMs,
+      }).catch(() => null);
+      return;
+    }
     await recordUsage({ accountId: this.o.accountId, role: "chat", choice, input: call.input, output: call.output, durationMs: call.latencyMs, ok: call.ok });
     await recordModelExecution({
       attemptGroupId: this.attemptGroupId, attemptIndex, operation: "rag_answer", role: "chat", householdId: this.o.accountId,
@@ -102,7 +121,10 @@ export class LoopUsageMeter {
           timer = setTimeout(() => { const e = new CallTimeout(timeoutMs); controller.abort(e); reject(e); }, timeoutMs);
           controller.signal.addEventListener("abort", () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new CallCancelled()), { once: true });
         });
-        const out = await Promise.race([this.o.model.next({ ...input, signal: controller.signal }), aborted]);
+        // Agent F (D23): no call may be given more output tokens than the turn has left.
+        const left = this.o.limits.maxTokensPerTurn - (this.usage.input + this.usage.output) - estimateTokens(input);
+        const maxOutputTokens = Math.max(MIN_OUTPUT_TOKENS, Math.min(input.maxOutputTokens, left));
+        const out = await Promise.race([this.o.model.next({ ...input, maxOutputTokens, signal: controller.signal }), aborted]);
         const priced = this.hosted && this.o.model.choice ? costUsd(this.o.model.choice, out.usage) : null;
         const call: Call = { attempt: attempt + 1, ok: true, input: out.usage.input, output: out.usage.output, costUsd: priced, latencyMs: this.now() - t0, ...(attempt ? { retry: true } : {}) };
         this.calls.push(call); this.usage.input += call.input; this.usage.output += call.output;
