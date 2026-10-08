@@ -104,7 +104,11 @@ test("S7 min(bill, limit) - excess survives the save-time gate and is shown as a
   expect(t.visible).toMatch(/Indicative estimate[^.]*S\$1,100/);
   expect(t.visible).toMatch(/not a payout/i);
   const s = await last(request);
-  expect(s.message?.answer_json?.computations?.some((c: any) => c.result.value === 1100)).toBeTruthy();
+  // Integration (mechanics only): the bill estimate now comes from the `calculate` tool, whose record is saved in
+  // answer_json.calculations (CalculationRecord); `compute` records stay in answer_json.computations. Either way a
+  // saved record with the result S$1,100 is required.
+  const records = [...(s.message?.answer_json?.computations ?? []), ...(s.message?.answer_json?.calculations ?? [])];
+  expect(records.some((c: any) => c.result?.value === 1100)).toBeTruthy();
 });
 
 test("S9 another household's member, policy and figure never appear; nothing is written to the other household", async ({ page, request }) => {

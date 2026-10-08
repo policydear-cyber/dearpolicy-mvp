@@ -10,6 +10,9 @@
  * Refuses to start in a production build, on Vercel, without the loop flag, or against a non-local database.
  *
  *   DATABASE_URL=postgres://...@localhost/... DEARPOLICY_RAG_LOOP=1 PORT=3300 node --import tsx e2e/support/rag2-loop-server.ts
+ * E2E_RAG2_NEXT=start serves the existing `next build` output (.next) in-process instead of next dev -- the same as
+ * `next start` but keeping the two test routes above; much lighter on memory. NODE_ENV must still not be
+ * "production" (run it with NODE_ENV=test), so the production refusal above is unchanged.
  */
 import http from "node:http";
 import next from "next";
@@ -28,7 +31,7 @@ process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTI
 const port = Number(process.env.PORT ?? 3300);
 
 async function main() {
-  const app = next({ dev: true, dir: process.cwd(), port, hostname: "localhost" });
+  const app = next({ dev: process.env.E2E_RAG2_NEXT !== "start", dir: process.cwd(), port, hostname: "localhost" });
   await app.prepare();
   const handle = app.getRequestHandler();
   const { pool } = await import("@/lib/db/client");
