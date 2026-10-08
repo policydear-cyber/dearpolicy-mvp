@@ -11,16 +11,28 @@
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
-import type { EvidenceRef } from "../evidence";
+import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
+import { loadPages } from "../store";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
+import { loopLimits } from "@/lib/ai/usage";
+import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, householdOperandProblem, normalizeKey } from "./facts";
+import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
 import { composeFinal, evidenceIdOf, type ComputeCall, type Composed } from "./compose";
-import { loopBudget, loopToolEnv } from "./flag";
-import { stateNote, SYSTEM_PROMPT } from "./prompt";
-import type { LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
+import { loopToolEnv } from "./flag";
+import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
+import type { LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
 
 export type LoopPerson = { id: string; name: string; relationship: string };
-export type LoopInput = { accountId: string; message: string; state: RagLoopState; people: LoopPerson[]; speakerId: string | null; model: LoopModel; env?: NodeJS.ProcessEnv; asOf?: string | null };
+export type LoopInput = { accountId: string; message: string; state: RagLoopState; people: LoopPerson[];
+  /** Who is typing, when the request itself knows (the only member recorded as self). A speaker the household named
+   * earlier in the conversation (state.speakerId) takes precedence. Null in a shared login: the loop asks when needed. */
+  speakerId: string | null;
+  /** Who the chat was opened about (a member-scoped chat): the initial active subject -- never the speaker. */
+  initialSubjectId?: string | null;
+  model: LoopModel; env?: NodeJS.ProcessEnv; asOf?: string | null;
+  /** Cancels the turn: an in-flight model call is aborted and no further call is made. */
+  signal?: AbortSignal | null };
 export type LoopReply =
   | { kind: "final"; composed: Composed }
   | { kind: "ask"; pending: LoopPending; preface: string | null }
@@ -28,6 +40,19 @@ export type LoopReply =
 export type LoopOutput = { state: RagLoopState; reply: LoopReply; trace: TraceTurn; tools: ToolContext; corrections: { key: string; from: unknown; to: unknown; withdrawn: string[] }[]; reasked: LoopPending | null };
 
 export const FALLBACK_TEXT = "I couldn’t finish looking that up just now. Please ask again, or ask about one policy or one person at a time.";
+/** Honest replies when a usage limit or a timeout stops the turn (nothing is answered from a half-finished turn). */
+export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
+  turn_calls: FALLBACK_TEXT,
+  turn_tokens: "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
+  turn_usd: "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
+  turn_time: "I couldn’t finish: the time set aside for this answer ran out, so I stopped before answering. Please ask again.",
+  timeout: "I couldn’t finish: the model took too long to reply, so I stopped the request before answering. Please ask again in a moment.",
+  cancelled: "I stopped before answering because the request was cancelled.",
+  household_allowance: "I couldn’t look that up: this household has used its monthly allowance for assistant answers. Your documents and their pages are still available; assistant answers resume next month.",
+  household_spend_cap: "I couldn’t look that up: this household has reached DearPolicy’s monthly model-use limit. Your documents and their pages are still available; assistant answers resume next month.",
+  run_budget: "I couldn’t look that up: the model-use budget set for this test run is used up, so no model was called.",
+  model_error: FALLBACK_TEXT,
+};
 const STATEMENT = /\b(?:cover\w*|pays?|payable|limits?|excluded|eligib\w*|benefits?)\b/i;
 
 export function loopToolSpecs(): LoopToolSpec[] {
@@ -64,27 +89,86 @@ function whyLine(e: EvidenceRef, about: string): string {
 
 const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; return s.length > 160 ? s.slice(0, 160) + "…" : s; };
 
+const SELF_MENTION = /^(?:i|me|my|myself|mine|my own|self)$/i;
+/** Evidence that makes how an event happened matter: wording that distinguishes accidents (and so illness / other
+ * causes) -- an accident-only benefit, an accidental definition, an illness exclusion. */
+const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease)\b/i;
+/** Tools that establish what a person's policies say: never run for a person until who is meant is settled. */
+const SUBJECT_TOOLS = new Set(["policies_for", "select_table_value", "search_passages"]);
+
 export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const env = input.env ?? process.env;
-  const budget = loopBudget(env);
+  const limits = loopLimits(env);
   const state: RagLoopState = structuredClone(input.state);
   state.turn += 1;
+  state.speakerId = state.speakerId ?? input.speakerId ?? null;
+  if (!state.subjectId && input.initialSubjectId) state.subjectId = input.initialSubjectId;
   const householdIds = new Set(input.people.map((p) => p.id));
-  const ctx = createToolContext({ accountId: input.accountId, speakerId: input.speakerId, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
+  const ctx = createToolContext({ accountId: input.accountId, speakerId: state.speakerId, lastSubjectId: state.subjectId, asOf: input.asOf ?? null });
   ctx.conversation.recentSubjectIds = [...state.recentSubjectIds];
   ctx.seq = state.seq;
   const computeCalls = new Map<string, ComputeCall>();
-  const trace: TraceTurn = { turn: state.turn, userMessage: input.message, modelId: input.model.id, modelKind: input.model.kind, steps: 0, usage: { input: 0, output: 0 }, latencyMs: 0, toolCalls: [], evidenceChosen: [], outcome: "budget_exhausted", dropped: [], gate: [] };
+  const trace: TraceTurn = { turn: state.turn, userMessage: input.message, modelId: input.model.id, modelKind: input.model.kind, steps: 0, usage: { input: 0, output: 0 }, latencyMs: 0, toolCalls: [], evidenceChosen: [], outcome: "budget_exhausted", dropped: [], gate: [], calls: [], limit: null };
   const corrections: LoopOutput["corrections"] = [];
   const pendingBefore = state.pending;
-  const messages: LoopMessage[] = [{ role: "system", content: SYSTEM_PROMPT + "\n\n" + stateNote(state, input.people, input.speakerId) }];
+  const userTexts = [...state.history.map((h) => h.user), input.message];
+  const messages: LoopMessage[] = [{ role: "system", content: SYSTEM_PROMPT + "\n\n" + stateNote(state, input.people, state.speakerId) }];
   for (const h of state.history.slice(-6)) { messages.push({ role: "user", content: h.user }); messages.push({ role: "assistant", content: h.assistant }); }
   messages.push({ role: "user", content: input.message });
   const tools = loopToolSpecs();
   let reply: LoopReply | null = null;
   const t0 = Date.now();
+  const meter = new LoopUsageMeter({ model: input.model, accountId: input.accountId, limits, startedAt: t0, promptVersion: LOOP_PROMPT_VERSION, signal: input.signal ?? null });
+  let stop: MeterStop | null = null;
+
+  // Who is meant, while unsettled: candidates resolve_person offered (this turn, or the person question pending from
+  // the last turn) -- nothing about their cover is looked up until the household says which one.
+  let unsettled = new Set<string>(pendingBefore?.kind === "person" ? pendingBefore.options.map((o) => o.id) : []);
+  let lastAmbiguous: { self: boolean; labels: Map<string, string> } | null = null;
+  const candidateLabels = new Map<string, string>();
+
+  /** The claim kept for `subject` (created if new). The active claim moves to it unless a question about another
+   * member's claim is pending -- a side remark about someone else never displaces that claim. */
+  const claimFor = (subject: string): LoopClaim => {
+    if (state.claim?.subjectId === subject) return state.claim;
+    const parked = state.otherClaims?.[subject] ?? { subjectId: subject, facts: {}, derived: [] };
+    const hold = state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject;
+    if (hold) { (state.otherClaims ??= {})[subject] = parked; return parked; }
+    if (state.claim?.subjectId) (state.otherClaims ??= {})[state.claim.subjectId] = state.claim;
+    if (state.otherClaims) delete state.otherClaims[subject];
+    state.claim = parked;
+    return parked;
+  };
+  /** Moves the active subject -- except to the speaker while another member's claim is open or pending (a side
+   * question about "me" never changes who the claim is about). */
+  const setSubject = (id: string, viaSelf: boolean) => {
+    const otherClaimOpen = (state.claim?.subjectId && state.claim.subjectId !== id) || (state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== id);
+    if (viaSelf && otherClaimOpen) return;
+    state.subjectId = id;
+    state.recentSubjectIds = [id, ...state.recentSubjectIds.filter((x) => x !== id)].slice(0, 5);
+  };
+  /** Evidence (seen this conversation) whose wording makes the cause of an event matter. */
+  const causeEvidence = () => Object.values(state.evidence).filter((e) => CAUSE_WORDING.test(e.passage.text) || CAUSE_WORDING.test(e.table?.rowLabel ?? "")).map((e) => e.id);
+  /** True when the subject's claim records an event (an injury, a condition) but not how it happened, and the
+   * documents' wording makes the cause matter. */
+  const causeOpen = (subject: string | null | undefined): string[] | null => {
+    const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
+    if (!claim) return null;
+    const keys = Object.keys(claim.facts);
+    if (!keys.some((k) => EVENT_KEY.test(k)) || keys.some((k) => CAUSE_KEYS.has(k) && confirmed(claim.facts[k]))) return null;
+    const ev = causeEvidence();
+    return ev.length ? ev : null;
+  };
 
   const record = (name: string, args: Record<string, unknown>, ok: boolean, evidenceIds: string[], error?: string, summary?: string): TraceToolCall => { const t: TraceToolCall = { name, args, ok, evidenceIds, ...(error ? { error } : {}), ...(summary ? { summary } : {}) }; trace.toolCalls.push(t); return t; };
+
+  // Page text for evidence precision (loaded once per document per turn).
+  const pageCache = new Map<string, Map<number, string>>();
+  const pagesOf = async (policyId: string) => {
+    if (!pageCache.has(policyId)) pageCache.set(policyId, new Map((await loadPages(input.accountId, [policyId]).catch(() => [])).map((p) => [p.page, p.text])));
+    return pageCache.get(policyId)!;
+  };
+  const refine = async (refs: EvidenceRef[], about?: string | null) => { for (const r of refs) if (r && !r.support) refineEvidence(r, await pagesOf(r.policyId), about ?? null); };
 
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
@@ -96,24 +180,34 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (call.name === "note_facts") {
       const subject = (a.subject_id as string) ?? state.claim?.subjectId ?? state.subjectId;
       if (!subject || !householdIds.has(subject)) return { result: { ok: false, error: "subject_id must be a household member (resolve the person first)" } };
-      if (!state.claim || state.claim.subjectId !== subject) state.claim = { subjectId: subject, facts: {}, derived: [] };
-      const recorded: string[] = [], corrected: { key: string; from: unknown; to: unknown; withdrawn: string[] }[] = [];
-      for (const f of a.facts as { key: string; value: string; words: string; currency?: string }[]) {
-        const key = String(f.key).trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-        if (!key || f.value == null || !String(f.words ?? "").trim()) continue;
+      if (unsettled.has(subject)) return { result: { ok: false, error: "who is meant is not settled yet: ask which person the household means before recording facts about one of them" } };
+      const claim = claimFor(subject);
+      const recorded: string[] = [], refused: { key: string; error: string }[] = [], unconfirmed: string[] = [], corrected: { key: string; from: unknown; to: unknown; withdrawn: string[] }[] = [];
+      for (const f of a.facts as { key: string; value: string; words?: string; currency?: string; evidence_ids?: string[] }[]) {
+        const key = normalizeKey(f.key);
+        if (!key || f.value == null) continue;
+        const docIds = (f.evidence_ids ?? []).filter((id) => state.evidence[id]);
+        if ((f.evidence_ids ?? []).length && !docIds.length) { refused.push({ key, error: "cites evidence no tool returned" }); continue; }
+        const docText = docIds.length ? docIds.map((id) => state.evidence[id].passage.text).join("\n") : null;
+        const chk = checkFact({ key, value: String(f.value), words: String(f.words ?? "") }, userTexts, docText);
+        if (!chk.ok) { refused.push({ key, error: chk.error }); continue; }
         const value = f.currency ? `${String(f.value)} ${f.currency.toUpperCase()}` : String(f.value);
-        const old = state.claim.facts[key];
+        const words = docText != null ? (f.words?.trim() || state.evidence[docIds[0]].passage.text.slice(0, 160)) : String(f.words);
+        const entry = { value, words, turn: state.turn, source: chk.source, basis: chk.basis, ...(docIds.length ? { evidenceIds: docIds } : {}) };
+        const old = claim.facts[key];
         if (old && String(old.value) !== value) {
-          const withdrawn = state.claim.derived.filter((d) => d.factKeys.includes(key)).map((d) => d.sentence);
-          state.claim.derived = state.claim.derived.filter((d) => !d.factKeys.includes(key));
-          state.claim.facts[key] = { value, words: f.words, turn: state.turn, previous: [...(old.previous ?? []), { value: old.value, words: old.words, turn: old.turn }] };
+          const withdrawn = claim.derived.filter((d) => d.factKeys.includes(key)).map((d) => d.sentence);
+          claim.derived = claim.derived.filter((d) => !d.factKeys.includes(key));
+          claim.facts[key] = { ...entry, previous: [...(old.previous ?? []), { value: old.value, words: old.words, turn: old.turn, source: old.source, basis: old.basis }] };
           corrected.push({ key, from: old.value, to: value, withdrawn });
-        } else if (!old) state.claim.facts[key] = { value, words: f.words, turn: state.turn };
+        } else if (!old || (old.basis === "paraphrased" && chk.basis === "stated")) claim.facts[key] = old ? { ...entry, previous: old.previous } : entry;
         recorded.push(key);
-        if (state.pending?.kind === "fact" && state.pending.factKey === key) state.pending = null;
+        if (chk.basis === "paraphrased") unconfirmed.push(key);
+        if (state.pending?.kind === "fact" && state.pending.factKey === key && (state.pending.subjectId ?? subject) === subject) state.pending = null;
       }
       corrections.push(...corrected);
-      return { result: { ok: true, recorded, corrected, facts: state.claim.facts } };
+      if (!recorded.length && refused.length) return { result: { ok: false, error: refused.map((r) => `${r.key}: ${r.error}`).join("; "), refused } };
+      return { result: { ok: true, recorded, ...(unconfirmed.length ? { unconfirmed, note: "unconfirmed facts are the household's report in your words, not confirmed values: they cannot be used in a calculation; ask to confirm if one matters" } : {}), ...(refused.length ? { refused } : {}), corrected, facts: claim.facts } };
     }
     if (call.name === "ask_user") {
       const question = String(a.question ?? "").trim();
@@ -125,33 +219,54 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const options = ((a.options as string[]) ?? []).filter((id) => householdIds.has(id));
         if (options.length < 2) return { result: { ok: false, error: "a person question offers two or more household members (the candidates resolve_person returned)" } };
         if (pendingBefore?.kind === "person" && pendingBefore.turn === state.turn - 1) return { result: { ok: false, error: "you already asked who is meant; resolve the person from the household's reply" } };
-        const pending: LoopPending = { kind: "person", question, mention: typeof a.mention === "string" ? a.mention : null, options: options.map((id) => ({ id, label: input.people.find((p) => p.id === id)!.name })), turn: state.turn };
+        const purpose = lastAmbiguous?.self && options.every((id) => lastAmbiguous!.labels.has(id)) ? "speaker" as const : "subject" as const;
+        const label = (id: string) => { const p = input.people.find((x) => x.id === id)!; const rel = candidateLabels.get(id); return rel && purpose === "subject" ? `${p.name} (your ${rel})` : p.name; };
+        const pending: LoopPending = { kind: "person", question, mention: typeof a.mention === "string" ? a.mention : null, options: options.map((id) => ({ id, label: label(id) })), turn: state.turn, purpose };
         return { result: { ok: true }, terminal: { kind: "ask", pending, preface } };
       }
-      const key = String(a.fact_key ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+      const key = normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
       const subject = (a.subject_id as string) ?? state.claim?.subjectId ?? state.subjectId;
-      const known = state.claim && state.claim.subjectId === subject ? state.claim.facts[key] : undefined;
-      if (known) return { result: { ok: false, error: `${key} is already recorded (${String(known.value)}, "${known.words}"); do not ask again` } };
+      const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
+      const known = claim?.facts[key];
+      if (known && confirmed(known)) return { result: { ok: false, error: `${key} is already recorded (${String(known.value)}, "${known.words}"); do not ask again` } };
       const because = ((a.because_evidence_ids as string[]) ?? []).filter((id) => state.evidence[id]);
       if (!because.length) return { result: { ok: false, error: "cite the evidence (because_evidence_ids) of the benefit or clause that makes this fact matter" } };
+      const cause = !CAUSE_KEYS.has(key) ? causeOpen(subject) : null;
+      if (cause) return { result: { ok: false, error: `how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing ${cause.slice(0, 3).join(", ")})` } };
       const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
       return { result: { ok: true }, terminal: { kind: "ask", pending, preface } };
     }
     // final_answer
+    const answerSubject = (a.subject_id as string) ?? state.subjectId;
+    const estimates = ((a.sentences as Record<string, unknown>[]) ?? []).some((x) => typeof x.result_id === "string" && ctx.results.get(x.result_id)?.kind === "indicative_estimate");
+    const cause = estimates ? causeOpen(answerSubject) : null;
+    if (cause) return { result: { ok: false, error: `an estimate for this event depends on how it happened (the documents distinguish accidents), which is not known: ask how it happened first (fact_key how_it_happened, citing ${cause.slice(0, 3).join(", ")})` } };
     const composed = composeFinal({ sentences: a.sentences as Record<string, unknown>[], nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, { state, tools: ctx, computeCalls, householdIds, userText: input.message });
     if (!composed.sentences.length && !composed.dropped.length) return { result: { ok: false, error: "final_answer needs at least one sentence" } };
     return { result: { ok: true }, terminal: { kind: "final", composed } };
   };
 
-  for (let step = 0; step < budget.maxSteps && !reply; step++) {
-    if (trace.usage.input + trace.usage.output >= budget.maxTokens) break;
-    let out;
-    try { out = await input.model.next({ messages, tools, maxOutputTokens: budget.maxOutputTokens }); }
-    catch (error) { trace.outcome = "error"; record("model", {}, false, [], error instanceof Error ? error.message : String(error)); break; }
-    trace.steps++; trace.usage.input += out.usage.input; trace.usage.output += out.usage.output; trace.modelId = out.modelId || trace.modelId;
+  /** A tool call refused by the loop before it runs (null: run it). */
+  const preflight = (call: ToolCall): string | null => {
+    const subject = typeof call.arguments.subject_id === "string" ? call.arguments.subject_id : null;
+    if (SUBJECT_TOOLS.has(call.name) && subject && unsettled.has(subject)) return "who is meant is not settled yet: ask the household which person they mean (ask_user kind=person with the candidates) before looking up anyone's cover";
+    if (call.name === "compute") {
+      const facts = { ...(state.otherClaims ? Object.assign({}, ...Object.values(state.otherClaims).map((c) => c.facts)) : {}), ...(state.claim?.facts ?? {}) };
+      for (const o of (call.arguments.operands as Record<string, unknown>[] | undefined) ?? []) {
+        if (o && typeof o === "object" && o.household && typeof o.household === "object") { const p = householdOperandProblem(o.household as Record<string, unknown>, facts); if (p) return p; }
+      }
+    }
+    return null;
+  };
+
+  for (let step = 0; !reply; step++) {
+    const m = await meter.next({ messages, tools, maxOutputTokens: limits.maxOutputTokens });
+    if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") record("model", {}, false, [], m.stop.detail); break; }
+    const out = m.out;
+    trace.steps++; trace.modelId = out.modelId || trace.modelId;
     messages.push({ role: "assistant", content: out.text, toolCalls: out.toolCalls });
     if (!out.toolCalls.length) { messages.push({ role: "user", content: "Use the tools. End the turn only with ask_user or final_answer." }); continue; }
     for (const call of out.toolCalls) {
@@ -163,13 +278,29 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         if (r.terminal && TERMINAL.has(call.name)) reply = r.terminal;
         continue;
       }
+      const refusal = preflight(call);
+      if (refusal) { record(call.name, call.arguments, false, [], refusal); messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: refusal }) }); continue; }
       const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
+      await refine(res.evidence, typeof call.arguments.query === "string" ? call.arguments.query : typeof call.arguments.benefit === "string" ? call.arguments.benefit : null);
       const ids: string[] = [];
       const shown = res.ok ? { ok: true, data: forModel(res.data, state, call.name, ids), evidence: forModel(res.evidence, state, call.name, ids) } : { ok: false, error: res.error, evidence: forModel(res.evidence, state, call.name, ids) };
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (res.ok && call.name === "resolve_person") {
-        const r = res.data as { status: string; person?: { id: string } };
-        if (r.status === "ok" && r.person) { state.subjectId = r.person.id; state.recentSubjectIds = [r.person.id, ...state.recentSubjectIds.filter((x) => x !== r.person!.id)].slice(0, 5); if (state.pending?.kind === "person") state.pending = null; }
+        const r = res.data as { status: string; person?: { id: string }; via?: string; options?: { id: string; relationLabel?: string }[] };
+        const selfMention = SELF_MENTION.test(String(call.arguments.mention ?? "").trim());
+        if (r.status === "ok" && r.person) {
+          const id = r.person.id;
+          if (pendingBefore?.kind === "person" && pendingBefore.purpose === "speaker" && pendingBefore.options.some((o) => o.id === id) && !state.speakerId) {
+            // The household said who is typing: that is the speaker, not who the conversation is about.
+            state.speakerId = id; ctx.conversation.speakerId = id;
+          } else setSubject(id, r.via === "self");
+          unsettled = new Set();
+          if (state.pending?.kind === "person") state.pending = null;
+        } else if (r.status === "ambiguous" && r.options?.length) {
+          unsettled = new Set(r.options.map((o) => o.id));
+          lastAmbiguous = { self: selfMention, labels: new Map(r.options.map((o) => [o.id, o.relationLabel ?? ""])) };
+          for (const o of r.options) if (o.relationLabel) candidateLabels.set(o.id, o.relationLabel);
+        }
       }
       const d = res.ok ? (res.data as Record<string, unknown>) : null;
       record(call.name, call.arguments, res.ok, ids, res.ok ? undefined : res.error, d ? brief({ status: d.status, valueId: d.valueId, resultId: d.resultId, value: d.value, amount: d.amount, kind: d.kind, column: d.columnHeader, row: d.rowLabel, hits: Array.isArray(d.hits) ? d.hits.length : undefined }) : undefined);
@@ -177,12 +308,19 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
   }
   trace.latencyMs = Date.now() - t0;
+  trace.usage = { ...meter.usage };
+  trace.calls = meter.calls;
   state.seq = ctx.seq;
 
   let reasked: LoopPending | null = null;
   const done = reply as LoopReply | null;
   let final: LoopReply;
-  if (!done) { final = { kind: "fallback", text: FALLBACK_TEXT }; if (trace.outcome !== "error") trace.outcome = "budget_exhausted"; }
+  if (!done) {
+    const kind = stop?.kind ?? "turn_calls";
+    final = { kind: "fallback", text: LIMIT_TEXT[kind] };
+    trace.limit = { kind, detail: stop?.detail ?? "the turn ended without an answer" };
+    trace.outcome = kind === "model_error" ? "error" : kind === "turn_calls" ? "budget_exhausted" : kind === "timeout" || kind === "turn_time" || kind === "cancelled" ? "timeout" : "limit_reached";
+  }
   else if (done.kind === "ask") { final = done; state.pending = done.pending; trace.outcome = "ask_user"; }
   else if (done.kind === "final") {
     final = done;
@@ -190,13 +328,25 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     trace.outcome = "final_answer";
     trace.dropped = c.dropped;
     trace.evidenceChosen.push(...c.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id)));
-    if (c.subjectId) state.subjectId = c.subjectId;
+    // Precision: each cited passage narrowed to the sentence / row the answer's sentence rests on (internal; the page
+    // stays the household-facing link).
+    for (const sent of c.sentences) for (const id of sent.evidenceIds) {
+      const e = state.evidence[id];
+      if (!e || e.support) continue;
+      const pages = await pagesOf(e.policyId);
+      const text = pages.get(e.passage.onPage);
+      const sp = text ? supportSpan(e, text, sent.text) : null;
+      if (sp) { e.support = sp; const cx = contextFor(sp, pages); e.context = cx.length ? cx : null; }
+    }
+    if (c.subjectId) setSubject(c.subjectId, c.subjectId === state.speakerId);
     // Derived statements are remembered with the facts they used, so a correction can withdraw them.
     if (state.claim) for (const s of c.sentences) if (s.estimate && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn });
     // An interruption: the claim question still open is put back to the household after the side answer.
     if (state.pending?.kind === "fact") { reasked = state.pending; trace.reasked = state.pending.question; }
     else if (state.pending?.kind === "person") state.pending = null;
   } else final = done;
+  // The ask_user `why` line's passage: narrowed too.
+  for (const id of trace.evidenceChosen) { const e = state.evidence[id]; if (e && !e.support) await refine([e], final.kind === "ask" ? final.pending.question : null); }
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
   return { state, reply: final, trace, tools: ctx, corrections, reasked };
 }

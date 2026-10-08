@@ -8,7 +8,7 @@
  * Under the deterministic model stand-in (DEARPOLICY_DETERMINISTIC_MODEL) no network call is made: a test must install
  * the scripted model instead (scripted-model.ts).
  */
-import { apiKeyFor, modelFor, type ModelChoice } from "@/lib/ai/providers";
+import { apiKeyFor, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice } from "@/lib/ai/providers";
 import { deterministicModelRequested } from "@/lib/ai/deterministic-model";
 import type { LoopMessage, LoopModel, ModelTurnInput, ModelTurnOutput, ToolCall } from "./types";
 
@@ -57,7 +57,7 @@ export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: str
 export class HostedLoopModel implements LoopModel {
   readonly kind = "hosted" as const;
   readonly id: string;
-  constructor(private readonly choice: ModelChoice = modelFor("chat"), private readonly http: Fetch = fetch, private readonly timeoutMs = 90_000) {
+  constructor(readonly choice: ModelChoice = modelFor("chat"), private readonly http: Fetch = fetch, private readonly timeoutMs = 90_000) {
     this.id = `${choice.provider}:${choice.provider === "gemini" ? GEMINI_ALIASES[choice.model] ?? choice.model : choice.model}`;
   }
   async next(input: ModelTurnInput): Promise<ModelTurnOutput> {
@@ -69,21 +69,25 @@ export class HostedLoopModel implements LoopModel {
     const t0 = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    // The meter's signal (its per-call timeout, or the turn being cancelled) cancels the provider request itself.
+    const onAbort = () => controller.abort();
+    if (input.signal?.aborted) controller.abort(); else input.signal?.addEventListener("abort", onAbort, { once: true });
+    const failed = async (res: Response) => { const body = await res.text().catch(() => ""); if (isQuotaExhaustedBody(res.status, body)) throw new ProviderQuotaExhausted(res.status); throw new Error(`model service returned an error (${res.status})`); };
     try {
       let res: Response, read: ReturnType<typeof openAiReply>;
       if (provider === "anthropic") {
         res = await this.http("https://api.anthropic.com/v1/messages", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify(anthropicRequest(model, input)) });
-        if (!res.ok) throw new Error(`model service returned ${res.status}`);
+        if (!res.ok) await failed(res);
         read = anthropicReply(await res.json());
       } else {
         const base = provider === "groq" ? (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1") : provider === "gemini" ? "https://generativelanguage.googleapis.com/v1beta/openai" : (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1");
         const body: Record<string, unknown> = openAiRequest(model, input);
         if (provider !== "openai") { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; delete body.parallel_tool_calls; }
         res = await this.http(base.replace(/\/$/, "") + "/chat/completions", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", authorization: "Bearer " + key }, body: JSON.stringify(body) });
-        if (!res.ok) throw new Error(`model service returned ${res.status}`);
+        if (!res.ok) await failed(res);
         read = openAiReply(await res.json());
       }
-      return { toolCalls: read.toolCalls, text: read.text, usage: read.usage, modelId: read.model ? `${provider}:${read.model}` : this.id, latencyMs: Date.now() - t0 };
-    } finally { clearTimeout(timer); }
+      return { toolCalls: read.toolCalls, text: read.text, usage: read.usage, modelId: read.model ? `${provider}:${read.model}` : this.id, resolvedModel: read.model ?? null, latencyMs: Date.now() - t0 };
+    } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", onAbort); }
   }
 }

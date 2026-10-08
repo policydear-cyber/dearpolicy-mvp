@@ -146,11 +146,14 @@ async function main() {
   // ---------------- (b)-(f) ----------------
   const B = await run(claimConversation(), CLAIM_MESSAGES);
   const [b1, b2, c1, c2, d1, f1, f2] = B.turns;
-  await check("D-b1 \"my son\" with two sons: one question offering exactly Jun Hao and Jun Wei (never the stepson), nothing else said", () => {
+  // Expectation changed (agent C): the stepson used to be silently left out of "my son"; he is now offered too,
+  // labelled as the stepson, and the household chooses.
+  await check("D-b1 \"my son\" with two sons and a stepson: one question offering Jun Hao, Jun Wei and Ryan (labelled stepson), nothing else said", () => {
     const a = b1.saved.answer;
     assert.equal(a.questions.length, 1); assert.equal(a.questions[0].id, "rag_person");
-    assert.deepEqual((a.personCandidates ?? []).map((p) => p.id).sort(), [M.junhao.id, M.junwei.id].sort());
-    assert.doesNotMatch(visible(a), /Ryan/); assert.doesNotMatch(visible(a), MONEY);
+    assert.deepEqual((a.personCandidates ?? []).map((p) => p.id).sort(), [M.junhao.id, M.junwei.id, M.ryan.id].sort());
+    assert.match((a.personCandidates ?? []).find((p) => p.id === M.ryan.id)!.label, /stepson/);
+    assert.doesNotMatch(visible(a), MONEY);
     assert.equal(b1.loop.pending.kind, "person");
   });
   await check("D-b2 the household chooses Jun Hao: answered from the Child column (S$80, never the adult S$150)", () => {
@@ -167,7 +170,11 @@ async function main() {
     assert.equal(a.mode, "fact_finding"); assert.equal(a.questions.length, 1); assert.match(a.questions[0].text, /how many nights/i);
     assert.equal((visible(a).match(/\?/g) ?? []).length, 2); // the question, in the summary and on its card
     assert.doesNotMatch(visible(a), MONEY);
-    assert.equal(c1.loop.claim.facts.cause.value, "accident"); assert.equal(c1.loop.claim.subjectId, M.junhao.id);
+    // Expectation changed (agent C): no cause=accident is recorded from "fell off the monkey bars"; how it happened is
+    // recorded in the household's words, and the injury as their (paraphrased, unconfirmed) report.
+    assert.equal(c1.loop.claim.facts.cause, undefined); assert.equal(c1.loop.claim.subjectId, M.junhao.id);
+    assert.deepEqual([c1.loop.claim.facts.how_it_happened.source, c1.loop.claim.facts.how_it_happened.basis], ["user_reported", "stated"]);
+    assert.deepEqual([c1.loop.claim.facts.injury.value, c1.loop.claim.facts.injury.source, c1.loop.claim.facts.injury.basis], ["arm fracture", "user_reported", "paraphrased"]);
     assert.equal(c1.loop.pending.factKey, "nights_in_hospital"); assert.ok(c1.trace.evidenceChosen.length >= 1);
   });
   await check("D-c2 next question one at a time; asking again for the recorded number of nights is refused", () => {
@@ -254,6 +261,8 @@ async function main() {
     assert.ok(t.trace.gate.length >= 1, "the gate reported the wrong-column figure");
     assert.ok(v.includes(FIGURE_LEFT_OUT_NOTE));
   });
+  // Expectation changed (agent C): a stale (corrected) household figure is now refused when compute is called (it is
+  // no longer a recorded fact), before any sentence is composed; facts are recorded only from the household's words.
   const S = await run([
     { steps: [
       () => [call("resolve_person", { mention: "Jun Hao" })],
@@ -265,21 +274,21 @@ async function main() {
       (v) => [call("select_table_value", { policy_id: (pick(v, "policies_for").covering as any[]).find((p) => /FamilyGuard/.test(p.productName)).policyId, benefit: "Hospital cash", subject_id: M.junhao.id })],
       (v) => [call("compute", { operation: "per_day", label: "stale", operands: [{ value_id: pick(v, "select_table_value").valueId }, { household: { label: "nights", attribution: "2 nights", count: 2 } }] })],
       (v) => [call("compute", { operation: "per_day", label: "fresh", operands: [{ value_id: pick(v, "select_table_value").valueId }, { household: { label: "nights", attribution: "actually 3", count: 3 } }] })],
-      (v) => { const stale = v.find("compute", (o) => o.args.label === "stale")!.result.data, fresh = v.find("compute", (o) => o.args.label === "fresh")!.result.data; return [call("final_answer", { subject_id: M.junhao.id, sentences: [
-        { text: `Indicative estimate: FamilyGuard hospital cash of S$100 per day for 2 nights comes to S$${stale.amount}.`, result_id: stale.resultId },
+      (v) => { const fresh = v.find("compute", (o) => o.args.label === "fresh")!.result.data; return [call("final_answer", { subject_id: M.junhao.id, sentences: [
         { text: `FamilyGuard hospital cash of S$100 per day for 3 nights gives a payout of S$${fresh.amount}.`, result_id: fresh.resultId },
         { text: `FamilyGuard hospital cash of S$100 per day for 3 nights comes to S$${fresh.amount}.`, result_id: fresh.resultId },
       ] })]; },
     ] },
-  ], ["Jun Hao was in hospital, what's the hospital cash?"]);
-  await check("N3 two questions at once and a person question without real candidates are refused; a stale (corrected) figure and payout wording never reach the household; an estimate is labelled", () => {
+  ], ["Jun Hao was in hospital 2 nights, no wait, actually 3. What's the hospital cash?"]);
+  await check("N3 two questions at once and a person question without real candidates are refused; a stale (corrected) figure is refused at compute and payout wording never reaches the household; an estimate is labelled", () => {
     const t = S.turns[0], v = visible(t.saved.answer);
     const refusals = t.trace.toolCalls.filter((x: any) => !x.ok).map((x: any) => x.error);
     assert.ok(refusals.some((e: string) => /exactly one question/.test(e))); assert.ok(refusals.some((e: string) => /two or more household members/.test(e)));
+    assert.ok(t.trace.toolCalls.some((x: any) => x.name === "compute" && x.args.label === "stale" && !x.ok && /not a recorded fact/.test(x.error)), "the stale figure is refused at compute");
     assert.doesNotMatch(v, /S\$200|payout/i);
     assert.match(v, /^Updated: nights in hospital is now 3 \(you first said 2\)\./);
     assert.match(v, /Indicative estimate: FamilyGuard hospital cash of S\$100 per day for 3 nights comes to S\$300\./);
-    assert.ok(t.trace.dropped.some((d: any) => /not a fact the household has given/.test(d.reason)) && t.trace.dropped.some((d: any) => /payout/.test(d.reason)));
+    assert.ok(t.trace.dropped.some((d: any) => /payout/.test(d.reason)));
     assert.deepEqual(t.trace.gate, []);
   });
   const P = await run([

@@ -13,15 +13,16 @@ const ids = (description: string): JsonSchema => ({ type: "array", items: { type
 
 export const NOTE_FACTS: LoopToolSpec = {
   name: "note_facts",
-  description: "Record facts the household has stated about the event (who, what happened, cause, nights in hospital, amounts billed...). Quote their own words. Giving a key that is already recorded replaces it (a correction); anything worked out from the old value is withdrawn. Never record a guess.",
+  description: "Record facts the household has stated about the event (what happened and how, nights in hospital, admission / discharge dates and times, amounts billed...), each quoting their own words verbatim from this conversation; the value must be what those words say. Refused: a policy-defined classification they did not state in those terms (cause=accident, illness, a diagnosis -- record how_it_happened in their words instead), a quantity the policy works out (payable days, claimable amounts), a count in another unit than they used (nights are not days). A paraphrase is kept but marked unconfirmed and cannot be used in a calculation. A fact printed in a document may be recorded with evidence_ids instead of words. Giving a key that is already recorded replaces it (a correction); anything worked out from the old value is withdrawn. Never record a guess.",
   parameters: { type: "object", properties: {
     subject_id: str("The household member the event is about (from resolve_person)."),
     facts: { type: "array", items: { type: "object", properties: {
-      key: str("A short stable key, e.g. cause, injury, admitted, nights_in_hospital, bill_amount."),
+      key: str("A short stable key, e.g. how_it_happened, injury, admitted, nights_in_hospital, admission_datetime, discharge_datetime, bill_amount."),
       value: { type: "string", description: "The value, as text (a number as digits, e.g. \"3\" or \"2400\"; yes/no as \"yes\"/\"no\")." },
-      words: str("The household's own words this comes from, quoted."),
+      words: str("The household's own words this comes from, quoted verbatim."),
+      evidence_ids: ids("Instead of words: evidence ids of a document passage that prints this fact."),
       currency: str("ISO currency of an amount the household gave, e.g. SGD (only when they gave one)."),
-    }, required: ["key", "value", "words"], additionalProperties: false } },
+    }, required: ["key", "value"], additionalProperties: false } },
   }, required: ["facts"], additionalProperties: false },
 };
 

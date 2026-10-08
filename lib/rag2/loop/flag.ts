@@ -8,6 +8,7 @@
  * The loop runs the lib/rag2 tools itself, so turning the loop on implies the tools for the loop's own calls.
  */
 import { isProduction, truthy } from "@/lib/launch/guards";
+import { loopLimits } from "@/lib/ai/usage";
 
 export type RagLoopStatus = { enabled: boolean; reason: string; production: boolean };
 
@@ -35,8 +36,9 @@ export function loopToolEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proces
   return { ...env, DEARPOLICY_RAG_TOOLS: "1", ...(s.production ? { DEARPOLICY_RAG_TOOLS_ALLOW_PRODUCTION: "1" } : {}) };
 }
 
-/** Bounded budget per chat turn: model steps and tokens (input + output, summed over the turn's model calls). */
+/** Bounded budget per chat turn: model calls (steps), tokens (input + output, summed over the turn's model calls) and
+ * output tokens per call -- the same numbers the usage meter enforces (lib/ai/usage.ts loopLimits). */
 export function loopBudget(env: NodeJS.ProcessEnv = process.env): { maxSteps: number; maxTokens: number; maxOutputTokens: number } {
-  const n = (v: string | undefined, d: number, lo: number, hi: number) => { const x = Number(v); return Number.isFinite(x) && x >= lo ? Math.min(hi, Math.floor(x)) : d; };
-  return { maxSteps: n(env.DEARPOLICY_RAG_LOOP_MAX_STEPS, 12, 2, 40), maxTokens: n(env.DEARPOLICY_RAG_LOOP_MAX_TOKENS, 120_000, 4_000, 1_000_000), maxOutputTokens: n(env.DEARPOLICY_RAG_LOOP_MAX_OUTPUT_TOKENS, 2_000, 256, 16_000) };
+  const l = loopLimits(env);
+  return { maxSteps: l.maxCallsPerTurn, maxTokens: l.maxTokensPerTurn, maxOutputTokens: l.maxOutputTokens };
 }

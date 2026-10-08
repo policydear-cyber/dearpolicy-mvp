@@ -78,7 +78,9 @@ export function claimConversation(): ScriptTurn[] {
     { user: "broke his arm", steps: [
       () => [call("resolve_person", { mention: "he" })],
       (v) => [
-        call("note_facts", { subject_id: person(v), facts: [{ key: "cause", value: "accident", words: "He fell off the monkey bars at the playground" }, { key: "injury", value: "fracture (arm)", words: "broke his arm" }] }),
+        // What the household said, in their words (agent C): how it happened, and the injury as they reported it --
+        // never cause=accident (a policy-defined classification they did not state).
+        call("note_facts", { subject_id: person(v), facts: [{ key: "how_it_happened", value: "fell off the monkey bars at the playground", words: "He fell off the monkey bars at the playground" }, { key: "injury", value: "arm fracture", words: "broke his arm" }] }),
         call("policies_for", { subject_id: person(v), topic: "accident" }),
         call("search_passages", { query: "hospital cash per day", subject_id: person(v) }),
       ],

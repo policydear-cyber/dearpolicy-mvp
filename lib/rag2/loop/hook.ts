@@ -42,15 +42,25 @@ const label = (p: ClaimPerson) => (p.preferred_name && p.preferred_name !== p.di
 const words = (key: string) => key.replace(/_/g, " ");
 const show = (v: unknown) => String(v).replace(/_/g, " ");
 
+/** The supporting span with what it needs (header first, then the span, then any footnote); the passage when no
+ * single sentence / row has been identified. */
+export function preciseExcerpt(r: RagLoopState["evidence"][string]): string {
+  if (!r.support) return r.passage.text;
+  const ctx = r.context ?? [];
+  return [...ctx.filter((c) => c.role !== "footnote").map((c) => c.text), r.support.text, ...ctx.filter((c) => c.role === "footnote").map((c) => c.text)].join("\n");
+}
+
 async function citationsFor(accountId: string, state: RagLoopState, ids: string[]): Promise<ChatCitation[]> {
   const refs = ids.map((id) => state.evidence[id]).filter(Boolean);
   if (!refs.length) return [];
   const rows = (await query<{ id: string; product_name: string | null; insurer: string | null; document_role: string | null }>(`SELECT id::text AS id, product_name, insurer, document_role FROM policies WHERE account_id=$1 AND id::text=ANY($2::text[]) AND ${activePredicate()}`, [accountId, [...new Set(refs.map((r) => r.policyId))]]).catch(() => ({ rows: [] as { id: string; product_name: string | null; insurer: string | null; document_role: string | null }[] }))).rows;
   const out: ChatCitation[] = [];
   for (const r of refs) {
-    if (out.some((c) => c.policyId === r.policyId && c.pageStart === r.page.start && c.pageEnd === r.page.end && c.excerpt === r.passage.text)) continue;
+    if (out.some((c) => c.policyId === r.policyId && c.pageStart === r.page.start && c.pageEnd === r.page.end && c.excerpt === preciseExcerpt(r))) continue;
     const p = rows.find((x) => x.id === r.policyId);
-    out.push({ chunkId: "rag2:" + r.id, policyId: r.policyId, policyName: p?.product_name ?? "Policy document", insurer: p?.insurer ?? undefined, pageStart: r.page.start, pageEnd: r.page.end, documentRole: p?.document_role ?? null, excerpt: r.passage.text });
+    // The page is the household-facing link; the excerpt is the exact supporting sentence / row, with the table header,
+    // continued header or footnote it needs to be read correctly (lib/rag2/evidence.ts refineEvidence).
+    out.push({ chunkId: "rag2:" + r.id, policyId: r.policyId, policyName: p?.product_name ?? "Policy document", insurer: p?.insurer ?? undefined, pageStart: r.page.start, pageEnd: r.page.end, documentRole: p?.document_role ?? null, excerpt: preciseExcerpt(r) });
   }
   return out;
 }
@@ -65,9 +75,12 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   const message = request.submittedQuestion ?? request.question;
   const prior = conversation.state as LoopConversationState;
   const people: LoopPerson[] = context.family.map((p) => ({ id: p.id, name: label(p), relationship: p.relationship }));
+  // The speaker ("me", "my") is the member typing: the only member recorded as self, or -- in a shared household
+  // login -- whoever the household says they are (kept in the loop state). A member-scoped chat names who the chat is
+  // ABOUT (the initial active subject), never who is typing.
   const selves = context.family.filter((p) => /^self$/i.test(p.relationship ?? ""));
-  const speakerId = selves.length === 1 ? selves[0].id : request.familyMemberId ?? null;
-  const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, model: loopModel() });
+  const speakerId = selves.length === 1 ? selves[0].id : null;
+  const out = await runLoop({ accountId: request.accountId, message, state: prior.ragLoop ?? emptyLoopState(), people, speakerId, initialSubjectId: request.familyMemberId ?? null, model: loopModel() });
   const { state, reply, trace } = out;
   const answer = blank();
   const notes: string[] = [];
