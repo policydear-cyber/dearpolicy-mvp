@@ -189,6 +189,8 @@ jobs:
         run: npm run r7:chat-robustness-test
       - name: Answer verification (a reversal, an exclusion heading, a dropped condition, a swapped unit or period, a neighbouring row's amount, a swapped or missing currency, a missing hash, a superseded document or the wrong person never passes; true statements in many phrasings still do; totals add only verified figures in one currency; every answer path's figures checked at save)
         run: npm run verify:assertions-test
+      - name: Save-time answer gate (a household's own number never grounds cover, a limit or a total and is echoed only as theirs; every figure is grounded only by its own sentence's binding -- policy, person, benefit row, version, page range, column; totals, monthly restatements and multiples only with an explicit computation record the gate recomputes)
+        run: npm run verify:gate-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

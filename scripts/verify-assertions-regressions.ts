@@ -320,7 +320,7 @@ async function totals() {
     assert.ok(r, "the registry path answered");
     const text = [r!.summary, ...r!.details].join("\n");
     assert.match(text, /S\$220,000/, "the verified SGD figures are added up (S$200,000 + S$20,000): " + text);
-    assert.match(text, /Recheck Life: S\$20,000\./, "a figure flagged at ingestion stands once the same check passes on the cited page: " + text);
+    assert.match(text, /Recheck Life(?: \(Death benefit\))?: S\$20,000\./, "a figure flagged at ingestion stands once the same check passes on the cited page: " + text);
     assert.match(text, /US\$100,000/, "the USD figure keeps its currency");
     assert.ok(!/S\$100,000/.test(text.replace(/US\$100,000/g, "")), "USD shown as S$: " + text);
     assert.ok(/RM ?80,000|MYR ?80,000/.test(text), "the MYR figure keeps its currency: " + text);
@@ -374,18 +374,39 @@ async function totals() {
   await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,2,$3)", [A, acc.id, acc.page]);
   const citeOf = (d: D) => ({ chunkId: "page:" + d.id + ":2", policyId: d.id, policyName: d.product, pageStart: 2, pageEnd: 2 });
   const answer = (summary: string, details: string[], cites: D[]) => ({ mode: "answer", summary, details, claimItems: [], nextSteps: [], confidence: null, citations: cites.map(citeOf), disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [] }) as unknown as import("@/types").ChatAnswer;
-  await check("G01 figures printed beside their currency on a cited page, and totals / periods of them, are kept", async () => {
-    const a = answer("Your death cover adds up to S$220,000.", ["Term Shield: S$200,000.", "Recheck Life: S$20,000.", "Term Shield premium S$1,200 a year, about S$100 a month."], [docs.SGD, docs.REVER]);
+  // Gate R17: a figure is grounded only by its own sentence's binding, and a total / restatement only by an explicit
+  // computation record (scripts/verify-gate-regressions.ts covers the loopholes); here, the old paths kept working.
+  const bindTo = (d: D, benefit: string, passage: string) => ({ policyId: d.id, subjectId: me.id, benefit, documentHash: "sha256:" + d.number, pageStart: 2, pageEnd: 2, passage });
+  const halfUp = { mode: "half_up", precision: 2 } as const;
+  await check("G01 figures bound to their own cited passage, and totals / periods of them with an explicit record, are kept", async () => {
+    const s1 = "Your death cover adds up to S$220,000.", d1 = "Term Shield death benefit: S$200,000.", d2 = "Recheck Life death benefit: S$20,000.", d3 = "Term Shield premium S$1,200 a year, about S$100 a month.";
+    const ts = bindTo(docs.SGD, "Death benefit", "Death benefit S$200,000."), rl = bindTo(docs.REVER, "Death benefit", "Death benefit S$20,000."), pr = bindTo(docs.SGD, "Annual premium", "Annual premium S$1,200.");
+    const a = answer(s1, [d1, d2, d3], [docs.SGD, docs.REVER]);
+    Object.assign(a, { figureBindings: [{ ...ts, sentence: d1, value: 200000, currency: "SGD" }, { ...rl, sentence: d2, value: 20000, currency: "SGD" }, { ...pr, sentence: d3, value: 1200, currency: "SGD" }],
+      computations: [{ sentence: s1, result: { value: 220000, currency: "SGD" }, operation: "sum", period: null, currency: "SGD", rounding: halfUp, scope: "person", operands: [{ value: 200000, currency: "SGD", period: null, role: "benefit", binding: ts }, { value: 20000, currency: "SGD", period: null, role: "benefit", binding: rl }] },
+        { sentence: d3, result: { value: 100, currency: "SGD" }, operation: "per_period", fromPeriod: "year", toPeriod: "month", factor: 12, period: "year", currency: "SGD", rounding: halfUp, operands: [{ value: 1200, currency: "SGD", period: "year", role: "premium", binding: pr }] }] });
     const problems = await verifyAnswerFigures(a, { accountId: A });
     assert.deepEqual(problems, []); assert.match(a.summary, /S\$220,000/); assert.equal(a.details.length, 3);
-    const b = answer("You asked about S$5,000; Term Shield states S$200,000.", [], [docs.SGD]);
-    assert.deepEqual(await verifyAnswerFigures(b, { accountId: A, userText: "is S$5,000 enough?" }), [], "a figure from the household's own message");
-    const dep = answer("For the dependants you pay S$1,506 a year: S$612.00 + 3 × S$298.00.", [], [docs.SGD]);
+    // The same answer without its bindings and records: nothing a cited page prints somewhere grounds it any more.
+    const bare = answer(s1, [d1, d2, d3], [docs.SGD, docs.REVER]);
+    await verifyAnswerFigures(bare, { accountId: A }); assert.ok(!/220,000|200,000|S\$100 a month/.test([bare.summary, ...bare.details].join(" ")), [bare.summary, ...bare.details].join(" "));
+    const b = answer("You asked about S$5,000.", [], [docs.SGD]);
+    assert.deepEqual(await verifyAnswerFigures(b, { accountId: A, userText: "is S$5,000 enough?" }), [], "a figure from the household's own message, attributed");
     await db.query("UPDATE policy_pages SET text=text||' Spouse S$612.00 per year. Each child S$298.00 per year.' WHERE policy_id=$1", [docs.SGD.id]);
-    assert.deepEqual(await verifyAnswerFigures(dep, { accountId: A }), [], "a total of counted dependant premiums");
+    const sd = "For the dependants you pay S$1,506 a year for your family: S$612.00 + 3 × S$298.00 in premiums.";
+    const sp = { ...bindTo(docs.SGD, "Spouse premium", "Spouse S$612.00 per year."), subjectId: spouse.id }, ch = bindTo(docs.SGD, "Each child premium", "Each child S$298.00 per year.");
+    await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", [docs.SGD.id, spouse.id, A]);
+    const childOp = { value: 298, currency: "SGD", period: "year", role: "premium", binding: ch };
+    const dep = answer(sd, [], [docs.SGD]);
+    Object.assign(dep, { figureBindings: [{ ...sp, sentence: sd, value: 612, currency: "SGD" }, { ...ch, sentence: sd, value: 298, currency: "SGD" }],
+      computations: [{ sentence: sd, result: { value: 1506, currency: "SGD" }, operation: "sum", period: "year", currency: "SGD", rounding: halfUp, scope: "household", operands: [{ value: 612, currency: "SGD", period: "year", role: "premium", binding: sp },
+        { value: 894, currency: "SGD", period: "year", role: "premium", computation: { sentence: "", result: { value: 894, currency: "SGD" }, operation: "product", factor: 3, period: "year", currency: "SGD", rounding: halfUp, operands: [childOp] } }] }] });
+    assert.deepEqual(await verifyAnswerFigures(dep, { accountId: A }), [], "a total of counted dependant premiums, recorded");
   });
   await check("G02 a figure in another currency, from no cited page, or with no citation at all is removed and the answer says so", async () => {
-    const a = answer("Dollar Life pays S$100,000 on death. Term Shield pays S$200,000.", [], [docs.USD, docs.SGD]);
+    const s2 = "Term Shield death benefit is S$200,000.";
+    const a = answer("Dollar Life pays S$100,000 on death. " + s2, [], [docs.USD, docs.SGD]);
+    Object.assign(a, { figureBindings: [{ ...bindTo(docs.USD, "Death benefit", "Death benefit US$100,000."), sentence: "Dollar Life pays S$100,000 on death.", value: 100000, currency: "SGD" }, { ...bindTo(docs.SGD, "Death benefit", "Death benefit S$200,000."), sentence: s2, value: 200000, currency: "SGD" }] });
     const p = await verifyAnswerFigures(a, { accountId: A });
     assert.equal(p.length, 1, JSON.stringify(p)); assert.ok(!/S\$100,000/.test(a.summary)); assert.match(a.summary, /S\$200,000/); assert.ok(a.details.includes(FIGURE_LEFT_OUT_NOTE));
     const b = answer("Your total cover is S$999,000.", [], []);
@@ -398,17 +419,18 @@ async function totals() {
   });
   await check("G03 a cover statement the cited page contradicts is removed; a supported one stays", async () => {
     const a = answer("Fractures are covered. Hospital cash is S$100 per day.", [], [acc]);
+    Object.assign(a, { figureBindings: [{ policyId: acc.id, subjectId: me.id, benefit: "Hospital cash", documentHash: "sha256:pa", pageStart: 2, pageEnd: 2, passage: "Hospital cash S$100 per day.", sentence: "Hospital cash is S$100 per day.", value: 100, currency: "SGD" }] });
     const p = await verifyAnswerFigures(a, { accountId: A });
     assert.equal(p.length, 1, JSON.stringify(p)); assert.ok(!/Fractures are covered/.test(a.summary)); assert.match(a.summary, /S\$100 per day/); assert.ok(a.details.includes(CLAIM_LEFT_OUT_NOTE) || a.details.includes(FIGURE_LEFT_OUT_NOTE));
     const b = answer("Fractures are not covered.", [], [acc]);
     assert.deepEqual(await verifyAnswerFigures(b, { accountId: A }), []);
   });
-  await check("G05 a policy-stated limit stands only when its cited page prints its amount beside its currency", async () => {
-    const lim = (amount: number, currency: string, d: D) => ({ kind: "policy_stated_limit", label: "Policy-stated coverage limit", notice: "", benefitTitle: "Death benefit", ownerName: null, amount, currency, amountText: "x", quote: "", citation: citeOf(d) });
+  await check("G05 a policy-stated limit stands only with its own binding to a cited page that prints its amount beside its currency", async () => {
+    const lim = (amount: number, currency: string, d: D, binding?: unknown) => ({ kind: "policy_stated_limit", label: "Policy-stated coverage limit", notice: "", benefitTitle: "Death benefit", ownerName: null, amount, currency, amountText: "x", quote: "", citation: citeOf(d), ...(binding ? { binding } : {}) });
     const a = answer("Here is the limit.", [], []);
-    (a as { policyStatedLimits?: unknown[] }).policyStatedLimits = [lim(200000, "SGD", docs.SGD), lim(100000, "SGD", docs.USD)];
+    (a as { policyStatedLimits?: unknown[] }).policyStatedLimits = [lim(200000, "SGD", docs.SGD, bindTo(docs.SGD, "Death benefit", "Death benefit S$200,000.")), lim(100000, "SGD", docs.USD, bindTo(docs.USD, "Death benefit", "Death benefit US$100,000.")), lim(200000, "SGD", docs.SGD)];
     const p = await verifyAnswerFigures(a, { accountId: A });
-    assert.equal(a.policyStatedLimits!.length, 1, "the US$ limit relabelled S$ is dropped"); assert.equal(a.policyStatedLimits![0].amount, 200000); assert.equal(p.length, 1);
+    assert.equal(a.policyStatedLimits!.length, 1, "the US$ limit relabelled S$, and the card with no binding, are dropped"); assert.equal(a.policyStatedLimits![0].amount, 200000); assert.equal(p.length, 2);
   });
   await check("G04 the gate is wired into the save of every chat answer (workflow saveTurn)", async () => {
     const src = await readFile(path.resolve("lib/chat/workflow.ts"), "utf8");

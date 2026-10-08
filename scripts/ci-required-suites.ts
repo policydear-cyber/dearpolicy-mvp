@@ -103,4 +103,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "r11:blind-test",
   "r7:chat-robustness-test",
   "verify:assertions-test",
+  "verify:gate-test",
 ];

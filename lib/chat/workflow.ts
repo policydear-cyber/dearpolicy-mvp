@@ -102,6 +102,8 @@ const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   if(hypothetical)args.state.hypothetical=hypothetical;else if(args.state.plannedEvent&&args.state.intent!=="claim")args.state.hypothetical="planned "+args.state.plannedEvent;
   else if(args.state.hypothetical==="rejected claim"&&args.answer.mode==="answer"&&args.state.intent!=="claim"){/* still on the turned-down claim */}else delete args.state.hypothetical;
   // Round 16: every answer path's figures and cover statements are checked against the cited pages (lib/chat/answer-verification.ts).
+  // Gate R17: the bindings and computation records this turn's producers attached (lib/chat/answer-verification.ts).
+  await attachProvenance(args.answer,args.conversation.account_id);
   const figureProblems=await verifyAnswerFigures(args.answer,{accountId:args.conversation.account_id,userText:args.message});
   if(figureProblems.length)((globalThis as {__dpVerifyDebug?:boolean}).__dpVerifyDebug?(m:string)=>process.stderr.write(m+"\n"):console.warn)("[figure-gate] "+JSON.stringify({problems:figureProblems.map(p=>({where:p.where,reason:p.reason}))}));
   return storeTurn(args);
@@ -128,7 +130,7 @@ import { inactiveDocuments,inactiveList } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
-import { verifyAnswerFigures } from "./answer-verification";
+import { attachProvenance,citeLine,verifyAnswerFigures,withProvenanceScope } from "./answer-verification";
 
 
 export type ChatRequest={
@@ -3051,7 +3053,9 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(!merged.benefits.length&&!merged.observations.length&&reviews.find(r=>r.id===contract.id)!.status==="searched")reviews.find(r=>r.id===contract.id)!.status="no_matching_section";
           for(const observation of dedupeNegativeRestatements(merged.observations)){
             const text=readableObservation(observation.text);
-            if(text)observations.push(contract.ownerName+" · "+contract.name+": "+text);
+            if(text){const line=contract.ownerName+" · "+contract.name+": "+text;observations.push(line);
+              // Gate R17: the figures of an observation are read from the passage its evidence quotes (resolved on those pages at save time).
+              for(const q of observation.evidence)for(const p of analysisPassages.filter(x=>x.id===q.sourceId))citeLine(null,line,{policyId:p.policyId,pageStart:p.pageStart,pageEnd:p.pageEnd,subjectId:contract.ownerId});}
             addCitations(answer.citations,observation.evidence.flatMap(q=>analysisPassages.filter(p=>p.id===q.sourceId).map(p=>p.citation)));
           }
           for(const step of merged.nextSteps)answer.nextSteps.push(step.text);
@@ -3265,7 +3269,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
     // Every model call in this turn is booked to this household (usage,
     // per-household limit) -- see lib/ai/usage.ts.
     // Round 10: and shares one model time budget (lib/ai/usage.ts chatTurnModelBudgetMs).
-    const result = await runWithModelHousehold(context.request.accountId, () => turnDisplay.run({message:context.request.displayQuestion}, () => runChatWorkflowInternal(context, options)), { budgetMs: chatTurnModelBudgetMs() });
+    const result = await runWithModelHousehold(context.request.accountId, () => turnDisplay.run({message:context.request.displayQuestion}, () => withProvenanceScope(() => runChatWorkflowInternal(context, options))), { budgetMs: chatTurnModelBudgetMs() });
     void recordEvent({
       name: "chat.turn.completed",
       correlationId,

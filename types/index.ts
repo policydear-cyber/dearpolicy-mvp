@@ -29,6 +29,8 @@ export type PolicyStatedLimit = {
   /** Verbatim clause text the amount and currency were read from. */
   quote:string;
   citation:ChatCitation;
+  /** Gate R17: the card's own binding (person, benefit, version, page range, passage). A card without one is dropped. */
+  binding?:FigureBinding;
 };
 /** Where a claim-related benefit stands before any claim evidence has been
  * reviewed (a preliminary claim assessment never carries an event amount). */
@@ -188,6 +190,59 @@ export type FactFindingPlanView = {
   readyForEvidenceGatedEstimate:boolean;blockedReasons:string[];
 };
 
+
+/** Gate R17 (lib/chat/answer-verification.ts): where ONE figure of an answer comes from -- the policy, the
+ * person the sentence is about, the benefit (row / label), the document version (file hash), the page range
+ * and the verbatim passage, and the table column where a table prints one column per person or tier. A figure
+ * is grounded only by its own binding, checked against that passage of that version. */
+export type FigureBinding = {
+  policyId:string;
+  /** The family member the sentence (or card) is about. */
+  subjectId:string;
+  /** The benefit's row / label, as the document prints it ("Death benefit", "Annual premium"). */
+  benefit:string;
+  /** The cited version's file hash (policies.file_hash). */
+  documentHash:string|null;
+  pageStart:number; pageEnd:number;
+  /** Verbatim from the cited page(s). */
+  passage:string;
+  /** The column header of the person's / tier's column, where the row prints one column per person or tier. */
+  column?:string|null;
+  /** The wording presents a superseded version as superseded. */
+  presentedAsSuperseded?:boolean;
+};
+/** A figure stated in one sentence of the answer, bound to its source. `sentence` is the exact sentence. */
+export type BoundFigure = FigureBinding & { sentence:string; value:number; currency:string };
+export type FigurePeriod = "day"|"week"|"month"|"quarter"|"half_year"|"year"|"event"|"lifetime";
+/** One operand of a computation: a figure grounded by its own binding, an explicitly attributed figure from the
+ * household's own message (never a policy figure), or (explicitly) another computation record. */
+export type ComputationOperand = {
+  value:number; currency:string; period:FigurePeriod|null;
+  /** What the figure is: a premium, a benefit / sum insured / limit, or the household's own figure. */
+  role:"premium"|"benefit"|"user";
+  binding?:FigureBinding;
+  user?:boolean;
+  computation?:ComputationRecord;
+};
+/** An explicit record of how a computed figure (total, monthly restatement, multiple, difference) was worked out.
+ * The gate recomputes it; words like "total" or "about" prove nothing. */
+export type ComputationRecord = {
+  /** The exact sentence that states the result (empty for a nested operand record). */
+  sentence:string;
+  result:{ value:number; currency:string };
+  operation:"sum"|"product"|"difference"|"divide"|"per_period";
+  operands:ComputationOperand[];
+  /** product: the count; divide: the divisor; per_period: the conversion factor (12 for year <-> month). */
+  factor?:number;
+  fromPeriod?:FigurePeriod; toPeriod?:FigurePeriod;
+  /** The period every operand is stated per (they must all share it). */
+  period:FigurePeriod|null;
+  currency:string;
+  rounding:{ mode:"half_up"|"half_even"|"down"|"up"|"none"; precision:number };
+  /** "household": operands for different people, stated as a household total. */
+  scope?:"person"|"household";
+};
+
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -240,4 +295,8 @@ export type ChatAnswer = {
    * (never present unless lib/claims/composition/engine.ts actually ran).
    * See ClaimCompositionView's own doc comment. */
   composition?:ClaimCompositionView|null;
+  /** Gate R17: per-sentence binding of every figure the answer's text states (lib/chat/answer-verification.ts). */
+  figureBindings?:BoundFigure[];
+  /** Gate R17: explicit records of every computed figure the answer's text states. */
+  computations?:ComputationRecord[];
 };
