@@ -387,6 +387,10 @@ async function main() {
     state.claim = { subjectId: M.ben.id, facts: { admitted_at: { value: "2026-03-01T20:00+08:00", words: "admitted 1 March 8pm", turn: 1 }, discharged_at: { value: "2026-03-04T11:00+08:00", words: "discharged 4 March 11am", turn: 1 } }, derived: [] };
     const comp2 = CO.composeFinal({ sentences: [{ text: "Ben's hospital cash under Kestrel DayCare Cash comes to S$160 for his stay.", result_id: e.calcId }] }, cx);
     expectRow("composer estimate: label + record", "true 1", `${comp2.sentences[0]?.text.startsWith("Indicative estimate:")} ${comp2.calculations.length}`);
+    // Integration (S7): the household's bill figure in an estimate sentence is attributed by the composer.
+    expectRow("composer attributes the bill", "Indicative estimate: for the S$2,400 bill you mentioned, Ben's cover comes to S$800.", CO.attributeHouseholdFigures("Indicative estimate: for a S$2,400 bill, Ben's cover comes to S$800.", { record: { operands: [{ source: "household", unit: "money", value: 2400 }] } as never }));
+    expectRow("already attributed: unchanged", "Indicative estimate: for the S$2,400 bill you gave, it comes to S$800.", CO.attributeHouseholdFigures("Indicative estimate: for the S$2,400 bill you gave, it comes to S$800.", { record: { operands: [{ source: "household", unit: "money", value: 2400 }] } as never }));
+    expectRow("a printed figure is never attributed to the household", "Indicative estimate: up to the S$800 limit, it comes to S$800.", CO.attributeHouseholdFigures("Indicative estimate: up to the S$800 limit, it comes to S$800.", { record: { operands: [{ source: "household", unit: "money", value: 2400 }] } as never }));
     const comp3 = CO.composeFinal({ sentences: [{ text: "Ben will be paid S$160.", result_id: e.calcId }] }, cx);
     assert.equal(comp3.sentences.length, 0, "a payout is dropped");
   });

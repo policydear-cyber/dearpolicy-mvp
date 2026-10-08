@@ -291,6 +291,25 @@ function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: stri
   }
   return { keys, problem: null };
 }
+/** Integration (S7): an estimate sentence that states the household's own bill figure says it is theirs ("the S$1,500
+ * bill you mentioned") -- the composer words it; the gate is not relaxed. Only the household's money operands are
+ * attributed, and only where the sentence does not already attribute them. */
+const SAID_BACK = /\byou(?:['’]ve| have)? (?:asked about|mentioned|said|told (?:me|us)|wrote|reported|gave|quoted|entered|typed|noted|stated|put)\b|\baccording to you\b|\byour (?:own )?(?:figures?|bill|amount)\b/i;
+export function attributeHouseholdFigures(text: string, c: Pick<CalcOutcome, "record">): string {
+  if (SAID_BACK.test(text)) return text;
+  const own = (c.record?.operands ?? []).filter((o) => o.source === "household" && o.unit === "money" && typeof o.value === "number");
+  let t = text;
+  for (const f of moneyFiguresIn(text)) {
+    if (!own.some((o) => same(o.value as number, f.value))) continue;
+    const raw = f.raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const before = new RegExp(String.raw`\b(?:an?|the|your)\s+` + raw + String.raw`\s+(bill|invoice|claim|amount)\b`, "i");
+    const after = new RegExp(String.raw`\b(?:an?|the|your)\s+(bill|invoice|amount)\s+of\s+` + raw + String.raw`\b`, "i");
+    if (before.test(t)) t = t.replace(before, (_m, n: string) => `the ${f.raw} ${n} you mentioned`);
+    else if (after.test(t)) t = t.replace(after, (_m, n: string) => `the ${f.raw} ${n} you mentioned`);
+    else t = t.replace(f.raw, `${f.raw} (the figure you mentioned)`);
+  }
+  return t;
+}
 function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string }, evIds: string[], valueOps: TableValueOperand[], subjectId: string | null, ctx: Ctx, out: Composed, drop: (s: string, r: string, note?: string) => void): void {
   let text = text0;
   const pd = payoutOrDecision(text);
@@ -308,6 +327,7 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
       const hh = calcFactKeys(c, ctx); if (hh.problem) { drop(text, hh.problem, MISSING_FACT_NOTE); return; }
       factKeys = hh.keys;
     } else if (!ILLUSTRATION_IF.test(text)) { drop(text, "an illustration must state its what-if (“if …”)"); return; }
+    if (c.kind === "indicative_estimate") text = attributeHouseholdFigures(text, c);
     const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
     if (!fig) { drop(text, "does not state the calculation’s result"); return; }
     out.calculations.push({ ...c.record, sentence: partOf(fig.raw) });
