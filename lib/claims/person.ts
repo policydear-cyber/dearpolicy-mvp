@@ -371,9 +371,15 @@ const COL_CLASS: [ColumnClass, RegExp][] = [
 const PERSONISH = /\b(?:insured|assured|covered|persons?|people|individuals?|famil(?:y|ies)|category|categories|relationship|juniors?|youths?|teen\w*|seniors?|elderly|students?|retirees?|beneficiar\w*|nominees?|helpers?|domestic|named)\b/i;
 const AMOUNT_PHRASE = /\b(?:sum|amount|value)s? (?:insured|assured|covered)\b|\b(?:insured|assured|covered) (?:sum|amount|value)s?\b/gi;
 
+const FAMILY_AGGREGATE = /\bfamily (?:maximum|max|limit|aggregate|total|plan|cover|sum insured)\b|\b(?:per|whole|entire) family\b/i;
+
 export function columnApplicability(header: string | null | undefined): ColumnApplicability {
   const h = String(header ?? "").replace(AMOUNT_PHRASE, " ").replace(/\s+/g, " ").trim();
   if (!h) return { kind: "none" };
+  // Integration (round 3): a whole-family aggregate or plan column ("Family maximum", "Family plan", "per family") is
+  // one limit for the family, not a class of person -- like a tier, it names nobody (r6: the family maximum for trip
+  // cancellation). "Family members" still names people without a known class.
+  if (FAMILY_AGGREGATE.test(h) && !COL_CLASS.some(([, re]) => re.test(h.replace(new RegExp(FAMILY_AGGREGATE.source, "gi"), " ")))) return { kind: "none" };
   let classes = COL_CLASS.filter(([, re]) => re.test(h)).map(([c]) => c);
   if (/\bfamily members?\b/i.test(h)) classes = classes.filter((c) => c !== "owner");
   // A dependant child is a child; a dependant spouse is a spouse.

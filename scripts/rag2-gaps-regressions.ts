@@ -101,6 +101,8 @@ async function main() {
     assert.equal(k("Spouse"), "spouse"); assert.equal(k("Dependant child"), "child");
     assert.equal(k("Spouse & Child"), "ambiguous"); assert.equal(k("Adult or Child"), "ambiguous");
     assert.equal(k("Senior"), "unrecognised"); assert.equal(k("Insured persons"), "unrecognised"); assert.equal(k("Family members"), "unrecognised");
+    // Integration (round 3): a whole-family aggregate column is one limit for the family, not a class of person (r6).
+    assert.equal(k("Family maximum"), "none"); assert.equal(k("Per family"), "none"); assert.equal(k("Family maximum (adults)"), "adult");
     assert.equal(k("Benefit (S$)"), "none"); assert.equal(k("Sum insured"), "none"); assert.equal(k("Plan B"), "none"); assert.equal(k(""), "none");
     const adult = P.personApplicability({ relationship: "spouse", notes: null, dateOfBirth: "1980-01-01" }, { asOf: "2026-10-08" });
     for (const h of ["Child", "Juvenile", "Spouse & Child", "Senior", "Insured persons"]) assert.ok(P.columnFitProblem(P.columnApplicability(h), adult, { isOwner: false }), `${h} must not support an adult`);
