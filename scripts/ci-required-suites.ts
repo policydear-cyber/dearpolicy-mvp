@@ -105,4 +105,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "verify:assertions-test",
   "verify:gate-test",
   "rag2:tools-test",
+  "rag2:loop-test",
 ];

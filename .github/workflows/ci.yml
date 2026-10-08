@@ -193,6 +193,8 @@ jobs:
         run: npm run verify:gate-test
       - name: Conversational RAG retrieval tools behind DEARPOLICY_RAG_TOOLS (default off; household-scoped, active/released/current documents only; the subject's table column before the value; every value with its evidence -- page, row, column, passage offsets; integer-cent calculations labelled printed limit vs indicative estimate; bindings and records accepted by the save-time gate)
         run: npm run rag2:tools-test
+      - name: Conversational RAG loop behind DEARPOLICY_RAG_LOOP (default off; one model-driven loop through the real chat route with a scripted test model -- the person resolved first and asked once, one policy-relevant question at a time, never a known fact again, an interruption answered then the pending question re-asked, a correction updating facts and withdrawing what was derived, every visible sentence tied to evidence and checked by the save-time gate, indicative estimates labelled and never totalled)
+        run: npm run rag2:loop-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

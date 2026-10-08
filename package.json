@@ -137,6 +137,8 @@
     "verify:assertions-test": "node --import tsx scripts/verify-assertions-regressions.ts",
     "verify:gate-test": "node --import tsx scripts/verify-gate-regressions.ts",
     "rag2:tools-test": "node --import tsx scripts/rag2-tools-regressions.ts",
+    "rag2:loop-test": "node --import tsx scripts/rag2-loop-regressions.ts",
+    "rag2:loop-demo": "node --import tsx scripts/rag2-loop-demo.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",
     "e2e:browser": "playwright test -c e2e/playwright.config.ts",
