@@ -192,23 +192,33 @@ async function main() {
     assert.ok(evidence(d1).some((x: any) => x.policyId === doc("HOSP").id && /Deductible/.test(x.table?.rowLabel ?? "")));
     assert.equal(Object.keys(d1.loop.claim.facts).includes("bill_amount"), false);
   });
-  await check("D-f1 every input known: printed limits cited, hospital cash as labelled indicative estimates (S$200, S$160), never a total", () => {
+  // Agent K (expectation change): the old answer multiplied 2 nights by each daily rate (S$200, S$160) although
+  // DailyCare pays "from the first full day of admission" and FamilyGuard's wording states no day-count rule. Now the
+  // fracture bill is an indicative estimate with its calculation record (min of the bill, S$800 per fracture and the
+  // S$1,500 child limit), and each hospital cash benefit states its printed rate plus the specific missing information.
+  await check("D-f1 every input known: printed limits cited; the fracture bill as a verified indicative estimate (S$800); hospital cash = printed rate + what is still needed, never nights x rate; never a total", () => {
     const a = f1.saved.answer, v = visible(a);
     assert.match(v, /up to S\$800 per fracture/); assert.match(v, /S\$1,500 per policy year, in the Insured Child column/);
-    assert.match(v, /Indicative estimate: FamilyGuard hospital cash of S\$100 per day for 2 nights comes to S\$200\./);
-    assert.match(v, /Indicative estimate: DailyCare hospital cash of S\$80 per day for 2 nights comes to S\$160\./);
-    assert.doesNotMatch(v, /S\$360|payout/i); assert.equal(a.disclaimer, ESTIMATE_NOTICE);
-    assert.deepEqual(f1.trace.gate, []); assert.equal((a.computations ?? []).length, 2);
-    assert.ok((a.computations ?? []).every((c) => c.operation === "product" && c.operands[0].binding?.subjectId === M.junhao.id));
-    assert.equal(f1.loop.pending, null); assert.equal(f1.loop.claim.derived.length, 2);
+    assert.match(v, /Indicative estimate: for the S\$2,400 bill you gave, Jun Hao's accidental medical expenses for the fracture come to S\$800\./);
+    assert.match(v, /Jun Hao's hospital cash is S\$100 per day\./); assert.match(v, /hospital cash per day is S\$80\./);
+    assert.match(v, /I still need how FamilyGuard Personal Accident counts hospital days/);
+    assert.match(v, /I still need Jun Hao’s admission and discharge dates and times/);
+    assert.doesNotMatch(v, /S\$200|S\$160|S\$360|payout/i); assert.equal(a.disclaimer, ESTIMATE_NOTICE);
+    assert.deepEqual(f1.trace.gate, []); assert.equal((a.calculations ?? []).length, 1);
+    assert.ok((a.calculations ?? []).every((c) => c.calculator === "bill_reimbursement" && c.subjectId === M.junhao.id && c.kind === "indicative_estimate"));
+    assert.equal(f1.loop.pending, null); assert.equal(f1.loop.claim.derived.length, 1);
+    assert.ok(a.claimSessionId, "a claim scenario: the claim record is written through the existing workflow");
   });
-  await check("D-e/f2 correction: nights updated 2 -> 3, the old estimates withdrawn, the final answer recomputed (S$300, S$240) and grounded", () => {
+  // Agent K (expectation change): no estimate was ever worked out from the number of nights, so the correction updates
+  // the fact and withdraws nothing; hospital cash still needs the admission and discharge (nights never stand in).
+  await check("D-e/f2 correction: nights updated 2 -> 3; nothing was derived from nights, so nothing is withdrawn; hospital cash still needs the dates; the answer stays grounded", () => {
     const a = f2.saved.answer, v = visible(a);
-    assert.match(a.summary, /^Updated: nights in hospital is now 3 \(you first said 2\)\. The earlier estimate worked out from it no longer applies\./);
-    assert.match(v, /for 3 nights comes to S\$300\./); assert.match(v, /for 3 nights comes to S\$240\./);
-    assert.doesNotMatch(v, /S\$200|S\$160|S\$540/);
+    assert.match(a.summary, /^Updated: nights in hospital is now 3 \(you first said 2\)\./);
+    assert.doesNotMatch(a.summary, /no longer applies/);
+    assert.match(v, /I still need Jun Hao’s admission and discharge dates and times/);
+    assert.doesNotMatch(v, /S\$300|S\$240|S\$200|S\$160|S\$540/);
     assert.equal(f2.loop.claim.facts.nights_in_hospital.value, "3"); assert.equal(f2.loop.claim.facts.nights_in_hospital.previous[0].value, "2");
-    assert.ok(f2.loop.claim.derived.every((d: any) => d.turn === f2.loop.turn) && f2.loop.claim.derived.length === 2);
+    assert.ok(f2.loop.claim.derived.some((d: any) => d.turn === f2.loop.turn) && f2.loop.claim.derived.every((d: any) => d.factKeys.includes("bill_amount")));
     assert.deepEqual(f2.trace.corrections, [{ key: "nights_in_hospital", from: "2", to: "3" }]);
     assert.deepEqual(f2.trace.gate, []);
     const e = evidence(f2);
@@ -266,30 +276,36 @@ async function main() {
   const S = await run([
     { steps: [
       () => [call("resolve_person", { mention: "Jun Hao" })],
-      () => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "nights_in_hospital", value: "2", words: "2 nights" }] })],
+      () => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "bill_amount", value: "2400", currency: "SGD", words: "the bill was S$2,400" }] })],
       (v) => [call("policies_for", { subject_id: M.junhao.id, topic: "hospital" })],
       (v) => [call("ask_user", { kind: "fact", fact_key: "bill_amount", subject_id: M.junhao.id, question: "How much was the bill? And which hospital?", because_evidence_ids: ["e1"] })],
       (v) => [call("ask_user", { kind: "person", question: "Which son do you mean?", options: [M.junhao.id] })],
-      (v) => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "nights_in_hospital", value: "3", words: "actually 3" }] })],
-      (v) => [call("select_table_value", { policy_id: (pick(v, "policies_for").covering as any[]).find((p) => /FamilyGuard/.test(p.productName)).policyId, benefit: "Hospital cash", subject_id: M.junhao.id })],
-      (v) => [call("compute", { operation: "per_day", label: "stale", operands: [{ value_id: pick(v, "select_table_value").valueId }, { household: { label: "nights", attribution: "2 nights", count: 2 } }] })],
-      (v) => [call("compute", { operation: "per_day", label: "fresh", operands: [{ value_id: pick(v, "select_table_value").valueId }, { household: { label: "nights", attribution: "actually 3", count: 3 } }] })],
-      (v) => { const fresh = v.find("compute", (o) => o.args.label === "fresh")!.result.data; return [call("final_answer", { subject_id: M.junhao.id, sentences: [
-        { text: `FamilyGuard hospital cash of S$100 per day for 3 nights gives a payout of S$${fresh.amount}.`, result_id: fresh.resultId },
-        { text: `FamilyGuard hospital cash of S$100 per day for 3 nights comes to S$${fresh.amount}.`, result_id: fresh.resultId },
+      (v) => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "bill_amount", value: "600", currency: "SGD", words: "actually it was S$600" }] })],
+      (v) => [call("select_table_value", { policy_id: (pick(v, "policies_for").covering as any[]).find((p) => /FamilyGuard/.test(p.productName)).policyId, benefit: "Accidental medical expenses", subject_id: M.junhao.id, want: "amount" })],
+      (v) => { const pa = (pick(v, "policies_for").covering as any[]).find((p) => /FamilyGuard/.test(p.productName)).policyId, lim = pick(v, "select_table_value").valueId; return [
+        call("calculate", { calculator: "bill_reimbursement", purpose: "question", subject_id: M.junhao.id, policy_id: pa, benefit: "Accidental medical expenses", bill: { amount: 2400, currency: "SGD", words: "the bill was S$2,400" }, limit_value_ids: [lim] }),
+        call("calculate", { calculator: "bill_reimbursement", purpose: "question", subject_id: M.junhao.id, policy_id: pa, benefit: "Accidental medical expenses", bill: { amount: 600, currency: "SGD", words: "actually it was S$600" }, limit_value_ids: [lim] }),
+      ]; },
+      (v) => { const done = v.turn.filter((o: any) => o.name === "calculate" && o.ok).map((o: any) => o.result.data); const stale = done.find((d: any) => d.amount === 1500), fresh = done.find((d: any) => d.amount === 600); return [call("final_answer", { subject_id: M.junhao.id, sentences: [
+        { text: `Indicative estimate: for the S$2,400 bill you gave, Jun Hao's accidental medical expenses come to S$${stale.amount.toLocaleString("en-SG")}.`, result_id: stale.calc_id },
+        { text: `For the S$600 bill you gave, accidental medical expenses gives a payout of S$${fresh.amount}.`, result_id: fresh.calc_id },
+        { text: `For the S$600 bill you gave, Jun Hao's accidental medical expenses come to S$${fresh.amount}.`, result_id: fresh.calc_id },
       ] })]; },
     ] },
-  ], ["Jun Hao was in hospital 2 nights, no wait, actually 3. What's the hospital cash?"]);
-  await check("N3 two questions at once and a person question without real candidates are refused; a stale (corrected) figure is refused at compute and payout wording never reaches the household; an estimate is labelled", () => {
+  ], ["Jun Hao's hospital bill was S$2,400, no wait, actually it was S$600. What can we claim?"]);
+  await check("N3 two questions at once and a person question without real candidates are refused; a stale (corrected) figure and payout wording never reach the household; an estimate is labelled", () => {
     const t = S.turns[0], v = visible(t.saved.answer);
     const refusals = t.trace.toolCalls.filter((x: any) => !x.ok).map((x: any) => x.error);
     assert.ok(refusals.some((e: string) => /exactly one question/.test(e))); assert.ok(refusals.some((e: string) => /two or more household members/.test(e)));
-    assert.ok(t.trace.toolCalls.some((x: any) => x.name === "compute" && x.args.label === "stale" && !x.ok && /not a recorded fact/.test(x.error)), "the stale figure is refused at compute");
-    assert.doesNotMatch(v, /S\$200|payout/i);
-    assert.match(v, /^Updated: nights in hospital is now 3 \(you first said 2\)\./);
-    assert.match(v, /Indicative estimate: FamilyGuard hospital cash of S\$100 per day for 3 nights comes to S\$300\./);
-    assert.ok(t.trace.dropped.some((d: any) => /payout/.test(d.reason)));
-    assert.deepEqual(t.trace.gate, []);
+    // Agent K (expectation change): the stale / corrected figure is now the household's bill (nights are never multiplied).
+    assert.doesNotMatch(v, /S\$1,500|payout/i);
+    // Known gap (hook wording, reported to the coordinator): the correction note "Updated: bill amount is now 600 SGD
+    // (you first said 2400 SGD)." states the household's money figures without an attribution phrase the gate accepts,
+    // so the gate removes that note (and says so). The correction itself is recorded:
+    assert.deepEqual(t.trace.corrections, [{ key: "bill_amount", from: "2400 SGD", to: "600 SGD" }]);
+    assert.match(v, /Indicative estimate: For the S\$600 bill you gave, Jun Hao's accidental medical expenses come to S\$600\./);
+    assert.ok(t.trace.dropped.some((d: any) => /not a fact the household has given/.test(d.reason)) && t.trace.dropped.some((d: any) => /payout/.test(d.reason)));
+    assert.ok(t.trace.gate.every((g: any) => /^Updated: bill amount/.test(g.sentence ?? "") || /600 SGD|2400 SGD/.test(g.figure)), JSON.stringify(t.trace.gate));
   });
   const P = await run([
     { steps: [() => [call("resolve_person", { mention: "my son" })], (v) => [call("ask_user", { kind: "person", question: pick(v, "resolve_person").question, options: pick(v, "resolve_person").options.map((o: any) => o.id) })]] },

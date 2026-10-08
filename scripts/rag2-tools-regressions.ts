@@ -418,9 +418,13 @@ async function main() {
   await check("K2 indicative estimates: household days with a day cap, deductible, co-insurance with cap; never called a payout", async () => {
     const rate = okv(await value("CASH", "hospital cash", M.junhao.id)), cap = okv(await value("CASH", "maximum days per admission", M.junhao.id, "count"));
     const stay = K.householdFigure("days in hospital", "he was in hospital for 45 days", { count: 45 });
-    const e = K.perDay(operand(rate), stay, operand(cap));
+    // Agent K (expectation change): a household-reported number of days is never a payable-day count -- per-day
+    // benefits count days by the policy's own rule from admission and discharge (the calculate tool).
+    const refusedDays = K.perDay(operand(rate), stay, operand(cap));
+    assert.equal(refusedDays.status, "refused"); assert.match((refusedDays as { reason: string }).reason, /payable-day count/);
+    const e = K.perDay(operand(rate), operand(cap));
     assert.equal(e.status, "ok"); if (e.status !== "ok") return;
-    assert.deepEqual([e.kind, e.cents, e.record], ["indicative_estimate", 240000, null]); assert.ok(e.steps[0].includes("30"));
+    assert.deepEqual([e.kind, e.cents], ["printed_limit", 240000]);
     const bill = K.householdFigure("specialist bill", "the bill was S$900", { amount: 900, currency: "SGD" });
     const pct = okv(await value("OUTPT", "outpatient fracture treatment", M.yixuan.id, "percent"));
     const co = K.coInsurance(bill, operand(pct), K.householdFigure("co-insurance cap", "my plan caps co-pay at S$50", { amount: 50, currency: "SGD" }));
@@ -428,11 +432,13 @@ async function main() {
     assert.deepEqual([co.kind, co.cents], ["indicative_estimate", 85000]);
     const ded = K.deductible(bill, K.householdFigure("deductible", "my deductible is S$1,000", { amount: 1000, currency: "SGD" }));
     assert.equal(ded.status, "ok"); if (ded.status === "ok") assert.equal(ded.cents, 0);
-    for (const r of [e, co]) assert.ok(!JSON.stringify(r).toLowerCase().includes("payout"));
+    for (const r of [co, ded]) assert.ok(!JSON.stringify(r).toLowerCase().includes("payout"));
   });
   await check("K3 refusals: estimates never enter totals, mixed currencies, unattributed household figures, non-amount values", async () => {
     const rate = okv(await value("CASH", "hospital cash", M.junhao.id));
-    const est = K.perDay(operand(rate), K.householdFigure("days", "four days", { count: 4 }));
+    // Agent K (expectation change): household days are refused for a per-day rate; the estimate used here is a deductible on the household's bill.
+    assert.equal(K.perDay(operand(rate), K.householdFigure("days", "four days", { count: 4 })).status, "refused");
+    const est = K.deductible(K.householdFigure("bill", "the bill was S$500", { amount: 500, currency: "SGD" }), K.householdFigure("deductible", "my deductible is S$100", { amount: 100, currency: "SGD" }));
     assert.equal(est.status, "ok");
     const t = K.sum([est as import("@/lib/rag2/compute").ComputeOk, operand(rate)]);
     assert.equal(t.status, "refused"); assert.match((t as { reason: string }).reason, /estimate never enters a total/);
@@ -441,7 +447,8 @@ async function main() {
     assert.equal(K.sum([operand(rate), K.householdFigure("bill", "  ", { amount: 10, currency: "SGD" })]).status, "refused");
     const pct = okv(await value("CI", "severe", M.melissa.id, "percent"));
     assert.equal(K.sum([operand(rate), operand(pct)]).status, "refused", "a percentage is not an amount");
-    assert.equal(K.perDay(operand(okv(await value("CI", "severe", M.melissa.id, "amount"))), K.householdFigure("days", "3 days", { count: 3 })).status, "ok", "an unperiod amount may be multiplied");
+    assert.equal(K.perDay(operand(okv(await value("CI", "severe", M.melissa.id, "amount"))), K.householdFigure("days", "3 days", { count: 3 })).status, "refused", "Agent K: household days are never multiplied as payable days");
+    assert.equal(K.product(operand(okv(await value("CI", "severe", M.melissa.id, "amount"))), K.householdFigure("times", "3 times", { count: 3 })).status, "ok", "an unperiod amount may be multiplied");
   });
   await check("K4 integer-cent arithmetic and rounding: 0.1 + 0.2, half-up, policy rounding stated", () => {
     const a = K.householdFigure("a", "you said 0.10", { amount: 0.1, currency: "SGD" }), b = K.householdFigure("b", "you said 0.20", { amount: 0.2, currency: "SGD" });
@@ -508,9 +515,9 @@ async function main() {
   const ON = { DEARPOLICY_RAG_TOOLS: "1", NODE_ENV: "test" } as unknown as NodeJS.ProcessEnv;
   await check("R1 registry: every tool has a name, description and object schema; no tool takes an account id", () => {
     const names = R.RAG_TOOLS.map((t) => t.name);
-    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "policies_for", "select_table_value", "compute"]);
+    assert.deepEqual(names, ["search_passages", "read_page", "resolve_person", "policies_for", "select_table_value", "compute", "calculate"]);
     for (const t of R.RAG_TOOLS) { assert.equal(t.parameters.type, "object"); assert.ok(t.description.length > 20); assert.ok(!JSON.stringify(t.parameters).includes("account")); }
-    assert.equal(R.toolSpecs().length, 6);
+    assert.equal(R.toolSpecs().length, 7);
   });
   await check("R2 a conversation through the registry: person -> value -> compute, all with evidence", async () => {
     const ctx = R.createToolContext({ accountId: ACCOUNT, speakerId: M.darren.id, asOf: ASOF });
@@ -523,7 +530,8 @@ async function main() {
     assert.ok(v.ok && v.evidence.length >= 1); const vid = ((v as { data: { valueId: string } }).data).valueId;
     for (const ev of v.evidence) exact(ev, "CASH");
     const c = await R.runTool(ctx, "compute", { operation: "per_day", operands: [{ value_id: vid }, { household: { label: "days", attribution: "he stayed 3 days", count: 3 } }] }, ON);
-    assert.ok(c.ok, JSON.stringify(c)); assert.equal((c as { data: { cents: number; kind: string } }).data.cents, 24000); assert.equal((c as { data: { kind: string } }).data.kind, "indicative_estimate");
+    // Agent K (expectation change): "he stayed 3 days" x rate is refused -- payable days follow the policy's day-count rule.
+    assert.equal(c.ok, false); assert.match((c as { error: string }).error, /payable-day count/);
     const pr = await R.runTool(ctx, "policies_for", { subject_id: M.junhao.id }, ON);
     assert.ok(pr.ok && pr.evidence.length >= 1);
     const sr = await R.runTool(ctx, "search_passages", { query: "hospital cash", k: 3 }, ON);

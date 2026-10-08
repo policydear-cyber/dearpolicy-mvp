@@ -11,7 +11,7 @@ const data = (o: ScriptObservation | undefined): any => { if (!o) throw new Erro
 const person = (v: ScriptView) => { const r = data(v.find("resolve_person")); if (r.status !== "ok") throw new Error("script: person not resolved: " + JSON.stringify(r)); return r.person.id as string; };
 const policy = (v: ScriptView, product: RegExp) => { const c = (data(v.find("policies_for")).covering as any[]).find((p) => product.test(p.productName ?? "")); if (!c) throw new Error("script: no covering policy like " + product); return c.policyId as string; };
 const selected = (v: ScriptView, benefit: RegExp) => { const o = [...v.turn].reverse().find((x) => x.name === "select_table_value" && benefit.test(String(x.args.benefit))); const d = data(o); if (d.status !== "ok") throw new Error("script: value not selected: " + JSON.stringify(d).slice(0, 300)); return d as { valueId: string; value: number; currency: string; rowLabel: string; columnHeader: string }; };
-const result = (v: ScriptView, label: RegExp) => { const o = [...v.turn].reverse().find((x) => x.name === "compute" && label.test(String(x.args.label))); return data(o) as { resultId: string; amount: number; currency: string }; };
+export const computeResult = (v: ScriptView, label: RegExp) => { const o = [...v.turn].reverse().find((x) => x.name === "compute" && label.test(String(x.args.label))); return data(o) as { resultId: string; amount: number; currency: string }; };
 const hitOf = (v: ScriptView, text: RegExp) => { for (const o of [...v.turn].reverse()) if (o.name === "search_passages" && o.ok) { const h = (o.result.data.hits as any[]).find((x) => text.test(x.evidence?.excerpt ?? x.text ?? "")); if (h) return { id: h.evidence.evidence_id as string, text: String(h.evidence.excerpt ?? h.text) }; } throw new Error("script: no passage like " + text); };
 const hit = (v: ScriptView, text: RegExp) => hitOf(v, text).id;
 /** A figure as the passage prints it (read from the tool result, as a model reads it). */
@@ -45,20 +45,32 @@ export function claimConversation(): ScriptTurn[] {
       call("select_table_value", { policy_id: cash, benefit: "Maximum days per admission", subject_id: junHao, want: "count" }),
     ];
   };
-  const computeCash = (v: ScriptView, nights: number, words: string): ScriptCall[] => [
-    call("compute", { operation: "per_day", label: "FamilyGuard hospital cash", operands: [{ value_id: selected(v, /^Hospital cash$/).valueId }, { household: { label: "nights in hospital", attribution: words, count: nights } }] }),
-    call("compute", { operation: "per_day", label: "DailyCare hospital cash", operands: [{ value_id: selected(v, /Hospital cash per day/).valueId }, { household: { label: "nights in hospital", attribution: words, count: nights } }, { value_id: selected(v, /Maximum days/).valueId }] }),
-  ];
+  // Agent K (expectation change): hospital cash is never nights x rate. The benefits are worked out with the
+  // calculate tool: the fracture bill against the per-fracture and annual limits (an indicative estimate), and each
+  // hospital cash benefit under its own day-count rule -- unresolved here (DailyCare needs the admission and discharge
+  // dates and times for "from the first full day of admission"; FamilyGuard's stored wording states no day-count rule).
+  const calcs = (v: ScriptView, nights: number, words: string): ScriptCall[] => {
+    void nights; void words;
+    const pa = policy(v, /FamilyGuard/), cash = policy(v, /DailyCare/);
+    const fractureHit = hitOf(v, /per fracture/);
+    return [
+      call("calculate", { calculator: "bill_reimbursement", purpose: "claim", subject_id: junHao, policy_id: pa, benefit: "Accidental medical expenses", bill: { amount: 2400, currency: "SGD", words: "The bill was S$2,400" }, limit_value_ids: [selected(v, /Accidental medical/).valueId], passage_limits: [{ page: 2, quote: (fractureHit.text.split("\n").find((l) => /per fracture/.test(l)) ?? fractureHit.text).trim(), amount: printed(fractureHit.text, /S\$([\d,]+) per fracture/), currency: "SGD", label: "Accidental medical expenses per fracture", applies: "sub_limit" }] }),
+      call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: junHao, policy_id: pa, benefit: "Hospital cash", rate_value_id: selected(v, /^Hospital cash$/).valueId }),
+      call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: junHao, policy_id: cash, benefit: "Hospital cash per day", rate_value_id: selected(v, /Hospital cash per day/).valueId, day_cap_value_id: selected(v, /Maximum days/).valueId }),
+    ];
+  };
+  const calcOf = (v: ScriptView, calculator: string, product: RegExp) => { const o = [...v.turn].reverse().find((x) => x.name === "calculate" && x.ok && x.args.calculator === calculator && x.args.policy_id === policy(v, product)); return data(o) as { calc_id: string; amount: number | null; kind: string }; };
   const claimAnswer = (v: ScriptView, nights: number) => {
+    void nights;
     const ame = selected(v, /Accidental medical/), pa = selected(v, /^Hospital cash$/), cash = selected(v, /Hospital cash per day/);
-    const rPa = result(v, /FamilyGuard/), rCash = result(v, /DailyCare/);
     const fractureHit = hitOf(v, /per fracture/), fracture = fractureHit.id, perFracture = printed(fractureHit.text, /S\$([\d,]+) per fracture/);
+    const rBill = calcOf(v, "bill_reimbursement", /FamilyGuard/), rPa = calcOf(v, "hospital_cash", /FamilyGuard/), rCash = calcOf(v, "hospital_cash", /DailyCare/);
     return [call("final_answer", { subject_id: junHao, sentences: [
       { text: `Jun Hao's fracture comes under accidental medical expenses on FamilyGuard Personal Accident, which pays fractures up to ${sgd(perFracture)} per fracture.`, evidence_ids: [fracture], benefit: "accidental medical expenses" },
       { text: `His accidental medical expenses limit is ${sgd(ame.value)} per policy year, in the Insured Child column.`, value_ids: [ame.valueId] },
-      { text: "The bill you mentioned is above that per-fracture limit for accidental medical expenses.", evidence_ids: [fracture] },
-      { text: `Indicative estimate: FamilyGuard hospital cash of ${sgd(pa.value)} per day for ${nights} nights comes to ${sgd(rPa.amount)}.`, result_id: rPa.resultId },
-      { text: `Indicative estimate: DailyCare hospital cash of ${sgd(cash.value)} per day for ${nights} nights comes to ${sgd(rCash.amount)}.`, result_id: rCash.resultId },
+      { text: `Indicative estimate: for the S$2,400 bill you gave, Jun Hao's accidental medical expenses for the fracture come to ${sgd(rBill.amount ?? 0)}.`, result_id: rBill.calc_id },
+      { text: `Under FamilyGuard Personal Accident, Jun Hao's hospital cash is ${sgd(pa.value)} per day.`, result_id: rPa.calc_id },
+      { text: `Under DailyCare Hospital Cash, his hospital cash per day is ${sgd(cash.value)}.`, result_id: rCash.calc_id },
     ], next_steps: ["Keep the hospital bill, the discharge summary and the doctor’s memo; each insurer asks for them with the claim form."] })];
   };
   return [
@@ -110,7 +122,7 @@ export function claimConversation(): ScriptTurn[] {
         call("search_passages", { query: "fracture accidental medical expenses", subject_id: junHao }),
       ],
       (v) => hospitalCash(v, 2, "warded for 2 nights"),
-      (v) => computeCash(v, 2, "warded for 2 nights"),
+      (v) => calcs(v, 2, "warded for 2 nights"),
       (v) => claimAnswer(v, 2),
     ] },
     { user: "3 nights", steps: [
@@ -120,7 +132,7 @@ export function claimConversation(): ScriptTurn[] {
         call("search_passages", { query: "fracture accidental medical expenses", subject_id: junHao }),
       ],
       (v) => hospitalCash(v, 3, "Actually it was 3 nights"),
-      (v) => computeCash(v, 3, "Actually it was 3 nights"),
+      (v) => calcs(v, 3, "Actually it was 3 nights"),
       (v) => claimAnswer(v, 3),
     ] },
   ];
