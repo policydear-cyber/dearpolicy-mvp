@@ -202,6 +202,8 @@ jobs:
         run: npm run rag2:calc-test
       - name: Conversational RAG adversarial-review fixes (instruction text in a document is never evidence and passage figures bind only to the passage's own label; payout and claim-decision wording refused in every sentence, estimate and next step; sums of limits never a claimable total; household figures never policy operands; remembered evidence re-validated every turn; figure-free statements checked against their evidence; a corrected person withdraws and names the estimate; compound and re-asked questions refused; the day-count rule end to end through calculate; spend cap and metering before every loop model call)
         run: npm run rag2:fix-test
+      - name: Conversational RAG adversarial suite (two synthetic households; the reviewer's required behaviour for evidence, people, facts, calculations, limits and lifecycle -- must pass in full)
+        run: npm run rag2:adversarial-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
