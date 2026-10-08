@@ -213,7 +213,7 @@ async function main() {
   // the fact and withdraws nothing; hospital cash still needs the admission and discharge (nights never stand in).
   await check("D-e/f2 correction: nights updated 2 -> 3; nothing was derived from nights, so nothing is withdrawn; hospital cash still needs the dates; the answer stays grounded", () => {
     const a = f2.saved.answer, v = visible(a);
-    assert.match(a.summary, /^Updated: nights in hospital is now 3 \(you first said 2\)\./);
+    assert.match(a.summary, /^Updated: nights in hospital is now 3 \(you said 2 at first\)\./);
     assert.doesNotMatch(a.summary, /no longer applies/);
     assert.match(v, /I still need Jun Hao’s admission and discharge dates and times/);
     assert.doesNotMatch(v, /S\$300|S\$240|S\$200|S\$160|S\$540/);
@@ -299,13 +299,13 @@ async function main() {
     assert.ok(refusals.some((e: string) => /exactly one question/.test(e))); assert.ok(refusals.some((e: string) => /two or more household members/.test(e)));
     // Agent K (expectation change): the stale / corrected figure is now the household's bill (nights are never multiplied).
     assert.doesNotMatch(v, /S\$1,500|payout/i);
-    // Known gap (hook wording, reported to the coordinator): the correction note "Updated: bill amount is now 600 SGD
-    // (you first said 2400 SGD)." states the household's money figures without an attribution phrase the gate accepts,
-    // so the gate removes that note (and says so). The correction itself is recorded:
+    // Integration (K's reported gap, fixed): the correction note says the money figures are the household's own
+    // ("you said ... at first"), so the gate keeps it.
+    assert.match(v, /^Updated: bill amount is now 600 SGD \(you said 2400 SGD at first\)\./);
     assert.deepEqual(t.trace.corrections, [{ key: "bill_amount", from: "2400 SGD", to: "600 SGD" }]);
     assert.match(v, /Indicative estimate: For the S\$600 bill you gave, Jun Hao's accidental medical expenses come to S\$600\./);
     assert.ok(t.trace.dropped.some((d: any) => /not a fact the household has given/.test(d.reason)) && t.trace.dropped.some((d: any) => /payout/.test(d.reason)));
-    assert.ok(t.trace.gate.every((g: any) => /^Updated: bill amount/.test(g.sentence ?? "") || /600 SGD|2400 SGD/.test(g.figure)), JSON.stringify(t.trace.gate));
+    assert.deepEqual(t.trace.gate, [], JSON.stringify(t.trace.gate));
   });
   const P = await run([
     { steps: [() => [call("resolve_person", { mention: "my son" })], (v) => [call("ask_user", { kind: "person", question: pick(v, "resolve_person").question, options: pick(v, "resolve_person").options.map((o: any) => o.id) })]] },

@@ -86,7 +86,7 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   const answer = blank();
   const notes: string[] = [];
   for (const c of out.corrections) {
-    notes.push(`Updated: ${words(c.key)} is now ${show(c.to)} (you first said ${show(c.from)}).`);
+    notes.push(`Updated: ${words(c.key)} is now ${show(c.to)} (you said ${show(c.from)} at first).`);
     if (c.withdrawn.length) notes.push("The earlier estimate worked out from it no longer applies.");
   }
   if (reply.kind === "ask") {
