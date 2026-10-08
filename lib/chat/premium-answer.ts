@@ -468,7 +468,7 @@ export async function dependantPremiumAnswer(args: { accountId: string; question
       // Gate R17: each printed rate is bound to its own row (for a person of that row's kind), and the total is the
       // explicit record of the sum of each rate times the number of dependants of that kind the document names.
       const hash = (await documentHashes(args.accountId, [doc.id])).get(doc.id) ?? null;
-      const owner = (await query<{ owner: string }>(`SELECT family_member_id::text AS owner FROM policies WHERE account_id=$1 AND id::text=$2`, [args.accountId, doc.id]).catch(() => ({ rows: [] }))).rows[0]?.owner ?? null;
+      const owner = (await query<{ owner: string }>(`SELECT p.family_member_id::text AS owner FROM policies p WHERE p.account_id=$1 AND p.id::text=$2 AND ${activePredicate("p")}`, [args.accountId, doc.id]).catch(() => ({ rows: [] }))).rows[0]?.owner ?? null;
       const rateOperand = (who: "spouse" | "child", amount: number, subjectId: string | null | undefined) => {
         const b = subjectId ? rowBinding({ policyId: doc.id, subjectId, documentHash: hash, page: page.page, pageText: page.text, value: amount, currency: "SGD", want: who === "spouse" ? /\bspouse\b/i : /\bchild/i, benefit: who === "spouse" ? "Spouse premium" : "Child premium" }) : null;
         return b ? boundOperand(amount, "SGD", "year", "premium", b) : null;
