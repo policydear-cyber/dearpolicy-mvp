@@ -17,6 +17,8 @@ import { test, expect, type Page, type APIRequestContext } from "@playwright/tes
  */
 const MONEY = /S\$\s?\d/;
 const INTERNAL = /\b(?:e\d+|v\d+|r\d+)\b(?=[,.)\s])|evidence_id|value_id|result_id|select_table_value|final_answer|ask_user/;
+/** Agent P: commentary on what the composer removed, or why, is never shown to the household. */
+const COMMENTARY = /\bleft (?:it |them )?out\b|\bI left\b|couldn[’']t be tied|Part of what I was going to say/i;
 
 async function scenario(request: APIRequestContext, id: string): Promise<string[]> {
   const r = await request.post("/__rag2adv/scenario", { data: { id } });
@@ -49,6 +51,8 @@ test("S1 factual: Ethan's fracture benefit from his own (Child) column, cited", 
   await newChat(page);
   const t = await send(page, m);
   expect(t.visible).toMatch(/S\$600 per fracture/);
+  // Agent P: the conditions are not established, so the printed benefit reads as conditional, never as an entitlement.
+  expect(t.visible).toMatch(/S\$600 per fracture[^.]*payable if the fracture is confirmed by X-ray and certified/);
   expect(t.visible).not.toMatch(/1,000/);
   expect(t.visible).not.toMatch(INTERNAL);
   const saved = await last(request);
@@ -68,6 +72,7 @@ test("S2 broken arm: asks how it happened; never records 'accident' from 'broke 
   const t2 = await send(page, m2);
   expect(t2.visible).toMatch(/S\$600 per fracture/);
   expect(t2.visible).not.toMatch(/medically confirmed|approved/i);
+  expect(t2.visible).not.toMatch(COMMENTARY);
 });
 
 test("S3 hospital income per complete 24 hours: times asked one at a time; nights never become payable days", async ({ page, request }) => {
@@ -83,6 +88,21 @@ test("S3 hospital income per complete 24 hours: times asked one at a time; night
   // Integration (mechanics only): the rendered message includes the estimate notice ("... they are not a payout ..."),
   // which S7 below requires; the estimate itself must never be called a payout.
   expect(t3.visible.replace(/\bnot a payout\b/gi, "")).not.toMatch(/payout/i);
+  expect(t3.visible).not.toMatch(COMMENTARY);
+});
+
+test("S3one admission and discharge given in one message: both used, never asked again", async ({ page, request }) => {
+  const [m1, m2] = await scenario(request, "S3one");
+  await newChat(page);
+  const t1 = await send(page, m1);
+  expect(t1.visible).toMatch(/admitted and discharged/i); expect(t1.visible).not.toMatch(MONEY);
+  const t2 = await send(page, m2);
+  expect(t2.visible).not.toMatch(/\?/);
+  expect(t2.visible).toMatch(/Indicative estimate[^.]*S\$180/);
+  expect(t2.visible).not.toMatch(/S\$270/);
+  expect(t2.visible).not.toMatch(COMMENTARY);
+  const s = await last(request);
+  expect(s.state?.ragLoop?.claim?.facts?.discharged_at).toBeTruthy();
 });
 
 test("S4 side question about the speaker: answered for Marcus, then Ethan's pending question re-asked, Ethan's facts kept", async ({ page, request }) => {
@@ -116,6 +136,9 @@ test("S9 another household's member, policy and figure never appear; nothing is 
   await newChat(page);
   const t = await send(page, m);
   expect(t.visible).not.toMatch(/S\$120|FamilyFirst|Insured Child/);
+  // Agent P: said plainly, without saying anything about any other household.
+  expect(t.visible).toMatch(/couldn’t identify “Rohan” among the family members linked to your account/);
+  expect(t.visible).not.toMatch(/another household|another account|exists/i);
   const s = await last(request);
   expect(s.otherHouseholdMessages).toBe(0);
   expect(s.state?.ragLoop?.claim ?? null).toBeNull();

@@ -38,10 +38,12 @@ export const S1: Scenario = {
   turns: [{ steps: [
     () => [call("resolve_person", { mention: "Ethan" })],
     (v) => [call("policies_for", { subject_id: v.data("resolve_person").person.id, topic: "accident" })],
-    () => [stv(KS, "Fracture benefit", T.ethan.id)],
+    // Agent P: the model also looks up the benefit's conditions (prompt rule 6); it states only the figure -- the
+    // composer says it as conditional (the X-ray / doctor condition is not established).
+    () => [stv(KS, "Fracture benefit", T.ethan.id), call("search_passages", { query: "fracture benefit conditions confirmed by X-ray", subject_id: T.ethan.id })],
     (v) => { const s = valueOf(v, /Fracture/); return [call("final_answer", { subject_id: T.ethan.id, sentences: [{ text: `Ethan's KidSafe fracture benefit is ${s.currency === "SGD" ? "S$" : ""}${Number(s.value).toLocaleString("en-SG")} per fracture, from the Child column.`, value_ids: [s.valueId] }] })]; },
   ] }],
-  expect: { visible: ["states S$600 per fracture for Ethan", "never S$1,000 (the Adult column)", "no question"], evidence: ["KidSafe v2 p1, row 'Fracture benefit (per fracture)', column 'Child', cell 'S$600'", "binding subjectId = Ethan, column Child"] },
+  expect: { visible: ["states S$600 per fracture for Ethan", "never S$1,000 (the Adult column)", "no question", "conditional: payable if the fracture is confirmed by X-ray and certified (not an established entitlement)"], evidence: ["KidSafe v2 p1, row 'Fracture benefit (per fracture)', column 'Child', cell 'S$600'", "binding subjectId = Ethan, column Child", "KidSafe v2 p2 'payable once per fracture confirmed by X-ray and certified ...'"] },
 };
 
 export const S1b: Scenario = {
@@ -134,6 +136,40 @@ export const S3: Scenario = {
     visible: ["turn 1 and 2: one question each, admission then discharge date+time; no money", "turn 3: S$90 per complete 24 hours cited; 'Indicative estimate' S$180; NEVER S$270 (3 nights x S$90); no 'payout'"],
     evidence: ["KidSafe v2 p1 'Hospital income (each complete 24 hours, max 60)' / Child S$90", "KidSafe v2 p2 'payable for each complete period of 24 hours ... shorter than 24 hours is not counted'"],
     calculation: "payable periods = floor((5 Oct 09:00 - 2 Oct 21:30) / 24 h) = floor(59.5/24) = 2 (sources: household's admission/discharge words; rule: KidSafe p2); 2 x S$90 (KidSafe p1 Child) = S$180.00, half-up cents; label indicative estimate",
+  },
+};
+
+/** Agent P (task 5): the household gives the admission AND the discharge in one message; both are recorded at once,
+ * a careless re-ask for the discharge is refused, and the estimate follows -- no second question. */
+export const S3one: Scenario = {
+  id: "S3one", account: "T", title: "hospital income per complete 24 hours: admission and discharge supplied in one message, never re-asked",
+  messages: ["Ethan was kept in hospital after his fall. How much hospital income can we claim?", "He was admitted on 2 October at about 9.30pm and discharged on 5 October at 9am, so 3 nights."],
+  turns: [
+    { steps: [
+      () => [call("resolve_person", { mention: "Ethan" })],
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "how_it_happened", value: "fall", words: "after his fall" }, { key: "hospitalised", value: "yes", words: "kept in hospital" }] })],
+      () => [stv(KS, "Hospital income", T.ethan.id), call("search_passages", { query: "hospital income complete period of 24 hours confined", subject_id: T.ethan.id })],
+      (v) => [call("ask_user", { kind: "fact", fact_key: "admission_datetime", subject_id: T.ethan.id, question: "On what dates and at what times was Ethan admitted and discharged?", because_evidence_ids: [hit(v, /complete period of 24 hours/)] })],
+    ] },
+    { steps: [
+      // Every fact the message gives, in one call.
+      () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "admitted_at", value: "2 October 9.30pm", words: "admitted on 2 October at about 9.30pm" }, { key: "discharged_at", value: "5 October 9am", words: "discharged on 5 October at 9am" }, { key: "nights_in_hospital", value: "3", words: "so 3 nights" }] })],
+      () => [stv(KS, "Hospital income", T.ethan.id)],
+      // A careless model asks again for what the message just gave: refused (already recorded).
+      (v) => [call("ask_user", { kind: "fact", fact_key: "discharged_at", subject_id: T.ethan.id, question: "On what date and at what time was Ethan discharged?", because_evidence_ids: [valueOf(v, /Hospital income/).evidence.evidence_id] })],
+      (v) => { const s = valueOf(v, /Hospital income/); return [hospitalCalc(T.ethan.id, KS, "Hospital income", s.valueId, AT("2026-10-02T21:30+08:00", "admitted on 2 October at about 9.30pm"), AT("2026-10-05T09:00+08:00", "discharged on 5 October at 9am"))]; },
+      (v) => { const s = valueOf(v, /Hospital income/); const good = calcOf(v); return [call("final_answer", { subject_id: T.ethan.id, sentences: [
+        { text: `Ethan's KidSafe hospital income is S$${s.value} for each complete 24 hours in hospital.`, value_ids: [s.valueId] },
+        // a careless model also states the nights figure against the calculation (rejected; nothing about it is shown)
+        ...(good ? [{ text: `Indicative estimate: KidSafe hospital income of S$${s.value} for 3 nights comes to S$270.`, result_id: good.calc_id }] : []),
+        ...(good && good.amount != null ? [{ text: `Indicative estimate: KidSafe hospital income of S$${s.value} for 2 complete periods of 24 hours comes to S$${good.amount}.`, result_id: good.calc_id }] : []),
+      ] })]; },
+    ] },
+  ],
+  expect: {
+    visible: ["turn 1: one question asking for the admission and discharge dates and times; no money", "turn 2: no question (both were given); S$90 per complete 24 hours cited; 'Indicative estimate' S$180; never S$270; no 'payout'"],
+    evidence: ["KidSafe v2 p1 'Hospital income (each complete 24 hours, max 60)' / Child S$90", "KidSafe v2 p2 'payable for each complete period of 24 hours'"],
+    calculation: "payable periods = floor((5 Oct 09:00 - 2 Oct 21:30) / 24 h) = floor(59.5/24) = 2; 2 x S$90 = S$180.00; label indicative estimate",
   },
 };
 
@@ -472,4 +508,4 @@ export const X10: Scenario = {
   expect: { visible: ["never 'fully covered' / 'expect the money'", "the neutral step may stay"], evidence: [] },
 };
 
-export const ALL: Scenario[] = [S1, S1b, S1c, S2, S3, S4, S4b, S5, S7, S7b, S6a, S6b, S8, S8b, S9loop, S10, X1, X2, X3, X4, X6, X7, X9, X10];
+export const ALL: Scenario[] = [S1, S1b, S1c, S2, S3, S3one, S4, S4b, S5, S7, S7b, S6a, S6b, S8, S8b, S9loop, S10, X1, X2, X3, X4, X6, X7, X9, X10];

@@ -30,7 +30,7 @@ const KS = doc("KIDSAFE").id;
 const DEMOS: Demo[] = [
   { n: 1, title: "Factual answer: a cited figure from the right person's column", scenario: SC.S1 },
   { n: 2, title: "Broken arm: asks how it happened where the wording depends on it; nothing inferred", scenario: SC.S2 },
-  { n: 3, title: "Hospital stay under the policy's own day-count rule (each complete 24 hours)", scenario: SC.S3 },
+  { n: 3, title: "Hospital stay under the policy's own day-count rule (each complete 24 hours); admission and discharge given in one message", scenario: SC.S3one },
   { n: 4, title: "Side question about the speaker during a child's claim", scenario: SC.S4 },
   { n: 5, title: "Stepchild: 'my son' resolved without assuming eligibility", scenario: SC.S5 },
   { n: 6, title: "Corrected discharge date invalidates and recomputes the estimate (first-full-day rule)", scenario: SC.S6b },

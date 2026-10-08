@@ -1,12 +1,11 @@
 # DearPolicy conversational RAG -- the ten required demonstrations
 
-> **Integration transcript.** Generated on the integrated head (6d75338 plus CHECKPOINT.md) with `npm run rag2:demo10 -- --out docs/rag-migration/checkpoint/DEMO10.md`. A SCRIPTED TEST MODEL plays the model, so this shows what DearPolicy's own code does with the model's tool calls: evidence, calculations, the save-time gate and the saved reply. It is not a real-model conversation. All data is synthetic.
-
+> **Integration transcript.** Regenerated on branch r3-P (agent P: presentation of the composed answer -- no duplicated missing-information question, household names, no internal commentary after a failed verification, unresolved person, supplied facts used, conditional printed benefits) with `npm run rag2:demo10 -- --out docs/rag-migration/checkpoint/DEMO10.md`. Demo 3 now uses scenario S3one (admission and discharge given in one message; the original three-message S3 stays in rag2:adversarial-test). A SCRIPTED TEST MODEL plays the model, so this shows what DearPolicy's own code does with the model's tool calls: evidence, calculations, the save-time gate and the saved reply. It is not a real-model conversation. All data is synthetic. "Dropped by the composer" lines are the internal trace; the household sees only the REPLY lines.
 
 SCRIPTED TEST MODEL through the real chat route (PGlite, DEARPOLICY_RAG_LOOP=1). Synthetic households: Tan (Brightwater KidSafe accident plan, Corallis MediGuard) and Nair (Veridian FamilyFirst hospital cash, Lumora SecureMed; shared login, two stepsons).
 
 ## 1. Factual answer: a cited figure from the right person's column  (scenario S1, household Tan)
-Expected: states S$600 per fracture for Ethan; never S$1,000 (the Adult column); no question
+Expected: states S$600 per fracture for Ethan; never S$1,000 (the Adult column); no question; conditional: payable if the fracture is confirmed by X-ray and certified (not an established entitlement)
 
 ### Turn 1
 USER: What does Ethan's accident plan pay if he fractures a bone?
@@ -14,13 +13,15 @@ Tool calls:
   - resolve_person({"mention":"Ethan"}) -> ok {"status":"ok"}
   - policies_for({"topic":"accident","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {}
   - select_table_value({"benefit":"Fracture benefit","policy_id":"73000000-0000-4000-8000-000000000101","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"status":"ok","valueId":"v1","value":600,"column":"Child","row":"Fracture benefit (per fracture)"}
+  - search_passages({"query":"fracture benefit conditions confirmed by X-ray","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"hits":3}
   - final_answer({"sentences":[{"text":"Ethan's KidSafe fracture benefit is S$600 per fracture, from the Child column.","value_ids":["v1"]}],"subject_id":"73000000-0000-4000-800…) -> ok
 Evidence selected:
+  - [e4] KidSafe Family Accident Plan p2 | for Ethan Tan Jun Kai | "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner."
   - [e3] KidSafe Family Accident Plan p1 | row "Fracture benefit (per fracture)" | column "Child" | for Ethan Tan Jun Kai | "Fracture benefit (per fracture) S$1,000 S$600"
 Calculation (verified record saved):
   (none saved)
 REPLY (as saved):
-  > Ethan's KidSafe fracture benefit is S$600 per fracture, from the Child column.
+  > Ethan's KidSafe fracture benefit is S$600 per fracture, from the Child column, payable if the fracture is confirmed by X-ray and certified by a registered medical practitioner.
 
 ## 2. Broken arm: asks how it happened where the wording depends on it; nothing inferred  (scenario S2, household Tan)
 Expected: turn 1: exactly one question, about how it happened (accident vs illness); no money figure; turn 2: S$600 per fracture; the X-ray/doctor requirement; never 'confirmed'/'approved' as if reviewed
@@ -49,20 +50,20 @@ Tool calls:
   - search_passages({"query":"fracture confirmed by X-ray certified","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"hits":3}
   - final_answer({"sentences":[{"text":"Ethan's KidSafe fracture benefit is S$600 per fracture.","value_ids":["v1"]},{"text":"Ethan's fracture is medically confirmed, so the fra…) -> ok
 Evidence selected:
-  - [e11] KidSafe Family Accident Plan p1 | row "Fracture benefit (per fracture)" | column "Child" | for Ethan Tan Jun Kai | "Fracture benefit (per fracture) S$1,000 S$600"
   - [e5] KidSafe Family Accident Plan p2 | for Ethan Tan Jun Kai | "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner."
+  - [e11] KidSafe Family Accident Plan p1 | row "Fracture benefit (per fracture)" | column "Child" | for Ethan Tan Jun Kai | "Fracture benefit (per fracture) S$1,000 S$600"
 Calculation (verified record saved):
   (none saved)
 Dropped by the composer:
   - "Ethan's fracture is medically confirmed, so the fracture benefit is approved." -- states a claim decision (approved / confirmed / fully covered) only the insurer can make
+  - "The fracture has to be confirmed by X-ray and certified by a registered medical practitioner." -- repeats the condition stated with the benefit
 REPLY (as saved):
-  > Ethan's KidSafe fracture benefit is S$600 per fracture.
-  > The fracture has to be confirmed by X-ray and certified by a registered medical practitioner.
-  > I left out a sentence that stated a decision on the claim: only the insurer decides a claim, after reviewing it and its evidence.
+  > Ethan's KidSafe fracture benefit is S$600 per fracture, payable if the fracture is confirmed by X-ray and certified by a registered medical practitioner.
+  > Only the insurer makes a decision on the claim, after reviewing it and its evidence.
 
-## 3. Hospital stay under the policy's own day-count rule (each complete 24 hours)  (scenario S3, household Tan)
-Expected: turn 1 and 2: one question each, admission then discharge date+time; no money; turn 3: S$90 per complete 24 hours cited; 'Indicative estimate' S$180; NEVER S$270 (3 nights x S$90); no 'payout'
-Expected calculation: payable periods = floor((5 Oct 09:00 - 2 Oct 21:30) / 24 h) = floor(59.5/24) = 2 (sources: household's admission/discharge words; rule: KidSafe p2); 2 x S$90 (KidSafe p1 Child) = S$180.00, half-up cents; label indicative estimate
+## 3. Hospital stay under the policy's own day-count rule (each complete 24 hours); admission and discharge given in one message  (scenario S3one, household Tan)
+Expected: turn 1: one question asking for the admission and discharge dates and times; no money; turn 2: no question (both were given); S$90 per complete 24 hours cited; 'Indicative estimate' S$180; never S$270; no 'payout'
+Expected calculation: payable periods = floor((5 Oct 09:00 - 2 Oct 21:30) / 24 h) = floor(59.5/24) = 2; 2 x S$90 = S$180.00; label indicative estimate
 
 ### Turn 1
 USER: Ethan was kept in hospital after his fall. How much hospital income can we claim?
@@ -71,35 +72,21 @@ Tool calls:
   - note_facts({"facts":[{"key":"how_it_happened","value":"fall","words":"after his fall"},{"key":"hospitalised","value":"yes","words":"kept in hospital"}],"subject_id":"73000…) -> ok
   - select_table_value({"benefit":"Hospital income","policy_id":"73000000-0000-4000-8000-000000000101","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"status":"ok","valueId":"v1","value":90,"column":"Child","row":"Hospital income (each complete 24 hours, max 60)"}
   - search_passages({"query":"hospital income complete period of 24 hours confined","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"hits":3}
-  - ask_user({"kind":"fact","fact_key":"admitted_at","question":"On what date and at what time was Ethan admitted?","subject_id":"73000000-0000-4000-8000-000000000003","beca…) -> ok
+  - ask_user({"kind":"fact","fact_key":"admission_datetime","question":"On what dates and at what times was Ethan admitted and discharged?","subject_id":"73000000-0000-4000-…) -> ok
 Evidence selected:
   - [e3] KidSafe Family Accident Plan p2 | for Ethan Tan Jun Kai | "Hospital income is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient. Any period shorter than 24 hours is not counted. Admission and discharg…"
 Calculation (verified record saved):
   (none saved)
 REPLY (as saved):
-  > On what date and at what time was Ethan admitted?
-  > [question] On what date and at what time was Ethan admitted?
+  > On what dates and at what times was Ethan admitted and discharged?
+  > [question] On what dates and at what times was Ethan admitted and discharged?
 
 ### Turn 2
-USER: He was admitted on 2 October at about 9.30pm.
+USER: He was admitted on 2 October at about 9.30pm and discharged on 5 October at 9am, so 3 nights.
 Tool calls:
-  - note_facts({"facts":[{"key":"admitted_at","value":"2 October 9.30pm","words":"admitted on 2 October at about 9.30pm"}],"subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok
-  - search_passages({"query":"hospital income complete period of 24 hours","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"hits":3}
-  - ask_user({"kind":"fact","fact_key":"discharged_at","question":"On what date and at what time was Ethan discharged?","subject_id":"73000000-0000-4000-8000-000000000003","…) -> ok
-Evidence selected:
-  - [e3] KidSafe Family Accident Plan p2 | for Ethan Tan Jun Kai | "Hospital income is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient. Any period shorter than 24 hours is not counted. Admission and discharg…"
-Calculation (verified record saved):
-  (none saved)
-REPLY (as saved):
-  > On what date and at what time was Ethan discharged?
-  > [question] On what date and at what time was Ethan discharged?
-
-### Turn 3
-USER: He was discharged on 5 October at 9am, so 3 nights.
-Tool calls:
-  - note_facts({"facts":[{"key":"discharged_at","value":"5 October 9am","words":"discharged on 5 October at 9am"},{"key":"nights_in_hospital","value":"3","words":"so 3 nights"…) -> ok
+  - note_facts({"facts":[{"key":"admitted_at","value":"2 October 9.30pm","words":"admitted on 2 October at about 9.30pm"},{"key":"discharged_at","value":"5 October 9am","words…) -> ok
   - select_table_value({"benefit":"Hospital income","policy_id":"73000000-0000-4000-8000-000000000101","subject_id":"73000000-0000-4000-8000-000000000003"}) -> ok {"status":"ok","valueId":"v2","value":90,"column":"Child","row":"Hospital income (each complete 24 hours, max 60)"}
-  - compute({"label":"nights","operands":[{"value_id":"v2"},{"household":{"count":3,"label":"nights","attribution":"so 3 nights"}}],"operation":"per_day"}) -> REFUSED: a number of days or nights the household gives is not a payable-day count: use the calculate tool (calculator hospital_cash) with the admission and discharge, which applies the policy's own day-count rule
+  - ask_user({"kind":"fact","fact_key":"discharged_at","question":"On what date and at what time was Ethan discharged?","subject_id":"73000000-0000-4000-8000-000000000003","…) -> REFUSED: discharged_at is already recorded (5 October 9am, "discharged on 5 October at 9am"); do not ask again
   - calculate({"benefit":"Hospital income","purpose":"claim","admission":{"at":"2026-10-02T21:30+08:00","words":"admitted on 2 October at about 9.30pm"},"discharge":{"at":"20…) -> ok {"amount":180,"kind":"indicative_estimate"}
   - final_answer({"sentences":[{"text":"Ethan's KidSafe hospital income is S$90 for each complete 24 hours in hospital.","value_ids":["v2"]},{"text":"Indicative estimate: KidSaf…) -> ok
 Evidence selected:
@@ -117,7 +104,6 @@ Dropped by the composer:
 REPLY (as saved):
   > Ethan's KidSafe hospital income is S$90 for each complete 24 hours in hospital.
   > Indicative estimate: KidSafe hospital income of S$90 for 2 complete periods of 24 hours comes to S$180.
-  > Part of what I was going to say couldn’t be tied to a passage of your documents, so I left it out.
   (notice) Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.
 
 ## 4. Side question about the speaker during a child's claim  (scenario S4, household Tan)
@@ -283,7 +269,7 @@ Evidence selected:
 Calculation (verified record saved):
   (none saved)
 REPLY (as saved):
-  > Updated: this is about Chloe Tan Xin Yi (Chloe), not Ethan Tan Jun Kai (Ethan). The earlier estimate I worked out for Ethan Tan Jun Kai (Ethan) from the bill amount no longer applies, because it was worked out for Ethan Tan Jun Kai (Ethan)'s policy, not Chloe Tan Xin Yi (Chloe)'s.
+  > Updated: this is about Chloe, not Ethan. The earlier estimate I worked out for Ethan from the bill amount no longer applies, because it was worked out for Ethan's policy, not Chloe's.
   > Chloe is not listed among the insured persons on the KidSafe Family Accident Plan.
 
 ## 7. A cap + excess calculation survives the save-time verification  (scenario S7b, household Tan)
@@ -330,7 +316,6 @@ Tool calls:
   - final_answer({"sentences":[{"text":"Rohan's FamilyFirst daily hospital cash is S$120 per day.","value_ids":["v1"]},{"text":"To work out the days payable I need Rohan's admis…) -> ok
 Evidence selected:
   - [e2] FamilyFirst Hospital Cash Plan p1 | row "Daily hospital cash (max 90 days per year)" | column "Insured Child" | for Rohan Nair | "Daily hospital cash (max 90 days per year) S$200 per day S$120 per day"
-  - [e3] FamilyFirst Hospital Cash Plan p2 | for Rohan Nair | "Daily hospital cash is payable for each day of inpatient confinement starting from the first full day of admission. The day of admission counts as a full day only if admission is before 12:00 noon. Th…"
   - [e7] FamilyFirst Hospital Cash Plan p2 | for Rohan Nair | "Daily hospital cash is payable for each day of inpatient confinement starting from the first full day of admission."
   - [e8] FamilyFirst Hospital Cash Plan p2 | for Rohan Nair | "The day of admission counts as a full day only if admission is before 12:00 noon."
   - [e9] FamilyFirst Hospital Cash Plan p1 | for Rohan Nair | "Daily hospital cash (max 90 days per year) S$200 per day S$120 per day"
@@ -338,11 +323,10 @@ Calculation (verified record saved):
   (none saved)
 Dropped by the composer:
   - "Indicative estimate: FamilyFirst daily hospital cash of S$120 per day for 3 days comes to S$360." -- S$360 is not a printed figure of this benefit (no estimate is possible yet: Rohan Nair’s admission and discharge dates and times (with the hospital’s time zone))
+  - "To work out the days payable I need Rohan's admission date and time and his discharge date." -- repeats the missing-information requirement
 REPLY (as saved):
   > Rohan's FamilyFirst daily hospital cash is S$120 per day.
-  > To work out the days payable I need Rohan's admission date and time and his discharge date.
-  > To work out Rohan Nair’s daily hospital cash under FamilyFirst Hospital Cash Plan, I still need Rohan Nair’s admission and discharge dates and times (with the hospital’s time zone).
-  > I left out an estimate because the information it needs isn’t known yet.
+  > To work out Rohan Nair’s daily hospital cash under FamilyFirst Hospital Cash Plan, I still need the admission and discharge dates and times (with the hospital’s time zone).
 
 ## 9. Another household's evidence is inaccessible  (scenario S9, household Tan)
 Expected: no S$120, no FamilyFirst cover statement, no Rohan as a person of this household
@@ -366,7 +350,7 @@ Dropped by the composer:
   - "Rohan's FamilyFirst daily hospital cash is S$120 per day." -- cites evidence no tool returned (e1)
   - "Rohan is insured as an Insured Child on FamilyFirst." -- states cover or a figure without citing evidence
 REPLY (as saved):
-  > Part of what I was going to say couldn’t be tied to a passage of your documents, so I left it out.
+  > I couldn’t identify “Rohan” among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them on the Household page.
 
 ## 10. Evidence of a document deleted mid-conversation cannot support the next answer  (scenario S10, household Tan)
 Expected: turn 2: neither S$90 nor 'covered for fractures' is stated from the deleted/superseded document; ideally says the document is no longer available
@@ -396,7 +380,7 @@ Dropped by the composer:
   - "Ethan's KidSafe hospital income is S$90 for each complete 24 hours." -- cites evidence from a document that is no longer available (e2)
   - "Ethan is covered for fractures under the KidSafe Family Accident Plan." -- cites evidence from a document that is no longer available (e2)
 REPLY (as saved):
-  > The KidSafe Family Accident Plan document an earlier answer relied on has since been deleted or replaced by a newer version, so I left out what it said.
+  > The KidSafe Family Accident Plan document an earlier answer relied on has since been deleted or replaced by a newer version, so I can no longer use what it said.
 
 ## 9 (tool level). Household Tan's tool context against household Nair
   - read_page({"policy_id":"73000000-0000-4000-8000-000000000111","page":1}) -> refused: that document is not one of this household's readable documents
