@@ -195,6 +195,8 @@ jobs:
         run: npm run rag2:tools-test
       - name: Conversational RAG loop behind DEARPOLICY_RAG_LOOP (default off; one model-driven loop through the real chat route with a scripted test model -- the person resolved first and asked once, one policy-relevant question at a time, never a known fact again, an interruption answered then the pending question re-asked, a correction updating facts and withdrawing what was derived, every visible sentence tied to evidence and checked by the save-time gate, indicative estimates labelled and never totalled)
         run: npm run rag2:loop-test
+      - name: Conversational RAG conversation state, fact provenance, evidence precision and usage accounting (integration, two synthetic households, scripted test model and a fake-fetch hosted adapter -- facts only from the household's words, no inferred classifications or payable days; speaker vs active subject in a shared login; stepchildren offered and labelled; supporting sentence / row with header, continuation and footnote; every loop model call counted, recorded and stopped by per-turn, household, run, time and cancellation limits with an honest reply)
+        run: npm run rag2:conv-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
