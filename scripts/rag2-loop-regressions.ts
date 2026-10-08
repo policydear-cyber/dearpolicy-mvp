@@ -325,6 +325,28 @@ async function main() {
     assert.doesNotMatch(v, /3 nights|covered/);
     assert.equal(t.trace.dropped.length, 2, JSON.stringify(t.trace.dropped));
   });
+  // Integration (agent C's request 3): the calculator's missing inputs drive the next question -- exactly that fact,
+  // one at a time, citing the calculator's evidence.
+  const MI = await run([
+    { steps: [
+      () => [call("resolve_person", { mention: "Jun Hao" })],
+      () => [call("policies_for", { subject_id: M.junhao.id, topic: "hospital" })],
+      (v) => [call("select_table_value", { policy_id: (pick(v, "policies_for").covering as any[]).find((p) => /DailyCare/.test(p.productName)).policyId, benefit: "Hospital cash per day", subject_id: M.junhao.id, want: "amount" })],
+      (v) => [call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: M.junhao.id, policy_id: (pick(v, "policies_for").covering as any[]).find((p) => /DailyCare/.test(p.productName)).policyId, benefit: "Hospital cash per day", rate_value_id: pick(v, "select_table_value").valueId })],
+      (v) => [call("ask_user", { kind: "fact", fact_key: "bill_amount", subject_id: M.junhao.id, question: "How much was the bill?", because_evidence_ids: [pick(v, "calculate").missing[0].evidence[0].evidence_id] })],
+      () => [call("ask_user", { kind: "fact", fact_key: "admission_datetime", subject_id: M.junhao.id, question: "When was Jun Hao admitted (date and time)?" })],
+    ] },
+  ], ["Jun Hao was in hospital. How much hospital cash can we get from DailyCare?"]);
+  await check("N3c an unresolved calculation lists its missing inputs as data; the loop asks for exactly the first one (citing the calculator's evidence), not another fact", () => {
+    const t = MI.turns[0];
+    const c = t.trace.toolCalls.find((x: any) => x.name === "calculate");
+    assert.ok(c && c.ok, "calculate ran");
+    const refused = t.trace.toolCalls.find((x: any) => x.name === "ask_user" && !x.ok);
+    assert.ok(refused && /still needs admission_datetime/.test(refused.error), JSON.stringify(t.trace.toolCalls.map((x: any) => [x.name, x.ok, x.error])));
+    assert.equal(t.saved.answer.questions.length, 1);
+    assert.equal(t.saved.answer.questions[0].id, "rag_fact_admission_datetime");
+    assert.equal(t.trace.outcome, "ask_user");
+  });
   const P = await run([
     { steps: [() => [call("resolve_person", { mention: "my son" })], (v) => [call("ask_user", { kind: "person", question: pick(v, "resolve_person").question, options: pick(v, "resolve_person").options.map((o: any) => o.id) })]] },
     { steps: [() => [call("ask_user", { kind: "person", question: "Which son do you mean?", options: [M.junhao.id, M.junwei.id] })], () => [call("resolve_person", { mention: "the younger one" })], (v) => [call("final_answer", { sentences: [{ text: "Thanks, I'll look at the youngest." }] })]] },

@@ -104,12 +104,58 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
   } else return fail(`unknown calculator ${String(a.calculator)}`);
   if ("refused" in out) return fail(out.refused);
   calcOutcomes(ctx).set(out.calcId, { ...out, purpose } as CalcOutcome & { purpose: string });
+  const missing = await missingInputs(ctx, out, a, doc.fileHash ?? null);
   return { ok: true, evidence: out.evidence, data: {
     calc_id: out.calcId, kind: out.kind, purpose, amount: out.amount, currency: out.currency,
     printed: out.printed.map((p) => ({ label: p.label, value: p.value, unit: p.unit, currency: p.currency, value_id: p.valueId ?? null })),
     requirements: out.requirements, conditions: out.conditions.map((c) => ({ id: c.id, kind: c.kind, status: c.status, text: c.text, ...(c.needs ? { needs: c.needs } : {}) })),
     steps: out.steps, unresolved_text: out.kind === "unresolved" || out.kind === "not_payable" ? out.unresolvedText : null, reason: out.reason ?? null, evidence_requirements: out.evidenceRequirements,
+    missing,
   } };
+}
+
+/**
+ * Integration (agent C's request 3): what the calculation still needs, as data the loop can act on. Each item names
+ * the fact key its answer is recorded under (or the condition id to pass back in `settled`), who can answer it
+ * ("household": ask them, one question at a time; "insurer": state it, never ask the household), why (the
+ * calculator's own wording of the requirement) and the passages that make it matter (shown to the model as evidence
+ * ids). Ordered as they should be asked. Empty when the calculation is resolved.
+ */
+export type MissingInput = { key: string; condition_id: string | null; ask: "household" | "insurer"; why: string; evidence: EvidenceRef[] };
+async function missingInputs(ctx: ToolContext, out: CalcOutcome, a: Record<string, unknown>, documentHash: string | null): Promise<MissingInput[]> {
+  if (out.kind !== "unresolved") return [];
+  const pages = await pageMap(ctx.accountId, out.policyId);
+  const refOf = (c: CalcOutcome["conditions"][number]): EvidenceRef[] => {
+    if (!c.passage) return [];
+    const same = out.evidence.find((e) => e.passage.text === c.passage!.text);
+    if (same) return [same];
+    const text = pages.get(c.passage.pageStart);
+    const ev = text ? evidenceFor({ policyId: out.policyId, documentHash, page: c.passage.pageStart, pageText: text, passage: c.passage.text, subjectId: out.subjectId }) : null;
+    return ev ? [ev] : [];
+  };
+  const items: MissingInput[] = [];
+  const push = (m: MissingInput) => { if (!items.some((x) => x.key === m.key)) items.push(m); };
+  const rate = out.evidence[0] ? [out.evidence[0]] : [];
+  if (out.calculator === "hospital_cash") {
+    const timing = out.conditions.filter((c) => c.kind === "day_count_rule" || c.kind === "minimum_stay").flatMap(refOf);
+    const why = out.requirements.find((r) => /admission|discharge/i.test(r)) ?? "the admission and discharge dates and times the policy wording counts from";
+    const at = (k: string) => { const h = a[k] as Record<string, unknown> | undefined; return h && typeof h.at === "string" ? h.at : null; };
+    const hasTime = (v: string | null) => !!v && /T\d{2}:\d{2}/.test(v);
+    const needTimes = out.requirements.some((r) => /times?\b/i.test(r) && /admission|discharge/i.test(r));
+    if (out.requirements.some((r) => /admission|discharge/i.test(r))) {
+      if (a.stay_ongoing !== true && (!at("admission") || (needTimes && !hasTime(at("admission"))))) push({ key: "admission_datetime", condition_id: null, ask: "household", why, evidence: [...rate, ...timing] });
+      if (!at("discharge") || (needTimes && !hasTime(at("discharge")))) push({ key: "discharge_datetime", condition_id: null, ask: "household", why, evidence: [...rate, ...timing] });
+    }
+  }
+  if (out.calculator === "bill_reimbursement" && !a.bill) push({ key: "bill_amount", condition_id: null, ask: "household", why: "the bill amount", evidence: rate });
+  for (const c of out.conditions) {
+    if (c.status !== "unresolved" || !c.needs) continue;
+    if (c.kind === "minimum_stay") continue; // settled by the admission / discharge times above
+    if (c.kind === "currency") { push({ key: "bill_amount", condition_id: c.id, ask: "household", why: c.needs, evidence: rate }); continue; }
+    const insurer = c.kind === "day_count_rule" || c.kind === "deduction_order" || c.kind === "definition";
+    push({ key: c.id, condition_id: c.id, ask: insurer ? "insurer" : "household", why: c.needs, evidence: refOf(c).length ? refOf(c) : rate });
+  }
+  return items;
 }
 
 /** A limit printed in a sentence, located verbatim on its stored page; its amount must be printed in the quote. */

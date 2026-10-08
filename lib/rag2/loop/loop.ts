@@ -13,6 +13,7 @@
 import { moneyFiguresIn } from "@/lib/chat/answer-verification";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import { loadPages } from "../store";
+import { calcOutcomes } from "../calc/tool";
 import { createToolContext, RAG_TOOLS, runTool, validateArgs, type ToolContext } from "../tools";
 import { loopLimits } from "@/lib/ai/usage";
 import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, householdOperandProblem, normalizeKey } from "./facts";
@@ -108,6 +109,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   ctx.conversation.recentSubjectIds = [...state.recentSubjectIds];
   ctx.seq = state.seq;
   const computeCalls = new Map<string, ComputeCall>();
+  /** Integration (agent C's request 3): what the latest calculate result for each person still needs from the
+   * household (fact key, why, the evidence ids that make it matter), in the order it should be asked. */
+  const calcMissing = new Map<string, { key: string; why: string; evidenceIds: string[] }[]>();
   const trace: TraceTurn = { turn: state.turn, userMessage: input.message, modelId: input.model.id, modelKind: input.model.kind, steps: 0, usage: { input: 0, output: 0 }, latencyMs: 0, toolCalls: [], evidenceChosen: [], outcome: "budget_exhausted", dropped: [], gate: [], calls: [], limit: null };
   const corrections: LoopOutput["corrections"] = [];
   const pendingBefore = state.pending;
@@ -240,10 +244,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const claim = subject ? (state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject]) : null;
       const known = claim?.facts[key];
       if (known && confirmed(known)) return { result: { ok: false, error: `${key} is already recorded (${String(known.value)}, "${known.words}"); do not ask again` } };
-      const because = ((a.because_evidence_ids as string[]) ?? []).filter((id) => state.evidence[id]);
+      // The calculation's own missing inputs drive the next question: ask exactly those, one at a time, in order.
+      const stillNeeded = (subject ? calcMissing.get(subject) ?? [] : []).filter((m) => !(claim?.facts[m.key] && confirmed(claim.facts[m.key])));
+      const calcItem = stillNeeded.find((m) => m.key === key) ?? null;
+      let because = ((a.because_evidence_ids as string[]) ?? []).filter((id) => state.evidence[id]);
+      if (!because.length && calcItem) because = calcItem.evidenceIds.filter((id) => state.evidence[id]);
       if (!because.length) return { result: { ok: false, error: "cite the evidence (because_evidence_ids) of the benefit or clause that makes this fact matter" } };
       const cause = !CAUSE_KEYS.has(key) ? causeOpen(subject) : null;
       if (cause) return { result: { ok: false, error: `how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing ${cause.slice(0, 3).join(", ")})` } };
+      if (stillNeeded.length && !CAUSE_KEYS.has(key) && key !== stillNeeded[0].key) return { result: { ok: false, error: `the calculation still needs ${stillNeeded[0].key} (${stillNeeded[0].why}): ask for exactly that next, one question at a time (fact_key ${stillNeeded[0].key}, citing ${stillNeeded[0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
@@ -251,7 +260,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     // final_answer
     const answerSubject = (a.subject_id as string) ?? state.subjectId;
-    const estimates = ((a.sentences as Record<string, unknown>[]) ?? []).some((x) => typeof x.result_id === "string" && ctx.results.get(x.result_id)?.kind === "indicative_estimate");
+    const estimates = ((a.sentences as Record<string, unknown>[]) ?? []).some((x) => typeof x.result_id === "string" && (ctx.results.get(x.result_id)?.kind === "indicative_estimate" || calcOutcomes(ctx).get(x.result_id)?.kind === "indicative_estimate"));
     const cause = estimates ? causeOpen(answerSubject) : null;
     if (cause) return { result: { ok: false, error: `an estimate for this event depends on how it happened (the documents distinguish accidents), which is not known: ask how it happened first (fact_key how_it_happened, citing ${cause.slice(0, 3).join(", ")})` } };
     const composed = composeFinal({ sentences: a.sentences as Record<string, unknown>[], nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, { state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name) });
@@ -294,6 +303,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       await refine(res.evidence, typeof call.arguments.query === "string" ? call.arguments.query : typeof call.arguments.benefit === "string" ? call.arguments.benefit : null);
       const ids: string[] = [];
       const shown = res.ok ? { ok: true, data: forModel(res.data, state, call.name, ids), evidence: forModel(res.evidence, state, call.name, ids) } : { ok: false, error: res.error, evidence: forModel(res.evidence, state, call.name, ids) };
+      if (res.ok && call.name === "calculate" && typeof call.arguments.subject_id === "string") {
+        const miss = ((shown as { data?: { missing?: { key: string; ask: string; why: string; evidence?: { evidence_id?: string }[] }[] } }).data?.missing ?? []).filter((m) => m.ask === "household");
+        calcMissing.set(call.arguments.subject_id, miss.map((m) => ({ key: normalizeKey(m.key), why: m.why, evidenceIds: (m.evidence ?? []).map((e) => e.evidence_id ?? "").filter(Boolean) })));
+      }
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
       if (res.ok && call.name === "resolve_person") {
         const r = res.data as { status: string; person?: { id: string }; via?: string; options?: { id: string; relationLabel?: string }[] };
