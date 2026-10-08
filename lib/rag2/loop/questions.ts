@@ -10,7 +10,7 @@
  *    wording, how it happened with accident / illness wording, a bill with expense / reimbursement wording).
  */
 import { contentWords } from "./facts";
-import { factConcept } from "./facts";
+import { factConcept, MECHANISM } from "./facts";
 
 const WH = "(?:when|what|which|where|who|whom|whose|how|why)";
 const AUX = "(?:was|were|is|are|am|did|does|do|will|would|can|could|has|have|had|should)";
@@ -53,4 +53,40 @@ export function relevantEvidence(question: string, factKey: string, evidenceText
   if (!want.size) return false;
   const have = new Set(contentWords(text));
   return [...want].some((w) => have.has(w));
+}
+
+
+/**
+ * Agent P (task 5): the words of the household's message that already give the fact a question would ask for (null
+ * when the message does not give it). Admission / discharge: the keyword with a date or time in the same clause;
+ * a bill: a money figure next to bill / invoice / cost wording; how it happened: an accident mechanism in their words.
+ * The loop's ask_user can refuse a question this returns words for ("record it with note_facts instead").
+ */
+const MONTHS = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+const WHEN = new RegExp(String.raw`\b\d{1,2}(?:st|nd|rd|th)?\s+${MONTHS}\b|\b${MONTHS}\s+\d{1,2}(?:st|nd|rd|th)?\b|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[/.]\d{1,2}(?:[/.]\d{2,4})?\b|\b\d{1,2}(?:[.:]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}[:.]\d{2}\b|\b(?:yesterday|today|last night|this morning|(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b|\bnoon\b|\bmidnight\b`, "i");
+const STATED: Record<string, { kw: RegExp; value: RegExp }> = {
+  admission: { kw: /\b(?:admitted|admission|admit|checked in|went into hospital|was warded|got warded)\b/i, value: WHEN },
+  discharge: { kw: /\b(?:discharged|discharge|checked out|came home|went home|left (?:the )?hospital)\b/i, value: WHEN },
+  bill: { kw: /\b(?:bill|invoice|cost|charged|came to|paid)\b/i, value: /S\$\s?\d|\$\s?\d|\bSGD\s?\d|\d\s?(?:dollars|SGD)\b/i },
+};
+export function statedInMessage(factKey: string, message: string): string | null {
+  const c = factConcept(factKey).concept;
+  if (c === "cause") { const m = MECHANISM.exec(message); return m ? message.slice(Math.max(0, m.index - 30), m.index + m[0].length + 30).trim() : null; }
+  const spec = STATED[c];
+  if (!spec) return null;
+  const others = Object.entries(STATED).filter(([k]) => k !== c).map(([, o]) => o.kw);
+  for (const m of message.matchAll(new RegExp(spec.kw.source, "gi"))) {
+    const at = m.index ?? 0;
+    // After the keyword: up to the clause end or the next other fact's keyword.
+    let after = message.slice(at, at + 80);
+    const end = after.search(/[.;!?](?:\s|$)/); if (end > 0) after = after.slice(0, end);
+    for (const o of others) { const k = after.slice(m[0].length).search(o); if (k >= 0) after = after.slice(0, m[0].length + k); }
+    // Before it: back to the clause start or the previous other fact's keyword ("On 2 October he was admitted").
+    let before = message.slice(Math.max(0, at - 40), at);
+    const cut = Math.max(before.search(/[.;!?]\s[^.;!?]*$/), ...others.map((o) => { let last = -1; for (const x of before.matchAll(new RegExp(o.source, "gi"))) last = (x.index ?? 0) + x[0].length; return last; }));
+    if (cut >= 0) before = before.slice(cut + 1);
+    if (spec.value.test(after)) return after.trim();
+    if (spec.value.test(before)) return (before + after).trim();
+  }
+  return null;
 }

@@ -18,11 +18,17 @@ import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
-import { confirmed, contentWords, numbersIn } from "./facts";
+import { confirmed, contentWords, factConcept, numbersIn } from "./facts";
 import { checkCitedStatement, instructionLines, payoutOrDecision, unsafeNextStep, withoutInstructions, PAYOUT as PAYOUT_WORDS } from "./statements";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
-export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement" };
+export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement";
+  /** Agent P: the position of the model's sentence this came from (final_answer order). */
+  at?: number;
+  /** Agent P: for a requirement, the fact concepts it asks the household for (admission, discharge, bill, ...). */
+  asks?: string[];
+  /** Agent P: the condition clause appended to a printed benefit whose conditions are not established. */
+  condition?: string };
 export type Composed = {
   sentences: ComposedSentence[]; nextSteps: string[];
   figureBindings: BoundFigure[]; computations: ComputationRecord[];
@@ -35,16 +41,24 @@ export type Composed = {
   notes: string[];
   evidenceIds: string[]; subjectId: string | null;
 };
-export const DROPPED_NOTE = "Part of what I was going to say couldn’t be tied to a passage of your documents, so I left it out.";
-/** Agent F (D24): specific, figure-free notes for what was left out. */
-export const PAYOUT_NOTE = "I left out a sentence that described an amount as paid, owed or claimable: only the insurer decides what it pays.";
-export const DECISION_NOTE = "I left out a sentence that stated a decision on the claim: only the insurer decides a claim, after reviewing it and its evidence.";
-export const INSTRUCTION_NOTE = "I left out text from your document that reads as an instruction rather than policy wording, so it isn’t used as evidence.";
-export const UNSUPPORTED_NOTE = "I left out a statement that the passage it relied on doesn’t actually support.";
-export const SUM_NOTE = "I left out a total: adding printed limits together doesn’t give an amount the insurer would pay.";
-export const STEP_NOTE = "I left out a suggested step that stated cover or a payment without evidence.";
-export const UNRESOLVED_NOTE = "I left out an estimate because the information it needs isn’t known yet.";
-export const MISSING_FACT_NOTE = "I left out an estimate because it relied on something you haven’t told me (or have since corrected), so it can’t be worked out yet.";
+/** Agent P: what the household is told when NOTHING of the answer could be kept and no requirement or caveat applies
+ * (accurate for every verification failure: the answer could not be confirmed from their documents). Never shown
+ * beside kept sentences. */
+export const DROPPED_NOTE = "I couldn’t confirm an answer to that from your documents.";
+/** Agent P: user-facing caveats (facts about insurance, never commentary on what was removed). The payout / decision /
+ * sum caveats are shown whenever the model tried to state such a thing, because the household may have asked it. */
+export const PAYOUT_NOTE = "Only the insurer decides whether an amount is paid, owed or claimable, after it reviews the claim.";
+export const DECISION_NOTE = "Only the insurer makes a decision on the claim, after reviewing it and its evidence.";
+export const SUM_NOTE = "Printed limits added together aren’t an amount the insurer would pay.";
+/** Agent P: shown only when nothing else can be said (accurate to the rejection reason). */
+export const INSTRUCTION_NOTE = "Some text in your document reads as an instruction rather than policy wording, so I haven’t treated it as part of your policy.";
+export const CALC_NOTE = "I couldn’t check that figure against the policy’s own calculation, so I haven’t given one.";
+export const INCOMPLETE_NOTE = "This may not be everything your documents say about it.";
+/** Internal markers (trace / categorisation only; never shown to the household). */
+export const UNSUPPORTED_NOTE = "unsupported";
+export const STEP_NOTE = "step";
+export const UNRESOLVED_NOTE = "unresolved";
+export const MISSING_FACT_NOTE = "missing_fact";
 /** True when two texts share a content word (stemmed). */
 const sharesWords = (a: string, b: string) => { const x = new Set(contentWords(a)); return contentWords(b).some((w) => x.has(w)); };
 /** A clause's own label for a figure: the model's label only when the line that prints the figure carries it. */
@@ -159,12 +173,30 @@ function householdInputs(result: ComputeOk, ctx: Ctx): { keys: string[]; problem
 
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
   const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
-  const note = (n: string) => { if (!out.notes.includes(n)) out.notes.push(n); };
-  const drop = (sentence: string, reason: string, householdNote?: string) => { out.dropped.push({ sentence, reason }); if (householdNote) note(householdNote); };
-  for (const s of args.sentences ?? []) {
-    let text = String(s.text ?? "").replace(/\s+/g, " ").trim();
+  // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).
+  const drops: DropInfo[] = [];
+  let cur = -1, curEstimate = false;
+  const staleNotes = new Set([...(ctx.stale?.values() ?? [])]);
+  const drop = (sentence: string, reason: string, householdNote?: string) => {
+    out.dropped.push({ sentence, reason });
+    const cat: DropCat = cur < 0 ? "step" : householdNote === PAYOUT_NOTE || /\bpayout\b/.test(reason) ? "payout" : householdNote === DECISION_NOTE || /\bdecision\b/.test(reason) ? "decision"
+      : householdNote === INSTRUCTION_NOTE ? "instruction" : householdNote === SUM_NOTE ? "sum" : householdNote === UNRESOLVED_NOTE ? "unresolved" : householdNote === MISSING_FACT_NOTE ? "missing"
+      : householdNote && staleNotes.has(householdNote) ? "stale" : /(?:calculation|computation)[’']s result|arithmetic/.test(reason) ? "calc" : "verify";
+    const need = cat === "missing" ? (/uses (?:the household[’']s )?(.+?)(?: = | \(“)/.exec(reason)?.[1] ?? null) : null;
+    drops.push({ at: cur, cat, sentence, estimate: curEstimate || /\bestimat\w*\b/i.test(sentence), need, note: cat === "stale" ? householdNote ?? null : null });
+  };
+  const conditioned: { at: number; words: string[] }[] = [];
+  const people = peopleFromLabels(ctx.names ?? []);
+  const sentencesIn = args.sentences ?? [];
+  for (let i = 0; i < sentencesIn.length; i++) {
+    for (const x of out.sentences) x.at ??= cur;
+    cur = i;
+    const s = sentencesIn[i];
+    // Agent P: names as the household uses them; never "Full Name (Short)'s", never a full name twice in a sentence.
+    let text = tidyNames(String(s.text ?? "").replace(/\s+/g, " ").trim(), people);
     if (!text) continue;
-    const evIds = ((s.evidence_ids as string[]) ?? []).filter(Boolean);
+    curEstimate = typeof s.result_id === "string" && !!s.result_id;
+    let evIds = ((s.evidence_ids as string[]) ?? []).filter(Boolean);
     const valIds = ((s.value_ids as string[]) ?? []).filter(Boolean);
     const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : null;
     const subjectId = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : out.subjectId;
@@ -202,6 +234,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total
     // anyone can claim, get or be paid.
     if (result && result.operation === "sum" && result.kind === "printed_limit" && (!/\blimits?\b/i.test(text) || /\b(?:claim\w*|receiv\w*|gets?|paid|payable|reimburs\w*|owe\w*|entitle\w*)\b/i.test(text))) { drop(text, "presents a sum of printed limits as an amount that can be claimed", SUM_NOTE); continue; }
+    // Agent P (task 6): a printed benefit whose recorded conditions are not established is said as conditional.
+    if (figures.length && !result) {
+      const benefits = [...values.map((v) => ({ label: v!.operand.benefit, policyId: v!.operand.evidence.policyId })), ...evIds.map((id) => ctx.state.evidence[id]).filter((e) => e.table?.rowLabel).map((e) => ({ label: e.table!.rowLabel, policyId: e.policyId }))];
+      const cond = conditionalFraming(text, benefits, ctx);
+      if (cond) { text = cond.text; if (!evIds.includes(cond.evidenceId)) evIds = [...evIds, cond.evidenceId]; conditioned.push({ at: i, words: cond.words }); }
+    }
     const refs: EvidenceRef[] = [...evIds.map((id) => ctx.state.evidence[id]), ...values.map((v) => v!.operand.evidence), ...(result?.evidence ?? [])];
     const bindings: BoundFigure[] = [], records: ComputationRecord[] = [];
     let factKeys: string[] = [];
@@ -261,8 +299,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     out.figureBindings.push(...bindings); out.computations.push(...records);
     const ids = [...new Set([...evIds, ...refs.map((r) => evidenceIdOf(ctx.state, r))])];
     out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
-    out.sentences.push({ text, evidenceIds: ids, estimate: result?.kind === "indicative_estimate", factKeys });
+    out.sentences.push({ text, evidenceIds: ids, estimate: result?.kind === "indicative_estimate", factKeys, ...(conditioned.some((c) => c.at === i) ? { condition: conditioned.find((c) => c.at === i)!.words.join(" ") } : {}) });
   }
+  for (const x of out.sentences) x.at ??= cur;
+  cur = -1;
   for (const step of Array.isArray(args.nextSteps) ? args.nextSteps : []) {
     const t = String(step ?? "").trim();
     if (!t) continue;
@@ -272,6 +312,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (bad) { drop(t, bad, STEP_NOTE); continue; }
     out.nextSteps.push(t);
   }
+  settleAnswer(out, drops, conditioned, ctx);
   return out;
 }
 
@@ -357,12 +398,191 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
   const ids = evidenceIds();
   out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
   out.sentences.push({ text, evidenceIds: ids, estimate: false, factKeys: [], kind: "printed" });
-  if (!out.sentences.some((x) => x.text === c.unresolvedText)) out.sentences.push({ text: c.unresolvedText, evidenceIds: ids, estimate: false, factKeys: [], kind: "requirement" });
+  requirementOf(c, ctx, out, evIds);
 }
 /** Agent F (D24): an unresolved calculation's specific requirement (figure-free), said once. */
 function requirementOf(c: CalcOutcome, ctx: Ctx, out: Composed, evIds: string[]): void {
-  if ((c.kind !== "unresolved" && c.kind !== "not_payable") || !c.unresolvedText || out.sentences.some((x) => x.text === c.unresolvedText)) return;
+  if ((c.kind !== "unresolved" && c.kind !== "not_payable") || !c.unresolvedText) return;
+  const text = tidyNames(c.unresolvedText, peopleFromLabels(ctx.names ?? []));
+  if (out.sentences.some((x) => x.text === text)) return;
   const ids = [...new Set([...evIds, ...c.evidence.map((e) => evidenceIdOf(ctx.state, e))])];
   out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
-  out.sentences.push({ text: c.unresolvedText, evidenceIds: ids, estimate: false, factKeys: [], kind: "requirement" });
+  out.sentences.push({ text, evidenceIds: ids, estimate: false, factKeys: [], kind: "requirement", asks: c.kind === "unresolved" ? requirementConcepts(c) : [] });
+}
+
+// ------------------------------------------------------------------------------- Agent P: presenting the answer
+type DropCat = "payout" | "decision" | "instruction" | "sum" | "unresolved" | "missing" | "stale" | "calc" | "verify" | "step";
+type DropInfo = { at: number; cat: DropCat; sentence: string; estimate: boolean; need?: string | null; note?: string | null };
+
+/** A household member as a sentence may name them: the full (display) name and the short name the household uses. */
+export type NamedPerson = { full: string; short: string | null };
+/** "Ethan Tan Jun Kai (Ethan)" -> { full: "Ethan Tan Jun Kai", short: "Ethan" }; "Rohan Nair" -> { full, short: null }. */
+export function peopleFromLabels(labels: string[]): NamedPerson[] {
+  return labels.map((l) => { const m = /^(.*?)\s*\(([^)]+)\)\s*$/.exec(l.trim()); return m ? { full: m[1].trim(), short: m[2].trim() } : { full: l.trim(), short: null }; }).filter((p) => p.full.length >= 2);
+}
+const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Agent P (task 2): names as the household uses them. "Full Name (Short)" becomes the short name (so never
+ * "Full Name (Short)'s"); within one sentence a full name is said once -- a later possessive mention becomes "the"
+ * ("I still need Rohan Nair's admission" -> "I still need the admission"), a later plain mention the short name. */
+export function tidyNames(text: string, people: NamedPerson[]): string {
+  let t = text;
+  for (const p of people) if (p.short && p.short !== p.full) t = t.replace(new RegExp(esc(p.full) + String.raw`\s*\(\s*` + esc(p.short) + String.raw`\s*\)`, "g"), p.short);
+  return t.split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((sentence) => {
+    let x = sentence;
+    for (const p of people) {
+      if (p.full === p.short || p.full.split(/\s+/).length < 2) continue;
+      let n = 0;
+      x = x.replace(new RegExp(String.raw`\b` + esc(p.full) + String.raw`(['’]s\b)?`, "g"), (m: string, poss?: string) => { n++; return n === 1 ? m : poss ? "the" : p.short ?? m; });
+    }
+    return x;
+  }).join(" ");
+}
+
+/** The fact concepts a sentence asks the household for, when it is a request for information (null otherwise). */
+const ASKING = /\?\s*$|\bI(?:['’]d| would| will|['’]ll)? (?:still |also |first )?need\b|\b(?:please|could you|can you|would you) (?:tell|let me know|give|send|share|confirm)\b|\blet me know\b|\btell me\b/i;
+const CONCEPT_WORDS: [string, RegExp][] = [
+  ["admission", /\badmi(?:t|ssion|tted|tting)\w*/i],
+  ["discharge", /\bdischarg\w*/i],
+  ["bill", /\b(?:bills?|invoices?|receipts?)\b|\bhow much (?:was|did) (?:it|the \w+) cost\b/i],
+  ["cause", /\bhow (?:it|this|that|the \w+(?: \w+)?) happened\b|\b(?:accident|illness|sickness)\b/i],
+  ["stay_length", /\bhow many (?:nights|days)\b|\bhow long\b|\blength of (?:the )?stay\b/i],
+  ["hospital", /\bwhich hospital\b|\bhospital(?:['’]s)? name\b/i],
+];
+export function askedConcepts(text: string): string[] | null {
+  if (!ASKING.test(text) || moneyFiguresIn(text).length) return null;
+  const c = CONCEPT_WORDS.filter(([, re]) => re.test(text)).map(([k]) => k);
+  return c.length ? c : null;
+}
+/** Agent P (task 1): the fact keys an unresolved calculation still needs from the household, as fact concepts
+ * (admission_datetime -> admission, bill_amount -> bill, an open condition -> its own key). */
+export function requirementConcepts(c: Pick<CalcOutcome, "requirements" | "conditions" | "calculator">): string[] {
+  const keys: string[] = [];
+  for (const r of c.requirements) {
+    if (/\badmi(?:ssion|tted)\b/i.test(r)) keys.push("admission_datetime");
+    if (/\bdischarg/i.test(r)) keys.push("discharge_datetime");
+    if (/\bbill\b|\bcurrency\b/i.test(r)) keys.push("bill_amount");
+  }
+  for (const x of c.conditions) if (x.status === "unresolved" && x.needs && x.kind !== "minimum_stay") keys.push(x.id);
+  return [...new Set(keys.map((k) => factConcept(k).concept))];
+}
+
+/** Agent P (task 6): the policy's condition for paying a printed benefit, from the passages read in this conversation. */
+const BENEFIT_GENERIC = new Set(["benefit", "daily", "per", "each", "max", "maximum", "limit", "amount", "sum", "cover", "plan", "insured", "payable", "total", "year", "day", "days", "complete", "hour", "hours", "policy", "child", "adult", "the"].map((w) => contentWords(w)[0] ?? w));
+const CONDITION = /\b(?:only if|if|provided(?: that)?|subject to|as long as|on condition that)\b|\b(?:must|has to|have to|needs? to|shall)\s+be\b|\b(?:confirmed|certified|diagnosed|verified|supported)\s+by\b/i;
+const ALREADY_CONDITIONAL = /\b(?:if|provided|subject to|as long as|only when|on condition|unless)\b/i;
+export function conditionalFraming(text: string, benefits: { label: string; policyId: string }[], ctx: Pick<Ctx, "state" | "stale">): { text: string; evidenceId: string; words: string[] } | null {
+  if (!benefits.length || ALREADY_CONDITIONAL.test(text) || /\bnot\b|\bexclu/i.test(text)) return null;
+  const facts = Object.values(ctx.state.claim?.facts ?? {});
+  for (const b of benefits) {
+    const label = b.label.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+    const keyWords = contentWords(label).filter((w) => !BENEFIT_GENERIC.has(w));
+    if (!keyWords.length) continue;
+    const noun = /\b([A-Za-z-]+)\s+benefit\b/i.exec(label)?.[1]?.toLowerCase() ?? null;
+    for (const e of Object.values(ctx.state.evidence)) {
+      if (e.policyId !== b.policyId || ctx.stale?.has(e.id) || e.table) continue;
+      for (const line of withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/)) {
+        const sentence = line.replace(/\s+/g, " ").trim();
+        if (!sentence || moneyFiguresIn(sentence).length || !CONDITION.test(sentence) || /\bnot (?:covered|payable)\b|\bexclu/i.test(sentence)) continue;
+        const have = new Set(contentWords(sentence));
+        if (!keyWords.every((w) => have.has(w))) continue;
+        const words = contentWords(sentence).filter((w) => !keyWords.includes(w));
+        // Established only by reviewed medical evidence recorded for the claim -- never by the household's report.
+        if (facts.some((f) => f.source === "medical_evidence" && contentWords(f.words).filter((w) => words.includes(w)).length >= 2)) continue;
+        // The sentence already carries the condition.
+        const own = new Set(contentWords(text));
+        if (words.length && words.filter((w) => own.has(w)).length / words.length >= 0.6) continue;
+        const body = sentence.replace(/[.;:\s]+$/, "");
+        let clause: string | null = null;
+        const part = /\b(?:confirmed|certified|diagnosed|verified|supported)\s+by\b.*$/i.exec(body)?.[0];
+        const must = /\b(?:must|has to|have to|needs? to|shall)\s+be\s+(.+)$/i.exec(body)?.[1];
+        const iff = /\b(?:only if|if|provided(?: that)?|as long as|on condition that)\s+(.+)$/i.exec(body)?.[1];
+        const subj = /\bsubject to\s+(.+)$/i.exec(body)?.[1];
+        if (part && noun) clause = `payable if the ${noun} is ${part}`;
+        else if (must && noun) clause = `payable only if the ${noun} is ${must}`;
+        else if (iff) clause = `payable only if ${iff}`;
+        else if (subj) clause = `subject to ${subj}`;
+        if (!clause || clause.length > 200) clause = `payable only if the policy’s conditions for it are met (“${body}”)`;
+        const id = evidenceIdOf(ctx.state, e);
+        const framed = text.replace(/[.!\s]+$/, "") + ", " + clause + ".";
+        return { text: framed, evidenceId: id, words: contentWords(clause) };
+      }
+    }
+  }
+  return null;
+}
+
+const QUALIFIER_START = /^(?:however|but|except|unless|only (?:if|when|after|for)|(?:this|that|it) (?:does not|doesn['’]t|only|is only|excludes|won['’]t)|not\b|note that|although|though|provided|subject to|(?:this|that|the) limit)\b/i;
+const DEPENDENT_START = /^(?:this|that|these|those|it|its|they|their|however|but|so|therefore|also|in addition|then|after that|as a result|because of (?:this|that)|which|otherwise|together|in total|altogether)\b/i;
+const INTRO = /:\s*$|\b(?:here (?:is|are)|the following|as follows|below)\b/i;
+/**
+ * Agent P (task 3): the answer as the household sees it, once sentences have been checked. Never commentary on what
+ * was removed or why. A kept sentence whose meaning depended on a removed one is withdrawn too (a removed qualifier of
+ * the sentence before it, a sentence that refers back to a removed one, an estimate's label left without its
+ * estimate, a list introduction whose list lost an item); a model sentence asking for what an unresolved
+ * calculation's requirement already asks (same fact concepts) is not repeated; a separate sentence repeating a
+ * condition now carried by its benefit's sentence is not repeated. Notes are user-facing caveats; when nothing at all
+ * can be kept, one accurate explanation of why.
+ */
+function settleAnswer(out: Composed, drops: DropInfo[], conditioned: { at: number; words: string[] }[], ctx: Ctx): void {
+  const removed = drops.filter((d) => d.at >= 0).map((d) => ({ at: d.at, estimate: d.estimate }));
+  const withdrawn: ComposedSentence[] = [];
+  let changed = true, incomplete = false;
+  const content = () => out.sentences.filter((x) => x.kind !== "requirement" && !withdrawn.includes(x));
+  while (changed) {
+    changed = false;
+    for (const k of content()) {
+      const at = k.at ?? -1;
+      const startsDependent = DEPENDENT_START.test(k.text) && removed.some((r) => r.at === at - 1) && !out.sentences.some((x) => x !== k && x.at === at - 1 && !withdrawn.includes(x));
+      const qualifierLost = drops.some((d) => d.at === at + 1 && QUALIFIER_START.test(d.sentence)) || withdrawn.some((w) => (w.at ?? -9) === at + 1 && QUALIFIER_START.test(w.text));
+      const labelLeft = !k.estimate && k.kind !== "indicative_estimate" && /\bestimat\w*\b/i.test(k.text) && removed.some((r) => r.estimate) && !out.sentences.some((x) => x.estimate && !withdrawn.includes(x));
+      // A list introduction whose list lost an item, or that now introduces nothing at all.
+      const intro = INTRO.test(k.text) && !moneyFiguresIn(k.text).length && (removed.some((r) => r.at > at) || (removed.length > 0 && !content().some((x) => (x.at ?? -1) > at)));
+      if (startsDependent || qualifierLost || labelLeft || intro) {
+        withdrawn.push(k); removed.push({ at, estimate: k.estimate }); changed = true;
+        if (intro && content().some((x) => (x.at ?? -1) > at)) incomplete = true;
+        out.dropped.push({ sentence: k.text, reason: intro ? "introduces a list that lost an item" : labelLeft ? "refers to an estimate that was removed" : qualifierLost ? "its qualification was removed" : "refers to a sentence that was removed" });
+      }
+    }
+  }
+  // A model sentence asking for what a requirement already asks.
+  const asked = new Set(out.sentences.filter((x) => x.kind === "requirement").flatMap((x) => x.asks ?? []));
+  for (const k of content()) {
+    const c = askedConcepts(k.text);
+    if (c && c.every((x) => asked.has(x))) { withdrawn.push(k); out.dropped.push({ sentence: k.text, reason: "repeats the missing-information requirement" }); }
+  }
+  // A separate sentence repeating a condition its benefit's sentence now carries.
+  for (const c of conditioned) for (const k of content()) {
+    if (k.at === c.at || moneyFiguresIn(k.text).length) continue;
+    const w = contentWords(k.text);
+    const have = new Set(c.words);
+    if (w.length && w.filter((x) => have.has(x)).length / w.length >= 0.85) { withdrawn.push(k); out.dropped.push({ sentence: k.text, reason: "repeats the condition stated with the benefit" }); }
+  }
+  if (withdrawn.length) {
+    const gone = (sentence: string) => withdrawn.some((w) => w.text.includes(sentence) || sentence.includes(w.text));
+    out.sentences = out.sentences.filter((x) => !withdrawn.includes(x));
+    out.figureBindings = out.figureBindings.filter((b) => !gone(b.sentence));
+    out.computations = out.computations.filter((r) => !gone(r.sentence));
+    const keptCalc = out.calculations.filter((r) => !gone(r.sentence));
+    const lostIds = new Set(out.calculations.filter((r) => !keptCalc.includes(r)).map((r) => r.id));
+    out.calculations = keptCalc;
+    out.calcs = out.calcs.filter((c) => !lostIds.has(c.calcId));
+    out.evidenceIds = out.evidenceIds.filter((id) => out.sentences.some((x) => x.evidenceIds.includes(id)));
+  }
+  // Notes: caveats the household needs (never "I left out ..."), or one accurate explanation when nothing is left.
+  const notes: string[] = [];
+  const add = (n: string | null | undefined) => { if (n && !notes.includes(n)) notes.push(n); };
+  for (const d of drops) if (d.cat === "stale") add(d.note ? d.note.replace(/,? so I left out what (?:it|they|the earlier version) said\.$/, ", so I can no longer use what it said.") : null);
+  if (drops.some((d) => d.cat === "decision")) add(DECISION_NOTE);
+  if (drops.some((d) => d.cat === "payout")) add(PAYOUT_NOTE);
+  if (drops.some((d) => d.cat === "sum")) add(SUM_NOTE);
+  if (incomplete && out.sentences.length) add(INCOMPLETE_NOTE);
+  if (!out.sentences.length && !notes.length && drops.length) {
+    const has = (c: DropCat) => drops.some((d) => d.cat === c);
+    const need = drops.find((d) => d.cat === "missing")?.need;
+    if (has("missing")) add(`I can’t work out an estimate yet: it would rely on ${need ? (/^(?:the|your|a|an)\b/i.test(need) ? need : "the " + need) : "a detail"} you haven’t given me (or have since corrected).`);
+    else if (has("calc")) add(CALC_NOTE);
+    else if (has("instruction")) add(INSTRUCTION_NOTE);
+    else add(DROPPED_NOTE);
+  }
+  out.notes = notes.map((n) => tidyNames(n, peopleFromLabels(ctx.names ?? [])));
 }

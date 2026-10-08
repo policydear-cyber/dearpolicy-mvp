@@ -39,6 +39,12 @@ export async function prepareLoopChat(request: ChatRequest): Promise<ChatContext
   return { request: { ...request, submittedQuestion: request.submittedQuestion ?? request.question }, family, people: family, conversation, token, holdings: [] };
 }
 
+/** Agent P (task 4): the person asked about is not one of the household's members (wording never says whether they
+ * exist anywhere else). */
+export function unknownPersonText(mentions: string[]): string {
+  const who = mentions.map((m) => `“${m.replace(/[“”"]/g, "")}”`).join(" or ");
+  return `I couldn’t identify ${who} among the family members linked to your account. Which family member do you mean? If they aren’t added yet, you can add them on the Household page.`;
+}
 const label = (p: ClaimPerson) => (p.preferred_name && p.preferred_name !== p.display_name ? `${p.display_name} (${p.preferred_name})` : p.display_name);
 const words = (key: string) => key.replace(/_/g, " ");
 const show = (v: unknown) => String(v).replace(/_/g, " ");
@@ -85,12 +91,21 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   const { state, reply, trace } = out;
   const answer = blank();
   const notes: string[] = [];
+  const named = context.family.map((p) => ({ label: label(p), short: p.preferred_name && p.preferred_name !== p.display_name ? p.preferred_name : p.display_name }));
+  const short = (l: string) => named.find((n) => n.label === l)?.short ?? l;
+  // Agent P (task 4): who resolve_person could not find among this household's members this turn (and whether
+  // anyone was resolved). Self-references ("me") are the speaker question, not an unknown person.
+  const resolves = trace.toolCalls.filter((t) => t.name === "resolve_person" && t.ok);
+  const unknownPeople = [...new Set(resolves.filter((t) => /"status":"unknown"/.test(t.summary ?? "")).map((t) => String(t.args.mention ?? "").trim()).filter((m) => m && !/^(?:i|me|my|myself|mine|self)$/i.test(m)))];
+  const resolvedSomeone = resolves.some((t) => /"status":"(?:ok|ambiguous)"/.test(t.summary ?? "")) || reply.kind === "ask";
   for (const c of out.corrections) {
     if (c.key === "person") {
       // Agent F (S6a): who the claim is about was corrected -- say so, and say which estimate no longer applies and
       // why (described by what it was worked out from, never by repeating its figure).
-      notes.push(`Updated: this is about ${show(c.to)}, not ${show(c.from)}.`);
-      if (c.withdrawn.length) notes.push(`The earlier ${c.withdrawn.length > 1 ? "estimates" : "estimate"} I worked out for ${show(c.from)}${c.about?.length ? ` from the ${c.about.map(words).join(" and ")}` : ""} no longer ${c.withdrawn.length > 1 ? "apply" : "applies"}, because ${c.withdrawn.length > 1 ? "they were" : "it was"} worked out for ${show(c.from)}'s policy, not ${show(c.to)}'s.`);
+      // Agent P (task 2): the names the household uses ("Ethan", never "Ethan Tan Jun Kai (Ethan)'s").
+      const from = short(show(c.from)), to = short(show(c.to));
+      notes.push(`Updated: this is about ${to}, not ${from}.`);
+      if (c.withdrawn.length) notes.push(`The earlier ${c.withdrawn.length > 1 ? "estimates" : "estimate"} I worked out for ${from}${c.about?.length ? ` from the ${c.about.map(words).join(" and ")}` : ""} no longer ${c.withdrawn.length > 1 ? "apply" : "applies"}, because ${c.withdrawn.length > 1 ? "they were" : "it was"} worked out for ${from}'s policy, not ${to}'s.`);
       continue;
     }
     notes.push(`Updated: ${words(c.key)} is now ${show(c.to)} (you said ${show(c.from)} at first).`);
@@ -106,18 +121,22 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     answer.questions = [q];
     if (p.kind === "person") answer.personCandidates = p.options.map((o) => ({ id: o.id, label: o.label }));
     answer.citations = await citationsFor(request.accountId, state, trace.evidenceChosen);
+  } else if (unknownPeople.length && !resolvedSomeone) {
+    // Agent P (task 4): the person asked about is not among this household's members. Said plainly, with nothing
+    // about anyone outside the household (never whether such a person exists elsewhere), and nothing composed from
+    // tools run for someone else is shown.
+    answer.summary = [...notes, unknownPersonText(unknownPeople)].join(" ");
   } else if (reply.kind === "final") {
     const c = reply.composed;
     const texts = c.sentences.map((s) => s.text);
     // A correction is said first (what changed, and what no longer applies), then the answer.
     const lead = notes.length ? [notes.join(" "), ...texts] : texts;
-    // Agent F (D24): what was left out is said specifically (a document no longer available, a payout or decision
-    // the insurer makes, a fact still missing), not as one generic note.
-    const leftOut = c.notes?.length ? c.notes : [DROPPED_NOTE];
-    answer.summary = lead[0] ?? (c.dropped.length ? leftOut.join(" ") : FALLBACK_TEXT);
-    answer.details = lead.slice(1);
+    // Agent P (task 3): the composer's notes are user-facing caveats (or, when nothing could be kept, one accurate
+    // explanation) -- never commentary on what was removed.
+    const body = [...lead, ...(c.notes ?? []), ...(unknownPeople.length ? [unknownPersonText(unknownPeople)] : [])];
+    answer.summary = body[0] ?? (c.dropped.length ? DROPPED_NOTE : FALLBACK_TEXT);
+    answer.details = body.slice(1);
     if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;
-    if (c.dropped.length && texts.length) answer.details.push(...leftOut);
     answer.nextSteps = c.nextSteps;
     answer.figureBindings = c.figureBindings;
     answer.computations = c.computations;
