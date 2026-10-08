@@ -191,6 +191,8 @@ jobs:
         run: npm run verify:assertions-test
       - name: Save-time answer gate (a household's own number never grounds cover, a limit or a total and is echoed only as theirs; every figure is grounded only by its own sentence's binding -- policy, person, benefit row, version, page range, column; totals, monthly restatements and multiples only with an explicit computation record the gate recomputes)
         run: npm run verify:gate-test
+      - name: Conversational RAG retrieval tools behind DEARPOLICY_RAG_TOOLS (default off; household-scoped, active/released/current documents only; the subject's table column before the value; every value with its evidence -- page, row, column, passage offsets; integer-cent calculations labelled printed limit vs indicative estimate; bindings and records accepted by the save-time gate)
+        run: npm run rag2:tools-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
