@@ -168,6 +168,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (!pageCache.has(policyId)) pageCache.set(policyId, new Map((await loadPages(input.accountId, [policyId]).catch(() => [])).map((p) => [p.page, p.text])));
     return pageCache.get(policyId)!;
   };
+  /** Sets an evidence entry's support to the sentence / row that supports `about` (keeps the old one when none fits). */
+  const narrow = async (id: string, about: string) => {
+    const e = state.evidence[id];
+    if (!e) return;
+    const pages = await pagesOf(e.policyId);
+    const text = pages.get(e.passage.onPage);
+    const sp = text ? supportSpan(e, text, about) : null;
+    if (sp) { e.support = sp; const cx = contextFor(sp, pages); e.context = cx.length ? cx : null; }
+  };
   const refine = async (refs: EvidenceRef[], about?: string | null) => { for (const r of refs) if (r && !r.support) refineEvidence(r, await pagesOf(r.policyId), about ?? null); };
 
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
@@ -204,6 +213,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         recorded.push(key);
         if (chk.basis === "paraphrased") unconfirmed.push(key);
         if (state.pending?.kind === "fact" && state.pending.factKey === key && (state.pending.subjectId ?? subject) === subject) state.pending = null;
+        if (state.parkedPending?.kind === "fact" && state.parkedPending.factKey === key && (state.parkedPending.subjectId ?? subject) === subject) state.parkedPending = null;
       }
       corrections.push(...corrected);
       if (!recorded.length && refused.length) return { result: { ok: false, error: refused.map((r) => `${r.key}: ${r.error}`).join("; "), refused } };
@@ -321,7 +331,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     trace.limit = { kind, detail: stop?.detail ?? "the turn ended without an answer" };
     trace.outcome = kind === "model_error" ? "error" : kind === "turn_calls" ? "budget_exhausted" : kind === "timeout" || kind === "turn_time" || kind === "cancelled" ? "timeout" : "limit_reached";
   }
-  else if (done.kind === "ask") { final = done; state.pending = done.pending; trace.outcome = "ask_user"; }
+  else if (done.kind === "ask") {
+    final = done;
+    // A person question (who is meant / who is typing) asked while a claim question is open: the claim question is
+    // set aside, not lost, and put back once the person is settled.
+    if (done.pending.kind === "person" && state.pending?.kind === "fact") state.parkedPending = state.pending;
+    if (done.pending.kind === "fact") state.parkedPending = null;
+    state.pending = done.pending; trace.outcome = "ask_user";
+  }
   else if (done.kind === "final") {
     final = done;
     const c = done.composed;
@@ -330,23 +347,22 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     trace.evidenceChosen.push(...c.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id)));
     // Precision: each cited passage narrowed to the sentence / row the answer's sentence rests on (internal; the page
     // stays the household-facing link).
-    for (const sent of c.sentences) for (const id of sent.evidenceIds) {
-      const e = state.evidence[id];
-      if (!e || e.support) continue;
-      const pages = await pagesOf(e.policyId);
-      const text = pages.get(e.passage.onPage);
-      const sp = text ? supportSpan(e, text, sent.text) : null;
-      if (sp) { e.support = sp; const cx = contextFor(sp, pages); e.context = cx.length ? cx : null; }
-    }
+    // A span found at search time (for the query) is replaced by the one for the sentence actually said.
+    for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
     if (c.subjectId) setSubject(c.subjectId, c.subjectId === state.speakerId);
     // Derived statements are remembered with the facts they used, so a correction can withdraw them.
     if (state.claim) for (const s of c.sentences) if (s.estimate && s.factKeys.length) state.claim.derived.push({ sentence: s.text, factKeys: s.factKeys, turn: state.turn });
     // An interruption: the claim question still open is put back to the household after the side answer.
+    if (state.pending?.kind === "person") state.pending = null;
+    if (!state.pending && state.parkedPending) { state.pending = state.parkedPending; state.parkedPending = null; }
     if (state.pending?.kind === "fact") { reasked = state.pending; trace.reasked = state.pending.question; }
-    else if (state.pending?.kind === "person") state.pending = null;
   } else final = done;
-  // The ask_user `why` line's passage: narrowed too.
-  for (const id of trace.evidenceChosen) { const e = state.evidence[id]; if (e && !e.support) await refine([e], final.kind === "ask" ? final.pending.question : null); }
+  // The passage a question cites (why it matters): narrowed to the sentence that makes the fact matter -- for how an
+  // event happened, the sentence about accidents; otherwise the one closest to the question.
+  if (final.kind === "ask" && final.pending.kind === "fact") {
+    const p = final.pending;
+    for (const id of trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
+  }
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
   return { state, reply: final, trace, tools: ctx, corrections, reasked };
 }

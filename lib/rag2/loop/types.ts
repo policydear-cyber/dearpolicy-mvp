@@ -73,6 +73,8 @@ export type RagLoopState = {
    * about the speaker does not change it. */
   subjectId: string | null; recentSubjectIds: string[];
   pending: LoopPending | null;
+  /** A claim question set aside while a person question (e.g. who is typing) is asked; put back after the answer. */
+  parkedPending?: LoopPending | null;
   /** The active claim (its subject's facts and what was derived from them). */
   claim: LoopClaim | null;
   /** Claims about other members, kept (not overwritten) while the active claim is pending. */

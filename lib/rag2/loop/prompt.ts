@@ -31,6 +31,7 @@ export function stateNote(s: RagLoopState, people: { id: string; name: string; r
   lines.push(`- Speaker (\"I\" / \"me\" / \"my\"): ${speakerId ? `${name(speakerId)} id=${speakerId}` : "not known (shared household login): if the question is about the speaker, ask who is asking"}`);
   lines.push(`- Active subject (who the conversation / claim is about): ${s.subjectId ? `${name(s.subjectId)} id=${s.subjectId}` : "none yet"}`);
   if (s.pending?.kind === "person") lines.push(`- Pending: you asked ${s.pending.purpose === "speaker" ? "who is typing" : `who "${s.pending.mention ?? "they"}" means`}: "${s.pending.question}" (candidates: ${s.pending.options.map((o) => `${o.label} id=${o.id}`).join(", ")}). The household's reply answers it.`);
+  if (s.parkedPending?.kind === "fact") lines.push(`- Claim question set aside until the person question is answered (fact_key=${s.parkedPending.factKey}): "${s.parkedPending.question}"`);
   if (s.pending?.kind === "fact") lines.push(`- Pending claim question (fact_key=${s.pending.factKey}${s.pending.subjectId ? `, about ${name(s.pending.subjectId)}` : ""}): "${s.pending.question}"`);
   const factLine = (facts: Record<string, LoopFact>) => {
     const entries = Object.entries(facts);

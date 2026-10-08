@@ -142,7 +142,7 @@ export function linesOf(pageText: string): Line[] {
 export function isTableLine(text: string): boolean { return /\t/.test(text.trim()) || /\S {3,}\S/.test(text.trim()); }
 const FOOT_MARK = /(?:[*†‡§¶]+|[¹²³⁴⁵⁶⁷⁸⁹]|\((?:\d{1,2}|[a-h])\))/;
 const hasFigure = (t: string) => /\d/.test(t);
-const words = (t: string) => new Set((t.toLowerCase().match(/[a-z]{3,}|\d+(?:[.,]\d+)*/g) ?? []).map((w) => w.replace(/,/g, "").replace(/(?:es|s)$/, "")));
+const words = (t: string) => new Set((t.toLowerCase().match(/[a-z]{3,}|\d+(?:[.,]\d+)*/g) ?? []).map((w) => /^\d/.test(w) ? w.replace(/,/g, "") : w.replace(/(?:es|s|e)$/, "")));
 
 /** Candidate supporting units of a passage: each table line whole, each prose line cut into sentences. */
 function unitsOf(ref: EvidenceRef, pageText: string): EvidenceSpan[] {
@@ -151,11 +151,15 @@ function unitsOf(ref: EvidenceRef, pageText: string): EvidenceSpan[] {
     if (l.end <= ref.passage.start || l.start >= ref.passage.end || !l.text.trim()) continue;
     const lead = l.text.length - l.text.trimStart().length, start = l.start + lead, end = l.start + l.text.trimEnd().length;
     if (isTableLine(l.text)) { out.push({ text: pageText.slice(start, end), start, end, onPage: ref.passage.onPage }); continue; }
+    // Sentences: split after . ! or ? (and any footnote marker) followed by space and a capital, bracket or marker --
+    // never inside a figure such as S$1.50.
     const body = pageText.slice(start, end);
-    const re = /[^.!?]+(?:[.!?]+(?=\s|$)|$)/g;
-    for (const m of body.matchAll(re)) {
-      const t = m[0], a = start + m.index! + (t.length - t.trimStart().length), b = start + m.index! + t.trimEnd().length;
+    let from = 0;
+    const cuts = [...body.matchAll(/(?<=[.!?][*†‡§¶¹²³⁴⁵⁶⁷⁸⁹]*)\s+(?=[A-Z(*†‡"“'‘])/g)].map((m) => [m.index!, m.index! + m[0].length]);
+    for (const [cutStart, cutEnd] of [...cuts, [body.length, body.length]]) {
+      const a = start + from, b = start + cutStart;
       if (b > a) out.push({ text: pageText.slice(a, b), start: a, end: b, onPage: ref.passage.onPage });
+      from = cutEnd;
     }
   }
   return out;
