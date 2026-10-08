@@ -57,7 +57,7 @@ function docOperand(id: string, role: Extract<CalcOperand, { source: "document" 
   if (!Number.isFinite(value)) return `the value for ${o.benefit} is not a printed ${o.valueKind}`;
   const binding = toFigureBinding({ ...o.evidence, subjectId: o.evidence.subjectId ?? subjectId }, o.benefit, value, o.currency ?? "");
   if (!binding) return `the passage for ${o.benefit} does not print its value for this person`;
-  return { id, source: "document", role, label: o.benefit, unit: o.valueKind, value, currency: o.valueKind === "money" ? (o.currency ?? null) : null, period: o.period ?? null, row: o.evidence.table?.rowLabel ?? o.benefit, column: o.evidence.table ? (o.evidence.table.columnLeaf || o.evidence.table.columnHeader || null) : null, binding };
+  return { id, source: "document", role, label: o.benefit, unit: o.valueKind, value, currency: o.valueKind === "money" ? (o.currency ?? null) : null, period: o.period ?? null, row: o.evidence.table?.rowLabel ?? o.evidence.passage.text, column: o.evidence.table ? (o.evidence.table.columnLeaf || o.evidence.table.columnHeader || null) : null, binding };
 }
 function printedOf(v: DocValue, subjectId: string): CalcOutcome["printed"][number] {
   const o = v.operand;

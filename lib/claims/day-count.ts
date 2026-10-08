@@ -230,6 +230,13 @@ export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string |
     calendar_day_inclusive: { rule: "calendar_day", edge: { admissionDayIncluded: true, dischargeDayIncluded: true } },
   };
   const m = map[rule];
+  // A date without a time is enough only for a rule that counts calendar dates (each night, day or part of a day):
+  // it is read as that local date (noon UTC keeps the date whatever the offset). The other rules need the times.
+  const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+  if (rule === "per_night" || rule === "calendar_day_inclusive") {
+    if (admissionISO && DATE_ONLY.test(admissionISO)) admissionISO += "T12:00Z";
+    if (dischargeISO && DATE_ONLY.test(dischargeISO)) dischargeISO += "T12:00Z";
+  }
   const r = computeHospitalDays({ admissionISO, dischargeISO, rule: m.rule, edgeInclusion: m.edge, icuPeriods: [], icuMode: null, waitingDays: 0, calendarBasis: "recorded_offset" });
   if (r.status !== "calculated" || rule !== "first_full_day") return r;
   // A stay that begins exactly at local midnight makes the admission day itself a full day.

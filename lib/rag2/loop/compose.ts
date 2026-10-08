@@ -9,7 +9,9 @@
  * dropped here -- with an honest note -- before the gate ever sees it. Nothing is added: no figure is ever written by
  * this code, only bound.
  */
-import type { BoundFigure, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
+import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
+import { calcOutcomes } from "../calc/tool";
+import type { CalcOutcome } from "../calc/engine";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { printedPeriodsOf } from "@/lib/chat/assertions";
 import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
@@ -18,10 +20,14 @@ import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
-export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[] };
+export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement" };
 export type Composed = {
   sentences: ComposedSentence[]; nextSteps: string[];
   figureBindings: BoundFigure[]; computations: ComputationRecord[];
+  /** Agent K: benefit calculations bound to the sentences that state them (re-run by the save-time gate). */
+  calculations: CalculationRecord[];
+  /** Agent K: the calculate outcomes the answer used (for the claim record, only in a claim scenario). */
+  calcs: (CalcOutcome & { purpose?: string })[];
   dropped: { sentence: string; reason: string }[];
   evidenceIds: string[]; subjectId: string | null;
 };
@@ -89,7 +95,7 @@ function householdInputs(result: ComputeOk, ctx: Ctx): { keys: string[]; problem
 }
 
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
-  const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], dropped: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
+  const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
   const drop = (sentence: string, reason: string) => out.dropped.push({ sentence, reason });
   for (const s of args.sentences ?? []) {
     let text = String(s.text ?? "").replace(/\s+/g, " ").trim();
@@ -102,6 +108,8 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
     const values = valIds.map((id) => ctx.tools.values.get(id));
     if (values.some((v) => !v)) { drop(text, "cites a table value that was not read in this turn"); continue; }
+    const calc = resultId ? calcOutcomes(ctx.tools).get(resultId) ?? null : null;
+    if (calc) { composeCalcSentence(text, calc, evIds, values.map((v) => v!.operand), subjectId, ctx, out, drop); continue; }
     const result = resultId ? ctx.tools.results.get(resultId) ?? null : null;
     if (resultId && !result) { drop(text, "cites a computation that was not made in this turn"); continue; }
     const figures = moneyFiguresIn(text);
@@ -172,4 +180,61 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (t && !moneyFiguresIn(t).length) out.nextSteps.push(t);
   }
   return out;
+}
+
+// ------------------------------------------------------------------------------------------- Agent K: calculations
+const ILLUSTRATION_IF = /\bif\b/i;
+/** Which recorded claim facts a calculation's household inputs are (by value, or by the household's words). */
+function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: string | null } {
+  const facts = ctx.state.claim?.facts ?? {};
+  const keys: string[] = [];
+  for (const o of c.record?.operands ?? []) {
+    if (o.source !== "household") continue;
+    const sq = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+    const hit = Object.entries(facts).find(([, f]) => (typeof o.value === "number" && Number(String(f.value).replace(/[^\d.]/g, "")) === o.value) || sq(f.words).includes(sq(o.attribution)) || sq(o.attribution).includes(sq(f.words)) || String(f.value) === String(o.value));
+    if (!hit) return { keys, problem: `the calculation uses the household’s ${o.label} (“${o.attribution}”), which is not a fact they have given (or it has since been corrected)` };
+    keys.push(hit[0]);
+  }
+  return { keys, problem: null };
+}
+function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string }, evIds: string[], valueOps: TableValueOperand[], subjectId: string | null, ctx: Ctx, out: Composed, drop: (s: string, r: string) => void): void {
+  let text = text0;
+  const sid = subjectId ?? c.subjectId;
+  if (sid !== c.subjectId) { drop(text, "the sentence is about another person than the calculation"); return; }
+  const partOf = (raw: string) => sentencesOf(text).find((p) => p.includes(raw)) ?? text;
+  const evidenceIds = () => [...new Set([...evIds, ...c.evidence.map((e) => evidenceIdOf(ctx.state, e))])];
+  if (c.kind === "indicative_estimate" || c.kind === "conditional_illustration") {
+    if (!c.record || c.amount == null || !c.currency) { drop(text, "the calculation has no result"); return; }
+    if (PAYOUT.test(text)) { drop(text, "calls a calculated benefit a payout"); return; }
+    let factKeys: string[] = [];
+    if (c.kind === "indicative_estimate") {
+      if (!/\bindicative estimate\b/i.test(text)) text = "Indicative estimate: " + text;
+      const hh = calcFactKeys(c, ctx); if (hh.problem) { drop(text, hh.problem); return; }
+      factKeys = hh.keys;
+    } else if (!ILLUSTRATION_IF.test(text)) { drop(text, "an illustration must state its what-if (“if …”)"); return; }
+    const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
+    if (!fig) { drop(text, "does not state the calculation’s result"); return; }
+    out.calculations.push({ ...c.record, sentence: partOf(fig.raw) });
+    out.calcs.push(c);
+    const ids = evidenceIds();
+    out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
+    out.sentences.push({ text, evidenceIds: ids, estimate: c.kind === "indicative_estimate", factKeys, kind: c.kind });
+    return;
+  }
+  // unresolved / not_payable: the printed figures may be stated (each bound to its own printed value), then the
+  // specific missing information -- never an estimate.
+  const printed = [...c.printed, ...valueOps.map((o) => ({ label: o.benefit, value: (o.cents ?? 0) / 100, unit: o.valueKind, currency: o.currency ?? null, evidence: o.evidence, binding: toFigureBinding({ ...o.evidence, subjectId: o.evidence.subjectId ?? c.subjectId }, o.benefit, (o.cents ?? 0) / 100, o.currency ?? "") }))];
+  const bindings: BoundFigure[] = [];
+  for (const f of moneyFiguresIn(text)) {
+    const p = printed.find((x) => x.unit === "money" && x.currency === f.currency && same(x.value, f.value) && x.binding);
+    if (!p) { drop(text, `${f.raw} is not a printed figure of this benefit (no estimate is possible yet: ${c.requirements.join("; ") || c.reason || "unresolved"})`); return; }
+    bindings.push({ ...p.binding!, sentence: partOf(f.raw), value: f.value, currency: f.currency });
+  }
+  if (/\bindicative estimate\b|\bestimate\b/i.test(text)) { drop(text, "states an estimate where the calculation is unresolved"); return; }
+  out.figureBindings.push(...bindings);
+  out.calcs.push(c);
+  const ids = evidenceIds();
+  out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
+  out.sentences.push({ text, evidenceIds: ids, estimate: false, factKeys: [], kind: "printed" });
+  if (!out.sentences.some((x) => x.text === c.unresolvedText)) out.sentences.push({ text: c.unresolvedText, evidenceIds: ids, estimate: false, factKeys: [], kind: "requirement" });
 }

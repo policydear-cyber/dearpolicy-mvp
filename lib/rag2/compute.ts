@@ -15,6 +15,7 @@
 import { printedPeriodsOf } from "@/lib/chat/assertions";
 import type { ComputationOperand, ComputationRecord, FigurePeriod } from "@/types";
 import { toFigureBinding, type EvidenceRef } from "./evidence";
+import { applyDeductionCore } from "@/lib/claims/calculators/deductions";
 import type { Period } from "./tables";
 
 export type TableValueOperand = {
@@ -142,10 +143,17 @@ export function difference(a: Operand, b: Operand, label = "Difference", roundin
   return ok(x.estimate || y.estimate ? "indicative_estimate" : "printed_limit", "difference", label, roundCents(d, rounding), x.currency, [`${x.describe} − ${y.describe} = ${money(Number(d), x.currency)}`], rounding, [...x.evidence, ...y.evidence], [...x.household, ...y.household], recordFor("difference", [x, y], Number(d), x.currency));
 }
 
+/** A household-reported number of days or nights is never a payable-day count: per-day benefits count days by the
+ * policy's own rule (first full day, complete 24 hours, each night...) from the admission and discharge -- the
+ * `calculate` tool (lib/rag2/calc) does that through the claim calculators. */
+export const HOUSEHOLD_DAYS_REFUSED = "a number of days or nights the household gives is not a payable-day count: use the calculate tool (calculator hospital_cash) with the admission and discharge, which applies the policy's own day-count rule";
+const perDayRate = (x: MoneyIn) => !!x.operand && (x.operand.period === "day" || x.operand.period === "night" || /\bper (?:day|night)\b|\bdaily\b/i.test(x.operand.benefit));
+
 /** amount x count (a whole number). */
 export function product(a: Operand, count: Operand, label = "Product", rounding: RoundingRule = DEFAULT_ROUNDING): ComputeResult {
   const x = moneyOf(a, "the amount"); if (typeof x === "string") return refuse(x);
   const n = countOf(count, "the count"); if (typeof n === "string") return refuse(n);
+  if (n.estimate && perDayRate(x)) return refuse(HOUSEHOLD_DAYS_REFUSED);
   const p = BigInt(x.cents) * BigInt(n.count);
   const est = x.estimate || n.estimate;
   const rec = !est && n.count >= 2 && n.count <= 100 ? recordFor("product", [x], Number(p), x.currency, n.count) : { record: null, note: est ? null : "the gate recomputes multiples of 2 to 100 only" };
@@ -176,6 +184,7 @@ export function perDay(rate: Operand, days: Operand, dayCap: Operand | null = nu
   const r = moneyOf(rate, "the daily rate"); if (typeof r === "string") return refuse(r);
   if (r.operand && r.operand.period && r.operand.period !== "day" && r.operand.period !== "night") return refuse(`the rate is printed per ${r.operand.period}, not per day`);
   const d = countOf(days, "the number of days"); if (typeof d === "string") return refuse(d);
+  if (d.estimate) return refuse(HOUSEHOLD_DAYS_REFUSED);
   const cap = dayCap ? countOf(dayCap, "the day cap") : null; if (typeof cap === "string") return refuse(cap);
   const used = cap ? Math.min(d.count, cap.count) : d.count;
   const p = BigInt(r.cents) * BigInt(used);
@@ -190,7 +199,7 @@ export function deductible(amount: Operand, ded: Operand, label = "After deducti
   const x = moneyOf(amount, "the amount"), y = moneyOf(ded, "the deductible");
   if (typeof x === "string") return refuse(x); if (typeof y === "string") return refuse(y);
   if (x.currency !== y.currency) return refuse(`mixed currencies (${x.currency}, ${y.currency}) are never subtracted`);
-  const v = x.cents > y.cents ? x.cents - y.cents : 0;
+  const v = applyDeductionCore(x.cents, { kind: "deductible", amountMinor: y.cents }).afterMinor;
   return ok("indicative_estimate", "deductible", label, roundCents(BigInt(v), rounding), x.currency, [`${x.describe} − deductible ${y.describe} = ${money(v, x.currency)}${x.cents <= y.cents ? " (the deductible is not exceeded)" : ""}`], rounding, [...x.evidence, ...y.evidence], [...x.household, ...y.household], { record: null, note: null });
 }
 
@@ -201,10 +210,13 @@ export function coInsurance(amount: Operand, rate: Operand, cap: Operand | null 
   const p = ppmOf(rate, "the co-insurance rate"); if (typeof p === "string") return refuse(p);
   const c = cap ? moneyOf(cap, "the co-insurance cap") : null; if (typeof c === "string") return refuse(c);
   if (c && c.currency !== x.currency) return refuse(`mixed currencies (${x.currency}, ${c.currency}) cannot be compared`);
-  let share = divRound(BigInt(x.cents) * BigInt(p.ppm), 1_000_000n, rounding.mode);
-  const steps = [`co-insurance share: ${p.describe} of ${x.describe} = ${money(Number(share), x.currency)}`];
-  if (c && share > BigInt(c.cents)) { steps.push(`capped at ${c.describe}`); share = BigInt(c.cents); }
-  const borne = BigInt(x.cents) - share;
+  // The shared deduction core (lib/claims/calculators/deductions.ts) -- the same arithmetic as the claim calculator.
+  const uncapped = applyDeductionCore(x.cents, { kind: "co_insurance", ppm: p.ppm });
+  const core = applyDeductionCore(x.cents, { kind: "co_insurance", ppm: p.ppm, capMinor: c ? c.cents : null });
+  const steps = [`co-insurance share: ${p.describe} of ${x.describe} = ${money(uncapped.householdShareMinor, x.currency)}`];
+  if (core.capApplied && c) steps.push(`capped at ${c.describe}`);
+  const share = BigInt(core.householdShareMinor);
+  const borne = BigInt(core.afterMinor);
   steps.push(`${money(x.cents, x.currency)} − ${money(Number(share), x.currency)} = ${money(Number(borne), x.currency)}`);
   return ok("indicative_estimate", "co_insurance", label, roundCents(borne, rounding), x.currency, steps, rounding, [...x.evidence, ...p.evidence, ...(c?.evidence ?? [])], [...x.household, ...p.household, ...(c?.household ?? [])], { record: null, note: null });
 }
