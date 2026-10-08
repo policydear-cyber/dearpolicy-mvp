@@ -271,19 +271,19 @@ async function main() {
     assert.ok(t.trace.gate.length >= 1, "the gate reported the wrong-column figure");
     assert.ok(v.includes(FIGURE_LEFT_OUT_NOTE));
   });
-  // Expectation changed (agent C): a stale (corrected) household figure is now refused when compute is called (it is
-  // no longer a recorded fact), before any sentence is composed; facts are recorded only from the household's words.
+  // Expectation changed (agent C, then agent K): facts are recorded only from the household's verbatim words; household
+  // nights are never multiplied by a rate, so the corrected figure is the household's bill and the calculate tool is used.
   const S = await run([
     { steps: [
       () => [call("resolve_person", { mention: "Jun Hao" })],
-      () => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "bill_amount", value: "2400", currency: "SGD", words: "the bill was S$2,400" }] })],
+      () => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "bill_amount", value: "2400", currency: "SGD", words: "bill was S$2,400" }] })],
       (v) => [call("policies_for", { subject_id: M.junhao.id, topic: "hospital" })],
       (v) => [call("ask_user", { kind: "fact", fact_key: "bill_amount", subject_id: M.junhao.id, question: "How much was the bill? And which hospital?", because_evidence_ids: ["e1"] })],
       (v) => [call("ask_user", { kind: "person", question: "Which son do you mean?", options: [M.junhao.id] })],
       (v) => [call("note_facts", { subject_id: M.junhao.id, facts: [{ key: "bill_amount", value: "600", currency: "SGD", words: "actually it was S$600" }] })],
       (v) => [call("select_table_value", { policy_id: (pick(v, "policies_for").covering as any[]).find((p) => /FamilyGuard/.test(p.productName)).policyId, benefit: "Accidental medical expenses", subject_id: M.junhao.id, want: "amount" })],
       (v) => { const pa = (pick(v, "policies_for").covering as any[]).find((p) => /FamilyGuard/.test(p.productName)).policyId, lim = pick(v, "select_table_value").valueId; return [
-        call("calculate", { calculator: "bill_reimbursement", purpose: "question", subject_id: M.junhao.id, policy_id: pa, benefit: "Accidental medical expenses", bill: { amount: 2400, currency: "SGD", words: "the bill was S$2,400" }, limit_value_ids: [lim] }),
+        call("calculate", { calculator: "bill_reimbursement", purpose: "question", subject_id: M.junhao.id, policy_id: pa, benefit: "Accidental medical expenses", bill: { amount: 2400, currency: "SGD", words: "bill was S$2,400" }, limit_value_ids: [lim] }),
         call("calculate", { calculator: "bill_reimbursement", purpose: "question", subject_id: M.junhao.id, policy_id: pa, benefit: "Accidental medical expenses", bill: { amount: 600, currency: "SGD", words: "actually it was S$600" }, limit_value_ids: [lim] }),
       ]; },
       (v) => { const done = v.turn.filter((o: any) => o.name === "calculate" && o.ok).map((o: any) => o.result.data); const stale = done.find((d: any) => d.amount === 1500), fresh = done.find((d: any) => d.amount === 600); return [call("final_answer", { subject_id: M.junhao.id, sentences: [
