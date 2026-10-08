@@ -1,0 +1,496 @@
+{
+  "scenario": "L6",
+  "title": "A question the documents do not answer",
+  "conversationId": "872bd0f7-454a-4783-975d-9627a54c44db",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "If one of us is injured overseas, does SunHaven pay for emergency medical evacuation, and up to how much?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+      "timings": {
+        "acceptedMs": 18,
+        "firstAssistantPersistedMs": 902,
+        "answerSeenMs": 1082,
+        "modelMs": 54,
+        "upstreamMs": 9,
+        "relayMs": 9
+      },
+      "calls": [
+        {
+          "seq": 18,
+          "at": "2026-10-08T15:03:37.372Z",
+          "estInputTokens": 8206,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018206,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "chargedUsd": 0.000559,
+          "ok": true,
+          "usage": {
+            "input": 5390,
+            "output": 40
+          },
+          "latencyMs": 5,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        },
+        {
+          "seq": 19,
+          "at": "2026-10-08T15:03:37.385Z",
+          "estInputTokens": 10191,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020191,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "chargedUsd": 0.0006841,
+          "ok": true,
+          "usage": {
+            "input": 6641,
+            "output": 40
+          },
+          "latencyMs": 49,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5378,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000558,
+          "latency_ms": 6,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:36.286Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6622,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000682,
+          "latency_ms": 49,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:36.343Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5390,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000559,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:37.377Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6641,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000684,
+          "latency_ms": 49,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:37.435Z"
+        }
+      ],
+      "relay": [
+        {
+          "at": "2026-10-08T15:03:36Z",
+          "t": 1791471816.281,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-16",
+          "usage": {
+            "prompt_tokens": 5378,
+            "completion_tokens": 40,
+            "total_tokens": 5418,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:36Z",
+          "t": 1791471816.296,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-17",
+          "usage": {
+            "prompt_tokens": 6622,
+            "completion_tokens": 40,
+            "total_tokens": 6662,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:37Z",
+          "t": 1791471817.374,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-18",
+          "usage": {
+            "prompt_tokens": 5390,
+            "completion_tokens": 40,
+            "total_tokens": 5430,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:37Z",
+          "t": 1791471817.387,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 3,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-19",
+          "usage": {
+            "prompt_tokens": 6641,
+            "completion_tokens": 40,
+            "total_tokens": 6681,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3
+        }
+      ],
+      "tokens": {
+        "input": 12031,
+        "output": 80
+      },
+      "costUsd": {
+        "charged": 0.0012431,
+        "ledger": 0.002483
+      }
+    }
+  ],
+  "totalMs": 1089,
+  "firstUsefulResponseMs": 902,
+  "tokens": {
+    "input": 12031,
+    "output": 80
+  },
+  "costUsd": 0.0012431,
+  "calls": 2,
+  "verdict": {
+    "scenario": "L6",
+    "verdict": "FAIL",
+    "failureStage": "model reasoning-tool selection",
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no figure near /evacuat/",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "asks no question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "says the documents do not say",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:plumbing-fake-not-a-model",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 12031,
+          "output": 80
+        },
+        "latencyMs": 66,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "query": "If one of us is injured overseas, does SunHaven pay for emergency medical evacuation, and up to how much?"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":4}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "support": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 140,
+          "text": "Harbourline General Insurance                                           Policy HG-PA-771204\nSunHaven Family Accident Guard - Policy Schedule",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 140,
+          "text": "SunHaven Family Accident Guard - Policy Schedule",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "support": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 996,
+          "text": "Schedule of benefits\nBenefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500\nFracture benefit (per fracture)                         S$1,200       S$750\nAccidental dental treatment (per accident)              S$800         S$400\nAccidental death                                        S$100,000     S$20,000",
+          "start": 591,
+          "onPage": 1
+        },
+        "support": {
+          "end": 765,
+          "text": "Accident medical expenses (per accident)                S$3,000       S$1,500",
+          "start": 688,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

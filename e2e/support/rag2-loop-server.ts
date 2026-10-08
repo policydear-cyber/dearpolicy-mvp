@@ -13,21 +13,35 @@
  * E2E_RAG2_NEXT=start serves the existing `next build` output (.next) in-process instead of next dev -- the same as
  * `next start` but keeping the two test routes above; much lighter on memory. NODE_ENV must still not be
  * "production" (run it with NODE_ENV=test), so the production refusal above is unchanged.
+ *
+ * E2E_RAG2_LIVE=1 (the live-model smoke, scripts/rag2-live): signs in as the synthetic household Lim
+ * (scripts/fixtures/rag2-live), never installs a scripted model and never turns on the deterministic stand-in: the
+ * loop calls the REAL configured chat model (lib/rag2/loop/hosted-model.ts) through OPENAI_BASE_URL, which must be
+ * the loopback relay, behind the run-cap guard (e2e/support/rag2-live-guard.ts). The scripted-model routes answer
+ * 404; GET /__rag2live/budget reports the guard's ledger and per-call records. Refuses to start unless every live
+ * safety check passes (NODE_ENV=test, local database, Vercel unset, loopback base URL, dummy key, cap <= US$0.50,
+ * priced model).
  */
 import http from "node:http";
 import next from "next";
 import { ACCOUNT_T } from "../../scripts/fixtures/rag2-adv/household";
 import { AdvModel } from "../../scripts/fixtures/rag2-adv/model";
 import { ALL } from "../../scripts/fixtures/rag2-adv/scenarios";
+import { ACCOUNT_L } from "../../scripts/fixtures/rag2-live/household";
+import { liveSafetyChecks, RunCapGuardModel } from "./rag2-live-guard";
+import { HostedLoopModel } from "@/lib/rag2/loop/hosted-model";
+import { RunCostLedger } from "@/lib/rag2/loop/usage-meter";
 
 const KEY = Symbol.for("dearpolicy.rag2.loop.model");
 if (process.env.NODE_ENV === "production" || (process.env.VERCEL ?? "") || (process.env.VERCEL_ENV ?? "")) throw new Error("test-only server refused in a production build");
 if (process.env.DEARPOLICY_RAG_LOOP !== "1") throw new Error("set DEARPOLICY_RAG_LOOP=1");
 const host = (() => { try { return new URL(process.env.DATABASE_URL ?? "").hostname; } catch { return ""; } })();
 if (!["localhost", "127.0.0.1"].includes(host)) throw new Error(`refusing non-local database host "${host}"`);
+const LIVE = process.env.E2E_RAG2_LIVE === "1";
+const live = LIVE ? liveSafetyChecks() : null;
 process.env.DEV_AUTH_ENABLED = "1";
-process.env.DEV_ACCOUNT_ID = ACCOUNT_T;
-process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
+process.env.DEV_ACCOUNT_ID = LIVE ? ACCOUNT_L : ACCOUNT_T;
+if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
 const port = Number(process.env.PORT ?? 3300);
 
 async function main() {
@@ -35,8 +49,15 @@ async function main() {
   await app.prepare();
   const handle = app.getRequestHandler();
   const { pool } = await import("@/lib/db/client");
+  const guard = live ? new RunCapGuardModel(new HostedLoopModel(live.choice), new RunCostLedger(live.capUsd), live.price) : null;
+  if (guard) (globalThis as Record<symbol, unknown>)[KEY] = guard;
   http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
+    if (LIVE && url.pathname.startsWith("/__rag2adv/")) { res.writeHead(404).end(JSON.stringify({ error: "scripted-model routes are off in the live server" })); return; }
+    if (guard && url.pathname === "/__rag2live/budget") {
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ model: guard.id, price: guard.price, ledger: guard.ledger.snapshot(), calls: guard.calls }));
+      return;
+    }
     if (url.pathname === "/__rag2adv/scenario" && req.method === "POST") {
       let body = ""; for await (const c of req) body += c;
       const id = (JSON.parse(body || "{}") as { id?: string }).id;
@@ -55,6 +76,6 @@ async function main() {
       return;
     }
     handle(req, res);
-  }).listen(port, () => console.log(`rag2 loop test server on http://localhost:${port}`));
+  }).listen(port, () => console.log(`rag2 loop test server on http://localhost:${port}${guard ? ` (LIVE model ${guard.id}, run cap US$${guard.ledger.capUsd})` : ""}`));
 }
 main().catch((e) => { console.error(e); process.exit(1); });
