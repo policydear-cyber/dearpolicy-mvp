@@ -38,6 +38,13 @@ export function createToolContext(args: { accountId: string; speakerId?: string 
 const str = (d: string): JsonSchema => ({ type: "string", description: d });
 const ids = (d: string): JsonSchema => ({ type: "array", items: { type: "string" }, description: d });
 const ok = (data: unknown, evidence: EvidenceRef[]): ToolResult => ({ ok: true, data, evidence });
+/** Agent F (D5): operand positions that are the policy's own terms, per compute operation. */
+const POLICY_OPERANDS: Record<string, [number, string][]> = {
+  per_day: [[0, "the daily rate"], [2, "the day cap"]],
+  min_cap: [[1, "the cap"]],
+  deductible: [[1, "the deductible"]],
+  co_insurance: [[1, "the co-insurance rate"], [2, "the co-insurance cap"]],
+};
 const fail = (error: string, evidence: EvidenceRef[] = []): ToolResult => ({ ok: false, error, evidence });
 const OPERAND: JsonSchema = { type: "object", description: "One input: a value_id from select_table_value, a result_id from compute, or a household figure with the household's own words.", properties: {
   value_id: str("A value id issued by select_table_value in this conversation."),
@@ -107,6 +114,12 @@ export const RAG_TOOLS: ToolDef[] = [
       const raw = (a.operands as Record<string, unknown>[]) ?? [];
       const ops: Operand[] = [];
       for (const o of raw) { const x = operandOf(ctx, o ?? {}); if (typeof x === "string") return fail(x); ops.push(x); }
+      // Agent F (D5): a household's own figure is never a POLICY operand -- a daily rate, a day cap, a cap or limit, a
+      // deductible, a co-insurance rate or cap comes only from the document (select_table_value).
+      for (const [i, what] of POLICY_OPERANDS[String(a.operation)] ?? []) {
+        const o = ops[i] as (Operand & { kind?: string; householdFigures?: unknown[] }) | undefined;
+        if (o && (o.kind === "household_figure" || ((o as ComputeOk).status === "ok" && ((o as ComputeOk).householdFigures?.length ?? 0) > 0))) return fail(`${what} must be the figure printed in the document (read it with select_table_value): a figure the household gives is never used as the policy's ${what.replace(/^the /, "")}`);
+      }
       const label = (a.label as string) ?? String(a.operation);
       const need = (n: number, m = n) => (ops.length < n || ops.length > m ? `${a.operation} takes ${n === m ? n : `${n} to ${m}`} operands` : null);
       let r;
