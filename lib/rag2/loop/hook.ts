@@ -15,6 +15,7 @@ import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import { DROPPED_NOTE } from "./compose";
+import { syncCalcClaimRecord } from "../calc/claim-record";
 import { FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
 import { emptyLoopState, type RagLoopState, type TraceTurn } from "./types";
@@ -110,6 +111,9 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     answer.nextSteps = c.nextSteps;
     answer.figureBindings = c.figureBindings;
     answer.computations = c.computations;
+    // Agent K: verified benefit calculations, and the claim record only when the household is pursuing a claim.
+    if (c.calculations.length) answer.calculations = c.calculations;
+    if (c.calcs.length) { const rec = await syncCalcClaimRecord({ accountId: request.accountId, conversationId: conversation.id, state, calcs: c.calcs, existingId: (prior as { claimSessionId?: string | null }).claimSessionId ?? null }); if (rec) answer.claimSessionId = rec.id; }
     answer.citations = await citationsFor(request.accountId, state, c.evidenceIds);
     if (out.reasked?.kind === "fact") {
       answer.details.push(RESUME_NOTE);
