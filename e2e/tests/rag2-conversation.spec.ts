@@ -80,7 +80,9 @@ test("S3 hospital income per complete 24 hours: times asked one at a time; night
   const t3 = await send(page, m3);
   expect(t3.visible).not.toMatch(/S\$270/);
   expect(t3.visible).toMatch(/Indicative estimate[^.]*S\$180/);
-  expect(t3.visible).not.toMatch(/payout/i);
+  // Integration (mechanics only): the rendered message includes the estimate notice ("... they are not a payout ..."),
+  // which S7 below requires; the estimate itself must never be called a payout.
+  expect(t3.visible.replace(/\bnot a payout\b/gi, "")).not.toMatch(/payout/i);
 });
 
 test("S4 side question about the speaker: answered for Marcus, then Ethan's pending question re-asked, Ethan's facts kept", async ({ page, request }) => {
