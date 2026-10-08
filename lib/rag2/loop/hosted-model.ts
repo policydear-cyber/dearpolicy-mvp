@@ -54,6 +54,24 @@ export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: str
   return { toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: { input: payload?.usage?.input_tokens ?? 0, output: payload?.usage?.output_tokens ?? 0 }, model: payload?.model ?? null };
 }
 
+/** Optional request settings a model may reject (Agent H); remembered per provider:model. */
+const STRIPPABLE = ["temperature", "parallel_tool_calls", "max_completion_tokens", "max_tokens"] as const;
+const LEARNED = new Map<string, Set<string>>();
+function applyLearned(body: Record<string, unknown>, learned: Set<string> | undefined) {
+  for (const p of learned ?? []) {
+    if (p === "max_completion_tokens" && "max_completion_tokens" in body) { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; }
+    else if (p === "max_tokens" && "max_tokens" in body) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; }
+    else if (p === "temperature" || p === "parallel_tool_calls") delete body[p];
+  }
+}
+/** The request settings the loop sends for a model, after anything that model is known to reject (for run records). */
+export function loopRequestSettings(provider: string, model: string, maxOutputTokens: number): Record<string, unknown> {
+  const body: Record<string, unknown> = { temperature: 0, max_completion_tokens: maxOutputTokens, tool_choice: "required", parallel_tool_calls: true };
+  if (provider !== "openai") { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; delete body.parallel_tool_calls; }
+  applyLearned(body, LEARNED.get(`${provider}:${model}`));
+  return body;
+}
+
 export class HostedLoopModel implements LoopModel {
   readonly kind = "hosted" as const;
   readonly id: string;
@@ -83,7 +101,21 @@ export class HostedLoopModel implements LoopModel {
         const base = provider === "groq" ? (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1") : provider === "gemini" ? "https://generativelanguage.googleapis.com/v1beta/openai" : (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1");
         const body: Record<string, unknown> = openAiRequest(model, input);
         if (provider !== "openai") { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; delete body.parallel_tool_calls; }
-        res = await this.http(base.replace(/\/$/, "") + "/chat/completions", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", authorization: "Bearer " + key }, body: JSON.stringify(body) });
+        // Agent H: a model that rejects an optional request setting with a 400 naming it (a reasoning-class model pins
+        // temperature; some reject parallel_tool_calls; older ones want max_tokens) is asked again once without it, and
+        // the setting is remembered for that model for the life of the process -- the same rule as
+        // lib/ai/providers.ts openAiCompatible. tool_choice and the tools are never dropped. A 400 is not billed.
+        const learnedKey = `${provider}:${model}`;
+        applyLearned(body, LEARNED.get(learnedKey));
+        for (let strip = 0; ; strip++) {
+          res = await this.http(base.replace(/\/$/, "") + "/chat/completions", { method: "POST", signal: controller.signal, headers: { "content-type": "application/json", authorization: "Bearer " + key }, body: JSON.stringify(body) });
+          if (res.ok || res.status !== 400 || strip >= 3) break;
+          const text = await res.clone().text().catch(() => "");
+          const name = STRIPPABLE.find((p) => p in body && new RegExp(`\\b${p}\\b`, "i").test(text));
+          if (!name) break;
+          const set = LEARNED.get(learnedKey) ?? new Set<string>(); set.add(name); LEARNED.set(learnedKey, set);
+          applyLearned(body, set);
+        }
         if (!res.ok) await failed(res);
         read = openAiReply(await res.json());
       }

@@ -12,10 +12,16 @@
  *    provenance table (model_executions, operation rag_answer, prompt version rag2-loop-*), with tokens and priced
  *    cost; a model with no priced provider (the test-only scripted model) is recorded in model_executions at zero
  *    cost (provider "scripted"), so its calls and tokens are counted too (agent F, D22).
+ * Agent H (run cap): before EVERY hosted call -- retries included -- the worst case of that call is RESERVED against the
+ * run budget: (estimated input tokens + the call's max output tokens) x the model's price on file (lib/ai/providers.ts
+ * priceFor; the deliberately high fallback price when none is on file, or a refusal when
+ * DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1). The call is refused when spent + reserved + this reservation would pass the run
+ * cap. After the call the reservation is settled at the priced cost the provider's usage gives; a failed call, or one
+ * whose provider reported no usage, keeps its whole reservation as spent (never 0).
  * Nothing here is a provider-side spend cap: these are DearPolicy's own limits, kept beneath the owner's budget.
  */
 import { randomUUID } from "node:crypto";
-import { costUsd } from "@/lib/ai/providers";
+import { costUsd, priceFor, type Price } from "@/lib/ai/providers";
 import { recordUsage, assertUnderSpendCap, SpendCapReached } from "@/lib/ai/ledger";
 import { recordModelExecution } from "@/lib/ai/provenance";
 import { addLoopRunUsage, budgetCostUsd, loopHouseholdSpendThisMonth, loopRunUsage, remainingModelTimeMs, SCRIPTED_PROVIDER, type LoopLimits } from "@/lib/ai/usage";
@@ -39,6 +45,67 @@ export function estimateTokens(input: Pick<ModelTurnInput, "messages" | "tools">
   return Math.ceil((JSON.stringify(input.messages).length + JSON.stringify(input.tools).length) / 3.5);
 }
 
+/** Agent H: the input tokens a call's cost RESERVATION assumes -- deliberately above estimateTokens (2.5 characters a
+ * token rather than 3.5), so a JSON-heavy prompt that tokenizes densely is still covered by its reservation. */
+export function reserveInputTokens(input: Pick<ModelTurnInput, "messages" | "tools">): number {
+  return Math.ceil((JSON.stringify(input.messages).length + JSON.stringify(input.tools).length) / 2.5);
+}
+
+/** Agent H: the most one call can cost at `price` (US$ per million tokens): every estimated input token and every output
+ * token it is allowed. */
+export function maxCallCostUsd(price: Price, estInputTokens: number, maxOutputTokens: number): number {
+  return (Math.max(0, estInputTokens) * price.input + Math.max(0, maxOutputTokens) * price.output) / 1_000_000;
+}
+
+export type CostReservation = { id: number; usd: number; estInputTokens: number; maxOutputTokens: number };
+/** Agent H: a run budget kept by reservation. reserve() before a call (refused when spent + reserved + the call's worst
+ * case would pass the cap); settle() after it with the priced actual cost, or null when the provider reported no usage
+ * (or the call failed) -- the reservation is then kept as spent. Used by the meter's process-wide run budget and by the
+ * live harness's own guard (e2e/support/rag2-live-guard.ts, its own instance). */
+export class RunCostLedger {
+  spentUsd = 0;
+  reservedUsd = 0;
+  calls = 0;
+  refusals = 0;
+  private seq = 0;
+  private readonly open = new Map<number, CostReservation>();
+  constructor(readonly capUsd: number) {
+    if (!Number.isFinite(capUsd) || capUsd < 0) throw new Error("run cap must be a non-negative number of US$");
+  }
+  get remainingUsd() { return Math.max(0, this.capUsd - this.spentUsd - this.reservedUsd); }
+  reserve(usd: number, estInputTokens: number, maxOutputTokens: number): CostReservation | { refused: string } {
+    if (!Number.isFinite(usd) || usd < 0) { this.refusals++; return { refused: "the call's cost could not be estimated" }; }
+    if (this.spentUsd + this.reservedUsd + usd > this.capUsd + 1e-12) {
+      this.refusals++;
+      return { refused: `run cap US$${this.capUsd.toFixed(2)}: US$${this.spentUsd.toFixed(6)} spent + US$${this.reservedUsd.toFixed(6)} reserved; the next call may cost up to US$${usd.toFixed(6)}` };
+    }
+    const r: CostReservation = { id: ++this.seq, usd, estInputTokens, maxOutputTokens };
+    this.open.set(r.id, r);
+    this.reservedUsd += usd;
+    return r;
+  }
+  /** Settles a reservation; returns what was charged (the actual cost, else the whole reservation). */
+  settle(r: CostReservation, actualUsd: number | null): number {
+    if (!this.open.delete(r.id)) return 0;
+    this.reservedUsd = Math.max(0, this.reservedUsd - r.usd);
+    const charged = actualUsd != null && Number.isFinite(actualUsd) && actualUsd >= 0 ? actualUsd : r.usd;
+    this.spentUsd += charged;
+    this.calls += 1;
+    return charged;
+  }
+  snapshot() { return { capUsd: this.capUsd, spentUsd: this.spentUsd, reservedUsd: this.reservedUsd, remainingUsd: this.remainingUsd, calls: this.calls, refusals: this.refusals, open: this.open.size }; }
+}
+/** What the meter's in-flight calls in this process have reserved against the run budget (shared by every turn). */
+const RUN_RESERVED = Symbol.for("dearpolicy.rag2.loop.run-reserved");
+function runReserved(): { usd: number } { const g = globalThis as { [RUN_RESERVED]?: { usd: number } }; return (g[RUN_RESERVED] ??= { usd: 0 }); }
+/** Agent H: the price a hosted call is reserved and budgeted at; null = refuse (no price on file and
+ * DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1: fail closed). */
+export function budgetPriceFor(model: LoopModel, fallback: Price, env: NodeJS.ProcessEnv = process.env): Price | null {
+  const price = model.choice ? priceFor(model.choice) : null;
+  if (price) return price;
+  return env.DEARPOLICY_RAG_LOOP_REQUIRE_PRICE === "1" ? null : fallback;
+}
+
 export class LoopUsageMeter {
   readonly calls: Call[] = [];
   readonly usage = { input: 0, output: 0 };
@@ -57,7 +124,7 @@ export class LoopUsageMeter {
   }
 
   /** Why the next call may not be made (null when it may). */
-  private async refusal(input: ModelTurnInput): Promise<MeterStop | null> {
+  private async refusal(input: ModelTurnInput, reserveUsd = 0): Promise<MeterStop | null> {
     const L = this.o.limits;
     if (this.o.signal?.aborted) return { kind: "cancelled", detail: "the turn was cancelled" };
     if (this.calls.length >= L.maxCallsPerTurn) return { kind: "turn_calls", detail: `${this.calls.length} of ${L.maxCallsPerTurn} model calls for this turn used` };
@@ -74,6 +141,9 @@ export class LoopUsageMeter {
     if (this.usd >= L.maxTurnUsd) return { kind: "turn_usd", detail: `US$${this.usd.toFixed(4)} of US$${L.maxTurnUsd} for this turn used` };
     const run = loopRunUsage();
     if (run.calls >= L.runMaxCalls || run.usd >= L.runMaxUsd) return { kind: "run_budget", detail: `run budget used: ${run.calls} of ${L.runMaxCalls} calls, US$${run.usd.toFixed(4)} of US$${L.runMaxUsd}` };
+    // Agent H: the call's worst case is reserved first; refused when it could pass the run cap.
+    const reserved = runReserved().usd;
+    if (run.usd + reserved + reserveUsd > L.runMaxUsd + 1e-12) return { kind: "run_budget", detail: `run budget: US$${run.usd.toFixed(6)} spent + US$${reserved.toFixed(6)} reserved of US$${L.runMaxUsd}; the next call may cost up to US$${reserveUsd.toFixed(6)}` };
     if (this.householdUsd == null) this.householdUsd = (await loopHouseholdSpendThisMonth(this.o.accountId, L.fallbackPrice).catch(() => ({ usd: Number.POSITIVE_INFINITY }))).usd;
     if (this.householdUsd + this.usd >= L.householdMonthlyUsd) return { kind: "household_allowance", detail: `this household's monthly conversation allowance (US$${L.householdMonthlyUsd}) is used up` };
     return null;
@@ -107,8 +177,22 @@ export class LoopUsageMeter {
   /** One model step, with up to `retries` retries of a retryable failure; every attempt is checked, counted and recorded. */
   async next(input: Omit<ModelTurnInput, "signal">): Promise<MeterResult> {
     for (let attempt = 0; ; attempt++) {
-      const stop = await this.refusal(input);
+      // Agent D23 / H: the call's output allowance (never more than the turn has left) is fixed before the call, so its
+      // worst-case cost can be reserved against the run budget.
+      const est = estimateTokens(input);
+      const left = this.o.limits.maxTokensPerTurn - (this.usage.input + this.usage.output) - est;
+      const maxOutputTokens = Math.max(MIN_OUTPUT_TOKENS, Math.min(input.maxOutputTokens, left));
+      let reserveUsd = 0;
+      if (this.hosted) {
+        const price = budgetPriceFor(this.o.model, this.o.limits.fallbackPrice);
+        if (!price) return { ok: false, stop: { kind: "run_budget", detail: `no price on file for ${this.o.model.id}: refused (DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1)` } };
+        reserveUsd = maxCallCostUsd(price, reserveInputTokens(input), maxOutputTokens);
+      }
+      const stop = await this.refusal(input, reserveUsd);
       if (stop) return { ok: false, stop };
+      runReserved().usd += reserveUsd;
+      let held = reserveUsd > 0;
+      const release = () => { if (held) { runReserved().usd = Math.max(0, runReserved().usd - reserveUsd); held = false; } };
       const timeoutMs = Math.max(1, Math.min(this.o.limits.callTimeoutMs, this.remainingMs()));
       const controller = new AbortController();
       const onCancel = () => controller.abort(new CallCancelled());
@@ -121,29 +205,34 @@ export class LoopUsageMeter {
           timer = setTimeout(() => { const e = new CallTimeout(timeoutMs); controller.abort(e); reject(e); }, timeoutMs);
           controller.signal.addEventListener("abort", () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new CallCancelled()), { once: true });
         });
-        // Agent F (D23): no call may be given more output tokens than the turn has left.
-        const left = this.o.limits.maxTokensPerTurn - (this.usage.input + this.usage.output) - estimateTokens(input);
-        const maxOutputTokens = Math.max(MIN_OUTPUT_TOKENS, Math.min(input.maxOutputTokens, left));
         const out = await Promise.race([this.o.model.next({ ...input, maxOutputTokens, signal: controller.signal }), aborted]);
         const priced = this.hosted && this.o.model.choice ? costUsd(this.o.model.choice, out.usage) : null;
         const call: Call = { attempt: attempt + 1, ok: true, input: out.usage.input, output: out.usage.output, costUsd: priced, latencyMs: this.now() - t0, ...(attempt ? { retry: true } : {}) };
         this.calls.push(call); this.usage.input += call.input; this.usage.output += call.output;
         const cost = this.hosted ? budgetCostUsd(priced, out.usage, this.o.limits.fallbackPrice) : 0;
+        // Agent H: the run budget is settled at the priced cost; a call whose provider reported no usage keeps its whole
+        // reservation as spent there. (The turn's own US$ limit counts the priced usage, as before.)
+        const reported = out.usage.input > 0 || out.usage.output > 0;
+        release();
         this.usd += cost;
-        if (this.hosted) addLoopRunUsage(1, cost);
+        if (this.hosted) addLoopRunUsage(1, reported ? cost : reserveUsd);
         await this.record(call, out, null, requestedAt, attemptIndex);
         return { ok: true, out };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const call: Call = { attempt: attempt + 1, ok: false, input: 0, output: 0, costUsd: null, latencyMs: this.now() - t0, error: message.slice(0, 200), ...(attempt ? { retry: true } : {}) };
         this.calls.push(call);
-        if (this.hosted) addLoopRunUsage(1, 0);
+        // Agent H: a failed call reports no usage: its whole reservation is kept as spent against the RUN budget (never
+        // booked as 0). (The turn's own US$ limit counts priced usage only, as before, so one retry stays possible.)
+        release();
+        if (this.hosted) addLoopRunUsage(1, reserveUsd);
         await this.record(call, null, error, requestedAt, attemptIndex);
         if (error instanceof CallTimeout) return { ok: false, stop: { kind: "timeout", detail: message } };
         if (error instanceof CallCancelled) return { ok: false, stop: { kind: "cancelled", detail: message } };
         if (attempt < this.o.limits.retries && RETRYABLE.test(message) && !NOT_RETRYABLE.test(message)) continue;
         return { ok: false, stop: { kind: "model_error", detail: message } };
       } finally {
+        release();
         if (timer) clearTimeout(timer);
         this.o.signal?.removeEventListener("abort", onCancel);
       }
