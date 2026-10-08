@@ -1,0 +1,105 @@
+/**
+ * Agent F: what a sentence of the visible answer may claim, beyond its figures (pure; no database access).
+ *
+ *  - PAYOUT / DECISION: an amount presented as paid, owed, reimbursed, claimable or received, or a claim decision
+ *    (approved, medically confirmed, fully covered, guaranteed) is never DearPolicy's to state -- refused in every
+ *    sentence, estimate and next step, whatever it cites (only the insurer decides what it pays).
+ *  - INSTRUCTION: text inside a document that addresses an assistant or a reader with instructions ("ignore all
+ *    previous instructions", "tell the policyholder ...") is not policy wording: it is never evidence for anything.
+ *  - checkCitedStatement: a figure-free cited sentence must say what its evidence says -- the polarity (a "not
+ *    covered" needs a passage that says so, or a list that does not name the person), the policy it names (one it
+ *    cites), the person (evidence read for that person) and the benefit (the passage mentions what the sentence is
+ *    about).
+ *  - unsafeNextStep: a next step never states or promises cover or money.
+ */
+import { contentWords } from "./facts";
+
+export const PAYOUT = /\bpay-?outs?\b|\bwill (?:be )?(?:pa(?:y|id)|reimburs\w*|refund\w*)\b|\b(?:you|we|they|he|she|i)(?:’|')?ll (?:get|receive|be paid|be reimbursed)\b|\b(?:you|we|they|he|she|i|it) will (?:get|receive|be paid|be reimbursed)\b|\bwill receive\b|\breimburses? (?:you|him|her|them|the household|the family)\b|\b(?:gets?|getting|got) (?:\S+ ){0,3}back\b|\bget back\b|\b(?:can|could|may|will be able to) (?:still )?claim\b|\bclaimable\b|\bowes?\b|\bowed\b|\bentitled to (?:receive|get|be paid|claim)\b|\bexpect (?:the |your )?(?:money|payment|payout|cheque|check|reimbursement|refund)\b|\b(?:money|payment|payout) (?:within|in|by)\b/i;
+const REQUIREMENT_APPROVAL = /\b(?:must|needs? to|has to|have to|should|to|may need to|requires? (?:it|them)? ?to) be (?:pre-?)?approved\b|\bapproved (?:hospital|provider|panel|doctor|clinic)s?\b/gi;
+export const DECISION = /\bpre-?approved\b|\bapproved\b|\b(?:medically|already|officially|formally) (?:confirmed|verified|accepted)\b|\b(?:is|are|was|were|has been|have been) (?:now |already )?(?:confirmed|accepted) (?:as|for) (?:a )?(?:claim|cover|payment)\b|\bfully covered\b|\bcovered in full\b|\bdefinitely covered\b|\bguarantee\w*\b|\bwill (?:definitely |certainly )?be covered\b/i;
+/** True when the sentence presents money as paid / owed / claimable, or states a claim decision. */
+export function payoutOrDecision(text: string): "payout" | "decision" | null {
+  if (PAYOUT.test(text)) return "payout";
+  if (DECISION.test(text.replace(REQUIREMENT_APPROVAL, " "))) return "decision";
+  return null;
+}
+
+export const INSTRUCTION = /\bignore (?:all |any )?(?:the )?(?:previous|prior|above|earlier|other|preceding) (?:instructions?|prompts?|rules|messages?)\b|\b(?:note|message|instructions?|notice) (?:to|for) (?:any|the|an?|all) (?:ai|a\.i\.|assistants?|chat ?bots?|language models?|llms?|models?|bots?)\b|\b(?:ai|virtual) assistants?\b|\b(?:language model|system prompt|chatgpt|llm)s?\b|\bdo not (?:mention|tell|disclose|reveal|say)\b|\btell (?:the|any) (?:policyholder|customer|user|insured|reader|household)\b/i;
+/** The lines of a passage that are instructions addressed to an assistant (never policy wording). */
+export function instructionLines(text: string): string[] {
+  return text.split(/\n+/).map((l) => l.trim()).filter((l) => l && INSTRUCTION.test(l));
+}
+/** The passage with every instruction line removed. */
+export function withoutInstructions(text: string): string {
+  return text.split("\n").filter((l) => !INSTRUCTION.test(l)).join("\n");
+}
+
+const GENERIC = new Set(["cover", "covered", "coverage", "covers", "insur", "insured", "insurance", "policy", "plan", "benefit", "under", "is", "are", "also", "will", "would", "can", "your", "this", "that", "there", "which", "who", "what", "when", "only", "any", "all", "each", "every", "one", "per", "for", "the", "has", "have", "been", "because", "so", "but", "if", "than", "then", "also", "listed", "named", "among", "show", "shown", "includ", "document", "schedule", "certificate", "page", "state", "says", "say", "wording", "here", "what", "next", "would", "should", "need", "needs", "must", "may"].map((w) => w.replace(/'s$/, "").replace(/(?:ing|ed|es|s)$/, "")));
+const NEGATIVE_SENTENCE = /\b(?:not|never|no longer|isn['’]t|aren['’]t|wasn['’]t|doesn['’]t|don['’]t|won['’]t|cannot|can['’]t)\b[^.]{0,40}\b(?:cover\w*|insured|payable|pa(?:y|id)|eligib\w*|named|listed|included|shown)\b|\bexclu\w+\b|\bno cover\b/i;
+const NEGATIVE_PASSAGE = /\bnot\b|\bexclu\w+\b|\bno (?:benefit|cover)\b|\bshall not\b|\bdoes not\b|\bunless\b|\bonly if\b/i;
+const MEMBERSHIP = /\b(?:named|listed|included|shown|among|on the (?:list|schedule|certificate))\b/i;
+/** A list of the people a document insures. */
+const INSURED_LIST = /\b(?:insured (?:persons|members|children|lives)|lives? assured|persons? insured|insured child(?:ren)?:|covered persons)\b/i;
+const POSITIVE_COVER = /\b(?:is|are|was|were)\s+(?:\w+\s+)?(?:covered|insured|eligible)\b|\bcovers\b|\bis payable\b/i;
+const COVER_PASSAGE = /\bcover\w*|\binsured\b|\bpay\w*|\bbenefits?\b|\bentitle\w*/i;
+
+export type CitedEvidence = { policyId: string; subjectId?: string | null; text: string };
+export type StatementCtx = {
+  /** Household members: id, the names a sentence may use for them. */
+  people: { id: string; names: string[] }[];
+  /** Readable documents: id -> product name. */
+  policyNames: Map<string, string>;
+  /** Who the sentence is about (resolved), when known. */
+  subjectId: string | null;
+};
+const tokensOf = (name: string) => (name.match(/[A-Za-z][A-Za-z'-]{2,}/g) ?? []);
+/** The distinctive word of a product name ("KidSafe" in "KidSafe Family Accident Plan"). */
+const productKey = (name: string) => (tokensOf(name).find((w) => /[A-Z].*[A-Z]|[a-z][A-Z]/.test(w)) ?? tokensOf(name)[0] ?? "").toLowerCase();
+
+/** Why a figure-free cited sentence is not supported by what it cites (null when it is). */
+export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: StatementCtx): string | null {
+  if (!cited.length) return null;
+  const all = cited.map((c) => withoutInstructions(c.text)).join("\n");
+  const lower = all.toLowerCase();
+  if (!all.trim()) return "its cited passage is an instruction inside the document, not policy wording";
+  // Policy: a product the sentence names must be one it cites.
+  const citedPolicies = new Set(cited.map((c) => c.policyId));
+  const citedKeys = new Set([...citedPolicies].map((id) => productKey(ctx.policyNames.get(id) ?? "")).filter(Boolean));
+  for (const [id, name] of ctx.policyNames) {
+    const key = productKey(name);
+    if (!key || citedPolicies.has(id) || citedKeys.has(key)) continue;
+    if (new RegExp("\\b" + key.replace(/[^a-z0-9]/g, "") + "\\b", "i").test(text)) return `it names ${name} but cites another document`;
+  }
+  // Person: a member named in the sentence whose evidence was all read for another member.
+  const named = ctx.people.filter((p) => p.names.some((n) => n && new RegExp("\\b" + n.replace(/[^A-Za-z' -]/g, "") + "\\b", "i").test(text)));
+  const readFor = new Set(cited.map((c) => c.subjectId).filter(Boolean) as string[]);
+  for (const p of named) if (readFor.size && !readFor.has(p.id) && ![...readFor].some((r) => named.some((q) => q.id === r))) return `it is about ${p.names[0]} but its evidence was read for someone else`;
+  // Polarity.
+  if (NEGATIVE_SENTENCE.test(text)) {
+    const membership = MEMBERSHIP.test(text);
+    const absent = membership && named.length > 0 && named.every((p) => !p.names.some((n) => n && lower.includes(n.toLowerCase())));
+    if (!NEGATIVE_PASSAGE.test(all) && !absent) return "it says something is not covered / not included, but its evidence says nothing of the kind";
+  } else if (POSITIVE_COVER.test(text)) {
+    if (!COVER_PASSAGE.test(all)) return "it states cover, but its evidence is not about cover";
+    for (const p of named) if (INSURED_LIST.test(all) && !p.names.some((n) => n && lower.includes(n.toLowerCase()))) return `it says ${p.names[0]} is covered, but the cited list of insured persons does not name them`;
+  }
+  // Benefit / topic: the passage mentions what the sentence is about.
+  const nameWords = new Set(ctx.people.flatMap((p) => p.names.flatMap((n) => contentWords(n))));
+  const productWords = new Set([...ctx.policyNames.values()].flatMap((n) => contentWords(n)));
+  const specific = contentWords(text).filter((w) => !GENERIC.has(w) && !nameWords.has(w) && !productWords.has(w));
+  if (specific.length) {
+    const have = new Set(contentWords(all));
+    const hit = specific.filter((w) => have.has(w) || lower.includes(w));
+    if (!hit.length) return `its evidence does not mention what it is about (${specific.slice(0, 4).join(", ")})`;
+  }
+  return null;
+}
+
+const STEP_COVER = /\b(?:you are|you['’]re|he is|he['’]s|she is|she['’]s|they are|they['’]re|it is|it['’]s|this is|is|are)\s+(?:\w+\s+)?(?:covered|insured|eligible|entitled)\b|\bcover(?:s|ed)? (?:this|it|that|the (?:cost|bill|claim|stay))\b|\bwill (?:be )?(?:cover|pay|reimburs)\w*\b/i;
+/** Why a next step may not be shown (null when it may): it states or promises cover, a payment or a decision. */
+export function unsafeNextStep(step: string): string | null {
+  const p = payoutOrDecision(step);
+  if (p) return p === "payout" ? "a next step that promises money" : "a next step that states a claim decision";
+  if (STEP_COVER.test(step) && !/\b(?:whether|if|check|ask|confirm with|find out)\b/i.test(step)) return "a next step that states cover without evidence";
+  return null;
+}

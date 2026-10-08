@@ -19,6 +19,7 @@ import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
 import { confirmed, contentWords, numbersIn } from "./facts";
+import { checkCitedStatement, instructionLines, payoutOrDecision, unsafeNextStep, withoutInstructions, PAYOUT as PAYOUT_WORDS } from "./statements";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
 export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement" };
@@ -30,13 +31,34 @@ export type Composed = {
   /** Agent K: the calculate outcomes the answer used (for the claim record, only in a claim scenario). */
   calcs: (CalcOutcome & { purpose?: string })[];
   dropped: { sentence: string; reason: string }[];
+  /** Agent F (D24): what the household is told about what was left out and why (specific, figure-free). */
+  notes: string[];
   evidenceIds: string[]; subjectId: string | null;
 };
 export const DROPPED_NOTE = "Part of what I was going to say couldn’t be tied to a passage of your documents, so I left it out.";
+/** Agent F (D24): specific, figure-free notes for what was left out. */
+export const PAYOUT_NOTE = "I left out a sentence that described an amount as paid, owed or claimable: only the insurer decides what it pays.";
+export const DECISION_NOTE = "I left out a sentence that stated a decision on the claim: only the insurer decides a claim, after reviewing it and its evidence.";
+export const INSTRUCTION_NOTE = "I left out text from your document that reads as an instruction rather than policy wording, so it isn’t used as evidence.";
+export const UNSUPPORTED_NOTE = "I left out a statement that the passage it relied on doesn’t actually support.";
+export const SUM_NOTE = "I left out a total: adding printed limits together doesn’t give an amount the insurer would pay.";
+export const STEP_NOTE = "I left out a suggested step that stated cover or a payment without evidence.";
+export const UNRESOLVED_NOTE = "I left out an estimate because the information it needs isn’t known yet.";
+export const MISSING_FACT_NOTE = "I left out an estimate because it relied on something you haven’t told me (or have since corrected), so it can’t be worked out yet.";
+/** True when two texts share a content word (stemmed). */
+const sharesWords = (a: string, b: string) => { const x = new Set(contentWords(a)); return contentWords(b).some((w) => x.has(w)); };
+/** A clause's own label for a figure: the model's label only when the line that prints the figure carries it. */
+function passageLabel(passage: string, value: number, wanted: string): string {
+  const want = contentWords(wanted);
+  if (!want.length) return "";
+  const lines = withoutInstructions(passage).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
+  return lines.some((l) => { const have = new Set(contentWords(l)); return want.every((w) => have.has(w)); }) ? wanted.trim() : "";
+}
 
 /** Statements that need evidence even without a figure. */
 const COVERISH = /\b(?:cover\w*|insur\w*|pays?|payable|benefits?|limits?|capped|maximum|excluded|exclusions?|not covered|eligib\w*|claim\w*|deductible|co-?insurance|sum assured|premiums?|waiting period|days?|nights?)\b/i;
-const PAYOUT = /\bpay-?outs?\b|\bwill (?:be )?pa(?:y|id)\b|\byou(?:’|')?ll (?:get|receive)\b|\byou will (?:get|receive)\b/i;
+/** Agent F (D2): the full payout wording (statements.ts) -- will reimburse, gets back, can claim, owes you, ... */
+const PAYOUT = PAYOUT_WORDS;
 const FIG_PERIOD: Record<string, FigurePeriod> = { day: "day", night: "day", week: "week", month: "month", quarter: "quarter", half_year: "half_year", year: "year", policy_year: "year", event: "event", lifetime: "lifetime" };
 const same = (a: number, b: number) => Math.abs(a - b) < 1e-9;
 
@@ -64,6 +86,12 @@ type Ctx = {
   userTexts?: string[];
   /** Household members' names (a sentence saying back what the household said may name the person). */
   names?: string[];
+  /** Agent F (D6): evidence ids that can no longer be used (document deleted, replaced, or not this household's),
+   * with the household-facing reason. Re-checked every turn by the loop. */
+  stale?: Map<string, string>;
+  /** Agent F (D7): household members (id + the names a sentence may use) and readable documents (id -> product). */
+  people?: { id: string; names: string[] }[];
+  policyNames?: Map<string, string>;
 };
 
 const sq = (t: string) => t.toLowerCase().normalize("NFKC").replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().replace(/^["']+|["'.,!?;:]+$/g, "").trim();
@@ -130,8 +158,9 @@ function householdInputs(result: ComputeOk, ctx: Ctx): { keys: string[]; problem
 }
 
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
-  const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
-  const drop = (sentence: string, reason: string) => out.dropped.push({ sentence, reason });
+  const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
+  const note = (n: string) => { if (!out.notes.includes(n)) out.notes.push(n); };
+  const drop = (sentence: string, reason: string, householdNote?: string) => { out.dropped.push({ sentence, reason }); if (householdNote) note(householdNote); };
   for (const s of args.sentences ?? []) {
     let text = String(s.text ?? "").replace(/\s+/g, " ").trim();
     if (!text) continue;
@@ -141,6 +170,16 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const subjectId = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : out.subjectId;
     const unknownEv = evIds.filter((id) => !ctx.state.evidence[id]);
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
+    // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
+    // household's current, active version -- with or without a figure in the sentence.
+    const staleEv = evIds.filter((id) => ctx.stale?.has(id));
+    if (staleEv.length) { drop(text, `cites evidence from a document that is no longer available (${staleEv.join(", ")})`, ctx.stale!.get(staleEv[0])); continue; }
+    // Agent F (D2 / D7): money presented as paid / owed / claimable, or a claim decision, is never stated.
+    const pd = payoutOrDecision(text);
+    if (pd) { drop(text, pd === "payout" ? "calls an amount a payout (paid, owed, reimbursed, received or claimable)" : "states a claim decision (approved / confirmed / fully covered) only the insurer can make", pd === "payout" ? PAYOUT_NOTE : DECISION_NOTE); continue; }
+    // Agent F (D1): a sentence resting on an instruction inside a document (not policy wording) is never stated.
+    const injected = evIds.filter((id) => instructionLines(ctx.state.evidence[id].passage.text).length && !withoutInstructions(ctx.state.evidence[id].passage.text).split(/\n+/).some((l) => sharesWords(l, text)));
+    if (injected.length) { drop(text, "cites text inside a document that is an instruction, not policy wording", INSTRUCTION_NOTE); continue; }
     const values = valIds.map((id) => ctx.tools.values.get(id));
     if (values.some((v) => !v)) { drop(text, "cites a table value that was not read in this turn"); continue; }
     const calc = resultId ? calcOutcomes(ctx.tools).get(resultId) ?? null : null;
@@ -154,6 +193,15 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] });
       continue;
     }
+    // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
+    // benefit); "medically confirmed" / "approved" were refused above.
+    if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
+      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", ctx.state.evidence[id].passage.text].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), subjectId });
+      if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
+    }
+    // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total
+    // anyone can claim, get or be paid.
+    if (result && result.operation === "sum" && result.kind === "printed_limit" && (!/\blimits?\b/i.test(text) || /\b(?:claim\w*|receiv\w*|gets?|paid|payable|reimburs\w*|owe\w*|entitle\w*)\b/i.test(text))) { drop(text, "presents a sum of printed limits as an amount that can be claimed", SUM_NOTE); continue; }
     const refs: EvidenceRef[] = [...evIds.map((id) => ctx.state.evidence[id]), ...values.map((v) => v!.operand.evidence), ...(result?.evidence ?? [])];
     const bindings: BoundFigure[] = [], records: ComputationRecord[] = [];
     let factKeys: string[] = [];
@@ -164,7 +212,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         if (PAYOUT.test(text)) { drop(text, "calls an estimate a payout"); continue; }
         if (!/\bindicative estimate\b/i.test(text)) { text = "Indicative estimate: " + text; }
         const hh = householdInputs(result, ctx);
-        if (hh.problem) { drop(text, hh.problem); continue; }
+        if (hh.problem) { drop(text, hh.problem, MISSING_FACT_NOTE); continue; }
         factKeys = hh.keys;
       }
       const fig = moneyFiguresIn(text).findIndex((f) => same(f.value, result.amount) && f.currency === result.currency);
@@ -196,8 +244,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       let b: FigureBinding | null = op && subjectId ? toFigureBinding({ ...op.evidence, subjectId: op.evidence.subjectId ?? subjectId }, op.benefit, f.value, f.currency) : null;
       if (!b && subjectId) for (const id of evIds) {
         const ref = ctx.state.evidence[id];
-        const benefit = (typeof s.benefit === "string" && s.benefit.trim()) || ref.table?.rowLabel || ref.label || "";
-        b = benefit ? toFigureBinding({ ...ref, subjectId: ref.subjectId ?? subjectId }, benefit, f.value, f.currency) : null;
+        // Agent F (D1): the benefit a passage figure is bound to is the passage's OWN label -- its table row, the
+        // label a tool gave it, or (for a clause) the model's label only when the line printing the figure says it.
+        // A line that is an instruction inside the document is never evidence for a figure.
+        const benefit = ref.table?.rowLabel || ref.label || passageLabel(ref.passage.text, f.value, typeof s.benefit === "string" ? s.benefit : "");
+        const policyText = withoutInstructions(ref.passage.text);
+        b = benefit && numbersIn(policyText).some((n) => same(n, f.value)) ? toFigureBinding({ ...ref, subjectId: ref.subjectId ?? subjectId }, benefit, f.value, f.currency) : null;
         if (b) break;
       }
       if (b) { bindings.push({ ...b, sentence, value: f.value, currency: f.currency }); return; }
@@ -213,7 +265,12 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
   }
   for (const step of Array.isArray(args.nextSteps) ? args.nextSteps : []) {
     const t = String(step ?? "").trim();
-    if (t && !moneyFiguresIn(t).length) out.nextSteps.push(t);
+    if (!t) continue;
+    if (moneyFiguresIn(t).length) { drop(t, "a next step may not state a figure"); continue; }
+    // Agent F (D8): a next step never states or promises cover, money or a decision.
+    const bad = unsafeNextStep(t);
+    if (bad) { drop(t, bad, STEP_NOTE); continue; }
+    out.nextSteps.push(t);
   }
   return out;
 }
@@ -234,8 +291,10 @@ function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: stri
   }
   return { keys, problem: null };
 }
-function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string }, evIds: string[], valueOps: TableValueOperand[], subjectId: string | null, ctx: Ctx, out: Composed, drop: (s: string, r: string) => void): void {
+function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string }, evIds: string[], valueOps: TableValueOperand[], subjectId: string | null, ctx: Ctx, out: Composed, drop: (s: string, r: string, note?: string) => void): void {
   let text = text0;
+  const pd = payoutOrDecision(text);
+  if (pd) { drop(text, pd === "payout" ? "calls a calculated benefit a payout (paid / owed / reimbursed / claimable)" : "states a claim decision only the insurer can make", pd === "payout" ? PAYOUT_NOTE : DECISION_NOTE); return; }
   const sid = subjectId ?? c.subjectId;
   if (sid !== c.subjectId) { drop(text, "the sentence is about another person than the calculation"); return; }
   const partOf = (raw: string) => sentencesOf(text).find((p) => p.includes(raw)) ?? text;
@@ -246,7 +305,7 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
     let factKeys: string[] = [];
     if (c.kind === "indicative_estimate") {
       if (!/\bindicative estimate\b/i.test(text)) text = "Indicative estimate: " + text;
-      const hh = calcFactKeys(c, ctx); if (hh.problem) { drop(text, hh.problem); return; }
+      const hh = calcFactKeys(c, ctx); if (hh.problem) { drop(text, hh.problem, MISSING_FACT_NOTE); return; }
       factKeys = hh.keys;
     } else if (!ILLUSTRATION_IF.test(text)) { drop(text, "an illustration must state its what-if (“if …”)"); return; }
     const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
@@ -264,14 +323,26 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
   const bindings: BoundFigure[] = [];
   for (const f of moneyFiguresIn(text)) {
     const p = printed.find((x) => x.unit === "money" && x.currency === f.currency && same(x.value, f.value) && x.binding);
-    if (!p) { drop(text, `${f.raw} is not a printed figure of this benefit (no estimate is possible yet: ${c.requirements.join("; ") || c.reason || "unresolved"})`); return; }
+    if (!p) {
+      drop(text, `${f.raw} is not a printed figure of this benefit (no estimate is possible yet: ${c.requirements.join("; ") || c.reason || "unresolved"})`, UNRESOLVED_NOTE);
+      // Agent F (D24): the household is told exactly what is still needed (the calculator's own requirement).
+      requirementOf(c, ctx, out, evIds);
+      return;
+    }
     bindings.push({ ...p.binding!, sentence: partOf(f.raw), value: f.value, currency: f.currency });
   }
-  if (/\bindicative estimate\b|\bestimate\b/i.test(text)) { drop(text, "states an estimate where the calculation is unresolved"); return; }
+  if (/\bindicative estimate\b|\bestimate\b/i.test(text)) { drop(text, "states an estimate where the calculation is unresolved", UNRESOLVED_NOTE); requirementOf(c, ctx, out, evIds); return; }
   out.figureBindings.push(...bindings);
   out.calcs.push(c);
   const ids = evidenceIds();
   out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
   out.sentences.push({ text, evidenceIds: ids, estimate: false, factKeys: [], kind: "printed" });
   if (!out.sentences.some((x) => x.text === c.unresolvedText)) out.sentences.push({ text: c.unresolvedText, evidenceIds: ids, estimate: false, factKeys: [], kind: "requirement" });
+}
+/** Agent F (D24): an unresolved calculation's specific requirement (figure-free), said once. */
+function requirementOf(c: CalcOutcome, ctx: Ctx, out: Composed, evIds: string[]): void {
+  if ((c.kind !== "unresolved" && c.kind !== "not_payable") || !c.unresolvedText || out.sentences.some((x) => x.text === c.unresolvedText)) return;
+  const ids = [...new Set([...evIds, ...c.evidence.map((e) => evidenceIdOf(ctx.state, e))])];
+  out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
+  out.sentences.push({ text: c.unresolvedText, evidenceIds: ids, estimate: false, factKeys: [], kind: "requirement" });
 }
