@@ -195,3 +195,84 @@ two households, seeded by `e2e/support/seed-rag2-conversation.ts`. The spec was 
 Chromium and no PostgreSQL. It does pass `tsc --noEmit`. Commands are in the spec header. The server assumes route
 handlers run in the same Node process as the custom server (true for `next dev` through the programmatic API). If the
 loop is not reached, check that first.
+
+---
+
+## Addendum: integrated head `aa452eb` (agent Radv2)
+
+**Scenario changes (mechanics only).** These scenarios now drive the current interfaces. The expected behaviour is
+unchanged.
+
+- **Calculation path.**
+  - S3, S6b, S8 and S8b use `calculate` (`hospital_cash`) with the household's admission and discharge as given.
+  - S7, S7b and S6a use `calculate` (`bill_reimbursement`).
+  - The old `compute`-with-household-nights attempts are kept as adversarial moves: they must be refused, and they are.
+- **Recorded facts.**
+  - Facts are recorded under the contract's keys (`how_it_happened`, not `cause`).
+  - Fact values now match the household's own words, so they count as confirmed rather than paraphrased.
+  - Sentences that repeat the household's bill now say so ("the bill you told me about").
+- **Usage checks.** U1–U3 use the scripted model in its metered form (`AdvModel(..., { metered: true })`, kind
+  "hosted" with a model choice). The usage meter therefore applies the spend cap and records its tokens. In U2 the
+  per-turn US$ limit is lifted, so the token limit is what stops the turn.
+- **S7 fixture wording.** The KidSafe accident-medical paragraph now states its order of deductions explicitly ("The
+  Excess is then deducted from that amount, after the limit per accident has been applied"). The expected S$1,100 is
+  therefore what the wording says, not one reading of ambiguous text.
+- **New check S7b.** A bill of S$1,000 gives S$900 in either order of deductions, so a valid cap-plus-excess estimate
+  can be shown surviving the verifier.
+- **Assertions.** They accept a ComputationRecord (from `compute`) or a CalculationRecord (from `calculate`).
+
+**Result on `aa452eb`: 34 of 47 checks pass** (per-check list: `scripts/fixtures/rag2-adv/BASE-RESULTS-aa452eb.txt`).
+
+Fixed since `ceddcf1`:
+- Broken arm: S2.1 and S2.2.
+- Day-count rules: S3.2, S3.3 and S8b.
+- Side questions: S4.2, S4.3 and S4b.2.
+- Stepchildren: S5.1–S5.3.
+- Partial answers (S8), payout wording (X3), fabricated quotes (X8) and wrong-fact counts (X9).
+- Usage: U1, U2 and U3.
+
+Still failing:
+- S2.3 (D7).
+- S7 (D28).
+- S6a and S6a' (D9 and D16).
+- S6b.2 (D29).
+- S10, both modes (D6).
+- X1 (D1).
+- X4 (D3).
+- X5: `min_cap` still accepts a household cap (D5).
+- X6 (D14).
+- X7 (D15).
+- X10 (D8).
+
+### D28. The bill calculator ignores the printed order of the limit and the deductible — **S7**
+`lib/rag2/calc/engine.ts:228-236` (`billReimbursement`) always runs the deductible step before the per-accident cap.
+The cap goes into `calculateMedicalReimbursement` as `perAdmissionCap`, applied after `deductionSteps`. `terms.ts` only
+reads the order of a deductible against co-insurance. The KidSafe wording says the excess is deducted after the limit:
+min(S$1,500, S$1,200) − S$100 = S$1,100. The calculator returns S$1,200 and labels it an indicative estimate, and the
+reply saying so passes the gate.
+
+### D29. A valid hospital-cash estimate is removed by the gate and replaced by a false "still need information" — **S6b.2**
+FamilyFirst Rohan: `calculate` correctly returns S$240, and S$480 after the correction (first-full-day rule; the
+transcript shows the day-count step and the 90-day cap step). Then:
+- The save-time gate rejects the estimate sentence because its S$120 rate is "not bound to a column". The rate row's
+  label reads "(max 90 days per year)", and the gate takes it for a "maximum days" row.
+- `answer-verification.ts:729` (`requirementFor`) substitutes the record's `unresolvedText`. For a resolved estimate
+  that text is `engine.ts:85`'s fallback "I still need information the documents do not give".
+
+The household is told information is missing when nothing is.
+
+### D30. The noon clause of the first-full-day rule is ignored — risk, no failing check
+`lib/claims/day-count.ts:227` maps `first_full_day` to "admission day never included". FamilyFirst says the admission
+day counts as a full day if admission is before 12:00 noon. A morning admission would be under-counted by one day.
+
+### D31. A pending "cause" question is not answered by a `how_it_happened` fact — no failing check now
+`lib/rag2/loop/loop.ts:219` clears a pending fact question only on the same key. A question pending as `cause` is
+asked again after the household answers and the fact is recorded under `how_it_happened`, even though both are cause
+keys (`facts.ts` `CAUSE_KEYS`). S2 now asks under `how_it_happened` (mechanics). The defect showed on `aa452eb` before
+that change.
+
+### Demonstrations
+`npm run rag2:demo10` is a test-only transcript of the ten demonstrations through the real chat route. It prints the
+tool calls, the evidence (document, page, row and column, passage), the expected calculation against the verified
+record actually saved, and the saved reply. Pass `-- --out <file>` to also write it as Markdown. The transcript shows
+D29 in demonstration 6 and D6 in demonstration 10 as they occur. They are not hidden.
