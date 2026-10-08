@@ -18,7 +18,8 @@
  * (scripts/fixtures/rag2-live), never installs a scripted model and never turns on the deterministic stand-in: the
  * loop calls the REAL configured chat model (lib/rag2/loop/hosted-model.ts) through OPENAI_BASE_URL, which must be
  * the loopback relay, behind the run-cap guard (e2e/support/rag2-live-guard.ts). The scripted-model routes answer
- * 404; GET /__rag2live/budget reports the guard's ledger and per-call records. Refuses to start unless every live
+ * 404; GET /__rag2live/budget reports the guard's ledger and per-call records. RAG2_LIVE_MODE=direct (GitHub Actions
+ * only) calls OpenAI directly with the repository secret; RAG2_LIVE_PREFLIGHT=1 refuses the first model call. Refuses to start unless every live
  * safety check passes (NODE_ENV=test, local database, Vercel unset, loopback base URL, dummy key, cap <= US$0.50,
  * priced model).
  */
@@ -49,13 +50,13 @@ async function main() {
   await app.prepare();
   const handle = app.getRequestHandler();
   const { pool } = await import("@/lib/db/client");
-  const guard = live ? new RunCapGuardModel(new HostedLoopModel(live.choice), new RunCostLedger(live.capUsd), live.price) : null;
+  const guard = live ? new RunCapGuardModel(new HostedLoopModel(live.choice), new RunCostLedger(live.capUsd), live.price, live.preflight) : null;
   if (guard) (globalThis as Record<symbol, unknown>)[KEY] = guard;
   http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     if (LIVE && url.pathname.startsWith("/__rag2adv/")) { res.writeHead(404).end(JSON.stringify({ error: "scripted-model routes are off in the live server" })); return; }
     if (guard && url.pathname === "/__rag2live/budget") {
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ model: guard.id, price: guard.price, ledger: guard.ledger.snapshot(), calls: guard.calls }));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ model: guard.id, price: guard.price, mode: live!.mode, preflight: guard.preflight, ledger: guard.ledger.snapshot(), calls: guard.calls }));
       return;
     }
     if (url.pathname === "/__rag2adv/scenario" && req.method === "POST") {
@@ -76,6 +77,6 @@ async function main() {
       return;
     }
     handle(req, res);
-  }).listen(port, () => console.log(`rag2 loop test server on http://localhost:${port}${guard ? ` (LIVE model ${guard.id}, run cap US$${guard.ledger.capUsd})` : ""}`));
+  }).listen(port, () => console.log(`rag2 loop test server on http://localhost:${port}${guard ? ` (LIVE model ${guard.id}, ${live!.mode} mode${guard.preflight ? ", PREFLIGHT" : ""}, run cap US$${guard.ledger.capUsd})` : ""}`));
 }
 main().catch((e) => { console.error(e); process.exit(1); });

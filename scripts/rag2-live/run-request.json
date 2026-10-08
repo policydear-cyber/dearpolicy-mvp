@@ -1,0 +1,8 @@
+{
+  "run_id": "preflight-1",
+  "scenarios": [
+    "L1"
+  ],
+  "run_cap_usd": 0.5,
+  "preflight": true
+}

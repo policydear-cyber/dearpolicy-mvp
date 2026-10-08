@@ -10,29 +10,67 @@
  * pass the cap; afterwards it is settled at the provider-reported usage, and a failed call or one reporting no usage
  * keeps its whole reservation as spent. The meter's own process-wide run budget (DEARPOLICY_RAG_LOOP_RUN_MAX_USD)
  * applies on top. A model with no price on file is refused before the server starts (fail closed).
+ *
+ * Two ways to reach the model (RAG2_LIVE_MODE):
+ *  - relay (default): OPENAI_BASE_URL is the loopback relay (scripts/rag2-live/relay.py) and OPENAI_API_KEY a dummy;
+ *  - direct (CI only): GITHUB_ACTIONS=true and CI=true, OPENAI_BASE_URL unset or exactly https://api.openai.com/v1,
+ *    OPENAI_API_KEY the repository secret. The key is never printed, logged or persisted; nothing here records request
+ *    headers. Per call the guard records what the relay recorded before: provider-reported model and usage, upstream
+ *    latency (measured around the provider request), the request settings and the prompt / tool-schema sha256.
+ * RAG2_LIVE_PREFLIGHT=1: the guard refuses the FIRST model call ("preflight: no model call made") without reserving
+ * or sending anything, so a run exercises build, seed, server and the /api/chat path at US$0.
  */
+import { createHash } from "node:crypto";
 import { modelFor, priceFor, costUsd, type ModelChoice, type Price } from "@/lib/ai/providers";
+import { loopRequestSettings } from "@/lib/rag2/loop/hosted-model";
 import { maxCallCostUsd, reserveInputTokens, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
 import type { LoopModel, ModelTurnInput, ModelTurnOutput } from "@/lib/rag2/loop/types";
 
 export const MAX_RUN_CAP_USD = 0.5;
+export const OPENAI_DIRECT_BASE = "https://api.openai.com/v1";
+export const PREFLIGHT_REFUSAL = "preflight: no model call made";
+/** The placeholder the CI workflow passes when the repository secret is absent (preflight only; never a key). */
+export const NO_KEY_PLACEHOLDER = "preflight-no-key-set";
+export type LiveMode = "relay" | "direct";
 export type GuardCall = {
   seq: number; at: string; estInputTokens: number; maxOutputTokens: number; reservedUsd: number; chargedUsd: number | null;
   ok: boolean; refused?: string; error?: string; usage?: { input: number; output: number }; latencyMs?: number;
+  /** Measured around the provider request itself (hosted-model.ts), without the loop's own work. */
+  upstreamMs?: number;
   requestedModel: string; resolvedModel?: string | null; tools: number; messages: number;
+  settings?: Record<string, unknown>; systemPromptSha256?: string | null; toolsSha256?: string;
 };
+const sha = (t: string) => createHash("sha256").update(t, "utf8").digest("hex");
+/** Sorted-key JSON, as relay.py hashes the tool schema it forwards. */
+function canon(v: unknown): string {
+  if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
+  if (v && typeof v === "object") return "{" + Object.keys(v as object).sort().map((k) => JSON.stringify(k) + ":" + canon((v as Record<string, unknown>)[k])).join(",") + "}";
+  return JSON.stringify(v);
+}
 
 /** Every precondition of a live run; throws with the first one that fails. Never prints a secret. */
-export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice: ModelChoice; price: Price; capUsd: number } {
+export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice: ModelChoice; price: Price; capUsd: number; mode: LiveMode; preflight: boolean } {
   const fail = (m: string) => { throw new Error("live run refused: " + m); };
+  const rawMode = env.RAG2_LIVE_MODE ?? "";
+  if (rawMode !== "" && rawMode !== "relay" && rawMode !== "direct") fail(`RAG2_LIVE_MODE must be "relay" (default) or "direct"`);
+  const mode: LiveMode = rawMode === "direct" ? "direct" : "relay";
+  const preflight = env.RAG2_LIVE_PREFLIGHT === "1";
   if (env.NODE_ENV !== "test") fail("NODE_ENV must be \"test\"");
   if ((env.VERCEL ?? "") !== "" || (env.VERCEL_ENV ?? "") !== "") fail("VERCEL / VERCEL_ENV must be unset");
   const host = (u: string | undefined) => { try { return new URL(u ?? "").hostname; } catch { return ""; } };
   if (!["localhost", "127.0.0.1"].includes(host(env.DATABASE_URL))) fail(`DATABASE_URL must be a local database (host "${host(env.DATABASE_URL)}")`);
-  if (host(env.OPENAI_BASE_URL) !== "127.0.0.1") fail("OPENAI_BASE_URL must point at the loopback relay (http://127.0.0.1:8787/v1)");
   const key = env.OPENAI_API_KEY ?? "";
-  if (!key) fail("OPENAI_API_KEY must be set to a non-secret dummy value (the relay drops it)");
-  if (/^sk-/.test(key) || key.length > 64) fail("OPENAI_API_KEY looks like a real key: the live run uses a dummy value; the real key stays in the Composio connection");
+  if (mode === "direct") {
+    // CI only: the repository secret goes straight to OpenAI. Nothing about the key is ever echoed.
+    if (env.GITHUB_ACTIONS !== "true" || env.CI !== "true") fail("RAG2_LIVE_MODE=direct is allowed only in GitHub Actions (GITHUB_ACTIONS=true and CI=true)");
+    if (env.OPENAI_BASE_URL !== undefined && env.OPENAI_BASE_URL !== OPENAI_DIRECT_BASE) fail(`in direct mode OPENAI_BASE_URL must be unset or exactly ${OPENAI_DIRECT_BASE}`);
+    if (!key) fail("in direct mode OPENAI_API_KEY must be set (the OPENAI_TEST_API_KEY repository secret)");
+    if (key === NO_KEY_PLACEHOLDER && !preflight) fail("OPENAI_TEST_API_KEY not set: only a preflight run is possible");
+  } else {
+    if (host(env.OPENAI_BASE_URL) !== "127.0.0.1") fail("OPENAI_BASE_URL must point at the loopback relay (http://127.0.0.1:8787/v1)");
+    if (!key) fail("OPENAI_API_KEY must be set to a non-secret dummy value (the relay drops it)");
+    if (/^sk-/.test(key) || key.length > 64) fail("OPENAI_API_KEY looks like a real key: the live run uses a dummy value; the real key stays in the Composio connection");
+  }
   for (const k of ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"]) if (env[k]) fail(`${k} must be unset (only the relay is reachable)`);
   if (env.DEARPOLICY_DETERMINISTIC_MODEL) fail("DEARPOLICY_DETERMINISTIC_MODEL must be unset (it would stop the real model being called)");
   const cap = Number(env.RAG2_LIVE_RUN_CAP_USD ?? "0.5");
@@ -45,7 +83,7 @@ export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice
   if (env.RAG2_LIVE_EXPECT_MODEL && `${choice.provider}:${choice.model}` !== env.RAG2_LIVE_EXPECT_MODEL) fail(`the chat model resolves to ${choice.provider}:${choice.model}, not ${env.RAG2_LIVE_EXPECT_MODEL}`);
   const price = priceFor(choice);
   if (!price) fail(`no price on file for ${choice.provider}:${choice.model} in lib/ai/providers.ts: refusing to run (fail closed)`);
-  return { choice, price: price!, capUsd: Math.min(cap, meterCap) };
+  return { choice, price: price!, capUsd: Math.min(cap, meterCap), mode, preflight };
 }
 
 export class RunCapGuardModel implements LoopModel {
@@ -53,14 +91,22 @@ export class RunCapGuardModel implements LoopModel {
   readonly id: string;
   readonly choice: ModelChoice;
   readonly calls: GuardCall[] = [];
-  constructor(private readonly inner: LoopModel, readonly ledger: RunCostLedger, readonly price: Price) {
+  constructor(private readonly inner: LoopModel, readonly ledger: RunCostLedger, readonly price: Price, readonly preflight = false) {
     if (!inner.choice) throw new Error("the guarded model must be a hosted model with a provider choice");
     this.id = inner.id; this.choice = inner.choice;
   }
   async next(input: ModelTurnInput): Promise<ModelTurnOutput> {
     const est = reserveInputTokens(input);
     const usd = maxCallCostUsd(this.price, est, input.maxOutputTokens);
-    const base = { seq: this.calls.length + 1, at: new Date().toISOString(), estInputTokens: est, maxOutputTokens: input.maxOutputTokens, reservedUsd: usd, requestedModel: `${this.choice.provider}:${this.choice.model}`, tools: input.tools.length, messages: input.messages.length };
+    const system = input.messages.find((m) => m.role === "system") as { content: string } | undefined;
+    const base = { seq: this.calls.length + 1, at: new Date().toISOString(), estInputTokens: est, maxOutputTokens: input.maxOutputTokens, reservedUsd: usd, requestedModel: `${this.choice.provider}:${this.choice.model}`, tools: input.tools.length, messages: input.messages.length,
+      systemPromptSha256: system ? sha(system.content.split("\n\nConversation state:")[0]) : null,
+      toolsSha256: sha(canon(input.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })))) };
+    if (this.preflight) {
+      // Nothing reserved, nothing sent. "spend" keeps the meter from retrying it.
+      this.calls.push({ ...base, reservedUsd: 0, chargedUsd: 0, ok: false, refused: PREFLIGHT_REFUSAL });
+      throw new Error(`${PREFLIGHT_REFUSAL} (no spend)`);
+    }
     const r = this.ledger.reserve(usd, est, input.maxOutputTokens);
     if ("refused" in r) {
       this.calls.push({ ...base, chargedUsd: 0, ok: false, refused: r.refused });
@@ -72,11 +118,11 @@ export class RunCapGuardModel implements LoopModel {
       const out = await this.inner.next(input);
       const reported = out.usage.input > 0 || out.usage.output > 0;
       const charged = this.ledger.settle(r, reported ? costUsd(this.choice, out.usage) : null);
-      this.calls.push({ ...base, chargedUsd: charged, ok: true, usage: out.usage, latencyMs: Date.now() - t0, resolvedModel: out.resolvedModel ?? null });
+      this.calls.push({ ...base, chargedUsd: charged, ok: true, usage: out.usage, latencyMs: Date.now() - t0, upstreamMs: out.latencyMs, resolvedModel: out.resolvedModel ?? null, settings: loopRequestSettings(this.choice.provider, this.choice.model, input.maxOutputTokens) });
       return out;
     } catch (error) {
       const charged = this.ledger.settle(r, null);
-      this.calls.push({ ...base, chargedUsd: charged, ok: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200), latencyMs: Date.now() - t0 });
+      this.calls.push({ ...base, chargedUsd: charged, ok: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200), latencyMs: Date.now() - t0, upstreamMs: Date.now() - t0, settings: loopRequestSettings(this.choice.provider, this.choice.model, input.maxOutputTokens) });
       throw error;
     }
   }

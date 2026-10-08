@@ -1,0 +1,168 @@
+name: rag2 live smoke (synthetic household; real model only on request)
+
+# Runs the live-model smoke (scripts/rag2-live, docs/rag-migration/live/README.md) on a hosted runner.
+# Requested ONLY by pushing a change to scripts/rag2-live/run-request.json on claude/conversational-rag-v1-1.
+# The model is called by the app SERVER process, which scripts/rag2-live/run.ts starts as its child; so the
+# OPENAI_TEST_API_KEY repository secret is set only on the step that runs run.ts (and is read, never printed, by the
+# presence check and the leak scan). Without the secret the run is forced to preflight (no model call, US$0).
+# Never set -x; never print the environment.
+on:
+  push:
+    branches: [claude/conversational-rag-v1-1]
+    paths: [scripts/rag2-live/run-request.json]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rag2-live-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dearpolicy_live
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dearpolicy_live"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dearpolicy_live
+      DATABASE_SSL: "off"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Read the run request (refuses run_cap_usd above 0.50)
+        id: req
+        run: |
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync("scripts/rag2-live/run-request.json", "utf8"));
+            const fail = (m) => { console.error("run-request.json refused: " + m); process.exit(1); };
+            if (typeof r.run_id !== "string" || !/^[A-Za-z0-9._-]{1,40}$/.test(r.run_id)) fail("run_id: 1-40 of A-Z a-z 0-9 . _ -");
+            if (!Array.isArray(r.scenarios) || !r.scenarios.length || !r.scenarios.every((s) => /^L[1-6]$/.test(s))) fail("scenarios: a non-empty list of L1..L6");
+            const cap = Number(r.run_cap_usd);
+            if (!Number.isFinite(cap) || cap <= 0 || cap > 0.5) fail("run_cap_usd must be > 0 and <= 0.50");
+            if (typeof r.preflight !== "boolean") fail("preflight must be true or false");
+            const out = [`run_id=${r.run_id}`, `scenarios=${r.scenarios.join(",")}`, `cap=${cap}`, `preflight=${r.preflight}`].join("\n") + "\n";
+            require("fs").appendFileSync(process.env.GITHUB_OUTPUT, out);
+            console.log(`run ${r.run_id}: scenarios ${r.scenarios.join(",")}, cap US$${cap}, preflight ${r.preflight}`);
+          '
+
+      - name: Is OPENAI_TEST_API_KEY set? (the value is never printed)
+        id: key
+        env:
+          K: ${{ secrets.OPENAI_TEST_API_KEY }}
+        run: |
+          if [ -n "$K" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::OPENAI_TEST_API_KEY not set: this run is forced to preflight (no model call)"
+          fi
+
+      - name: Live or preflight
+        id: mode
+        run: |
+          if [ "${{ steps.req.outputs.preflight }}" = "true" ] || [ "${{ steps.key.outputs.present }}" != "true" ]; then
+            echo "preflight=true" >> "$GITHUB_OUTPUT"; echo "mode: preflight (no model call)"
+          else
+            echo "preflight=false" >> "$GITHUB_OUTPUT"; echo "mode: live (cap US\$${{ steps.req.outputs.cap }})"
+          fi
+
+      - name: next build
+        run: npx next build
+
+      - name: "Database: extensions, schema, synthetic household Lim"
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d dearpolicy_live -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+          npm run db:setup
+          npm run rag2:live-seed
+
+      - name: Run the smoke (run.ts starts the app server on :3310; the server makes the model calls)
+        id: run
+        timeout-minutes: 25
+        env:
+          NODE_ENV: test
+          NODE_OPTIONS: --max-old-space-size=4096
+          E2E_RAG2_NEXT: start
+          RAG2_LIVE_MODE: direct
+          CHAT_MODEL: openai:gpt-6-luna
+          RAG2_LIVE_EXPECT_MODEL: openai:gpt-6-luna
+          RAG2_LIVE_RUN_CAP_USD: ${{ steps.req.outputs.cap }}
+          DEARPOLICY_RAG_LOOP_RUN_MAX_USD: ${{ steps.req.outputs.cap }}
+          DEARPOLICY_RAG_LOOP_REQUIRE_PRICE: "1"
+          RAG2_LIVE_KEY_PRESENT: ${{ steps.key.outputs.present }}
+          PREFLIGHT: ${{ steps.mode.outputs.preflight }}
+          RUN_ID: ${{ steps.req.outputs.run_id }}
+          SCENARIOS: ${{ steps.req.outputs.scenarios }}
+          # The key only for a live run; a preflight gets a non-secret placeholder and never calls the model.
+          OPENAI_API_KEY: ${{ steps.mode.outputs.preflight != 'true' && secrets.OPENAI_TEST_API_KEY || 'preflight-no-key-set' }}
+        run: |
+          flag="--live"
+          if [ "$PREFLIGHT" = "true" ]; then flag="--preflight"; fi
+          node --import tsx scripts/rag2-live/run.ts "$flag" --run-id "$RUN_ID" --scenarios "$SCENARIOS" --port 3310 --out docs/rag-migration/live
+
+      - name: Find the run folder
+        id: out
+        if: always()
+        env:
+          RUN_ID: ${{ steps.req.outputs.run_id }}
+        run: |
+          d=$(ls -d docs/rag-migration/live/RUN-"$RUN_ID"-* 2>/dev/null | tail -n 1 || true)
+          echo "dir=$d" >> "$GITHUB_OUTPUT"
+          if [ -z "$d" ]; then echo "::warning::no run folder was written"; fi
+
+      - name: Leak scan (the key value must not appear in the run folder or the server log)
+        id: scan
+        if: always() && steps.out.outputs.dir != ''
+        env:
+          K: ${{ secrets.OPENAI_TEST_API_KEY }}
+          D: ${{ steps.out.outputs.dir }}
+        run: |
+          if [ -n "$K" ] && grep -rqF -e "$K" "$D"; then
+            echo "::error::the key value appears in the run output; nothing is committed or uploaded"
+            exit 1
+          fi
+          echo "clean=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the run folder back to the branch (github-actions[bot])
+        if: always() && steps.scan.outputs.clean == 'true'
+        env:
+          D: ${{ steps.out.outputs.dir }}
+          RUN_ID: ${{ steps.req.outputs.run_id }}
+          PREFLIGHT: ${{ steps.mode.outputs.preflight }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898099+github-actions[bot]@users.noreply.github.com"
+          git add "$D"
+          kind="live"; if [ "$PREFLIGHT" = "true" ]; then kind="preflight"; fi
+          git commit -q -m "rag2-live: CI run $RUN_ID ($kind) -- $(basename "$D")"
+          for i in 1 2 3; do
+            if git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME"; then exit 0; fi
+            sleep $((i * 5))
+          done
+          echo "::error::could not push the run folder after 3 attempts"
+          exit 1
+
+      - name: Upload the run folder (includes server.log)
+        if: always() && steps.scan.outputs.clean == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag2-live-${{ steps.req.outputs.run_id }}
+          path: ${{ steps.out.outputs.dir }}
+          retention-days: 30

@@ -11,7 +11,7 @@ import { loopLimits, loopRunUsage, resetLoopRunUsage } from "@/lib/ai/usage";
 import { priceFor } from "@/lib/ai/providers";
 import { estimateTokens, LoopUsageMeter, maxCallCostUsd, reserveInputTokens, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
 import type { LoopModel, ModelTurnInput, ModelTurnOutput } from "@/lib/rag2/loop/types";
-import { RunCapGuardModel } from "../../e2e/support/rag2-live-guard";
+import { liveSafetyChecks, NO_KEY_PLACEHOLDER, PREFLIGHT_REFUSAL, RunCapGuardModel } from "../../e2e/support/rag2-live-guard";
 import { HostedLoopModel, loopRequestSettings } from "@/lib/rag2/loop/hosted-model";
 import { ACCOUNT_L } from "../fixtures/rag2-live/household";
 
@@ -116,6 +116,39 @@ async function t(name: string, fn: () => Promise<void> | void) {
       await m.next(input); assert.equal(bodies.length, 3, "remembered: no second 400"); assert.ok(!("temperature" in bodies[2]));
       assert.ok(!("temperature" in loopRequestSettings("openai", "gpt-strip-test", 2000)));
     } finally { if (saved.key == null) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = saved.key; if (saved.det != null) process.env.DEARPOLICY_DETERMINISTIC_MODEL = saved.det; }
+  });
+  await t("B10 direct mode: only in GitHub Actions, only api.openai.com, key required; relay rules unchanged", () => {
+    const base = { NODE_ENV: "test", DATABASE_URL: "postgres://u:p@localhost:5432/x", CHAT_MODEL: "openai:gpt-6-luna", RAG2_LIVE_EXPECT_MODEL: "openai:gpt-6-luna",
+      RAG2_LIVE_RUN_CAP_USD: "0.50", DEARPOLICY_RAG_LOOP_RUN_MAX_USD: "0.50", DEARPOLICY_RAG_LOOP_REQUIRE_PRICE: "1", OPENAI_API_KEY: "test-value-not-a-key" } as Record<string, string>;
+    const saved = { ...process.env };
+    const run = (extra: Record<string, string | undefined>) => {
+      for (const k of Object.keys(process.env)) delete process.env[k];
+      Object.assign(process.env, base); for (const [k, v] of Object.entries(extra)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      try { return liveSafetyChecks(process.env); } finally { for (const k of Object.keys(process.env)) delete process.env[k]; Object.assign(process.env, saved); }
+    };
+    const direct = { RAG2_LIVE_MODE: "direct", GITHUB_ACTIONS: "true", CI: "true" };
+    assert.equal(run(direct).mode, "direct");
+    assert.equal(run({ ...direct, OPENAI_BASE_URL: "https://api.openai.com/v1" }).mode, "direct");
+    assert.throws(() => run({ RAG2_LIVE_MODE: "direct" }), /only in GitHub Actions/);
+    assert.throws(() => run({ ...direct, CI: undefined }), /only in GitHub Actions/);
+    assert.throws(() => run({ ...direct, OPENAI_BASE_URL: "http://127.0.0.1:8787/v1" }), /unset or exactly/);
+    assert.throws(() => run({ ...direct, OPENAI_API_KEY: "" }), /must be set/);
+    assert.throws(() => run({ ...direct, OPENAI_API_KEY: NO_KEY_PLACEHOLDER }), /not set: only a preflight/);
+    assert.equal(run({ ...direct, OPENAI_API_KEY: NO_KEY_PLACEHOLDER, RAG2_LIVE_PREFLIGHT: "1" }).preflight, true);
+    assert.throws(() => run({ ...direct, RAG2_LIVE_RUN_CAP_USD: "0.51" }), /<= 0.5/);
+    assert.throws(() => run({ ...direct, DATABASE_URL: "postgres://u:p@db.example.com/x" }), /local database/);
+    assert.throws(() => run({ ...direct, VERCEL: "1" }), /VERCEL/);
+    assert.throws(() => run({ ...direct, RAG2_LIVE_EXPECT_MODEL: "openai:gpt-5-mini" }), /not openai:gpt-5-mini/);
+    assert.throws(() => run({ RAG2_LIVE_MODE: "other" }), /RAG2_LIVE_MODE/);
+    assert.throws(() => run({}), /loopback relay/, "relay mode (default) still needs the loopback base URL");
+  });
+  await t("B11 preflight: the guard refuses the first model call -- nothing reserved, nothing sent, US$0", async () => {
+    const inner = new FakeHosted(LUNA, () => ok(10, 10));
+    const g = new RunCapGuardModel(inner, new RunCostLedger(0.5), price, true);
+    await assert.rejects(() => g.next(input), new RegExp(PREFLIGHT_REFUSAL));
+    assert.equal(inner.calls, 0); assert.equal(g.ledger.spentUsd, 0); assert.equal(g.ledger.reservedUsd, 0);
+    assert.equal(g.calls[0].refused, PREFLIGHT_REFUSAL); assert.equal(g.calls[0].chargedUsd, 0);
+    assert.match(g.calls[0].toolsSha256 ?? "", /^[0-9a-f]{64}$/);
   });
   resetLoopRunUsage();
   console.log(`\nrag2-live budget regressions ${passed}/${passed + failed} passed`);

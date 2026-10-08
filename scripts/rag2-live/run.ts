@@ -15,7 +15,13 @@
  *   node --import tsx scripts/rag2-live/run.ts --plumbing        # PLUMBING TEST against the local fake endpoint
  *   node --import tsx scripts/rag2-live/run.ts --live            # the real model (needs the Composio connection)
  *   options: --scenarios L1,L4  --port 3310  --relay http://127.0.0.1:8787  --out docs/rag-migration/live
- * Output: <out>/RUN-<timestamp>[-PLUMBING]/run.json, conv-<id>.json, relay.jsonl, report.md (scripts/rag2-live/report.ts).
+ * Output: <out>/RUN-[<run-id>-]<timestamp>[-PLUMBING]/run.json, conv-<id>.json, relay.jsonl, report.md (report.ts).
+ *
+ * CI (.github/workflows/rag2-live-smoke.yml): RAG2_LIVE_MODE=direct -- no relay; the server calls OpenAI with the
+ * OPENAI_TEST_API_KEY repository secret (allowed only when GITHUB_ACTIONS=true and CI=true; see rag2-live-guard.ts).
+ *   --preflight   run everything (seed, server, the /api/chat path) but the guard refuses the FIRST model call:
+ *                 US$0, and the report says exactly where it stopped. Combines with --live (or stands alone).
+ *   --run-id <id> names the output directory RUN-<id>-<timestamp>.
  */
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -27,7 +33,7 @@ import { LOOP_PROMPT_VERSION, SYSTEM_PROMPT } from "@/lib/rag2/loop/prompt";
 import { loopToolSpecs } from "@/lib/rag2/loop/loop";
 import { loopRequestSettings } from "@/lib/rag2/loop/hosted-model";
 import { loopLimits } from "@/lib/ai/usage";
-import { liveSafetyChecks } from "../../e2e/support/rag2-live-guard";
+import { liveSafetyChecks, PREFLIGHT_REFUSAL } from "../../e2e/support/rag2-live-guard";
 import { seedLive } from "../../e2e/support/seed-rag2-live";
 import { ACCOUNT_L } from "../fixtures/rag2-live/household";
 import { SCENARIOS, type Scenario } from "./scenarios";
@@ -52,42 +58,59 @@ function relayLines(file: string, from: number, to: number): RelayLine[] {
 }
 
 async function main() {
-  const live = flag("live"), plumbing = flag("plumbing");
-  if (live === plumbing) throw new Error("say which run this is: --live (the real model, spends money) or --plumbing (local fake endpoint)");
+  const preflight = flag("preflight");
+  const plumbing = flag("plumbing"), live = flag("live") || (preflight && !plumbing);
+  if (live === plumbing) throw new Error("say which run this is: --live (the real model, spends money), --preflight (no model call) or --plumbing (local fake endpoint)");
+  if (preflight) process.env.RAG2_LIVE_PREFLIGHT = "1";
+  else delete process.env.RAG2_LIVE_PREFLIGHT;
+  const runId = arg("run-id");
+  if (runId != null && !/^[A-Za-z0-9._-]{1,40}$/.test(runId)) throw new Error("--run-id: 1-40 characters of A-Z a-z 0-9 . _ -");
   const safety = liveSafetyChecks(process.env);
   const port = Number(arg("port", "3310"));
   const relayUrl = arg("relay", "http://127.0.0.1:8787")!;
-  if (new URL(relayUrl).hostname !== "127.0.0.1") throw new Error("the relay must be on 127.0.0.1");
-  const health = await fetch(relayUrl + "/__relay/health").then((r) => r.json()).catch(() => null) as { mode: string; log: string; allowed_models: string[] } | null;
-  if (!health) throw new Error(`the relay is not running at ${relayUrl} (start it in the workbench kernel: see docs/rag-migration/live/README.md)`);
-  const relayPlumbing = health.mode !== "live";
-  if (live && relayPlumbing) throw new Error(`--live, but the relay is in "${health.mode}" mode`);
-  if (plumbing && !relayPlumbing) throw new Error("--plumbing, but the relay is in live mode (it would call the real model): refusing");
-  if (!health.allowed_models.includes(safety.choice.model)) throw new Error(`the relay does not allow ${safety.choice.model}`);
+  type RelayHealth = { mode: string; log: string; allowed_models: string[] };
+  let health = null as RelayHealth | null;
+  if (safety.mode === "direct") {
+    // CI: no relay. The server calls OpenAI directly; the guard records what the relay recorded before.
+    if (plumbing) throw new Error("--plumbing needs the relay; direct mode is for the real model (or --preflight) only");
+  } else {
+    if (new URL(relayUrl).hostname !== "127.0.0.1") throw new Error("the relay must be on 127.0.0.1");
+    health = await fetch(relayUrl + "/__relay/health").then((r) => r.json()).catch(() => null) as RelayHealth | null;
+    if (!health) throw new Error(`the relay is not running at ${relayUrl} (start it in the workbench kernel: see docs/rag-migration/live/README.md)`);
+    if (live && health.mode !== "live") throw new Error(`--live, but the relay is in "${health.mode}" mode`);
+    if (plumbing && health.mode === "live") throw new Error("--plumbing, but the relay is in live mode (it would call the real model): refusing");
+    if (!health.allowed_models.includes(safety.choice.model)) throw new Error(`the relay does not allow ${safety.choice.model}`);
+  }
+  const relayPlumbing = !!health && health.mode !== "live";
+  const relayLog = health?.log ?? "";
   if (!fs.existsSync(".next/BUILD_ID")) throw new Error("no next build output (.next/BUILD_ID) in this directory: the server serves the production build");
   const scenarios: Scenario[] = (arg("scenarios") ? arg("scenarios")!.split(",").map((id) => SCENARIOS.find((s) => s.id === id.trim()) ?? (() => { throw new Error("unknown scenario " + id); })()) : SCENARIOS);
 
   const started = new Date();
   const stamp = started.toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const outDir = path.join(arg("out", "docs/rag-migration/live")!, `RUN-${stamp}${relayPlumbing ? "-PLUMBING" : ""}`);
+  const outDir = path.join(arg("out", "docs/rag-migration/live")!, `RUN-${runId ? runId + "-" : ""}${stamp}${relayPlumbing ? "-PLUMBING" : ""}`);
   fs.mkdirSync(outDir, { recursive: true });
   const git = (c: string) => { try { return execSync(c, { encoding: "utf8" }).trim(); } catch { return null; } };
   const tools = loopToolSpecs().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   const limits = loopLimits();
   const meta = {
-    label: relayPlumbing ? "PLUMBING TEST -- local fake endpoint, NOT a model; no figure here is a model result" : "LIVE MODEL RUN",
+    label: preflight ? "PREFLIGHT -- no model call made; US$0" : relayPlumbing ? "PLUMBING TEST -- local fake endpoint, NOT a model; no figure here is a model result" : "LIVE MODEL RUN",
+    runId: runId ?? null, mode: safety.mode, preflight,
+    keyNote: process.env.RAG2_LIVE_KEY_PRESENT === "false" ? "OPENAI_TEST_API_KEY not set" : null,
     startedAt: started.toISOString(), commit: git("git rev-parse HEAD"), tree: git("git rev-parse HEAD^{tree}"), dirty: !!git("git status --porcelain --untracked-files=no"),
     buildId: fs.readFileSync(".next/BUILD_ID", "utf8").trim(),
     model: { requested: `${safety.choice.provider}:${safety.choice.model}`, pricePerMillion: safety.price, settings: loopRequestSettings(safety.choice.provider, safety.choice.model, limits.maxOutputTokens) },
     prompt: { version: LOOP_PROMPT_VERSION, systemPromptSha256: sha(SYSTEM_PROMPT), toolSchemaSha256: sha(canon(tools)), tools: tools.length },
     budget: { runCapUsd: safety.capUsd, meterRunMaxUsd: limits.runMaxUsd, turnMaxUsd: limits.maxTurnUsd, maxCallsPerTurn: limits.maxCallsPerTurn, maxTokensPerTurn: limits.maxTokensPerTurn, maxOutputTokensPerCall: limits.maxOutputTokens, retries: limits.retries },
-    relay: { url: relayUrl, mode: health.mode, log: health.log },
+    relay: health ? { url: relayUrl, mode: health.mode, log: health.log } : null,
   };
 
   await seedLive();
   const env = { ...process.env, E2E_RAG2_LIVE: "1", PORT: String(port), DEARPOLICY_RAG_LOOP: "1", E2E_RAG2_NEXT: "start", NEXT_TELEMETRY_DISABLED: "1" };
   const log = fs.createWriteStream(path.join(outDir, "server.log"));
   const server: ChildProcess = spawn(process.execPath, ["--import", "tsx", "e2e/support/rag2-loop-server.ts"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  // The server process makes the model calls; this process never needs the key again.
+  delete process.env.OPENAI_API_KEY;
   const ready = new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("the test server did not start within 180 s (see server.log)")), 180_000);
     server.stdout!.on("data", (b: Buffer) => { log.write(b); if (/rag2 loop test server on/.test(b.toString())) { clearTimeout(timer); resolve(); } });
@@ -132,15 +155,20 @@ async function main() {
         const g = await budget();
         const calls = g.calls.slice(g0);
         const execs = (await pool.query("SELECT attempt_index, status, error_category, requested_model, resolved_model, input_tokens, output_tokens, cached_tokens, cost_usd::float AS cost_usd, latency_ms, prompt_version, created_at FROM model_executions WHERE household_ref=$1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at", [pseudonymizeId(ACCOUNT_L), new Date(t0 - 1000), new Date(Date.now() + 1000)])).rows;
-        const relay = relayLines(health.log, t0, Date.now());
+        const relay = relayLog ? relayLines(relayLog, t0, Date.now()) : [];
         conv.turns.push({
           turn: i + 1, user: turn.user, jobStatus: job?.status ?? null, jobError: job?.error ?? null,
           visible: answer ? [answer.summary, ...(answer.details ?? []), ...(answer.questions ?? []).map((q: any) => q.text)].filter(Boolean).join("\n") : null,
-          timings: { acceptedMs, firstAssistantPersistedMs: persisted ? new Date(persisted.created_at).getTime() - t0 : null, answerSeenMs, modelMs: calls.reduce((n: number, c: any) => n + (c.latencyMs ?? 0), 0), upstreamMs: relay.reduce((n, l) => n + (l.upstream_ms ?? 0), 0), relayMs: relay.reduce((n, l) => n + (l.relay_ms ?? 0), 0) },
+          timings: { acceptedMs, firstAssistantPersistedMs: persisted ? new Date(persisted.created_at).getTime() - t0 : null, answerSeenMs, modelMs: calls.reduce((n: number, c: any) => n + (c.latencyMs ?? 0), 0), upstreamMs: relay.length ? relay.reduce((n, l) => n + (l.upstream_ms ?? 0), 0) : calls.reduce((n: number, c: any) => n + (c.upstreamMs ?? 0), 0), relayMs: relay.reduce((n, l) => n + (l.relay_ms ?? 0), 0) },
           calls, modelExecutions: execs, relay,
           tokens: { input: calls.reduce((n: number, c: any) => n + (c.usage?.input ?? 0), 0), output: calls.reduce((n: number, c: any) => n + (c.usage?.output ?? 0), 0) },
           costUsd: { charged: calls.reduce((n: number, c: any) => n + (c.chargedUsd ?? 0), 0), ledger: execs.reduce((n: number, e: any) => n + (e.cost_usd ?? 0), 0) },
         });
+        if (calls.some((c: any) => c.refused === PREFLIGHT_REFUSAL)) {
+          stop = `${PREFLIGHT_REFUSAL}: stopped at the first model call -- scenario ${s.id} turn ${i + 1}: POST /api/chat ${r.status} accepted in ${acceptedMs} ms, chat job ${job?.status ?? "unknown"}, the conversation loop's first model call refused by the run-cap guard before any request was sent`;
+          runRecord.preflightStop = { scenario: s.id, turn: i + 1, postStatus: r.status, acceptedMs, jobStatus: job?.status ?? null, answerSeenMs, detail: stop };
+          break;
+        }
         if (calls.some((c: any) => c.refused)) { stop = "run cap reached during " + s.id; break; }
         // No credential behind the relay: stop at once rather than send every scenario into the same error.
         const blocked = relay.find((l) => l.status === 401 || l.status === 403);
@@ -171,9 +199,12 @@ async function main() {
     const fin = await budget();
     runRecord.finishedAt = new Date().toISOString();
     runRecord.budgetUsed = fin.ledger;
-    const allRelay = relayLines(health.log, started.getTime(), Date.now());
-    runRecord.providerModels = [...new Set(allRelay.map((l) => l.provider_model).filter(Boolean))];
-    runRecord.promptObserved = { systemPromptSha256: [...new Set(allRelay.map((l) => l.system_prompt_sha256).filter(Boolean))], toolSchemaSha256: [...new Set(allRelay.map((l) => l.tools_sha256).filter(Boolean))], settings: [...new Set(allRelay.map((l) => JSON.stringify(l.settings ?? {})))].map((x) => JSON.parse(x)) };
+    const allRelay = relayLog ? relayLines(relayLog, started.getTime(), Date.now()) : [];
+    // Direct mode (no relay): the same facts come from the guard's per-call records.
+    const seen = allRelay.length ? allRelay.map((l) => ({ model: l.provider_model, sys: l.system_prompt_sha256, tools: l.tools_sha256, settings: l.settings }))
+      : fin.calls.filter((c: any) => !c.refused).map((c: any) => ({ model: c.resolvedModel, sys: c.systemPromptSha256, tools: c.toolsSha256, settings: c.settings }));
+    runRecord.providerModels = [...new Set(seen.map((l: any) => l.model).filter(Boolean))];
+    runRecord.promptObserved = { systemPromptSha256: [...new Set(seen.map((l: any) => l.sys).filter(Boolean))], toolSchemaSha256: [...new Set(seen.map((l: any) => l.tools).filter(Boolean))], settings: [...new Set(seen.filter((l: any) => l.settings).map((l: any) => JSON.stringify(l.settings)))].map((x) => JSON.parse(x as string)) };
     runRecord.promptMatchesSource = runRecord.promptObserved.systemPromptSha256.every((h: string) => h === meta.prompt.systemPromptSha256) && runRecord.promptObserved.toolSchemaSha256.every((h: string) => h === meta.prompt.toolSchemaSha256);
     fs.writeFileSync(path.join(outDir, "relay.jsonl"), allRelay.map((l) => JSON.stringify(l)).join("\n") + "\n");
     fs.writeFileSync(path.join(outDir, "run.json"), JSON.stringify(runRecord, null, 2));

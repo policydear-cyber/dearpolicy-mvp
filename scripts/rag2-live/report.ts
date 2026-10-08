@@ -13,13 +13,15 @@ const cell = (t: unknown) => String(t ?? "").replace(/\|/g, "\\|").replace(/\s+/
 export function writeReport(run: any): string {
   const L: string[] = [];
   const plumbing = /PLUMBING/.test(run.label ?? "");
-  L.push(`# ${plumbing ? "PLUMBING TEST" : "Live model run"} — ${run.startedAt}`);
+  L.push(`# ${run.preflight ? "PREFLIGHT" : plumbing ? "PLUMBING TEST" : "Live model run"}${run.runId ? " " + run.runId : ""} — ${run.startedAt}`);
   L.push("");
+  if (run.preflight) L.push(`> **PREFLIGHT — no model call made; US$${(run.budgetUsed?.spentUsd ?? 0).toFixed(2)} spent.** Build, seed, server and the /api/chat path ran; the run-cap guard refused the first model call.${run.keyNote ? ` **${run.keyNote}** (the run was forced to preflight).` : ""}`, "", `- Stopped at: ${run.preflightStop?.detail ?? "before the first model call (no conversation reached the model)"}`);
+  L.push(`- Mode: ${run.mode ?? "relay"}${run.mode === "direct" ? " (GitHub Actions; OpenAI called directly with the repository secret, never logged)" : " (loopback relay)"}`);
   if (plumbing) L.push("> **PLUMBING TEST — NOT MODEL RESULTS.** The \"model\" was a local fake OpenAI-compatible endpoint (scripts/rag2-live/plumbing_fake.py) behind the real relay and app path. Verdicts below only show that the harness, relay, accounting and checker work end to end.", "");
   L.push(`- Code: \`${run.commit?.slice(0, 7)}\` (tree \`${run.tree?.slice(0, 8)}\`${run.dirty ? ", **uncommitted changes**" : ""}); served build \`${run.buildId}\``);
   L.push(`- Model requested: \`${run.model?.requested}\`; provider-reported: ${(run.providerModels ?? []).map((m: string) => "`" + m + "`").join(", ") || "none"}; price on file US$${run.model?.pricePerMillion?.input}/M in, US$${run.model?.pricePerMillion?.output}/M out`);
   L.push(`- Request settings sent: ${(run.promptObserved?.settings ?? []).map((s: any) => "`" + JSON.stringify(s) + "`").join(" ") || "`" + JSON.stringify(run.model?.settings) + "` (expected)"}`);
-  L.push(`- Prompt \`${run.prompt?.version}\`: system sha256 \`${run.prompt?.systemPromptSha256?.slice(0, 12)}\`, tool schema sha256 \`${run.prompt?.toolSchemaSha256?.slice(0, 12)}\` (${run.prompt?.tools} tools); what the relay saw ${run.promptMatchesSource ? "matches the source" : "**differs from the source (the served build is not this commit's prompt/tools)**"}`);
+  L.push(`- Prompt \`${run.prompt?.version}\`: system sha256 \`${run.prompt?.systemPromptSha256?.slice(0, 12)}\`, tool schema sha256 \`${run.prompt?.toolSchemaSha256?.slice(0, 12)}\` (${run.prompt?.tools} tools); what was sent ${!(run.promptObserved?.systemPromptSha256?.length) ? "-- nothing (no model call made)" : run.promptMatchesSource ? "matches the source" : "**differs from the source (the served build is not this commit's prompt/tools)**"}`);
   const b = run.budgetUsed ?? {};
   L.push(`- Budget: run cap ${usd(run.budget?.runCapUsd)}; spent ${usd(b.spentUsd)} over ${b.calls ?? 0} calls; refused ${b.refusals ?? 0}`);
   L.push("");
@@ -39,7 +41,7 @@ export function writeReport(run: any): string {
       L.push(`  - Answer: ${t.visible ? "“" + cell(t.visible).slice(0, 500) + "”" : t.error ?? t.jobError ?? "(none)"}`);
       const tr = c.saved?.traces?.[t.turn - 1];
       if (tr) L.push(`  - Tools: ${(tr.toolCalls ?? []).map((x: any) => x.name + (x.ok ? "" : "✗")).join(" → ") || "none"}; outcome ${tr.outcome}${tr.limit ? ` (limit ${tr.limit.kind})` : ""}; evidence ${(tr.evidenceChosen ?? []).join(", ") || "none"}`);
-      L.push(`  - Time: accepted ${ms(t.timings?.acceptedMs)}, answer saved ${ms(t.timings?.firstAssistantPersistedMs)}, seen ${ms(t.timings?.answerSeenMs)}; model ${ms(t.timings?.modelMs)} (upstream via relay ${ms(t.timings?.upstreamMs)}); ${t.calls?.length ?? 0} calls, ${t.tokens?.input ?? 0}/${t.tokens?.output ?? 0} tokens, ${usd(t.costUsd?.charged)}`);
+      L.push(`  - Time: accepted ${ms(t.timings?.acceptedMs)}, answer saved ${ms(t.timings?.firstAssistantPersistedMs)}, seen ${ms(t.timings?.answerSeenMs)}; model ${ms(t.timings?.modelMs)} (upstream ${ms(t.timings?.upstreamMs)}${run.mode === "direct" ? "" : " via the relay"}); ${t.calls?.length ?? 0} calls, ${t.tokens?.input ?? 0}/${t.tokens?.output ?? 0} tokens, ${usd(t.costUsd?.charged)}`);
     }
     const failed = (c.verdict?.checks ?? []).filter((k: any) => !k.ok);
     if (failed.length) { L.push("- Failed checks:"); for (const k of failed) L.push(`  - t${k.turn} [${k.stage}] ${cell(k.name)}: ${cell(k.detail).slice(0, 240)}`); }

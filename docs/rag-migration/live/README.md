@@ -53,6 +53,49 @@ the `openai` toolkit (no tool allow/deny list on it). The relay turns this into 
 and a missing connection into `401 no_openai_connection`; the app then answers honestly ("the assistant model returned
 an error…"), does not retry a 401/403, and the harness stops the run.
 
+## CI mode (hosted runner; `.github/workflows/rag2-live-smoke.yml`)
+Because the workbench session cannot proxy `openai` (see the blocker above), the smoke can also run on a GitHub-hosted
+runner in **direct mode**: no relay; the app server calls `https://api.openai.com/v1` itself with a repository secret.
+
+**One-step secret setup** (repository owner, once): GitHub → the repository → Settings → Secrets and variables →
+Actions → **New repository secret** → Name `OPENAI_TEST_API_KEY`, Secret = the spend-limited OpenAI **test** key → Add
+secret. (Environment secrets and required reviewers are not available for private repositories on GitHub Free, so it is
+a repository secret.) Until it exists, every run is forced to preflight and its report says "OPENAI_TEST_API_KEY not set".
+
+**Requesting a run:** edit `scripts/rag2-live/run-request.json` on `claude/conversational-rag-v1-1` and push. Nothing
+else triggers the workflow (no pull_request, schedule or manual dispatch).
+```json
+{ "run_id": "live-1", "scenarios": ["L1"], "run_cap_usd": 0.50, "preflight": false }
+```
+`run_id`: 1–40 of `A-Z a-z 0-9 . _ -` (a new value per run); `scenarios`: any of L1–L6; `run_cap_usd`: > 0 and ≤ 0.50
+(the workflow refuses more); `preflight: true` = build, seed, server and the first `/api/chat` request run, the guard
+refuses the first model call ("preflight: no model call made"), US$0, and the report shows where it stopped.
+
+**What the job does:** checkout, Node 22, `npm ci`; reads the request; checks whether the secret is present (never
+printing it); `next build`; Postgres 17 + pgvector service, extensions, `npm run db:setup`, `npm run rag2:live-seed`;
+then `run.ts --live` (or `--preflight`) with `RAG2_LIVE_MODE=direct`, `CHAT_MODEL=openai:gpt-6-luna`,
+`RAG2_LIVE_EXPECT_MODEL=openai:gpt-6-luna`, `RAG2_LIVE_RUN_CAP_USD` = `DEARPOLICY_RAG_LOOP_RUN_MAX_USD` = the request's
+cap, `DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1`. run.ts starts the app server (port 3310) as its child process and **the
+server process makes every model call**, so `OPENAI_API_KEY` is set only on that one step (passed by run.ts to the
+server, then deleted from run.ts's own environment), and only for a live run — a preflight gets the placeholder
+`preflight-no-key-set`. A leak scan (`grep -rF` of the key value over the run folder, which includes `server.log`)
+must be clean before the folder `docs/rag-migration/live/RUN-<run_id>-<timestamp>/` is committed back to the branch as
+github-actions[bot] (rebase-and-retry the push up to 3 times; a `GITHUB_TOKEN` push does not retrigger workflows) and
+uploaded as an artifact (30 days). Never `set -x`; the environment is never printed.
+
+**Direct-mode guard** (e2e/support/rag2-live-guard.ts): allowed only with `GITHUB_ACTIONS=true`, `CI=true`,
+`RAG2_LIVE_MODE=direct`, `OPENAI_BASE_URL` unset or exactly `https://api.openai.com/v1`, and a non-empty
+`OPENAI_API_KEY` (the placeholder only with preflight). Every other refusal stays (NODE_ENV=test, local database,
+Vercel unset, cap ≤ 0.50, priced model, `CHAT_MODEL` = `RAG2_LIVE_EXPECT_MODEL`); relay mode is unchanged. Without the
+relay, the guard records per call what the relay recorded: provider-reported model and usage, upstream latency
+(measured around the provider request in hosted-model.ts), the request settings, and the system-prompt / tool-schema
+sha256. Request headers and the key are never recorded.
+
+**Budget across runs:** the whole live smoke must stay ≤ US$0.50 in total, not per run. Each run's report gives its
+actual spend (`Budget: … spent US$x`); the next request's `run_cap_usd` must be **0.50 minus everything spent by
+earlier runs** (e.g. after a run that spent US$0.031, the next cap is at most 0.469). Preflight runs spend US$0. Within
+a run the reservation logic above applies to every call.
+
 ## Safety checks (the server and the harness both refuse to start otherwise)
 `NODE_ENV=test`; `DATABASE_URL` on localhost/127.0.0.1; `VERCEL`/`VERCEL_ENV` unset; `OPENAI_BASE_URL` host is
 127.0.0.1; `OPENAI_API_KEY` set to a dummy (anything starting `sk-` or longer than 64 chars is refused);
