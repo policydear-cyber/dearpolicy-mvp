@@ -198,6 +198,9 @@ jobs:
       - name: Conversational RAG conversation state, fact provenance, evidence precision and usage accounting (integration, two synthetic households, scripted test model and a fake-fetch hosted adapter -- facts only from the household's words, no inferred classifications or payable days; speaker vs active subject in a shared login; stepchildren offered and labelled; supporting sentence / row with header, continuation and footnote; every loop model call counted, recorded and stopped by per-turn, household, run, time and cancellation limits with an honest reply)
         run: npm run rag2:conv-test
 
+      - name: Benefit calculation contract (the claim calculators behind the calculate tool -- the policy's own day-count rule from admission and discharge, never nights for days; deductibles, co-insurance and caps on the household's bill; mixed currencies refused; a missing condition gives the printed figure plus the specific requirement, never an estimate; every calculation record re-run by the save-time gate; claim records only in a claim scenario)
+        run: npm run rag2:calc-test
+
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
 

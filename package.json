@@ -138,6 +138,7 @@
     "verify:gate-test": "node --import tsx scripts/verify-gate-regressions.ts",
     "rag2:tools-test": "node --import tsx scripts/rag2-tools-regressions.ts",
     "rag2:loop-test": "node --import tsx scripts/rag2-loop-regressions.ts",
+    "rag2:calc-test": "node --import tsx scripts/rag2-calc-regressions.ts",
     "rag2:loop-demo": "node --import tsx scripts/rag2-loop-demo.ts",
     "rag2:conv-test": "node --import tsx scripts/rag2-conv-regressions.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
