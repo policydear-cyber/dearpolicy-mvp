@@ -12,6 +12,7 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { replacedFigures, type Replacement } from "@/lib/policies/amendments";
 import type { ChatCitation } from "@/types";
 import type { RegistryAnswer } from "./registry-answers";
+import { bindFigure, citeLine, figuresIn, printedRowFor } from "./answer-verification";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const longDate = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split("-").map(Number); return d + " " + MONTHS[m - 1] + " " + y; };
@@ -72,6 +73,22 @@ export async function amendmentAnswer(args: { accountId: string; question: strin
     + (olds.length ? "The earlier " + (olds.length === 1 ? "schedule" : "documents") + " (" + olds.map((d) => "“" + d.file + "”" + (d.dated ? ", dated " + longDate(d.dated) : "")).join("; ") + ") still " + (olds.length === 1 ? "prints" : "print") + " the figures from before the change, which the endorsement replaces"
       + (unchanged ? "; everything else on " + (olds.length === 1 ? "it" : "them") + " stays as printed" : "") + "." : "");
   const details = [...lines];
+  // Gate R17: each figure is read from the amending document's own Before / After row, on its page: bound to that row
+  // (and its column) for the policy's owner, and cited to the page so the row is also resolved there at save time.
+  const owner = (await query<{ owner: string; file_hash: string | null }>(`SELECT p.family_member_id::text AS owner, p.file_hash FROM policies p WHERE p.account_id=$1 AND p.id::text=$2 AND ${activePredicate("p")}`, [args.accountId, c.by]).catch(() => ({ rows: [] }))).rows[0];
+  const pageOf = new Map((await query<{ page_number: number; text: string }>("SELECT page_number, text FROM policy_pages WHERE account_id=$1 AND policy_id=$2", [args.accountId, c.by]).catch(() => ({ rows: [] }))).rows.map((r) => [r.page_number, r.text]));
+  c.rows.forEach((r, i) => {
+    for (const t of [lines[i], summary]) {
+      citeLine(null, t, { policyId: c.by, pageStart: r.page, benefit: r.label }); citeLine(null, t, { policyId: c.by, pageStart: r.page });
+      const text = pageOf.get(r.page);
+      if (!owner || !text) continue;
+      for (const f of figuresIn(t)) {
+        if (Math.abs(f.value - r.before) > 0.005 && Math.abs(f.value - r.after) > 0.005) continue;
+        const row = printedRowFor(r.line + " " + (Math.abs(f.value - r.before) <= 0.005 ? "before" : "after"), f.value, text);
+        if (row) bindFigure(null, t, f.value, f.currency, { policyId: c.by, subjectId: owner.owner, benefit: r.label, documentHash: owner.file_hash, pageStart: r.page, pageEnd: r.page, passage: row.line, column: row.column });
+      }
+    }
+  });
   const citations: ChatCitation[] = [{ chunkId: "page:" + c.by + ":" + (c.rows[0]?.page ?? 1), policyId: c.by, policyName: c.product ?? by.file, insurer: by.insurer ?? undefined, pageStart: c.rows[0]?.page ?? 1, pageEnd: c.rows[0]?.page ?? 1, documentRole: by.role }];
   return { summary, details, citations, personId: null, topic: c.product ?? undefined };
 }
