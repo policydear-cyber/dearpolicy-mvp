@@ -5,48 +5,42 @@
 > and `/api/chat`; it says nothing about how a real model behaves. Synthetic households only; no real keys, no
 > production URLs or credentials. Screenshots stayed in the sandbox.
 
-## What was tested
-- Code: `40d31d3` (tree `c95e93a0`) = remote head 7886e3d + the db:setup commit `715156d` + the browser-spec
-  mechanics commit `40d31d3`. The app code is identical to 6d75338: the commits after it change only docs,
-  `scripts/setup-db.ts` and the two e2e files.
-- Build: `next build` output from 6d75338 (CHECKPOINT.md run, BUILD_ID `us0dKjrUwzUwttZZyE59s`), served in-process in
-  production mode (`next({ dev: false })`, the equivalent of `next start`). next dev was not used.
-- Spec: `e2e/tests/rag2-conversation.spec.ts` with `e2e/support/playwright.rag2.config.ts`; the real `/chat` page;
-  the conversation and messages are persisted in PostgreSQL and read back by the test (`/__rag2adv/last`).
-
-## Environment
-Sandbox (985 MB RAM + 2 GB swap), Node 22.20.0, Playwright 1.55.0, Chromium 154.0.8037.92 (Debian apt),
-PostgreSQL 17.11 (apt) with pgvector and pgcrypto. Peak during the run: ~460 MB used, ~500 MB swap; no memory
-failure.
-
-## Commands
+## Round 3 run (current)
+- Code tested: `cabe531` (tree `92a8fd4b`). Its code is identical to `63a4d4b`; see CHECKPOINT-R3.md.
+- Build: a fresh `next build` of that tree (`rm -rf .next`; BUILD_ID `x_bBMVqM2aegwnega73zL`, 59/59 pages). It was
+  served in-process in production mode (`E2E_RAG2_NEXT=start`, `NODE_ENV=test`), not with next dev.
+- Database: local PostgreSQL 17.11 database `dearpolicy_e2e`. Its schema came from `npm run db:setup`, and sql/ is
+  unchanged since. It was re-seeded with `e2e/support/seed-rag2-conversation.ts`.
+- Environment: Node 22.20.0, Playwright 1.55.0, Chromium 154.0.8037.92 (apt). About 345 MB RAM and 650 MB swap in
+  use after the run; memory blocked no test.
+- Commands. Each test ran alone first (`-g "<name prefix>"`), then the whole file:
 ```
-# database (local only)
-pg_ctlcluster 17 main start
-psql: CREATE DATABASE dearpolicy_e2e; CREATE EXTENSION vector; CREATE EXTENSION pgcrypto;
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/dearpolicy_e2e
-npm run db:setup                      # full schema (now includes the four files it used to miss); run twice, idempotent
-# environment for server and tests
-export NODE_OPTIONS=--max-old-space-size=2048 DEARPOLICY_RAG_LOOP=1 PORT=3300 NODE_ENV=test \
-       E2E_RAG2_NEXT=start NEXT_TELEMETRY_DISABLED=1 E2E_CHROMIUM_PATH=/usr/bin/chromium
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/dearpolicy_e2e NODE_OPTIONS=--max-old-space-size=2048 \
+       DEARPOLICY_RAG_LOOP=1 PORT=3300 NODE_ENV=test E2E_RAG2_NEXT=start NEXT_TELEMETRY_DISABLED=1 E2E_CHROMIUM_PATH=/usr/bin/chromium
 unset OPENAI_API_KEY ANTHROPIC_API_KEY
+rm -rf .next && NEXT_TELEMETRY_DISABLED=1 npm run -s build
 node --import tsx e2e/support/seed-rag2-conversation.ts
-node --import tsx e2e/support/rag2-loop-server.ts &          # "rag2 loop test server on http://localhost:3300"
-# one test at a time, then the whole file once
-npx playwright test -c e2e/support/playwright.rag2.config.ts -g "<test name prefix>"
-npx playwright test -c e2e/support/playwright.rag2.config.ts
+node --import tsx e2e/support/rag2-loop-server.ts &        # "rag2 loop test server on http://localhost:3300"
+flock /home/user/.heavy.lock npx playwright test -c e2e/support/playwright.rag2.config.ts -g "<test name prefix>"
+flock /home/user/.heavy.lock npx playwright test -c e2e/support/playwright.rag2.config.ts
 ```
 
-## Results — 7/7 pass (each test alone, then all 7 in one serial run: 7 passed, 41.6 s)
-| Test | Result | Key assertions / visible text |
-|---|---|---|
-| S1 factual | PASS | "Ethan's KidSafe fracture benefit is S$600 per fracture, from the Child column."; no S$1,000; no internal ids; saved figure binding 600 / Child; gate empty |
-| S2 broken arm | PASS | turn 1 asks how it happened, no S$ figure, at most 2 "?" (the one question and its card); `cause` not recorded as "accident" (saved facts: injury "broken arm", how_it_happened "fell off the monkey bars at school"); turn 2 "S$600 per fracture", no "medically confirmed"/"approved" |
-| S3 hospital income | PASS | asks admission time, then discharge time (no S$ before); turn 3 "Indicative estimate: KidSafe hospital income of S$90 for 2 complete periods of 24 hours comes to S$180."; never S$270 (3 nights); "payout" appears only in the notice "… they are not a payout …" |
-| S4 side question | PASS | "Marcus's MediGuard deductible is S$2,500 per policy year."; Ethan's pending question re-asked ("How much was Ethan's medical bill for the arm?"); saved claim subject Ethan (…0003), injury "broken arm" kept |
-| S7 bill estimate | PASS (after mechanics fix) | "Indicative estimate: the smaller of the bill you told me about (S$1,500) and the S$1,200 limit, less the S$100 excess, comes to S$1,100."; notice "… not a payout …"; saved CalculationRecord indicative_estimate, steps s_lim (min → 120000 cents) then s_ded (→ 110000), result 1100 |
-| S9 other household | PASS | no S$120 / FamilyFirst / Insured Child; visible: "Part of what I was going to say couldn't be tied to a passage of your documents, so I left it out."; 0 messages written to the other household; no claim |
-| X1 prompt injection | PASS | "Claims must be notified within 30 days of the Accident."; no "pre-approved" / "50,000" / "will receive" |
+| Test | Alone | All together | Key assertions / visible text (from the saved reply) |
+|---|---|---|---|
+| S1 factual | PASS | PASS | "Ethan's KidSafe fracture benefit is S$600 per fracture, from the Child column, payable if the fracture is confirmed by X-ray and certified by a registered medical practitioner."; no S$1,000; no internal ids; binding 600 / Child; gate empty |
+| S2 broken arm | PASS | PASS | turn 1 asks how it happened, no S$; cause never "accident"; turn 2 "S$600 per fracture", no "medically confirmed" / "approved" |
+| S3 hospital income | PASS | PASS | admission time, then discharge time, asked one at a time; "Indicative estimate: KidSafe hospital income of S$90 for 2 complete periods of 24 hours comes to S$180."; never S$270 |
+| S3one (new, agent P) | PASS | PASS | admission and discharge in one message are both used and never asked again: no "?" in turn 2; the same S$180 estimate; no internal commentary; `discharged_at` saved |
+| S4 side question | PASS | PASS | "Marcus's MediGuard deductible is S$2,500 per policy year."; Ethan's bill question re-asked; claim subject Ethan, injury "broken arm" kept |
+| S7 bill estimate | PASS | PASS | "Indicative estimate: the smaller of the bill you told me about (S$1,500) and the S$1,200 limit, less the S$100 excess, comes to S$1,100."; "not a payout"; saved record result 1100 |
+| S9 other household | PASS | PASS | "I couldn't identify "Rohan" among the family members linked to your account. Which family member do you mean? …"; no S$120 / FamilyFirst / Insured Child; 0 rows written to the other household; no claim |
+| X1 prompt injection | PASS | PASS | "Claims must be notified within 30 days of the Accident."; no "pre-approved" / "50,000" / "will receive" |
+
+All together: **8 passed (47.3 s)**. No failures and no spec changes in round 3.
+
+## Round 2 run (40d31d3, superseded)
+On the round-2 build from 6d75338, the spec had 7 tests and all 7 passed, alone and together. S7 passed after the
+mechanics fix below.
 
 ## Failure before the mechanics fix (verbatim, S7)
 ```
