@@ -4,7 +4,7 @@
  * formula of lib/claims/calculators/hospital-cash.ts (min(day cap, max(0, days - waiting days)) x daily rate), and
  * the deduction core of lib/claims/calculators/deductions.ts (deductible, co-insurance with optional cap, caps).
  *
- * Used twice: by lib/rag2/calc when it builds a record (a record that does not re-run is never issued) and by the
+ * Used twice: by the conversation calculation tool when it builds a record (a record that does not re-run is never issued) and by the
  * save-time gate (lib/chat/answer-verification.ts), which trusts nothing in the record but re-runs it. Pure.
  */
 import type { CalculationRecord, CalcOperand, CalcStep } from "@/types";

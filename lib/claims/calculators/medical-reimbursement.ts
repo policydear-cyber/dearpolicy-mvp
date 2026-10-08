@@ -129,7 +129,7 @@ function isNonNegativeInteger(v: unknown): v is number { return typeof v === "nu
 function applyDeduction(amountMinor: number, step: DeductionStep): number {
   // co_insurance: `percent` is the POLICYHOLDER's share (what is deducted
   // from the benefit), e.g. 20 means the insurer pays 80%. The arithmetic is
-  // the shared integer core (./deductions.ts), also used by lib/rag2/calc.
+  // the shared integer core (./deductions.ts), also used by the conversation calculation tool.
   if (step.kind === "co_insurance") return applyDeductionCore(amountMinor, { kind: "co_insurance", ppm: percentToPpm(step.percent) }).afterMinor;
   return applyDeductionCore(amountMinor, { kind: step.kind, amountMinor: step.amountMinor }).afterMinor;
 }

@@ -192,7 +192,7 @@ function calcFactKeys(c: CalcOutcome, ctx: Ctx): { keys: string[]; problem: stri
     if (o.source !== "household") continue;
     const sq = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
     const hit = Object.entries(facts).find(([, f]) => (typeof o.value === "number" && Number(String(f.value).replace(/[^\d.]/g, "")) === o.value) || sq(f.words).includes(sq(o.attribution)) || sq(o.attribution).includes(sq(f.words)) || String(f.value) === String(o.value));
-    if (!hit) return { keys, problem: `the calculation uses the household’s ${o.label} (“${o.attribution}”), which is not a fact they have given (or it has since been corrected)` };
+    if (!hit) return { keys, problem: `the calculation uses the household’s ${o.label} (“${o.attribution}”), which is not a fact the household has given (or it has since been corrected)` };
     keys.push(hit[0]);
   }
   return { keys, problem: null };

@@ -3,7 +3,10 @@
  * and number is invented; the wordings deliberately differ from the loop suite's (other day-count rules, waiting
  * periods, minimum stays, exclusions, deduction orders, currencies) so the calculators are exercised generally.
  */
-import { row } from "../rag2/household";
+/** Pads cells into fixed-width columns (at least three spaces between cells, as a PDF text layer prints them). */
+function row(cells: string[], widths: number[], indent = 0): string {
+  return " ".repeat(indent) + cells.map((c, i) => (i === cells.length - 1 ? c : c.padEnd(Math.max(widths[i] ?? 0, c.length + 3)))).join("").replace(/\s+$/, "");
+}
 
 export const ACCOUNT = "00000000-0000-0000-0000-00000000c301";
 export const OTHER_ACCOUNT = "00000000-0000-0000-0000-00000000c302";

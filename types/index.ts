@@ -244,7 +244,7 @@ export type ComputationRecord = {
 };
 
 /** Agent K (calculation contract): a benefit calculation the save-time gate re-runs step by step
- * (lib/chat/answer-verification.ts). Produced only by lib/rag2/calc through the deterministic claim calculators. */
+ * (lib/chat/answer-verification.ts). Produced only by the conversation calculation tool through the deterministic claim calculators. */
 export type CalcResultKind = "printed_limit"|"conditional_illustration"|"indicative_estimate"|"unresolved";
 /** One input of a calculation. Document figures carry their own binding (row + column + person + version); the
  * household's own figures carry their words, verbatim, and are never presented as document facts. */

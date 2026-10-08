@@ -1,6 +1,6 @@
 /**
  * The ONE deduction core for every reimbursement-style calculation in DearPolicy: the claims calculator
- * (lib/claims/calculators/medical-reimbursement.ts) and the conversational calculation tool (lib/rag2/calc) both call
+ * (lib/claims/calculators/medical-reimbursement.ts) and the conversational calculation tool (the conversation calculation tool) both call
  * these functions, so a deductible, a co-insurance share (with or without a cap) or a cap on a bill is worked out the
  * same way everywhere.
  *
