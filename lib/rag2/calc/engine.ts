@@ -127,7 +127,13 @@ export function hospitalCash(a: {
     capOp = c; printed.push(printedOf(a.dayCap, a.subjectId));
     conds.push({ id: "c_day_cap", kind: "day_cap", text: `At most ${c.value} days (${c.row}).`, status: "established", basis: "document", passage: passageOf(a.dayCap.operand.evidence) });
   } else if (t.dayCap) {
-    const e = t.dayCap.evidence;
+    // Agent F: a day cap printed in the benefit's own row label ("Daily hospital cash (max 90 days per year)  S$200
+    // S$120") applies to every column: it is bound to the label cell that prints it (one figure for everyone the row
+    // covers), not to the whole row, whose value cells print only the rates.
+    const e0 = t.dayCap.evidence;
+    const labelCell = e0.passage.text.split(/\t|\s{3,}/)[0]?.trim() ?? "";
+    const inLabel = e0.passage.text.split(/\t|\s{3,}/).length >= 3 && new RegExp("(?<![\\d.,])" + t.dayCap.value + "(?![\\d.,])").test(labelCell);
+    const e = inLabel ? { ...e0, passage: { ...e0.passage, text: labelCell, start: e0.passage.start + e0.passage.text.indexOf(labelCell), end: e0.passage.start + e0.passage.text.indexOf(labelCell) + labelCell.length }, table: null, support: null, context: null } : e0;
     const binding: FigureBinding | null = toFigureBinding({ ...e, subjectId: e.subjectId ?? a.subjectId }, a.benefit, t.dayCap.value, "");
     if (binding) capOp = { id: "day_cap", source: "document", role: "day_cap", label: `${a.benefit} maximum days`, unit: "count", value: t.dayCap.value, currency: null, period: null, row: e.table?.rowLabel ?? e.passage.text, column: binding.column ?? null, binding };
     conds.push({ id: "c_day_cap", kind: "day_cap", text: `At most ${t.dayCap.value} days: “${e.passage.text}”`, status: "established", basis: "document", passage: passageOf(e) });
