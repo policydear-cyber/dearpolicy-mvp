@@ -25,6 +25,7 @@ import { NON_COVER_ROLES } from "@/lib/documents/messy";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { query } from "@/lib/db/client";
 import type { ChatCitation } from "@/types";
+import { citeLine } from "./answer-verification";
 
 // ------------------------------------------------------------------ household words
 const UNITS: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
@@ -243,6 +244,8 @@ export function documentLines(pages: PersonPage[], re: RegExp, limit = 4): DocLi
       if (!re.test(piece) || out.some((o) => o.line.includes(piece))) continue;
       out.push({ line: p.product + " — “" + piece.replace(/[.;\s]+$/, "") + "” (page " + p.page + ").", product: p.product, insurer: p.insurer, policyType: p.policyType,
         citation: { chunkId: "page:" + p.policyId + ":" + p.page, policyId: p.policyId, policyName: p.product, pageStart: p.page, pageEnd: p.page } });
+      // Gate R17: the quoted line's figures are read from its own page (resolved on that page at save time).
+      citeLine(null, out[out.length - 1].line, { policyId: p.policyId, pageStart: p.page });
       if (out.length >= limit) return out;
     }
   }

@@ -33,7 +33,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { BoundFigure, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
-import { amountAppears, amountPrintedWith, benefitRowProblem, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
+import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 
@@ -148,6 +148,33 @@ export function citePageLines(target: Provenance | null | undefined, lines: stri
     }
   }
 }
+/** A fact read from one passage of one page (a verified assertion: lib/chat/assertions.ts) as a producer renders it. */
+export type PassageFact = { policyId: string; subjectId: string; documentHash: string | null; page: number | null; passage: string; title?: string | null; tierLabel?: string | null; tier?: string | null; presentedAsSuperseded?: boolean };
+/** Binds the figures of `text` that `fact`'s passage prints to that passage (its own page, version, person and benefit
+ * row), and cites `text` to the fact's page so saveTurn can also resolve the exact printed row (and its column) there.
+ * The gate decides whether any of these grounds a sentence: a binding for the wrong benefit or person grounds nothing. */
+export function bindPassageFact(target: Provenance | null | undefined, text: string, fact: PassageFact | null | undefined): void {
+  if (!fact || !text || !fact.policyId || !(Number(fact.page) > 0)) return;
+  const figures = moneyFiguresIn(text).filter((f) => f.currency !== "$");
+  if (!figures.length) return;
+  const page = Number(fact.page);
+  if (fact.title && fact.subjectId && fact.passage) {
+    const binding: FigureBinding = { policyId: fact.policyId, subjectId: fact.subjectId, benefit: fact.title, documentHash: fact.documentHash, pageStart: page, pageEnd: page, passage: fact.passage, column: fact.tierLabel ?? fact.tier ?? null, ...(fact.presentedAsSuperseded ? { presentedAsSuperseded: true } : {}) };
+    for (const f of figures) if (amountAppears(f.value, fact.passage)) bindFigure(target, text, f.value, f.currency, binding);
+  }
+  citeLine(target, text, { policyId: fact.policyId, pageStart: page, subjectId: fact.subjectId ?? null, benefit: fact.title ?? null, column: fact.tierLabel ?? fact.tier ?? null });
+  citeLine(target, text, { policyId: fact.policyId, pageStart: page, subjectId: fact.subjectId ?? null });
+}
+/** For an answer built from printed pages: each line with a figure is cited to the page it names ("(page N)"), or --
+ * when it names none -- to each page the answer cites (at most six), so saveTurn can resolve the printed row there. */
+export function citeAnswerLines(target: Provenance | null | undefined, texts: (string | null | undefined)[], citations: ({ policyId: string; pageStart: number | null; pageEnd?: number | null } | null | undefined)[], subjectId?: string | null): void {
+  const cited = citations.filter((c): c is { policyId: string; pageStart: number; pageEnd?: number | null } => !!c && !!c.policyId && Number(c.pageStart) > 0);
+  for (const t of texts) {
+    if (!t || !moneyFiguresIn(t).length) continue;
+    if (/\(page \d+\b/.test(t)) { citePageLines(target, [t], cited, subjectId); continue; }
+    for (const c of cited.slice(0, 6)) citeLine(target, t, { policyId: c.policyId, pageStart: c.pageStart, pageEnd: Math.max(c.pageStart, c.pageEnd ?? c.pageStart), subjectId: subjectId ?? null });
+  }
+}
 /** The printed line of `pageText` a rendered sentence's figure comes from: the line that prints the amount and shares the
  * most words with the sentence, with its row label and -- in a table with one column per person / tier -- its column. */
 export function printedRowFor(sentence: string, value: number, pageText: string): { line: string; label: string; column: string | null } | null {
@@ -185,12 +212,19 @@ export function printedRowFor(sentence: string, value: number, pageText: string)
   }
   return { line, label, column };
 }
+/** The benefit a printed row states: its label -- or, where the label is only generic words ("Amount due"), the row's
+ * own words without its amounts ("Amount due (annual premium)"), so the row is named by what it prints. */
+export function rowBenefit(r: { line: string; label: string }): string {
+  if (benefitWords(r.label).size) return r.label;
+  const words = r.line.replace(/(?:S\$|SG\$|SGD|US\$|USD|RM|MYR|HK\$|HKD|A\$|AUD|€|£|¥|\$)?\s?\d[\d,]*(?:\.\d+)?/g, " ").replace(/[\t|]+/g, " ").replace(/\s+/g, " ").trim();
+  return benefitWords(words).size ? words : r.label;
+}
 /** A binding for `value` read from `pageText` (one page of one policy), or null when that page does not print it. */
 export function bindingFromPage(args: { policyId: string; subjectId: string; documentHash: string | null; page: number; pageText: string | null | undefined; sentence: string; value: number; currency: string; benefit?: string | null; column?: string | null }): FigureBinding | null {
   if (!args.pageText) return null;
   const r = printedRowFor(args.sentence, args.value, args.pageText);
   if (!r) return null;
-  return { policyId: args.policyId, subjectId: args.subjectId, benefit: args.benefit ?? r.label, documentHash: args.documentHash, pageStart: args.page, pageEnd: args.page, passage: r.line, column: args.column ?? r.column };
+  return { policyId: args.policyId, subjectId: args.subjectId, benefit: args.benefit ?? rowBenefit(r), documentHash: args.documentHash, pageStart: args.page, pageEnd: args.page, passage: r.line, column: args.column ?? r.column };
 }
 /** Copies onto `answer` what the turn's producers bound for sentences it states, resolving their source hints on the
  * pages they name, and binds each policy-stated limit card to its own cited page (called by saveTurn before the gate). */
@@ -236,6 +270,8 @@ export async function attachProvenance(answer: ChatAnswer, accountId?: string, f
             const want = (!h.subjectId || quoted) && b.column ? classOf(b.column) : null;
             if (want && classOfPerson(b.subjectId) !== want) { const m = [...who].find((id) => classOfPerson(id) === want); if (m) b.subjectId = m; }
             addF({ ...b, sentence: s.trim(), value: f.value, currency: f.currency });
+            // A value table (one row per policy year, one column per value): the figure's benefit is its column.
+            if (!h.benefit && b.column && b.column !== b.benefit) addF({ ...b, benefit: b.column, sentence: s.trim(), value: f.value, currency: f.currency });
             break;
           }
         }

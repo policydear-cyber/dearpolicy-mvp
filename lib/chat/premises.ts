@@ -9,6 +9,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ChatCitation } from "@/types";
 import { piecesOf } from "./printed-lines";
+import { citeLine } from "./answer-verification";
 
 export type Premise = { kind: "full_pay" | "tier" | "private_full" | null; rewrite: string | null; figures: number[]; tier: string | null };
 const CONFIRMING = /\b(?:right|correct|isn['’]?t it|is it|yes or no|true|am i right|ya|yah|hor|izzit)\s*\??\s*$|^\s*(?:so\s+)?(?:my|our|his|her|their|\w+['’]s)\b[^?]{0,80}\b(?:is|are|pays?|covers?)\b[^?]*\?\s*$/i;
@@ -51,7 +52,6 @@ export function premiseLead(p: Premise, details: string[]): string | null {
   return null;
 }
 
-const money = (n: number) => "S$" + n.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
 /** A figure the person stated that the answer does not show: where the documents print it, if anywhere. */
 export async function figurePremise(args: { accountId: string; question: string; figures: number[]; answerText: string; peopleIds: string[]; selfIds: string[] }): Promise<{ lead: string; detail: string | null; citation: ChatCitation | null } | null> {
   const shown = args.answerText.replace(/,/g, "");
@@ -73,11 +73,16 @@ export async function figurePremise(args: { accountId: string; question: string;
   const linesOf = (text: string) => { const raw = text.split(/\r?\n/).map((l) => l.replace(/\t+/g, " · ").replace(/\s+/g, " ").trim()).filter((l) => l.length >= 6 && l.length <= 240); return raw.some((l) => printed.test(l)) ? raw : piecesOf(text); };
   const hits = rows.flatMap((r) => linesOf(r.text).filter((l) => printed.test(l)).map((line) => ({ ...r, line, score: overlap(line) }))).sort((a, b) => b.score - a.score);
   const own = hits.find((h) => h.score > 0 && (h.owner_ids ?? []).some((o) => args.peopleIds.includes(o)));
-  if (own) return { lead: "Not quite — " + money(figure) + " is not what it pays for this in general; the line that prints " + money(figure) + " is first below.", detail: own.name + " — “" + own.line.replace(/[.;\s]+$/, "") + "” (page " + own.page + ").",
+  const other = own ? null : hits.find((h) => (h.owners ?? []).length);
+  // The quoted line's figure is read from its own page (resolved on that page at save time).
+  for (const h of [own, other]) if (h) citeLine(null, h.name + " — “" + h.line.replace(/[.;\s]+$/, "") + "” (page " + h.page + ").", { policyId: h.id, pageStart: h.page });
+  // Gate R17: the household's own figure is never restated as what a policy pays or holds; the printed line below
+  // (cited to its page) states it, and a lead that repeats it says it is theirs, exactly as they wrote it.
+  if (own) return { lead: "Not quite — that figure is not what it pays for this in general; the line that prints it is first below.", detail: own.name + " — “" + own.line.replace(/[.;\s]+$/, "") + "” (page " + own.page + ").",
     citation: { chunkId: "page:" + own.id + ":" + own.page, policyId: own.id, policyName: own.name, pageStart: own.page, pageEnd: own.page } };
-  const other = hits.find((h) => (h.owners ?? []).length);
   const whose = args.peopleIds.length === 1 && args.selfIds.includes(args.peopleIds[0]) ? "your own" : "these";
-  if (other) return { lead: "No — " + money(figure) + " is on " + (other.owners ?? []).join(" and ") + "’s " + other.name + ", not on " + whose + " policies.", detail: other.name + " — “" + other.line.replace(/[.;\s]+$/, "") + "” (page " + other.page + ").",
+  if (other) return { lead: "No — that figure is on " + (other.owners ?? []).join(" and ") + "’s " + other.name + ", not on " + whose + " policies.", detail: other.name + " — “" + other.line.replace(/[.;\s]+$/, "") + "” (page " + other.page + ").",
     citation: { chunkId: "page:" + other.id + ":" + other.page, policyId: other.id, policyName: other.name, pageStart: other.page, pageEnd: other.page } };
-  return { lead: "Your documents don’t show " + money(figure) + " for this. Here is what they do print:", detail: null, citation: null };
+  const raw = [...args.question.matchAll(/(?:S\$|SGD\s?|\$)\s?(\d[\d,]*(?:\.\d+)?)\s*(k|m|mil|million)?\b/gi)].find((m) => Number(m[1].replace(/,/g, "")) * (/^k$/i.test(m[2] ?? "") ? 1000 : /^m/i.test(m[2] ?? "") ? 1_000_000 : 1) === figure)?.[0]?.trim();
+  return { lead: "Your documents don’t show " + (raw ? "the " + raw + " you mentioned" : "that figure") + " for this. Here is what they do print:", detail: null, citation: null };
 }
