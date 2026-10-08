@@ -204,6 +204,10 @@ jobs:
         run: npm run rag2:fix-test
       - name: Conversational RAG adversarial suite (two synthetic households; the reviewer's required behaviour for evidence, people, facts, calculations, limits and lifecycle -- must pass in full)
         run: npm run rag2:adversarial-test
+      - name: Conversational RAG remaining gaps (applicability classes for people and columns at selection and at the gate; stepchild rows from the document's own definition; the claimed amount persisted with provenance; corrections update the persisted claim; a deleted or superseded source invalidates only what it alone supported)
+        run: npm run rag2:gaps-test
+      - name: Conversational RAG presentation (what the household sees -- no duplicated question, names as the household uses them, no internal commentary after a failed verification, an unknown person said plainly, facts in the message never asked again, unestablished conditions said as conditional)
+        run: npm run rag2:presentation-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

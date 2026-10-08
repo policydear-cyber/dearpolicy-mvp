@@ -49,7 +49,11 @@ t("C9 L3 asking how it happened, then a fact recorded as 'accident' that was nev
   const ask = { summary: "How did Kai break his arm?", questions: [{ text: "How did Kai break his arm?" }], resolvedFamilyMemberId: L.kai.id };
   const v = grade({ ...sc("L3"), turns: sc("L3").turns.slice(0, 1) }, conv("L3", [ask], [{ outcome: "ask_user" }], {}, { subjectId: L.kai.id, facts: { cause: { value: "accident", words: "broke his arm" } } }));
   assert.ok(v.checks.some((c) => !c.ok && /never records cause=accident/.test(c.name)));
-  const ok = grade({ ...sc("L3"), turns: sc("L3").turns.slice(0, 1) }, conv("L3", [ask], [{ outcome: "ask_user" }], {}, { subjectId: L.kai.id, facts: { injury: { value: "broken arm", words: "broke his arm" } } }));
+  // Integration (round 3, mechanics only): the correct turn-1 ask also cites the passage the L3 expectation requires
+  // (SUNHAVEN p2 accident-only wording, expected.ts P.accidentOnly); without it the hand-built "correct" turn failed
+  // at retrieval, not at the cause check this test is about.
+  const okAsk = { ...ask, citations: [cite("SUNHAVEN", 2, "This policy covers Bodily Injury caused solely and directly by an Accident.")] };
+  const ok = grade({ ...sc("L3"), turns: sc("L3").turns.slice(0, 1) }, conv("L3", [okAsk], [{ outcome: "ask_user" }], {}, { subjectId: L.kai.id, facts: { injury: { value: "broken arm", words: "broke his arm" } } }));
   assert.equal(ok.verdict, "PASS", JSON.stringify(ok.checks.filter((c) => !c.ok)));
 });
 t("C10 a turn stopped by a limit is INCOMPLETE, not a model failure", () => { const v = grade(sc("L1"), conv("L1", [{ summary: "I couldn’t look that up." }], [{ outcome: "limit_reached", limit: { kind: "run_budget", detail: "cap" } }])); assert.equal(v.verdict, "INCOMPLETE"); assert.equal(v.failureStage, null); });
