@@ -1048,11 +1048,15 @@ export function looksLikeCoverageLine(benefitName:string){
   if(/\b[STFGM]\d{7}[A-Z]\b/i.test(name))return true;
   return false;
 }
+/** Every rule read from these documents. The order is total (benefit name, then page, then id): rows that share a
+ * benefit name are otherwise returned in whatever order the database scans them, and the first of them wins
+ * wherever a later step keeps one row per benefit (tier selection, stated-rule preference, ledger seeding) --
+ * the Round 9 flake, where a re-read could change which of two equal-named rows a household saw. */
 export async function loadBenefitCatalog(accountId:string,policyIds:string[]){
   if(!policyIds.length)return [] as CatalogBenefit[];
   await ensureBenefitSchema();
   const r=await query<BenefitRow>(
-    "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind FROM policy_benefits b WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) AND coalesce((to_jsonb(b)->>'duplicate_of_policy_id')::uuid<>ALL($2::uuid[]),true) ORDER BY benefit_name",
+    "SELECT id,policy_id,product_name,benefit_name,traits,requires,formula_kind,formula_value::text,currency,fact_key,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review,basis_inferred,reviewed_at::text,(basis_inferred AND reviewed_at IS NULL) AS needs_confirmation,to_jsonb(b)->>'tier' AS tier,to_jsonb(b)->>'row_kind' AS row_kind FROM policy_benefits b WHERE account_id=$1 AND policy_id=ANY($2::uuid[]) AND coalesce((to_jsonb(b)->>'duplicate_of_policy_id')::uuid<>ALL($2::uuid[]),true) ORDER BY benefit_name,source_page NULLS LAST,id",
     [accountId,policyIds]);
   // Round 7: a figure a later endorsement of the same policy replaced is not
   // current cover (lib/policies/amendments.ts).
