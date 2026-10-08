@@ -176,8 +176,10 @@ export function knownFactFor(key: string, facts: Record<string, FactLike2>): { k
   const hasTime = (f: FactLike2) => { const p = isoParts(String(f.value)); return p ? p.hh != null : datesTimesIn(String(f.value) + " " + f.words).times.length > 0; };
   const hasDate = (f: FactLike2) => !!isoParts(String(f.value)) || datesTimesIn(String(f.value) + " " + f.words).dates.length > 0;
   for (const [fk, f] of Object.entries(facts)) {
-    if (!confirmed(f)) continue;
     const c = factConcept(fk);
+    // Integration (D31): how it happened is answered by the household's own description, even in the model's words
+    // (a paraphrase is unconfirmed as a value, but the question has been answered and is never asked again).
+    if (!confirmed(f) && !(want.concept === "cause" && c.concept === "cause")) continue;
     if (c.concept !== want.concept || want.concept.startsWith("key:")) continue;
     if (want.concept === "admission" || want.concept === "discharge") {
       if (want.grain === "time" && !hasTime(f)) continue;

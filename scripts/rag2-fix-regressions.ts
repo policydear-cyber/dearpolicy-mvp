@@ -286,6 +286,29 @@ async function main() {
     });
   }
 
+  // ------------------------------------------------------------------ D31 (integration): a cause question answered
+  { const r = await converse(ACCOUNT_T, [
+      { steps: [
+        () => [call("resolve_person", { mention: "Ethan" })],
+        () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "injury", value: "broken arm", words: "broke his arm" }] }), call("search_passages", { query: "accident fracture", subject_id: T.ethan.id })],
+        (v) => [call("ask_user", { kind: "fact", fact_key: "cause", subject_id: T.ethan.id, question: "How did Ethan break his arm?", because_evidence_ids: [hitOf(v, /ccident|racture/)] })],
+      ] },
+      { steps: [
+        () => [call("note_facts", { subject_id: T.ethan.id, facts: [{ key: "how_it_happened", value: "fell on the pavement", words: "He tripped over a kerb on the way home" }] }), call("search_passages", { query: "accident fracture", subject_id: T.ethan.id })],
+        (v) => [call("ask_user", { kind: "fact", fact_key: "cause", subject_id: T.ethan.id, question: "Was it an accident?", because_evidence_ids: [hitOf(v, /ccident|racture/)] })],
+        () => [call("final_answer", { subject_id: T.ethan.id, sentences: [{ text: "Thanks, I have noted how it happened." }] })],
+      ] },
+    ], ["Ethan broke his arm. What can we claim?", "He tripped over a kerb on the way home"]);
+    const t = r.turns[1];
+    await check("F31 D31: a pending cause question is answered by a how_it_happened fact (even in the model's words) and is not asked again", () => {
+      assert.equal(r.turns[0].loop.pending?.factKey, "cause", info(r.turns[0]));
+      assert.equal(t.loop.claim.facts.how_it_happened?.basis, "paraphrased", info(t));
+      assert.ok(t.trace.toolCalls.some((x: any) => x.name === "ask_user" && !x.ok), "the cause question is refused: " + info(t));
+      assert.equal(t.loop.pending, null, info(t));
+      assert.equal(t.a.questions.length, 0);
+    });
+  }
+
   // ------------------------------------------------------------------ D14 / D15: one question; known facts; relevant why
   await check("F14 D14 unit: compound questions are caught by structure; one fact with an either/or, or one clause naming date and time, is one question", () => {
     for (const q of ["When was Ethan admitted, and when was he discharged?", "Which hospital was it and what time was he admitted?", "Was he admitted, and was he discharged the same day?", "How much was the bill and when did he go home?"]) assert.ok(Q.compoundQuestion(q), q);
