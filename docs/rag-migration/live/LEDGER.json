@@ -1,4 +1,18 @@
 {
   "exercise_cap_usd": 0.5,
-  "runs": []
+  "runs": [
+    {
+      "run_id": "live-L1-r2",
+      "tested_code_sha": "af8a6b4dd9901d1d5cfebee479266824c3a8278e",
+      "request_sha": "80b0e3820921c71cad55fbc9732eef65be171a96",
+      "at": "2026-10-09T05:09:46.376Z",
+      "preflight": false,
+      "run_cap_usd": 0.5,
+      "spent_usd": 0.001111,
+      "reserved_unsettled_usd": 0,
+      "calls": 4,
+      "refused": 0,
+      "failed": 0
+    }
+  ]
 }
