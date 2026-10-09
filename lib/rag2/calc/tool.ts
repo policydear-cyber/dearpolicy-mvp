@@ -7,7 +7,9 @@
  */
 import type { JsonSchema, ToolContext, ToolDef, ToolResult } from "../tools";
 import { evidenceFor, type EvidenceRef } from "../evidence";
-import { loadMembers, pageMap, loadDocs } from "../store";
+import { loadMembers, pageMap, loadDocs, familyBase, policyFamily, resolveDocumentRef, type DocRow, type MemberRow } from "../store";
+import { selectTableValue, type SelectedValue } from "../tables";
+import { columnApplicability, columnFitProblem, personApplicability } from "@/lib/claims/person";
 import type { TableValueOperand } from "../compute";
 import { billReimbursement, hospitalCash, lumpSum, type CalcOutcome, type DocValue, type HouseholdInput, type Refusal } from "./engine";
 import { readBenefitTerms } from "./terms";
@@ -50,24 +52,33 @@ export const CALC_TOOLS: ToolDef[] = [CALCULATE_TOOL];
 const fail = (error: string, evidence: EvidenceRef[] = []): ToolResult => ({ ok: false, error, evidence });
 
 export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>): Promise<ToolResult> {
-  const subjectId = String(a.subject_id), policyId = String(a.policy_id), benefit = String(a.benefit).trim();
+  const subjectId = String(a.subject_id), benefit = String(a.benefit).trim();
   const purpose = String(a.purpose) as "question" | "what_if" | "claim";
   const whatIf = purpose === "what_if";
   const member = (await loadMembers(ctx.accountId)).find((m) => m.id === subjectId);
   if (!member) return fail("subject_id is not an active member of this household");
-  const doc = (await loadDocs(ctx.accountId, [policyId]))[0];
-  if (!doc) return fail("that document is not one of this household's readable documents");
+  // V1: the document the calculation is made on is the POLICY's own document (its schedule), whichever of its readable
+  // documents (schedule or endorsement), policy number or name the model passed; a value read from any document of the
+  // same policy is that policy's value. Unreadable documents stay unreadable (loadDocs), other policies stay refused.
+  const readable = await loadDocs(ctx.accountId);
+  const ref = resolveDocumentRef(readable, String(a.policy_id ?? ""));
+  if ("error" in ref) return fail(ref.error);
+  const family = policyFamily(readable, ref.doc);
+  const doc = familyBase(family, ref.doc);
+  const policyId = doc.id;
+  const familyIds = new Set(family.map((d) => d.id));
+  const ofPolicy = (e: EvidenceRef) => familyIds.has(e.policyId) || (!!e.amends && familyIds.has(e.amends.policyId));
   const who = member.preferredName || member.displayName;
   const value = (key: string, want?: TableValueOperand["valueKind"]): DocValue | string | null => {
     const id = a[key]; if (id == null) return null;
     const v = ctx.values.get(String(id));
     if (!v) return `${key}: unknown value id ${String(id)} (values must come from select_table_value in this conversation)`;
     if (v.subjectId !== subjectId) return `${key}: ${String(id)} was read for another person`;
-    if (v.operand.evidence.policyId !== policyId) return `${key}: ${String(id)} is from another document`;
+    if (!ofPolicy(v.operand.evidence)) return `${key}: ${String(id)} is from another policy than ${doc.productName ?? "the one calculated for"}`;
     if (want && v.operand.valueKind !== want) return `${key}: ${String(id)} is a printed ${v.operand.valueKind}, not a ${want}`;
     return { operand: v.operand, valueId: String(id) };
   };
-  const values = (key: string): DocValue[] | string => { const out: DocValue[] = []; for (const id of (a[key] as string[]) ?? []) { const x = ctx.values.get(String(id)); if (!x) return `${key}: unknown value id ${id}`; if (x.subjectId !== subjectId || x.operand.evidence.policyId !== policyId) return `${key}: ${id} is for another person or document`; out.push({ operand: x.operand, valueId: id }); } return out; };
+  const values = (key: string): DocValue[] | string => { const out: DocValue[] = []; for (const id of (a[key] as string[]) ?? []) { const x = ctx.values.get(String(id)); if (!x) return `${key}: unknown value id ${id}`; if (x.subjectId !== subjectId || !ofPolicy(x.operand.evidence)) return `${key}: ${id} is for another person or policy`; out.push({ operand: x.operand, valueId: id }); } return out; };
   const household = (key: string, unit: "at" | "bill"): HouseholdInput | string | null => {
     const h = a[key] as Record<string, unknown> | undefined; if (!h) return null;
     const words = String(h.words ?? "").trim(); if (!words) return `${key}: the household's own words are required`;
@@ -83,11 +94,15 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
 
   let out: CalcOutcome | Refusal;
   if (a.calculator === "hospital_cash") {
-    const rate = value("rate_value_id", "money"); if (typeof rate === "string") return fail(rate); if (!rate) return fail("hospital_cash needs rate_value_id (read the daily rate with select_table_value first)");
+    const given = value("rate_value_id", "money"); if (typeof given === "string") return fail(given); if (!given) return fail("hospital_cash needs rate_value_id (read the daily rate with select_table_value first)");
     let cap = value("day_cap_value_id", "count"); if (typeof cap === "string") return fail(cap);
     if (!cap) cap = await autoDayCap(ctx, policyId, subjectId, benefit);
     const adm = household("admission", "at"), dis = household("discharge", "at");
     if (typeof adm === "string") return fail(adm); if (typeof dis === "string") return fail(dis);
+    // V1: the rate in force for the stay's dates (a schedule's rate, or an endorsement's revised rate from its effective
+    // date), for this person -- not the one in force on the day of the conversation.
+    const rate = await rateInForce(ctx, member, doc, given, ctx.values.get(String(a.rate_value_id))?.selected ?? null, adm, dis);
+    if (typeof rate === "string") return fail(rate);
     const t2 = await readBenefitTerms({ accountId: ctx.accountId, policyId, benefit, subjectId, rowLabel: rate.operand.evidence.table?.rowLabel ?? null });
     const pu = a.prior_use as { periods?: number; amount?: number; currency?: string; words?: string } | undefined;
     if (pu && !String(pu.words ?? "").trim()) return fail("prior_use: the household's own words are required");
@@ -192,4 +207,46 @@ async function autoDayCap(ctx: ToolContext, policyId: string, subjectId: string,
     if (r.status === "ok" && r.valueKind === "count") return { operand: { kind: "table_value", benefit: r.rowLabel || label, valueKind: "count", cents: null, ppm: null, count: r.value, currency: null, period: r.period, evidence: r.evidence } };
   }
   return null;
+}
+
+/**
+ * V1: the daily rate in force for the stay's dates, for this person. The value the model passed was selected as of the
+ * conversation's date; the stay may be before an endorsement's effective date (or after it). The rate is read again
+ * from the policy's own document as of the admission date and as of the discharge date: one value -> that value (from
+ * the schedule or the endorsement in force); two values -> the stay spans the change, which is not split here. An
+ * endorsement row printed for another class of person ("Category: Child (each)") does not change this person's rate.
+ */
+async function rateInForce(ctx: ToolContext, member: MemberRow, base: DocRow, given: DocValue, selected: SelectedValue | null, adm: HouseholdInput | null, dis: HouseholdInput | null): Promise<DocValue | string> {
+  const day = (h: HouseholdInput | null) => (h && typeof h.value === "string" && /^\d{4}-\d{2}-\d{2}/.test(h.value) ? h.value.slice(0, 10) : null);
+  const from = day(adm), to = day(dis) ?? from;
+  if (!from || !selected) return given;
+  const tier = selected.columnBasis.basis === "explicit_tier" ? selected.columnHeader : null;
+  const person = personApplicability({ relationship: member.relationship, notes: member.notes, dateOfBirth: member.dateOfBirth }, { asOf: from });
+  const excludes = (s: SelectedValue) => (!!s.amends || !!s.amendedFrom) && s.evidence.passage.text.split(/\t| {3,}/).map((c) => c.trim()).filter(Boolean)
+    .some((c) => { const col = columnApplicability(c); return col.kind === "class" && !!columnFitProblem(col, person, { isOwner: null, header: c }); });
+  const dayBefore = (iso: string) => new Date(Date.parse(iso + "T00:00:00Z") - 86_400_000).toISOString().slice(0, 10);
+  const at = async (asOf: string): Promise<SelectedValue | string> => {
+    let r = await selectTableValue({ accountId: ctx.accountId, policyId: base.id, benefit: selected.benefit, subject: { memberId: member.id, tier }, want: "amount", asOf });
+    if (r.status === "ok" && excludes(r)) {
+      const eff = r.amends?.effectiveDate ?? null;
+      if (!eff) return `the amended ${selected.benefit} row is printed for another class of person, and its effective date is not stated`;
+      r = await selectTableValue({ accountId: ctx.accountId, policyId: base.id, benefit: selected.benefit, subject: { memberId: member.id, tier }, want: "amount", asOf: dayBefore(eff) });
+    }
+    if (r.status !== "ok") return `the daily rate in force on ${asOf} could not be read: ${"reason" in r ? r.reason : "question" in r ? r.question : r.status}`;
+    if (r.valueKind !== "money" || r.cents == null) return `the daily rate in force on ${asOf} is not a printed amount`;
+    return r;
+  };
+  const a = await at(from); if (typeof a === "string") return a;
+  if (to && to !== from) {
+    const b = await at(to); if (typeof b === "string") return b;
+    if (b.cents !== a.cents || b.currency !== a.currency) {
+      const eff = b.amends?.effectiveDate ?? a.amends?.endsOn ?? null;
+      return `the daily rate changes during the stay (${a.currency} ${a.value} on ${from}, ${b.currency} ${b.value} on ${to}${eff ? `; the change takes effect on ${eff}` : ""}): the stay is not split across the change here -- state both printed rates and the effective date, and ask the insurer how the days are apportioned`;
+    }
+  }
+  if (a.evidence.policyId === given.operand.evidence.policyId && a.cents === given.operand.cents && a.rowLabel === given.operand.benefit) return given;
+  const valueId = "v" + ++ctx.seq;
+  const operand: TableValueOperand = { kind: "table_value", benefit: a.rowLabel || a.benefit, valueKind: a.valueKind, cents: a.cents, ppm: a.ppm, count: null, currency: a.currency, period: a.period, evidence: a.evidence };
+  ctx.values.set(valueId, { selected: a, subjectId: member.id, operand });
+  return { operand, valueId };
 }

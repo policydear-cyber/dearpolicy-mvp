@@ -22,6 +22,9 @@ export type UnitTerms = {
   rate: { unit: string | null; span: RecordSpan | null };
   durationRule: { rule: string; span: RecordSpan } | null;
   caps: RecordCap[];
+  /** V1: an endorsement of the calculation's policy the rate was read from (its spans are on that document's pages).
+   * The save-time gate checks it amends the record's policy. */
+  amendingDocumentIds?: string[];
 };
 export type RecordWithUnitTerms = Omit<CalculationRecord, "sentence"> & { unitTerms?: UnitTerms };
 
@@ -44,7 +47,7 @@ export function checkUnitTerms(r: RecordWithUnitTerms, pageText?: (policyId: str
   if (!u) return "the calculation does not carry the rate's unit terms";
   const spans: RecordSpan[] = [...(u.rate.span ? [u.rate.span] : []), ...(u.durationRule ? [u.durationRule.span] : []), ...u.caps.map((c) => c.span)];
   for (const s of spans) {
-    if (s.policyId !== r.policyId) return "a unit term is read from another document than the calculation's";
+    if (s.policyId !== r.policyId && !(u.amendingDocumentIds ?? []).includes(s.policyId)) return "a unit term is read from another document than the calculation's";
     if (pageText && s.page != null) { const t = pageText(s.policyId, s.page); if (t != null && t.slice(s.start, s.end) !== s.text) return `a unit term's span is not on its page: “${s.text}”`; }
   }
   // The rate's unit re-reads from its span, and is one a daily calculator multiplies.

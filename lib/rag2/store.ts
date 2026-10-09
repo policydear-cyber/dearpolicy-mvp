@@ -74,3 +74,46 @@ export async function loadPages(accountId: string, policyIds: string[], pages?: 
 export async function pageMap(accountId: string, policyId: string): Promise<Map<number, string>> {
   return new Map((await loadPages(accountId, [policyId])).map((p) => [p.page, p.text]));
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// V1: documents of one policy, and a tool's document reference
+// ---------------------------------------------------------------------------------------------------------------
+export const normPolicyNumber = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const isEndorsementDoc = (d: DocRow) => /endorse|alteration|amendment/i.test(d.documentRole ?? "");
+/** The readable documents of the same policy as `doc` (itself included): the same policy or group policy number --
+ * a schedule and its endorsements. A document without a policy number is a policy of its own. */
+export function policyFamily(docs: DocRow[], doc: DocRow): DocRow[] {
+  const keys = [normPolicyNumber(doc.policyNumber), normPolicyNumber(doc.groupPolicyNumber)].filter((k) => k.length >= 4);
+  if (!keys.length) return [doc];
+  const fam = docs.filter((d) => d.id === doc.id || [normPolicyNumber(d.policyNumber), normPolicyNumber(d.groupPolicyNumber)].some((k) => k.length >= 4 && keys.includes(k)));
+  return fam.some((d) => d.id === doc.id) ? fam : [doc, ...fam];
+}
+/** The policy's own document (schedule / certificate) among its family: `doc` itself unless it is an endorsement, else
+ * the earliest non-endorsement document; an endorsement alone stands for itself. */
+export function familyBase(family: DocRow[], doc: DocRow): DocRow {
+  if (!isEndorsementDoc(doc)) return doc;
+  const bases = family.filter((d) => !isEndorsementDoc(d)).sort((a, b) => String(a.effectiveDate ?? a.documentDate ?? a.createdAt ?? "").localeCompare(String(b.effectiveDate ?? b.documentDate ?? b.createdAt ?? "")));
+  return bases[0] ?? doc;
+}
+const UUIDISH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A tool's `policy_id`: a readable document id, or -- as models also pass -- the policy number, or the insurer /
+ * product words of exactly ONE policy (its schedule is used). Anything else is refused with the readable documents
+ * listed, and an id that is not readable (another household's, deleted, superseded, not released) stays refused. */
+export function resolveDocumentRef(docs: DocRow[], ref: string): { doc: DocRow; by: "id" | "policy_number" | "name" } | { error: string } {
+  const r = String(ref ?? "").trim();
+  const exact = docs.find((d) => d.id === r);
+  if (exact) return { doc: exact, by: "id" };
+  const listing = () => docs.map((d) => `${d.id} (${[d.insurer, d.productName, d.documentRole, d.policyNumber].filter(Boolean).join(", ")})`).join("; ");
+  if (!r || UUIDISH.test(r)) return { error: "that document is not one of this household's readable documents" + (docs.length ? `; the readable documents are: ${listing()}` : "") };
+  const no = normPolicyNumber(r);
+  let hits = no.length >= 4 ? docs.filter((d) => normPolicyNumber(d.policyNumber) === no || normPolicyNumber(d.groupPolicyNumber) === no) : [];
+  let by: "policy_number" | "name" = "policy_number";
+  if (!hits.length) {
+    const words = (r.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((w) => !["the", "and", "plan", "policy", "insurance", "assurance", "document"].includes(w));
+    hits = words.length ? docs.filter((d) => { const hay = [d.insurer, d.productName, d.policyNumber].join(" ").toLowerCase(); return words.every((w) => hay.includes(w)); }) : [];
+    by = "name";
+  }
+  const bases = [...new Map(hits.map((d) => { const b = familyBase(policyFamily(docs, d), d); return [b.id, b] as const; })).values()];
+  if (bases.length === 1) return { doc: bases[0], by };
+  return { error: `policy_id must be a document id${bases.length > 1 ? ` (“${r}” matches more than one policy)` : ` (“${r}” is not one)`}; the readable documents are: ${listing()}` };
+}
