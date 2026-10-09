@@ -54,47 +54,74 @@ and a missing connection into `401 no_openai_connection`; the app then answers h
 an error…"), does not retry a 401/403, and the harness stops the run.
 
 ## CI mode (hosted runner; `.github/workflows/rag2-live-smoke.yml`)
-Because the workbench session cannot proxy `openai` (see the blocker above), the smoke can also run on a GitHub-hosted
-runner in **direct mode**: no relay; the app server calls `https://api.openai.com/v1` itself with a repository secret.
+Because the workbench session cannot proxy `openai` (see the blocker above), the smoke runs on a GitHub-hosted runner
+in **direct mode**: no relay; the app server calls `https://api.openai.com/v1` itself with a repository secret.
 
 **One-step secret setup** (repository owner, once): GitHub → the repository → Settings → Secrets and variables →
 Actions → **New repository secret** → Name `OPENAI_TEST_API_KEY`, Secret = the spend-limited OpenAI **test** key → Add
 secret. (Environment secrets and required reviewers are not available for private repositories on GitHub Free, so it is
-a repository secret.) Until it exists, every run is forced to preflight and its report says "OPENAI_TEST_API_KEY not set".
+a repository secret.) Without it every run is forced to preflight and its report says "OPENAI_TEST_API_KEY not set".
 
-**Requesting a run:** edit `scripts/rag2-live/run-request.json` on `claude/conversational-rag-v1-1` and push. Nothing
-else triggers the workflow (no pull_request, schedule or manual dispatch).
+**Requesting a run:** push the code first; then, as **policydear-cyber**, push ONE commit to
+`claude/conversational-rag-v1-1` that changes **only** `scripts/rag2-live/run-request.json`:
 ```json
-{ "run_id": "live-1", "scenarios": ["L1"], "run_cap_usd": 0.50, "preflight": false }
+{ "run_id": "live-L1", "scenarios": ["L1"], "run_cap_usd": 0.50, "preflight": false }
 ```
-`run_id`: 1–40 of `A-Z a-z 0-9 . _ -` (a new value per run); `scenarios`: any of L1–L6; `run_cap_usd`: > 0 and ≤ 0.50
-(the workflow refuses more); `preflight: true` = build, seed, server and the first `/api/chat` request run, the guard
-refuses the first model call ("preflight: no model call made"), US$0, and the report shows where it stopped.
+The workflow refuses any other actor, a request commit that touches anything else, a merge, or a push that carries more
+than the request commit. The **tested code** is the request commit's parent; both SHAs are recorded in the ledger, at
+the top of `report.md` and in `run.json`. `run_id`: 1–40 of `A-Z a-z 0-9 . _ -`, new per run; `scenarios`: L1–L6;
+`run_cap_usd`: > 0 and ≤ 0.50; `preflight: true` = everything up to the first model call, which is refused (US$0).
 
-**What the job does:** checkout, Node 22, `npm ci`; reads the request; checks whether the secret is present (never
-printing it); `next build`; Postgres 17 + pgvector service, extensions, `npm run db:setup`, `npm run rag2:live-seed`;
-then `run.ts --live` (or `--preflight`) with `RAG2_LIVE_MODE=direct`, `CHAT_MODEL=openai:gpt-6-luna`,
-`RAG2_LIVE_EXPECT_MODEL=openai:gpt-6-luna`, `RAG2_LIVE_RUN_CAP_USD` = `DEARPOLICY_RAG_LOOP_RUN_MAX_USD` = the request's
-cap, `DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1`. run.ts starts the app server (port 3310) as its child process and **the
-server process makes every model call**, so `OPENAI_API_KEY` is set only on that one step (passed by run.ts to the
-server, then deleted from run.ts's own environment), and only for a live run — a preflight gets the placeholder
-`preflight-no-key-set`. A leak scan (`grep -rF` of the key value over the run folder, which includes `server.log`)
-must be clean before the folder `docs/rag-migration/live/RUN-<run_id>-<timestamp>/` is committed back to the branch as
-github-actions[bot] (rebase-and-retry the push up to 3 times; a `GITHUB_TOKEN` push does not retrigger workflows) and
-uploaded as an artifact (30 days). Never `set -x`; the environment is never printed.
+Why not a "Run workflow" button: GitHub's docs for `workflow_dispatch` say *"This event will only trigger a workflow
+run if the workflow file exists on the default branch."* and *"On the GitHub UI, the "Run workflow" button will be
+present if the workflow file exists on the default branch."*
+(docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch). `main`
+stays unchanged, so the push trigger is used; there is no pull_request, schedule or dispatch trigger.
+
+**Model (mirrors production):** `CHAT_MODEL`, `JUDGEMENT_MODEL`, `NARRATION_MODEL` and `READING_MODEL` are all
+`openai:gpt-6-luna` (production's plain variables); the guard refuses a run where any of them resolves to anything else.
+Price on file from the official model page (developers.openai.com/api/docs/models/gpt-6-luna): input US$0.10, cached
+input US$0.01, output US$0.50 per 1M tokens. The same page says *"Chat Completions supports function calling only with
+`reasoning_effort` set to `none`."* — recorded as a provider-capability next to the price table
+(lib/ai/providers.ts `capabilityFor`) and applied by `openAiRequest`, so the loop's tool calls are sent with
+`reasoning_effort: "none"`. If the model rejects another optional setting (e.g. `temperature`) with a 400 naming it,
+the request is sent once more without it; every attempt, retried or failed, is reserved and recorded by the fetch guard.
+`report.md` / `run.json` open with the requested and provider-reported model ids and the settings actually sent.
+
+**What the job does:** gate (actor, request-only commit, SHAs) → `npm ci` → plan against the ledger (below) →
+`next build` → Postgres 17 + pgvector service, extensions, `npm run db:setup`, `npm run rag2:live-seed` → **Model test**,
+the ONLY step that receives the secret: checks it is present (never printed); for a live run makes the free
+availability check `GET https://api.openai.com/v1/models/gpt-6-luna` (only the HTTP status and the returned id are
+kept; not 200 = stop, US$0); runs `run.ts --live` (or `--preflight`) with `set +e`, keeping its exit code (run.ts starts
+the app server, and **the server process makes every model call**; the key is passed to it on that command only and
+deleted from run.ts's own environment); then `grep -rF` for the key value over `docs/rag-migration/live` (run folder and
+`server.log` included); writes its outputs and exits 0. Then, unless the key was found: the run's entry is appended to
+LEDGER.json and the run folder + ledger are committed back as github-actions[bot] (rebase-and-retry the push up to 3
+times; a `GITHUB_TOKEN` push does not retrigger workflows) **even when conversations failed**, and uploaded as an
+artifact (30 days). If the push fails, the job fails loudly and the uploaded report and the job summary say
+**"LEDGER NOT PERSISTED"**. Finally the job fails if the harness exit code was not 0 or the key was found. Never
+`set -x`; the environment is never printed.
+
+**Every model call counts, process-wide.** The live server installs a guard on `globalThis.fetch` before Next.js starts
+(e2e/support/rag2-live-fetch-guard.ts): a request to OpenAI is sent only after its worst case — (body characters / 2.5 +
+its `max_completion_tokens`/`max_tokens`) × the price on file — is reserved; a request without a bounded max output, to
+an unpriced model, or to any other model-provider host (Google, Anthropic, Groq, …) is refused and recorded. Each call
+is settled from its response usage (cached input at the cached price); a failed call or one without usage keeps its
+whole reservation as spent. The fetch guard, the loop's usage meter and the loop-model guard share ONE run ledger
+(usage-meter.ts `installSharedRunLedger`): the meter refuses a loop call that no longer fits it, without reserving twice.
+
+**Budget across runs — US$0.50 for the WHOLE six-conversation exercise.** `docs/rag-migration/live/LEDGER.json`
+(`exercise_cap_usd: 0.50`, one entry per run: run_id, tested_code_sha, request_sha, spent_usd,
+reserved_unsettled_usd, calls, refused, failed). Before building, the workflow computes
+`remaining = 0.50 − Σ(spent_usd + reserved_unsettled_usd)` and uses `min(remaining, run_cap_usd)` as the run's cap; it
+refuses to start when remaining ≤ 0 or when the run_id is the latest entry's (or any earlier entry's). A run that left
+no run.json is entered at its whole cap (spend unknown, never 0); a preflight at US$0. Earlier preflight runs
+(preflight-1, preflight-2) made no model call and spent US$0.
 
 **Direct-mode guard** (e2e/support/rag2-live-guard.ts): allowed only with `GITHUB_ACTIONS=true`, `CI=true`,
 `RAG2_LIVE_MODE=direct`, `OPENAI_BASE_URL` unset or exactly `https://api.openai.com/v1`, and a non-empty
-`OPENAI_API_KEY` (the placeholder only with preflight). Every other refusal stays (NODE_ENV=test, local database,
-Vercel unset, cap ≤ 0.50, priced model, `CHAT_MODEL` = `RAG2_LIVE_EXPECT_MODEL`); relay mode is unchanged. Without the
-relay, the guard records per call what the relay recorded: provider-reported model and usage, upstream latency
-(measured around the provider request in hosted-model.ts), the request settings, and the system-prompt / tool-schema
-sha256. Request headers and the key are never recorded.
-
-**Budget across runs:** the whole live smoke must stay ≤ US$0.50 in total, not per run. Each run's report gives its
-actual spend (`Budget: … spent US$x`); the next request's `run_cap_usd` must be **0.50 minus everything spent by
-earlier runs** (e.g. after a run that spent US$0.031, the next cap is at most 0.469). Preflight runs spend US$0. Within
-a run the reservation logic above applies to every call.
+`OPENAI_API_KEY` (the placeholder `preflight-no-key-set` only with preflight). Every other refusal stays; relay mode is
+unchanged. Request headers and the key are never recorded.
 
 ## Safety checks (the server and the harness both refuse to start otherwise)
 `NODE_ENV=test`; `DATABASE_URL` on localhost/127.0.0.1; `VERCEL`/`VERCEL_ENV` unset; `OPENAI_BASE_URL` host is

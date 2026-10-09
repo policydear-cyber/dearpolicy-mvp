@@ -22,6 +22,9 @@
  *   --preflight   run everything (seed, server, the /api/chat path) but the guard refuses the FIRST model call:
  *                 US$0, and the report says exactly where it stopped. Combines with --live (or stands alone).
  *   --run-id <id> names the output directory RUN-<id>-<timestamp>.
+ *   --availability-status <code> [--availability-id <id>]  the workflow's free GET /v1/models/<model> result; a live
+ *                 run stops before any model call (US$0) unless it is 200.
+ * RAG2_LIVE_TESTED_SHA / RAG2_LIVE_REQUEST_SHA (CI): the code commit tested and the run-request commit.
  */
 import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -93,7 +96,13 @@ async function main() {
   const git = (c: string) => { try { return execSync(c, { encoding: "utf8" }).trim(); } catch { return null; } };
   const tools = loopToolSpecs().map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
   const limits = loopLimits();
+  const availability = arg("availability-status") != null ? { status: arg("availability-status")!, id: arg("availability-id") ?? null } : null;
+  const shaEnv = (k: string) => (process.env[k] && /^[0-9a-f]{7,40}$/.test(process.env[k]!) ? process.env[k]! : null);
   const meta = {
+    testedCodeSha: shaEnv("RAG2_LIVE_TESTED_SHA") ?? git("git rev-parse HEAD"),
+    requestSha: shaEnv("RAG2_LIVE_REQUEST_SHA"),
+    modelsRequested: Object.fromEntries((["CHAT_MODEL", "JUDGEMENT_MODEL", "NARRATION_MODEL", "READING_MODEL"] as const).map((k) => [k, process.env[k] ?? null])),
+    availability,
     label: preflight ? "PREFLIGHT -- no model call made; US$0" : relayPlumbing ? "PLUMBING TEST -- local fake endpoint, NOT a model; no figure here is a model result" : "LIVE MODEL RUN",
     runId: runId ?? null, mode: safety.mode, preflight,
     keyNote: process.env.RAG2_LIVE_KEY_PRESENT === "false" ? "OPENAI_TEST_API_KEY not set" : null,
@@ -105,6 +114,16 @@ async function main() {
     relay: health ? { url: relayUrl, mode: health.mode, log: health.log } : null,
   };
 
+  if (availability && !preflight && availability.status !== "200") {
+    // The free availability check (GET /v1/models/<model>) did not return 200: stop before any model call, US$0.
+    const stopped: any = { ...meta, stoppedBeforeStart: `model availability check returned ${availability.status}${availability.id ? ` (${availability.id})` : ""}: no conversation run, US$0`, budgetUsed: { capUsd: safety.capUsd, spentUsd: 0, reservedUsd: 0, remainingUsd: safety.capUsd, calls: 0, refusals: 0, failed: 0 }, conversations: scenarios.map((s) => ({ scenario: s.id, title: s.title, notRun: "model availability check failed" })), httpCalls: [] };
+    fs.writeFileSync(path.join(outDir, "run.json"), JSON.stringify(stopped, null, 2));
+    fs.writeFileSync(path.join(outDir, "report.md"), writeReport(stopped));
+    console.log(`stopped: ${stopped.stoppedBeforeStart}; wrote ${outDir}`);
+    await pool.end().catch(() => undefined);
+    process.exitCode = 1;
+    return;
+  }
   await seedLive();
   const env = { ...process.env, E2E_RAG2_LIVE: "1", PORT: String(port), DEARPOLICY_RAG_LOOP: "1", E2E_RAG2_NEXT: "start", NEXT_TELEMETRY_DISABLED: "1" };
   const log = fs.createWriteStream(path.join(outDir, "server.log"));
@@ -119,7 +138,8 @@ async function main() {
   });
   const base = `http://localhost:${port}`;
   const headers = { "content-type": "application/json", origin: base };
-  const budget = async () => (await fetch(base + "/__rag2live/budget").then((r) => r.json())) as { ledger: { remainingUsd: number; spentUsd: number; capUsd: number; calls: number; refusals: number }; calls: any[] };
+  const budget = async () => (await fetch(base + "/__rag2live/budget").then((r) => r.json())) as { ledger: { remainingUsd: number; spentUsd: number; reservedUsd: number; capUsd: number; calls: number; refusals: number; failed: number }; calls: any[]; httpCalls: any[] };
+  let written = false;
   const runRecord: any = { ...meta, conversations: [] as any[] };
   try {
     await ready;
@@ -133,7 +153,8 @@ async function main() {
       let conversationId: string | null = null, revision = 0;
       const convStart = Date.now();
       for (const [i, turn] of s.turns.entries()) {
-        const g0 = (await budget()).calls.length;
+        const gb = await budget();
+        const g0 = gb.calls.length, h0 = gb.httpCalls.length;
         const t0 = Date.now();
         const r: Response = await fetch(base + "/api/chat", { method: "POST", headers, body: JSON.stringify({ familyMemberId: null, scope: "family", question: turn.user, conversationId, conversationRevision: conversationId ? revision : undefined, asynchronous: true, timeZone: "Asia/Singapore" }) });
         const acceptedMs = Date.now() - t0;
@@ -154,22 +175,24 @@ async function main() {
         const persisted = (await pool.query("SELECT created_at FROM chat_messages WHERE conversation_id=$1 AND role='assistant' AND created_at >= $2 ORDER BY created_at LIMIT 1", [conversationId, new Date(t0)])).rows[0];
         const g = await budget();
         const calls = g.calls.slice(g0);
+        // Every provider request of the turn, as the process-wide fetch guard reserved and settled it.
+        const httpCalls = g.httpCalls.slice(h0).map((c: any) => ({ ...c, scenario: s.id, turn: i + 1 }));
         const execs = (await pool.query("SELECT attempt_index, status, error_category, requested_model, resolved_model, input_tokens, output_tokens, cached_tokens, cost_usd::float AS cost_usd, latency_ms, prompt_version, created_at FROM model_executions WHERE household_ref=$1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at", [pseudonymizeId(ACCOUNT_L), new Date(t0 - 1000), new Date(Date.now() + 1000)])).rows;
         const relay = relayLog ? relayLines(relayLog, t0, Date.now()) : [];
         conv.turns.push({
           turn: i + 1, user: turn.user, jobStatus: job?.status ?? null, jobError: job?.error ?? null,
           visible: answer ? [answer.summary, ...(answer.details ?? []), ...(answer.questions ?? []).map((q: any) => q.text)].filter(Boolean).join("\n") : null,
-          timings: { acceptedMs, firstAssistantPersistedMs: persisted ? new Date(persisted.created_at).getTime() - t0 : null, answerSeenMs, modelMs: calls.reduce((n: number, c: any) => n + (c.latencyMs ?? 0), 0), upstreamMs: relay.length ? relay.reduce((n, l) => n + (l.upstream_ms ?? 0), 0) : calls.reduce((n: number, c: any) => n + (c.upstreamMs ?? 0), 0), relayMs: relay.reduce((n, l) => n + (l.relay_ms ?? 0), 0) },
-          calls, modelExecutions: execs, relay,
-          tokens: { input: calls.reduce((n: number, c: any) => n + (c.usage?.input ?? 0), 0), output: calls.reduce((n: number, c: any) => n + (c.usage?.output ?? 0), 0) },
-          costUsd: { charged: calls.reduce((n: number, c: any) => n + (c.chargedUsd ?? 0), 0), ledger: execs.reduce((n: number, e: any) => n + (e.cost_usd ?? 0), 0) },
+          timings: { acceptedMs, firstAssistantPersistedMs: persisted ? new Date(persisted.created_at).getTime() - t0 : null, answerSeenMs, modelMs: calls.reduce((n: number, c: any) => n + (c.latencyMs ?? 0), 0), upstreamMs: relay.length ? relay.reduce((n, l) => n + (l.upstream_ms ?? 0), 0) : httpCalls.reduce((n: number, c: any) => n + (c.upstreamMs ?? 0), 0), relayMs: relay.reduce((n, l) => n + (l.relay_ms ?? 0), 0) },
+          calls, httpCalls, modelExecutions: execs, relay,
+          tokens: { input: httpCalls.reduce((n: number, c: any) => n + (c.usage?.input ?? 0), 0), output: httpCalls.reduce((n: number, c: any) => n + (c.usage?.output ?? 0), 0) },
+          costUsd: { charged: httpCalls.reduce((n: number, c: any) => n + (c.chargedUsd ?? 0), 0), reserved: httpCalls.reduce((n: number, c: any) => n + (c.reservedUsd ?? 0), 0), ledger: execs.reduce((n: number, e: any) => n + (e.cost_usd ?? 0), 0) },
         });
         if (calls.some((c: any) => c.refused === PREFLIGHT_REFUSAL)) {
           stop = `${PREFLIGHT_REFUSAL}: stopped at the first model call -- scenario ${s.id} turn ${i + 1}: POST /api/chat ${r.status} accepted in ${acceptedMs} ms, chat job ${job?.status ?? "unknown"}, the conversation loop's first model call refused by the run-cap guard before any request was sent`;
           runRecord.preflightStop = { scenario: s.id, turn: i + 1, postStatus: r.status, acceptedMs, jobStatus: job?.status ?? null, answerSeenMs, detail: stop };
           break;
         }
-        if (calls.some((c: any) => c.refused)) { stop = "run cap reached during " + s.id; break; }
+        if (calls.some((c: any) => c.refused) || httpCalls.some((c: any) => c.refused)) { stop = `model call refused during ${s.id} turn ${i + 1}: ${[...calls, ...httpCalls].find((c: any) => c.refused)?.refused}`; break; }
         // No credential behind the relay: stop at once rather than send every scenario into the same error.
         const blocked = relay.find((l) => l.status === 401 || l.status === 403);
         if (blocked) { stop = `the relay could not reach the model (${blocked.status}: ${String(blocked.error ?? "").slice(0, 120)})`; break; }
@@ -179,7 +202,7 @@ async function main() {
       conv.firstUsefulResponseMs = conv.turns[0]?.timings?.firstAssistantPersistedMs ?? null;
       conv.tokens = { input: conv.turns.reduce((n: number, t: any) => n + (t.tokens?.input ?? 0), 0), output: conv.turns.reduce((n: number, t: any) => n + (t.tokens?.output ?? 0), 0) };
       conv.costUsd = conv.turns.reduce((n: number, t: any) => n + (t.costUsd?.charged ?? 0), 0);
-      conv.calls = conv.turns.reduce((n: number, t: any) => n + (t.calls?.length ?? 0), 0);
+      conv.calls = conv.turns.reduce((n: number, t: any) => n + (t.httpCalls?.filter((c: any) => !c.refused).length ?? 0), 0);
       if (conversationId) {
         const loaded = await loadConversation(conversationId);
         const verdict: Verdict = grade(s, loaded);
@@ -199,21 +222,41 @@ async function main() {
     const fin = await budget();
     runRecord.finishedAt = new Date().toISOString();
     runRecord.budgetUsed = fin.ledger;
+    runRecord.httpCalls = runRecord.conversations.flatMap((c: any) => (c.turns ?? []).flatMap((t: any) => t.httpCalls ?? []));
     const allRelay = relayLog ? relayLines(relayLog, started.getTime(), Date.now()) : [];
     // Direct mode (no relay): the same facts come from the guard's per-call records.
+    const sent = fin.httpCalls.filter((c: any) => !c.refused);
     const seen = allRelay.length ? allRelay.map((l) => ({ model: l.provider_model, sys: l.system_prompt_sha256, tools: l.tools_sha256, settings: l.settings }))
-      : fin.calls.filter((c: any) => !c.refused).map((c: any) => ({ model: c.resolvedModel, sys: c.systemPromptSha256, tools: c.toolsSha256, settings: c.settings }));
+      : fin.calls.filter((c: any) => !c.refused).map((c: any, k: number) => ({ model: c.resolvedModel ?? sent[k]?.providerModel, sys: c.systemPromptSha256, tools: c.toolsSha256, settings: sent[k]?.settings ?? c.settings }));
+    for (const c of sent) if (c.providerModel) seen.push({ model: c.providerModel, sys: null, tools: null, settings: c.settings });
     runRecord.providerModels = [...new Set(seen.map((l: any) => l.model).filter(Boolean))];
     runRecord.promptObserved = { systemPromptSha256: [...new Set(seen.map((l: any) => l.sys).filter(Boolean))], toolSchemaSha256: [...new Set(seen.map((l: any) => l.tools).filter(Boolean))], settings: [...new Set(seen.filter((l: any) => l.settings).map((l: any) => JSON.stringify(l.settings)))].map((x) => JSON.parse(x as string)) };
     runRecord.promptMatchesSource = runRecord.promptObserved.systemPromptSha256.every((h: string) => h === meta.prompt.systemPromptSha256) && runRecord.promptObserved.toolSchemaSha256.every((h: string) => h === meta.prompt.toolSchemaSha256);
     fs.writeFileSync(path.join(outDir, "relay.jsonl"), allRelay.map((l) => JSON.stringify(l)).join("\n") + "\n");
-    fs.writeFileSync(path.join(outDir, "run.json"), JSON.stringify(runRecord, null, 2));
+    fs.writeFileSync(path.join(outDir, "run.json"), JSON.stringify(topFirst(runRecord), null, 2));
     fs.writeFileSync(path.join(outDir, "report.md"), writeReport(runRecord));
+    written = true;
     console.log(`wrote ${outDir}`);
+  } catch (error) {
+    runRecord.error = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+    throw error;
   } finally {
+    if (!written) {
+      // A crashed run still leaves its spend on record (the cumulative ledger reads budgetUsed from run.json).
+      runRecord.budgetUsed = await budget().then((b) => b.ledger).catch(() => null);
+      runRecord.httpCalls = await budget().then((b) => b.httpCalls).catch(() => []);
+      try { fs.writeFileSync(path.join(outDir, "run.json"), JSON.stringify(topFirst(runRecord), null, 2)); fs.writeFileSync(path.join(outDir, "report.md"), writeReport(runRecord)); } catch { /* keep the original error */ }
+    }
     server.kill("SIGTERM");
     log.end();
     await pool.end().catch(() => undefined);
   }
+}
+/** run.json opens with what a reader needs first: the shas, the models, the settings sent and the per-call table. */
+function topFirst(r: any) {
+  const { testedCodeSha, requestSha, modelsRequested, providerModels, promptObserved, httpCalls, budgetUsed, ...rest } = r;
+  return { testedCodeSha, requestSha, modelsRequested, providerModels, requestSettingsSent: promptObserved?.settings ?? [], budgetUsed,
+    perCall: (httpCalls ?? []).map((c: any) => ({ seq: c.seq, scenario: c.scenario, turn: c.turn, model: c.model, providerModel: c.providerModel ?? null, status: c.status ?? null, refused: c.refused ?? null, input: c.usage?.input ?? 0, output: c.usage?.output ?? 0, cached: c.usage?.cached ?? 0, reasoning: c.usage?.reasoning ?? null, reservedUsd: c.reservedUsd, chargedUsd: c.chargedUsd, upstreamMs: c.upstreamMs ?? null })),
+    promptObserved, ...rest, httpCalls };
 }
 main().catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });

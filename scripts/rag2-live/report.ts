@@ -16,6 +16,20 @@ export function writeReport(run: any): string {
   L.push(`# ${run.preflight ? "PREFLIGHT" : plumbing ? "PLUMBING TEST" : "Live model run"}${run.runId ? " " + run.runId : ""} — ${run.startedAt}`);
   L.push("");
   if (run.preflight) L.push(`> **PREFLIGHT — no model call made; US$${(run.budgetUsed?.spentUsd ?? 0).toFixed(2)} spent.** Build, seed, server and the /api/chat path ran; the run-cap guard refused the first model call.${run.keyNote ? ` **${run.keyNote}** (the run was forced to preflight).` : ""}`, "", `- Stopped at: ${run.preflightStop?.detail ?? "before the first model call (no conversation reached the model)"}`);
+  // What a reader needs first: the code and request tested, the models, the settings actually sent, every call.
+  L.push(`- Tested code: \`${run.testedCodeSha ?? run.commit ?? "?"}\`; run request commit: \`${run.requestSha ?? "-"}\``);
+  const mr = run.modelsRequested ?? {};
+  L.push(`- Models requested: ${Object.entries(mr).map(([k, v]) => `${k}=\`${v ?? "(unset)"}\``).join(", ") || "`" + (run.model?.requested ?? "?") + "`"}; provider-reported: ${(run.providerModels ?? []).map((m: string) => "`" + m + "`").join(", ") || "none"}`);
+  L.push(`- Request settings actually sent: ${(run.promptObserved?.settings ?? []).map((x: any) => "`" + JSON.stringify(x) + "`").join(" ") || "none (no model request was sent)"}`);
+  if (run.availability) L.push(`- Model availability check (GET /v1/models/<model>, free): ${run.availability.status}${run.availability.id ? ` id \`${run.availability.id}\`` : ""}`);
+  if (run.stoppedBeforeStart) L.push(`- **Stopped before any conversation:** ${run.stoppedBeforeStart}`);
+  if (run.error) L.push(`- **Harness error:** ${cell(run.error)}`);
+  const hc: any[] = run.httpCalls ?? [];
+  if (hc.length) {
+    L.push("", "| # | Scenario / turn | Model → reported | Status | Tokens in / out (cached, reasoning) | Reserved | Charged | Upstream |", "|---|---|---|---|---|---|---|---|");
+    for (const c of hc) L.push(`| ${c.seq} | ${c.scenario ?? "-"} t${c.turn ?? "-"} | ${c.model ?? "-"} → ${c.providerModel ?? "-"} | ${c.refused ? "refused: " + cell(c.refused).slice(0, 80) : c.status ?? cell(c.error ?? "-")} | ${c.usage ? `${c.usage.input} / ${c.usage.output} (${c.usage.cached}, ${c.usage.reasoning ?? "-"})` : "-"} | ${usd(c.reservedUsd)} | ${usd(c.chargedUsd)} | ${ms(c.upstreamMs)} |`);
+  } else L.push("- Model calls: none sent");
+  L.push("");
   L.push(`- Mode: ${run.mode ?? "relay"}${run.mode === "direct" ? " (GitHub Actions; OpenAI called directly with the repository secret, never logged)" : " (loopback relay)"}`);
   if (plumbing) L.push("> **PLUMBING TEST — NOT MODEL RESULTS.** The \"model\" was a local fake OpenAI-compatible endpoint (scripts/rag2-live/plumbing_fake.py) behind the real relay and app path. Verdicts below only show that the harness, relay, accounting and checker work end to end.", "");
   L.push(`- Code: \`${run.commit?.slice(0, 7)}\` (tree \`${run.tree?.slice(0, 8)}\`${run.dirty ? ", **uncommitted changes**" : ""}); served build \`${run.buildId}\``);

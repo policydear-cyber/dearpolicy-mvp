@@ -9,10 +9,12 @@ import assert from "node:assert/strict";
 import { pool } from "@/lib/db/client";
 import { loopLimits, loopRunUsage, resetLoopRunUsage } from "@/lib/ai/usage";
 import { priceFor } from "@/lib/ai/providers";
-import { estimateTokens, LoopUsageMeter, maxCallCostUsd, reserveInputTokens, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
+import { estimateTokens, installSharedRunLedger, LoopUsageMeter, maxCallCostUsd, reserveInputTokens, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
+import { installFetchGuard } from "../../e2e/support/rag2-live-fetch-guard";
+import { entryFor, planRun, remainingUsd, validateRequest, type Ledger } from "./ledger";
 import type { LoopModel, ModelTurnInput, ModelTurnOutput } from "@/lib/rag2/loop/types";
 import { liveSafetyChecks, NO_KEY_PLACEHOLDER, PREFLIGHT_REFUSAL, RunCapGuardModel } from "../../e2e/support/rag2-live-guard";
-import { HostedLoopModel, loopRequestSettings } from "@/lib/rag2/loop/hosted-model";
+import { HostedLoopModel, loopRequestSettings, openAiRequest } from "@/lib/rag2/loop/hosted-model";
 import { ACCOUNT_L } from "../fixtures/rag2-live/household";
 
 const host = (() => { try { return new URL(process.env.DATABASE_URL ?? "").hostname; } catch { return ""; } })();
@@ -149,6 +151,89 @@ async function t(name: string, fn: () => Promise<void> | void) {
     assert.equal(inner.calls, 0); assert.equal(g.ledger.spentUsd, 0); assert.equal(g.ledger.reservedUsd, 0);
     assert.equal(g.calls[0].refused, PREFLIGHT_REFUSAL); assert.equal(g.calls[0].chargedUsd, 0);
     assert.match(g.calls[0].toolsSha256 ?? "", /^[0-9a-f]{64}$/);
+  });
+  await t("B12 fetch guard: refuses other provider hosts and unbounded calls, reserves before sending, settles from usage, charges failures in full", async () => {
+    let sent = 0;
+    const replies: (() => Response)[] = [];
+    const target = { fetch: (async () => { sent++; const r = replies.shift(); if (!r) throw new Error("socket hang up"); return r(); }) as unknown as typeof fetch };
+    const ledger = new RunCostLedger(0.5);
+    const g = installFetchGuard({ ledger, env: { OPENAI_BASE_URL: undefined } as unknown as NodeJS.ProcessEnv, target });
+    const body = (extra: Record<string, unknown>) => JSON.stringify({ model: "gpt-6-luna", messages: [{ role: "user", content: "x".repeat(2500) }], ...extra });
+    const post = (url: string, b: string) => target.fetch(url, { method: "POST", body: b, headers: { authorization: "Bearer not-recorded" } });
+    await assert.rejects(() => post("https://api.anthropic.com/v1/messages", body({ max_tokens: 10 })), /not the configured model provider/);
+    await assert.rejects(() => post("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", body({ max_tokens: 10 })), /refused/);
+    await assert.rejects(() => post("https://api.openai.com/v1/chat/completions", body({})), /no bounded max output/);
+    await assert.rejects(() => target.fetch("https://api.openai.com/v1/models", {}), /only a POST/);
+    await assert.rejects(() => post("https://api.openai.com/v1/chat/completions", JSON.stringify({ model: "gpt-unpriced", max_completion_tokens: 10, messages: [] })), /no price/);
+    assert.equal(sent, 0, "nothing refused reached the network");
+    const one = maxCallCostUsd(price, Math.ceil(body({ max_completion_tokens: 2000 }).length / 2.5), 2000);
+    replies.push(() => new Response(JSON.stringify({ model: "gpt-6-luna-2026-09-01", usage: { prompt_tokens: 1000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 400 } } }), { status: 200 }));
+    await post("https://api.openai.com/v1/chat/completions", body({ max_completion_tokens: 2000, reasoning_effort: "none" }));
+    const ok1 = g.calls[g.calls.length - 1];
+    assert.ok(Math.abs(ok1.chargedUsd - (600 * 0.1 + 400 * 0.01 + 100 * 0.5) / 1e6) < 1e-12, `charged ${ok1.chargedUsd}`);
+    assert.equal(ok1.providerModel, "gpt-6-luna-2026-09-01"); assert.equal(ok1.settings?.reasoning_effort, "none"); assert.ok(Math.abs(ok1.reservedUsd - maxCallCostUsd(price, Math.ceil(body({ max_completion_tokens: 2000, reasoning_effort: "none" }).length / 2.5), 2000)) < 1e-12, "reserved before sending: (body chars / 2.5 + max output) x price");
+    replies.push(() => new Response("{}", { status: 500 }));
+    await post("https://api.openai.com/v1/chat/completions", body({ max_completion_tokens: 2000 }));
+    assert.ok(Math.abs(g.calls[g.calls.length - 1].chargedUsd - one) < 1e-12, "a failed call keeps its whole reservation");
+    replies.push(() => new Response(JSON.stringify({ model: "m" }), { status: 200 }));
+    await post("https://api.openai.com/v1/chat/completions", body({ max_completion_tokens: 2000 }));
+    assert.ok(Math.abs(g.calls[g.calls.length - 1].chargedUsd - one) < 1e-12, "no usage reported: whole reservation");
+    await assert.rejects(() => post("https://api.openai.com/v1/chat/completions", body({ max_completion_tokens: 2000 })), /socket/);
+    assert.ok(Math.abs(g.calls[g.calls.length - 1].chargedUsd - one) < 1e-12, "a network failure keeps its whole reservation");
+    assert.equal(ledger.reservedUsd, 0); assert.equal(sent, 4);
+    assert.ok(!JSON.stringify(g.calls).includes("not-recorded"), "no header is recorded");
+    const tiny = new RunCostLedger(one / 2);
+    const g2 = installFetchGuard({ ledger: tiny, env: {} as NodeJS.ProcessEnv, target: { fetch: target.fetch } });
+    g2.uninstall();
+    const t2 = { fetch: (async () => { sent++; return new Response("{}"); }) as unknown as typeof fetch };
+    installFetchGuard({ ledger: tiny, env: {} as NodeJS.ProcessEnv, target: t2 });
+    await assert.rejects(() => t2.fetch("https://api.openai.com/v1/chat/completions", { method: "POST", body: body({ max_completion_tokens: 2000 }) }), /run cap/);
+    assert.equal(sent, 4, "refused for the run cap: not sent");
+    g.uninstall();
+  });
+  await t("B13 one ledger: the meter refuses a loop call that no longer fits the shared run ledger (no second reservation)", async () => {
+    resetLoopRunUsage();
+    const shared = new RunCostLedger(0.0001);
+    installSharedRunLedger(shared);
+    try {
+      const m = new FakeHosted(LUNA, () => ok(100, 10));
+      const meter = new LoopUsageMeter({ model: m, accountId: ACCOUNT_L, limits: { ...loopLimits(), runMaxUsd: 0.5 }, startedAt: Date.now(), promptVersion: "rag2-loop-test" });
+      const r = await meter.next(input);
+      assert.equal(r.ok, false); assert.equal((r as any).stop.kind, "run_budget"); assert.match((r as any).stop.detail, /run ledger/); assert.equal(m.calls, 0);
+      const big = new RunCostLedger(0.5); installSharedRunLedger(big);
+      const m2 = new FakeHosted(LUNA, () => ok(100, 10));
+      const meter2 = new LoopUsageMeter({ model: m2, accountId: ACCOUNT_L, limits: { ...loopLimits(), runMaxUsd: 0.5 }, startedAt: Date.now(), promptVersion: "rag2-loop-test" });
+      assert.equal((await meter2.next(input)).ok, true);
+      assert.equal(big.reservedUsd, 0); assert.equal(big.calls, 0, "the meter itself does not reserve on the shared ledger (the request layer does)");
+    } finally { installSharedRunLedger(null); }
+  });
+  await t("B14 cumulative ledger: remaining = 0.50 - sum(spent + unsettled); refused at <= 0 and for a used run_id; unknown spend counted at the cap", () => {
+    const l: Ledger = { exercise_cap_usd: 0.5, runs: [] };
+    const req = validateRequest({ run_id: "live-L1", scenarios: ["L1"], run_cap_usd: 0.5, preflight: false });
+    assert.deepEqual(planRun(l, req), { ok: true, capUsd: 0.5, remainingUsd: 0.5 });
+    l.runs.push(entryFor({ budgetUsed: { spentUsd: 0.031, reservedUsd: 0.002, calls: 9, refusals: 0, failed: 1 } }, { runId: "live-L1", testedSha: "abc1234", requestSha: "def5678", capUsd: 0.5, preflight: false }));
+    assert.equal(remainingUsd(l), 0.467);
+    assert.equal((planRun(l, req) as any).ok, false); assert.match((planRun(l, req) as any).reason, /latest ledger entry/);
+    const req2 = validateRequest({ run_id: "live-all", scenarios: ["L1", "L2"], run_cap_usd: 0.5, preflight: false });
+    assert.equal((planRun(l, req2) as any).capUsd, 0.467, "the cap is min(remaining, request)");
+    l.runs.push(entryFor(null, { runId: "crashed", testedSha: "abc1234", requestSha: "0123abc", capUsd: 0.467, preflight: false }));
+    assert.equal(remainingUsd(l), 0);
+    assert.match((planRun(l, req2) as any).reason, /used up/);
+    assert.throws(() => validateRequest({ run_id: "x", scenarios: ["L1"], run_cap_usd: 0.51, preflight: false }), /<= 0.50/);
+    assert.equal(entryFor(null, { runId: "p", testedSha: "a", requestSha: "b", capUsd: 0.5, preflight: true }).spent_usd, 0);
+  });
+  await t("B15 gpt-6-luna: Chat Completions with tools is sent with reasoning_effort \"none\" (provider capability record)", async () => {
+    assert.equal((openAiRequest("gpt-6-luna", input, "openai") as any).reasoning_effort, "none");
+    assert.ok(!("reasoning_effort" in (openAiRequest("gpt-x", input, "openai") as any)));
+    assert.equal(loopRequestSettings("openai", "gpt-6-luna", 2000).reasoning_effort, "none");
+    const saved = { key: process.env.OPENAI_API_KEY, det: process.env.DEARPOLICY_DETERMINISTIC_MODEL };
+    process.env.OPENAI_API_KEY = "dummy-not-a-key"; delete process.env.DEARPOLICY_DETERMINISTIC_MODEL;
+    try {
+      let sentBody: any = null;
+      const http = (async (_u: string, init: any) => { sentBody = JSON.parse(init.body); return new Response(JSON.stringify({ model: "gpt-6-luna", usage: { prompt_tokens: 1, completion_tokens: 1 }, choices: [{ message: { tool_calls: [] } }] }), { status: 200 }); }) as unknown as typeof fetch;
+      await new HostedLoopModel(LUNA, http).next(input);
+      assert.equal(sentBody.reasoning_effort, "none"); assert.equal(sentBody.tool_choice, "required"); assert.equal(sentBody.model, "gpt-6-luna");
+    } finally { if (saved.key == null) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = saved.key; if (saved.det != null) process.env.DEARPOLICY_DETERMINISTIC_MODEL = saved.det; }
   });
   resetLoopRunUsage();
   console.log(`\nrag2-live budget regressions ${passed}/${passed + failed} passed`);
