@@ -24,17 +24,6 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: dearpolicy_ingest
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres -d dearpolicy_ingest"
-          --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dearpolicy_ingest
       NEXT_TELEMETRY_DISABLED: "1"
@@ -80,6 +69,23 @@ jobs:
 
       - name: Browser (Chromium headless shell)
         run: npx playwright install --with-deps chromium
+
+      # The runner's own PostgreSQL (preinstalled, from the PostgreSQL apt repository) plus pgvector, instead of a
+      # pgvector/pgvector service container: Docker Hub refused that image pull for run ingest-live-5 three times
+      # ("toomanyrequests: unauthenticated pull rate limit") before any step ran.
+      - name: "Database: the runner's PostgreSQL with pgvector (no container image pull)"
+        run: |
+          set -euo pipefail
+          if [ ! -d /usr/lib/postgresql ]; then sudo apt-get update -qq; sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql >/dev/null; fi
+          v=$(ls /usr/lib/postgresql | sort -n | tail -1)
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "postgresql-$v-pgvector" >/dev/null
+          sudo systemctl start postgresql
+          for _ in $(seq 1 30); do pg_isready -q -h localhost -p 5432 && break; sleep 1; done
+          pg_isready -h localhost -p 5432
+          sudo -u postgres psql -qc "ALTER USER postgres PASSWORD 'postgres'"
+          sudo -u postgres createdb dearpolicy_ingest
+          echo "PostgreSQL $v with pgvector on localhost:5432"
 
       - name: "Database: extensions and schema (the account is created by the harness, the way sign-up does)"
         run: |
