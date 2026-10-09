@@ -393,6 +393,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
   let gateRepaired = false;
+  /** The answer as first composed: kept if the model does not answer the repair (error, limit) -- the hook's gate then
+   * leaves out what it rejects, as it would have without the repair. */
+  let beforeRepair: LoopReply | null = null;
+  /** Sentences the gate rejected this turn (never remembered as established statements). */
+  const gateRejected = new Set<string>();
   /** Round 8 (F1): the composed answer is run through the save-time gate (report mode) before the turn ends. A rejected
    * figure sentence is sent back ONCE with the gate's actual reason and the evidence the sentence cites, so the model can
    * restate it as its evidence prints it; the second answer is final (hook.ts drops what the gate still rejects and
@@ -409,6 +414,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const b = squash(p.sentence);
       const own = c.sentences.find((s) => { const a = squash(s.text); return !!b && (a.includes(b) || b.includes(a)); });
       if (!own) return [];
+      gateRejected.add(own.text);
       const ids = [...own.evidenceIds, ...(own.valueIds ?? []).map((v) => "value " + v)];
       return [`"${own.text}" -- ${p.figure ? p.figure + ": " : ""}${p.reason}${ids.length ? ` (it cites ${ids.join(", ")})` : ""}`];
     });
@@ -650,7 +656,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         let r = action(call);
         if (r.terminal?.kind === "final" && !gateRepaired) {
           const repair = await gateRepair(r.terminal.composed);
-          if (repair) { gateRepaired = true; r = { result: { ok: false, error: repair } }; }
+          if (repair) { gateRepaired = true; beforeRepair = r.terminal; r = { result: { ok: false, error: repair } }; }
         } else if (r.terminal?.kind === "final" && gateRepaired) limitDateDrops(r.terminal.composed, call);
         record(call.name, call.arguments, r.result.ok !== false, [], r.result.ok === false ? String(r.result.error) : undefined);
         messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(r.result) });
@@ -701,11 +707,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   state.seq = ctx.seq;
 
   let reasked: LoopPending | null = null;
-  const done = reply as LoopReply | null;
+  const done = (reply ?? beforeRepair) as LoopReply | null;
   /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
   const remember = (c: Composed) => {
     for (const s of c.sentences) {
-      if (s.estimate || s.kind === "requirement" || !s.evidenceIds.length) continue;
+      if (s.estimate || s.kind === "requirement" || !s.evidenceIds.length || gateRejected.has(s.text)) continue;
       const b = c.figureBindings.find((x) => !!x.sentence && (s.text.includes(x.sentence) || x.sentence.includes(s.text)));
       if (!b) continue;
       const subjectId = b.subjectId ?? c.subjectId ?? null;
