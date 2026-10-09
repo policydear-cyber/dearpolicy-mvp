@@ -130,6 +130,19 @@
       "calls": 60,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "ingest-live-4",
+      "tested_code_sha": "2cd45cc3fa51e1107a68140a8361dd42b8e25edf",
+      "request_sha": "7083cf58a53f823e33bd9c3f9cc52e239e1dd303",
+      "at": "2026-10-09T20:14:43.853Z",
+      "preflight": false,
+      "run_cap_usd": 0.08,
+      "spent_usd": 0.024372,
+      "reserved_unsettled_usd": 0,
+      "calls": 61,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
