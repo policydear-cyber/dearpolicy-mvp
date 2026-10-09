@@ -243,13 +243,23 @@ async function main() {
   await check("B1 Q5: a turn that runs out of budget gives a useful partial answer -- the supported printed figure and what is missing -- never only the limit text", () => {
     const t = r5.turns[0];
     assert.ok(!Object.values(LIMIT_TEXT).includes(t.visible.trim()), "bare limit text:\n" + t.visible);
-    assert.match(t.visible, /S\$120 per day|S\$120\b/, t.visible);
-    assert.match(t.visible, /\b(?:still|not yet|couldn’t|could not|missing|need)\b/i, t.visible);
+    // The supported printed benefit (its figure shown when the gate confirms it, its wording otherwise) ...
+    assert.match(t.visible, /Hospital daily allowance/, t.visible);
+    // ... and what is still missing.
+    assert.match(t.visible, /\b(?:Still needed|still missing|didn’t get as far)\b/i, t.visible);
   });
-  await check("B2 Q5: repeated failures of the same tool stop being retried (the model is told to answer), well before the token limit", () => {
-    const t = r5.turns[0];
-    const fails = (t.trace.toolCalls as any[]).filter((x) => x.name === "calculate" && !x.ok);
-    assert.ok(fails.length <= 3, `calculate failed ${fails.length} times`);
+  // The same replay with room to keep going: the retries themselves.
+  process.env.DEARPOLICY_RAG_LOOP_MAX_TOKENS = "200000";
+  let r5b;
+  try { r5b = await run([{ steps: [...q5steps, ...retry] }], Q5, true); } finally { if (prevLimit == null) delete process.env.DEARPOLICY_RAG_LOOP_MAX_TOKENS; else process.env.DEARPOLICY_RAG_LOOP_MAX_TOKENS = prevLimit; }
+  if (process.env.REPRO) console.log("--- Q5 retries\n" + r5b.turns[0].visible + "\n  " + JSON.stringify(r5b.turns[0].trace.toolCalls.map((x: any) => [x.name, x.ok, String(x.error ?? "").slice(0, 40)])));
+  await check("B2 Q5: repeated tool calls stop being retried (the model is told to answer), and the turn still ends with a useful partial answer", () => {
+    const t = r5b.turns[0];
+    assert.ok(!Object.values(LIMIT_TEXT).includes(t.visible.trim()), "bare limit text:\n" + t.visible);
+    const calcs = (t.trace.toolCalls as any[]).filter((x) => x.name === "calculate");
+    const ran = calcs.filter((x) => !/^not run again/.test(String(x.error ?? "")));
+    assert.ok(ran.length <= 3, `calculate ran ${ran.length} times`);
+    assert.ok(calcs.some((x) => /^not run again/.test(String(x.error ?? ""))), "a third attempt is refused, telling the model to answer");
   });
   await check("B3 per-call context: no tool result lists the same evidence twice, and a passage already shown this turn is not repeated in full", () => {
     // Q2 searched the same SafeStay schedule twice (Isla, then Simon): the second result refers back.

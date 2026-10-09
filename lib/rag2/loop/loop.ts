@@ -82,19 +82,31 @@ export function loopToolSpecs(): LoopToolSpec[] {
 
 const isRef = (v: any): v is EvidenceRef => !!v && typeof v === "object" && typeof v.policyId === "string" && !!v.passage && typeof v.passage.text === "string" && !!v.page;
 /** What a tool result looks like to the model: every EvidenceRef replaced by its evidence id and a short excerpt. */
-function forModel(value: unknown, state: RagLoopState, via: string, ids: string[]): unknown {
-  if (Array.isArray(value)) return value.map((v) => forModel(v, state, via, ids));
+function forModel(value: unknown, state: RagLoopState, via: string, ids: string[], shown?: Set<string>): unknown {
+  if (Array.isArray(value)) return value.map((v) => forModel(v, state, via, ids, shown));
   if (isRef(value)) {
     const id = evidenceIdOf(state, value, via);
     if (!ids.includes(id)) ids.push(id);
+    // Round 7 (A3): a passage the model has already been shown this turn is referred to, not repeated in full.
+    if (shown?.has(id)) return { evidence_id: id, page: value.passage.onPage, ...(value.table ? { row: value.table.rowLabel, column: value.table.columnHeader } : {}), excerpt: "(shown above)" };
+    shown?.add(id);
     return { evidence_id: id, policy_id: value.policyId, page: value.passage.onPage, ...(value.table ? { row: value.table.rowLabel, column: value.table.columnHeader } : {}), excerpt: value.passage.text.length > 400 ? value.passage.text.slice(0, 400) + "…" : value.passage.text };
   }
   if (value && typeof value === "object") {
     const o: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) o[k] = forModel(v, state, via, ids);
+    for (const [k, v] of Object.entries(value)) o[k] = forModel(v, state, via, ids, shown);
     return o;
   }
   return value;
+}
+/** Round 7 (A3): a tool result as the model sees it -- its data, then only the evidence its data did not already
+ * list (never the same passage twice in one result), each passage in full only the first time this turn. */
+function resultForModel(res: { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state: RagLoopState, via: string, ids: string[], shown: Set<string>): Record<string, unknown> {
+  const data = res.ok ? forModel(res.data, state, via, ids, shown) : undefined;
+  const inData = new Set(ids);
+  const extra = (Array.isArray(res.evidence) ? res.evidence : []).filter((e) => !isRef(e) || !inData.has(evidenceIdOf(state, e, via)));
+  const evidence = forModel(extra, state, via, ids, shown) as unknown[];
+  return res.ok ? { ok: true, data, ...(evidence.length ? { evidence } : {}) } : { ok: false, error: res.error, ...(evidence.length ? { evidence } : {}) };
 }
 
 /** The line of a cited passage that says why a question matters: a table row's label, else the passage line sharing
@@ -114,6 +126,19 @@ function whyLine(e: EvidenceRef, about: string): string {
 const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; return s.length > 160 ? s.slice(0, 160) + "…" : s; };
 
 const SELF_MENTION = /^(?:i|me|my|myself|mine|my own|self)$/i;
+/** Round 7 (A3): told once to a turn running short of budget or whose tools keep failing. */
+export const BUDGET_NOTICE = "This question's model-use budget is running low or a tool keeps failing: do not retry failing tools or search again. End the turn now with final_answer -- the printed figures you already have, cited -- and say what is still missing; or ask_user for the one missing fact.";
+/** The stops a turn's own budget causes (a partial answer is given); provider errors, cancellations and household
+ * allowances keep their own honest text. */
+const BUDGET_STOPS = new Set(["turn_tokens", "turn_tokens_used", "turn_calls", "turn_usd", "turn_time"]);
+/** A table row's benefit as the household reads it: the operand's label, or -- when that is only an item number
+ * ("B") -- the longest worded cell of the row printing `cell`. */
+function rowLabelOf(benefit: string, passage: string, cell: string): string {
+  if ((benefit.match(/[A-Za-z]{3,}/g) ?? []).length >= 2) return benefit.trim();
+  const line = passage.split("\n").find((l) => l.includes(cell)) ?? passage;
+  const worded = line.split(/\t+| {2,}/).map((c) => c.trim()).filter((c) => c !== cell && (c.match(/[A-Za-z]{3,}/g) ?? []).length >= 2 && !/[$€£¥]\s?\d/.test(c)).sort((a, b) => b.length - a.length);
+  return worded[0] ?? benefit.trim();
+}
 /** Round 6c: a mention that means anyone in the household (a quantifier or the household as a whole), not one person. */
 export const ANYONE = /^(?:(?:one|any|either|each|all|both|neither|none|some|whichever)(?: one)? of (?:us|you|them|the family|the kids|the children|my family|our family|our kids|our children)|anyone|anybody|someone|somebody|everyone|everybody|whoever|we|us|our|ours|the family|family|the household|any family member|a family member|family members|any of the kids|any of the children)$/i;
 /** Lookups that read a policy's passages / rows. */
@@ -279,6 +304,14 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   const refine = async (refs: EvidenceRef[], about?: string | null) => { for (const r of refs) if (r && !r.support) refineEvidence(r, await pagesOf(r.policyId), about ?? null); };
 
+  /** Round 7 (A3): passages shown to the model in full this turn (a repeat is referred to, not resent). */
+  const shownThisTurn = new Set<string>();
+  /** Round 7 (A3): failed runs of each tool this turn; a tool that failed twice is not run again. */
+  const failures = new Map<string, number>();
+  const noteFailure = (name: string) => failures.set(name, (failures.get(name) ?? 0) + 1);
+  let budgetWarned = false;
+  /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
+  const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
   const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
@@ -496,6 +529,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
 
   /** A tool call refused by the loop before it runs (null: run it). */
   const preflight = (call: ToolCall): string | null => {
+    const sig = call.name + " " + JSON.stringify(call.arguments);
+    if (madeCalls.has(sig) && !LOOP_ACTIONS.some((x) => x.name === call.name)) { noteFailure(call.name); return `not run again: the same ${call.name} call was already made for this question (its result is above). Use that result, or end the turn with final_answer and say what is still missing.`; }
+    madeCalls.add(sig);
+    if ((failures.get(call.name) ?? 0) >= 2) return `not run again: ${call.name} has already failed twice for this question. End the turn now with final_answer -- the printed figures you already have, cited -- and say what is still missing (or ask_user for the one missing fact).`;
     const subject = typeof call.arguments.subject_id === "string" ? call.arguments.subject_id : null;
     if (SUBJECT_TOOLS.has(call.name) && subject && unsettled.has(subject)) return "who is meant is not settled yet: ask the household which person they mean (ask_user kind=person with the candidates) before looking up anyone's cover";
     if (call.name === "compute") {
@@ -507,7 +544,39 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return null;
   };
 
+  /** Round 7 (A3): the partial answer of a turn stopped by its budget (null when nothing printed was read). */
+  const partialAnswer = (): Composed | null => {
+    const read = [...ctx.values.entries()].filter(([, v]) => v.operand.valueKind === "money" && v.operand.cents != null && !stale.has(evidenceIdOf(state, v.operand.evidence)));
+    const seenRows = new Set<string>();
+    const sentences: Record<string, unknown>[] = [];
+    for (const [valueId, v] of read.reverse()) {
+      const e = v.operand.evidence, t = e.table;
+      const rowKey = `${e.policyId}|${t?.rowLabel ?? v.operand.benefit}|${t?.columnHeader ?? ""}`;
+      if (seenRows.has(rowKey) || sentences.length >= 3) continue;
+      seenRows.add(rowKey);
+      const cell = (t?.cell?.text ?? "").replace(/\s+/g, " ").trim();
+      if (!cell || !/\d/.test(cell)) continue;
+      const label = rowLabelOf(v.operand.benefit, e.passage.text, cell);
+      const product = policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? "Your policy";
+      sentences.unshift({ text: `${product} prints “${label}” as ${cell}${t?.columnHeader ? ` in its ${t.columnHeader} column` : ""}.`, value_ids: [valueId], subject_id: v.subjectId });
+    }
+    if (!sentences.length) return null;
+    const composed = composeFinal({ sentences, subjectId: state.subjectId }, composeCtx());
+    if (!composed.sentences.length) return null;
+    const unresolved = [...calcOutcomes(ctx).values()].reverse().find((c) => c.kind === "unresolved" && (c.requirements?.length || c.unresolvedText));
+    const missing = unresolved?.requirements?.length ? `Still needed before an amount can be worked out: ${unresolved.requirements.join("; ")}.` : "I didn’t get as far as working out an amount for what you described, so I haven’t given one.";
+    composed.notes = [...(composed.notes ?? []), `I stopped before finishing because this question reached its model-use limit. ${missing}`];
+    return composed;
+  };
+
   for (let step = 0; !reply; step++) {
+    // Round 7 (A3): a turn running short of its budget, or whose tools keep failing, is told once to stop retrying
+    // and answer with what is already supported (the notice rides on the latest tool result).
+    const used = meter.usage.input + meter.usage.output;
+    if (!budgetWarned && step > 0 && (used > limits.maxTokensPerTurn * 0.5 || [...failures.values()].some((n) => n >= 2))) {
+      const last = [...messages].reverse().find((x) => x.role === "tool") as { content: string } | undefined;
+      if (last) { budgetWarned = true; try { last.content = JSON.stringify({ ...JSON.parse(last.content), notice: BUDGET_NOTICE }); } catch { last.content += "\n" + BUDGET_NOTICE; } }
+    }
     const m = await meter.next({ messages, tools, maxOutputTokens: limits.maxOutputTokens });
     if (!m.ok) { stop = m.stop; if (m.stop.kind === "model_error") record("model", {}, false, [], m.stop.detail); break; }
     const out = m.out;
@@ -528,7 +597,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const res = await runTool(ctx, call.name, call.arguments, loopToolEnv(env));
       await refine(res.evidence, typeof call.arguments.query === "string" ? call.arguments.query : typeof call.arguments.benefit === "string" ? call.arguments.benefit : null);
       const ids: string[] = [];
-      const shown = res.ok ? { ok: true, data: forModel(res.data, state, call.name, ids), evidence: forModel(res.evidence, state, call.name, ids) } : { ok: false, error: res.error, evidence: forModel(res.evidence, state, call.name, ids) };
+      const shown = resultForModel(res as { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state, call.name, ids, shownThisTurn);
+      if (!res.ok) noteFailure(call.name);
       if (res.ok && call.name === "calculate" && typeof call.arguments.subject_id === "string") {
         const miss = ((shown as { data?: { missing?: { key: string; ask: string; why: string; evidence?: { evidence_id?: string }[] }[] } }).data?.missing ?? []).filter((m) => m.ask === "household");
         calcMissing.set(call.arguments.subject_id, miss.map((m) => ({ key: normalizeKey(m.key), why: m.why, evidenceIds: (m.evidence ?? []).map((e) => e.evidence_id ?? "").filter(Boolean) })));
@@ -581,7 +651,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let final: LoopReply;
   if (!done) {
     const kind = stop?.kind ?? "turn_calls";
-    final = { kind: "fallback", text: LIMIT_TEXT[kind] };
+    // Round 7 (A3): a turn stopped by its own budget answers with what it had already established -- the printed
+    // figures it read (bound and gated like any answer) and what is still missing -- never only the limit text.
+    const partial = BUDGET_STOPS.has(kind) ? partialAnswer() : null;
+    final = partial ? { kind: "final", composed: partial } : { kind: "fallback", text: LIMIT_TEXT[kind] };
+    if (partial) { trace.dropped = partial.dropped; trace.evidenceChosen.push(...partial.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id))); }
     trace.limit = { kind, detail: stop?.detail ?? "the turn ended without an answer" };
     trace.outcome = kind === "model_error" ? "error" : kind === "turn_calls" || kind === "turn_tokens_used" ? "budget_exhausted" : kind === "timeout" || kind === "turn_time" || kind === "cancelled" ? "timeout" : "limit_reached";
   }
