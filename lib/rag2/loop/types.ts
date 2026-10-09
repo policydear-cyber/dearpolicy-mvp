@@ -21,7 +21,9 @@ export type ModelTurnInput = { messages: LoopMessage[]; tools: LoopToolSpec[]; m
   signal?: AbortSignal };
 export type ModelTurnOutput = { toolCalls: ToolCall[]; text: string | null; usage: ModelUsage; modelId: string; latencyMs: number;
   /** The model id the provider itself reported for this call (null when it reported none). */
-  resolvedModel?: string | null };
+  resolvedModel?: string | null;
+  /** The provider's own id for this call (OpenAI / Anthropic response `id`), recorded as model_executions.provider_request_id. */
+  providerRequestId?: string | null };
 /** A model that takes the conversation so far and the tool list, and replies with tool calls (and optional text,
  * which is never shown: the visible answer is composed only from final_answer / ask_user). */
 export interface LoopModel { readonly id: string; readonly kind: "hosted" | "scripted";

@@ -49,10 +49,10 @@ export function anthropicUsage(u: any): ReportedUsage {
   return { input: tokensOf(u?.input_tokens) + read + write, output: tokensOf(u?.output_tokens), cached: read };
 }
 /** Reads an OpenAI-style reply into tool calls (exported for the adapter test). */
-export function openAiReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null } {
+export function openAiReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null; requestId: string | null } {
   const msg = payload?.choices?.[0]?.message ?? {};
   const toolCalls: ToolCall[] = (msg.tool_calls ?? []).map((c: any, i: number) => ({ id: String(c.id ?? `call_${i}`), name: String(c.function?.name ?? ""), arguments: parseArgs(c.function?.arguments) }));
-  return { toolCalls, text: typeof msg.content === "string" ? msg.content : null, usage: openAiUsage(payload?.usage), model: payload?.model ?? null };
+  return { toolCalls, text: typeof msg.content === "string" ? msg.content : null, usage: openAiUsage(payload?.usage), model: payload?.model ?? null, requestId: typeof payload?.id === "string" ? payload.id : null };
 }
 /** Anthropic Messages request body (exported for the adapter test). */
 export function anthropicRequest(model: string, input: ModelTurnInput) {
@@ -67,9 +67,9 @@ export function anthropicRequest(model: string, input: ModelTurnInput) {
   }
   return { model, max_tokens: input.maxOutputTokens, temperature: 0, system, tool_choice: { type: "any" }, messages: out, tools: input.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) };
 }
-export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null } {
+export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null; requestId: string | null } {
   const blocks: any[] = payload?.content ?? [];
-  return { toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: anthropicUsage(payload?.usage), model: payload?.model ?? null };
+  return { toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: anthropicUsage(payload?.usage), model: payload?.model ?? null, requestId: typeof payload?.id === "string" ? payload.id : null };
 }
 
 /** Optional request settings a model may reject (Agent H); remembered per provider:model. */
@@ -137,7 +137,7 @@ export class HostedLoopModel implements LoopModel {
         if (!res.ok) await failed(res);
         read = openAiReply(await res.json());
       }
-      return { toolCalls: read.toolCalls, text: read.text, usage: read.usage, modelId: read.model ? `${provider}:${read.model}` : this.id, resolvedModel: read.model ?? null, latencyMs: Date.now() - t0 };
+      return { toolCalls: read.toolCalls, text: read.text, usage: read.usage, modelId: read.model ? `${provider}:${read.model}` : this.id, resolvedModel: read.model ?? null, providerRequestId: read.requestId ?? null, latencyMs: Date.now() - t0 };
     } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", onAbort); }
   }
 }

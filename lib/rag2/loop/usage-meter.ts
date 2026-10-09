@@ -192,7 +192,7 @@ export class LoopUsageMeter {
     await recordModelExecution({
       attemptGroupId: this.attemptGroupId, attemptIndex, operation: "rag_answer", role: "chat", householdId: this.o.accountId,
       requested: { provider: choice.provider, model: choice.model, capability: "chat", promptVersion: this.o.promptVersion },
-      requestedAt, resolved: out ? { resolvedModel: out.resolvedModel ?? null, providerRequestId: null, finishReason: null, region: null } : null,
+      requestedAt, resolved: out ? { resolvedModel: out.resolvedModel ?? null, providerRequestId: out.providerRequestId ?? null, finishReason: null, region: null } : null,
       status: call.ok ? "succeeded" : "failed", errorCategory: call.ok ? null : error instanceof CallTimeout ? "timeout" : error instanceof CallCancelled ? "cancelled" : /quota/i.test(String((error as Error)?.message ?? error)) ? "provider_quota" : "model_provider",
       usage: { input: call.input, output: call.output, cached }, costUsd: call.costUsd, latencyMs: call.latencyMs,
     });

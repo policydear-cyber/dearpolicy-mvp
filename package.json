@@ -158,6 +158,7 @@
     "rag2:live-budget-test": "node --import tsx scripts/rag2-live/budget-regressions.ts",
     "rag2:live-checker-test": "node --import tsx scripts/rag2-live/check-regressions.ts",
     "rag2:live-seed": "node --import tsx e2e/support/seed-rag2-live.ts",
+    "rag2:live-attribution-test": "node --import tsx scripts/rag2-live/attribution-regressions.ts",
     "e2e:rag2-conversation": "playwright test -c e2e/support/playwright.rag2.config.ts",
     "e2e:r8-render": "playwright test -c e2e/playwright.r8.config.ts",
     "security:cross-product-currency-test": "node --import tsx scripts/cross-product-currency-regressions.ts",

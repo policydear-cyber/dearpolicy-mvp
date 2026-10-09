@@ -42,6 +42,7 @@ import { ACCOUNT_L } from "../fixtures/rag2-live/household";
 import { SCENARIOS, type Scenario } from "./scenarios";
 import { grade, loadConversation, type Verdict } from "./check";
 import { writeReport } from "./report";
+import { reconcile, turnExecutions } from "./attribution";
 
 const arg = (name: string, d?: string) => { const i = process.argv.indexOf("--" + name); return i > 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : d; };
 const flag = (name: string) => process.argv.includes("--" + name);
@@ -140,6 +141,7 @@ async function main() {
   const headers = { "content-type": "application/json", origin: base };
   const budget = async () => (await fetch(base + "/__rag2live/budget").then((r) => r.json())) as { ledger: { remainingUsd: number; spentUsd: number; reservedUsd: number; capUsd: number; calls: number; refusals: number; failed: number }; calls: any[]; httpCalls: any[] };
   let written = false;
+  const seenExecutions = new Set<string>();
   const runRecord: any = { ...meta, conversations: [] as any[] };
   try {
     await ready;
@@ -177,7 +179,9 @@ async function main() {
         const calls = g.calls.slice(g0);
         // Every provider request of the turn, as the process-wide fetch guard reserved and settled it.
         const httpCalls = g.httpCalls.slice(h0).map((c: any) => ({ ...c, scenario: s.id, turn: i + 1 }));
-        const execs = (await pool.query("SELECT attempt_index, status, error_category, requested_model, resolved_model, input_tokens, output_tokens, cached_tokens, cost_usd::float AS cost_usd, latency_ms, prompt_version, created_at FROM model_executions WHERE household_ref=$1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at", [pseudonymizeId(ACCOUNT_L), new Date(t0 - 1000), new Date(Date.now() + 1000)])).rows;
+        // From the POST onwards only, each row once (scripts/rag2-live/attribution.ts: the old 1 s look-back counted the
+        // previous turn's last call again).
+        const execs = turnExecutions((await pool.query("SELECT id::text AS id, operation, attempt_index, status, error_category, requested_model, resolved_model, provider_request_id, input_tokens, output_tokens, cached_tokens, cost_usd::float AS cost_usd, latency_ms, prompt_version, created_at FROM model_executions WHERE household_ref=$1 AND created_at >= $2 AND created_at <= $3 ORDER BY created_at", [pseudonymizeId(ACCOUNT_L), new Date(t0), new Date(Date.now() + 1000)])).rows, t0, seenExecutions);
         const relay = relayLog ? relayLines(relayLog, t0, Date.now()) : [];
         conv.turns.push({
           turn: i + 1, user: turn.user, jobStatus: job?.status ?? null, jobError: job?.error ?? null,
@@ -186,6 +190,7 @@ async function main() {
           calls, httpCalls, modelExecutions: execs, relay,
           tokens: { input: httpCalls.reduce((n: number, c: any) => n + (c.usage?.input ?? 0), 0), output: httpCalls.reduce((n: number, c: any) => n + (c.usage?.output ?? 0), 0) },
           costUsd: { charged: httpCalls.reduce((n: number, c: any) => n + (c.chargedUsd ?? 0), 0), reserved: httpCalls.reduce((n: number, c: any) => n + (c.reservedUsd ?? 0), 0), ledger: execs.reduce((n: number, e: any) => n + (e.cost_usd ?? 0), 0) },
+          reconciliation: reconcile(httpCalls, execs),
         });
         if (calls.some((c: any) => c.refused === PREFLIGHT_REFUSAL)) {
           stop = `${PREFLIGHT_REFUSAL}: stopped at the first model call -- scenario ${s.id} turn ${i + 1}: POST /api/chat ${r.status} accepted in ${acceptedMs} ms, chat job ${job?.status ?? "unknown"}, the conversation loop's first model call refused by the run-cap guard before any request was sent`;
