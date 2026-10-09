@@ -33,11 +33,27 @@ export function openAiRequest(model: string, input: ModelTurnInput, provider?: P
   const required = provider ? capabilityFor({ provider, model })?.chatCompletionsWithTools?.set ?? {} : {};
   return { model, temperature: 0, max_completion_tokens: input.maxOutputTokens, tool_choice: "required", parallel_tool_calls: true, ...required, messages, tools: input.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })) };
 }
+/** A1: provider-reported usage. `input` is every input token (cached ones included); `cached` is the part of it the
+ * provider served from its prompt cache (OpenAI usage.prompt_tokens_details.cached_tokens; Anthropic
+ * cache_read_input_tokens), priced at the model's cached-input rate (lib/ai/providers.ts costUsd). */
+export type ReportedUsage = { input: number; output: number; cached: number };
+const tokensOf = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+/** OpenAI usage: prompt_tokens already include the cached ones. */
+export function openAiUsage(u: any): ReportedUsage {
+  const input = tokensOf(u?.prompt_tokens);
+  return { input, output: tokensOf(u?.completion_tokens), cached: Math.min(input, tokensOf(u?.prompt_tokens_details?.cached_tokens)) };
+}
+/** Anthropic usage: input_tokens EXCLUDES cache reads and cache writes, so they are added back to give every input
+ * token; the cache reads are the cached part (cache writes are priced as ordinary input). */
+export function anthropicUsage(u: any): ReportedUsage {
+  const read = tokensOf(u?.cache_read_input_tokens), write = tokensOf(u?.cache_creation_input_tokens);
+  return { input: tokensOf(u?.input_tokens) + read + write, output: tokensOf(u?.output_tokens), cached: read };
+}
 /** Reads an OpenAI-style reply into tool calls (exported for the adapter test). */
-export function openAiReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: { input: number; output: number }; model: string | null } {
+export function openAiReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null } {
   const msg = payload?.choices?.[0]?.message ?? {};
   const toolCalls: ToolCall[] = (msg.tool_calls ?? []).map((c: any, i: number) => ({ id: String(c.id ?? `call_${i}`), name: String(c.function?.name ?? ""), arguments: parseArgs(c.function?.arguments) }));
-  return { toolCalls, text: typeof msg.content === "string" ? msg.content : null, usage: { input: payload?.usage?.prompt_tokens ?? 0, output: payload?.usage?.completion_tokens ?? 0 }, model: payload?.model ?? null };
+  return { toolCalls, text: typeof msg.content === "string" ? msg.content : null, usage: openAiUsage(payload?.usage), model: payload?.model ?? null };
 }
 /** Anthropic Messages request body (exported for the adapter test). */
 export function anthropicRequest(model: string, input: ModelTurnInput) {
@@ -52,9 +68,9 @@ export function anthropicRequest(model: string, input: ModelTurnInput) {
   }
   return { model, max_tokens: input.maxOutputTokens, temperature: 0, system, tool_choice: { type: "any" }, messages: out, tools: input.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })) };
 }
-export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: { input: number; output: number }; model: string | null } {
+export function anthropicReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: ReportedUsage; model: string | null } {
   const blocks: any[] = payload?.content ?? [];
-  return { toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: { input: payload?.usage?.input_tokens ?? 0, output: payload?.usage?.output_tokens ?? 0 }, model: payload?.model ?? null };
+  return { toolCalls: blocks.filter((b) => b.type === "tool_use").map((b) => ({ id: String(b.id), name: String(b.name), arguments: parseArgs(b.input) })), text: blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n") || null, usage: anthropicUsage(payload?.usage), model: payload?.model ?? null };
 }
 
 /** Optional request settings a model may reject (Agent H); remembered per provider:model. */

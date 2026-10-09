@@ -41,6 +41,8 @@ export async function recordUsage(args:{accountId?:string;role:ModelRole;choice:
 
 export type UsageSummary={
   month:string;calls:number;inputTokens:number;outputTokens:number;costUsd:number;unpricedCalls:number;
+  /** A1: of inputTokens, those the provider served from its prompt cache (priced at the cached-input rate). */
+  cachedTokens:number;
   byRole:{role:string;calls:number;inputTokens:number;outputTokens:number;costUsd:number}[];
   chatTurns:number;documentsRead:number;
   plan:{name:string;priceUsd:number;includedChatTurns:number;includedDocuments:number;hardStopUsd:number};
@@ -58,8 +60,8 @@ export function planLimits(){
 }
 export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
   await ensureLedgerSchema();
-  const rows=await query<{role:string;calls:number;input_tokens:number;output_tokens:number;cost_usd:string;unpriced:number}>(
-    `SELECT role,count(*)::int AS calls,coalesce(sum(input_tokens),0)::int AS input_tokens,coalesce(sum(output_tokens),0)::int AS output_tokens,
+  const rows=await query<{role:string;calls:number;input_tokens:number;output_tokens:number;cached_tokens:number;cost_usd:string;unpriced:number}>(
+    `SELECT role,count(*)::int AS calls,coalesce(sum(input_tokens),0)::int AS input_tokens,coalesce(sum(output_tokens),0)::int AS output_tokens,coalesce(sum(cached_tokens),0)::int AS cached_tokens,
             coalesce(sum(cost_usd),0)::text AS cost_usd,count(*) FILTER (WHERE NOT priced)::int AS unpriced
        FROM model_usage WHERE account_id=$1 AND at>=date_trunc('month',now()) GROUP BY role ORDER BY role`,[accountId]);
   const turns=await query<{count:number}>(
@@ -71,6 +73,7 @@ export async function usageThisMonth(accountId:string):Promise<UsageSummary>{
   const plan=planLimits();
   const summary:UsageSummary={
     month:new Date().toISOString().slice(0,7),
+    cachedTokens:rows.rows.reduce((n,r)=>n+Number(r.cached_tokens??0),0),
     calls:byRole.reduce((n,r)=>n+r.calls,0),inputTokens:byRole.reduce((n,r)=>n+r.inputTokens,0),outputTokens:byRole.reduce((n,r)=>n+r.outputTokens,0),
     costUsd:Math.round(byRole.reduce((n,r)=>n+r.costUsd,0)*10000)/10000,unpricedCalls:rows.rows.reduce((n,r)=>n+r.unpriced,0),
     byRole,chatTurns:Number(turns.rows[0]?.count??0),documentsRead:Number(documents.rows[0]?.count??0),plan,warnings:[],

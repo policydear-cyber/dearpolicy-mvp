@@ -95,8 +95,9 @@ export function budgetConfig(env: NodeJS.ProcessEnv = process.env): BudgetConfig
 // ---------------------------------------------------------------------------
 export type UsageRow = { operation: string; role: string; provider: string; model: string; calls: number; failedCalls: number;
   inputTokens: number; outputTokens: number; cachedTokens: number; costUsd: number; unpricedCalls: number };
+/** inputTokens include cachedTokens (the part the provider served from its prompt cache, priced at the cached rate). */
 export type UsageReport = { since: string; scope: "household" | "all_households"; calls: number; failedCalls: number;
-  inputTokens: number; outputTokens: number; costUsd: number; unpricedCalls: number; rows: UsageRow[] };
+  inputTokens: number; outputTokens: number; cachedTokens: number; costUsd: number; unpricedCalls: number; rows: UsageRow[] };
 
 /** Recorded model usage since `since`, grouped by operation and model. With
  * an accountId, only that household's calls; with null, every call on the
@@ -122,7 +123,7 @@ export async function usageByOperationAndModel(accountId: string | null, since: 
   const sum = (f: (row: UsageRow) => number) => rows.reduce((n, row) => n + f(row), 0);
   return { since: since.toISOString(), scope: accountId ? "household" : "all_households", rows,
     calls: sum((x) => x.calls), failedCalls: sum((x) => x.failedCalls), inputTokens: sum((x) => x.inputTokens),
-    outputTokens: sum((x) => x.outputTokens), costUsd: Math.round(sum((x) => x.costUsd) * 1e6) / 1e6, unpricedCalls: sum((x) => x.unpricedCalls) };
+    outputTokens: sum((x) => x.outputTokens), cachedTokens: sum((x) => x.cachedTokens), costUsd: Math.round(sum((x) => x.costUsd) * 1e6) / 1e6, unpricedCalls: sum((x) => x.unpricedCalls) };
 }
 export function startOfMonth(now = new Date()) { return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); }
 

@@ -32,6 +32,19 @@ export type MeterStop = { kind: MeterStopKind; detail: string };
 export type MeterResult = { ok: true; out: ModelTurnOutput } | { ok: false; stop: MeterStop };
 type Call = NonNullable<TraceTurn["calls"]>[number];
 
+/** A1: the cached input tokens a provider reported for a call (part of its input tokens; 0 when none reported). */
+export function cachedTokensOf(usage: { input: number; output: number; cached?: number } | null | undefined): number {
+  const c = usage?.cached;
+  return typeof c === "number" && Number.isFinite(c) && c > 0 ? Math.min(Math.floor(c), Math.max(0, usage!.input)) : 0;
+}
+/** A1: the ACTUAL estimated cost of a call -- the provider-reported usage at the model's price on file, cached input at
+ * the cached-input rate (full input price when none is on file); null when the model has no price. Distinct from the
+ * pre-call RESERVATION (maxCallCostUsd: every estimated input token and every allowed output token at full price),
+ * which only guards the run cap and is settled down to this figure. */
+export function actualCallCostUsd(choice: Parameters<typeof costUsd>[0], usage: { input: number; output: number; cached?: number }): number | null {
+  return costUsd(choice, { input: usage.input, output: usage.output, cached: cachedTokensOf(usage) });
+}
+
 /** The fewest output tokens a call is ever offered (a call that cannot even answer is not worth making). */
 const MIN_OUTPUT_TOKENS = 256;
 class CallTimeout extends Error { constructor(ms: number) { super(`model call timed out after ${ms} ms`); this.name = "CallTimeout"; } }
@@ -134,7 +147,7 @@ export class LoopUsageMeter {
   }
 
   /** Why the next call may not be made (null when it may). */
-  private async refusal(input: ModelTurnInput, reserveUsd = 0): Promise<MeterStop | null> {
+  private async refusal(input: ModelTurnInput, reservationUsd = 0): Promise<MeterStop | null> {
     const L = this.o.limits;
     if (this.o.signal?.aborted) return { kind: "cancelled", detail: "the turn was cancelled" };
     if (this.calls.length >= L.maxCallsPerTurn) return { kind: "turn_calls", detail: `${this.calls.length} of ${L.maxCallsPerTurn} model calls for this turn used` };
@@ -153,7 +166,7 @@ export class LoopUsageMeter {
     if (run.calls >= L.runMaxCalls || run.usd >= L.runMaxUsd) return { kind: "run_budget", detail: `run budget used: ${run.calls} of ${L.runMaxCalls} calls, US$${run.usd.toFixed(4)} of US$${L.runMaxUsd}` };
     // Agent H: the call's worst case is reserved first; refused when it could pass the run cap.
     const reserved = runReserved().usd;
-    if (run.usd + reserved + reserveUsd > L.runMaxUsd + 1e-12) return { kind: "run_budget", detail: `run budget: US$${run.usd.toFixed(6)} spent + US$${reserved.toFixed(6)} reserved of US$${L.runMaxUsd}; the next call may cost up to US$${reserveUsd.toFixed(6)}` };
+    if (run.usd + reserved + reservationUsd > L.runMaxUsd + 1e-12) return { kind: "run_budget", detail: `run budget: US$${run.usd.toFixed(6)} spent + US$${reserved.toFixed(6)} reserved of US$${L.runMaxUsd}; the next call may cost up to US$${reservationUsd.toFixed(6)}` };
     if (this.householdUsd == null) this.householdUsd = (await loopHouseholdSpendThisMonth(this.o.accountId, L.fallbackPrice).catch(() => ({ usd: Number.POSITIVE_INFINITY }))).usd;
     if (this.householdUsd + this.usd >= L.householdMonthlyUsd) return { kind: "household_allowance", detail: `this household's monthly conversation allowance (US$${L.householdMonthlyUsd}) is used up` };
     return null;
@@ -170,17 +183,18 @@ export class LoopUsageMeter {
         requested: { provider: SCRIPTED_PROVIDER as unknown as NonNullable<LoopModel["choice"]>["provider"], model: this.o.model.id, capability: "chat", promptVersion: this.o.promptVersion },
         requestedAt, resolved: out ? { resolvedModel: out.resolvedModel ?? out.modelId ?? null, providerRequestId: null, finishReason: null, region: null } : null,
         status: call.ok ? "succeeded" : "failed", errorCategory: call.ok ? null : error instanceof CallTimeout ? "timeout" : error instanceof CallCancelled ? "cancelled" : "model_provider",
-        usage: { input: call.input, output: call.output }, costUsd: 0, latencyMs: call.latencyMs,
+        usage: { input: call.input, output: call.output, cached: cachedTokensOf(out?.usage) }, costUsd: 0, latencyMs: call.latencyMs,
       }).catch(() => null);
       return;
     }
-    await recordUsage({ accountId: this.o.accountId, role: "chat", choice, input: call.input, output: call.output, durationMs: call.latencyMs, ok: call.ok });
+    const cached = call.ok ? cachedTokensOf(out?.usage) : 0;
+    await recordUsage({ accountId: this.o.accountId, role: "chat", choice, input: call.input, output: call.output, cached, durationMs: call.latencyMs, ok: call.ok });
     await recordModelExecution({
       attemptGroupId: this.attemptGroupId, attemptIndex, operation: "rag_answer", role: "chat", householdId: this.o.accountId,
       requested: { provider: choice.provider, model: choice.model, capability: "chat", promptVersion: this.o.promptVersion },
       requestedAt, resolved: out ? { resolvedModel: out.resolvedModel ?? null, providerRequestId: null, finishReason: null, region: null } : null,
       status: call.ok ? "succeeded" : "failed", errorCategory: call.ok ? null : error instanceof CallTimeout ? "timeout" : error instanceof CallCancelled ? "cancelled" : /quota/i.test(String((error as Error)?.message ?? error)) ? "provider_quota" : "model_provider",
-      usage: { input: call.input, output: call.output }, costUsd: call.costUsd, latencyMs: call.latencyMs,
+      usage: { input: call.input, output: call.output, cached }, costUsd: call.costUsd, latencyMs: call.latencyMs,
     });
   }
 
@@ -192,20 +206,20 @@ export class LoopUsageMeter {
       const est = estimateTokens(input);
       const left = this.o.limits.maxTokensPerTurn - (this.usage.input + this.usage.output) - est;
       const maxOutputTokens = Math.max(MIN_OUTPUT_TOKENS, Math.min(input.maxOutputTokens, left));
-      let reserveUsd = 0;
+      let reservationUsd = 0;
       if (this.hosted) {
         const price = budgetPriceFor(this.o.model, this.o.limits.fallbackPrice);
         if (!price) return { ok: false, stop: { kind: "run_budget", detail: `no price on file for ${this.o.model.id}: refused (DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1)` } };
-        reserveUsd = maxCallCostUsd(price, reserveInputTokens(input), maxOutputTokens);
+        reservationUsd = maxCallCostUsd(price, reserveInputTokens(input), maxOutputTokens);
       }
       const shared = this.hosted ? sharedRunLedger() : null;
-      if (shared && reserveUsd > shared.remainingUsd + 1e-12) return { ok: false, stop: { kind: "run_budget", detail: `run ledger: US$${shared.spentUsd.toFixed(6)} spent + US$${shared.reservedUsd.toFixed(6)} reserved of US$${shared.capUsd}; the next call may cost up to US$${reserveUsd.toFixed(6)}` } };
-      const stop = await this.refusal(input, shared ? 0 : reserveUsd);
+      if (shared && reservationUsd > shared.remainingUsd + 1e-12) return { ok: false, stop: { kind: "run_budget", detail: `run ledger: US$${shared.spentUsd.toFixed(6)} spent + US$${shared.reservedUsd.toFixed(6)} reserved of US$${shared.capUsd}; the next call may cost up to US$${reservationUsd.toFixed(6)}` } };
+      const stop = await this.refusal(input, shared ? 0 : reservationUsd);
       if (stop) return { ok: false, stop };
-      if (shared) reserveUsd = 0; // reserved and settled on the shared ledger where the request is sent
-      runReserved().usd += reserveUsd;
-      let held = reserveUsd > 0;
-      const release = () => { if (held) { runReserved().usd = Math.max(0, runReserved().usd - reserveUsd); held = false; } };
+      if (shared) reservationUsd = 0; // reserved and settled on the shared ledger where the request is sent
+      runReserved().usd += reservationUsd;
+      let held = reservationUsd > 0;
+      const release = () => { if (held) { runReserved().usd = Math.max(0, runReserved().usd - reservationUsd); held = false; } };
       const timeoutMs = Math.max(1, Math.min(this.o.limits.callTimeoutMs, this.remainingMs()));
       const controller = new AbortController();
       const onCancel = () => controller.abort(new CallCancelled());
@@ -219,16 +233,17 @@ export class LoopUsageMeter {
           controller.signal.addEventListener("abort", () => reject(controller.signal.reason instanceof Error ? controller.signal.reason : new CallCancelled()), { once: true });
         });
         const out = await Promise.race([this.o.model.next({ ...input, maxOutputTokens, signal: controller.signal }), aborted]);
-        const priced = this.hosted && this.o.model.choice ? costUsd(this.o.model.choice, out.usage) : null;
-        const call: Call = { attempt: attempt + 1, ok: true, input: out.usage.input, output: out.usage.output, costUsd: priced, latencyMs: this.now() - t0, ...(attempt ? { retry: true } : {}) };
+        // A1: the actual estimated cost, from the provider-reported usage (cached input at the cached rate).
+        const actualCostUsd = this.hosted && this.o.model.choice ? actualCallCostUsd(this.o.model.choice, out.usage) : null;
+        const call: Call = { attempt: attempt + 1, ok: true, input: out.usage.input, output: out.usage.output, costUsd: actualCostUsd, latencyMs: this.now() - t0, ...(attempt ? { retry: true } : {}) };
         this.calls.push(call); this.usage.input += call.input; this.usage.output += call.output;
-        const cost = this.hosted ? budgetCostUsd(priced, out.usage, this.o.limits.fallbackPrice) : 0;
+        const cost = this.hosted ? budgetCostUsd(actualCostUsd, out.usage, this.o.limits.fallbackPrice) : 0;
         // Agent H: the run budget is settled at the priced cost; a call whose provider reported no usage keeps its whole
         // reservation as spent there. (The turn's own US$ limit counts the priced usage, as before.)
         const reported = out.usage.input > 0 || out.usage.output > 0;
         release();
         this.usd += cost;
-        if (this.hosted) addLoopRunUsage(1, reported ? cost : reserveUsd);
+        if (this.hosted) addLoopRunUsage(1, reported ? cost : reservationUsd);
         await this.record(call, out, null, requestedAt, attemptIndex);
         return { ok: true, out };
       } catch (error) {
@@ -238,7 +253,7 @@ export class LoopUsageMeter {
         // Agent H: a failed call reports no usage: its whole reservation is kept as spent against the RUN budget (never
         // booked as 0). (The turn's own US$ limit counts priced usage only, as before, so one retry stays possible.)
         release();
-        if (this.hosted) addLoopRunUsage(1, reserveUsd);
+        if (this.hosted) addLoopRunUsage(1, reservationUsd);
         await this.record(call, null, error, requestedAt, attemptIndex);
         if (error instanceof CallTimeout) return { ok: false, stop: { kind: "timeout", detail: message } };
         if (error instanceof CallCancelled) return { ok: false, stop: { kind: "cancelled", detail: message } };
