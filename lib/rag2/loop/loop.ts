@@ -10,7 +10,8 @@
  * break the conversation rules (a second question, a fact already known, a question no evidence makes relevant).
  * The visible reply is composed only from the model's final_answer / ask_user (compose.ts).
  */
-import { moneyFiguresIn } from "@/lib/chat/answer-verification";
+import { moneyFiguresIn, verifyAnswerFigures } from "@/lib/chat/answer-verification";
+import type { ChatAnswer } from "@/types";
 import { refineEvidence, supportSpan, contextFor, type EvidenceRef } from "../evidence";
 import { loadDocs, loadPages } from "../store";
 import { calcOutcomes } from "../calc/tool";
@@ -22,7 +23,7 @@ import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -390,6 +391,46 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     return { composed: out, repair: null };
   };
+  /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
+  let gateRepaired = false;
+  /** Round 8 (F1): the composed answer is run through the save-time gate (report mode) before the turn ends. A rejected
+   * figure sentence is sent back ONCE with the gate's actual reason and the evidence the sentence cites, so the model can
+   * restate it as its evidence prints it; the second answer is final (hook.ts drops what the gate still rejects and
+   * names the benefit and document). Never a rewrite by us: nothing is added to what the model wrote. */
+  const gateRepair = async (c: Composed): Promise<string | null> => {
+    const texts = [...c.sentences.map((s) => s.text), ...(c.notes ?? [])];
+    const dateDrops = c.dropped.some((d) => d.reason.startsWith(DATE_ABSENCE_REASON));
+    if (!dateDrops && !texts.some((t) => moneyFiguresIn(t).length)) return null;
+    const draft = { mode: "answer", summary: texts[0] ?? "", details: texts.slice(1), claimItems: [], nextSteps: c.nextSteps, confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], figureBindings: c.figureBindings, computations: c.computations, ...(c.calculations.length ? { calculations: c.calculations } : {}) } as unknown as ChatAnswer;
+    let problems: Awaited<ReturnType<typeof verifyAnswerFigures>> = [];
+    if (texts.some((t) => moneyFiguresIn(t).length)) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true }); } catch { return null; }
+    const squash = (x: string) => x.replace(/\s+/g, " ").trim().toLowerCase();
+    const lines = problems.flatMap((p) => {
+      const b = squash(p.sentence);
+      const own = c.sentences.find((s) => { const a = squash(s.text); return !!b && (a.includes(b) || b.includes(a)); });
+      if (!own) return [];
+      const ids = [...own.evidenceIds, ...(own.valueIds ?? []).map((v) => "value " + v)];
+      return [`"${own.text}" -- ${p.figure ? p.figure + ": " : ""}${p.reason}${ids.length ? ` (it cites ${ids.join(", ")})` : ""}`];
+    });
+    for (const d of c.dropped) if (d.reason.startsWith(DATE_ABSENCE_REASON)) lines.push(`"${d.sentence}" -- ${d.reason}`);
+    if (!lines.length) return null;
+    return `the save-time check would not show ${lines.length > 1 ? "these sentences" : "this sentence"}: ${[...new Set(lines)].join("; ")}. Call final_answer again with the same sentences, rewriting only ${lines.length > 1 ? "these" : "this one"}: state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. "previously X, and Y from <date>"), or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.`;
+  };
+  /** Round 8 (F1): after the one repair, a sentence still left out for claiming a printed date is absent is named
+   * precisely -- the benefit and the document -- instead of the generic note. */
+  const limitDateDrops = (c: Composed, call: ToolCall) => {
+    const given = ((call.arguments.sentences as Record<string, unknown>[]) ?? []);
+    const lines = c.dropped.filter((d) => d.reason.startsWith(DATE_ABSENCE_REASON)).map((d) => {
+      const src = given.find((g) => String(g?.text ?? "").replace(/\s+/g, " ").trim() === d.sentence.replace(/\s+/g, " ").trim());
+      const ids = ((src?.evidence_ids as string[]) ?? []).filter((id) => state.evidence[id]);
+      const docs = [...new Set(ids.map((id) => { const e = state.evidence[id]; return policyNames.get(e.policyId) ?? state.docNames?.[e.policyId] ?? null; }).filter((x): x is string => !!x))];
+      const date = /prints “([^”]+)”/.exec(d.reason)?.[1];
+      const what = typeof src?.benefit === "string" && src.benefit.trim() ? `“${src.benefit.trim()}”` : "this benefit";
+      return `I’ve left out what I had on ${what}${docs.length ? ` in ${docs.join(" and ")}` : ""}, because I couldn’t state it consistently with that document${date ? `, which prints the date “${date}”` : ""}.`;
+    });
+    if (!lines.length) return;
+    c.notes = [...c.notes.filter((n) => n !== DROPPED_NOTE), ...lines.filter((l) => !c.notes.includes(l))];
+  };
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
@@ -606,7 +647,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const call of out.toolCalls) {
       if (reply) { messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify({ ok: false, error: "the turn already ended" }) }); continue; }
       if (LOOP_ACTIONS.some((s) => s.name === call.name)) {
-        const r = action(call);
+        let r = action(call);
+        if (r.terminal?.kind === "final" && !gateRepaired) {
+          const repair = await gateRepair(r.terminal.composed);
+          if (repair) { gateRepaired = true; r = { result: { ok: false, error: repair } }; }
+        } else if (r.terminal?.kind === "final" && gateRepaired) limitDateDrops(r.terminal.composed, call);
         record(call.name, call.arguments, r.result.ok !== false, [], r.result.ok === false ? String(r.result.error) : undefined);
         messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(r.result) });
         if (r.terminal && TERMINAL.has(call.name)) reply = r.terminal;

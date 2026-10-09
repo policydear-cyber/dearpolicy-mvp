@@ -228,6 +228,22 @@ function householdInputs(result: ComputeOk, ctx: Ctx): { keys: string[]; problem
   return { keys, problem: null };
 }
 
+/** Round 8 (F1): the reason a sentence claiming a printed date is absent is left out (the loop's gate repair keys on it). */
+export const DATE_ABSENCE_REASON = "says a date is not stated or confirmed";
+const DATE_WORD = String.raw`(?:effective|start|starting|commencement|end|expiry|renewal)?\s*dates?`;
+const NOT_GIVEN = String.raw`(?:(?:is|are|was|were)\s+)?(?:not|isn['’]t|aren['’]t|wasn['’]t|weren['’]t|never|nowhere)\s+(?:been\s+)?(?:clearly\s+)?(?:stated|confirmed|printed|given|shown|specified|mentioned|listed|known|clear)`;
+/** "the effective date is not confirmed", "its start date isn't stated anywhere", "no date is given for ...". */
+export function dateAbsenceClaim(text: string): boolean {
+  return new RegExp(String.raw`\b${DATE_WORD}\b[^.;]{0,40}?\b${NOT_GIVEN}\b`, "i").test(text)
+    || new RegExp(String.raw`\b(?:no|without an?|without any)\s+${DATE_WORD}\b[^.;]{0,20}\b(?:is|was|are)?\s*(?:stated|given|printed|shown|specified|confirmed)\b`, "i").test(text)
+    || new RegExp(String.raw`\bnot (?:confirmed|stated|printed|specified) when\b[^.;]{0,40}\b(?:starts?|applies|takes effect|begins?)\b`, "i").test(text);
+}
+const MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+/** The first calendar date printed in a text ("1 July 2026", "July 1, 2026", "2026-07-01", "01/07/2026"), or null. */
+export function printedDateIn(text: string): string | null {
+  const m = new RegExp(String.raw`\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:${MONTHS})\.?,?\s+\d{4}|(?:${MONTHS})\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{4})\b`, "i").exec(text);
+  return m ? m[0] : null;
+}
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
   const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
   // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).
@@ -277,6 +293,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (injected.length) { drop(text, "cites text inside a document that is an instruction, not policy wording", INSTRUCTION_NOTE); continue; }
     const values = valIds.map((id) => ctx.tools.values.get(id));
     if (values.some((v) => !v)) { drop(text, "cites a table value that was not read in this turn"); continue; }
+    // Round 8 (F1): a sentence saying a date is not stated / confirmed, when the evidence it cites prints a date, says
+    // something its evidence contradicts.
+    const absentDate = dateAbsenceClaim(text) ? printedDateIn([...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), ...values.map((v) => JSON.stringify(v))].join("\n")) : null;
+    if (absentDate) { drop(text, `${DATE_ABSENCE_REASON} -- its cited evidence prints “${absentDate}”`); continue; }
     const calc = resultId ? calcOutcomes(ctx.tools).get(resultId) ?? null : null;
     if (calc) { composeCalcSentence(text, calc, evIds, values.map((v) => v!.operand), subjectId, ctx, out, drop); continue; }
     const result = resultId ? ctx.tools.results.get(resultId) ?? null : null;

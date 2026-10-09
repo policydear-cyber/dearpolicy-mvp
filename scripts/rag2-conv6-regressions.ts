@@ -150,7 +150,7 @@ async function main() {
     { text: "For Isla, SafeStay is also accident-only and excludes illness or disease confinement, so it would not pay for dengue.", subject_id: isla, evidence_ids: [hit(v, /Who is covered/), hit(v, /disease is not covered/)] },
   ]; };
   const LIVE_FELIX = "For Felix, the SafeStay Family Hospital Cash & Personal Accident Plan is accident-only and says confinement due to illness or disease is not covered, so it would not pay for dengue; its child hospital daily allowance is S$80 per day in the schedule, but an endorsement revises it to S$110 per day from 1 July 2026, and the endorsement’s effective date is not confirmed in the records.";
-  const REPAIRED_FELIX = "For Felix, the SafeStay Family Hospital Cash & Personal Accident Plan is accident-only and says confinement due to illness or disease is not covered, so it would not pay for dengue; its child hospital daily allowance was S$80 per day before the endorsement, and is S$110 per day from 1 July 2026.";
+  const REPAIRED_FELIX = "For Felix, the SafeStay Family Hospital Cash & Personal Accident Plan is accident-only and says confinement due to illness or disease is not covered, so it would not pay for dengue; its child hospital daily allowance was previously S$80 per day, and is S$110 per day from 1 July 2026 under the endorsement.";
   // As the live model did (one final_answer), then -- if the loop asks for a repair -- the model's repaired sentences.
   const q9 = (repaired: string): ScriptTurn[] => [{ steps: [...q9Head,
     (v) => [call("final_answer", { subject_id: isla, sentences: q9Sentences(v, LIVE_FELIX) })],
@@ -166,7 +166,7 @@ async function main() {
     assert.equal(asked.length, 1, "one bounded repair: " + JSON.stringify(t.trace.toolCalls.map((x: any) => [x.name, x.ok])));
     assert.match(String(asked[0].error), /S\$80/);
     assert.match(t.visible, /S\$500/); assert.match(t.visible, /accident-only/);
-    assert.match(t.visible, /S\$80 per day before the endorsement, and is S\$110 per day from 1 July 2026/, t.visible);
+    assert.match(t.visible, /previously S\$80 per day, and is S\$110 per day from 1 July 2026/, t.visible);
     assert.deepEqual(t.trace.gate, []);
   });
   const stuck9 = await run(q9(LIVE_FELIX), Q9);

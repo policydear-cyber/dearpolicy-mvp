@@ -10,8 +10,6 @@ import { activePredicate } from "@/lib/lifecycle/scopes";
 import { getConversation, historyToken, openConversation, ChatConflict } from "@/lib/chat/store";
 import { enforceLiveChatMonetaryBoundary } from "@/lib/chat/monetary-boundary";
 import { FIGURE_LEFT_OUT_NOTE, sentencesOf, verifyAnswerFigures, type FigureProblem } from "@/lib/chat/answer-verification";
-import { containsMoney, withholdSentences } from "@/lib/chat/monetary-boundary";
-import { checkCitedStatement } from "./statements";
 import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
@@ -43,49 +41,34 @@ export function benefitLabelOf(b: { benefit: string; passage: string }): string 
 /** Gate reasons that make the sentence itself wrong (about the wrong person, a version not on file). */
 const WRONG_SUBJECT = /\babout someone\b|\bnot for\b|\bversion\b|\bsuperseded\b|\bdeleted\b|\bwrong (?:person|member|column)\b/i;
 const sameSentence = (a: string, b: string) => { const x = squashT(a), y = squashT(b); return !!x && !!y && (x.includes(y) || y.includes(x)); };
+/**
+ * Round 8 (A3): the save-time gate's rejections are final at this point (the loop has already given the model its one
+ * repair). A rejected sentence is left out WHOLE -- never rewritten without its figure ("a set amount" claims what the
+ * evidence does not say) -- and the household is told precisely what was left out: the benefit and the document (and
+ * page) whose figure could not be confirmed. Independent sentences stay as they are.
+ */
 function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: RagLoopState, composed: Composed | null): void {
   const rejected = (s: string) => problems.some((p) => { const a = squashT(s), b = squashT(p.sentence); return (b && (a.includes(b) || b.includes(a))) || (!!p.figure && s.includes(p.figure)); });
-  const evidenceOf = (s: string) => (composed?.sentences ?? []).find((x) => { const a = squashT(x.text), b = squashT(s); return a.includes(b) || b.includes(a); })?.evidenceIds ?? [];
   const lostSentences: string[] = [];
-  const rescue = (field: string): string => sentencesOf(field).map((s) => {
-    if (!rejected(s)) return s;
-    lostSentences.push(s);
-    // A sentence the gate rejected for WHO or WHICH VERSION it is about is wrong as a whole: never rescued.
-    if (problems.some((p) => (sameSentence(p.sentence, s) || (!!p.figure && s.includes(p.figure))) && WRONG_SUBJECT.test(p.reason))) return "";
-    const r = withholdSentences(s).text.trim();
-    if (!r || containsMoney(r) || (r.match(/[A-Za-z]{3,}/g) ?? []).length < 6) return "";
-    // The figure-free part must still say only what its own evidence says.
-    const ids = evidenceOf(s).filter((id) => state.evidence[id]);
-    if (!ids.length) return "";
-    const why = checkCitedStatement(r, ids.map((id) => ({ policyId: state.evidence[id].policyId, subjectId: state.evidence[id].subjectId ?? null, text: [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].passage.text].join("\n") })), { people: [], policyNames: new Map(), subjectId: null });
-    if (why) return "";
-    return r;
-  }).filter(Boolean).join(" ");
-  answer.summary = rescue(answer.summary);
-  answer.details = answer.details.map(rescue).filter((d) => d.trim());
-  const gone = (sentence: string) => lostSentences.some((l) => { const a = squashT(l), b = squashT(sentence); return a.includes(b) || b.includes(a); });
+  const keep = (field: string): string => sentencesOf(field).filter((s) => { if (!rejected(s)) return true; lostSentences.push(s); return false; }).join(" ");
+  answer.summary = keep(answer.summary);
+  answer.details = answer.details.map(keep).filter((d) => d.trim());
+  const gone = (sentence: string) => lostSentences.some((l) => sameSentence(l, sentence));
+  const lostBindings = (composed?.figureBindings ?? answer.figureBindings ?? []).filter((b) => gone(b.sentence));
   answer.figureBindings = (answer.figureBindings ?? []).filter((b) => !gone(b.sentence));
   answer.computations = (answer.computations ?? []).filter((r) => !gone(r.sentence));
   if (answer.calculations) answer.calculations = answer.calculations.filter((r) => !gone(r.sentence));
-  const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
-  if (said.length) {
-    if (!answer.summary.trim()) { answer.summary = answer.details[0]; answer.details = answer.details.slice(1); }
-    // Beside what remains, the household is still told plainly that a figure was left out.
-    if (lostSentences.length && !answer.details.includes(FIGURE_LEFT_OUT_NOTE)) answer.details.push(FIGURE_LEFT_OUT_NOTE);
-    return;
-  }
-  // Nothing supported is left: say specifically what could not be confirmed (benefit, document, page), or the
-  // composer's own requirement -- never the rejected figure, and never only a generic note.
   const lines: string[] = [];
-  for (const s of lostSentences) for (const b of (composed?.figureBindings ?? []).filter((x) => { const a = squashT(x.sentence), c = squashT(s); return a.includes(c) || c.includes(a); })) {
+  for (const b of lostBindings) {
     const doc = answer.citations.find((c) => c.policyId === b.policyId)?.policyName ?? state.docNames?.[b.policyId] ?? "your policy document";
-    const line = `I found “${benefitLabelOf(b)}” in ${doc} (page ${b.pageStart}), but I couldn’t confirm its amount against that page, so I haven’t stated it.`;
+    const line = `The figure I left out is for “${benefitLabelOf(b)}” in ${doc} (page ${b.pageStart}).`;
     if (!lines.includes(line)) lines.push(line);
   }
-  const requirements = (composed?.sentences ?? []).filter((x) => x.kind === "requirement").map((x) => x.text);
-  const body = [...lines, ...requirements];
-  answer.summary = body[0] ?? "I couldn’t confirm the amounts against your documents, so I haven’t stated them; the cited pages below show what they print.";
-  answer.details = [...body.slice(1), ...answer.details];
+  const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
+  const requirements = (composed?.sentences ?? []).filter((x) => x.kind === "requirement" && !said.includes(x.text)).map((x) => x.text);
+  const limitation = [FIGURE_LEFT_OUT_NOTE, ...lines, ...(said.length ? [] : requirements)];
+  if (!answer.summary.trim()) { const body = [...answer.details, ...limitation]; answer.summary = body[0]; answer.details = body.slice(1); }
+  else answer.details = [...answer.details, ...limitation.filter((l) => !answer.details.includes(l))];
 }
 
 export async function prepareLoopChat(request: ChatRequest): Promise<ChatContext> {
