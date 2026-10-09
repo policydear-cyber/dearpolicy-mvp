@@ -66,7 +66,7 @@ test("S2 broken arm: asks how it happened; never records 'accident' from 'broke 
   const t1 = await send(page, m1);
   expect(t1.visible).toMatch(/accident|illness|how/i);
   expect(t1.visible).not.toMatch(MONEY);
-  expect((t1.visible.match(/\?/g) ?? []).length).toBeLessThanOrEqual(2); // the one question (summary + its card)
+  expect((t1.visible.match(/\?/g) ?? []).length).toBe(1); // the one question, shown once (its card; never repeated in the body)
   const s1 = await last(request);
   expect(s1.state?.ragLoop?.claim?.facts?.cause?.value).not.toBe("accident");
   const t2 = await send(page, m2);

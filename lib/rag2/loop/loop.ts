@@ -102,7 +102,10 @@ function forModel(value: unknown, state: RagLoopState, via: string, ids: string[
 function whyLine(e: EvidenceRef, about: string): string {
   if (e.table?.rowLabel) return e.table.rowLabel;
   const want = new Set((about.toLowerCase().match(/[a-z]{4,}/g) ?? []).map((w) => w.replace(/e?s$/, "")));
-  const lines = e.passage.text.split(/\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const all = e.passage.text.split(/\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  // Round 6 (A3): a heading ("Section 2 - What is covered") never says why a fact matters: prefer wording lines.
+  const wording = all.filter((l) => /[.;:]$/.test(l) || l.split(" ").length > 8);
+  const lines = wording.length ? wording : all;
   const score = (l: string) => (l.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => want.has(w.replace(/e?s$/, ""))).length;
   const best = [...lines].sort((a, b) => score(b) - score(a))[0] ?? "";
   return "“" + (best.length > 160 ? best.slice(0, 157) + "…" : best) + "”";
@@ -389,7 +392,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (stillNeeded.length && !CAUSE_KEYS.has(key) && !sameFact(stillNeeded[0].key, key)) return { result: { ok: false, error: `the calculation still needs ${stillNeeded[0].key} (${stillNeeded[0].why}): ask for exactly that next, one question at a time (fact_key ${stillNeeded[0].key}, citing ${stillNeeded[0].evidenceIds.slice(0, 3).join(", ") || "the calculation's evidence"})` } };
       // Agent F (D15): the cited "why" must be about the fact asked, not any passage that happens to be in the state.
       if (!calcItem && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
-      const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key)} (page ${state.evidence[id].passage.onPage})`).join("; ");
+      const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };

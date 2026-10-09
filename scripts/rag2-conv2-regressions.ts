@@ -241,6 +241,30 @@ async function main() {
     assert.ok(t.answer.citations.some((c) => c.policyId === CARE && c.pageStart === 2));
   });
 
+  // ---------------------------------------------------------------- L3b (new live paraphrase): the PlayWell fixture
+  const PW = doc("PLAYWELL").id;
+  const l3b: ScriptTurn[] = [{ steps: [
+    () => [call("resolve_person", { mention: "Mei" })],
+    () => [call("note_facts", { subject_id: mei, facts: [{ key: "how_it_happened", value: "landed badly on her elbow at gymnastics", words: "Mei landed badly on her elbow at gymnastics this afternoon" }, { key: "injury", value: "dislocated elbow", words: "the clinic says it's dislocated" }] }), call("policies_for", { subject_id: mei, topic: "accident dislocation" })],
+    () => [call("search_passages", { subject_id: mei, k: 10, policy_ids: [PW], query: "dislocation benefit X-ray MRI registered medical practitioner accident" }), call("select_table_value", { subject_id: mei, policy_id: PW, benefit: "Dislocation benefit (per dislocation)", want: "amount" })],
+    (v) => { const s = data(v, "select_table_value"); return [call("ask_user", { kind: "fact", fact_key: "dislocation_imaging_confirmed", subject_id: mei,
+      statements: [{ text: `Mei's PlayWell Junior Accident Cover lists a Dislocation benefit of S$${s.value} per dislocation.`, value_ids: [s.valueId] }],
+      question: "Has the dislocation been confirmed by an X-ray or MRI?", because_evidence_ids: [hit(v, /confirmed by X-ray or MRI/)] })]; },
+  ] }];
+  const pw = await run(l3b, ["Mei landed badly on her elbow at gymnastics this afternoon and the clinic says it's dislocated. Is that something her PlayWell plan helps with?"]);
+  if (process.env.REPRO) console.log(`--- L3b (PlayWell) scripted\n${pw[0].visible}\n`);
+  await check("B4 L3b fixture: Mei's S$600 dislocation benefit binds to the single 'Sum insured' column and is said with its X-ray / MRI condition", () => {
+    const t = pw[0];
+    assert.match(t.content, /S\$600 per dislocation[^.]*\b(?:payable if|only if)\b[^.]*registered medical practitioner[^.]*X-ray or MRI/i, t.content);
+    assert.ok((t.answer.figureBindings ?? []).some((b) => b.value === 600 && b.policyId === PW && b.subjectId === mei), JSON.stringify(t.answer.figureBindings));
+    assert.equal(t.answer.questions.length, 1);
+    assert.equal(count(t.visible, t.answer.questions[0].text), 1);
+    assert.deepEqual(t.trace.gate, []);
+  });
+  await check("B5 the question card says why with policy wording, never a heading", () => {
+    for (const t of [...live3, ...pw]) for (const q of t.answer.questions) assert.doesNotMatch(q.why ?? "", /“Section \d|“Part \d/, q.why);
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2 conv2 regressions ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);
