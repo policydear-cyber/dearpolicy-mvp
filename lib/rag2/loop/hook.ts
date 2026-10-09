@@ -14,7 +14,7 @@ import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
-import { DROPPED_NOTE } from "./compose";
+import { DECISION_NOTE, DROPPED_NOTE, PAYOUT_NOTE, SUM_NOTE } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
@@ -25,6 +25,8 @@ type Save = (args: { conversation: ChatContext["conversation"]; token: ChatConte
 
 export const ESTIMATE_NOTICE = "Indicative estimates are worked out from your documents and what you have told me; they are not a payout, and the insurer decides what it pays.";
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
+/** The composer's caveats an asking turn says before its question (never "nothing could be confirmed"). */
+const ASK_NOTES = new Set([PAYOUT_NOTE, DECISION_NOTE, SUM_NOTE]);
 
 export async function prepareLoopChat(request: ChatRequest): Promise<ChatContext> {
   const family = (await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`, [request.accountId])).rows;
@@ -125,10 +127,21 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
       ? { id: "rag_person", text: p.question, type: "choice", options: p.options.map((o) => o.label), why: "The answer depends on who this is about." }
       : { id: "rag_fact_" + p.factKey, text: p.question, type: p.options?.length ? "choice" : "text", ...(p.options?.length ? { options: p.options } : {}), why: "This changes what your policy pays under: " + p.why };
     answer.mode = p.kind === "fact" ? "fact_finding" : "answer";
-    answer.summary = [...notes, reply.preface, p.question].filter(Boolean).join(" ");
+    // Round 6 (A3): the question is presented once -- by its card (answer.questions). The message body carries only
+    // what is said before it: corrections, then the composed preface / statements (e.g. the identified benefit,
+    // conditionally, cited), bound and gated like any answer.
+    const c = reply.composed ?? null;
+    const said = c ? [...c.sentences.map((s) => s.text), ...(c.notes ?? []).filter((n) => ASK_NOTES.has(n))] : [];
+    answer.summary = [...notes, ...(reply.preface ? [reply.preface] : []), ...said].join(" ");
     answer.questions = [q];
     if (p.kind === "person") answer.personCandidates = p.options.map((o) => ({ id: o.id, label: o.label }));
-    answer.citations = await citationsFor(request.accountId, state, trace.evidenceChosen);
+    if (c) {
+      answer.figureBindings = c.figureBindings;
+      answer.computations = c.computations;
+      if (c.calculations.length) answer.calculations = c.calculations;
+      if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;
+    }
+    answer.citations = await citationsFor(request.accountId, state, [...new Set([...(c?.evidenceIds ?? []), ...trace.evidenceChosen])]);
   } else if (unknownPeople.length && !resolvedSomeone) {
     // Agent P (task 4): the person asked about is not among this household's members. Said plainly, with nothing
     // about anyone outside the household (never whether such a person exists elsewhere), and nothing composed from

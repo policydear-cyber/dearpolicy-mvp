@@ -11,6 +11,10 @@
  *    cites), the person (evidence read for that person) and the benefit (the passage mentions what the sentence is
  *    about).
  *  - unsafeNextStep: a next step never states or promises cover or money.
+ *  - INTERNAL ids: the ids the tools hand the model (evidence e1, table value v1, computation r1, calculation k...),
+ *    tool / field names and record UUIDs are never household-facing: stripInternalIds removes a cited id list the
+ *    model wrote into a sentence ("[e9, e6]", "(evidence e2)") and returns the ids, so the caller keeps them as the
+ *    sentence's citations; internalIdsIn is the check that nothing of the kind is left in visible text.
  */
 import { contentWords } from "./facts";
 
@@ -102,4 +106,22 @@ export function unsafeNextStep(step: string): string | null {
   if (p) return p === "payout" ? "a next step that promises money" : "a next step that states a claim decision";
   if (STEP_COVER.test(step) && !/\b(?:whether|if|check|ask|confirm with|find out)\b/i.test(step)) return "a next step that states cover without evidence";
   return null;
+}
+
+const ID = String.raw`(?:[evr]\d{1,4}|k[0-9a-f]{10})`;
+/** An internal id, tool or field name, or record UUID in household-facing text. */
+export const INTERNAL_ID = new RegExp(String.raw`\b${ID}\b|\b(?:evidence_ids?|value_ids?|result_ids?|subject_id|policy_id|fact_key|select_table_value|search_passages|policies_for|resolve_person|read_page|final_answer|ask_user|note_facts)\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`);
+/** Every internal id / name left in the text (empty when it is household-facing). */
+export function internalIdsIn(text: string): string[] {
+  return [...String(text ?? "").matchAll(new RegExp(INTERNAL_ID.source, "g"))].map((m) => m[0]);
+}
+const ID_LIST = new RegExp(String.raw`\s*[\[(]\s*(?:(?:evidence|values?|results?|sources?|ids?|refs?|see|cf\.?)\s*:?\s*)*${ID}(?:\s*(?:,|;|/|&|and)\s*${ID})*\s*[\])]`, "g");
+const LEAD_LIST = new RegExp(String.raw`\s*\b(?:evidence|value|result|source)s?\s*:?\s*${ID}(?:\s*(?:,|;|/|&|and)\s*${ID})*\b`, "gi");
+/** The text without the internal ids the model wrote into it, and those ids (to be kept as its citations). */
+export function stripInternalIds(text: string): { text: string; ids: string[] } {
+  const ids: string[] = [];
+  const take = (m: string) => { for (const x of m.match(new RegExp(ID, "g")) ?? []) if (!ids.includes(x)) ids.push(x); return ""; };
+  const out = String(text ?? "").replace(ID_LIST, take).replace(LEAD_LIST, take)
+    .replace(/\s+([.,;:!?])/g, "$1").replace(/\(\s*\)|\[\s*\]/g, "").replace(/\s{2,}/g, " ").trim();
+  return { text: out, ids };
 }

@@ -19,7 +19,7 @@ import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
 import { confirmed, contentWords, factConcept, numbersIn } from "./facts";
-import { checkCitedStatement, instructionLines, payoutOrDecision, unsafeNextStep, withoutInstructions, PAYOUT as PAYOUT_WORDS } from "./statements";
+import { checkCitedStatement, instructionLines, internalIdsIn, payoutOrDecision, stripInternalIds, unsafeNextStep, withoutInstructions, PAYOUT as PAYOUT_WORDS } from "./statements";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
 export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement";
@@ -193,12 +193,18 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     cur = i;
     const s = sentencesIn[i];
     // Agent P: names as the household uses them; never "Full Name (Short)'s", never a full name twice in a sentence.
-    let text = tidyNames(String(s.text ?? "").replace(/\s+/g, " ").trim(), people);
+    // Round 6 (A3): ids the model wrote into the sentence ("[e9, e6]") are never shown; the ones a tool returned are
+    // kept as the sentence's citations (the household sees them as its page links), checked like any other.
+    const inline = stripInternalIds(String(s.text ?? "").replace(/\s+/g, " ").trim());
+    let text = tidyNames(inline.text, people);
     if (!text) continue;
-    curEstimate = typeof s.result_id === "string" && !!s.result_id;
-    let evIds = ((s.evidence_ids as string[]) ?? []).filter(Boolean);
-    const valIds = ((s.value_ids as string[]) ?? []).filter(Boolean);
-    const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : null;
+    let evIds = [...new Set([...((s.evidence_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^e\d/.test(id) && ctx.state.evidence[id])])];
+    const valIds = [...new Set([...((s.value_ids as string[]) ?? []).filter(Boolean), ...inline.ids.filter((id) => /^v\d/.test(id) && ctx.tools.values.has(id))])];
+    const inlineResult = inline.ids.find((id) => /^r\d/.test(id) && (ctx.tools.results.has(id) || calcOutcomes(ctx.tools).has(id))) ?? null;
+    const resultId = typeof s.result_id === "string" && s.result_id ? s.result_id : inlineResult;
+    curEstimate = !!resultId;
+    const leak = internalIdsIn(text);
+    if (leak.length) { drop(text, `shows an internal id (${leak.slice(0, 3).join(", ")})`); continue; }
     const subjectId = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : out.subjectId;
     const unknownEv = evIds.filter((id) => !ctx.state.evidence[id]);
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
@@ -304,9 +310,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
   for (const x of out.sentences) x.at ??= cur;
   cur = -1;
   for (const step of Array.isArray(args.nextSteps) ? args.nextSteps : []) {
-    const t = String(step ?? "").trim();
+    const t = stripInternalIds(String(step ?? "")).text;
     if (!t) continue;
     if (moneyFiguresIn(t).length) { drop(t, "a next step may not state a figure"); continue; }
+    if (internalIdsIn(t).length) { drop(t, "a next step may not show an internal id", STEP_NOTE); continue; }
     // Agent F (D8): a next step never states or promises cover, money or a decision.
     const bad = unsafeNextStep(t);
     if (bad) { drop(t, bad, STEP_NOTE); continue; }

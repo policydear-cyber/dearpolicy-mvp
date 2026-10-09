@@ -19,6 +19,7 @@ import { loopLimits } from "@/lib/ai/usage";
 import { CAUSE_KEYS, checkFact, confirmed, EVENT_KEY, factConcept, householdOperandProblem, isoParts, knownFactFor, MECHANISM, normalizeKey, numbersIn, quotedFrom } from "./facts";
 import { calcRef, CLAIMED_AMOUNT_KEY, syncLoopClaimState } from "../calc/claim-record";
 import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions";
+import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
 import { composeFinal, evidenceIdOf, type ComputeCall, type Composed } from "./compose";
@@ -40,7 +41,10 @@ export type LoopInput = { accountId: string; message: string; state: RagLoopStat
   personChoiceId?: string | null };
 export type LoopReply =
   | { kind: "final"; composed: Composed }
-  | { kind: "ask"; pending: LoopPending; preface: string | null }
+  | { kind: "ask"; pending: LoopPending; preface: string | null;
+      /** Round 6 (A3): what the turn says before its question (the preface and statements), composed and checked like
+       * a final_answer (null when it says nothing). The question itself is presented once, as the question card. */
+      composed?: Composed | null }
   | { kind: "fallback"; text: string };
 export type LoopCorrection = { key: string; from: unknown; to: unknown; withdrawn: string[];
   /** Agent F: the facts the withdrawn estimates were worked out from (said back without their figures). */
@@ -71,7 +75,6 @@ export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
 };
 /** Agent F: the household says the person was wrong ("sorry, it was Chloe, not Ethan", "I mixed them up"). */
 const PERSON_CORRECTION = { test: (m: string) => /\b(?:mixed (?:them|it|those|the two) up|mix-?up|i meant|i mean\b|meant to say|not (?:him|her)\b|wrong (?:child|person|kid|son|daughter)|correction|actually it was|it was (?:\w+ ){0,3}not\b|rather than)\b/i.test(m) || /\bnot [A-Z][a-z]+\b/.test(m) };
-const STATEMENT = /\b(?:cover\w*|pays?|payable|limits?|excluded|eligib\w*|benefits?)\b/i;
 
 export function loopToolSpecs(): LoopToolSpec[] {
   return [...RAG_TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })), ...LOOP_ACTIONS];
@@ -260,6 +263,12 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   const refine = async (refs: EvidenceRef[], about?: string | null) => { for (const r of refs) if (r && !r.support) refineEvidence(r, await pagesOf(r.policyId), about ?? null); };
 
+  /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
+  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
+  let askRefused = false;
+  /** The evidence the asked question cites (why it matters). */
+  let askBecause: string[] = [];
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
@@ -330,8 +339,23 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const compound = compoundQuestion(question);
       if (compound) return { result: { ok: false, error: compound } };
       if (moneyFiguresIn(question).length) return { result: { ok: false, error: "a question never states a figure" } };
+      if (internalIdsIn(question).length) return { result: { ok: false, error: "a question never shows an internal id or tool name" } };
       const preface = typeof a.preface === "string" && a.preface.trim() ? a.preface.trim() : null;
-      if (preface && (/\d/.test(preface) || STATEMENT.test(preface) || moneyFiguresIn(preface).length)) return { result: { ok: false, error: "the preface may not state figures or cover; put facts in final_answer with evidence" } };
+      // Round 6 (A3): what is said before the question (preface, statements) is verified, not banned -- composed by the
+      // same composer as final_answer (and so, when saved, checked by the same gate). Anything it would not show is
+      // refused once with the composer's reason, so the model can cite it, say it conditionally, or leave it out.
+      const spoken = [...(preface ? [{ text: preface }] : []), ...(Array.isArray(a.statements) ? (a.statements as Record<string, unknown>[]) : [])];
+      if (spoken.some((x) => /\?/.test(String(x?.text ?? "")))) return { result: { ok: false, error: "statements and the preface state; they never ask. Ask exactly one question, in question" } };
+      if (spoken.length && a.kind === "person" && Array.isArray(a.statements) && a.statements.length) return { result: { ok: false, error: "a person question is asked on its own (no statements)" } };
+      let composed: Composed | null = null;
+      if (spoken.length) {
+        composed = composeFinal({ sentences: spoken, subjectId: (a.subject_id as string) ?? null }, composeCtx());
+        if (composed.dropped.length && !askRefused) {
+          askRefused = true;
+          return { result: { ok: false, error: "not shown before the question: " + composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" (${d.reason})`).join("; ") + ". State only what the cited evidence prints (a benefit with its conditions, cited with evidence_ids / value_ids), or leave it out." } };
+        }
+        if (!composed.sentences.length) composed = null;
+      }
       if (a.kind === "person") {
         const options = ((a.options as string[]) ?? []).filter((id) => householdIds.has(id));
         if (options.length < 2) return { result: { ok: false, error: "a person question offers two or more household members (the candidates resolve_person returned)" } };
@@ -339,7 +363,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         const purpose = lastAmbiguous?.self && options.every((id) => lastAmbiguous!.labels.has(id)) ? "speaker" as const : "subject" as const;
         const label = (id: string) => { const p = input.people.find((x) => x.id === id)!; const rel = candidateLabels.get(id); return rel && purpose === "subject" ? `${p.name} (your ${rel})` : p.name; };
         const pending: LoopPending = { kind: "person", question, mention: typeof a.mention === "string" ? a.mention : null, options: options.map((id) => ({ id, label: label(id) })), turn: state.turn, purpose };
-        return { result: { ok: true }, terminal: { kind: "ask", pending, preface } };
+        return { result: { ok: true }, terminal: { kind: "ask", pending, preface: null, composed } };
       }
       const key = normalizeKey(a.fact_key);
       if (!key) return { result: { ok: false, error: "a fact question needs the fact_key its answer is recorded under" } };
@@ -367,8 +391,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!calcItem && !relevantEvidence(question, key, because.map((id) => [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].label ?? "", state.evidence[id].passage.text].join("\n")), input.people.map((p) => p.name))) return { result: { ok: false, error: `the cited evidence (${because.join(", ")}) does not make ${key} matter: cite the benefit or clause whose wording depends on it, or do not ask` } };
       const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key)} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
+      askBecause = because;
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
-      return { result: { ok: true }, terminal: { kind: "ask", pending, preface } };
+      return { result: { ok: true }, terminal: { kind: "ask", pending, preface: null, composed } };
     }
     // final_answer
     const answerSubject = (a.subject_id as string) ?? state.subjectId;
@@ -383,7 +408,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const mapped = ids.map((id) => (stale.has(id) ? liveEquivalent(state, stale, id) ?? id : id));
       return { ...x, evidence_ids: [...new Set(mapped)] };
     });
-    const composed = composeFinal({ sentences: sentencesIn, nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, { state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+    const composed = composeFinal({ sentences: sentencesIn, nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, composeCtx());
     if (!composed.sentences.length && !composed.dropped.length) return { result: { ok: false, error: "final_answer needs at least one sentence" } };
     return { result: { ok: true }, terminal: { kind: "final", composed } };
   };
@@ -466,6 +491,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   }
   else if (done.kind === "ask") {
     final = done;
+    const c = done.composed;
+    if (c) {
+      trace.dropped = c.dropped;
+      trace.evidenceChosen.push(...c.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id)));
+      for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
+      if (state.claim?.subjectId) for (const k of c.calcs) if (k.subjectId === state.claim.subjectId) (state.claim.calcs ??= {})[k.calcId] = calcRef(k, state.claim, (k.evidence ?? []).map((e) => evidenceIdOf(state, e, "calculate")), state.turn);
+    }
     // A person question (who is meant / who is typing) asked while a claim question is open: the claim question is
     // set aside, not lost, and put back once the person is settled.
     if (done.pending.kind === "person" && state.pending?.kind === "fact") state.parkedPending = state.pending;
@@ -497,7 +529,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // event happened, the sentence about accidents; otherwise the one closest to the question.
   if (final.kind === "ask" && final.pending.kind === "fact") {
     const p = final.pending;
-    for (const id of trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
+    for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
   }
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
   // Agent F (D6): remember the names of the documents this turn's evidence came from (readable now).
