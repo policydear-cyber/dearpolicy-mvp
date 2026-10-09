@@ -120,6 +120,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "rag2:conv4-test",
   "rag2:conv5-test",
   "rag2:conv6-test",
+  "rag2:conv7-test",
   "rag2:deletion-semantics-test",
   "ingest:scanned-detect-test",
   "rag2:calc-ingested-test",

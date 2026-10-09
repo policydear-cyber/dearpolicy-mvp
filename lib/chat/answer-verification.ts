@@ -355,13 +355,19 @@ function bindingsOf(answer: ChatAnswer): FigureBinding[] {
 async function loadContext(accountId: string, answer: ChatAnswer, userText: string): Promise<Ctx> {
   const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.calculations ?? []).map((k) => k?.policyId), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
   const docs = new Map<string, Doc>();
+  // Whether this household has any removed (deleted / superseded) amendment document at all -- asked in the same query
+  // as the cited documents, so the metadata read below costs nothing for the many households that have none.
+  let anyRemovedAmendment = false;
   if (ids.length) {
-    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; role: string | null; effective: string | null; expiry: string | null }>(
+    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; role: string | null; effective: string | null; expiry: string | null; removed_amendment: boolean }>(
       `SELECT p.id::text AS id, p.family_member_id::text AS owner, p.file_hash, (p.superseded_at IS NOT NULL) AS superseded,
               (coalesce(p.quarantine_status,'') IN ('scan_clean','not_scanned_prototype')) AS usable,
               to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'document_role' AS role,
-              left(to_jsonb(p)->>'effective_date', 10) AS effective, left(to_jsonb(p)->>'renewal_or_expiry_date', 10) AS expiry
+              left(to_jsonb(p)->>'effective_date', 10) AS effective, left(to_jsonb(p)->>'renewal_or_expiry_date', 10) AS expiry,
+              EXISTS (SELECT 1 FROM policies q WHERE q.account_id=p.account_id AND (q.lifecycle_state<>'active' OR q.superseded_at IS NOT NULL)
+                        AND coalesce(to_jsonb(q)->>'document_role','') ~* 'endorse|alteration|amendment|rider|addendum') AS removed_amendment
          FROM policies p WHERE p.account_id=$1 AND p.id::text=ANY($2::text[]) AND ${activePredicate("p")}`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
+    anyRemovedAmendment = rows.some((r) => !!r.removed_amendment);
     for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map(), product: r.product ?? null, policyNumber: r.policy_number ?? null, role: r.role ?? null, effective: r.effective ?? null, expiry: r.expiry ?? null });
     if (docs.size) {
       const members = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, [...docs.keys()]]).catch(() => ({ rows: [] }))).rows;
@@ -392,7 +398,7 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
   // Round 8: removed (deleted / superseded) amendment documents of the cited policies -- read from document METADATA
   // only; a removed document's text is never loaded. Active documents' text is used only for an explicit reversal.
   const removals = new Map<string, AmendmentRemoval[]>();
-  if (docs.size) {
+  if (docs.size && anyRemovedAmendment) {
     const meta = (await query<Record<string, unknown>>(
       `SELECT p.id::text AS id, p.document_role AS role, p.policy_number, to_jsonb(p)->>'group_policy_number' AS group_policy_number,
               (p.lifecycle_state='active') AS active, (p.superseded_at IS NOT NULL) AS superseded,
@@ -859,6 +865,8 @@ function computationProblem(r: ComputationRecord, f: StatedFigure, sentence: str
 // condition established or not applicable; a day-count step must use the rule the cited wording states); and the
 // sentence worded as what it is (an estimate says so and is never a payout or a total; an illustration says "if" and
 // answers a what-if the household asked). A number merely printed on the cited page never validates a calculation.
+/** "this is not a confirmed payout", "isn't guaranteed": a negated payout / guarantee says the opposite of one. */
+const CALC_NEGATED_PAYOUT = /\b(?:not|isn['’]t|aren['’]t|never)\s+(?:an?\s+)?(?:(?:confirmed|guaranteed|final|promised|actual)\s+)?(?:pay-?outs?|guarantee(?:d|s)?|payments?)\b|\bno guarantee\b/gi;
 const CALC_PAYOUT = /\bpay-?outs?\b|\bwill (?:be )?pa(?:y|id)\b|\byou(?:’|')?ll (?:get|receive)\b|\byou will (?:get|receive)\b|\bguarantee\w*\b/i;
 const CALC_TOTAL = /\b(?:totals?|totall?ing|altogether|combined|in all|add(?:s|ed)? up)\b/i;
 const CALC_ATTRIBUTED = /\byour (?:own )?(?:figures?|bill|amount|dates?|times?|words)\b|\b(?:as )?you (?:gave|told|said|mentioned|quoted|wrote)\b|\bthe (?:bill|amount|dates?|times?) you\b/i;
@@ -936,7 +944,7 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
   if (r.kind !== "indicative_estimate" && r.kind !== "conditional_illustration") return "the calculation’s kind is not an illustration or an indicative estimate";
   if (!r.subjectId || !r.policyId || !r.benefit) return "the calculation does not name its person, policy and benefit";
   // Wording.
-  if (CALC_PAYOUT.test(sentence)) return "a calculated benefit is stated as a payout";
+  if (CALC_PAYOUT.test(sentence.replace(CALC_NEGATED_PAYOUT, " "))) return "a calculated benefit is stated as a payout";
   if (r.kind === "indicative_estimate") {
     if (!/\bindicative estimate\b/i.test(sentence)) return "an indicative estimate is not labelled as one";
     if (CALC_TOTAL.test(sentence)) return "an indicative estimate is stated as (part of) a total";
@@ -949,8 +957,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     const assumedTimes = r.operands.filter((o) => o?.source === "assumption" && (o.unit === "date" || o.unit === "datetime"));
     const resolvesDuration = assumedTimes.length > 0 && assumedTimes.every((o) => o.source === "assumption" && DURATION_WORDS.test(o.attribution ?? "") && quotedBy(o.attribution, [ctx.userText]));
     if (!WHAT_IF.test(ctx.userText) && !resolvesDuration) return "an illustration is given though the household did not ask a what-if";
-    // Never the figure for their actual stay: the sentence states the assumption it rests on.
-    if (assumedTimes.length && !STATES_ASSUMPTION.test(sentence)) return "an illustration does not state the times it assumes";
+    // Never the figure for their actual stay: times WE assumed for a duration they gave are stated as an assumption
+    // ("If you mean exactly 72 hours ..."); a what-if in their own times is stated by its own "if" clause.
+    if (resolvesDuration && !STATES_ASSUMPTION.test(sentence)) return "an illustration does not state the times it assumes";
   }
   // Operands.
   for (const o of r.operands) {

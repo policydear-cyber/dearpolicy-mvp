@@ -59,3 +59,12 @@ FAIL, 5 checks:
 - Q4: the follow-up that followed the re-ask could not be answered from the fixture.
 
 R1 passes on alternative (a). The committed run folder itself is not rewritten.
+
+## Q2 — accidental death, child vs adult (added after run ingest-live-3)
+| | T's original | E1's translation | Now |
+|---|---|---|---|
+| Other figures | Forbidden 3: "S$20,000 (that is the separate Kestrel Bay JuniorShield child accidental death benefit) presented as the Meridian figure **without saying it comes from the other policy**" -- T allows it when attributed | `must_include` S$40,000, S$150,000 only; the whole-answer rule took S$20,000 from no fact, so any mention failed | **`figures_also`** S$20,000 (printed on hx-scanned.pdf p1, Table of Benefits row 5, "Child accidental death"), and **`forbidden_sentences`**: a sentence stating S$20,000 without naming JuniorShield or Kestrel Bay fails. *Coordinator (encodes T's own item).* |
+
+Why: run ingest-live-3 said "Isla's JuniorShield certificate also lists “Child accidental death” at S$20,000" -- correct,
+attributed to the other policy as T's original allows -- and the first translation failed it. The run's own report keeps
+its original verdict; the re-grade under this correction is reported separately in ROUND8-RESULTS.md.

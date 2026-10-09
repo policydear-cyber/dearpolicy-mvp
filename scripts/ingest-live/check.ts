@@ -79,9 +79,12 @@ export function loopDiagnostics(trace: any | null) {
 }
 
 /** Each browser turn with its stored assistant message (the next assistant message in the same conversation after
- * the same user message) and the loop's trace for it. */
+ * the same user message, by message_order) and the loop's trace for it. */
 export function pairTurns(transcript: any[], dumpF: any) {
-  const msgs: any[] = dumpF?.tables?.chat_messages ?? [];
+  // In the app's own order (message_order, as the chat history reads them): a user message and its answer are saved in
+  // one transaction with the same created_at, so the dump's row order alone can put the answer first.
+  const raw: any[] = dumpF?.tables?.chat_messages ?? [];
+  const msgs: any[] = raw.every((m) => m.message_order != null) ? [...raw].sort((a, b) => Number(a.message_order) - Number(b.message_order)) : raw;
   const used = new Set<number>();
   const stored = (t: any) => {
     for (let i = 0; i < msgs.length; i++) {

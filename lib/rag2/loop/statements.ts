@@ -134,11 +134,14 @@ export function internalIdsIn(text: string): string[] {
 }
 const ID_LIST = new RegExp(String.raw`\s*[\[(]\s*(?:(?:evidence|values?|results?|sources?|ids?|refs?|see|cf\.?)\s*:?\s*)*${ID}(?:\s*(?:,|;|/|&|and)\s*${ID})*\s*[\])]`, "g");
 const LEAD_LIST = new RegExp(String.raw`\s*\b(?:evidence|value|result|source)s?\s*:?\s*${ID}(?:\s*(?:,|;|/|&|and)\s*${ID})*\b`, "gi");
+/** A model's own inline citation marker (private-use delimiters: U+E200 "cite" U+E202 id [U+E202 id ...] U+E201), as
+ * gpt-6-luna writes it into final_answer text -- its ids are the sentence's citations, never shown. */
+const MODEL_CITE = new RegExp(String.raw`\s*\uE200\s*cite\s*(?:\uE202\s*${ID}\s*)+\uE201`, "g");
 /** The text without the internal ids the model wrote into it, and those ids (to be kept as its citations). */
 export function stripInternalIds(text: string): { text: string; ids: string[] } {
   const ids: string[] = [];
   const take = (m: string) => { for (const x of m.match(new RegExp(ID, "g")) ?? []) if (!ids.includes(x)) ids.push(x); return ""; };
-  const out = String(text ?? "").replace(ID_LIST, take).replace(LEAD_LIST, take)
+  const out = String(text ?? "").replace(MODEL_CITE, take).replace(/[\uE200-\uE2FF]/g, "").replace(ID_LIST, take).replace(LEAD_LIST, take)
     .replace(/\s+([.,;:!?])/g, "$1").replace(/\(\s*\)|\[\s*\]/g, "").replace(/\s{2,}/g, " ").trim();
   return { text: out, ids };
 }

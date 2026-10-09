@@ -59,6 +59,10 @@ t("a citation to the wrong page fails", () => assert.ok(failedChecks(folder((f) 
 t("no follow-up where one is needed fails", () => assert.ok(failedChecks(folder((f) => { f["transcript.json"][0].pendingQuestion = null; })).some((c) => /asks a follow-up/.test(c))));
 t("an error turn is not useful", () => assert.ok(failedChecks(folder((f) => { f["transcript.json"][2].error = "Something went wrong"; })).some((c) => /useful reply/.test(c))));
 t("after deletion, citing the deleted source fails", () => assert.ok(failedChecks(folder((f) => { f["dump-final/dump.json"].tables.chat_messages[5].answer_json.citations = [{ policyId: P.end, pageStart: 1 }]; })).some((c) => /does not rely on the deleted b.pdf|does not cite b.pdf/.test(c))));
+t("an answer saved in the same transaction as its question (same created_at, listed first in the dump) is paired by message_order", () => {
+  const v = grade(folder((f) => { const m = f["dump-final/dump.json"].tables.chat_messages; m.forEach((x: any, i: number) => { x.message_order = i + 1; x.created_at = "2026-10-09T10:00:0" + Math.floor(i / 2) + ".000Z"; }); [m[2], m[3]] = [m[3], m[2]]; }));
+  assert.equal(v.verdict, "PASS", JSON.stringify(v.checks.filter((c) => !c.ok)));
+});
 t("an unread scanned page fails extraction", () => assert.ok(failedChecks(folder((f) => { f["dump-processing/dump.json"].tables.policy_pages[1] = { policy_id: P.end, page_number: 1, text: "", extraction_method: "unreadable" }; })).some((c) => /page 1 text extracted/.test(c))));
 t("a wrong automatic link fails", () => assert.ok(failedChecks(folder((f) => { f["linking.json"][0].linked = ["Simon Alastair Hartwell"]; })).some((c) => /linked automatically/.test(c))));
 t("placeholder expectations are never a PASS", () => assert.equal(grade(folder((f) => { f["EXPECTED.json"] = { ...expected, placeholder: true }; })).verdict, "UNGRADED (placeholder EXPECTED.json)"));

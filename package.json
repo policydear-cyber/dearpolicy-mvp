@@ -153,6 +153,7 @@
     "rag2:conv4-test": "node --import tsx scripts/rag2-conv4-regressions.ts",
     "rag2:conv5-test": "node --import tsx scripts/rag2-conv5-regressions.ts",
     "rag2:conv6-test": "node --import tsx scripts/rag2-conv6-regressions.ts",
+    "rag2:conv7-test": "node --import tsx scripts/rag2-conv7-regressions.ts",
     "rag2:deletion-semantics-test": "node --import tsx scripts/rag2-deletion-semantics-regressions.ts",
     "ingest:scanned-detect-test": "node --import tsx scripts/ingest-live/scanned-detect-test.ts",
     "rag2:calc-ingested-test": "node --import tsx scripts/rag2-calc-ingested-regressions.ts",

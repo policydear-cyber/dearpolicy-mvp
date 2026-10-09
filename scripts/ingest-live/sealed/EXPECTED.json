@@ -103,7 +103,17 @@
           "page": 1
         }
       ],
-      "ask_follow_up": false
+      "ask_follow_up": false,
+      "figures_also": [
+        "S$20,000"
+      ],
+      "forbidden_sentences": [
+        {
+          "pattern": "S\\$20,000",
+          "unless": "JuniorShield|Kestrel",
+          "why": "the JuniorShield child accidental death benefit presented as the Meridian figure without naming the other policy (source Q2 forbidden 3)"
+        }
+      ]
     },
     "Q3": {
       "person": "Felix Oran Hartwell",

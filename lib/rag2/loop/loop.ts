@@ -391,6 +391,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     }
     return { composed: out, repair: null };
   };
+  /** Composer drop reasons that are about wording only (the figure itself was not refused). */
+  const FORM_DROP = /^shows an internal id|^calls (?:a calculated benefit|an amount) a payout/;
   /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
   let gateRepaired = false;
   /** The answer as first composed: kept if the model does not answer the repair (error, limit) -- the hook's gate then
@@ -406,7 +408,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // The same paragraphs the hook shows (a removal limitation kept with the figure it qualifies).
     const texts = keepLimitationWithFigure([...c.sentences.map((s) => s.text), ...(c.notes ?? [])]);
     const dateDrops = c.dropped.some((d) => d.reason.startsWith(DATE_ABSENCE_REASON));
-    if (!dateDrops && !texts.length) return null;
+    // Round 8b: a figure sentence the composer left out only for its WORDING (an id shown in it, a calculated amount
+    // called a payout) is part of the same one repair -- the model restates it; nothing is rewritten by us.
+    const formDrops = c.dropped.filter((d) => FORM_DROP.test(d.reason) && /\d/.test(d.sentence));
+    if (!dateDrops && !formDrops.length && !texts.length) return null;
     const draft = { mode: "answer", summary: texts[0] ?? "", details: texts.slice(1), claimItems: [], nextSteps: c.nextSteps, confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], figureBindings: c.figureBindings, computations: c.computations, ...(c.calculations.length ? { calculations: c.calculations } : {}) } as unknown as ChatAnswer;
     let problems: Awaited<ReturnType<typeof verifyAnswerFigures>> = [];
     if (texts.length) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true }); } catch { return null; }
@@ -420,6 +425,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       return [`"${own.text}" -- ${p.figure ? p.figure + ": " : ""}${p.reason}${ids.length ? ` (it cites ${ids.join(", ")})` : ""}`];
     });
     for (const d of c.dropped) if (d.reason.startsWith(DATE_ABSENCE_REASON)) lines.push(`"${d.sentence}" -- ${d.reason}`);
+    for (const d of formDrops) lines.push(`"${d.sentence}" -- left out: ${d.reason}; restate it without ids in the text (put them in evidence_ids / value_ids / result_id) and without calling an amount paid, owed or a payout`);
     if (!lines.length) return null;
     return `the save-time check would not show ${lines.length > 1 ? "these sentences" : "this sentence"}: ${[...new Set(lines)].join("; ")}. Call final_answer again with the same sentences, rewriting only ${lines.length > 1 ? "these" : "this one"} so that what the check says is missing or wrong is fixed: if it says a limitation is not stated (e.g. an amendment document was removed, so the current amount may differ), keep the figure and state that limitation in the same sentence; state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. "previously X, and Y from <date>"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.`;
   };

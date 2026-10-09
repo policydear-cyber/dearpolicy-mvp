@@ -21,7 +21,7 @@ import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
 import { CAUSE_KEYS, confirmed, contentWords, EVENT_KEY, factConcept, numbersIn } from "./facts";
-import { checkCitedStatement, instructionLines, internalIdsIn, payoutOrDecision, stripInternalIds, unsafeNextStep, withoutInstructions, PAYOUT as PAYOUT_WORDS } from "./statements";
+import { checkCitedStatement, instructionLines, internalIdsIn, payoutOrDecision, stripInternalIds, unsafeNextStep, withoutInstructions, withoutNegatedDecisions, PAYOUT as PAYOUT_WORDS } from "./statements";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
 export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: boolean; factKeys: string[]; kind?: "printed" | "conditional_illustration" | "indicative_estimate" | "requirement";
@@ -514,7 +514,8 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
   const evidenceIds = () => [...new Set([...evIds, ...c.evidence.map((e) => evidenceIdOf(ctx.state, e)), ...recordRuleEvidence(c, ctx)])];
   if (c.kind === "indicative_estimate" || c.kind === "conditional_illustration") {
     if (!c.record || c.amount == null || !c.currency) { drop(text, "the calculation has no result"); return; }
-    if (PAYOUT.test(text)) { drop(text, "calls a calculated benefit a payout"); return; }
+    // A negated payout word ("this is not a confirmed payout") says the opposite of a payout (as payoutOrDecision reads it).
+    if (PAYOUT.test(withoutNegatedDecisions(text))) { drop(text, "calls a calculated benefit a payout"); return; }
     let factKeys: string[] = [];
     if (c.kind === "indicative_estimate") {
       if (!/\bindicative estimate\b/i.test(text)) text = "Indicative estimate: " + text;
