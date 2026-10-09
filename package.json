@@ -167,6 +167,7 @@
     "rag2:live-seed": "node --import tsx e2e/support/seed-rag2-live.ts",
     "rag2:live-attribution-test": "node --import tsx scripts/rag2-live/attribution-regressions.ts",
     "rag2:live-fetch-guard-pdf-test": "node --import tsx scripts/rag2-live/fetch-guard-pdf-regressions.ts",
+    "trial:guard-test": "node --import tsx scripts/trial/trial-guard-regressions.ts",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",
     "ingest:live-check": "node --import tsx scripts/ingest-live/check.ts",
     "ingest:live-checker-test": "node --import tsx scripts/ingest-live/check-regressions.ts",

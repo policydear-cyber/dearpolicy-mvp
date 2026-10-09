@@ -18,3 +18,4 @@ logs
 .e2e-auth-seed.json
 .e2e-auth-households
 .e2e-injury-seed.json
+.trial/
