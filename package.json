@@ -147,6 +147,7 @@
     "rag2:units-test": "node --import tsx scripts/rag2-units-regressions.ts",
     "rag2:dimensions-test": "node --import tsx scripts/rag2-dimensions-regressions.ts",
     "rag2:conv2-test": "node --import tsx scripts/rag2-conv2-regressions.ts",
+    "rag2:conv3-test": "node --import tsx scripts/rag2-conv3-regressions.ts",
     "routing:test": "node --import tsx scripts/routing-regressions.ts",
     "rag2:gaps-test": "node --import tsx scripts/rag2-gaps-regressions.ts",
     "rag2:presentation-test": "node --import tsx scripts/rag2-presentation-regressions.ts",
