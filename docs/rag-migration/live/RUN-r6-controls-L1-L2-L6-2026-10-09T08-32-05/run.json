@@ -1,0 +1,3704 @@
+{
+  "testedCodeSha": "8bb117e16c747d9b65e0a6c6c88cc458c5f3324b",
+  "requestSha": "5fbff862cff5da96955218162244c9eb00ae5737",
+  "modelsRequested": {
+    "CHAT_MODEL": "openai:gpt-6-luna",
+    "JUDGEMENT_MODEL": "openai:gpt-6-luna",
+    "NARRATION_MODEL": "openai:gpt-6-luna",
+    "READING_MODEL": "openai:gpt-6-luna"
+  },
+  "providerModels": [
+    "gpt-6-luna"
+  ],
+  "requestSettingsSent": [
+    {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  ],
+  "budgetUsed": {
+    "capUsd": 0.482313,
+    "spentUsd": 0.0028805899999999997,
+    "reservedUsd": 0,
+    "remainingUsd": 0.47943241,
+    "calls": 14,
+    "refusals": 0,
+    "open": 0,
+    "failed": 0
+  },
+  "perCall": [
+    {
+      "seq": 1,
+      "scenario": "L1",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4583,
+      "output": 17,
+      "cached": 4440,
+      "reasoning": 0,
+      "reservedUsd": 0.0019844,
+      "chargedUsd": 0.00006720000000000001,
+      "upstreamMs": 1157
+    },
+    {
+      "seq": 2,
+      "scenario": "L1",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4697,
+      "output": 41,
+      "cached": 4457,
+      "reasoning": 0,
+      "reservedUsd": 0.0020077,
+      "chargedUsd": 0.00008907,
+      "upstreamMs": 1506
+    },
+    {
+      "seq": 3,
+      "scenario": "L1",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 5679,
+      "output": 157,
+      "cached": 4571,
+      "reasoning": 0,
+      "reservedUsd": 0.0021501999999999997,
+      "chargedUsd": 0.00023501000000000001,
+      "upstreamMs": 2075
+    },
+    {
+      "seq": 4,
+      "scenario": "L1",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 7602,
+      "output": 101,
+      "cached": 5553,
+      "reasoning": 0,
+      "reservedUsd": 0.0024301000000000006,
+      "chargedUsd": 0.00031093,
+      "upstreamMs": 2800
+    },
+    {
+      "seq": 5,
+      "scenario": "L2",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4585,
+      "output": 17,
+      "cached": 4440,
+      "reasoning": 0,
+      "reservedUsd": 0.0019852,
+      "chargedUsd": 0.00006740000000000001,
+      "upstreamMs": 968
+    },
+    {
+      "seq": 6,
+      "scenario": "L2",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4696,
+      "output": 42,
+      "cached": 4459,
+      "reasoning": 0,
+      "reservedUsd": 0.002008,
+      "chargedUsd": 0.00008929000000000001,
+      "upstreamMs": 1522
+    },
+    {
+      "seq": 7,
+      "scenario": "L2",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 5674,
+      "output": 159,
+      "cached": 4570,
+      "reasoning": 0,
+      "reservedUsd": 0.0021512,
+      "chargedUsd": 0.00023560000000000003,
+      "upstreamMs": 2240
+    },
+    {
+      "seq": 8,
+      "scenario": "L2",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 8039,
+      "output": 138,
+      "cached": 5548,
+      "reasoning": 0,
+      "reservedUsd": 0.0025112,
+      "chargedUsd": 0.00037358000000000004,
+      "upstreamMs": 2248
+    },
+    {
+      "seq": 9,
+      "scenario": "L2",
+      "turn": 2,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4645,
+      "output": 17,
+      "cached": 0,
+      "reasoning": 0,
+      "reservedUsd": 0.0019944,
+      "chargedUsd": 0.000473,
+      "upstreamMs": 834
+    },
+    {
+      "seq": 10,
+      "scenario": "L2",
+      "turn": 2,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4759,
+      "output": 107,
+      "cached": 4519,
+      "reasoning": 0,
+      "reservedUsd": 0.0020176,
+      "chargedUsd": 0.00012269,
+      "upstreamMs": 1701
+    },
+    {
+      "seq": 11,
+      "scenario": "L2",
+      "turn": 2,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 8257,
+      "output": 76,
+      "cached": 4633,
+      "reasoning": 0,
+      "reservedUsd": 0.0025091999999999996,
+      "chargedUsd": 0.00044673,
+      "upstreamMs": 1543
+    },
+    {
+      "seq": 12,
+      "scenario": "L2",
+      "turn": 2,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 8608,
+      "output": 105,
+      "cached": 8131,
+      "reasoning": 0,
+      "reservedUsd": 0.0025702,
+      "chargedUsd": 0.00018151,
+      "upstreamMs": 1810
+    },
+    {
+      "seq": 13,
+      "scenario": "L6",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4594,
+      "output": 19,
+      "cached": 4440,
+      "reasoning": 0,
+      "reservedUsd": 0.0019865,
+      "chargedUsd": 0.00006929999999999999,
+      "upstreamMs": 970
+    },
+    {
+      "seq": 14,
+      "scenario": "L6",
+      "turn": 1,
+      "model": "gpt-6-luna",
+      "providerModel": "gpt-6-luna",
+      "status": 200,
+      "refused": null,
+      "input": 4674,
+      "output": 108,
+      "cached": 4468,
+      "reasoning": 0,
+      "reservedUsd": 0.0020051,
+      "chargedUsd": 0.00011928,
+      "upstreamMs": 1494
+    }
+  ],
+  "promptObserved": {
+    "systemPromptSha256": [
+      "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797"
+    ],
+    "toolSchemaSha256": [
+      "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15"
+    ],
+    "settings": [
+      {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      }
+    ]
+  },
+  "availability": {
+    "status": "200",
+    "id": "gpt-6-luna"
+  },
+  "label": "LIVE MODEL RUN",
+  "runId": "r6-controls-L1-L2-L6",
+  "mode": "direct",
+  "preflight": false,
+  "keyNote": null,
+  "startedAt": "2026-10-09T08:32:05.878Z",
+  "commit": "5fbff862cff5da96955218162244c9eb00ae5737",
+  "tree": "967c382c85cd99a6488955410749083e26752193",
+  "dirty": false,
+  "buildId": "nqdVZ6IwdQ-jARiK36zI7",
+  "model": {
+    "requested": "openai:gpt-6-luna",
+    "pricePerMillion": {
+      "input": 0.1,
+      "output": 0.5,
+      "cachedInput": 0.01
+    },
+    "settings": {
+      "temperature": 0,
+      "max_completion_tokens": 2000,
+      "tool_choice": "required",
+      "parallel_tool_calls": true,
+      "reasoning_effort": "none"
+    }
+  },
+  "prompt": {
+    "version": "rag2-loop-v5",
+    "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+    "toolSchemaSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+    "tools": 10
+  },
+  "budget": {
+    "runCapUsd": 0.482313,
+    "meterRunMaxUsd": 0.482313,
+    "turnMaxUsd": 0.05,
+    "maxCallsPerTurn": 12,
+    "maxTokensPerTurn": 80000,
+    "maxOutputTokensPerCall": 2000,
+    "retries": 1
+  },
+  "relay": null,
+  "conversations": [
+    {
+      "scenario": "L1",
+      "title": "Direct factual question",
+      "conversationId": "62356018-100e-4bc5-8485-30e93fe68b20",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "How much ICU cash does the CareDay plan pay for Grace?",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "Grace’s CareDay plan lists ICU cash of S$200 for each complete 24 hours in intensive care, up to 30 days per year; it is in addition to hospital cash.",
+          "timings": {
+            "acceptedMs": 355,
+            "firstAssistantPersistedMs": 8136,
+            "answerSeenMs": 8243,
+            "modelMs": 7549,
+            "upstreamMs": 7538,
+            "relayMs": 0
+          },
+          "calls": [
+            {
+              "seq": 1,
+              "at": "2026-10-09T08:32:08.411Z",
+              "estInputTokens": 9654,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0019654,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 2,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4583,
+                "output": 17,
+                "cached": 4440
+              },
+              "latencyMs": 1163,
+              "upstreamMs": 1163,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 2,
+              "at": "2026-10-09T08:32:09.590Z",
+              "estInputTokens": 9880,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.001988,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 4,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4697,
+                "output": 41,
+                "cached": 4457
+              },
+              "latencyMs": 1508,
+              "upstreamMs": 1508,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 3,
+              "at": "2026-10-09T08:32:11.116Z",
+              "estInputTokens": 11297,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0021297,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 6,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 5679,
+                "output": 157,
+                "cached": 4571
+              },
+              "latencyMs": 2076,
+              "upstreamMs": 2076,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 4,
+              "at": "2026-10-09T08:32:13.236Z",
+              "estInputTokens": 14076,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0024076,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 9,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 7602,
+                "output": 101,
+                "cached": 5553
+              },
+              "latencyMs": 2802,
+              "upstreamMs": 2802,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 1,
+              "at": "2026-10-09T08:32:08.412Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 9844,
+              "reservedUsd": 0.0019844,
+              "chargedUsd": 0.00006720000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1157,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4583,
+                "output": 17,
+                "cached": 4440,
+                "reasoning": 0
+              },
+              "scenario": "L1",
+              "turn": 1
+            },
+            {
+              "seq": 2,
+              "at": "2026-10-09T08:32:09.591Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 10077,
+              "reservedUsd": 0.0020077,
+              "chargedUsd": 0.00008907,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1506,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4697,
+                "output": 41,
+                "cached": 4457,
+                "reasoning": 0
+              },
+              "scenario": "L1",
+              "turn": 1
+            },
+            {
+              "seq": 3,
+              "at": "2026-10-09T08:32:11.116Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 11502,
+              "reservedUsd": 0.0021501999999999997,
+              "chargedUsd": 0.00023501000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 2075,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 5679,
+                "output": 157,
+                "cached": 4571,
+                "reasoning": 0
+              },
+              "scenario": "L1",
+              "turn": 1
+            },
+            {
+              "seq": 4,
+              "at": "2026-10-09T08:32:13.237Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 14301,
+              "reservedUsd": 0.0024301000000000006,
+              "chargedUsd": 0.00031093,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 2800,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 7602,
+                "output": 101,
+                "cached": 5553,
+                "reasoning": 0
+              },
+              "scenario": "L1",
+              "turn": 1
+            }
+          ],
+          "modelExecutions": [
+            {
+              "attempt_index": 0,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4583,
+              "output_tokens": 17,
+              "cached_tokens": 4440,
+              "cost_usd": 0.000067,
+              "latency_ms": 1164,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:09.579Z"
+            },
+            {
+              "attempt_index": 1,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4697,
+              "output_tokens": 41,
+              "cached_tokens": 4457,
+              "cost_usd": 0.000089,
+              "latency_ms": 1509,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:11.100Z"
+            },
+            {
+              "attempt_index": 2,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 5679,
+              "output_tokens": 157,
+              "cached_tokens": 4571,
+              "cost_usd": 0.000235,
+              "latency_ms": 2077,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:13.193Z"
+            },
+            {
+              "attempt_index": 3,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 7602,
+              "output_tokens": 101,
+              "cached_tokens": 5553,
+              "cost_usd": 0.000311,
+              "latency_ms": 2802,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:16.039Z"
+            }
+          ],
+          "relay": [],
+          "tokens": {
+            "input": 22561,
+            "output": 316
+          },
+          "costUsd": {
+            "charged": 0.00070221,
+            "reserved": 0.0085724,
+            "ledger": 0.0007019999999999999
+          }
+        }
+      ],
+      "totalMs": 8250,
+      "firstUsefulResponseMs": 8136,
+      "tokens": {
+        "input": 22561,
+        "output": 316
+      },
+      "costUsd": 0.00070221,
+      "calls": 4,
+      "verdict": {
+        "scenario": "L1",
+        "verdict": "PASS",
+        "failureStage": null,
+        "incomplete": null,
+        "checks": [
+          {
+            "turn": 1,
+            "name": "stored page CAREDAY p1 holds the passage",
+            "ok": true,
+            "stage": "document extraction",
+            "detail": "present"
+          },
+          {
+            "turn": 1,
+            "name": "no internal ids visible",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "estimate never called a payout",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "never states approval, payment or entitlement",
+            "ok": true,
+            "stage": "verification",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "at most one question",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "each question shown once",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "once"
+          },
+          {
+            "turn": 1,
+            "name": "shows S$200",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "present"
+          },
+          {
+            "turn": 1,
+            "name": "never states S$120",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "absent"
+          },
+          {
+            "turn": 1,
+            "name": "no invented figure",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "every figure is printed or calculated"
+          },
+          {
+            "turn": 1,
+            "name": "asks no question",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "about grace",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "subject after the turn: grace"
+          },
+          {
+            "turn": 1,
+            "name": "figure bound to grace / CAREDAY / Insured Adult",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "bound"
+          },
+          {
+            "turn": 1,
+            "name": "cites CAREDAY p1 \"ICU cash (each complete 24 hours, max 30\"",
+            "ok": true,
+            "stage": "retrieval",
+            "detail": "cited"
+          }
+        ]
+      },
+      "saved": {
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "speakerId": "74000000-0000-4000-8000-000000000001",
+        "pending": null,
+        "claim": null,
+        "traces": [
+          {
+            "turn": 1,
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "steps": 4,
+            "usage": {
+              "input": 22561,
+              "output": 316
+            },
+            "latencyMs": 7658,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Grace"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "ICU cash",
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "CareDay Hospital Cash Plan ICU cash benefit daily amount intensive care unit",
+                  "policy_ids": [
+                    "74000000-0000-4000-8000-000000000102"
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":4}",
+                "evidenceIds": [
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "want": "amount",
+                  "benefit": "ICU cash",
+                  "policy_id": "74000000-0000-4000-8000-000000000102",
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "select_table_value",
+                "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":200,\"column\":\"Insured Adult\",\"row\":\"ICU cash (each complete 24 hours, max 30 per year)\"}",
+                "evidenceIds": [
+                  "e2",
+                  "e9"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "Grace’s CareDay plan lists ICU cash of S$200 for each complete 24 hours in intensive care, up to 30 days per year; it is in addition to hospital cash.",
+                      "benefit": "ICU cash",
+                      "value_ids": [
+                        "v1"
+                      ],
+                      "evidence_ids": [
+                        "e5"
+                      ]
+                    }
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [
+              "e5",
+              "e9"
+            ],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          }
+        ],
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 238,
+                "role": "table_header",
+                "text": "Policy owner                  Daniel Lim Wen Jie",
+                "start": 190,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 295,
+              "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+              "start": 239,
+              "onPage": 1
+            },
+            "support": {
+              "end": 295,
+              "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+              "start": 239,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:live-careday"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 374,
+                "role": "table_header",
+                "text": "Name                          Cover type        Date of birth",
+                "start": 313,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 494,
+              "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+              "start": 435,
+              "onPage": 1
+            },
+            "support": {
+              "end": 494,
+              "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+              "start": 435,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 233,
+                "role": "table_header",
+                "text": "Policyholder                  Daniel Lim Wen Jie",
+                "start": 185,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 290,
+              "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+              "start": 234,
+              "onPage": 1
+            },
+            "support": {
+              "end": 290,
+              "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+              "start": 234,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": null,
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 365,
+                "role": "table_header",
+                "text": "Name                          Category      Date of birth",
+                "start": 308,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 477,
+              "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+              "start": 422,
+              "onPage": 1
+            },
+            "support": {
+              "end": 477,
+              "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+              "start": 422,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 438,
+              "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+              "start": 303,
+              "onPage": 2
+            },
+            "support": {
+              "end": 438,
+              "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+              "start": 303,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 145,
+              "text": "Meridian Mutual Assurance                                               Policy MM-HC-205518\nCareDay Hospital Cash Plan - Certificate of Insurance",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 145,
+              "text": "CareDay Hospital Cash Plan - Certificate of Insurance",
+              "start": 92,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 721,
+                "role": "table_header",
+                "text": "Benefit                                                       Insured Adult   Insured Child",
+                "start": 630,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 888,
+              "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+              "start": 616,
+              "onPage": 1
+            },
+            "support": {
+              "end": 804,
+              "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+              "start": 722,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 301,
+              "text": "Conditions\nHospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
+              "start": 0,
+              "onPage": 2
+            },
+            "support": {
+              "end": 173,
+              "text": "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission.",
+              "start": 11,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "select_table_value",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "cell": {
+                "end": 872,
+                "text": "S$200",
+                "start": 867
+              },
+              "tableId": "74000000-0000-4000-8000-000000000102:p1:t3",
+              "rowLabel": "ICU cash (each complete 24 hours, max 30 per year)",
+              "appliesTo": {
+                "kind": "person_class",
+                "value": "Insured Adult",
+                "personClass": "adult"
+              },
+              "columnLeaf": "Insured Adult",
+              "columnHeader": "Insured Adult"
+            },
+            "context": [
+              {
+                "end": 721,
+                "role": "table_header",
+                "text": "Benefit                                                       Insured Adult   Insured Child",
+                "start": 630,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 888,
+              "text": "ICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+              "start": 805,
+              "onPage": 1
+            },
+            "support": {
+              "end": 888,
+              "text": "ICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+              "start": 805,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          }
+        },
+        "answers": [
+          {
+            "turn": 1,
+            "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000002",
+            "citations": [
+              {
+                "chunkId": "rag2:e5",
+                "excerpt": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+                "insurer": "Meridian Mutual Assurance",
+                "pageEnd": 2,
+                "policyId": "74000000-0000-4000-8000-000000000102",
+                "pageStart": 2,
+                "policyName": "CareDay Hospital Cash Plan",
+                "documentRole": "schedule"
+              },
+              {
+                "chunkId": "rag2:e9",
+                "excerpt": "Benefit                                                       Insured Adult   Insured Child\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+                "insurer": "Meridian Mutual Assurance",
+                "pageEnd": 1,
+                "policyId": "74000000-0000-4000-8000-000000000102",
+                "pageStart": 1,
+                "policyName": "CareDay Hospital Cash Plan",
+                "documentRole": "schedule"
+              }
+            ],
+            "figureBindings": [
+              {
+                "value": 200,
+                "column": "Insured Adult",
+                "benefit": "ICU cash (each complete 24 hours, max 30 per year)",
+                "pageEnd": 1,
+                "passage": "ICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+                "currency": "SGD",
+                "policyId": "74000000-0000-4000-8000-000000000102",
+                "sentence": "Grace’s CareDay plan lists ICU cash of S$200 for each complete 24 hours in intensive care, up to 30 days per year; it is in addition to hospital cash.",
+                "pageStart": 1,
+                "subjectId": "74000000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:live-careday"
+              }
+            ],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "L2",
+      "title": "Adult / Child table, then a person correction",
+      "conversationId": "49966f75-7fd3-4c93-8f98-c38b4cf556b2",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "What does our SunHaven plan pay for accidental dental treatment for Kai?",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "Only the insurer makes a decision on the claim, after reviewing it and its evidence.",
+          "timings": {
+            "acceptedMs": 14,
+            "firstAssistantPersistedMs": 8100,
+            "answerSeenMs": 8286,
+            "modelMs": 6987,
+            "upstreamMs": 6978,
+            "relayMs": 0
+          },
+          "calls": [
+            {
+              "seq": 5,
+              "at": "2026-10-09T08:32:17.265Z",
+              "estInputTokens": 9661,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0019660999999999997,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 2,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4585,
+                "output": 17,
+                "cached": 4440
+              },
+              "latencyMs": 970,
+              "upstreamMs": 970,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 6,
+              "at": "2026-10-09T08:32:18.241Z",
+              "estInputTokens": 9884,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0019884,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 4,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4696,
+                "output": 42,
+                "cached": 4459
+              },
+              "latencyMs": 1524,
+              "upstreamMs": 1524,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 7,
+              "at": "2026-10-09T08:32:19.784Z",
+              "estInputTokens": 11306,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0021306000000000003,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 6,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 5674,
+                "output": 159,
+                "cached": 4570
+              },
+              "latencyMs": 2243,
+              "upstreamMs": 2243,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 8,
+              "at": "2026-10-09T08:32:22.041Z",
+              "estInputTokens": 14886,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0024886000000000005,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 9,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8039,
+                "output": 138,
+                "cached": 5548
+              },
+              "latencyMs": 2250,
+              "upstreamMs": 2250,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 5,
+              "at": "2026-10-09T08:32:17.265Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 9852,
+              "reservedUsd": 0.0019852,
+              "chargedUsd": 0.00006740000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 968,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4585,
+                "output": 17,
+                "cached": 4440,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 1
+            },
+            {
+              "seq": 6,
+              "at": "2026-10-09T08:32:18.242Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 10080,
+              "reservedUsd": 0.002008,
+              "chargedUsd": 0.00008929000000000001,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1522,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4696,
+                "output": 42,
+                "cached": 4459,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 1
+            },
+            {
+              "seq": 7,
+              "at": "2026-10-09T08:32:19.785Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 11512,
+              "reservedUsd": 0.0021512,
+              "chargedUsd": 0.00023560000000000003,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 2240,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 5674,
+                "output": 159,
+                "cached": 4570,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 1
+            },
+            {
+              "seq": 8,
+              "at": "2026-10-09T08:32:22.042Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 15112,
+              "reservedUsd": 0.0025112,
+              "chargedUsd": 0.00037358000000000004,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 2248,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 8039,
+                "output": 138,
+                "cached": 5548,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 1
+            }
+          ],
+          "modelExecutions": [
+            {
+              "attempt_index": 3,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 7602,
+              "output_tokens": 101,
+              "cached_tokens": 5553,
+              "cost_usd": 0.000311,
+              "latency_ms": 2802,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:16.039Z"
+            },
+            {
+              "attempt_index": 0,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4585,
+              "output_tokens": 17,
+              "cached_tokens": 4440,
+              "cost_usd": 0.000067,
+              "latency_ms": 971,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:18.237Z"
+            },
+            {
+              "attempt_index": 1,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4696,
+              "output_tokens": 42,
+              "cached_tokens": 4459,
+              "cost_usd": 0.000089,
+              "latency_ms": 1525,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:19.767Z"
+            },
+            {
+              "attempt_index": 2,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 5674,
+              "output_tokens": 159,
+              "cached_tokens": 4570,
+              "cost_usd": 0.000236,
+              "latency_ms": 2244,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:22.028Z"
+            },
+            {
+              "attempt_index": 3,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 8039,
+              "output_tokens": 138,
+              "cached_tokens": 5548,
+              "cost_usd": 0.000374,
+              "latency_ms": 2251,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:24.294Z"
+            }
+          ],
+          "relay": [],
+          "tokens": {
+            "input": 22994,
+            "output": 356
+          },
+          "costUsd": {
+            "charged": 0.0007658700000000001,
+            "reserved": 0.0086556,
+            "ledger": 0.001077
+          }
+        },
+        {
+          "turn": 2,
+          "user": "Sorry, I meant Grace, not Kai.",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "For Grace, SunHaven’s “Accidental dental treatment (per accident)” benefit is up to S$800 per accident, for treatment to sound natural teeth damaged by an Accident.",
+          "timings": {
+            "acceptedMs": 12,
+            "firstAssistantPersistedMs": 7018,
+            "answerSeenMs": 7255,
+            "modelMs": 5898,
+            "upstreamMs": 5888,
+            "relayMs": 0
+          },
+          "calls": [
+            {
+              "seq": 9,
+              "at": "2026-10-09T08:32:25.557Z",
+              "estInputTokens": 9753,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0019753,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 4,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4645,
+                "output": 17,
+                "cached": 0
+              },
+              "latencyMs": 838,
+              "upstreamMs": 837,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 10,
+              "at": "2026-10-09T08:32:26.399Z",
+              "estInputTokens": 9980,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.001998,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 6,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4759,
+                "output": 107,
+                "cached": 4519
+              },
+              "latencyMs": 1705,
+              "upstreamMs": 1705,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 11,
+              "at": "2026-10-09T08:32:28.121Z",
+              "estInputTokens": 14878,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0024878,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 9,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8257,
+                "output": 76,
+                "cached": 4633
+              },
+              "latencyMs": 1544,
+              "upstreamMs": 1544,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 12,
+              "at": "2026-10-09T08:32:29.683Z",
+              "estInputTokens": 15477,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0025477,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 11,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 8608,
+                "output": 105,
+                "cached": 8131
+              },
+              "latencyMs": 1811,
+              "upstreamMs": 1811,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 9,
+              "at": "2026-10-09T08:32:25.558Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 9944,
+              "reservedUsd": 0.0019944,
+              "chargedUsd": 0.000473,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 834,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4645,
+                "output": 17,
+                "cached": 0,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 2
+            },
+            {
+              "seq": 10,
+              "at": "2026-10-09T08:32:26.400Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 10176,
+              "reservedUsd": 0.0020176,
+              "chargedUsd": 0.00012269,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1701,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4759,
+                "output": 107,
+                "cached": 4519,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 2
+            },
+            {
+              "seq": 11,
+              "at": "2026-10-09T08:32:28.121Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 15092,
+              "reservedUsd": 0.0025091999999999996,
+              "chargedUsd": 0.00044673,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1543,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 8257,
+                "output": 76,
+                "cached": 4633,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 2
+            },
+            {
+              "seq": 12,
+              "at": "2026-10-09T08:32:29.684Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 15702,
+              "reservedUsd": 0.0025702,
+              "chargedUsd": 0.00018151,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1810,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 8608,
+                "output": 105,
+                "cached": 8131,
+                "reasoning": 0
+              },
+              "scenario": "L2",
+              "turn": 2
+            }
+          ],
+          "modelExecutions": [
+            {
+              "attempt_index": 3,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 8039,
+              "output_tokens": 138,
+              "cached_tokens": 5548,
+              "cost_usd": 0.000374,
+              "latency_ms": 2251,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:24.294Z"
+            },
+            {
+              "attempt_index": 0,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4645,
+              "output_tokens": 17,
+              "cached_tokens": 0,
+              "cost_usd": 0.000473,
+              "latency_ms": 838,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:26.396Z"
+            },
+            {
+              "attempt_index": 1,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4759,
+              "output_tokens": 107,
+              "cached_tokens": 4519,
+              "cost_usd": 0.000123,
+              "latency_ms": 1706,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:28.106Z"
+            },
+            {
+              "attempt_index": 2,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 8257,
+              "output_tokens": 76,
+              "cached_tokens": 4633,
+              "cost_usd": 0.000447,
+              "latency_ms": 1544,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:29.666Z"
+            },
+            {
+              "attempt_index": 3,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 8608,
+              "output_tokens": 105,
+              "cached_tokens": 8131,
+              "cost_usd": 0.000182,
+              "latency_ms": 1812,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:31.496Z"
+            }
+          ],
+          "relay": [],
+          "tokens": {
+            "input": 26269,
+            "output": 305
+          },
+          "costUsd": {
+            "charged": 0.00122393,
+            "reserved": 0.0090914,
+            "ledger": 0.001599
+          }
+        }
+      ],
+      "totalMs": 15549,
+      "firstUsefulResponseMs": 8100,
+      "tokens": {
+        "input": 49263,
+        "output": 661
+      },
+      "costUsd": 0.0019898,
+      "calls": 8,
+      "verdict": {
+        "scenario": "L2",
+        "verdict": "FAIL",
+        "failureStage": "model reasoning-tool selection",
+        "incomplete": null,
+        "checks": [
+          {
+            "turn": 1,
+            "name": "stored page SUNHAVEN p1 holds the passage",
+            "ok": true,
+            "stage": "document extraction",
+            "detail": "present"
+          },
+          {
+            "turn": 2,
+            "name": "stored page SUNHAVEN p1 holds the passage",
+            "ok": true,
+            "stage": "document extraction",
+            "detail": "present"
+          },
+          {
+            "turn": 1,
+            "name": "no internal ids visible",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "estimate never called a payout",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "never states approval, payment or entitlement",
+            "ok": true,
+            "stage": "verification",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "at most one question",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "each question shown once",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "once"
+          },
+          {
+            "turn": 1,
+            "name": "shows S$400",
+            "ok": false,
+            "stage": "verification",
+            "detail": "missing; visible figures: none (dropped by the composer / gate)"
+          },
+          {
+            "turn": 1,
+            "name": "never states S$800",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "absent"
+          },
+          {
+            "turn": 1,
+            "name": "no invented figure",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "every figure is printed or calculated"
+          },
+          {
+            "turn": 1,
+            "name": "about kai",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "subject after the turn: kai"
+          },
+          {
+            "turn": 1,
+            "name": "figure bound to kai / SUNHAVEN / Child",
+            "ok": false,
+            "stage": "model reasoning-tool selection",
+            "detail": "bindings: none"
+          },
+          {
+            "turn": 1,
+            "name": "cites SUNHAVEN p1 \"Accidental dental treatment (per acciden\"",
+            "ok": false,
+            "stage": "model reasoning-tool selection",
+            "detail": "retrieved but not cited"
+          },
+          {
+            "turn": 2,
+            "name": "no internal ids visible",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 2,
+            "name": "estimate never called a payout",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 2,
+            "name": "never states approval, payment or entitlement",
+            "ok": true,
+            "stage": "verification",
+            "detail": "none"
+          },
+          {
+            "turn": 2,
+            "name": "at most one question",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "none"
+          },
+          {
+            "turn": 2,
+            "name": "each question shown once",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "once"
+          },
+          {
+            "turn": 2,
+            "name": "shows S$800",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "present"
+          },
+          {
+            "turn": 2,
+            "name": "never states S$400",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "absent"
+          },
+          {
+            "turn": 2,
+            "name": "no invented figure",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "every figure is printed or calculated"
+          },
+          {
+            "turn": 2,
+            "name": "about grace",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "subject after the turn: grace"
+          },
+          {
+            "turn": 2,
+            "name": "figure bound to grace / SUNHAVEN / Adult",
+            "ok": true,
+            "stage": "person-version resolution",
+            "detail": "bound"
+          },
+          {
+            "turn": 2,
+            "name": "cites SUNHAVEN p1 \"Accidental dental treatment (per acciden\"",
+            "ok": true,
+            "stage": "retrieval",
+            "detail": "cited"
+          }
+        ]
+      },
+      "saved": {
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "speakerId": "74000000-0000-4000-8000-000000000001",
+        "pending": null,
+        "claim": null,
+        "traces": [
+          {
+            "turn": 1,
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "steps": 4,
+            "usage": {
+              "input": 22994,
+              "output": 356
+            },
+            "latencyMs": 7038,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Kai"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "accidental dental treatment",
+                  "subject_id": "74000000-0000-4000-8000-000000000003"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e2",
+                  "e3",
+                  "e4"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "SunHaven accidental dental treatment benefit conditions limit child",
+                  "policy_ids": [
+                    "74000000-0000-4000-8000-000000000101"
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000003"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":6}",
+                "evidenceIds": [
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e8",
+                  "e9",
+                  "e10"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "tier": "Child",
+                  "want": "any",
+                  "benefit": "Accidental Dental Treatment",
+                  "policy_id": "74000000-0000-4000-8000-000000000101",
+                  "subject_id": "74000000-0000-4000-8000-000000000003"
+                },
+                "name": "select_table_value",
+                "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":400,\"column\":\"Child\",\"row\":\"Accidental dental treatment (per accident)\"}",
+                "evidenceIds": [
+                  "e11"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "For Kai, SunHaven’s “Accidental dental treatment (per accident)” benefit pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$400 per accident; this is a limit, not a guaranteed payment.",
+                      "benefit": "Accidental dental treatment (per accident)",
+                      "value_ids": [
+                        "v1"
+                      ],
+                      "subject_id": "74000000-0000-4000-8000-000000000003",
+                      "evidence_ids": [
+                        "e6"
+                      ]
+                    }
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000003"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [
+              {
+                "reason": "states a claim decision (approved / confirmed / fully covered) only the insurer can make",
+                "sentence": "For Kai, SunHaven’s “Accidental dental treatment (per accident)” benefit pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$400 per accident; this is a limit, not a guaranteed payment."
+              }
+            ],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          },
+          {
+            "turn": 2,
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "final_answer",
+            "steps": 4,
+            "usage": {
+              "input": 26269,
+              "output": 305
+            },
+            "latencyMs": 5945,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "Grace"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"ok\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "topic": "accidental dental treatment",
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "policies_for",
+                "summary": "{}",
+                "evidenceIds": [
+                  "e1",
+                  "e12",
+                  "e3",
+                  "e13"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "k": 10,
+                  "query": "SunHaven accidental dental treatment dental expenses accident benefit",
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "search_passages",
+                "summary": "{\"hits\":8}",
+                "evidenceIds": [
+                  "e5",
+                  "e6",
+                  "e7",
+                  "e9",
+                  "e14",
+                  "e15",
+                  "e16",
+                  "e8"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "tier": "Adult",
+                  "want": "amount",
+                  "benefit": "Accidental dental treatment (per accident)",
+                  "policy_id": "74000000-0000-4000-8000-000000000101",
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "select_table_value",
+                "summary": "{\"status\":\"ok\",\"valueId\":\"v2\",\"value\":800,\"column\":\"Adult\",\"row\":\"Accidental dental treatment (per accident)\"}",
+                "evidenceIds": [
+                  "e17"
+                ]
+              },
+              {
+                "ok": true,
+                "args": {
+                  "sentences": [
+                    {
+                      "text": "For Grace, SunHaven’s “Accidental dental treatment (per accident)” benefit is up to S$800 per accident, for treatment to sound natural teeth damaged by an Accident.",
+                      "benefit": "Accidental dental treatment (per accident)",
+                      "value_ids": [
+                        "v2"
+                      ],
+                      "evidence_ids": [
+                        "e6"
+                      ]
+                    }
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000002"
+                },
+                "name": "final_answer",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [
+              "e6",
+              "e17"
+            ],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          }
+        ],
+        "evidence": {
+          "e1": {
+            "id": "e1",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 238,
+                "role": "table_header",
+                "text": "Policy owner                  Daniel Lim Wen Jie",
+                "start": 190,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 295,
+              "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+              "start": 239,
+              "onPage": 1
+            },
+            "support": {
+              "end": 295,
+              "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+              "start": 239,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": null,
+            "documentHash": "sha256:live-careday"
+          },
+          "e2": {
+            "id": "e2",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 374,
+                "role": "table_header",
+                "text": "Name                          Cover type        Date of birth",
+                "start": 313,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 554,
+              "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+              "start": 495,
+              "onPage": 1
+            },
+            "support": {
+              "end": 554,
+              "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+              "start": 495,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-careday"
+          },
+          "e3": {
+            "id": "e3",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 233,
+                "role": "table_header",
+                "text": "Policyholder                  Daniel Lim Wen Jie",
+                "start": 185,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 290,
+              "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+              "start": 234,
+              "onPage": 1
+            },
+            "support": {
+              "end": 290,
+              "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+              "start": 234,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": null,
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e4": {
+            "id": "e4",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 365,
+                "role": "table_header",
+                "text": "Name                          Category      Date of birth",
+                "start": 308,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 533,
+              "text": "Kai Lim Jun Hao               Child         06 May 2014",
+              "start": 478,
+              "onPage": 1
+            },
+            "support": {
+              "end": 533,
+              "text": "Kai Lim Jun Hao               Child         06 May 2014",
+              "start": 478,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e5": {
+            "id": "e5",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 687,
+                "role": "table_header",
+                "text": "Benefit                                                 Adult         Child",
+                "start": 612,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 996,
+              "text": "Schedule of benefits\nBenefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500\nFracture benefit (per fracture)                         S$1,200       S$750\nAccidental dental treatment (per accident)              S$800         S$400\nAccidental death                                        S$100,000     S$20,000",
+              "start": 591,
+              "onPage": 1
+            },
+            "support": {
+              "end": 917,
+              "text": "Accidental dental treatment (per accident)              S$800         S$400",
+              "start": 842,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e6": {
+            "id": "e6",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 510,
+              "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+              "start": 357,
+              "onPage": 2
+            },
+            "support": {
+              "end": 510,
+              "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+              "start": 357,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e7": {
+            "id": "e7",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 140,
+              "text": "Harbourline General Insurance                                           Policy HG-PA-771204\nSunHaven Family Accident Guard - Policy Schedule",
+              "start": 0,
+              "onPage": 1
+            },
+            "support": {
+              "end": 140,
+              "text": "SunHaven Family Accident Guard - Policy Schedule",
+              "start": 92,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e8": {
+            "id": "e8",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 237,
+              "text": "Section 2 - What is covered\nThis policy covers Bodily Injury caused solely and directly by an Accident. A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+              "start": 0,
+              "onPage": 2
+            },
+            "support": {
+              "end": 237,
+              "text": "A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+              "start": 104,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e9": {
+            "id": "e9",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 355,
+              "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+              "start": 239,
+              "onPage": 2
+            },
+            "support": {
+              "end": 355,
+              "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+              "start": 239,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e10": {
+            "id": "e10",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 365,
+                "role": "table_header",
+                "text": "Name                          Category      Date of birth",
+                "start": 308,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 589,
+              "text": "Insured persons\nName                          Category      Date of birth\nDaniel Lim Wen Jie            Adult         11 Mar 1980\nGrace Ong Pei Shan            Adult         22 Aug 1983\nKai Lim Jun Hao               Child         06 May 2014\nMei Lim Xin Hui               Child         30 Nov 2018",
+              "start": 292,
+              "onPage": 1
+            },
+            "support": {
+              "end": 533,
+              "text": "Kai Lim Jun Hao               Child         06 May 2014",
+              "start": 478,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e11": {
+            "id": "e11",
+            "via": "select_table_value",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "cell": {
+                "end": 917,
+                "text": "S$400",
+                "start": 912
+              },
+              "tableId": "74000000-0000-4000-8000-000000000101:p1:t3",
+              "rowLabel": "Accidental dental treatment (per accident)",
+              "appliesTo": {
+                "kind": "person_class",
+                "value": "Child",
+                "personClass": "child"
+              },
+              "columnLeaf": "Child",
+              "columnHeader": "Child"
+            },
+            "context": [
+              {
+                "end": 687,
+                "role": "table_header",
+                "text": "Benefit                                                 Adult         Child",
+                "start": 612,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 917,
+              "text": "Accidental dental treatment (per accident)              S$800         S$400",
+              "start": 842,
+              "onPage": 1
+            },
+            "support": {
+              "end": 917,
+              "text": "Accidental dental treatment (per accident)              S$800         S$400",
+              "start": 842,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e12": {
+            "id": "e12",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 374,
+                "role": "table_header",
+                "text": "Name                          Cover type        Date of birth",
+                "start": 313,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 494,
+              "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+              "start": 435,
+              "onPage": 1
+            },
+            "support": {
+              "end": 494,
+              "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+              "start": 435,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e13": {
+            "id": "e13",
+            "via": "policies_for",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": [
+              {
+                "end": 365,
+                "role": "table_header",
+                "text": "Name                          Category      Date of birth",
+                "start": 308,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 477,
+              "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+              "start": 422,
+              "onPage": 1
+            },
+            "support": {
+              "end": 477,
+              "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+              "start": 422,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e14": {
+            "id": "e14",
+            "via": "search_passages",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 888,
+              "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+              "start": 616,
+              "onPage": 1
+            },
+            "support": {
+              "end": 629,
+              "text": "Benefit table",
+              "start": 616,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e15": {
+            "id": "e15",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 478,
+              "text": "Illness and accident are both covered.",
+              "start": 440,
+              "onPage": 2
+            },
+            "support": {
+              "end": 478,
+              "text": "Illness and accident are both covered.",
+              "start": 440,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-careday"
+          },
+          "e16": {
+            "id": "e16",
+            "via": "search_passages",
+            "page": {
+              "end": 2,
+              "start": 2
+            },
+            "table": null,
+            "context": null,
+            "passage": {
+              "end": 597,
+              "text": "Section 4 - Where you are covered\nThis policy covers Accidents anywhere in the world.",
+              "start": 512,
+              "onPage": 2
+            },
+            "support": {
+              "end": 597,
+              "text": "This policy covers Accidents anywhere in the world.",
+              "start": 546,
+              "onPage": 2
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-sunhaven"
+          },
+          "e17": {
+            "id": "e17",
+            "via": "select_table_value",
+            "page": {
+              "end": 1,
+              "start": 1
+            },
+            "table": {
+              "cell": {
+                "end": 903,
+                "text": "S$800",
+                "start": 898
+              },
+              "tableId": "74000000-0000-4000-8000-000000000101:p1:t3",
+              "rowLabel": "Accidental dental treatment (per accident)",
+              "appliesTo": {
+                "kind": "person_class",
+                "value": "Adult",
+                "personClass": "adult"
+              },
+              "columnLeaf": "Adult",
+              "columnHeader": "Adult"
+            },
+            "context": [
+              {
+                "end": 687,
+                "role": "table_header",
+                "text": "Benefit                                                 Adult         Child",
+                "start": 612,
+                "onPage": 1
+              }
+            ],
+            "passage": {
+              "end": 917,
+              "text": "Accidental dental treatment (per accident)              S$800         S$400",
+              "start": 842,
+              "onPage": 1
+            },
+            "support": {
+              "end": 917,
+              "text": "Accidental dental treatment (per accident)              S$800         S$400",
+              "start": 842,
+              "onPage": 1
+            },
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-sunhaven"
+          }
+        },
+        "answers": [
+          {
+            "turn": 1,
+            "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000003",
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          },
+          {
+            "turn": 2,
+            "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000002",
+            "citations": [
+              {
+                "chunkId": "rag2:e6",
+                "excerpt": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+                "insurer": "Harbourline General Insurance",
+                "pageEnd": 2,
+                "policyId": "74000000-0000-4000-8000-000000000101",
+                "pageStart": 2,
+                "policyName": "SunHaven Family Accident Guard",
+                "documentRole": "schedule"
+              },
+              {
+                "chunkId": "rag2:e17",
+                "excerpt": "Benefit                                                 Adult         Child\nAccidental dental treatment (per accident)              S$800         S$400",
+                "insurer": "Harbourline General Insurance",
+                "pageEnd": 1,
+                "policyId": "74000000-0000-4000-8000-000000000101",
+                "pageStart": 1,
+                "policyName": "SunHaven Family Accident Guard",
+                "documentRole": "schedule"
+              }
+            ],
+            "figureBindings": [
+              {
+                "value": 800,
+                "column": "Adult",
+                "benefit": "Accidental dental treatment (per accident)",
+                "pageEnd": 1,
+                "passage": "Accidental dental treatment (per accident)              S$800         S$400",
+                "currency": "SGD",
+                "policyId": "74000000-0000-4000-8000-000000000101",
+                "sentence": "For Grace, SunHaven’s “Accidental dental treatment (per accident)” benefit is up to S$800 per accident, for treatment to sound natural teeth damaged by an Accident.",
+                "pageStart": 1,
+                "subjectId": "74000000-0000-4000-8000-000000000002",
+                "documentHash": "sha256:live-sunhaven"
+              }
+            ],
+            "calculations": [],
+            "computations": [],
+            "questions": []
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "L6",
+      "title": "A question the documents do not answer",
+      "conversationId": "88dc1353-ee5b-4e44-9aae-fa816bf23efd",
+      "turns": [
+        {
+          "turn": 1,
+          "user": "If one of us is injured overseas, does SunHaven pay for emergency medical evacuation, and up to how much?",
+          "jobStatus": "complete",
+          "jobError": null,
+          "visible": "I need to know who this is about first.\nWhich household member do you mean?",
+          "timings": {
+            "acceptedMs": 11,
+            "firstAssistantPersistedMs": 3534,
+            "answerSeenMs": 3630,
+            "modelMs": 2466,
+            "upstreamMs": 2464,
+            "relayMs": 0
+          },
+          "calls": [
+            {
+              "seq": 13,
+              "at": "2026-10-09T08:32:32.820Z",
+              "estInputTokens": 9674,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0019674000000000002,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 2,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4594,
+                "output": 19,
+                "cached": 4440
+              },
+              "latencyMs": 971,
+              "upstreamMs": 971,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            },
+            {
+              "seq": 14,
+              "at": "2026-10-09T08:32:33.796Z",
+              "estInputTokens": 9854,
+              "maxOutputTokens": 2000,
+              "reservedUsd": 0.0019854,
+              "requestedModel": "openai:gpt-6-luna",
+              "tools": 10,
+              "messages": 4,
+              "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+              "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+              "chargedUsd": null,
+              "ok": true,
+              "usage": {
+                "input": 4674,
+                "output": 108,
+                "cached": 4468
+              },
+              "latencyMs": 1495,
+              "upstreamMs": 1495,
+              "resolvedModel": "gpt-6-luna",
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              }
+            }
+          ],
+          "httpCalls": [
+            {
+              "seq": 13,
+              "at": "2026-10-09T08:32:32.820Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 9865,
+              "reservedUsd": 0.0019865,
+              "chargedUsd": 0.00006929999999999999,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 970,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4594,
+                "output": 19,
+                "cached": 4440,
+                "reasoning": 0
+              },
+              "scenario": "L6",
+              "turn": 1
+            },
+            {
+              "seq": 14,
+              "at": "2026-10-09T08:32:33.796Z",
+              "host": "api.openai.com",
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "model": "gpt-6-luna",
+              "maxOutputTokens": 2000,
+              "estInputTokens": 10051,
+              "reservedUsd": 0.0020051,
+              "chargedUsd": 0.00011928,
+              "ok": true,
+              "settings": {
+                "temperature": 0,
+                "max_completion_tokens": 2000,
+                "tool_choice": "required",
+                "parallel_tool_calls": true,
+                "reasoning_effort": "none"
+              },
+              "upstreamMs": 1494,
+              "status": 200,
+              "providerModel": "gpt-6-luna",
+              "usage": {
+                "input": 4674,
+                "output": 108,
+                "cached": 4468,
+                "reasoning": 0
+              },
+              "scenario": "L6",
+              "turn": 1
+            }
+          ],
+          "modelExecutions": [
+            {
+              "attempt_index": 3,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 8608,
+              "output_tokens": 105,
+              "cached_tokens": 8131,
+              "cost_usd": 0.000182,
+              "latency_ms": 1812,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:31.496Z"
+            },
+            {
+              "attempt_index": 0,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4594,
+              "output_tokens": 19,
+              "cached_tokens": 4440,
+              "cost_usd": 0.000069,
+              "latency_ms": 971,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:33.793Z"
+            },
+            {
+              "attempt_index": 1,
+              "status": "succeeded",
+              "error_category": null,
+              "requested_model": "gpt-6-luna",
+              "resolved_model": "gpt-6-luna",
+              "input_tokens": 4674,
+              "output_tokens": 108,
+              "cached_tokens": 4468,
+              "cost_usd": 0.000119,
+              "latency_ms": 1496,
+              "prompt_version": "rag2-loop-v5",
+              "created_at": "2026-10-09T08:32:35.292Z"
+            }
+          ],
+          "relay": [],
+          "tokens": {
+            "input": 9268,
+            "output": 127
+          },
+          "costUsd": {
+            "charged": 0.00018858,
+            "reserved": 0.0039916,
+            "ledger": 0.00037000000000000005
+          }
+        }
+      ],
+      "totalMs": 3636,
+      "firstUsefulResponseMs": 3534,
+      "tokens": {
+        "input": 9268,
+        "output": 127
+      },
+      "costUsd": 0.00018858,
+      "calls": 2,
+      "verdict": {
+        "scenario": "L6",
+        "verdict": "FAIL",
+        "failureStage": "model reasoning-tool selection",
+        "incomplete": null,
+        "checks": [
+          {
+            "turn": 1,
+            "name": "no internal ids visible",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "estimate never called a payout",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "never states approval, payment or entitlement",
+            "ok": true,
+            "stage": "verification",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "at most one question",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "Which household member do you mean?"
+          },
+          {
+            "turn": 1,
+            "name": "each question shown once",
+            "ok": true,
+            "stage": "presentation",
+            "detail": "once"
+          },
+          {
+            "turn": 1,
+            "name": "no figure near /evacuat/",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "none"
+          },
+          {
+            "turn": 1,
+            "name": "no invented figure",
+            "ok": true,
+            "stage": "model reasoning-tool selection",
+            "detail": "every figure is printed or calculated"
+          },
+          {
+            "turn": 1,
+            "name": "asks no question",
+            "ok": false,
+            "stage": "model reasoning-tool selection",
+            "detail": "Which household member do you mean?"
+          },
+          {
+            "turn": 1,
+            "name": "says the documents do not say",
+            "ok": false,
+            "stage": "model reasoning-tool selection",
+            "detail": "I need to know who this is about first. Which household member do you mean? The answer depends on who this is about."
+          }
+        ]
+      },
+      "saved": {
+        "subjectId": null,
+        "speakerId": "74000000-0000-4000-8000-000000000001",
+        "pending": {
+          "kind": "person",
+          "turn": 1,
+          "mention": "one of us",
+          "options": [
+            {
+              "id": "74000000-0000-4000-8000-000000000001",
+              "label": "Daniel Lim Wen Jie (Daniel)"
+            },
+            {
+              "id": "74000000-0000-4000-8000-000000000002",
+              "label": "Grace Ong Pei Shan (Grace)"
+            },
+            {
+              "id": "74000000-0000-4000-8000-000000000003",
+              "label": "Kai Lim Jun Hao (Kai)"
+            },
+            {
+              "id": "74000000-0000-4000-8000-000000000004",
+              "label": "Mei Lim Xin Hui (Mei)"
+            }
+          ],
+          "purpose": "subject",
+          "question": "Which household member do you mean?"
+        },
+        "claim": null,
+        "traces": [
+          {
+            "turn": 1,
+            "modelId": "openai:gpt-6-luna",
+            "outcome": "ask_user",
+            "steps": 2,
+            "usage": {
+              "input": 9268,
+              "output": 127
+            },
+            "latencyMs": 2476,
+            "limit": null,
+            "toolCalls": [
+              {
+                "ok": true,
+                "args": {
+                  "mention": "one of us"
+                },
+                "name": "resolve_person",
+                "summary": "{\"status\":\"unknown\"}",
+                "evidenceIds": []
+              },
+              {
+                "ok": true,
+                "args": {
+                  "kind": "person",
+                  "mention": "one of us",
+                  "options": [
+                    "74000000-0000-4000-8000-000000000001",
+                    "74000000-0000-4000-8000-000000000002",
+                    "74000000-0000-4000-8000-000000000003",
+                    "74000000-0000-4000-8000-000000000004"
+                  ],
+                  "question": "Which household member do you mean?"
+                },
+                "name": "ask_user",
+                "evidenceIds": []
+              }
+            ],
+            "evidenceChosen": [],
+            "dropped": [],
+            "gate": [],
+            "reasked": null,
+            "corrections": null
+          }
+        ],
+        "evidence": {},
+        "answers": [
+          {
+            "turn": 1,
+            "resolvedFamilyMemberId": null,
+            "citations": [],
+            "figureBindings": [],
+            "calculations": [],
+            "computations": [],
+            "questions": [
+              {
+                "id": "rag_person",
+                "why": "The answer depends on who this is about.",
+                "text": "Which household member do you mean?",
+                "type": "choice",
+                "options": [
+                  "Daniel Lim Wen Jie (Daniel)",
+                  "Grace Ong Pei Shan (Grace)",
+                  "Kai Lim Jun Hao (Kai)",
+                  "Mei Lim Xin Hui (Mei)"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "finishedAt": "2026-10-09T08:32:35.400Z",
+  "promptMatchesSource": true,
+  "httpCalls": [
+    {
+      "seq": 1,
+      "at": "2026-10-09T08:32:08.412Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 9844,
+      "reservedUsd": 0.0019844,
+      "chargedUsd": 0.00006720000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1157,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4583,
+        "output": 17,
+        "cached": 4440,
+        "reasoning": 0
+      },
+      "scenario": "L1",
+      "turn": 1
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-09T08:32:09.591Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 10077,
+      "reservedUsd": 0.0020077,
+      "chargedUsd": 0.00008907,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1506,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4697,
+        "output": 41,
+        "cached": 4457,
+        "reasoning": 0
+      },
+      "scenario": "L1",
+      "turn": 1
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-09T08:32:11.116Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 11502,
+      "reservedUsd": 0.0021501999999999997,
+      "chargedUsd": 0.00023501000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 2075,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 5679,
+        "output": 157,
+        "cached": 4571,
+        "reasoning": 0
+      },
+      "scenario": "L1",
+      "turn": 1
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-09T08:32:13.237Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 14301,
+      "reservedUsd": 0.0024301000000000006,
+      "chargedUsd": 0.00031093,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 2800,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 7602,
+        "output": 101,
+        "cached": 5553,
+        "reasoning": 0
+      },
+      "scenario": "L1",
+      "turn": 1
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-09T08:32:17.265Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 9852,
+      "reservedUsd": 0.0019852,
+      "chargedUsd": 0.00006740000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 968,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4585,
+        "output": 17,
+        "cached": 4440,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 1
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-09T08:32:18.242Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 10080,
+      "reservedUsd": 0.002008,
+      "chargedUsd": 0.00008929000000000001,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1522,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4696,
+        "output": 42,
+        "cached": 4459,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 1
+    },
+    {
+      "seq": 7,
+      "at": "2026-10-09T08:32:19.785Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 11512,
+      "reservedUsd": 0.0021512,
+      "chargedUsd": 0.00023560000000000003,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 2240,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 5674,
+        "output": 159,
+        "cached": 4570,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 1
+    },
+    {
+      "seq": 8,
+      "at": "2026-10-09T08:32:22.042Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 15112,
+      "reservedUsd": 0.0025112,
+      "chargedUsd": 0.00037358000000000004,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 2248,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 8039,
+        "output": 138,
+        "cached": 5548,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 1
+    },
+    {
+      "seq": 9,
+      "at": "2026-10-09T08:32:25.558Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 9944,
+      "reservedUsd": 0.0019944,
+      "chargedUsd": 0.000473,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 834,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4645,
+        "output": 17,
+        "cached": 0,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 2
+    },
+    {
+      "seq": 10,
+      "at": "2026-10-09T08:32:26.400Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 10176,
+      "reservedUsd": 0.0020176,
+      "chargedUsd": 0.00012269,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1701,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4759,
+        "output": 107,
+        "cached": 4519,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 2
+    },
+    {
+      "seq": 11,
+      "at": "2026-10-09T08:32:28.121Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 15092,
+      "reservedUsd": 0.0025091999999999996,
+      "chargedUsd": 0.00044673,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1543,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 8257,
+        "output": 76,
+        "cached": 4633,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 2
+    },
+    {
+      "seq": 12,
+      "at": "2026-10-09T08:32:29.684Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 15702,
+      "reservedUsd": 0.0025702,
+      "chargedUsd": 0.00018151,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1810,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 8608,
+        "output": 105,
+        "cached": 8131,
+        "reasoning": 0
+      },
+      "scenario": "L2",
+      "turn": 2
+    },
+    {
+      "seq": 13,
+      "at": "2026-10-09T08:32:32.820Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 9865,
+      "reservedUsd": 0.0019865,
+      "chargedUsd": 0.00006929999999999999,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 970,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4594,
+        "output": 19,
+        "cached": 4440,
+        "reasoning": 0
+      },
+      "scenario": "L6",
+      "turn": 1
+    },
+    {
+      "seq": 14,
+      "at": "2026-10-09T08:32:33.796Z",
+      "host": "api.openai.com",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 2000,
+      "estInputTokens": 10051,
+      "reservedUsd": 0.0020051,
+      "chargedUsd": 0.00011928,
+      "ok": true,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 2000,
+        "tool_choice": "required",
+        "parallel_tool_calls": true,
+        "reasoning_effort": "none"
+      },
+      "upstreamMs": 1494,
+      "status": 200,
+      "providerModel": "gpt-6-luna",
+      "usage": {
+        "input": 4674,
+        "output": 108,
+        "cached": 4468,
+        "reasoning": 0
+      },
+      "scenario": "L6",
+      "turn": 1
+    }
+  ]
+}

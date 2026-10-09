@@ -1,0 +1,380 @@
+{
+  "scenario": "L6",
+  "title": "A question the documents do not answer",
+  "conversationId": "88dc1353-ee5b-4e44-9aae-fa816bf23efd",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "If one of us is injured overseas, does SunHaven pay for emergency medical evacuation, and up to how much?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "I need to know who this is about first.\nWhich household member do you mean?",
+      "timings": {
+        "acceptedMs": 11,
+        "firstAssistantPersistedMs": 3534,
+        "answerSeenMs": 3630,
+        "modelMs": 2466,
+        "upstreamMs": 2464,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 13,
+          "at": "2026-10-09T08:32:32.820Z",
+          "estInputTokens": 9674,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019674000000000002,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4594,
+            "output": 19,
+            "cached": 4440
+          },
+          "latencyMs": 971,
+          "upstreamMs": 971,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 14,
+          "at": "2026-10-09T08:32:33.796Z",
+          "estInputTokens": 9854,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019854,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4674,
+            "output": 108,
+            "cached": 4468
+          },
+          "latencyMs": 1495,
+          "upstreamMs": 1495,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 13,
+          "at": "2026-10-09T08:32:32.820Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 9865,
+          "reservedUsd": 0.0019865,
+          "chargedUsd": 0.00006929999999999999,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 970,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4594,
+            "output": 19,
+            "cached": 4440,
+            "reasoning": 0
+          },
+          "scenario": "L6",
+          "turn": 1
+        },
+        {
+          "seq": 14,
+          "at": "2026-10-09T08:32:33.796Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10051,
+          "reservedUsd": 0.0020051,
+          "chargedUsd": 0.00011928,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1494,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4674,
+            "output": 108,
+            "cached": 4468,
+            "reasoning": 0
+          },
+          "scenario": "L6",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8608,
+          "output_tokens": 105,
+          "cached_tokens": 8131,
+          "cost_usd": 0.000182,
+          "latency_ms": 1812,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:32:31.496Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4594,
+          "output_tokens": 19,
+          "cached_tokens": 4440,
+          "cost_usd": 0.000069,
+          "latency_ms": 971,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:32:33.793Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4674,
+          "output_tokens": 108,
+          "cached_tokens": 4468,
+          "cost_usd": 0.000119,
+          "latency_ms": 1496,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:32:35.292Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 9268,
+        "output": 127
+      },
+      "costUsd": {
+        "charged": 0.00018858,
+        "reserved": 0.0039916,
+        "ledger": 0.00037000000000000005
+      }
+    }
+  ],
+  "totalMs": 3636,
+  "firstUsefulResponseMs": 3534,
+  "tokens": {
+    "input": 9268,
+    "output": 127
+  },
+  "costUsd": 0.00018858,
+  "calls": 2,
+  "verdict": {
+    "scenario": "L6",
+    "verdict": "FAIL",
+    "failureStage": "model reasoning-tool selection",
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "Which household member do you mean?"
+      },
+      {
+        "turn": 1,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 1,
+        "name": "no figure near /evacuat/",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "asks no question",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "Which household member do you mean?"
+      },
+      {
+        "turn": 1,
+        "name": "says the documents do not say",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "I need to know who this is about first. Which household member do you mean? The answer depends on who this is about."
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": {
+      "kind": "person",
+      "turn": 1,
+      "mention": "one of us",
+      "options": [
+        {
+          "id": "74000000-0000-4000-8000-000000000001",
+          "label": "Daniel Lim Wen Jie (Daniel)"
+        },
+        {
+          "id": "74000000-0000-4000-8000-000000000002",
+          "label": "Grace Ong Pei Shan (Grace)"
+        },
+        {
+          "id": "74000000-0000-4000-8000-000000000003",
+          "label": "Kai Lim Jun Hao (Kai)"
+        },
+        {
+          "id": "74000000-0000-4000-8000-000000000004",
+          "label": "Mei Lim Xin Hui (Mei)"
+        }
+      ],
+      "purpose": "subject",
+      "question": "Which household member do you mean?"
+    },
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "ask_user",
+        "steps": 2,
+        "usage": {
+          "input": 9268,
+          "output": 127
+        },
+        "latencyMs": 2476,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "one of us"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"unknown\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "kind": "person",
+              "mention": "one of us",
+              "options": [
+                "74000000-0000-4000-8000-000000000001",
+                "74000000-0000-4000-8000-000000000002",
+                "74000000-0000-4000-8000-000000000003",
+                "74000000-0000-4000-8000-000000000004"
+              ],
+              "question": "Which household member do you mean?"
+            },
+            "name": "ask_user",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {},
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": [
+          {
+            "id": "rag_person",
+            "why": "The answer depends on who this is about.",
+            "text": "Which household member do you mean?",
+            "type": "choice",
+            "options": [
+              "Daniel Lim Wen Jie (Daniel)",
+              "Grace Ong Pei Shan (Grace)",
+              "Kai Lim Jun Hao (Kai)",
+              "Mei Lim Xin Hui (Mei)"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
