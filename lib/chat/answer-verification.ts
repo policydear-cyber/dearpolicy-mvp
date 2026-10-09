@@ -38,7 +38,7 @@ import { dayEdgeExceptionsFromWording, dayRuleFromWording } from "@/lib/claims/d
 import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
-import { columnApplicability, columnFitProblem, personApplicability } from "@/lib/claims/person";
+import { columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
 
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
@@ -321,7 +321,10 @@ export function periodFactor(from: FigurePeriod, to: FigurePeriod): number | nul
 // The gate.
 // ---------------------------------------------------------------------------------------------------------
 
-type Doc = { id: string; owner: string; members: Set<string>; fileHash: string | null; superseded: boolean; usable: boolean; pages: Map<number, string> };
+type Doc = { id: string; owner: string; members: Set<string>; fileHash: string | null; superseded: boolean; usable: boolean; pages: Map<number, string>;
+  product: string | null; policyNumber: string | null; role: string | null; effective: string | null; expiry: string | null };
+/** Every active document of the household (light: no pages), for an endorsement's link to the policy it amends. */
+type HouseDoc = { id: string; owner: string; members: Set<string>; product: string | null; policyNumber: string | null; role: string | null };
 type Person = { id: string; names: string[]; relationship: string; notes?: string | null; dateOfBirth?: string | null };
 /** Agent G: a column printed for a class of person (Adult / Child / Insured Child / Juvenile / Spouse / Life Assured
  * ...) supports a figure only for a person established to be in that class; an ambiguous or unrecognised person column
@@ -333,7 +336,7 @@ function classProblem(column: string | null | undefined, subject: Person | undef
   const why = columnFitProblem(col, p, { isOwner: subject && ownerId ? subject.id === ownerId : null, header: column ?? null });
   return why ? "the figure cannot be used for this person: " + why : null;
 }
-type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[] };
+type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[]; house: HouseDoc[] };
 
 function bindingsOf(answer: ChatAnswer): FigureBinding[] {
   const out: FigureBinding[] = [...(answer.figureBindings ?? [])];
@@ -350,11 +353,13 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
   const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
   const docs = new Map<string, Doc>();
   if (ids.length) {
-    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean }>(
+    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; role: string | null; effective: string | null; expiry: string | null }>(
       `SELECT p.id::text AS id, p.family_member_id::text AS owner, p.file_hash, (p.superseded_at IS NOT NULL) AS superseded,
-              (coalesce(p.quarantine_status,'') IN ('scan_clean','not_scanned_prototype')) AS usable
+              (coalesce(p.quarantine_status,'') IN ('scan_clean','not_scanned_prototype')) AS usable,
+              to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'document_role' AS role,
+              left(to_jsonb(p)->>'effective_date', 10) AS effective, left(to_jsonb(p)->>'renewal_or_expiry_date', 10) AS expiry
          FROM policies p WHERE p.account_id=$1 AND p.id::text=ANY($2::text[]) AND ${activePredicate("p")}`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
-    for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map() });
+    for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map(), product: r.product ?? null, policyNumber: r.policy_number ?? null, role: r.role ?? null, effective: r.effective ?? null, expiry: r.expiry ?? null });
     if (docs.size) {
       const members = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, [...docs.keys()]]).catch(() => ({ rows: [] }))).rows;
       for (const m of members) docs.get(m.policy_id)?.members.add(m.member);
@@ -371,36 +376,172 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
     const rows = (await query<{ content: string }>(`SELECT content FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role='user' ORDER BY created_at`, [accountId, answer.conversationId]).catch(() => ({ rows: [] as { content: string }[] }))).rows;
     householdTexts.push(...rows.map((r) => r.content ?? ""));
   }
-  return { docs, people, userFigures: moneyFiguresIn(userText), userNumbers: (userText.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number), userText, householdTexts };
+  // The household's other documents, only when a cited document is an endorsement / alteration (its link to the policy
+  // it amends is re-established from them).
+  const house: HouseDoc[] = [];
+  if ([...docs.values()].some((d) => isAmendment(d))) {
+    const all = (await query<{ id: string; owner: string; product: string | null; policy_number: string | null; role: string | null }>(
+      `SELECT p.id::text AS id, p.family_member_id::text AS owner, to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'document_role' AS role
+         FROM policies p WHERE p.account_id=$1 AND ${activePredicate("p")} AND p.superseded_at IS NULL`, [accountId]).catch(() => ({ rows: [] }))).rows;
+    const links = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1`, [accountId]).catch(() => ({ rows: [] }))).rows;
+    for (const r of all) house.push({ id: r.id, owner: r.owner, members: new Set([r.owner, ...links.filter((l) => l.policy_id === r.id).map((l) => l.member)]), product: r.product ?? null, policyNumber: r.policy_number ?? null, role: r.role ?? null });
+  }
+  return { docs, people, house, userFigures: moneyFiguresIn(userText), userNumbers: (userText.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number), userText, householdTexts };
 }
 
-/** The column check: where the row that prints the amount has one value cell per person or tier, the amount must be in
- * the binding's column, and that column must be the person's class (an employee is not the spouse column). */
-function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null } = {}): string | null {
+// ---- table dimensions ---------------------------------------------------------------------------------------
+/** A document that amends a policy (an endorsement / alteration): by its recorded role, or its own wording. */
+const AMENDS_WORDING = /\bendorsement\b|\bpolicy (?:is|has been) altered\b|\bpolicy alteration\b|\b(?:is|are|hereby|has been|have been) amended\b/i;
+function isAmendment(d: Doc): boolean {
+  if (/endorse|alteration|amendment/i.test(d.role ?? "")) return true;
+  const first = [...d.pages.entries()].sort((a, b) => a[0] - b[0]).map(([, t]) => t).join("\n").slice(0, 1200);
+  return AMENDS_WORDING.test(first) && /\bendorsement\b|\balteration\b|\bamendment\b/i.test(first.slice(0, 400));
+}
+const normNo = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** The policy number an endorsement says it amends ("Endorsement No. 1 to policy KH-1234"), normalised; null if none. */
+function amendedPolicyNumber(d: Doc): string | null {
+  const all = [...d.pages.values()].join("\n");
+  const m = all.match(/\b(?:to|of|under|for|amending)\s+(?:the\s+)?(?:above\s+)?policy\s*(?:no\.?|number|#)?\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{4,})/i)
+    ?? all.match(/^\s*policy\s*(?:no\.?|number)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{4,})/im);
+  return m && /\d/.test(m[1]) ? normNo(m[1]) : null;
+}
+/** The date a document's change takes effect: a printed line naming a change with a date, else its printed effective
+ * date, else the recorded one. */
+function changeDateOf(d: Doc): string | null {
+  const text = [...d.pages.entries()].sort((a, b) => a[0] - b[0]).map(([, t]) => t).join("\n");
+  const lines = text.split(/\n/);
+  for (const l of lines) if (/\b(?:with effect from|w\.?e\.?f\.?|effective (?:date|from|on)|takes? effect)\b/i.test(l) && /\b(?:endorse|amend|alter|revis|chang|new|increas|decreas)/i.test(l)) { const ds = datesIn(l); if (ds.length === 1) return ds[0]; }
+  for (const l of lines) if (/\b(?:effective (?:date|from|on)|with effect from|takes? effect (?:on|from))\b/i.test(l)) { const ds = datesIn(l); if (ds.length) return ds[0]; }
+  return d.effective;
+}
+/** The date a sentence is about: a date it states (other than the change's own effective date), else one the household's
+ * message states, else today. */
+function questionDate(sentence: string | null, userText: string, effective: string | null): string {
+  const pick = (t: string) => datesIn(t).filter((x) => x !== effective);
+  return (sentence ? pick(sentence)[0] : undefined) ?? pick(userText)[0] ?? new Date().toISOString().slice(0, 10);
+}
+/** A sentence that presents a figure as the earlier value ("previously S$1,000,000", "raised from S$1,000,000 to ..."). */
+const PRESENTED_AS_EARLIER = /\b(?:previous(?:ly)?|formerly|originally|earlier|before (?:the |this |that )?(?:endorsement|amendment|alteration|change|revision)|(?:raised|increased|reduced|decreased|cut|lowered|changed|amended|revised|moved) from|up from|down from|replac(?:es|ed|ing))\b/i;
+const brandWords = (product: string | null) => (product ?? "").toLowerCase().match(/[a-z][a-z0-9]{3,}/g)?.filter((w) => !/^(?:plan|plans|insurance|assurance|policy|family|health|life|personal|accident|hospital|integrated|shield|cover|care|protect|protection|benefit|benefits|schedule|endorsement|group|term|whole|travel|medical|critical|illness|guard|plus|basic|standard|premier|gold|silver|platinum)$/.test(w)) ?? [];
+
+type TableHead = { top: number; head: string[]; full: string[] };
+/** The header of the table a row sits in (see headerFor), with each column's full header: a spanning heading printed
+ * on the line directly above it ("Adult" over "Before | After") joined to the leaf ("Adult / Before"). */
+function tableHeadFor(lines: string[], at: number, cells: number): TableHead | null {
+  let top = -1;
+  for (let i = at - 1; i >= 0 && i >= at - 60; i--) { const n = rowCells(lines[i]).length; if (n >= 3 && n >= cells - 1) top = i; else break; }
+  if (top < 0 || MONEY_CELL.test(lines[top])) return null;
+  const head = rowCells(lines[top]);
+  const full = [...head];
+  const above = top > 0 ? lines[top - 1] : "";
+  if (above.trim() && !MONEY_CELL.test(above) && !/\d[\d,]{3,}/.test(above) && rowCells(above).length >= 1 && rowCells(above).length < head.length && ((above.includes("\t") && !above.split("\t")[0].trim()) || (!above.includes("\t") && above.length - above.trimStart().length >= 4))) {
+    const spans: { text: string; pos: number }[] = [];
+    const leaves: number[] = [];
+    if (above.includes("\t") && lines[top].includes("\t")) {
+      let cur: string | null = null;
+      const a = above.split("\t"), hraw = lines[top].split("\t");
+      const map: (string | null)[] = hraw.map((_, i) => { if (a[i] && a[i].trim()) cur = a[i].trim(); return i < a.length || cur ? cur : null; });
+      let k = 0;
+      hraw.forEach((c, i) => { if (c.trim()) { if (map[i] && map[i] !== c.trim()) full[k] = `${map[i]} / ${c.trim()}`; k++; } });
+    } else {
+      for (const m of above.matchAll(/\S+(?: \S+)*/g)) spans.push({ text: m[0], pos: m.index! });
+      for (const m of lines[top].matchAll(/\S+(?: \S+)*/g)) leaves.push(m.index!);
+      if (leaves.length === head.length) leaves.forEach((pos, k) => { const sp = [...spans].reverse().find((x) => pos >= x.pos - 3); if (sp && k > 0 && sp.text !== head[k]) full[k] = `${sp.text} / ${head[k]}`; });
+    }
+  }
+  return { top, head, full };
+}
+
+/** The column check: where the row that prints the amount has one value cell per person, tier, version or stage, the
+ * amount must be in the binding's column, and EVERY dimension of that column must hold for the figure: the person's
+ * class (an employee is not the spouse column), the version in force on the date the sentence is about (an amended
+ * value from its effective date until it ends; the earlier value only before it, or where the sentence presents it as
+ * the earlier value), and the stage the sentence names. A version column is never a person. */
+function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null; doc?: Doc | null; sentence?: string | null; userText?: string } = {}): string | null {
   const rows = passageRows(b.passage).filter((r) => amountAppears(value, r));
   if (!rows.length) return "the amount is not printed in the cited passage";
   if (rows.some((r) => rowCells(r).length < 3)) return null; // a row with one value prints one figure for everyone it covers
-  if (!b.column || !b.column.trim()) return "the row prints one column per person or tier, and the figure is not bound to a column";
+  const unbound = "the row prints one column per person or tier, and the figure is not bound to a column";
   const lines = rangeText.split(/\n/);
-  const col = norm(b.column);
+  const col = norm(b.column ?? "");
   for (const row of rows) {
     const cells = rowCells(row);
     const at = lines.findIndex((l) => norm(l).includes(norm(row).slice(0, 60)));
     if (at < 0) continue;
-    const head = headerFor(lines, at, cells.length, col);
-    if (!head) continue;
-    const exact = head.findIndex((h) => norm(h) === col);
-    const j = exact >= 0 ? exact : head.findIndex((h) => { const hn = norm(h); return hn.length >= 2 && (hn.includes(col) || col.includes(hn)); });
-    const k = j + (cells.length - Math.min(head.length, cells.length));
-    if (j < 0 || k <= 0) continue;
-    const cell = cells[k] ?? "";
-    if (!amountAppears(value, cell)) return "the figure is printed in another person’s or tier’s column, not the one it is stated for";
+    const t = tableHeadFor(lines, at, cells.length);
+    if (!t) { if (!col) return unbound; continue; }
+    const off = cells.length - Math.min(t.head.length, cells.length);
+    const value_js = t.head.map((_, j) => j).filter((j) => j + off > 0);
+    let j = -1;
+    if (col) {
+      const by = (f: (j: number) => boolean) => value_js.filter(f);
+      let cand = by((x) => norm(t.full[x]) === col);
+      if (!cand.length) cand = by((x) => norm(t.head[x]) === col);
+      if (!cand.length) cand = by((x) => { const hn = norm(t.head[x]), fn = norm(t.full[x]); return (hn.length >= 2 && (hn.includes(col) || col.includes(hn))) || (fn.length >= 2 && col.includes(fn)); });
+      if (!cand.length) continue;
+      // The same leaf under two headings ("After" under Adult and Child): the one that prints the figure.
+      const holding = cand.filter((x) => amountAppears(value, cells[x + off] ?? ""));
+      j = holding.length === 1 ? holding[0] : cand[0];
+      if (!amountAppears(value, cells[j + off] ?? "")) return "the figure is printed in another person’s or tier’s column, not the one it is stated for";
+    } else {
+      // No column bound: the column the figure is printed in stands only when its one dimension is the version (an
+      // endorsement's Before / After) -- a person, plan or stage column must be bound by the producer.
+      const holding = value_js.filter((x) => amountAppears(value, cells[x + off] ?? ""));
+      if (holding.length !== 1 || !versionPairOf(t.full)) return unbound;
+      const d = columnDimensions(t.full[holding[0]]);
+      if (!d.version || d.person.kind !== "none" || d.plan || d.stage) return unbound;
+      j = holding[0];
+    }
+    const cell = cells[j + off] ?? "";
     const how = opts.count ? "match" : amountPrintedWith(value, currency, cell);
-    if (how === "other" || (how === "bare" && !currenciesStatedIn(head[j] + " " + b.passage).includes(currency))) return "the currency printed in the column is not the figure’s";
+    if (how === "other" || (how === "bare" && !currenciesStatedIn(t.full[j] + " " + b.passage).includes(currency))) return "the currency printed in the column is not the figure’s";
+    const dims = columnDimensions(t.full[j]);
     // Agent G: the column's class against the person's established class (an unknown class never passes).
-    return classProblem(head[j], subject, opts.ownerId ?? null);
+    const cls = classProblem(dims.version ? t.full[j].replace(dims.version.words, " ").replace(/\s*\/\s*$|^\s*\/\s*/g, "").trim() || null : t.full[j], subject, opts.ownerId ?? null);
+    if (cls) return cls;
+    if (dims.stage && opts.sentence != null && !new RegExp("\\b" + dims.stage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[ -]/g, "[ -]") + "\\b", "i").test(opts.sentence)) return `the figure is printed in the “${t.full[j]}” column, and the sentence does not say it is for that stage`;
+    return versionProblem(dims, t.full, opts.doc ?? null, opts.sentence ?? null, opts.userText ?? "");
   }
-  return "the table column the figure is stated for is not printed above its row";
+  return col ? "the table column the figure is stated for is not printed above its row" : unbound;
+}
+/** The version dimension: the figure's column must be the version in force on the date the sentence is about. */
+function versionProblem(dims: ColumnDimensions, headers: string[], doc: Doc | null, sentence: string | null, userText: string): string | null {
+  if (!dims.version || !versionPairOf(headers)) return null;
+  const own = headers.map((h) => columnDimensions(h).version?.effective).find(Boolean) ?? null;
+  const eff = dims.version.effective ?? own ?? (doc ? changeDateOf(doc) : null);
+  const asOf = questionDate(sentence, userText, eff);
+  const ends = doc && isAmendment(doc) ? doc.expiry : null;
+  const v = versionInForce(asOf, eff, ends);
+  if (dims.version.side === "after") {
+    if (v.side === "after") return null;
+    if (!v.side) return "the figure is the amended value, and " + v.reason;
+    return `the figure is the amended value, which takes effect on ${eff}, after the date the sentence is about (${asOf})`;
+  }
+  if (v.side === "before") return null;
+  if (sentence != null && PRESENTED_AS_EARLIER.test(sentence)) return null;
+  if (!v.side && !eff) return "the figure is the earlier value, and " + v.reason;
+  return `the figure is the value before the change effective ${eff}, and the sentence states it for ${asOf}, when the amended value applies`;
+}
+/** An endorsement's link: it must amend a policy of this household that speaks for the person (same policy number,
+ * and the policy number it prints, if any), and the sentence must not be about another of the household's policies. */
+function amendmentProblem(doc: Doc, subjectId: string, sentence: string | null, ctx: Ctx): string | null {
+  if (!isAmendment(doc)) return null;
+  const own = normNo(doc.policyNumber);
+  const named = amendedPolicyNumber(doc);
+  if (named && own && named !== own) return "the endorsement names another policy than the one it is filed under";
+  const key = named ?? own;
+  if (!key) return "the endorsement does not say which policy it amends";
+  const bases = ctx.house.filter((h) => h.id !== doc.id && normNo(h.policyNumber) === key && !/endorse|alteration|amendment/i.test(h.role ?? ""));
+  if (!bases.length) return "the policy the endorsement amends is not one of this household’s documents";
+  if (!bases.some((h) => h.members.has(subjectId))) return "the policy the endorsement amends does not cover the person the figure is stated for";
+  if (sentence != null) {
+    const lower = sentence.toLowerCase();
+    const mine = new Set([...bases.flatMap((h) => brandWords(h.product)), ...brandWords(doc.product)]);
+    const names = (w: string) => new RegExp("(?<![a-z0-9])" + w + "(?![a-z0-9])").test(lower);
+    const other = ctx.house.filter((h) => normNo(h.policyNumber) !== key).flatMap((h) => brandWords(h.product)).filter((w) => !mine.has(w));
+    if (other.some(names) && ![...mine].some(names)) return "the sentence is about another policy than the one the endorsement amends";
+  }
+  return null;
 }
 /** The currency a table's header names for the column the bare figure is printed in ("Benefit (S$)"). */
 function columnCurrency(b: FigureBinding, rangeText: string): string | null {
@@ -446,7 +587,7 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   if (!benefit) return "the figure is not bound to a benefit";
   if (sentence != null && !namesBenefit(sentence, benefit)) return "the sentence does not name the benefit the figure is printed for";
   const row = benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
-  const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner });
+  const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner, doc, sentence, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, sentence, ctx);
   if (row) {
     // A table whose rows are not benefits (a value table: one row per policy year, one column per value): the figure's
     // benefit is its own column (checked above), and the sentence names its row (the row's first cell).
@@ -617,7 +758,7 @@ function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: C
   if (!norm(range.join("\n")).includes(norm(b.passage))) return `${o.label}: the cited passage is not on the cited pages`;
   if (!numsOf(b.passage).some((n) => same(n, o.value as number))) return `${o.label}: the number is not printed in the cited passage`;
   if (o.unit === "percent" && !new RegExp("(?<![\\d.])" + String(o.value).replace(".", "\\.") + "\\s?%").test(b.passage)) return `${o.label}: the percentage is not printed as a percentage`;
-  const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true, ownerId: doc.owner });
+  const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true, ownerId: doc.owner, doc, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, null, ctx);
   return col ? `${o.label}: ${col}` : null;
 }
 /** Re-runs one benefit calculation for one sentence; null when it stands. */

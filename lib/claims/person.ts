@@ -434,3 +434,90 @@ export function columnFitProblem(col: ColumnApplicability, p: PersonApplicabilit
       return ctx.isOwner === false && p.relation !== "other" ? null : `${where} is printed for dependants, and this person is not established as a dependant on this document`;
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Table dimensions: what a value column is printed FOR. A column can carry more than one dimension at once
+// ("Adult / After", "Gold – Revised"): the person or category it is for, the plan / tier / ward, the version of the
+// schedule (before / after an endorsement or alteration), the benefit stage (early / advanced, first / subsequent),
+// and words that name none of these. A figure is usable only when EVERY dimension its column carries is resolved for
+// the person and the date it is stated for. A version column is never read as a person.
+// ---------------------------------------------------------------------------------------------------------------
+
+export type VersionSide = "before" | "after";
+export type ColumnDimensions = {
+  /** The person / category dimension (kind "none" when the column names no person). */
+  person: ColumnApplicability;
+  /** Plan, tier, ward class or option the column is printed for ("Plan B", "Gold", "Ward class A"). */
+  plan: string | null;
+  /** The schedule version (only meaningful when the table prints both sides -- see versionPairOf). */
+  version: { side: VersionSide; words: string; effective: string | null } | null;
+  /** The benefit stage / occurrence the column is printed for ("Early stage", "Subsequent claim"). */
+  stage: string | null;
+};
+
+const MONTH_NO: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+/** Every calendar date a text prints, as ISO dates ("01 Jul 2026", "1 July 2026", "2026-07-01", "July 1, 2026";
+ * a month and year alone -- "June 2026" -- is its first day). */
+export function datesIn(text: string): string[] {
+  const out: string[] = [];
+  const t = String(text ?? "");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ok = (y: number, m: number, d: number) => m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2200;
+  const taken: [number, number][] = [];
+  const push = (y: number, m: number, d: number, at: number, len: number) => { if (ok(y, m, d) && !taken.some(([a, b]) => at < b && at + len > a)) { out.push(`${y}-${pad(m)}-${pad(d)}`); taken.push([at, at + len]); } };
+  for (const m of t.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) push(+m[1], +m[2], +m[3], m.index!, m[0].length);
+  for (const m of t.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3})[a-z]*\.?,?\s+(\d{4})\b/g)) { const mo = MONTH_NO[m[2].toLowerCase()]; if (mo) push(+m[3], mo, +m[1], m.index!, m[0].length); }
+  for (const m of t.matchAll(/\b([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/g)) { const mo = MONTH_NO[m[1].toLowerCase()]; if (mo) push(+m[3], mo, +m[2], m.index!, m[0].length); }
+  for (const m of t.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g)) push(+m[3], +m[2], +m[1], m.index!, m[0].length);
+  for (const m of t.matchAll(/\b([A-Za-z]{3,9})\.?\s+(\d{4})\b/g)) { const w = m[1].toLowerCase(); const mo = MONTH_NO[w.slice(0, 3)]; if (mo && (w.length === 3 || /^(?:january|february|march|april|may|june|july|august|september|sept|october|november|december)$/.test(w))) push(+m[2], mo, 1, m.index!, m[0].length); }
+  return out;
+}
+
+const VERSION_BEFORE = /^(?:before|previous(?:ly)?|prior|old|original|existing|current|from|was|pre[- ]?(?:endorsement|alteration|amendment|change))\b|\b(?:before|prior to) (?:the )?(?:endorsement|alteration|amendment|change)\b|\b(?:previous|old|original|existing|former) (?:limit|benefit|amount|value|schedule|terms?|cover)\b/i;
+const VERSION_AFTER = /^(?:after|revised|new|amended|now|to|updated|changed|replacement|post[- ]?(?:endorsement|alteration|amendment|change))\b|\b(?:after|following) (?:the )?(?:endorsement|alteration|amendment|change)\b|\b(?:revised|amended|new|updated) (?:limit|benefit|amount|value|schedule|terms?|cover)\b|\b(?:with effect from|w\.?e\.?f\.?|effective (?:from|on)?)\b/i;
+const STAGE = /\b(?:early|intermediate|advanced|late|severe|mild|moderate|critical)(?:[ -]stage)?\b|\bstage\s*(?:[0-9]+|[ivx]+)\b|\b(?:first|subsequent|second|third|initial|further|additional|repeat)\s+(?:claims?|diagnos[ie]s|occurrences?|events?|payouts?|admissions?|surger(?:y|ies)|treatments?|episodes?)\b|^(?:first|subsequent|initial|repeat)$/i;
+const PLAN = /\bplan\s*[a-z0-9]{1,4}\b|\b(?:gold|silver|bronze|platinum|diamond|basic|standard|premier|deluxe|essential|enhanced|classic|prestige|elite)\b|\bward\b|\bclass [a-c]\d?\b|\bprivate hospital\b|\brestructured\b|\b(?:tier|option|grade|level|band)\s*[a-z0-9]/i;
+
+/** Splits a combined header ("Adult – Before", "Adult / After", "Gold (Revised)") into its parts. */
+const headerParts = (h: string) => h.split(/\s+[\/–—|-]\s+|\s*[()]\s*|\s*:\s+/).map((p) => p.trim()).filter(Boolean);
+
+/** The dimensions of one column header (heading and leaf joined, e.g. "Insured Adult / Before"). */
+export function columnDimensions(header: string | null | undefined): ColumnDimensions {
+  const h = String(header ?? "").replace(/\s+/g, " ").trim();
+  const parts = headerParts(h);
+  let version: ColumnDimensions["version"] = null;
+  const rest: string[] = [];
+  for (const p of parts.length ? parts : [h]) {
+    const after = VERSION_AFTER.test(p), before = VERSION_BEFORE.test(p);
+    if (!version && (after || before) && !(after && before)) {
+      // "Revised with effect from 01 Jul 2026": the column's own effective date.
+      const d = datesIn(p);
+      version = { side: after ? "after" : "before", words: p, effective: after && d.length === 1 ? d[0] : null };
+      // The rest of the part (if any) still counts: "Revised Adult limit".
+      const left = p.replace(after ? VERSION_AFTER : VERSION_BEFORE, " ").replace(/\b(?:with effect from|effective|from|on)\b|\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4}|\d{4}-\d{2}-\d{2}/gi, " ").trim();
+      if (left && /[a-z]{3}/i.test(left)) rest.push(left);
+      continue;
+    }
+    rest.push(p);
+  }
+  const remainder = rest.join(" / ");
+  const stage = rest.map((p) => p.match(STAGE)?.[0] ?? null).find(Boolean) ?? null;
+  const plan = rest.map((p) => (PLAN.test(p) ? p : null)).find(Boolean) ?? null;
+  return { person: columnApplicability(remainder), plan, version, stage };
+}
+
+/** Whether a table's headers print a before / after PAIR (a version dimension is real only then: a lone "Current" or
+ * "New" heading is not a version). */
+export function versionPairOf(headers: (string | null | undefined)[]): boolean {
+  const sides = new Set(headers.map((h) => columnDimensions(h).version?.side).filter(Boolean));
+  return sides.has("before") && sides.has("after");
+}
+
+/** Which version applies on `asOf` given the date the change takes effect (and, for the amended version, the date it
+ * ends). Null with a reason when it cannot be told. */
+export function versionInForce(asOf: string, effective: string | null, ends: string | null = null): { side: VersionSide; reason: string } | { side: null; reason: string } {
+  if (!effective) return { side: null, reason: "the table prints a before and an after value, and the date the change takes effect is not printed or recorded" };
+  if (asOf < effective) return { side: "before", reason: `the change takes effect on ${effective}, after ${asOf}` };
+  if (ends && asOf > ends) return { side: null, reason: `the amended terms (effective ${effective}) ended on ${ends}, before ${asOf}` };
+  return { side: "after", reason: `the change took effect on ${effective}` };
+}

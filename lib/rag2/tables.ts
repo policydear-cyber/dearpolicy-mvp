@@ -15,11 +15,12 @@
  * row, the column or the person's class cannot be told apart it says so (ambiguous, with options and one question)
  * or reports what is missing -- it never guesses.
  */
-import { evidenceAt, type AppliesTo, type EvidenceRef } from "./evidence";
+import { evidenceAt, type AppliesTo, type EvidenceAmendment, type EvidenceRef } from "./evidence";
 import { tokens } from "./search";
 import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
 import { columnApplicability, columnFitProblem, personApplicability, relationOf, type PersonApplicability, type RelationClass } from "./people";
 import { personClause } from "@/lib/policies/member-tiers";
+import { columnDimensions, datesIn, versionInForce, versionPairOf, type ColumnDimensions, type VersionSide } from "@/lib/claims/person";
 
 export type ColumnKind = "label" | "condition" | "amount" | "percent" | "count" | "unit" | "notes";
 export type Cell = { text: string; start: number; end: number };
@@ -83,7 +84,7 @@ function headerLike(l: Line): boolean {
   if (l.cells.length < 2) return false;
   if (l.cells.some((c) => isMoneyOrNumber(c.text) || /\d[\d,]*\.\d{2}\b/.test(c.text))) return false;
   if (l.cells.some((c) => c.text.length > 48)) return false;
-  const words = l.cells.filter((c) => HEADER_WORD.test(c.text) || CLASS_RES.some(([, re]) => re.test(c.text))).length;
+  const words = l.cells.filter((c) => HEADER_WORD.test(c.text) || CLASS_RES.some(([, re]) => re.test(c.text)) || (c.text.length <= 40 && (() => { const d = columnDimensions(c.text); return !!(d.version || d.stage || d.plan); })())).length;
   return l.cells.length >= 3 ? words >= Math.ceil(l.cells.length / 2) : words === 2;
 }
 const isDataRow = (l: Line) => l.cells.length >= 2 && valueCellCount(l) >= 1;
@@ -106,18 +107,25 @@ function kindOf(header: string, values: string[], index: number): ColumnKind {
   return "amount";
 }
 
-/** Who a column applies to, from its heading and leaf ("Insured Child / Limit" -> person class child). */
+/** Who a column applies to, from its heading and leaf ("Insured Child / Limit" -> person class child). A column that is
+ * only a version of the schedule ("Before", "Revised with effect from ...") is a version, never a person; one that is a
+ * person AND a version ("Adult / After") is the person here, its version kept in `dimensionsOf`. */
 export function appliesToOf(header: string): AppliesTo | null {
   const h = flat(header);
   if (!h) return null;
-  if (/^(?:before|old|previous|original|current \(before\)|existing)\b/i.test(h) || /\b(?:before|previous|old)\b/i.test(h) && !/\bafter\b/i.test(h) && /\b(?:endorsement|alteration|change|amend)/i.test(h)) return { kind: "version", value: "before" };
-  if (/^(?:after|new|revised|amended)\b/i.test(h) || /\b(?:after|revised|amended|new)\b/i.test(h) && /\b(?:endorsement|alteration|change|amend)/i.test(h)) return { kind: "version", value: "after" };
+  const dims = columnDimensions(h);
+  if (dims.version && dims.person.kind === "none" && !dims.plan && !dims.stage) return { kind: "version", value: dims.version.side };
+  if (/^(?:before|old|previous|original|current \(before\)|existing)\b/i.test(h) && dims.person.kind === "none") return { kind: "version", value: "before" };
   for (const [cls, re] of CLASS_RES) if (re.test(h)) return { kind: "person_class", value: h, personClass: cls };
   if (/\bplan\s*[a-z0-9]{1,4}\b/i.test(h)) return { kind: "plan", value: h };
   if (/\bward\b|\bprivate hospital\b|\brestructured\b|\bclass [a-c]\d?\b/i.test(h)) return { kind: "ward", value: h };
   if (/\b(?:tier|option|grade|level|band)\s*[a-z0-9]/i.test(h)) return { kind: "tier", value: h };
+  if (dims.stage) return { kind: "stage", value: h };
+  if (dims.plan) return { kind: "tier", value: h };
   return null;
 }
+/** Every dimension a column carries (person, plan / tier, version, stage) -- see lib/claims/person.ts columnDimensions. */
+export const dimensionsOf = (c: Pick<Column, "header">): ColumnDimensions => columnDimensions(c.header);
 const currencyOfHeader = (h: string) => { const m = h.match(/\((S\$|SGD|US\$|USD|HK\$|RM|MYR|€|£)\)/i); return m ? normCurrency(m[1]) : null; };
 export function normCurrency(sym: string): string {
   const s = sym.toUpperCase().replace(/\s/g, "");
@@ -316,7 +324,11 @@ export type SelectedValue = {
   currency: string | null; unit: string | null; period: Period; conditions: string[];
   benefit: string; rowLabel: string; columnHeader: string;
   /** How the subject's column was decided, and the evidence for it when a document says so. */
-  columnBasis: { basis: "only_column" | "explicit_tier" | "document" | "recorded_tier" | "relation" | "version_after" | "definition"; detail: string; evidence: EvidenceRef | null };
+  columnBasis: { basis: "only_column" | "explicit_tier" | "document" | "recorded_tier" | "relation" | "version_after" | "version_before" | "definition"; detail: string; evidence: EvidenceRef | null };
+  /** The schedule version the value is read from, where its table prints a before / after pair. */
+  version?: VersionSide | null;
+  /** For a value read from an endorsement: the policy it amends, its effective date and the row it changes. */
+  amends?: EvidenceAmendment | null;
   evidence: EvidenceRef;
   amendedFrom?: { value: number; currency: string | null; evidence: EvidenceRef; note: string } | null;
   notes: string[];
@@ -326,7 +338,7 @@ export type TableSelection =
   | { status: "ambiguous"; options: { label: string; detail: string; evidence: EvidenceRef | null }[]; question: string; reason: string }
   | { status: "missing"; reason: string; evidence?: EvidenceRef | null;
       /** Agent G: what is still unresolved about WHO the column is for (only this value is withheld; nothing else). */
-      unresolved?: { kind: "person_class" | "stepchild_class"; needs: string } | null };
+      unresolved?: { kind: UnresolvedKind; needs: string } | null };
 
 const GENERIC = new Set(["benefit", "limit", "amount", "cover", "sum", "payable", "max", "maximum", "plan", "per", "of", "which", "the", "value", "much", "how"]);
 const tokMatch = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && (a.startsWith(b.slice(0, 5)) && b.startsWith(a.slice(0, 5))) && (a.startsWith(b) || b.startsWith(a)));
@@ -374,6 +386,14 @@ export type SubjectColumnHints = {
   childDefinition?: ChildDefinition | null;
   /** The document's name, for reasons. */
   docName?: string | null;
+  /** The date the question is about (ISO): decides which version of a before / after table is in force. */
+  asOf?: string | null;
+  /** The date the document's change takes effect (its printed effective date, else the recorded one), and the date the
+   * amended terms end (an endorsement's expiry), for a before / after table whose columns print no date. */
+  versionEffective?: string | null;
+  versionEnds?: string | null;
+  /** Read this version regardless of the date (used to report an endorsement's amended value that is not yet in force). */
+  versionForce?: VersionSide | null;
 };
 
 /** Agent G: a document's definition of “Child”, read from its wording -- whether it includes step-children, whether a
@@ -414,12 +434,39 @@ function listLabel(line: string, names: string[]): string | null {
 }
 
 /** Decides which of `cols` applies to the subject. */
-export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: Column; basis: SelectedValue["columnBasis"] } | { ambiguous: Column[]; reason: string } | { none: string } | { unresolved: string; needs: string; kind: "person_class" | "stepchild_class" } {
+export type ColumnChoice = { ok: Column; basis: SelectedValue["columnBasis"]; version?: VersionSide | null } | { ambiguous: Column[]; reason: string } | { none: string } | { unresolved: string; needs: string; kind: UnresolvedKind };
+export type UnresolvedKind = "person_class" | "stepchild_class" | "version" | "stage";
+export function chooseColumn(cols: Column[], hints: SubjectColumnHints): ColumnChoice {
   if (!cols.length) return { none: "the table prints no value column for that" };
+  // Version dimension first (only where the table prints a before / after pair): the version in force on the
+  // question's date; then every other dimension among that version's columns. A version column is never a person.
+  if (versionPairOf(cols.map((c) => c.header))) {
+    const dims = cols.map((c) => ({ c, d: dimensionsOf(c) }));
+    const ownDate = dims.map((x) => x.d.version?.effective).find(Boolean) ?? null;
+    const eff = ownDate ?? hints.versionEffective ?? null;
+    const inForce = hints.versionForce ? { side: hints.versionForce, reason: "" } : versionInForce((hints.asOf ?? new Date().toISOString()).slice(0, 10), eff, hints.versionEnds ?? null);
+    if (!inForce.side) return { unresolved: inForce.reason, needs: eff ? "a schedule or endorsement in force on that date" : "the date the change takes effect (the endorsement or alteration that prints it)", kind: "version" };
+    const keep = dims.filter((x) => x.d.version?.side === inForce.side).map((x) => x.c);
+    if (!keep.length) return { none: `the table prints no ${inForce.side === "after" ? "amended" : "earlier"} column` };
+    const word = inForce.side === "after" ? "amended" : "earlier";
+    const versionBasis = (c: Column): SelectedValue["columnBasis"] => ({ basis: inForce.side === "after" ? "version_after" : "version_before", detail: `the ${word} (“${c.header}”) column${eff ? (inForce.side === "after" ? `, in force from ${eff}` : `, in force before ${eff}`) : ""}`, evidence: null });
+    const persons = keep.filter((c) => { const d = dimensionsOf(c); return d.person.kind !== "none" || d.plan || d.stage; });
+    if (keep.length === 1 && !persons.length) return { ok: keep[0], basis: versionBasis(keep[0]), version: inForce.side };
+    if (!persons.length) return { ambiguous: keep, reason: `the ${word} side of the row prints more than one value and the columns do not say who each applies to` };
+    const inner = chooseColumn(keep.map((c) => ({ ...c, appliesTo: appliesToOf(c.header.replace(/\s*[\/–—|-]\s*(?:before|after|previous|revised|old|new|original|existing|amended|current|from|to)\b.*$/i, "")) ?? c.appliesTo })), { ...hints, versionForce: null, asOf: null, versionEffective: null });
+    if ("ok" in inner) { const c = keep.find((k) => k.index === inner.ok.index)!; return { ok: c, basis: { ...inner.basis, detail: `${inner.basis.detail}; ${versionBasis(c).detail}` }, version: inForce.side }; }
+    return inner;
+  }
   const version = cols.filter((c) => c.appliesTo?.kind === "version");
   if (version.length && version.length === cols.length) {
     const after = version.filter((c) => c.appliesTo!.value === "after");
-    if (after.length === 1) return { ok: after[0], basis: { basis: "version_after", detail: `the amended (“${after[0].header}”) column`, evidence: null } };
+    if (after.length === 1) return { ok: after[0], basis: { basis: "version_after", detail: `the amended (“${after[0].header}”) column`, evidence: null }, version: "after" };
+  }
+  const stages = cols.filter((c) => c.appliesTo?.kind === "stage");
+  if (stages.length > 1 && stages.length === cols.length) {
+    const m = hints.tier ? stages.filter((c) => sameTier(c.header, hints.tier!) || sameTier(dimensionsOf(c).stage ?? "", hints.tier!)) : [];
+    if (m.length === 1) return { ok: m[0], basis: { basis: "explicit_tier", detail: `the “${m[0].header}” column (stage given: ${hints.tier})`, evidence: null } };
+    return { unresolved: `the row prints one value per stage (${stages.map((c) => c.header).join(" / ")}), and which stage applies is not established`, needs: `which stage applies (${stages.map((c) => c.header).join(" or ")}), from the diagnosis or the claim`, kind: "stage" };
   }
   const classed = cols.filter((c) => c.appliesTo && c.appliesTo.kind !== "version");
   if (cols.length === 1 && !classed.length) return { ok: cols[0], basis: { basis: "only_column", detail: "the row prints one value for everyone it covers", evidence: null } };
@@ -434,7 +481,7 @@ export function chooseColumn(cols: Column[], hints: SubjectColumnHints): { ok: C
   // A document naming the person with exactly one of the columns' classes / tiers ("Kavya Nair   Child").
   const docMatches = new Map<number, { line: string; ref: EvidenceRef }>();
   for (const named of hints.namedLines) {
-    // Only the clause of the line that names the person ("Koh Jun Hao (child)" of "A (adult); Koh Jun Hao (child)").
+    // Only the clause of the line that names the person ("B (child)" of "A (adult); B (child)").
     const clause0 = hints.names.map((n) => personClause(named.line, n)).find((c): c is string => !!c) ?? named.line;
     // Integration (agent C's request 4): a person named inside a labelled list ("Insured children: A; B") takes the
     // list's label, even when the clause around the name is just "B".
@@ -560,24 +607,59 @@ export async function selectTableValue(args: { accountId: string; policyId: stri
     memberId: subject.id, name: subject.displayName, names, relation, tier: args.subject.tier ?? null, recordedTier: link?.tier ?? null,
     isDocOwner: doc.ownerId === subject.id, ownerIsSelf: !!self && doc.ownerId === self.id, age: ageOn(subject.dateOfBirth, asOf), namedLines,
     applicability, childDefinition, docName: doc.productName ?? null,
+    asOf, versionEffective: changeDate(base, doc), versionEnds: isEndorsement(doc, base) ? doc.expiryDate : null,
   };
   const picked = pickValue(base, args.benefit, want, hints, subject.id);
+  if (picked.status === "ok" && picked.version && isEndorsement(doc, base)) picked.amends = amendmentOf(doc, base, docs, picked, hints);
   if (picked.status !== "ok") return picked;
 
-  // A later endorsement of the same policy that prints this benefit's amended value.
+  // A later endorsement of the same policy that prints this benefit's amended value: it must name this policy (when it
+  // prints a policy number), take effect after the schedule, be in force on the question's date (not before its
+  // effective date, not after it ends), and print the benefit's row with an amended (after) column.
   const baseDate = doc.effectiveDate ?? doc.documentDate ?? null;
   for (const d of family) {
     const L = load(d);
-    const all = [...L.pages.values()].join("\n");
-    if (!(d.documentRole === "endorsement" || AMENDS.test(all))) continue;
-    const eff = d.effectiveDate ?? d.documentDate ?? [...L.pages.values()].map(printedEffectiveDate).find(Boolean)?.date ?? null;
+    if (!isEndorsement(d, L)) continue;
+    const named = amendedPolicyNumber(L);
+    if (named && named !== key && named !== gkey) { picked.notes.push(`${d.productName ?? "An endorsement"} names policy ${named}, not this policy; it was not applied.`); continue; }
+    const eff = changeDate(L, d);
     if (!eff || (baseDate && eff <= baseDate)) continue;
-    const amended = pickValue(L, args.benefit, want, { ...hints, tier: null }, subject.id);
-    if (amended.status !== "ok" || amended.columnBasis.basis !== "version_after") continue;
+    const amended = pickValue(L, args.benefit, want, { ...hints, versionForce: "after", versionEffective: eff, versionEnds: d.expiryDate }, subject.id);
+    if (amended.status !== "ok" || amended.version !== "after") continue;
     if (eff > asOf) { picked.notes.push(`An endorsement effective ${eff} changes this to ${fmt(amended)} (not yet in force on ${asOf}).`); continue; }
-    return { ...amended, amendedFrom: { value: picked.value, currency: picked.currency, evidence: picked.evidence, note: `amended by the endorsement effective ${eff}` }, notes: [...amended.notes, `Amended by the endorsement effective ${eff}; the schedule printed ${fmt(picked)}.`] };
+    if (d.expiryDate && d.expiryDate < asOf) { picked.notes.push(`An endorsement effective ${eff} changed this to ${fmt(amended)} until ${d.expiryDate} (no longer in force on ${asOf}).`); continue; }
+    const amends = amendmentOf(d, L, [doc], amended, { ...hints, versionEffective: eff });
+    amended.evidence.amends = amends;
+    return { ...amended, amends, amendedFrom: { value: picked.value, currency: picked.currency, evidence: picked.evidence, note: `amended by the endorsement effective ${eff}` }, notes: [...amended.notes, `Amended by the endorsement effective ${eff} to policy ${doc.policyNumber ?? doc.productName ?? ""}`.trimEnd() + `; the schedule printed ${fmt(picked)}.`] };
   }
   return picked;
+}
+
+/** An endorsement / alteration document (by its recorded role, or its own wording). */
+function isEndorsement(d: DocRow, L: Loaded): boolean {
+  return d.documentRole === "endorsement" || AMENDS.test([...L.pages.values()].join("\n"));
+}
+/** The policy number an endorsement says it amends ("Endorsement No. 1 to policy KH-1234"), normalised; null if none. */
+function amendedPolicyNumber(L: Loaded): string | null {
+  const all = [...L.pages.values()].join("\n");
+  const m = all.match(/\b(?:to|of|under|for|amending)\s+(?:the\s+)?(?:above\s+)?policy\s*(?:no\.?|number|#)?\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{4,})/i)
+    ?? all.match(/^\s*policy\s*(?:no\.?|number)\s*[:#]?\s*([A-Z0-9][A-Z0-9\-\/]{4,})/im);
+  return m && /\d/.test(m[1]) ? normNo(m[1]) : null;
+}
+/** The date a document's change takes effect: a printed line naming a change with a date ("Revised with effect from
+ * ..."), else its printed effective date, else the recorded one. */
+function changeDate(L: Loaded, d: DocRow): string | null {
+  for (const text of L.pages.values()) for (const line of text.split("\n")) {
+    if (/\b(?:with effect from|w\.?e\.?f\.?|effective (?:date|from|on)|takes? effect)\b/i.test(line) && /\b(?:endorse|amend|alter|revis|chang|new|increas|decreas)/i.test(line)) { const ds = datesIn(line); if (ds.length === 1) return ds[0]; }
+  }
+  return [...L.pages.values()].map(printedEffectiveDate).find(Boolean)?.date ?? d.effectiveDate ?? d.documentDate ?? null;
+}
+/** The amendment link kept with a value read from an endorsement: the policy it amends (the base document of the same
+ * policy number), its effective date, when it ends, and the row it changes. */
+function amendmentOf(d: DocRow, L: Loaded, docs: DocRow[], v: SelectedValue, hints: SubjectColumnHints): EvidenceAmendment {
+  const key = normNo(d.policyNumber);
+  const base = docs.find((x) => x.id !== d.id && key && normNo(x.policyNumber) === key && x.documentRole !== "endorsement") ?? null;
+  return { endorsementId: d.id, policyId: base?.id ?? d.id, policyNumber: d.policyNumber, effectiveDate: hints.versionEffective ?? changeDate(L, d), endsOn: d.expiryDate, rowLabel: v.rowLabel, side: v.version ?? "after" };
 }
 const fmt = (v: SelectedValue) => v.valueKind === "money" ? `${v.currency} ${v.value.toLocaleString("en-SG", { minimumFractionDigits: v.cents! % 100 ? 2 : 0 })}` : v.valueKind === "percent" ? `${v.value}%` : `${v.value} ${v.unit ?? ""}`.trim();
 
@@ -626,7 +708,7 @@ function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hint
   // Agent G: the chosen column's class is checked against the person's explicit class -- unless the document itself
   // (its list of insured persons, the recorded insured category, its definition of a Child) settled the column.
   const app = columnApplicability(col.header);
-  const settledByDocument = ["document", "recorded_tier", "version_after", "definition"].includes(choice.basis.basis);
+  const settledByDocument = ["document", "recorded_tier", "version_after", "version_before", "definition"].includes(choice.basis.basis);
   // (A tier the household gave explicitly is honoured for a child -- some plans enrol a child at an adult tier -- but never
   // lets an adult, or a person of unknown class, take a child's or another class's column.)
   const honouredTier = choice.basis.basis === "explicit_tier" && hints.applicability?.cls === "child";
@@ -655,6 +737,6 @@ function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hint
   return {
     status: "ok", value: v.kind === "money" ? v.amount : v.kind === "percent" ? v.percent : v.count, valueKind: v.kind, cents: v.kind === "money" ? v.cents : null, ppm: v.kind === "percent" ? v.ppm : null,
     currency: v.kind === "money" ? v.currency : null, unit: v.kind === "count" ? v.unit : v.kind === "percent" ? "%" : v.unit, period: v.period, conditions,
-    benefit, rowLabel: r.label, columnHeader: col.header, columnBasis: choice.basis, evidence, notes: [],
+    benefit, rowLabel: r.label, columnHeader: col.header, columnBasis: choice.basis, version: choice.version ?? null, evidence, notes: [],
   };
 }

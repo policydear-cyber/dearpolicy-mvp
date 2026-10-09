@@ -8,7 +8,7 @@
  */
 import type { FigureBinding } from "@/types";
 
-export type AppliesToKind = "person_class" | "tier" | "plan" | "ward" | "version" | "everyone";
+export type AppliesToKind = "person_class" | "tier" | "plan" | "ward" | "version" | "stage" | "everyone";
 /** Who a table column's values apply to ("Child" -> person_class child; "Plan B" -> plan; "After" -> version). */
 export type AppliesTo = { kind: AppliesToKind; value: string; personClass?: string | null };
 
@@ -51,7 +51,11 @@ export type EvidenceRef = {
   support?: EvidenceSpan | null;
   /** What the support needs to be read correctly (table header, continued header, footnote). */
   context?: EvidenceContext[] | null;
+  /** For a value read from an endorsement / alteration: the policy it amends, the date it takes effect and the row it
+   * changes (the link the save-time gate re-establishes from the documents themselves). */
+  amends?: EvidenceAmendment | null;
 };
+export type EvidenceAmendment = { endorsementId: string; policyId: string; policyNumber: string | null; effectiveDate: string | null; endsOn: string | null; rowLabel: string; side: "before" | "after" };
 
 export type Span = { start: number; end: number; text: string };
 
