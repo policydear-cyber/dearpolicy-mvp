@@ -19,6 +19,7 @@ import { recomputeCalculation } from "@/lib/claims/calc-record";
 import { renderedAssistantText } from "@/components/assistant-message";
 import { withoutNegatedDecisions } from "@/lib/rag2/loop/statements";
 import { WITHHELD_AMOUNT_TEXT } from "@/lib/chat/monetary-boundary";
+import { CLAIM_LEFT_OUT_NOTE, FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 import { CALC_NOTE, DROPPED_NOTE, INSTRUCTION_NOTE } from "@/lib/rag2/loop/compose";
 /** lib/rag2/loop/hook.ts RESUME_NOTE (not imported: the hook pulls in the chat route's modules). */
 const RESUME_NOTE = "When you’re ready, here is the question I was on.";
@@ -64,7 +65,7 @@ const count = (hay: string, needle: string) => (needle ? hay.split(needle).lengt
  */
 const SAID_BACK = /^(?:you(?:['’]ve| have)? (?:said|told (?:me|us)|mentioned|wrote|reported|let me know)|as you (?:said|mentioned|told me))\b/i;
 const NOT_IN_DOCS = /\b(?:documents?|polic(?:y|ies)|schedule|certificate|plan|wording)\b[^.]{0,80}\b(?:do(?:es)?n['’]t|do(?:es)? not|never)\s+(?:mention|say|list|show|include|print|state|cover|have)\b|\bnot (?:mentioned|listed|stated|shown|printed|included) (?:in|anywhere in) (?:your|the)\b|\b(?:couldn['’]t|could not|can['’]t|cannot) find\b[^.]{0,60}\bin (?:your|the) (?:documents?|polic)/i;
-const GENERIC = new Set([DROPPED_NOTE, CALC_NOTE, INSTRUCTION_NOTE, RESUME_NOTE, "I need one more detail first.", "I need to know who this is about first.", "I need to know who is asking first."].map((x) => ws(x)));
+const GENERIC = new Set([DROPPED_NOTE, CALC_NOTE, INSTRUCTION_NOTE, RESUME_NOTE, FIGURE_LEFT_OUT_NOTE, CLAIM_LEFT_OUT_NOTE, "I need one more detail first.", "I need to know who this is about first.", "I need to know who is asking first."].map((x) => ws(x)));
 export function turnUsefulness(t: LoadedTurn): { ok: boolean; stage: Stage; detail: string } {
   const questions = t.questions.map(ws).filter(Boolean);
   const body = [t.content ?? t.answer.summary ?? "", ...((t.answer.details ?? []) as string[])].flatMap((x) => sentences(String(x ?? ""))).map(ws).filter((s) => s && !questions.some((q) => s === q || q.includes(s)));

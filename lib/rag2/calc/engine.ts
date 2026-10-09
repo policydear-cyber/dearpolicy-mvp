@@ -162,8 +162,10 @@ export function hospitalCash(a: {
     // S$120") applies to every column: it is bound to the label cell that prints it (one figure for everyone the row
     // covers), not to the whole row, whose value cells print only the rates.
     const e0 = t.dayCap.evidence;
-    const labelCell = e0.passage.text.split(/\t|\s{3,}/)[0]?.trim() ?? "";
-    const inLabel = e0.passage.text.split(/\t|\s{3,}/).length >= 3 && new RegExp("(?<![\\d.,])" + t.dayCap.value + "(?![\\d.,])").test(labelCell);
+    // Integration (r7): the label is the first cell that is not an item code ("B", "4.", "(a)") -- a row may start with one.
+    const cells0 = e0.passage.text.split(/\t|\s{3,}/).map((c) => c.trim());
+    const labelCell = cells0.find((c) => !ITEM_CODE.test(c)) ?? "";
+    const inLabel = cells0.length >= 3 && new RegExp("(?<![\\d.,])" + t.dayCap.value + "(?![\\d.,])").test(labelCell);
     const e = inLabel ? { ...e0, passage: { ...e0.passage, text: labelCell, start: e0.passage.start + e0.passage.text.indexOf(labelCell), end: e0.passage.start + e0.passage.text.indexOf(labelCell) + labelCell.length }, table: null, support: null, context: null } : e0;
     const binding: FigureBinding | null = toFigureBinding({ ...e, subjectId: e.subjectId ?? a.subjectId }, a.benefit, t.dayCap.value, "");
     // A1: the cap's own reset period, read from the clause that prints it.
@@ -326,13 +328,16 @@ export function hospitalCash(a: {
   return finish({ ...base, kind, conditions: conds, requirements: [], amount: cents / 100, currency: r.currency, record, steps: lines });
 }
 
+/** An item-code cell of a table row ("B", "12", "4.2", "(a)", "iii."): never the benefit's label. */
+const ITEM_CODE = /^\(?(?:[A-Z]{1,2}|[ivx]{1,4}|\d{1,3}(?:\.\d{1,2})?)[.)]?$/i;
 /** The noun for a rate unit's periods ("complete 24-hour periods", "days", "nights"). */
 function unitNoun(u: string | null): string {
   return u === "complete_24h" ? "complete 24-hour periods" : u === "night" ? "nights" : "days";
 }
 /** A passage narrowed to the label cell of a table row that prints `text` (one figure for every column of the row). */
 function narrowToLabel(e0: EvidenceRef, text: string): EvidenceRef {
-  const labelCell = e0.passage.text.split(/\t|\s{3,}/)[0]?.trim() ?? "";
+  // Integration (r7): the label is the first cell that is not an item code (a row may start with one: "B").
+  const labelCell = e0.passage.text.split(/\t|\s{3,}/).map((c) => c.trim()).find((c) => !ITEM_CODE.test(c)) ?? "";
   const i = labelCell ? e0.passage.text.indexOf(labelCell) : -1;
   if (i < 0 || !labelCell.includes(text)) return e0;
   return { ...e0, passage: { ...e0.passage, text: labelCell, start: e0.passage.start + i, end: e0.passage.start + i + labelCell.length }, table: null, support: null, context: null };

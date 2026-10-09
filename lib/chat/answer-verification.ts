@@ -351,7 +351,7 @@ function bindingsOf(answer: ChatAnswer): FigureBinding[] {
 /** The documents the answer's bindings and citations name (this household's, active -- the lifecycle predicate --
  * with their release state, version and pages), the household's people, and the household's own figures. */
 async function loadContext(accountId: string, answer: ChatAnswer, userText: string): Promise<Ctx> {
-  const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
+  const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.calculations ?? []).map((k) => k?.policyId), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
   const docs = new Map<string, Doc>();
   if (ids.length) {
     const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; role: string | null; effective: string | null; expiry: string | null }>(
@@ -821,12 +821,25 @@ function quotedBy(words: string, texts: string[]): boolean {
   const w = squash(words);
   return w.length >= 2 && texts.some((t) => squash(t).includes(w));
 }
+/** Integration (r7): `endorsementId` is an endorsement of the calculation's own policy (same policy number, not itself
+ * an endorsement), linked to this household's policy for the calculation's person. */
+function endorsesPolicy(endorsementId: string, r: CalculationRecord, ctx: Ctx): boolean {
+  const e = ctx.docs.get(endorsementId), base = ctx.docs.get(r.policyId);
+  if (!e || !base || !isAmendment(e) || isAmendment(base)) return false;
+  const key = amendedPolicyNumber(e) ?? normNo(e.policyNumber);
+  if (!key || normNo(base.policyNumber) !== key) return false;
+  return !amendmentProblem(e, r.subjectId, null, ctx);
+}
 function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: CalculationRecord, ctx: Ctx): string | null {
   const b = o.binding;
   if (!b) return `${o.label}: a document figure without its own binding`;
-  if (b.policyId !== r.policyId) return `${o.label}: bound to another document than the calculation’s`;
+  // Integration (r7): an endorsement's in-force figure may serve a calculation on the policy it amends (the same policy
+  // number, the endorsement linked to this household's policy for the person); any other document is refused.
+  const viaEndorsement = b.policyId !== r.policyId && endorsesPolicy(b.policyId, r, ctx);
+  if (b.policyId !== r.policyId && !viaEndorsement) return `${o.label}: bound to another document than the calculation’s`;
   if (b.subjectId !== r.subjectId) return `${o.label}: bound to another person than the calculation’s`;
-  if ((b.documentHash ?? null) !== (r.documentHash ?? null)) return `${o.label}: bound to another version than the calculation’s`;
+  if (viaEndorsement) { const e = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== e.fileHash) return `${o.label}: bound to another version of the endorsement than the one on file`; }
+  else if ((b.documentHash ?? null) !== (r.documentHash ?? null)) return `${o.label}: bound to another version than the calculation’s`;
   if ((o.column ?? null) !== (b.column ?? null)) return `${o.label}: the stated column is not the binding’s`;
   if (o.row && !squash(b.passage).includes(squash(o.row).slice(0, 40))) return `${o.label}: the stated row is not the bound passage`;
   // A column printed for a class of person (Adult / Child) must be the person's own class.
@@ -923,6 +936,8 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       if (!ruleCond || ruleCond.status !== "established" || ruleCond.basis !== "document" || !ruleCond.passage) return "the day count uses a rule the cited wording does not establish";
       const said = dayRuleFromWording(ruleCond.passage.text);
       if (!said || said.rule !== st.rule) return "the day count uses another rule than the cited wording states";
+      // Integration (r7): the remainder rule's hours are the wording's own (the recompute uses the record's).
+      if (st.rule === "completed_24h_remainder" && (said.remainderHours ?? null) !== (st.remainderHours ?? null)) return "the day count counts a remaining part from another number of hours than the cited wording states";
       // Integration (D30): every admission / discharge-day exception applied must be stated by an established passage.
       const stated = r.conditions.filter((c) => c.kind === "day_count_rule" && c.status === "established" && c.basis === "document" && c.passage).flatMap((c) => dayEdgeExceptionsFromWording(c.passage!.text));
       for (const e of st.edges ?? []) if (!stated.some((x) => x.edge === e.edge && x.when === e.when && x.minutes === e.minutes)) return `the day count applies a ${e.edge}-day exception the cited wording does not state`;

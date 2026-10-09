@@ -9,6 +9,7 @@ import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
 import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
+import { CLAIM_LEFT_OUT_NOTE, FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 
 const pages = new Map<string, string>();
 for (const d of DOCS) for (const [n, t] of Object.entries(d.pages)) pages.set(`${d.id}:${n}`, t);
@@ -204,6 +205,12 @@ t("C26 L3b turn 2 that says back the X-ray, re-states the cited S$600 with its c
   assert.equal(v.verdict, "PASS", JSON.stringify(bad(v)));
   assert.equal(turnUsefulness(mk("Mei’s PlayWell plan lists a Dislocation benefit of S$600.").turns[1]).ok, false, "a figure with no citation is not useful");
   assert.equal(turnUsefulness(mk("I couldn’t confirm an answer to that from your documents. You told me the doctor did an X-ray.").turns[1]).ok, false, "generic failure + echo is not useful");
+  // Integration (r7): the save-time gate's own notes are generic failures too.
+  // (Citations kept from what the gate removed must not make the note look like a cited statement.)
+  for (const note of [FIGURE_LEFT_OUT_NOTE, CLAIM_LEFT_OUT_NOTE]) {
+    const u = turnUsefulness(mk(note + " You told me the doctor did an X-ray.", cites).turns[1]);
+    assert.equal(u.ok, false, "the gate's note + echo is not useful: " + note); assert.match(u.detail, /generic failure/);
+  }
   assert.equal(turnUsefulness(mk("Mei’s PlayWell certificate doesn’t mention a benefit for physiotherapy after a dislocation.").turns[1]).ok, true, "what the documents do not say is useful");
   assert.equal(turnUsefulness({ ...mk("I need one more detail first.").turns[1], questions: ["Which clinic did Mei go to?"] }).ok, true, "one material question is useful");
 });

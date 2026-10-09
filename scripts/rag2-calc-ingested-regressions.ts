@@ -203,6 +203,56 @@ async function main() {
     assert.ok(r.source === "document" && r.binding.policyId === SCHED, JSON.stringify(r));
   });
 
+  // ------------------------------------------------------------------------------------------------ save-time gate
+  // Integration (r7): the gate re-checks these records -- the remainder rule's hours against the cited wording, and an
+  // endorsement's in-force rate on a record of the policy it amends (same policy number); another policy is refused.
+  const V = await import("@/lib/chat/answer-verification");
+  type Rec = import("@/types").CalculationRecord;
+  const gateOf = async (rec: Omit<Rec, "sentence">, sentence: string, user: string) => V.verifyAnswerFigures({ mode: "answer", summary: sentence, details: [], claimItems: [], nextSteps: [], confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], calculations: [{ ...rec, sentence }] } as unknown as import("@/types").ChatAnswer, { accountId: ACCOUNT, userText: user });
+  // The processing dump leaves file_hash out; the gate needs each document's version. The run's own stored bindings
+  // (dump-final) carry it, as scripts/rag2-ingested-gate-regressions.ts reads them.
+  const finalDump = await readFile(path.join(RUN, "dump-final/dump.json"), "utf8");
+  for (const m of finalDump.match(/"policyId":\s*"[0-9a-f-]{36}"[^{}]*?"documentHash":\s*"[0-9a-f]{64}"/g) ?? []) {
+    const pid = m.match(/"policyId":\s*"([0-9a-f-]{36})"/)![1], h = m.match(/"documentHash":\s*"([0-9a-f]{64})"/)![1];
+    await db.query("UPDATE policies SET file_hash=$1 WHERE id=$2 AND file_hash IS NULL", [h, pid]);
+  }
+  for (const id of [SCHED, ENDO, JUNIOR]) assert.ok((await db.query<{ h: string | null }>("SELECT file_hash AS h FROM policies WHERE id=$1", [id])).rows[0]?.h, "a stored version hash for " + id);
+  const SIMON_USER = `${ADM.words} and ${DIS.words}. No other hospital stays this policy year.`;
+  await check("G1 gate: Simon's S$360 under clause 4.2 is kept; a tampered remainderHours (6 h, re-run consistently to 4 days = S$480) is rejected", async () => {
+    const c = okc(await hc(SCHED, SIMON, ADM, DIS, NONE));
+    const sentence = "Indicative estimate: SafeStay hospital daily allowance of S$120 per day for 3 days comes to S$360.";
+    const ok = await gateOf(c.record!, sentence, SIMON_USER);
+    assert.deepEqual(ok.map((p) => p.reason), [], "the record as calculated passes");
+    const t = structuredClone(c.record!) as Omit<Rec, "sentence">;
+    const dc = t.steps.find((s) => s.op === "day_count")!; if (dc.op === "day_count") { dc.remainderHours = 6; dc.out = 4; }
+    for (const s of t.steps) if (s.op === "min_count") s.out = 4;
+    const mul = t.steps.find((s) => s.op === "multiply")!; mul.out = 48000; t.result = { ...t.result, value: 480 };
+    assert.ok(CR.recomputeCalculation(t).ok, "the tampered record is self-consistent: only the wording can catch it");
+    const bad = await gateOf(t, "Indicative estimate: SafeStay hospital daily allowance of S$120 per day for 4 days comes to S$480.", SIMON_USER);
+    assert.ok(bad.some((p) => /remaining part from another number of hours/.test(p.reason)), JSON.stringify(bad.map((p) => p.reason)));
+  });
+  await check("G2 gate: Felix's August S$330 (the endorsement's in-force S$110 on the schedule's record) is kept; the same rate bound to another policy is refused", async () => {
+    const aug = okc(await hc(SCHED, FELIX, at("2026-08-03T10:00+08:00"), at("2026-08-06T10:00+08:00"), NONE));
+    const user = "Felix was admitted on 2026-08-03 at 10:00 and discharged on 2026-08-06 at 10:00. No other hospital stays this policy year.";
+    const sentence = "Indicative estimate: SafeStay hospital daily allowance of S$110 per day for 3 days comes to S$330.";
+    const ok = await gateOf(aug.record!, sentence, user);
+    assert.deepEqual(ok.map((p) => p.reason), [], "the endorsement's rate serves the policy it amends");
+    const t = structuredClone(aug.record!) as Omit<Rec, "sentence">;
+    const rate = t.operands.find((o) => o.id === "rate")!;
+    if (rate.source === "document") rate.binding = { ...rate.binding, policyId: JUNIOR };
+    const bad = await gateOf(t, sentence, user);
+    assert.ok(bad.some((p) => /bound to another document than the calculation/.test(p.reason)), JSON.stringify(bad.map((p) => p.reason)));
+  });
+  await check("G3 V3's report: select_table_value with tier 'Adult' for Simon never returns the endorsement's child-only revised S$110", async () => {
+    for (const policyId of [SCHED, ENDO]) {
+      const ctx = ctxFor();
+      const r = await R.runTool(ctx, "select_table_value", { policy_id: policyId, benefit: HDA, subject_id: SIMON, want: "amount", tier: "Adult", as_of: "2026-08-04" }, ON);
+      const d = (r.ok ? r.data : {}) as { status?: string; value?: number };
+      assert.ok(!(d.status === "ok" && d.value === 110), `${policyId === ENDO ? "endorsement" : "schedule"}: ${JSON.stringify(d).slice(0, 300)}`);
+      if (d.status === "ok") assert.equal(d.value, 120, "the adult's own rate");
+    }
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2:calc-ingested-test ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

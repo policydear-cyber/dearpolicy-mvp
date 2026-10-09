@@ -220,6 +220,12 @@ jobs:
         run: npm run rag2:facts-test
       - name: "rag2 conv4: a supplied fact moves the conversation forward (benefit restated with its citation, remaining condition, next step)"
         run: npm run rag2:conv4-test
+      - name: Conversational RAG round 7 (the live ingestion run's loop defects replayed on its own stored rows -- a preface explaining why a fact is needed is shown; a passage already shown is not repeated; a turn out of budget gives a useful partial answer; row-context figure checks)
+        run: npm run rag2:conv5-test
+      - name: Calculate on ingested documents (the live run's stored rows -- a product, insurer or policy number resolves to the schedule; an endorsement's in-force rate for the stay's dates; the schedule's own complete-24-hours-plus-remainder rule; the save-time gate re-checks the remainder hours and the endorsement link)
+        run: npm run rag2:calc-ingested-test
+      - name: Gate and table reading for ingested documents (item-code columns, long compound labels, a single amount column, a row's own category cell as a person check, whole-row evidence)
+        run: npm run rag2:ingested-gate-test
       - name: "OCR: scanned pages are read by the configured OpenAI reading model (file part, bounded output, provenance, unread pages marked)"
         run: npm run ocr:openai-test
       - name: "Live-run accounting: each turn counts its own model_executions rows once"
