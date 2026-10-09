@@ -232,7 +232,7 @@ async function rateInForce(ctx: ToolContext, member: MemberRow, base: DocRow, gi
       if (!eff) return `the amended ${selected.benefit} row is printed for another class of person, and its effective date is not stated`;
       r = await selectTableValue({ accountId: ctx.accountId, policyId: base.id, benefit: selected.benefit, subject: { memberId: member.id, tier }, want: "amount", asOf: dayBefore(eff) });
     }
-    if (r.status !== "ok") return `the daily rate in force on ${asOf} could not be read: ${"reason" in r ? r.reason : "question" in r ? r.question : r.status}`;
+    if (r.status !== "ok") return `the daily rate in force on ${asOf} could not be read: ${r.reason}`;
     if (r.valueKind !== "money" || r.cents == null) return `the daily rate in force on ${asOf} is not a printed amount`;
     return r;
   };
