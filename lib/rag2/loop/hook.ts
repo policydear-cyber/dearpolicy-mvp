@@ -9,7 +9,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { getConversation, historyToken, openConversation, ChatConflict } from "@/lib/chat/store";
 import { enforceLiveChatMonetaryBoundary } from "@/lib/chat/monetary-boundary";
-import { sentencesOf, verifyAnswerFigures, type FigureProblem } from "@/lib/chat/answer-verification";
+import { FIGURE_LEFT_OUT_NOTE, sentencesOf, verifyAnswerFigures, type FigureProblem } from "@/lib/chat/answer-verification";
 import { containsMoney, withholdSentences } from "@/lib/chat/monetary-boundary";
 import { checkCitedStatement } from "./statements";
 import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
@@ -40,6 +40,9 @@ export function benefitLabelOf(b: { benefit: string; passage: string }): string 
   const worded = cells.filter((c) => (c.match(/[A-Za-z]{3,}/g) ?? []).length >= 2 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\b/.test(c)).sort((x, y) => y.length - x.length);
   return worded[0] ?? b.benefit.trim();
 }
+/** Gate reasons that make the sentence itself wrong (about the wrong person, a version not on file). */
+const WRONG_SUBJECT = /\babout someone\b|\bnot for\b|\bversion\b|\bsuperseded\b|\bdeleted\b|\bwrong (?:person|member|column)\b/i;
+const sameSentence = (a: string, b: string) => { const x = squashT(a), y = squashT(b); return !!x && !!y && (x.includes(y) || y.includes(x)); };
 function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: RagLoopState, composed: Composed | null): void {
   const rejected = (s: string) => problems.some((p) => { const a = squashT(s), b = squashT(p.sentence); return (b && (a.includes(b) || b.includes(a))) || (!!p.figure && s.includes(p.figure)); });
   const evidenceOf = (s: string) => (composed?.sentences ?? []).find((x) => { const a = squashT(x.text), b = squashT(s); return a.includes(b) || b.includes(a); })?.evidenceIds ?? [];
@@ -47,13 +50,16 @@ function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: Ra
   const rescue = (field: string): string => sentencesOf(field).map((s) => {
     if (!rejected(s)) return s;
     lostSentences.push(s);
+    // A sentence the gate rejected for WHO or WHICH VERSION it is about is wrong as a whole: never rescued.
+    if (problems.some((p) => (sameSentence(p.sentence, s) || (!!p.figure && s.includes(p.figure))) && WRONG_SUBJECT.test(p.reason))) return "";
     const r = withholdSentences(s).text.trim();
     if (!r || containsMoney(r) || (r.match(/[A-Za-z]{3,}/g) ?? []).length < 6) return "";
     // The figure-free part must still say only what its own evidence says.
     const ids = evidenceOf(s).filter((id) => state.evidence[id]);
     if (!ids.length) return "";
     const why = checkCitedStatement(r, ids.map((id) => ({ policyId: state.evidence[id].policyId, subjectId: state.evidence[id].subjectId ?? null, text: [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].passage.text].join("\n") })), { people: [], policyNames: new Map(), subjectId: null });
-    return why ? "" : r;
+    if (why) return "";
+    return r;
   }).filter(Boolean).join(" ");
   answer.summary = rescue(answer.summary);
   answer.details = answer.details.map(rescue).filter((d) => d.trim());
@@ -62,7 +68,12 @@ function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: Ra
   answer.computations = (answer.computations ?? []).filter((r) => !gone(r.sentence));
   if (answer.calculations) answer.calculations = answer.calculations.filter((r) => !gone(r.sentence));
   const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
-  if (said.length) { if (!answer.summary.trim()) { answer.summary = answer.details[0]; answer.details = answer.details.slice(1); } return; }
+  if (said.length) {
+    if (!answer.summary.trim()) { answer.summary = answer.details[0]; answer.details = answer.details.slice(1); }
+    // Beside what remains, the household is still told plainly that a figure was left out.
+    if (lostSentences.length && !answer.details.includes(FIGURE_LEFT_OUT_NOTE)) answer.details.push(FIGURE_LEFT_OUT_NOTE);
+    return;
+  }
   // Nothing supported is left: say specifically what could not be confirmed (benefit, document, page), or the
   // composer's own requirement -- never the rejected figure, and never only a generic note.
   const lines: string[] = [];
