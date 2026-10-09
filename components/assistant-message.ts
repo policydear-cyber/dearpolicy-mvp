@@ -42,3 +42,8 @@ export function renderedAssistantText(content: string | null | undefined, a: Par
   ];
   return parts.filter((x) => typeof x === "string" && x.trim()).map((x) => answerText(x)).join("\n");
 }
+
+/** The chat page's messages with each assistant body cleared of a question its card shows (one layer presents a question). */
+export function withQuestionsOnce<M extends { role: string; content: string; answer?: { questions?: { text: string }[] } }>(messages: M[]): M[] {
+  return messages.map((m) => (m.role === "assistant" ? { ...m, content: bodyWithoutQuestions(m.content, m.answer?.questions ?? []) } : m));
+}

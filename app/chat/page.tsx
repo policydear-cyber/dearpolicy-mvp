@@ -7,7 +7,7 @@ import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESS
 import { formatMoney } from "@/lib/format/currency";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
 import { answerText,codeWords } from "@/components/answer-text";
-import { bodyWithoutQuestions,hasAssessment } from "@/components/assistant-message";
+import { hasAssessment,withQuestionsOnce } from "@/components/assistant-message";
 import { readableDates,sgDate } from "@/components/format-date";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
@@ -297,9 +297,9 @@ function ChatContent(){
         <div className="prompt-grid">{examplePrompts(family).map(text=><button key={text} onClick={()=>setQuestion(text)}>{text}</button>)}</div>
       </div>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
-      {messages.map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
+      {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
         <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
-          {message.role==="assistant"?(body=>body?<p>{readableDates(customerAnswerText(body))}</p>:null)(bodyWithoutQuestions(message.content,message.answer?.questions)):<p>{message.content}</p>}
+          {message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
           {message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{shown(q.text)}</strong><small>{shown(q.why)}</small>

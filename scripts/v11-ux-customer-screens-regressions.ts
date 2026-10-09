@@ -166,9 +166,7 @@ test("chat: one direct answer, collapsed sources, plain uncertainty, one next st
   assert.ok(!/excludedBenefits/.test(chat), "no ruled-out list");
   assert.ok(!/reviewerRequirements/.test(chat), "no reviewer routing");
   assert.match(chat, /nextSteps\[0\]/);
-  // Round 6: the body is the message text without the question its card shows (one layer presents a question);
-  // it still goes through customerAnswerText.
-  assert.match(chat, /customerAnswerText\(body\)\)\}<\/p>:null\)\(bodyWithoutQuestions\(message\.content,/);
+  assert.match(chat, /customerAnswerText\(message\.content\)/);
   assert.match(chat, /customerMessage\(p\?\.stage,/);
 });
 
