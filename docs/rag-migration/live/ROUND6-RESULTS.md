@@ -28,6 +28,8 @@ Postgres, save-time verification). PDF upload / extraction is NOT covered.
 | r6-final-candidate | 9fe5ee8 | 8/9 pass (L4, L5, L3b, L4b, L5b, L1, L2, L6); L3 INCOMPLETE: the model recorded how_it_happened = "not stated", the cause question was then refused as already answered, and the turn hit its 80,000-token limit |
 | r6-facts-fix-L3-L3b | d97131c | L3 pass (conditional S$750 with the accident wording, then the cause question; speaker's deductible; back to the question); L3b pass by the checker |
 
+**Correction (round 7):** only L3 and L3b were re-run on the final code (d97131c). The other seven passes (L4, L5, L5b, L4b, L1, L2, L6) were on 9fe5ee8, before the facts fix; they were not re-run on d97131c. L3b's "pass" on both runs hid an unhelpful second turn (an echo, then a generic failure) that the checker did not grade; the round-7 checker now grades every substantive turn and fails both of those turns.
+
 Cumulative real-model spend for the exercise: US$0.03991 over 172 calls (cap US$0.50), charged from provider usage at the
 official prices with cached input at US$0.01/M.
 
