@@ -167,7 +167,7 @@ jobs:
           kind="live"; if [ "$PREFLIGHT" = "true" ]; then kind="preflight"; fi
           git commit -q -m "rag2-live: CI run $RUN_ID ($kind) -- results and LEDGER.json"
           for i in 1 2 3; do
-            if git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME"; then echo "pushed"; exit 0; fi
+            if git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME"; then echo "pushed"; exit 0; fi
             sleep $((i * 5))
           done
           msg="LEDGER NOT PERSISTED: the results and LEDGER.json commit could not be pushed after 3 attempts. Add this run's spend to docs/rag-migration/live/LEDGER.json by hand before any further run."
