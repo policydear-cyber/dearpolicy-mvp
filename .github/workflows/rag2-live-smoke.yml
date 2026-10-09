@@ -37,7 +37,6 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dearpolicy_live
-      DATABASE_SSL: "off"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
