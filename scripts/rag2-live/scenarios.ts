@@ -56,6 +56,8 @@ export type TurnExpect = {
   factRecorded?: { keyPattern: string; wordsInclude: string };
   /** The pending claim question must be put back after a side question. */
   pendingReasked?: { pattern: string };
+  /** Usefulness with the right conditions: every sentence stating `figure` also states its condition (regex). */
+  conditional?: { figure: string; pattern: string; about: string };
 };
 export type ScenarioTurn = { user: string; expect: TurnExpect };
 export type Scenario = { id: string; title: string; why: string; turns: ScenarioTurn[] };
@@ -67,6 +69,9 @@ const P = {
   hc24h: { doc: "CAREDAY", page: 2, text: "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission." },
   dentalRow: { doc: "SUNHAVEN", page: 1, text: "Accidental dental treatment (per accident)" },
   fractureRow: { doc: "SUNHAVEN", page: 1, text: "Fracture benefit (per fracture)" },
+  fractureXray: { doc: "SUNHAVEN", page: 2, text: "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner." },
+  dislocationRow: { doc: "PLAYWELL", page: 1, text: "Dislocation benefit (per dislocation)" },
+  dislocationXray: { doc: "PLAYWELL", page: 2, text: "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI." },
   accidentOnly: { doc: "SUNHAVEN", page: 2, text: "This policy covers Bodily Injury caused solely and directly by an Accident." },
   deductible: { doc: "KESTREL", page: 1, text: "Deductible (per policy year, private hospital)\tS$3,500" },
   endtLimit: { doc: "KESTREL_ENDT", page: 1, text: "Annual claim limit\tS$1,000,000\tS$1,500,000" },
@@ -110,7 +115,7 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "L3", title: "Broken arm: cause decides cover; side question about the speaker; back to the pending question",
-    why: "The plan covers injury caused by an Accident only, so how it happened must be asked before any figure; a side question about Daniel's own Shield deductible is answered without moving the claim off Kai, and the cause question is put back; the answer then gives the Child fracture figure.",
+    why: "The plan covers injury caused by an Accident only, so how it happened must be asked before any figure; a side question about Daniel's own Shield deductible is answered without moving the claim off Kai, and the cause question is put back; once the cause is given, the turn states the Child fracture figure (S$750, SUNHAVEN p1) as conditional on X-ray confirmation and certification by a registered medical practitioner (p2) -- asking whether that is done is allowed, as one question, never instead of the figure.",
     turns: [
       {
         user: "Kai broke his arm yesterday. Can we claim for it?",
@@ -131,7 +136,9 @@ export const SCENARIOS: Scenario[] = [
         user: "He fell off his bicycle at the park.",
         expect: {
           figures: ["S$750"], forbidden: [{ figure: "S$1,200", why: "the Adult column, not Kai's", stage: "person-version resolution" }],
-          subject: "kai", binding: { member: "kai", doc: "SUNHAVEN", column: "Child", value: 750 }, passages: [P.fractureRow], onlyPrintedFigures: true,
+          subject: "kai", binding: { member: "kai", doc: "SUNHAVEN", column: "Child", value: 750 }, onlyPrintedFigures: true,
+          passages: [P.fractureRow, P.fractureXray],
+          conditional: { figure: "S$750", pattern: "x-?ray|registered medical practitioner|certif", about: "its X-ray / certification condition" },
           factRecorded: { keyPattern: "how|cause|happen", wordsInclude: "fell off his bicycle" },
           mustNotAsk: { pattern: "how (did|was|it)|what happened", about: "re-asking how it happened" },
         },
@@ -190,3 +197,75 @@ export const SCENARIOS: Scenario[] = [
     }],
   },
 ];
+
+/**
+ * Round 6: fresh paraphrases for the live re-run (same synthetic household Lim; never the earlier sentences). Each
+ * expectation is grounded in a stored passage (verbatim) or a deterministic calculation.
+ */
+export const PARAPHRASES: Scenario[] = [
+  {
+    id: "L3b", title: "Dislocated elbow: a benefit whose condition is evidence (X-ray or MRI), stated conditionally",
+    why: "Mei's PlayWell certificate prints Dislocation benefit (per dislocation) S$600 (PLAYWELL p1) and says it is payable once per dislocation diagnosed by a registered medical practitioner and confirmed by X-ray or MRI (p2). How it happened is in the message, so it is not asked; the S$600 is stated with that condition (one question about it is allowed); then, once the household says an X-ray was done, it is not asked again.",
+    turns: [
+      {
+        user: "Mei landed badly on her elbow at gymnastics this afternoon and the clinic says it's dislocated. Is that something her PlayWell plan helps with?",
+        expect: {
+          figures: ["S$600"], subject: "mei", binding: { member: "mei", doc: "PLAYWELL", value: 600 },
+          conditional: { figure: "S$600", pattern: "x-?ray|\\bmri\\b|registered medical practitioner|diagnos", about: "its diagnosis / X-ray or MRI condition" },
+          forbidden: [{ figure: "S$900", why: "the burns benefit, not the dislocation benefit" }],
+          passages: [P.dislocationRow, P.dislocationXray], onlyPrintedFigures: true,
+          mustNotAsk: { pattern: "how (did|was|it)|what happened", about: "how it happened (the message says)" },
+        },
+      },
+      {
+        user: "Yes, the doctor at the clinic did an X-ray and it showed the dislocation.",
+        expect: {
+          subject: "mei", onlyPrintedFigures: true,
+          mustNotAsk: { pattern: "x-?ray|\\bmri\\b|scan", about: "the X-ray the household just described" },
+          factRecorded: { keyPattern: "x.?ray|scan|imag|confirm|diagnos", wordsInclude: "x-ray" },
+        },
+      },
+    ],
+  },
+  {
+    id: "L4b", title: "Hospital cash for an adult: both times in one message, a rate row with a yearly cap",
+    why: "Every input is in the message: 14 Sep 21:50 to 18 Sep 08:20 = 82 h 30 min = 3 complete periods of 24 hours (CAREDAY p2: counted from admission; shorter periods not counted) x S$100 (Insured Adult, CAREDAY p1 row 'Hospital cash (each complete 24 hours, max 90 per year)' -- the 'per year' is the 90-period cap, 3 <= 90) = S$300. 4 nights (S$400), 5 calendar days (S$500) or the child rate (S$180) are wrong; the times are not asked again.",
+    turns: [{
+      user: "Grace got warded on 14 September 2026 at 9.50pm and went home on 18 September 2026 at 8.20am. What does CareDay give her in hospital cash for that stay?",
+      expect: {
+        figures: ["S$300"],
+        forbidden: [
+          { figure: "S$400", why: "4 nights x S$100: nights are not complete 24-hour periods", stage: "calculation" },
+          { figure: "S$500", why: "5 calendar days x S$100", stage: "calculation" },
+          { figure: "S$180", why: "3 x the Insured Child rate", stage: "person-version resolution" },
+          { figure: "S$240", why: "4 x the Insured Child rate", stage: "person-version resolution" },
+        ],
+        subject: "grace", passages: [P.hcRow, P.hc24h],
+        mustNotAsk: { pattern: "admi|discharg|warded|went home|date|time|when", about: "the admission / discharge dates and times already given" },
+        calculation: {
+          calculator: "hospital_cash", kind: "indicative_estimate",
+          formula: "floor((2026-09-18T08:20 - 2026-09-14T21:50) / 24 h) = floor(82.5 h / 24 h) = 3 complete periods (cap 90 per year not reached); 3 x S$100 = S$300",
+          operands: [
+            { label: "Hospital cash, Insured Adult", value: 100, source: "document", from: "CAREDAY p1, Hospital cash row, Insured Adult column" },
+            { label: "admission", value: "2026-09-14T21:50", source: "household", from: "14 September 2026 at 9.50pm" },
+            { label: "discharge", value: "2026-09-18T08:20", source: "household", from: "18 September 2026 at 8.20am" },
+          ],
+          result: 300,
+        },
+      },
+    }],
+  },
+  {
+    id: "L5b", title: "An endorsement question asked as 'has my limit changed?'",
+    why: "KESTREL p1 prints Annual claim limit S$1,000,000; Endorsement No. 1 (KESTREL_ENDT p1, effective 01 Jul 2026) prints Before S$1,000,000 / After S$1,500,000. The current limit is S$1,500,000 from the endorsement; S$1,000,000 only as what it was.",
+    turns: [{
+      user: "Did the endorsement on my KestrelShield policy change my yearly claim limit? What is it at today?",
+      expect: {
+        figures: ["S$1,500,000"],
+        forbidden: [{ figure: "S$1,000,000", why: "the superseded schedule figure given as the current limit", unless: "\\b(was|were|before|previous(ly)?|original(ly)?|earlier|replac|amend|increas|raised|changed|from S\\$1,000,000)", stage: "person-version resolution" }],
+        subject: "daniel", binding: { member: "daniel", doc: "KESTREL_ENDT", value: 1500000 }, passages: [P.endtLimit], onlyPrintedFigures: true, noQuestion: true,
+      },
+    }],
+  },
+];
+SCENARIOS.push(...PARAPHRASES);

@@ -10,6 +10,9 @@
  *      each complete period of 24 hours; illness and accident both covered.
  *    - KestrelShield Integrated Plan (Kestrel Health Insurance) for Daniel: base schedule (annual claim limit
  *      S$1,000,000) and Endorsement No. 1 effective 01 Jul 2026 raising it to S$1,500,000.
+ *    - Round 6: PlayWell Junior Accident Cover (Tidewater Assurance) for Mei only: one "Sum insured" column; accident
+ *      only; a dislocation benefit payable once diagnosed by a registered medical practitioner and confirmed by X-ray
+ *      or MRI (an evidence condition, for the L3b paraphrase scenario).
  */
 import { row } from "../rag2-adv/household";
 
@@ -31,7 +34,7 @@ export type LiveDoc = {
   key: DocKey; id: string; account: string; owner: string; members: { id: string; tier?: string | null }[]; insurer: string; product: string; policyNumber: string;
   policyType: string; role: string; hash: string; effective: string; expiry: string; pages: Record<number, string>;
 };
-export type DocKey = "SUNHAVEN" | "CAREDAY" | "KESTREL" | "KESTREL_ENDT";
+export type DocKey = "SUNHAVEN" | "CAREDAY" | "KESTREL" | "KESTREL_ENDT" | "PLAYWELL";
 
 const SW = [56, 14, 14];
 const SUNHAVEN_P1 = [
@@ -126,11 +129,37 @@ const KESTREL_ENDT_P1 = [
   "All other terms of the policy remain unchanged.",
 ].join("\n");
 
+const PW = [56, 14];
+const PLAYWELL_P1 = [
+  row(["Tidewater Assurance", "Certificate TA-JA-480327"], [72]),
+  "PlayWell Junior Accident Cover - Certificate of Cover",
+  "",
+  row(["Certificate number", "TA-JA-480327"], [30]),
+  row(["Parent or guardian", "Daniel Lim Wen Jie"], [30]),
+  row(["Insured child", "Mei Lim Xin Hui"], [30]),
+  row(["Period of cover", "01 Jun 2026 to 31 May 2027"], [30]),
+  "",
+  "Table of benefits",
+  row(["Benefit", "Sum insured"], PW),
+  row(["Dislocation benefit (per dislocation)", "S$600"], PW),
+  row(["Burns benefit (per accident)", "S$900"], PW),
+  row(["Outpatient physiotherapy (per accident)", "S$300"], PW),
+].join("\n");
+const PLAYWELL_P2 = [
+  "General conditions",
+  "This certificate covers Injury caused solely by an Accident while the insured child is covered.",
+  "",
+  "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+  "",
+  "Outpatient physiotherapy must be referred in writing by the treating doctor.",
+].join("\n");
+
 const all = [L.daniel, L.grace, L.kai, L.mei].map((m) => ({ id: m.id }));
 export const DOCS: LiveDoc[] = [
   { key: "SUNHAVEN", id: id(101), account: ACCOUNT_L, owner: L.daniel.id, members: all, insurer: "Harbourline General Insurance", product: "SunHaven Family Accident Guard", policyNumber: "HG-PA-771204", policyType: "Personal Accident", role: "schedule", hash: "sha256:live-sunhaven", effective: "2026-04-01", expiry: "2027-03-31", pages: { 1: SUNHAVEN_P1, 2: SUNHAVEN_P2 } },
   { key: "CAREDAY", id: id(102), account: ACCOUNT_L, owner: L.daniel.id, members: all, insurer: "Meridian Mutual Assurance", product: "CareDay Hospital Cash Plan", policyNumber: "MM-HC-205518", policyType: "Hospital Cash", role: "schedule", hash: "sha256:live-careday", effective: "2026-02-01", expiry: "2027-01-31", pages: { 1: CAREDAY_P1, 2: CAREDAY_P2 } },
   { key: "KESTREL", id: id(103), account: ACCOUNT_L, owner: L.daniel.id, members: [{ id: L.daniel.id }], insurer: "Kestrel Health Insurance", product: "KestrelShield Integrated Plan", policyNumber: "KH-IS-338861", policyType: "Integrated Shield", role: "schedule", hash: "sha256:live-kestrel", effective: "2026-04-01", expiry: "2027-03-31", pages: { 1: KESTREL_P1 } },
+  { key: "PLAYWELL", id: id(105), account: ACCOUNT_L, owner: L.daniel.id, members: [{ id: L.mei.id }], insurer: "Tidewater Assurance", product: "PlayWell Junior Accident Cover", policyNumber: "TA-JA-480327", policyType: "Personal Accident", role: "schedule", hash: "sha256:live-playwell", effective: "2026-06-01", expiry: "2027-05-31", pages: { 1: PLAYWELL_P1, 2: PLAYWELL_P2 } },
   { key: "KESTREL_ENDT", id: id(104), account: ACCOUNT_L, owner: L.daniel.id, members: [{ id: L.daniel.id }], insurer: "Kestrel Health Insurance", product: "KestrelShield Integrated Plan - Endorsement No. 1", policyNumber: "KH-IS-338861", policyType: "Integrated Shield", role: "endorsement", hash: "sha256:live-kestrel-endt1", effective: "2026-07-01", expiry: "2027-03-31", pages: { 1: KESTREL_ENDT_P1 } },
 ];
 export const doc = (key: DocKey) => DOCS.find((d) => d.key === key)!;

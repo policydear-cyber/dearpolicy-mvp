@@ -16,6 +16,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { pool } from "@/lib/db/client";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
+import { renderedAssistantText } from "@/components/assistant-message";
 import type { CalculationRecord, ChatAnswer } from "@/types";
 import { ACCOUNT_L, DOCS, L, doc, type MemberKey } from "../fixtures/rag2-live/household";
 import { SCENARIOS, STAGES, type Passage, type Scenario, type Stage, type TurnExpect } from "./scenarios";
@@ -23,6 +24,8 @@ import { SCENARIOS, STAGES, type Passage, type Scenario, type Stage, type TurnEx
 export type Check = { turn: number; name: string; ok: boolean; stage: Stage; detail: string };
 export type LoadedTurn = {
   index: number; user: string; answer: Partial<ChatAnswer> & Record<string, any>; visible: string; questions: string[];
+  /** The saved message text (chat_messages.content): the body the chat page shows above the question card. */
+  content?: string;
   userAt: string | null; assistantAt: string | null; trace: any | null;
 };
 export type LoadedConversation = { conversationId: string; state: any; turns: LoadedTurn[]; pages: Map<string, string> };
@@ -37,10 +40,14 @@ const sentences = (text: string) => (text ?? "").split(/(?<=[.!?])\s+|\n+/).map(
 const memberId = (k: MemberKey) => L[k].id;
 const memberKeyOf = (id: string | null | undefined) => (Object.keys(L) as MemberKey[]).find((k) => L[k].id === id) ?? (id ? `unknown(${id.slice(-4)})` : "none");
 
-/** What the household sees for one assistant message (the chat page renders these parts). */
-export function visibleText(a: Partial<ChatAnswer> & Record<string, any>): string {
-  return [a.summary, ...(a.details ?? []), ...(a.questions ?? []).map((q: any) => q?.text), ...(a.nextSteps ?? []), a.disclaimer].filter((x) => typeof x === "string" && x.trim()).join("\n");
+/** What the household sees for one assistant message: the chat page's own view of it (components/assistant-message.ts
+ * -- the body, each question once as its card with why it matters, the details, a next step when nothing is asked). */
+export function visibleText(a: Partial<ChatAnswer> & Record<string, any>, content?: string | null): string {
+  return renderedAssistantText(content ?? a.summary ?? "", a);
 }
+/** Wording that presents a printed benefit as a decision, a payment or an entitlement (never DearPolicy's to state). */
+export const ENTITLEMENT = /\b(?:pre-?)?approved\b(?! (?:hospital|provider|panel|doctor|clinic))|\byou(?:['’]ll| will) (?:receive|get|be paid)\b|\b(?:he|she|they|kai|mei|grace|daniel)(?:['’]ll| will) (?:receive|get|be paid)\b|\bwill be (?:paid|reimbursed)\b|\bis entitled to\b|\bare entitled to\b|\bguarantee\w*\b|\bfully covered\b|\b(?:can|will) definitely claim\b/i;
+const count = (hay: string, needle: string) => (needle ? hay.split(needle).length - 1 : 0);
 
 /** Reads a saved conversation back from the database. */
 export async function loadConversation(conversationId: string): Promise<LoadedConversation> {
@@ -58,7 +65,7 @@ export async function loadConversation(conversationId: string): Promise<LoadedCo
     const index = turns.length;
     const user = pendingUser?.content ?? "";
     const trace = traces.find((t) => t.userMessage === user && !turns.some((x) => x.trace === t)) ?? null;
-    turns.push({ index, user, answer, visible: visibleText(answer), questions: (answer.questions ?? []).map((q: any) => String(q?.text ?? "")), userAt: pendingUser?.at ?? null, assistantAt: new Date(m.created_at).toISOString(), trace });
+    turns.push({ index, user, answer, content: m.content ?? undefined, visible: visibleText(answer, m.content), questions: (answer.questions ?? []).map((q: any) => String(q?.text ?? "")), userAt: pendingUser?.at ?? null, assistantAt: new Date(m.created_at).toISOString(), trace });
     pendingUser = null;
   }
   return { conversationId, state: c.state, turns, pages };
@@ -92,6 +99,14 @@ function gradeTurn(t: LoadedTurn, e: TurnExpect, conv: LoadedConversation, out: 
   add("no internal ids visible", !INTERNAL.test(t.visible), "presentation", INTERNAL.exec(t.visible)?.[0] ?? "none");
   const payout = sentences(t.visible).filter((s) => /\bpayout\b/i.test(s) && !/\bnot a payout\b/i.test(s));
   add("estimate never called a payout", payout.length === 0, "presentation", payout[0] ?? "none");
+  // Round 6: every turn -- a printed benefit is never a decision, payment or entitlement; at most ONE question, asked
+  // once (by its card, never repeated in the body); asking a material question is never by itself a failure.
+  const entitled = sentences(t.visible).filter((s) => ENTITLEMENT.test(s));
+  add("never states approval, payment or entitlement", entitled.length === 0, "verification", entitled[0] ?? "none");
+  const multi = t.questions.filter((q) => (q.match(/\?/g) ?? []).length > 1);
+  add("at most one question", t.questions.length <= 1 && !multi.length, "model reasoning-tool selection", t.questions.length > 1 ? `asked ${t.questions.length}: ${t.questions.join(" | ")}` : multi[0] ?? (t.questions[0] ?? "none"));
+  const twice = t.questions.filter((q) => count(t.visible, ws(q)) > 1 || count(ws(t.visible), ws(q)) > 1);
+  add("each question shown once", twice.length === 0, "presentation", twice.length ? `shown ${count(ws(t.visible), ws(twice[0]))}x: "${twice[0]}"` : "once");
   for (const f of e.figures ?? []) {
     const v = amount(f);
     const ok = shown.includes(v);
@@ -110,6 +125,12 @@ function gradeTurn(t: LoadedTurn, e: TurnExpect, conv: LoadedConversation, out: 
     const v = amount(f.figure);
     const bad = sentences(t.visible).filter((s) => moneyIn(s).includes(v) && !(f.unless && new RegExp(f.unless, "i").test(s)));
     add(`never states ${f.figure}`, bad.length === 0, f.stage ?? "model reasoning-tool selection", bad.length ? `${f.why}: "${bad[0]}"` : "absent");
+  }
+  if (e.conditional) {
+    const c = e.conditional, v = amount(c.figure);
+    const with_ = sentences(t.visible).filter((s) => moneyIn(s).includes(v));
+    const ok = with_.length > 0 && with_.every((s) => new RegExp(c.pattern, "i").test(s));
+    add(`${c.figure} stated with ${c.about}`, ok, "model reasoning-tool selection", !with_.length ? "figure not shown" : ok ? "conditional" : `unconditional: "${with_.find((s) => !new RegExp(c.pattern, "i").test(s))}"`);
   }
   if (e.noMoney) add("no money figure", shown.length === 0, "model reasoning-tool selection", shown.length ? `shows ${shown.join(", ")}` : "none");
   if (e.noMoneyNear) { const bad = sentences(t.visible).filter((s) => new RegExp(e.noMoneyNear!, "i").test(s) && moneyIn(s).length); add(`no figure near /${e.noMoneyNear}/`, bad.length === 0, "model reasoning-tool selection", bad[0] ?? "none"); }

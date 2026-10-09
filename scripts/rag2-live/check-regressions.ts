@@ -57,5 +57,79 @@ t("C9 L3 asking how it happened, then a fact recorded as 'accident' that was nev
   assert.equal(ok.verdict, "PASS", JSON.stringify(ok.checks.filter((c) => !c.ok)));
 });
 t("C10 a turn stopped by a limit is INCOMPLETE, not a model failure", () => { const v = grade(sc("L1"), conv("L1", [{ summary: "I couldn’t look that up." }], [{ outcome: "limit_reached", limit: { kind: "run_budget", detail: "cap" } }])); assert.equal(v.verdict, "INCOMPLETE"); assert.equal(v.failureStage, null); });
+
+// ------------------------------------------------------------------ Round 6: usefulness, conditions, questioning (L3 t3)
+const t3 = { ...sc("L3"), turns: [sc("L3").turns[2]] };
+const one = (a: Record<string, any>, trace: Record<string, any> = {}, content?: string): LoadedConversation => ({
+  conversationId: "test", pages, state: { ragLoop: { evidence: {}, claim: { subjectId: L.kai.id, facts: { how_it_happened: { value: "fell off his bicycle at the park", words: "He fell off his bicycle at the park." } } }, turns: [] } },
+  turns: [{ index: 0, user: t3.turns[0].user, content, answer: { details: [], questions: [], citations: [], ...a }, visible: visibleText({ details: [], questions: [], ...a }, content), questions: (a.questions ?? []).map((q: any) => q.text), userAt: null, assistantAt: null, trace: { outcome: "ask_user", toolCalls: [], evidenceChosen: [], dropped: [], gate: [], ...trace } }],
+});
+const XQ = { id: "rag_fact_fracture_xray_confirmed", text: "Has a registered medical practitioner confirmed Kai’s fracture by X-ray?", type: "text", why: "This changes what your policy pays under: “Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.” (page 2)" };
+const fracture = { resolvedFamilyMemberId: L.kai.id,
+  summary: "Kai's SunHaven Family Accident Guard lists a Fracture benefit of S$750 per fracture for a child, payable if the fracture is confirmed by X-ray and certified by a registered medical practitioner.",
+  questions: [XQ],
+  citations: [cite("SUNHAVEN", 1, "Fracture benefit (per fracture)   S$1,200   S$750"), cite("SUNHAVEN", 2, "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.")],
+  figureBindings: [{ value: 750, policyId: doc("SUNHAVEN").id, subjectId: L.kai.id, column: "Child" }] };
+const bad = (v: ReturnType<typeof grade>) => v.checks.filter((c) => !c.ok);
+t("C11 L3 t3: the conditional S$750 first, then ONE X-ray question (the card) PASSES -- asking it is not a failure", () => { const v = grade(t3, one(fracture)); assert.equal(v.verdict, "PASS", JSON.stringify(bad(v))); });
+t("C12 L3 t3: only the X-ray question, no figure, FAILS on usefulness", () => {
+  const v = grade(t3, one({ ...fracture, summary: "I need one more detail first.", figureBindings: [] }));
+  assert.equal(v.verdict, "FAIL"); assert.ok(bad(v).some((c) => c.name === "shows S$750"), JSON.stringify(bad(v)));
+});
+t("C13 L3 t3: S$750 without its X-ray / certification condition FAILS on conditions", () => {
+  const v = grade(t3, one({ ...fracture, summary: "Kai's SunHaven plan has a Fracture benefit of S$750 per fracture." }));
+  assert.ok(bad(v).some((c) => /stated with its X-ray/.test(c.name)), JSON.stringify(bad(v)));
+});
+t("C14 the question repeated in the message body FAILS at presentation", () => {
+  const v = grade(t3, one({ ...fracture, summary: fracture.summary + " " + XQ.text }, {}, fracture.summary + " " + XQ.text));
+  // the chat page drops a body copy of a carded question (older saved messages), so the transcript shows it once ...
+  assert.ok(!bad(v).some((c) => c.name === "each question shown once"), JSON.stringify(bad(v)));
+  // ... but a second, differently placed copy (in the details) is still caught.
+  const w = grade(t3, one({ ...fracture, details: [XQ.text] }));
+  assert.ok(bad(w).some((c) => c.name === "each question shown once" && c.stage === "presentation"), JSON.stringify(bad(w)));
+});
+t("C15 'you will receive S$750' / 'approved' FAIL (a printed benefit is never a payment or decision)", () => {
+  for (const summary of ["Kai will receive S$750 for the fracture, payable if it is confirmed by X-ray.", "The fracture claim is approved: S$750 per fracture, subject to X-ray confirmation."]) {
+    const v = grade(t3, one({ ...fracture, summary }));
+    assert.ok(bad(v).some((c) => c.name === "never states approval, payment or entitlement"), summary + " " + JSON.stringify(bad(v)));
+  }
+});
+t("C16 two questions in one turn FAIL; a re-ask of how it happened FAILS", () => {
+  const v = grade(t3, one({ ...fracture, questions: [XQ, { id: "q2", text: "Which hospital did he go to?", type: "text" }] }));
+  assert.ok(bad(v).some((c) => c.name === "at most one question"));
+  const w = grade(t3, one({ ...fracture, questions: [{ id: "q", text: "How did Kai break his arm?", type: "text" }] }));
+  assert.ok(bad(w).some((c) => /does not re-ask/.test(c.name)));
+});
+t("C17 internal evidence ids in the text ('[e9, e6]') FAIL at presentation", () => {
+  const v = grade(t3, one({ ...fracture, summary: fracture.summary.replace(/\.$/, " [e9, e6].") }));
+  assert.equal(v.failureStage, "presentation", JSON.stringify(bad(v)));
+});
+t("C18 every scenario (L1-L6, L3b, L4b, L5b) is source-grounded: each expected passage is verbatim on its stored page; each calculation recomputes from its operands", () => {
+  const ids = SCENARIOS.map((s) => s.id);
+  for (const id of ["L3b", "L4b", "L5b"]) assert.ok(ids.includes(id), "missing scenario " + id);
+  for (const s of SCENARIOS) {
+    s.turns.forEach((turn, i) => {
+      for (const p of turn.expect.passages ?? []) assert.ok(String(doc(p.doc).pages[p.page] ?? "").includes(p.text), `${s.id} t${i + 1}: "${p.text}" not on ${p.doc} p${p.page}`);
+      const c = turn.expect.calculation;
+      if (c?.calculator === "hospital_cash") {
+        const at = (k: string) => Date.parse(String(c.operands.find((o) => o.label === k)!.value) + ":00+08:00");
+        const rate = Number(c.operands.find((o) => o.source === "document")!.value);
+        const periods = Math.min(90, Math.floor((at("discharge") - at("admission")) / 86_400_000));
+        assert.equal(periods * rate, c.result, `${s.id}: ${periods} x ${rate}`);
+        assert.ok(String(doc("CAREDAY").pages[1]).includes(`S$${rate}`), `${s.id}: rate S$${rate} printed`);
+      }
+      for (const f of turn.expect.figures ?? []) assert.ok(DOCS.some((d) => Object.values(d.pages).some((pg) => pg.includes(f))) || turn.expect.calculation?.result === Number(f.replace(/[^\d.]/g, "")), `${s.id}: ${f} printed or calculated`);
+    });
+  }
+});
+t("C19 L3b: the conditional S$600 for Mei passes; S$600 alone fails on its condition; 'S$900' (burns) fails", () => {
+  const s = { ...sc("L3b"), turns: [sc("L3b").turns[0]] };
+  const mk = (summary: string, binds = [{ value: 600, policyId: doc("PLAYWELL").id, subjectId: L.mei.id, column: "Sum insured" }]): LoadedConversation => ({ conversationId: "t", pages, state: { ragLoop: { evidence: {}, claim: null, turns: [] } },
+    turns: [{ index: 0, user: s.turns[0].user, answer: { details: [], questions: [], citations: [cite("PLAYWELL", 1, "Dislocation benefit (per dislocation)   S$600"), cite("PLAYWELL", 2, "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.")], summary, resolvedFamilyMemberId: L.mei.id, figureBindings: binds }, visible: summary, questions: [], userAt: null, assistantAt: null, trace: { outcome: "final_answer", toolCalls: [], evidenceChosen: [], dropped: [], gate: [] } }] });
+  const ok = grade(s, mk("Mei's PlayWell Junior Accident Cover lists a Dislocation benefit of S$600 per dislocation, payable if the dislocation is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI."));
+  assert.equal(ok.verdict, "PASS", JSON.stringify(bad(ok)));
+  assert.ok(bad(grade(s, mk("Mei's PlayWell plan pays S$600 per dislocation."))).some((c) => /stated with/.test(c.name)));
+  assert.ok(bad(grade(s, mk("Mei's PlayWell plan lists S$900, payable if confirmed by X-ray."))).some((c) => /never states S\$900/.test(c.name)));
+});
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);
