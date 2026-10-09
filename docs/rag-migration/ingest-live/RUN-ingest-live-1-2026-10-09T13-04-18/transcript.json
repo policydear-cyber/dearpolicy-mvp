@@ -1,0 +1,206 @@
+[
+  {
+    "id": "Q1",
+    "phase": "conversation",
+    "user": "What's the policy number on our Meridian Harbour plan, and when does it run out?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nYour Meridian Harbour SafeStay Family Hospital Cash & Personal Accident Plan policy number is MHA-HC-2025-0748213, and it runs through 31 January 2027 (both dates inclusive).\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 4752,
+    "at": "2026-10-09T13:06:07.272Z",
+    "screenshot": "screenshots/12-chat-Q1-1.png",
+    "conversation": "C1"
+  },
+  {
+    "id": "Q2",
+    "phase": "conversation",
+    "user": "If something happened to Isla in an accident, how much is the accidental death payout for her? Is it the same as mine?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 16414,
+    "at": "2026-10-09T13:06:12.328Z",
+    "screenshot": "screenshots/13-chat-Q2-1.png",
+    "conversation": "C2"
+  },
+  {
+    "id": "Q3",
+    "phase": "conversation",
+    "user": "Felix fell off the monkey bars at school yesterday and broke his wrist. How much can we claim from the Meridian policy?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nSorry Felix was hurt.\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nHas a registered medical practitioner certified the fracture type in writing and confirmed it by X-ray?\nThis changes what your policy pays under: “Items D and E: the type of fracture must be certified in writing by a registered medical practitioner and confirmed by X-ray. Only one of Item D or” (page 1); “4.4 For Items D and E, a Compound fracture means a fracture in which the broken bone breaks through the skin. All” (page 2)\nAnswer\nShow full assessment",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": "Has a registered medical practitioner certified the fracture type in writing and confirmed it by X-ray?",
+    "ms": 12357,
+    "at": "2026-10-09T13:06:29.002Z",
+    "screenshot": "screenshots/14-chat-Q3-1.png",
+    "conversation": "C3"
+  },
+  {
+    "id": "Q4",
+    "phase": "conversation",
+    "user": "The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin.",
+    "via": "inline answer (asked: Has a registered medical practitioner certified the fracture type in writing and confirmed it by X-ray?)",
+    "answer": "DearPolicy\n\nYou told me the doctor said it’s a closed fracture, the X-ray confirmed it, and the bone didn’t come through the skin.\n\nWhat you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nNEXT STEP\n\nWhen you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 8722,
+    "at": "2026-10-09T13:06:41.518Z",
+    "screenshot": "screenshots/15-chat-Q4-1.png",
+    "conversation": "C3"
+  },
+  {
+    "id": "Q5",
+    "phase": "conversation",
+    "user": "I was in hospital after that car accident in March. They admitted me at 9:40pm on 14 March and I was discharged at 8:20am on 18 March. How much hospital cash should Meridian pay me?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [],
+    "pendingQuestion": null,
+    "ms": 15359,
+    "at": "2026-10-09T13:06:50.544Z",
+    "screenshot": "screenshots/16-chat-Q5-1.png",
+    "conversation": "C4"
+  },
+  {
+    "id": "Q6",
+    "phase": "conversation",
+    "user": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nYes—the endorsement increased the SafeStay “Hospital daily allowance” for each child from S$80 to S$110 per day, effective 1 July 2026; days of confinement before that date remain at the old rate, and the 60-day-per-policy-year maximum is unchanged.\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 6225,
+    "at": "2026-10-09T13:07:06.238Z",
+    "screenshot": "screenshots/17-chat-Q6-1.png",
+    "conversation": "C5"
+  },
+  {
+    "id": "Q7",
+    "phase": "conversation",
+    "user": "How much are we actually paying for the Meridian policy every year?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI can’t tell from the Meridian policy documents available here how much the annual premium is; the schedule shows the family plan and cover period but no premium amount (page 1).\n\nNEXT STEP\n\nCheck the insurer’s renewal notice, premium invoice, or payment records for the amount actually charged.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 8822,
+    "at": "2026-10-09T13:07:12.748Z",
+    "screenshot": "screenshots/18-chat-Q7-1.png",
+    "conversation": "C6"
+  },
+  {
+    "id": "Q8",
+    "phase": "conversation",
+    "user": "Isla might need to stay in hospital two nights next week. Will her JuniorShield plan pay the $150 a day?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 9263,
+    "at": "2026-10-09T13:07:21.833Z",
+    "screenshot": "screenshots/19-chat-Q8-1.png",
+    "conversation": "C7"
+  },
+  {
+    "id": "Q9",
+    "phase": "conversation",
+    "user": "Oh, by the way, if one of the kids gets dengue, which of our policies would actually pay anything?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nFor Felix, the SafeStay Family Hospital Cash & Personal Accident Plan is accident-only, so its hospital benefits do not cover dengue illness.\n\nI found no dengue-specific benefit in Felix’s listed policy, and no JuniorShield certificate for him in the documents available.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 13354,
+    "at": "2026-10-09T13:07:31.367Z",
+    "screenshot": "screenshots/20-chat-Q9-1.png",
+    "conversation": "C8"
+  },
+  {
+    "id": "R1",
+    "phase": "reopen",
+    "user": "So if Isla was in hospital for exactly 3 days in August after falling at the playground, how much would Meridian pay?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [],
+    "pendingQuestion": null,
+    "ms": 41735,
+    "at": "2026-10-09T13:07:45.381Z",
+    "screenshot": "screenshots/22-chat-R1-1.png",
+    "conversation": "C5"
+  },
+  {
+    "id": "D1",
+    "phase": "after_delete",
+    "user": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t confirm one of the figures against the cited page of your documents.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 6260,
+    "at": "2026-10-09T13:09:29.723Z",
+    "screenshot": "screenshots/24-chat-D1-1.png",
+    "conversation": "after-delete"
+  }
+]
