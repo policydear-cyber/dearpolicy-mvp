@@ -16,7 +16,7 @@ import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
 import { DECISION_NOTE, DROPPED_NOTE, PAYOUT_NOTE, SUM_NOTE } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
-import { FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
+import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
 import { emptyLoopState, type RagLoopState, type TraceTurn } from "./types";
 
@@ -102,7 +102,7 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   // Agent P (task 4): who resolve_person could not find among this household's members this turn (and whether
   // anyone was resolved). Self-references ("me") are the speaker question, not an unknown person.
   const resolves = trace.toolCalls.filter((t) => t.name === "resolve_person" && t.ok);
-  const unknownPeople = [...new Set(resolves.filter((t) => /"status":"unknown"/.test(t.summary ?? "")).map((t) => String(t.args.mention ?? "").trim()).filter((m) => m && !/^(?:i|me|my|myself|mine|self)$/i.test(m)))];
+  const unknownPeople = [...new Set(resolves.filter((t) => /"status":"unknown"/.test(t.summary ?? "")).map((t) => String(t.args.mention ?? "").trim()).filter((m) => m && !/^(?:i|me|my|myself|mine|self)$/i.test(m) && !ANYONE.test(m)))];
   const resolvedSomeone = resolves.some((t) => /"status":"(?:ok|ambiguous)"/.test(t.summary ?? "")) || reply.kind === "ask";
   for (const c of out.corrections) {
     if (c.key === "person") {

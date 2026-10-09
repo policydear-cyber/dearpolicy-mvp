@@ -114,6 +114,12 @@ function whyLine(e: EvidenceRef, about: string): string {
 const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; return s.length > 160 ? s.slice(0, 160) + "…" : s; };
 
 const SELF_MENTION = /^(?:i|me|my|myself|mine|my own|self)$/i;
+/** Round 6c: a mention that means anyone in the household (a quantifier or the household as a whole), not one person. */
+export const ANYONE = /^(?:(?:one|any|either|each|all|both|neither|none|some|whichever)(?: one)? of (?:us|you|them|the family|the kids|the children|my family|our family|our kids|our children)|anyone|anybody|someone|somebody|everyone|everybody|whoever|we|us|our|ours|the family|family|the household|any family member|a family member|family members|any of the kids|any of the children)$/i;
+/** Lookups that read a policy's passages / rows. */
+const LOOKUPS = new Set(["search_passages", "select_table_value", "read_page"]);
+/** A table column whose values apply to a kind of person, a tier or a plan (the answer can differ by person). */
+const PER_PERSON = new Set(["person_class", "tier", "plan"]);
 /** Evidence that makes how an event happened matter: wording that distinguishes accidents (and so illness / other
  * causes) -- an accident-only benefit, an accidental definition, an illness exclusion. */
 const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease)\b/i;
@@ -272,6 +278,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
   let askBecause: string[] = [];
+  /** The mention the latest resolve_person call of this turn was asked about. */
+  let lastMention: string | null = null;
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
@@ -360,6 +368,15 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         if (!composed.sentences.length) composed = null;
       }
       if (a.kind === "person") {
+        // Round 6c (A3): ask who only when the answer depends on the person. A mention that means anyone in the
+        // household ("one of us", "anyone", "we") is answered for the policy and the people it covers; and once
+        // the policy's relevant passages / rows have been read this turn and none of them varies by person (no
+        // person, tier or plan column; no per-person cover lookup), the answer is the same whoever it is.
+        const mention = String(a.mention ?? lastMention ?? "").trim();
+        if (ANYONE.test(mention)) return { result: { ok: false, error: `"${mention}" means whoever it happens to: answer for the policy and the people it covers (each covered person's own column where the rows differ by person); do not ask who` } };
+        const turnEv = trace.toolCalls.filter((t) => t.ok && LOOKUPS.has(t.name)).flatMap((t) => t.evidenceIds);
+        const perPerson = trace.toolCalls.some((t) => t.ok && t.name === "policies_for") || turnEv.some((id) => PER_PERSON.has(state.evidence[id]?.table?.appliesTo?.kind ?? ""));
+        if (!(lastAmbiguous?.self) && turnEv.length && !perPerson) return { result: { ok: false, error: "the passages and rows read for this question do not vary by person (no person, tier or plan column): answer it for the policy and the people it covers; do not ask who" } };
         const options = ((a.options as string[]) ?? []).filter((id) => householdIds.has(id));
         if (options.length < 2) return { result: { ok: false, error: "a person question offers two or more household members (the candidates resolve_person returned)" } };
         if (pendingBefore?.kind === "person" && pendingBefore.turn === state.turn - 1) return { result: { ok: false, error: "you already asked who is meant; resolve the person from the household's reply" } };
@@ -456,6 +473,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         calcMissing.set(call.arguments.subject_id, miss.map((m) => ({ key: normalizeKey(m.key), why: m.why, evidenceIds: (m.evidence ?? []).map((e) => e.evidence_id ?? "").filter(Boolean) })));
       }
       if (res.ok && call.name === "compute") { const rid = (res.data as { resultId?: string }).resultId; if (rid) computeCalls.set(rid, { operation: String(call.arguments.operation), operands: (call.arguments.operands as Record<string, unknown>[]) ?? [] }); }
+      if (call.name === "resolve_person") lastMention = String(call.arguments.mention ?? "");
       if (res.ok && call.name === "resolve_person") {
         const r = res.data as { status: string; person?: { id: string }; via?: string; options?: { id: string; relationLabel?: string }[] };
         const selfMention = SELF_MENTION.test(String(call.arguments.mention ?? "").trim());
@@ -467,6 +485,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           } else setSubject(id, r.via === "self");
           unsettled = new Set();
           if (state.pending?.kind === "person") state.pending = null;
+        } else if (r.status === "ambiguous" && r.options?.length && ANYONE.test(String(call.arguments.mention ?? "").trim())) {
+          // Anyone in the household: nobody needs to be settled before the policy is read.
+          (res.data as Record<string, unknown>).note = "this mention means anyone in the household: answer for the policy and the people it covers; do not ask who";
         } else if (r.status === "ambiguous" && r.options?.length) {
           unsettled = new Set(r.options.map((o) => o.id));
           lastAmbiguous = { self: selfMention, labels: new Map(r.options.map((o) => [o.id, o.relationLabel ?? ""])) };

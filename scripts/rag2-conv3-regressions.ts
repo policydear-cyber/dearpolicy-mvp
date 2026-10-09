@@ -178,11 +178,12 @@ async function main() {
   const l6: ScriptTurn[] = [{ steps: [
     () => [call("resolve_person", { mention: "one of us" })],
     () => [call("ask_user", { kind: "person", mention: "one of us", question: "Which household member do you mean?", options: ids })],
-    () => [call("search_passages", { k: 10, policy_ids: [SUN], query: "emergency medical evacuation overseas worldwide repatriation" })],
+    () => [call("search_passages", { k: 10, policy_ids: [SUN], query: "where you are covered accidents anywhere in the world overseas evacuation" })],
     (v) => [call("final_answer", { sentences: [{ text: "Your SunHaven Family Accident Guard covers accidents anywhere in the world, but its schedule does not list an emergency medical evacuation benefit.", evidence_ids: [hit(v, /anywhere in the world/)] }] })],
   ] }];
   const t6 = await run(l6, L6M);
   show("L6 'one of us'", t6[0]);
+  if (process.env.REPRO) console.log(JSON.stringify(t6[0].trace.toolCalls.map((x: any) => [x.name, x.ok, x.error, x.summary])).slice(0, 1500));
   await check("D4 a group / anyone mention ('one of us') is answered for the policy: the person question is refused", () => {
     assert.equal(t6[0].answer.questions.length, 0, t6[0].visible);
     assert.ok((t6[0].trace.toolCalls as any[]).some((x) => x.name === "ask_user" && !x.ok), "the person question was refused");
