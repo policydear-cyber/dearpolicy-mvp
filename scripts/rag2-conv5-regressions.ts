@@ -269,6 +269,21 @@ async function main() {
     assert.ok(growthFromSearches < 26_000, `the three searches added ${growthFromSearches} characters to every later request`);
   });
 
+  // ------------------------------------------- R: an earlier value printed in the selected cell's row (D1 / Q6)
+  const D1 = ["Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?"];
+  const d1: ScriptTurn[] = [{ steps: [
+    () => [call("resolve_person", { mention: "Isla" })],
+    () => [call("select_table_value", { tier: "Child", want: "amount", benefit: "Hospital daily allowance (per day of confinement)", policy_id: ENDT, subject_id: isla })],
+    (v) => { const x = data(v, "select_table_value"); return [call("final_answer", { subject_id: isla, sentences: [{ text: `The endorsement changed the SafeStay “Hospital daily allowance (per day of confinement)” for each child from S$80 to S$${x.value} per day, from 1 July 2026.`, value_ids: [x.valueId] }] })]; },
+  ] }];
+  const rd1 = await run(d1, D1);
+  show("D1 earlier value", rd1.turns[0]);
+  await check("R1 the earlier value printed in the selected cell's own row (S$80 beside S$110) is found by the composer, not dropped as printed nowhere", () => {
+    const t = rd1.turns[0];
+    assert.ok(!(t.trace.dropped as any[]).some((d) => /S\$80 is printed in none/.test(d.reason)), JSON.stringify(t.trace.dropped));
+    assert.ok(!generic(t), t.visible);
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2 conv5 regressions ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

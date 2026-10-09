@@ -113,7 +113,7 @@ export function evidenceIdOf(state: RagLoopState, ref: EvidenceRef, via = "compo
 function gateOperand(o: TableValueOperand, subjectId: string): ComputationOperand | null {
   if (o.valueKind !== "money" || o.cents == null || !o.currency) return null;
   const value = o.cents / 100;
-  const binding = toFigureBinding({ ...o.evidence, subjectId: o.evidence.subjectId ?? subjectId }, o.benefit, value, o.currency);
+  const binding = toFigureBinding({ ...o.evidence, subjectId: o.evidence.subjectId ?? subjectId }, wordedBenefit(o.benefit, evidenceTextOf(o.evidence), o.evidence.table?.cell?.text), value, o.currency);
   if (!binding) return null;
   const printed = printedPeriodsOf(value, o.currency, o.evidence.passage.text).find((p) => p != null) ?? null;
   return { value, currency: o.currency, period: printed ? (FIG_PERIOD[printed] ?? (printed as FigurePeriod)) : (o.period ? FIG_PERIOD[o.period] ?? null : null), role: "benefit", binding };
@@ -172,6 +172,24 @@ function explainsNeedOnly(text: string, ctx: Ctx): boolean {
   return numbersIn(text).every((n) => saidNums.has(n));
 }
 
+/** Round 7 (A3): a table row's benefit as printed: its row label, or -- when that label is only an item code ("A",
+ * "B", "5") -- the longest worded cell of the row (the benefit's name), so a figure is bound to the benefit the
+ * sentence names. */
+export function wordedBenefit(label: string, rowText: string, cellText?: string | null): string {
+  if ((String(label ?? "").match(/[A-Za-z]{3,}/g) ?? []).length >= 1 && String(label).trim().length > 3) return String(label).trim();
+  const line = rowText.split("\n").find((l) => (cellText && l.includes(cellText)) || (l.split(/\t+| {2,}/)[0] ?? "").trim() === String(label ?? "").trim()) ?? rowText;
+  const worded = line.split(/\t+| {2,}/).map((c) => c.trim()).filter((c) => c !== cellText && (c.match(/[A-Za-z]{3,}/g) ?? []).length >= 2 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(c)).sort((a, b) => b.length - a.length);
+  return worded[0] ?? String(label ?? "").trim();
+}
+/**
+ * Round 7 (A3): everything an evidence entry carries for reading its figures and wording -- the passage, the exact
+ * supporting span, the context it needs (the table's header row, a continued header, a footnote; the whole row for a
+ * selected cell, as lib/rag2/evidence.ts provides it), the row label and the selected cell. Shared EvidenceRef shape.
+ */
+export function evidenceTextOf(ref: EvidenceRef): string {
+  const parts = [ref.passage?.text, ref.support?.text, ...(ref.context ?? []).map((c) => c.text), ref.table?.rowLabel, ref.table?.cell?.text];
+  return [...new Set(parts.filter((x): x is string => typeof x === "string" && !!x.trim()))].join("\n");
+}
 /** A gate record for an indicative per-day / multiple estimate: a printed per-period amount times a whole count the
  * household gave (after any printed day cap). The gate recomputes it and checks the sentence states the count. */
 function estimateRecord(result: ComputeOk, call: ComputeCall | undefined, ctx: Ctx, subjectId: string): { record: Omit<ComputationRecord, "sentence">; operand: ComputationOperand } | null {
@@ -276,7 +294,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
     // benefit); "medically confirmed" / "approved" were refused above.
     if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
-      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", ctx.state.evidence[id].passage.text].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), subjectId });
+      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), subjectId });
       if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
     }
     // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total
@@ -327,15 +345,20 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // A printed table value the sentence (or its computation) cites.
       const ops: TableValueOperand[] = [...values.map((v) => v!.operand), ...(result ? [...ctx.tools.values.values()].map((v) => v.operand).filter((o) => result.evidence.some((e) => evidenceKey(e) === evidenceKey(o.evidence))) : [])];
       const op = ops.find((o) => o.valueKind === "money" && o.cents != null && same(o.cents / 100, f.value) && o.currency === f.currency);
-      let b: FigureBinding | null = op && subjectId ? toFigureBinding({ ...op.evidence, subjectId: op.evidence.subjectId ?? subjectId }, op.benefit, f.value, f.currency) : null;
-      if (!b && subjectId) for (const id of evIds) {
-        const ref = ctx.state.evidence[id];
+      let b: FigureBinding | null = op && subjectId ? toFigureBinding({ ...op.evidence, subjectId: op.evidence.subjectId ?? subjectId }, wordedBenefit(op.benefit, evidenceTextOf(op.evidence), op.evidence.table?.cell?.text), f.value, f.currency) : null;
+      // Round 7 (A3): the passages a figure may be printed in are the cited evidence AND the evidence of the table
+      // values the sentence cites -- each read with its row context (the whole row, its headers), so a figure printed
+      // beside the selected cell (an endorsement's earlier "Existing" amount) is found.
+      const refsForFigure: EvidenceRef[] = [...evIds.map((id) => ctx.state.evidence[id] as EvidenceRef), ...values.map((v) => v!.operand.evidence)];
+      if (!b && subjectId) for (const ref of refsForFigure) {
         // Agent F (D1): the benefit a passage figure is bound to is the passage's OWN label -- its table row, the
         // label a tool gave it, or (for a clause) the model's label only when the line printing the figure says it.
         // A line that is an instruction inside the document is never evidence for a figure.
-        const benefit = ref.table?.rowLabel || ref.label || passageLabel(ref.passage.text, f.value, typeof s.benefit === "string" ? s.benefit : "");
-        const policyText = withoutInstructions(ref.passage.text);
-        b = benefit && numbersIn(policyText).some((n) => same(n, f.value)) ? toFigureBinding({ ...ref, subjectId: ref.subjectId ?? subjectId }, benefit, f.value, f.currency) : null;
+        const benefit = (ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "");
+        const policyText = withoutInstructions(evidenceTextOf(ref));
+        const inCell = !!ref.table?.cell && numbersIn(ref.table.cell.text).some((n) => same(n, f.value));
+        // A figure printed elsewhere in the row than the selected cell is bound to the row, not to that cell's column.
+        b = benefit && numbersIn(policyText).some((n) => same(n, f.value)) ? toFigureBinding({ ...ref, ...(ref.table && !inCell ? { table: null } : {}), subjectId: ref.subjectId ?? subjectId }, benefit, f.value, f.currency) : null;
         if (b) break;
       }
       if (b) { bindings.push({ ...b, sentence, value: f.value, currency: f.currency }); return; }
