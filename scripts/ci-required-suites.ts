@@ -120,6 +120,7 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "rag2:conv4-test",
   "ocr:openai-test",
   "rag2:live-attribution-test",
+  "rag2:live-fetch-guard-pdf-test",
   "ingest:live-checker-test",
   "routing:test",
 ];

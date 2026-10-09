@@ -224,6 +224,8 @@ jobs:
         run: npm run ocr:openai-test
       - name: "Live-run accounting: each turn counts its own model_executions rows once"
         run: npm run rag2:live-attribution-test
+      - name: "Live fetch guard: PDF requests reserved for their page images; Pinecone and unbounded requests refused"
+        run: npm run rag2:live-fetch-guard-pdf-test
       - name: "Ingest-live checker regressions (grades uploads, extraction, citations, usefulness and deletion)"
         run: npm run ingest:live-checker-test
       - name: Catalogue routing (a request for the documents on file or the policies held is answered as one, in a fresh chat and mid-claim; a claim statement or question is never read as one)
