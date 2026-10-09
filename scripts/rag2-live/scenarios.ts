@@ -229,6 +229,11 @@ export const PARAPHRASES: Scenario[] = [
         user: "Yes, the doctor at the clinic did an X-ray and it showed the dislocation.",
         expect: {
           subject: "mei", onlyPrintedFigures: true,
+          // Round 7: the household's answer moves the claim forward -- the benefit explained again (cited, with its
+          // condition) and what still remains, never only their words said back.
+          figures: ["S$600"], binding: { member: "mei", doc: "PLAYWELL", value: 600 },
+          conditional: { figure: "S$600", pattern: "x-?ray|\\bmri\\b|registered medical practitioner|diagnos", about: "its diagnosis / X-ray or MRI condition" },
+          says: [{ pattern: "\\binsurer\\b", about: "what still remains (the insurer checks the documents and decides)" }],
           mustNotAsk: { pattern: "x-?ray|\\bmri\\b|scan", about: "the X-ray the household just described" },
           factRecorded: { keyPattern: "x.?ray|scan|imag|confirm|diagnos", wordsInclude: "x-ray" },
         },

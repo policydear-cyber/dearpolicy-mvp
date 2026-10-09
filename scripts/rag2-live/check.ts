@@ -19,6 +19,9 @@ import { recomputeCalculation } from "@/lib/claims/calc-record";
 import { renderedAssistantText } from "@/components/assistant-message";
 import { withoutNegatedDecisions } from "@/lib/rag2/loop/statements";
 import { WITHHELD_AMOUNT_TEXT } from "@/lib/chat/monetary-boundary";
+import { CALC_NOTE, DROPPED_NOTE, INSTRUCTION_NOTE } from "@/lib/rag2/loop/compose";
+/** lib/rag2/loop/hook.ts RESUME_NOTE (not imported: the hook pulls in the chat route's modules). */
+const RESUME_NOTE = "When you’re ready, here is the question I was on.";
 const WITHHELD = new RegExp(WITHHELD_AMOUNT_TEXT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 import type { CalculationRecord, ChatAnswer } from "@/types";
 import { ACCOUNT_L, DOCS, L, doc, type MemberKey } from "../fixtures/rag2-live/household";
@@ -51,6 +54,33 @@ export function visibleText(a: Partial<ChatAnswer> & Record<string, any>, conten
 /** Wording that presents a printed benefit as a decision, a payment or an entitlement (never DearPolicy's to state). */
 export const ENTITLEMENT = /\b(?:pre-?)?approved\b(?! (?:hospital|provider|panel|doctor|clinic))|\byou(?:['’]ll| will) (?:receive|get|be paid)\b|\b(?:he|she|they|kai|mei|grace|daniel)(?:['’]ll| will) (?:receive|get|be paid)\b|\bwill be (?:paid|reimbursed)\b|\bis entitled to\b|\bare entitled to\b|\bguarantee\w*\b|\bfully covered\b|\b(?:can|will) definitely claim\b/i;
 const count = (hay: string, needle: string) => (needle ? hay.split(needle).length - 1 : 0);
+
+/**
+ * Round 7: whether a substantive assistant turn is USEFUL. It must carry at least one of: a supported figure or
+ * condition (a sentence of its own, with a citation); a single material question; or an honest statement of what the
+ * documents do not say. A turn that only says back the household's own words, or only the generic verification
+ * failure, is not useful -- however safe. The stage is where it went wrong first: the model offered nothing citable
+ * (model reasoning-tool selection), or it did and the answer still did not show it (presentation).
+ */
+const SAID_BACK = /^(?:you(?:['’]ve| have)? (?:said|told (?:me|us)|mentioned|wrote|reported|let me know)|as you (?:said|mentioned|told me))\b/i;
+const NOT_IN_DOCS = /\b(?:documents?|polic(?:y|ies)|schedule|certificate|plan|wording)\b[^.]{0,80}\b(?:do(?:es)?n['’]t|do(?:es)? not|never)\s+(?:mention|say|list|show|include|print|state|cover|have)\b|\bnot (?:mentioned|listed|stated|shown|printed|included) (?:in|anywhere in) (?:your|the)\b|\b(?:couldn['’]t|could not|can['’]t|cannot) find\b[^.]{0,60}\bin (?:your|the) (?:documents?|polic)/i;
+const GENERIC = new Set([DROPPED_NOTE, CALC_NOTE, INSTRUCTION_NOTE, RESUME_NOTE, "I need one more detail first.", "I need to know who this is about first.", "I need to know who is asking first."].map((x) => ws(x)));
+export function turnUsefulness(t: LoadedTurn): { ok: boolean; stage: Stage; detail: string } {
+  const questions = t.questions.map(ws).filter(Boolean);
+  const body = [t.content ?? t.answer.summary ?? "", ...((t.answer.details ?? []) as string[])].flatMap((x) => sentences(String(x ?? ""))).map(ws).filter((s) => s && !questions.some((q) => s === q || q.includes(s)));
+  if (questions.length === 1) return { ok: true, stage: "model reasoning-tool selection", detail: "one material question" };
+  const honest = body.find((s) => NOT_IN_DOCS.test(s));
+  if (honest) return { ok: true, stage: "model reasoning-tool selection", detail: "says what the documents do not say" };
+  const substantive = body.filter((s) => !SAID_BACK.test(s) && !GENERIC.has(s));
+  const citations = (t.answer.citations ?? []) as unknown[];
+  if (substantive.length && citations.length) return { ok: true, stage: "model reasoning-tool selection", detail: "a cited statement" };
+  // Where it went wrong first: did the model's terminal call offer anything citable (or did the composer drop it)?
+  const terminal = ((t.trace?.toolCalls ?? []) as any[]).filter((c) => c.name === "final_answer" || c.name === "ask_user");
+  const offered = terminal.some((c) => [...(c.args?.sentences ?? []), ...(c.args?.statements ?? [])].some((s: any) => (s?.evidence_ids ?? []).length || (s?.value_ids ?? []).length || s?.result_id));
+  const stage: Stage = offered || (t.trace?.dropped ?? []).length ? "presentation" : "model reasoning-tool selection";
+  const why = !body.length ? "says nothing" : body.every((s) => SAID_BACK.test(s)) ? `only says back the household's words: "${body[0]}"` : body.every((s) => SAID_BACK.test(s) || GENERIC.has(s)) ? `only a generic failure: "${body.find((s) => GENERIC.has(s))}"` : substantive.length ? `nothing cited: "${substantive[0]}"` : `"${body[0]}"`;
+  return { ok: false, stage, detail: why };
+}
 
 /** Reads a saved conversation back from the database. */
 export async function loadConversation(conversationId: string): Promise<LoadedConversation> {
@@ -114,6 +144,8 @@ function gradeTurn(t: LoadedTurn, e: TurnExpect, conv: LoadedConversation, out: 
   add("at most one question", t.questions.length <= 1 && !multi.length, "model reasoning-tool selection", t.questions.length > 1 ? `asked ${t.questions.length}: ${t.questions.join(" | ")}` : multi[0] ?? (t.questions[0] ?? "none"));
   const twice = t.questions.filter((q) => count(t.visible, ws(q)) > 1 || count(ws(t.visible), ws(q)) > 1);
   add("each question shown once", twice.length === 0, "presentation", twice.length ? `shown ${count(ws(t.visible), ws(twice[0]))}x: "${twice[0]}"` : "once");
+  // Round 7: every substantive turn (not one a limit stopped) is useful.
+  if (!t.trace?.limit && (!t.trace || ["final_answer", "ask_user"].includes(t.trace.outcome))) { const u = turnUsefulness(t); add("useful turn (a cited figure or condition, one material question, or what the documents do not say)", u.ok, u.stage, u.detail); }
   for (const f of e.figures ?? []) {
     const v = amount(f);
     const ok = shown.includes(v);

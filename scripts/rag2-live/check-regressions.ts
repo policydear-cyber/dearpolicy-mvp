@@ -4,9 +4,11 @@
  *   node --import tsx scripts/rag2-live/check-regressions.ts
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { DOCS, L, doc } from "../fixtures/rag2-live/household";
 import { SCENARIOS } from "./scenarios";
-import { grade, visibleText, type LoadedConversation } from "./check";
+import { grade, turnUsefulness, visibleText, type LoadedConversation } from "./check";
 
 const pages = new Map<string, string>();
 for (const d of DOCS) for (const [n, t] of Object.entries(d.pages)) pages.set(`${d.id}:${n}`, t);
@@ -163,5 +165,48 @@ t("C23 'a limit, not a guaranteed payment' is not an entitlement; 'guaranteed pa
   assert.equal(ok.verdict, "PASS", JSON.stringify(bad(ok)));
   assert.ok(bad(grade(l2, mk("Kai has a guaranteed payout of S$400 per accident."))).some((c) => c.name === "never states approval, payment or entitlement"));
 });
+// ------------------------------------------------- Round 7: every substantive turn is useful (L3b turn 2, real runs)
+/** A real run's saved L3b conversation (docs/rag-migration/live/RUN-*\/conv-L3b.json, read only), as the checker loads it. */
+function savedRun(prefix: string): LoadedConversation {
+  const dir = path.resolve("docs/rag-migration/live");
+  const run = fs.readdirSync(dir).filter((d) => d.startsWith(prefix)).sort()[0];
+  assert.ok(run, "missing run folder " + prefix);
+  const j = JSON.parse(fs.readFileSync(path.join(dir, run, "conv-L3b.json"), "utf8"));
+  const s = j.saved;
+  return { conversationId: j.conversationId, pages, state: { ragLoop: { evidence: s.evidence, claim: s.claim, turns: s.traces } },
+    turns: j.turns.map((t: any, i: number) => { const a = s.answers[i] ?? {}; const qs = (a.questions ?? []).map((q: any) => q.text);
+      return { index: i, user: t.user, content: t.visible.split("\n").filter((l: string) => !qs.includes(l) && !(a.questions ?? []).some((q: any) => q.why === l)).join(" "), answer: { summary: t.visible, details: [], ...a }, visible: t.visible, questions: qs, userAt: null, assistantAt: null, trace: s.traces[i] }; }) };
+}
+const echoRun = savedRun("RUN-r6-final-candidate-"), failRun = savedRun("RUN-r6-facts-fix-L3-L3b-");
+t("C24 L3b turn 2 of r6-final-candidate (only 'You told me ...', the model gave nothing citable) FAILS as not useful, at model reasoning-tool selection", () => {
+  assert.equal(echoRun.turns[1].visible, "You told me the doctor at the clinic did an X-ray and it showed the dislocation.");
+  const v = grade(sc("L3b"), echoRun);
+  assert.equal(v.verdict, "FAIL", JSON.stringify(bad(v)));
+  const u = bad(v).find((c) => c.turn === 2 && /^useful turn/.test(c.name));
+  assert.ok(u, JSON.stringify(bad(v)));
+  assert.equal(u!.stage, "model reasoning-tool selection"); assert.match(u!.detail, /only says back/);
+  assert.ok(!bad(v).some((c) => c.turn === 1), "turn 1 (the conditional S$600 and one question) stays a pass: " + JSON.stringify(bad(v)));
+});
+t("C25 L3b turn 2 of r6-facts-fix-L3-L3b (only the generic verification failure; the model's cited sentence was dropped) FAILS as not useful, at presentation", () => {
+  assert.equal(failRun.turns[1].visible, "I couldn’t confirm an answer to that from your documents.");
+  const v = grade(sc("L3b"), failRun);
+  assert.equal(v.verdict, "FAIL");
+  const u = bad(v).find((c) => c.turn === 2 && /^useful turn/.test(c.name));
+  assert.ok(u, JSON.stringify(bad(v)));
+  assert.equal(u!.stage, "presentation"); assert.match(u!.detail, /generic failure/);
+});
+t("C26 L3b turn 2 that says back the X-ray, re-states the cited S$600 with its condition and what remains PASSES; a bare generic failure or an uncited figure does not", () => {
+  const good = "You told me the doctor at the clinic did an X-ray and it showed the dislocation. Mei’s PlayWell plan lists a Dislocation benefit of S$600 per dislocation, payable once if diagnosed by a registered medical practitioner and confirmed by X-ray or MRI. What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for and decides the claim after reviewing them.";
+  const base = echoRun.turns[1];
+  const mk = (summary: string, extra: Record<string, any> = {}) => ({ ...echoRun, turns: [echoRun.turns[0], { ...base, content: summary, visible: summary, answer: { ...base.answer, summary, ...extra } }] });
+  const cites = { citations: [cite("PLAYWELL", 1, "Dislocation benefit (per dislocation)   S$600"), cite("PLAYWELL", 2, "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.")], figureBindings: [{ value: 600, policyId: doc("PLAYWELL").id, subjectId: L.mei.id }] };
+  const v = grade(sc("L3b"), mk(good, cites));
+  assert.equal(v.verdict, "PASS", JSON.stringify(bad(v)));
+  assert.equal(turnUsefulness(mk("Mei’s PlayWell plan lists a Dislocation benefit of S$600.").turns[1]).ok, false, "a figure with no citation is not useful");
+  assert.equal(turnUsefulness(mk("I couldn’t confirm an answer to that from your documents. You told me the doctor did an X-ray.").turns[1]).ok, false, "generic failure + echo is not useful");
+  assert.equal(turnUsefulness(mk("Mei’s PlayWell certificate doesn’t mention a benefit for physiotherapy after a dislocation.").turns[1]).ok, true, "what the documents do not say is useful");
+  assert.equal(turnUsefulness({ ...mk("I need one more detail first.").turns[1], questions: ["Which clinic did Mei go to?"] }).ok, true, "one material question is useful");
+});
+
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);
