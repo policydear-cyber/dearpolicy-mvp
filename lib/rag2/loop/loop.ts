@@ -103,10 +103,9 @@ function forModel(value: unknown, state: RagLoopState, via: string, ids: string[
  * list (never the same passage twice in one result), each passage in full only the first time this turn. */
 function resultForModel(res: { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state: RagLoopState, via: string, ids: string[], shown: Set<string>): Record<string, unknown> {
   const data = res.ok ? forModel(res.data, state, via, ids, shown) : undefined;
-  const inData = new Set(ids);
-  const extra = (Array.isArray(res.evidence) ? res.evidence : []).filter((e) => !isRef(e) || !inData.has(evidenceIdOf(state, e, via)));
-  const evidence = forModel(extra, state, via, ids, shown) as unknown[];
-  return res.ok ? { ok: true, data, ...(evidence.length ? { evidence } : {}) } : { ok: false, error: res.error, ...(evidence.length ? { evidence } : {}) };
+  // The evidence list repeats what the data already showed only as references (id, page, row), never in full.
+  const evidence = forModel(Array.isArray(res.evidence) ? res.evidence : [], state, via, ids, shown) as unknown[];
+  return res.ok ? { ok: true, data, evidence } : { ok: false, error: res.error, evidence };
 }
 
 /** The line of a cited passage that says why a question matters: a table row's label, else the passage line sharing
