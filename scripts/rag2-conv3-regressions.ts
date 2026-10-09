@@ -164,6 +164,14 @@ async function main() {
     assert.doesNotMatch(pos[0].visible, /S\$400/, pos[0].visible);
   });
 
+  await check("D3b the decision / payout detector is negation- and scope-aware, both ways", async () => {
+    const { payoutOrDecision } = await import("@/lib/rag2/loop/statements");
+    for (const t of ["For Kai, the benefit is up to S$400 per accident; this is a limit, not a guaranteed payment.", "Listing a benefit is not an approval of the claim.", "The schedule does not guarantee that a claim will be paid.", "This does not mean you will receive S$400.", "This is an indicative estimate, not a payout.", "No amount is guaranteed until the insurer reviews the claim."])
+      assert.equal(payoutOrDecision(t), null, t);
+    for (const t of ["The claim is approved.", "You will be paid S$400.", "You are entitled to S$400.", "There is a guaranteed payout of S$400.", "Kai is fully covered.", "It is not approved yet but it is guaranteed.", "It is not a payout; you will be paid S$400 next week.", "Kai is entitled to the fracture benefit."])
+      assert.notEqual(payoutOrDecision(t), null, t);
+  });
+
   // --------------------------------------------------------------- D4: L6, "one of us" never asks who
   const L6M = ["If one of us is injured overseas, does SunHaven pay for emergency medical evacuation, and up to how much?"];
   const ids = Object.values(L).map((m) => m.id);

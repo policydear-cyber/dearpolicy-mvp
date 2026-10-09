@@ -23,9 +23,26 @@ const REQUIREMENT_APPROVAL = /\b(?:must|needs? to|has to|have to|should|to|may n
 export const DECISION = /\bpre-?approved\b|\bapproved\b|\b(?:medically|already|officially|formally) (?:confirmed|verified|accepted)\b|\b(?:is|are|was|were|has been|have been) (?:now |already )?(?:confirmed|accepted) (?:as|for) (?:a )?(?:claim|cover|payment)\b|\bfully covered\b|\bcovered in full\b|\bdefinitely covered\b|\bguarantee\w*\b|\bwill (?:definitely |certainly )?be covered\b/i;
 /** True when the sentence presents money as paid / owed / claimable, or states a claim decision. */
 export function payoutOrDecision(text: string): "payout" | "decision" | null {
-  if (PAYOUT.test(text)) return "payout";
-  if (DECISION.test(text.replace(REQUIREMENT_APPROVAL, " "))) return "decision";
+  // Round 6c: a decision / payout word in the scope of a negation is the opposite of a decision ("this is a limit,
+  // not a guaranteed payment", "is not an approval", "does not guarantee", "not a payout") -- removed before testing.
+  const t = withoutNegatedDecisions(text);
+  if (PAYOUT.test(t)) return "payout";
+  if (DECISION.test(t.replace(REQUIREMENT_APPROVAL, " ")) || ENTITLEMENT.test(t)) return "decision";
   return null;
+}
+/** "you are entitled to", "is entitled to S$750" -- an entitlement is a claim decision (negated or not: "is not
+ * entitled to" is a decision too). */
+const ENTITLEMENT = /\bentitled to\b|\bentitlement\b/i;
+const NEGATOR = String.raw`(?:not|never|no|isn['’]t|aren['’]t|wasn['’]t|weren['’]t|doesn['’]t|don['’]t|didn['’]t|won['’]t|wouldn['’]t|cannot|can['’]t|without)`;
+const FILLER = String.raw`(?:\s+(?:a|an|the|any|yet|be|been|being|itself|in itself|necessarily|automatically|always|by itself|\w+ly))*`;
+const DECIDED = String.raw`(?:pre-?approved|approved|approval|approve|guarantee\w*|fully covered|covered in full|definitely covered|confirmed|accepted|a decision|decision|promise\w*|pay-?outs?|payments?)`;
+const NEGATED_DECISION = new RegExp(String.raw`\b${NEGATOR}(?:${FILLER}|(?:\s+(?!but\b|and\b|yet\b|however\b)[\w'’-]+){0,3}?)\s+${DECIDED}\b(?:\s+(?:payments?|pay-?outs?|amounts?|of (?:payment|cover)))?`, "gi");
+/** "does not guarantee that a claim will be paid", "does not mean you will receive it": what follows a negated
+ * guarantee / promise / meaning, to the end of its clause, is in the negation's scope. */
+const NEGATED_SCOPE = new RegExp(String.raw`\b${NEGATOR}${FILLER}\s+(?:guarantee|promise|mean|imply|confirm|say|state)s?\b(?:\s+that)?[^.;:!?]*`, "gi");
+/** The text with every negated decision / payout phrase removed (the rest is checked as written). */
+export function withoutNegatedDecisions(text: string): string {
+  return String(text ?? "").replace(NEGATED_SCOPE, " ").replace(NEGATED_DECISION, " ");
 }
 
 export const INSTRUCTION = /\bignore (?:all |any )?(?:the )?(?:previous|prior|above|earlier|other|preceding) (?:instructions?|prompts?|rules|messages?)\b|\b(?:note|message|instructions?|notice) (?:to|for) (?:any|the|an?|all) (?:ai|a\.i\.|assistants?|chat ?bots?|language models?|llms?|models?|bots?)\b|\b(?:ai|virtual) assistants?\b|\b(?:language model|system prompt|chatgpt|llm)s?\b|\bdo not (?:mention|tell|disclose|reveal|say)\b|\btell (?:the|any) (?:policyholder|customer|user|insured|reader|household)\b/i;
