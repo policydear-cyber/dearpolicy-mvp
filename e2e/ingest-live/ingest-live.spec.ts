@@ -200,14 +200,27 @@ test("live ingestion journey", async ({ page }) => {
       const target = (await policies(page)).find((p) => p.original_filename === qs.deleteSource);
       if (soft(target, `delete: ${qs.deleteSource} is not in the library`)) {
         await policiesPage(page, uploads.length);
-        const card = page.locator(".document-card").filter({ hasText: target!.product_name ?? target!.original_filename }).first();
-        await card.getByRole("button", { name: "Delete" }).click();
-        await card.getByRole("button", { name: "Confirm delete" }).click();
-        soft(await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted", { timeout: 60_000 }).then(() => true, () => false), `delete ${qs.deleteSource}: no "was deleted" confirmation`);
-        soft(!(await policies(page)).some((p) => p.id === target!.id), `delete ${qs.deleteSource}: still listed`);
+        // By the card's own policy id: two documents of one plan (a schedule and its endorsement) share the product
+        // name, so a card found by its text can be the WRONG document (run ingest-live-1 deleted hx-text.pdf).
+        const card = page.locator(`.document-card[data-policy-id="${target!.id}"]`);
+        soft(await card.count() === 1, `delete ${qs.deleteSource}: its card (data-policy-id) is not on the page`);
+        const others = (await policies(page)).filter((p) => p.id !== target!.id).map((p) => p.id);
+        await card.getByRole("button", { name: "Delete", exact: true }).click();
+        await card.getByRole("button", { name: "Confirm delete", exact: true }).click();
+        // The page confirms in its library notice: "Deleted <name>. It is no longer used in answers, ..."
+        const notice = page.locator("[data-testid=library-notice]");
+        const confirmed = await expect(notice).toContainText(/^Deleted /, { timeout: 60_000 }).then(() => true, () => false);
+        const noticeText = (await notice.innerText().catch(() => "")).trim();
+        soft(confirmed, `delete ${qs.deleteSource}: no "Deleted ..." confirmation (notice: "${noticeText}")`);
+        let listed = true;
+        for (const until = Date.now() + 60_000; Date.now() < until;) { listed = (await policies(page)).some((p) => p.id === target!.id); if (!listed) break; await page.waitForTimeout(2000); }
+        soft(!listed, `delete ${qs.deleteSource}: still listed 60 s after the confirmation`);
+        const after = (await policies(page)).map((p) => p.id);
+        const lostOthers = others.filter((id) => !after.includes(id));
+        soft(!lostOthers.length, `delete ${qs.deleteSource}: other documents disappeared too (${lostOthers.length})`);
         await policiesPage(page, uploads.length - 1);
         await shot(page, "after-delete-library");
-        write("deleted.json", { file: qs.deleteSource, policyId: target!.id, at: new Date().toISOString() });
+        write("deleted.json", { file: qs.deleteSource, policyId: target!.id, at: new Date().toISOString(), confirmed, notice: noticeText, listedAfter: listed, otherDocumentsLost: lostOthers });
         await page.goto("/chat");
         if (!qs.afterDeleteSameConversation) await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
         else { await page.locator("details.chat-history > summary").click(); await page.locator(".history-open").first().click(); await expect(answers().first()).toBeVisible({ timeout: 60_000 }); }

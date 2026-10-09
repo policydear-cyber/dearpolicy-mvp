@@ -7,6 +7,20 @@ const read = (dir: string, f: string) => { const p = path.join(dir, f); return f
 const usd = (n: unknown) => (typeof n === "number" ? "US$" + n.toFixed(6) : "-");
 const cell = (s: unknown) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n+/g, "<br>");
 
+/** The whole exercise's spend from docs/rag-migration/live/LEDGER.json (shared with the rag2 live smoke), with this run
+ * added when the ledger does not list it yet (CI appends it after the report is written). */
+export function exerciseSpendLine(run: any, ledgerPath = "docs/rag-migration/live/LEDGER.json"): string {
+  let ledger: any = null;
+  try { ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8")); } catch { return "**Exercise spend**: LEDGER.json not readable"; }
+  const runs: any[] = ledger.runs ?? [];
+  const used = (r: any) => (Number(r.spent_usd) || 0) + (Number(r.reserved_unsettled_usd) || 0);
+  const listed = runs.some((r) => r.run_id === run.runId);
+  const before = runs.filter((r) => r.run_id !== run.runId).reduce((n, r) => n + used(r), 0);
+  const mine = listed ? used(runs.find((r) => r.run_id === run.runId)) : (Number(run.budgetUsed?.spentUsd) || 0) + (Number(run.budgetUsed?.reservedUsd) || 0);
+  const cap = Number(ledger.exercise_cap_usd) || 0.5;
+  return `**Exercise spend (LEDGER.json)**: ${usd(before + mine)} of US$${cap.toFixed(2)} -- ${runs.filter((r) => r.run_id !== run.runId).length} earlier run(s) ${usd(before)} + this run ${usd(mine)}${listed ? "" : " (not yet in the ledger)"}; ${usd(cap - before - mine)} left`;
+}
+
 export function writeIngestReport(dir: string): string {
   const run = read(dir, "run.json") ?? {};
   const uploads: any[] = read(dir, "uploads.json") ?? [];
@@ -15,7 +29,7 @@ export function writeIngestReport(dir: string): string {
   const verdict = read(dir, "verdict.json");
   const journey = read(dir, "journey.json");
   const L: string[] = [];
-  L.push(`# Live ingestion test -- ${run.label ?? "run"}`, "");
+  L.push(exerciseSpendLine(run), "", `# Live ingestion test -- ${run.label ?? "run"}`, "");
   L.push(`- **Tested code**: \`${run.testedCodeSha ?? "?"}\` (request commit \`${run.requestSha ?? "-"}\`), tree \`${run.tree ?? "?"}\`, build ${run.buildId ?? "?"}`);
   L.push(`- **Models requested**: ${Object.entries(run.modelsRequested ?? {}).map(([k, v]) => `${k}=${v}`).join(", ")}; **provider-reported**: ${(run.providerModels ?? []).join(", ") || "none (no call sent)"}`);
   L.push(`- **Spend**: ${usd(run.budgetUsed?.spentUsd)} of a ${usd(run.budgetUsed?.capUsd)} run cap; ${run.budgetUsed?.calls ?? 0} calls sent, ${run.budgetUsed?.refusals ?? 0} refused, ${run.budgetUsed?.failed ?? 0} failed; reserved-unsettled ${usd(run.budgetUsed?.reservedUsd)}`);
@@ -33,6 +47,16 @@ export function writeIngestReport(dir: string): string {
     L.push(`### ${t.id} -- ${t.phase} -- ${Math.round(t.ms / 1000)} s`, "", `**User** (${t.via}): ${cell(t.user)}`, "", `**DearPolicy**: ${t.error ? "[ERROR SHOWN] " + cell(t.error) : t.stuck ? "[no reply in time]" : cell(t.answer)}`, "");
     if (t.citationsShown?.length) L.push(`Sources shown: ${cell(t.citationsShown.join("; "))}`, "");
     if (t.pendingQuestion) L.push(`Asks: ${cell(t.pendingQuestion)}${t.unansweredFollowUp ? " (no fixture answer)" : ""}`, "");
+    const lp = t.loop;
+    if (lp) {
+      L.push(`<details><summary>Loop: ${lp.outcome ?? "?"}, ${lp.steps ?? "?"} step(s)${lp.limit ? ", LIMIT " + cell(typeof lp.limit === "string" ? lp.limit : JSON.stringify(lp.limit)) : ""}, ${lp.usage ? `${lp.usage.input} in / ${lp.usage.output} out tokens` : "no usage"}, ${lp.latencyMs ?? "?"} ms</summary>`, "");
+      L.push("| # | tool | ok | error / result | evidence |", "|---|---|---|---|---|");
+      lp.toolCalls.forEach((c: any, k: number) => L.push(`| ${k + 1} | ${c.name} | ${c.ok ? "yes" : "**no**"} | ${cell(c.error ?? c.summary ?? (c.args ? JSON.stringify(c.args).slice(0, 160) : ""))} | ${c.evidence} |`));
+      if (Array.isArray(lp.calls) && lp.calls.length) L.push("", `Per call (tokens in/out): ${lp.calls.map((c: any, k: number) => `${k + 1}: ${c.input ?? c.usage?.input ?? "?"}/${c.output ?? c.usage?.output ?? "?"}`).join("; ")}`);
+      if (lp.gate?.length) L.push("", `Gate: ${cell(JSON.stringify(lp.gate).slice(0, 600))}`);
+      if (lp.dropped?.length) L.push("", `Composer dropped: ${cell(JSON.stringify(lp.dropped).slice(0, 600))}`);
+      L.push("", "</details>", "");
+    } else if (!t.error && !t.stuck) L.push("_No loop trace stored for this turn._", "");
     L.push(`![${t.id}](${t.screenshot})`, "");
   }
   if (verdict?.checks?.length) {

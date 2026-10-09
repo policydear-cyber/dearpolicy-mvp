@@ -23,7 +23,7 @@ import { ensureDefaultHousehold } from "@/lib/household/repo";
 import { liveSafetyChecks, PREFLIGHT_REFUSAL } from "../../e2e/support/rag2-live-guard";
 import { reconcile } from "../rag2-live/attribution";
 import { dumpAccount } from "./dump";
-import { grade } from "./check";
+import { annotateTranscript, grade } from "./check";
 import { writeIngestReport } from "./report";
 
 const arg = (n: string, d?: string) => { const i = process.argv.indexOf("--" + n); return i > 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith("--") ? process.argv[i + 1] : d; };
@@ -134,6 +134,7 @@ async function main() {
   for (const f of [".processing-done", ".dump-done"]) fs.rmSync(path.join(outDir, f), { force: true });
   run.finishedAt = new Date().toISOString();
   save();
+  annotateTranscript(outDir);
   const v = grade(outDir);
   fs.writeFileSync(path.join(outDir, "verdict.json"), JSON.stringify(v, null, 2));
   run.verdict = v.verdict; save();

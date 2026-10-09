@@ -17,6 +17,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
+import { turnUsefulness, type LoadedTurn } from "../rag2-live/check";
 
 type Check = { scope: string; check: string; ok: boolean; detail: string };
 const read = (dir: string, f: string) => { const p = path.join(dir, f); return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null; };
@@ -24,7 +26,82 @@ const g = (o: any, ...keys: string[]) => { for (const k of keys) if (o && o[k] !
 /** Lower-case, unify dashes / currency spacing / thousands separators, so "S$ 1,100" matches "s$1100". */
 export function norm(s: string) { return String(s ?? "").toLowerCase().replace(/[‐-―]/g, "-").replace(/(\d),(?=\d{3}\b)/g, "$1").replace(/s\$\s+/g, "s$").replace(/\s+/g, " ").trim(); }
 const has = (text: string, needle: string) => norm(text).includes(norm(needle));
-const NON_ANSWER = /something went wrong|try again (later|in a)|could not (answer|complete)|the assistant model returned an error|i (can't|cannot) help/i;
+/** Sentences that tell the household nothing about their cover: the verification / limit / error notes. They are
+ * removed before the rag2-live usefulness rule (scripts/rag2-live/check.ts turnUsefulness) is applied, so a reply made
+ * only of them -- e.g. run ingest-live-1's Q2 "I couldn’t confirm one of the figures against the cited page of your
+ * documents." with citations attached -- is not useful. */
+export const GENERIC_SENTENCES: RegExp[] = [
+  new RegExp("^" + FIGURE_LEFT_OUT_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/’/g, "['’]") + "$", "i"),
+  /^I couldn['’]t finish\b/i, /^Nothing was saved from this attempt\b/i, /^Please (?:try again|ask about one policy)/i,
+  /something went wrong|try again (?:later|in a)|the assistant model returned an error/i,
+];
+const sentencesOf = (t: string) => String(t ?? "").split(/(?<=[.!?])\s+|\n+/).map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+const genericOnly = (t: string) => sentencesOf(t).filter((x) => !GENERIC_SENTENCES.some((re) => re.test(x))).join(" ");
+/** Usefulness of one stored assistant message: a cited figure or condition, a single material question, or an honest
+ * statement of what the documents do not say (the rag2-live rule), after removing generic notes. */
+export function usefulReply(stored: { content?: string | null; answer_json?: any } | null, trace: any | null, user: string): { ok: boolean; detail: string } {
+  if (!stored) return { ok: false, detail: "no stored answer" };
+  const a = stored.answer_json ?? { summary: stored.content };
+  if (trace?.limit) return { ok: false, detail: `stopped by a limit (${typeof trace.limit === "string" ? trace.limit : JSON.stringify(trace.limit)})` };
+  const content = genericOnly(stored.content ?? a.summary ?? "");
+  const details = ((a.details ?? []) as string[]).map(genericOnly).filter(Boolean);
+  const turn: LoadedTurn = { index: 0, user, answer: { ...a, summary: content, details }, content, visible: content, questions: ((a.questions ?? []) as any[]).map((q) => String(q?.text ?? "")).filter(Boolean), userAt: null, assistantAt: null, trace };
+  const u = turnUsefulness(turn);
+  const removed = sentencesOf([stored.content ?? a.summary ?? "", ...((a.details ?? []) as string[])].join("\n")).filter((x) => GENERIC_SENTENCES.some((re) => re.test(x)));
+  return { ok: u.ok, detail: u.detail + (removed.length ? ` (generic note set aside: "${removed[0]}")` : "") };
+}
+
+/** The loop's per-turn traces from the stored conversation state (chat_conversations.state.ragLoop.turns), each
+ * taken once, matched by conversation and user message. */
+/** The stored user message for a browser turn: the same text, or -- for an answer typed into the inline answer box --
+ * "<the chat's question>: <the answer>". */
+export const sameUserMessage = (stored: unknown, typed: unknown) => { const a = String(stored ?? "").trim(), b = String(typed ?? "").trim(); return !!b && (a === b || a.endsWith(": " + b)); };
+export function conversationTraces(dump: any) {
+  const byConv = new Map<string, any[]>(((dump?.tables?.chat_conversations ?? []) as any[]).map((c) => [String(c.id), [...(c.state?.ragLoop?.turns ?? [])]]));
+  return { take(conversationId: string | undefined, user: string) {
+    const list = conversationId ? byConv.get(String(conversationId)) ?? [] : [...byConv.values()].flat();
+    const i = list.findIndex((x) => sameUserMessage(x?.userMessage, user));
+    if (i < 0) return null;
+    const [t] = list.splice(i, 1); return t;
+  } };
+}
+/** One turn's loop diagnostics for transcript.json and the report: tool calls (ok / error), gate and composer drops,
+ * the limit, steps, and token usage (per call where the trace has it). */
+export function loopDiagnostics(trace: any | null) {
+  if (!trace) return null;
+  return {
+    outcome: trace.outcome ?? null, steps: trace.steps ?? null, limit: trace.limit ?? null, latencyMs: trace.latencyMs ?? null, modelId: trace.modelId ?? null,
+    usage: trace.usage ?? null, calls: trace.calls ?? null,
+    toolCalls: ((trace.toolCalls ?? []) as any[]).map((c) => ({ name: c.name, ok: c.ok !== false, error: c.error ?? null, summary: c.summary ?? null, evidence: (c.evidenceIds ?? []).length, args: c.name === "final_answer" || c.name === "ask_user" ? undefined : c.args })),
+    gate: trace.gate ?? [], dropped: trace.dropped ?? [], evidenceChosen: trace.evidenceChosen ?? [],
+  };
+}
+
+/** Each browser turn with its stored assistant message (the next assistant message in the same conversation after
+ * the same user message) and the loop's trace for it. */
+export function pairTurns(transcript: any[], dumpF: any) {
+  const msgs: any[] = dumpF?.tables?.chat_messages ?? [];
+  const used = new Set<number>();
+  const stored = (t: any) => {
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i].role !== "user" || used.has(i) || !sameUserMessage(msgs[i].content, t.user)) continue;
+      const a = msgs.slice(i + 1).find((m) => m.role === "assistant" && (m.conversation_id ?? null) === (msgs[i].conversation_id ?? null));
+      used.add(i);
+      return a ?? null;
+    }
+    return null;
+  };
+  const traces = conversationTraces(dumpF);
+  return transcript.map((t) => { const st = stored(t); return { ...t, stored: st, trace: st ? traces.take(st.conversation_id, t.user) : null }; });
+}
+/** Writes each turn's loop diagnostics into transcript.json (field `loop`), from the final dump's conversation state. */
+export function annotateTranscript(dir: string) {
+  const transcript: any[] = read(dir, "transcript.json") ?? [];
+  const dumpF = read(path.join(dir, "dump-final"), "dump.json");
+  if (!transcript.length || !dumpF) return;
+  const paired = pairTurns(transcript, dumpF);
+  fs.writeFileSync(path.join(dir, "transcript.json"), JSON.stringify(paired.map(({ stored, trace, ...t }) => ({ ...t, loop: loopDiagnostics(trace), storedCitations: ((stored?.answer_json?.citations ?? []) as any[]).map((c) => ({ policyId: c.policyId, pageStart: c.pageStart ?? null, pageEnd: c.pageEnd ?? null })) })), null, 2));
+}
 
 export function grade(dir: string) {
   const expected = read(dir, "EXPECTED.json");
@@ -62,23 +139,22 @@ export function grade(dir: string) {
   }
 
   // Turns: pair each browser turn with its stored answer (the assistant message after the same user message).
-  const msgs: any[] = dumpF?.tables?.chat_messages ?? [];
-  const used = new Set<number>();
-  const stored = (t: any) => {
-    for (let i = 0; i < msgs.length; i++) {
-      if (msgs[i].role !== "user" || used.has(i) || String(msgs[i].content ?? "").trim() !== String(t.user).trim()) continue;
-      const a = msgs.slice(i + 1).find((m) => m.role === "assistant");
-      used.add(i);
-      return a ?? null;
-    }
-    return null;
-  };
-  const turns = transcript.map((t) => ({ ...t, stored: stored(t) }));
+  const turns = pairTurns(transcript, dumpF);
   const deletedFile = deleted?.file ?? null;
+  // The deletion must be CONFIRMED before any after-deletion question counts: the page's own confirmation, the
+  // document gone from the library, its lifecycle no longer active in the final dump, no other document lost, and
+  // all of it before the first after-deletion question was asked.
+  const delRow = deleted ? ((dumpF?.tables?.policies ?? []) as any[]).find((p) => p.id === deleted.policyId) : null;
+  const firstAfter = turns.find((t) => t.phase === "after_delete");
+  const otherInactive = deleted ? ((dumpF?.tables?.policies ?? []) as any[]).filter((p) => p.id !== deleted.policyId && p.lifecycle_state && p.lifecycle_state !== "active").map((p) => p.original_filename) : [];
+  const deletionConfirmed = !!deleted && deleted.confirmed === true && deleted.listedAfter === false && (!delRow || (delRow.lifecycle_state && delRow.lifecycle_state !== "active")) && !otherInactive.length && (!firstAfter || new Date(deleted.at) <= new Date(firstAfter.at));
+  if (deleted || firstAfter) add(`delete ${deletedFile ?? "(nothing deleted)"}`, "deleted through the page and confirmed before the next question", deletionConfirmed,
+    deleted ? `notice: "${deleted.notice ?? "-"}"; listed after: ${deleted.listedAfter ?? "unknown"}; lifecycle: ${delRow ? delRow.lifecycle_state : "row gone"}${otherInactive.length ? `; OTHER documents not active: ${otherInactive.join(", ")}` : ""}` : "no deletion recorded");
   for (const t of turns) {
     const scope = `${t.id} (${t.phase}) "${String(t.user).slice(0, 60)}"`;
-    const useful = !t.error && !t.stuck && t.answer.length >= 40 && !NON_ANSWER.test(t.answer);
-    add(scope, "useful reply", useful, t.error ? `error: ${t.error}` : t.stuck ? "no reply in time" : `${t.answer.length} chars`);
+    const u = t.error ? { ok: false, detail: `error: ${t.error}` } : t.stuck ? { ok: false, detail: "no reply in time" } : usefulReply(t.stored, t.trace, t.user);
+    add(scope, "useful reply (a cited figure or condition, one material question, or what the documents do not say)", u.ok, u.detail);
+    if (t.phase === "after_delete") add(scope, "asked after a confirmed deletion", deletionConfirmed, deletionConfirmed ? "" : "the deletion was not confirmed: this turn tests nothing");
     if (t.phase === "after_delete" && deletedFile) {
       const cites = ((t.stored?.answer_json?.citations ?? []) as any[]).map((c) => fileOf.get(c.policyId) ?? (c.policyId === deleted.policyId ? deletedFile : null));
       add(scope, `does not rely on the deleted ${deletedFile}`, !cites.includes(deletedFile), `cites: ${cites.filter(Boolean).join(", ") || "nothing"}`);
@@ -121,6 +197,7 @@ export function grade(dir: string) {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const dir = process.argv[2];
   if (!dir) { console.error("usage: check.ts <run folder>"); process.exit(2); }
+  annotateTranscript(dir);
   const v = grade(dir);
   fs.writeFileSync(path.join(dir, "verdict.json"), JSON.stringify(v, null, 2));
   console.log(`${v.verdict}: ${"passed" in v ? `${v.passed} passed, ${v.failed} failed` : ""}`);
