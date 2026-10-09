@@ -15,6 +15,7 @@
  *   GET /__ingestlive/budget   the ledger and every guarded call (no content, no headers, no key)
  */
 import http from "node:http";
+import { randomBytes } from "node:crypto";
 import next from "next";
 import { liveSafetyChecks, PREFLIGHT_REFUSAL, RunCapGuardModel } from "./rag2-live-guard";
 import { installFetchGuard } from "./rag2-live-fetch-guard";
@@ -32,6 +33,8 @@ const fetchGuard = installFetchGuard({ ledger, preflightRefusal: live.preflight 
 Object.assign(process.env, {
   DEV_AUTH_ENABLED: "1", DEV_ACCOUNT_ID: userId, DEARPOLICY_RAG_LOOP: "1",
   STORAGE_DRIVER: "local", MALWARE_SCANNING_INTENTIONALLY_DISABLED: "true",
+  // A production build compiles NODE_ENV checks as "production": the upload intent needs a server secret (one per run).
+  UPLOAD_INTENT_SECRET: process.env.UPLOAD_INTENT_SECRET || randomBytes(32).toString("hex"),
 });
 for (const k of ["VIRUSTOTAL_API_KEY", "PINECONE_API_KEY", "SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "DEARPOLICY_DETERMINISTIC_MODEL"]) delete process.env[k];
 const port = Number(process.env.PORT ?? 3320);

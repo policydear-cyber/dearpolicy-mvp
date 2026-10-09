@@ -31,6 +31,12 @@ async function api<T = any>(page: Page, p: string): Promise<{ status: number; bo
   return page.evaluate(async (p) => { const r = await fetch(p, { cache: "no-store" }); const t = await r.text(); let b: unknown = t; try { b = JSON.parse(t); } catch { /* text */ } return { status: r.status, body: b as never }; }, p);
 }
 const policies = async (page: Page) => (await api<{ policies: Policy[] }>(page, "/api/policies")).body.policies ?? [];
+/** The policies page with its document cards rendered (a screenshot right after navigation shows only the loading state). */
+async function policiesPage(page: Page, cards: number) {
+  await page.goto("/policies");
+  if (cards > 0) await expect(page.locator(".document-card")).toHaveCount(cards, { timeout: 30_000 }).catch(() => undefined);
+  await page.waitForTimeout(800);
+}
 
 test("live ingestion journey", async ({ page }) => {
   test.setTimeout(Number(process.env.INGEST_LIVE_TEST_TIMEOUT_MS ?? 75 * 60_000));
@@ -78,14 +84,14 @@ test("live ingestion journey", async ({ page }) => {
       if (p) {
         const s = `${p.quarantine_status}/${p.processing_status}${p.processing_stage ? ":" + p.processing_stage : ""}`;
         if (rec.states[rec.states.length - 1]?.state !== s) rec.states.push({ at: Date.now() - t0, state: s, message: p.processing_message ?? null });
-        if (!processingShot && !["ready", "failed", "error"].includes(p.processing_status)) { await page.goto("/policies"); rec.screenshots.push(await shot(page, `upload-${i + 1}-processing`)); processingShot = true; }
+        if (!processingShot && !["ready", "failed", "error"].includes(p.processing_status)) { await policiesPage(page, i + 1); rec.screenshots.push(await shot(page, `upload-${i + 1}-processing`)); processingShot = true; }
       }
       if (p && ["ready", "failed", "error"].includes(p.processing_status)) break;
       if (p && (p.quarantine_status === "scan_rejected" || p.processing_stalled)) break;
       if (Date.now() - t0 > READY_MS) break;
       await page.waitForTimeout(2500);
     }
-    await page.goto("/policies");
+    await policiesPage(page, i + 1);
     rec.screenshots.push(await shot(page, `upload-${i + 1}-final`));
     Object.assign(rec, { policyId: p?.id ?? null, productName: p?.product_name ?? null, finalStatus: p ? `${p.quarantine_status}/${p.processing_status}` : "missing", msToFinal: Date.now() - t0,
       ready: p?.processing_status === "ready", error: p?.processing_error ?? null, message: p?.processing_message ?? null, needsReview: !!p?.needs_review, reviewReason: p?.review_reason ?? null,
@@ -97,7 +103,7 @@ test("live ingestion journey", async ({ page }) => {
   step("uploads finished", { ready: uploads.filter((u) => u.ready).length, of: uploads.length });
 
   // 3. The library, and who each document was linked to automatically.
-  await page.goto("/policies");
+  await policiesPage(page, uploads.length);
   await shot(page, "library");
   const lib = await policies(page);
   write("linking.json", lib.map((p) => ({ file: p.original_filename, policyId: p.id, product: p.product_name, linked: p.linked_people.map((l) => l.name), detected: p.detected_people.map((d) => ({ name: d.name, matched: d.matchedFamilyMemberId ? Object.entries(members).find(([, id]) => id === d.matchedFamilyMemberId)?.[0] ?? "(another id)" : null })), needsReview: !!p.needs_review, reviewReason: p.review_reason ?? null })));
@@ -172,12 +178,13 @@ test("live ingestion journey", async ({ page }) => {
     if (qs.deleteSource) {
       const target = (await policies(page)).find((p) => p.original_filename === qs.deleteSource);
       if (soft(target, `delete: ${qs.deleteSource} is not in the library`)) {
-        await page.goto("/policies");
+        await policiesPage(page, uploads.length);
         const card = page.locator(".document-card").filter({ hasText: target!.product_name ?? target!.original_filename }).first();
         await card.getByRole("button", { name: "Delete" }).click();
         await card.getByRole("button", { name: "Confirm delete" }).click();
         soft(await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted", { timeout: 60_000 }).then(() => true, () => false), `delete ${qs.deleteSource}: no "was deleted" confirmation`);
         soft(!(await policies(page)).some((p) => p.id === target!.id), `delete ${qs.deleteSource}: still listed`);
+        await policiesPage(page, uploads.length - 1);
         await shot(page, "after-delete-library");
         write("deleted.json", { file: qs.deleteSource, policyId: target!.id, at: new Date().toISOString() });
         await page.goto("/chat");

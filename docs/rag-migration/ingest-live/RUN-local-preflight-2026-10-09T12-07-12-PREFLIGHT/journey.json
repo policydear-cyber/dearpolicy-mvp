@@ -1,0 +1,24 @@
+{
+  "preflight": true,
+  "startedAt": "2026-10-09T12:07:18.954Z",
+  "steps": [
+    {
+      "name": "household members added",
+      "at": "2026-10-09T12:07:22.959Z",
+      "members": 4
+    },
+    {
+      "name": "uploads finished",
+      "at": "2026-10-09T12:11:59.659Z",
+      "ready": 0,
+      "of": 3
+    },
+    {
+      "name": "conversation asked",
+      "at": "2026-10-09T12:12:04.432Z",
+      "turns": 1
+    }
+  ],
+  "finishedAt": "2026-10-09T12:12:04.432Z",
+  "failures": []
+}

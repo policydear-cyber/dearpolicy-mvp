@@ -67,6 +67,8 @@ export type HttpCall = {
   /** sha256 (first 16 hex) of the system message: which app prompt made the call, without recording it. */
   systemSha?: string | null;
   pdf?: { pages: number | null; bytes: number }[];
+  /** Preflight only: the worst case this request would have reserved (nothing was sent or reserved). */
+  wouldReserveUsd?: number;
 };
 export type FetchGuard = { calls: HttpCall[]; uninstall: () => void };
 
@@ -89,7 +91,6 @@ export function installFetchGuard(opts: { ledger: RunCostLedger; env?: NodeJS.Pr
     const rec: HttpCall = { seq: calls.length + 1, at: new Date().toISOString(), host, path, method, model: null, maxOutputTokens: null, estInputTokens: null, reservedUsd: 0, chargedUsd: 0, ok: false };
     const refuse = (why: string): never => { rec.refused = why; calls.push(rec); throw new Error(`live fetch guard refused, no request sent (no spend): ${why}`); };
     if (!openai) refuse(`${host} is not the configured model provider (only OpenAI is allowed in the live run)`);
-    if (opts.preflightRefusal) refuse(opts.preflightRefusal);
     const raw = typeof init?.body === "string" ? init.body : null;
     if (method !== "POST" || raw == null) refuse(`${method} ${path}: only a POST with a JSON body (bounded max output) can be reserved`);
     let body: Record<string, unknown>;
@@ -110,6 +111,8 @@ export function installFetchGuard(opts: { ledger: RunCostLedger; env?: NodeJS.Pr
     if (!price) refuse(`no price on file for openai:${model}`);
     rec.estInputTokens = reservedInputTokens(raw!.length, pdfs);
     const usd = maxCallCostUsd(price!, rec.estInputTokens, rec.maxOutputTokens!);
+    // Preflight: the request is fully checked and its reservation computed (recorded as `wouldReserveUsd`), then refused.
+    if (opts.preflightRefusal) { rec.wouldReserveUsd = usd; refuse(opts.preflightRefusal); }
     const r = opts.ledger.reserve(usd, rec.estInputTokens, rec.maxOutputTokens!);
     if ("refused" in r) refuse(`run cap: ${r.refused}`);
     const reservation = r as Exclude<typeof r, { refused: string }>;

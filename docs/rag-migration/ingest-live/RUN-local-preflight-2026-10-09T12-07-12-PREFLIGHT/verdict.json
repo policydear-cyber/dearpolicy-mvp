@@ -1,0 +1,128 @@
+{
+  "verdict": "PREFLIGHT (not graded)",
+  "placeholder": true,
+  "passed": 6,
+  "failed": 14,
+  "checks": [
+    {
+      "scope": "hx-text.pdf",
+      "check": "uploaded and processed",
+      "ok": false,
+      "detail": "not_scanned_prototype/queued"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1842 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "linked automatically to the right people",
+      "ok": false,
+      "detail": "linked: nobody; expected: Simon Alastair Hartwell, Leonie Brigitte Hartwell, Felix Oran Hartwell, Isla Maren Hartwell"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "uploaded and processed",
+      "ok": false,
+      "detail": "not_scanned_prototype/queued"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1250 chars"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"S$110\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"01 July 2026\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "uploaded and processed",
+      "ok": false,
+      "detail": "not_scanned_prototype/queued"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 text extracted",
+      "ok": false,
+      "detail": "no stored page"
+    },
+    {
+      "scope": "Q1 (conversation) \"How much hospital daily allowance would Isla get now if she \"",
+      "check": "useful reply",
+      "ok": false,
+      "detail": "185 chars"
+    },
+    {
+      "scope": "Q1",
+      "check": "states \"110\"",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"S$80 per day\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "cites hx-endorsement.pdf page 1",
+      "ok": false,
+      "detail": "cited: nothing"
+    },
+    {
+      "scope": "Q1",
+      "check": "uses the current version (hx-endorsement.pdf)",
+      "ok": false,
+      "detail": "cited: nothing"
+    },
+    {
+      "scope": "Q1",
+      "check": "about Isla Maren Hartwell",
+      "ok": false,
+      "detail": "no stored subject; answer does not name Isla"
+    },
+    {
+      "scope": "Q2",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q3",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "R1",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "D1",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    }
+  ]
+}
