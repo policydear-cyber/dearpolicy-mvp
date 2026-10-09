@@ -12,10 +12,11 @@ import { capSpansStays, PER_DAY_UNITS, readValueTerms, resetOf, type CapReset, t
 
 /** A span of the calculation's document (page offsets when known). */
 export type RecordSpan = { policyId: string; page: number | null; start: number; end: number; text: string; source: string };
-export type PriorUse = "not_counted" | "household_none" | "household_figure" | "assumed_none";
+export type PriorUse = "not_counted" | "household_none" | "household_figure" | "assumed_none" | "assumed_available";
 export type RecordCap = { operandId: string; kind: "count" | "money"; max: number; currency: string | null; unit: string | null; reset: CapReset; span: RecordSpan;
   /** How earlier use within the reset period was settled: not_counted (the cap does not span stays), household_none /
-   * household_figure (the household's words; a figure is a household operand), assumed_none (a what-if: stated). */
+   * household_figure (the household's words; a figure is a household operand), assumed_none (a what-if: stated),
+   * assumed_available (integration r6: not known, so the estimate states that what the stay needs is still available). */
   priorUse: PriorUse; priorOperandId?: string | null };
 export type UnitTerms = {
   rate: { unit: string | null; span: RecordSpan | null };
@@ -78,6 +79,12 @@ export function checkUnitTerms(r: RecordWithUnitTerms, pageText?: (policyId: str
       if (!cond) return `earlier use of the cap “${c.span.text}” is not addressed`;
       if (c.priorUse === "not_counted") return `the cap “${c.span.text}” resets per ${c.reset}: earlier use counts`;
       if (c.priorUse === "assumed_none") { if (r.kind !== "conditional_illustration" || !/earlier use/i.test(r.assumption ?? "")) return `the calculation assumes no earlier use of “${c.span.text}” without saying so`; }
+      else if (c.priorUse === "assumed_available") {
+        // Integration (r6): an estimate that assumes the stay's units / amount are still available states it.
+        if (r.kind !== "indicative_estimate" || cond.status !== "established" || cond.basis !== "assumption") return `earlier use of the cap “${c.span.text}” is assumed without being stated`;
+        const capText = c.kind === "count" ? String(c.max) : (c.max.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(c.max) ? 0 : 2 }));
+        if (!/\b(?:still available|has been used)\b/i.test(r.assumption ?? "") || !(r.assumption ?? "").replace(/(\d),(?=\d{3}\b)/g, "$1").includes(capText.replace(/,/g, ""))) return `the estimate's assumption does not name the limit “${c.span.text}”`;
+      }
       else if (cond.status === "unresolved" || cond.basis !== "household" || !cond.householdWords?.trim()) return `earlier use of the cap “${c.span.text}” is not settled by the household`;
       if (c.priorUse === "household_figure" && !r.operands.some((x) => x.id === c.priorOperandId && x.source === "household")) return `the earlier use of “${c.span.text}” is not the household's figure`;
     }

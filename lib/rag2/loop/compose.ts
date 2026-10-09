@@ -358,6 +358,17 @@ export function attributeHouseholdFigures(text: string, c: Pick<CalcOutcome, "re
   }
   return t;
 }
+/** Integration (r6): the estimate sentence (the one stating the result) carries the record's assumption. */
+export function withAssumption(text: string, assumption: string, amount: number, currency: string): string {
+  const plain = (s: string) => s.toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
+  if (plain(text).includes(plain(assumption))) return text;
+  const f = moneyFiguresIn(text).find((x) => same(x.value, amount) && x.currency === currency);
+  const parts = sentencesOf(text);
+  const i = f ? parts.findIndex((p) => p.includes(f.raw)) : -1;
+  if (i < 0) return text;
+  parts[i] = parts[i].replace(/[.!]?\s*$/, `, ${assumption}.`);
+  return parts.join(" ");
+}
 function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string }, evIds: string[], valueOps: TableValueOperand[], subjectId: string | null, ctx: Ctx, out: Composed, drop: (s: string, r: string, note?: string) => void): void {
   let text = text0;
   const pd = payoutOrDecision(text);
@@ -376,6 +387,9 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
       factKeys = hh.keys;
     } else if (!ILLUSTRATION_IF.test(text)) { drop(text, "an illustration must state its what-if (“if …”)"); return; }
     if (c.kind === "indicative_estimate") text = attributeHouseholdFigures(text, c);
+    // Integration (r6): an estimate that assumes earlier use of a capped allowance leaves what this stay needs states
+    // that assumption in its own sentence (the save-time gate rejects it otherwise).
+    if (c.kind === "indicative_estimate" && c.record.assumption?.trim()) text = withAssumption(text, c.record.assumption.trim(), c.amount, c.currency);
     const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
     if (!fig) { drop(text, "does not state the calculation’s result"); return; }
     out.calculations.push({ ...c.record, sentence: partOf(fig.raw) });

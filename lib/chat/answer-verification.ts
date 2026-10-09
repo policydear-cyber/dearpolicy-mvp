@@ -772,6 +772,8 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
   if (r.kind === "indicative_estimate") {
     if (!/\bindicative estimate\b/i.test(sentence)) return "an indicative estimate is not labelled as one";
     if (CALC_TOTAL.test(sentence)) return "an indicative estimate is stated as (part of) a total";
+    // Integration (r6): an estimate resting on a stated assumption (earlier use of a capped allowance) must say it.
+    if (r.assumption?.trim() && !norm(sentence).includes(norm(r.assumption))) return "the estimate does not state its assumption (" + r.assumption.trim() + ")";
   } else {
     if (!/\bif\b/i.test(sentence)) return "an illustration does not state its what-if";
     if (!WHAT_IF.test(ctx.userText)) return "an illustration is given though the household did not ask a what-if";
@@ -818,6 +820,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       const adm = r.operands.find((o) => o.role === "admission"), dis = r.operands.find((o) => o.role === "discharge");
       const span = adm && dis ? (Date.parse(String(dis.value)) - Date.parse(String(adm.value))) / 3_600_000 : NaN;
       if (!(span >= hours)) return `the minimum stay is not met: ${c.text}`;
+    } else if (c.basis === "assumption") {
+      // Integration (r6): only earlier use of a capped allowance, only in an estimate that states the assumption.
+      if (r.kind !== "indicative_estimate" || !/_prior_use$/.test(c.id) || !r.assumption?.trim()) return `a condition is settled by an assumption the estimate does not state: ${c.text}`;
     } else if (c.basis === "absent") {
       if (c.status !== "not_applicable") return `a condition the document does not print is marked established: ${c.text}`;
     } else return `a condition has no basis: ${c.text}`;

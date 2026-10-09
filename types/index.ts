@@ -268,7 +268,7 @@ export type CalcCondition = {
   text:string; status:"established"|"unresolved"|"not_applicable";
   /** How it is settled: "document" (a passage of the version used), "household" (their words), "derived" (worked out
    * from the operands, e.g. a stay's length), "absent" (the stored document prints no such condition). */
-  basis:"document"|"household"|"derived"|"absent"|"none";
+  basis:"document"|"household"|"derived"|"absent"|"assumption"|"none";
   passage?:{ policyId:string; pageStart:number; pageEnd:number; text:string }|null;
   householdWords?:string|null;
   /** What would settle it, in the household's terms ("Jun Hao's admission and discharge dates and times"). */
@@ -301,7 +301,8 @@ export type CalculationRecord = {
   conditions:CalcCondition[];
   /** Evidence the existing claim workflow will still need (reviewed bill, discharge summary...): kept, never waived. */
   evidenceRequirements:string[];
-  /** conditional_illustration only: the what-if, in the household's words. */
+  /** conditional_illustration: the what-if, in the household's words. indicative_estimate (integration r6): the stated
+   * assumption that earlier use of a capped allowance leaves what this stay needs available -- the sentence must say it. */
   assumption?:string|null;
   /** Shown instead of the sentence if the record fails verification: the specific unresolved requirement (no figures). */
   unresolvedText:string;

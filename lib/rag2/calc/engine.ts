@@ -234,11 +234,13 @@ export function hospitalCash(a: {
     else return finish({ kind: "not_payable", calculator: "hospital_cash", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, conditions: conds, requirements: [], amount: null, currency: r.currency, record: null, steps: [], reason: `the stay lasted ${Math.floor(hours)} hours and the wording requires at least ${t.minimumStayHours!.value}`, evidence: [r.evidence, t.minimumStayHours!.evidence], evidenceRequirements: [], who: a.who, product });
   }
   // (A what-if may assume no earlier use of a cap -- stated as its assumption; anything else needs the household.)
-  for (const c of conds) if (c.status === "unresolved" && c.needs && c.kind !== "day_count_rule" && c.kind !== "minimum_stay" && !(a.whatIf && PRIOR_IDS.includes(c.id))) reqs.push(c.needs);
+  // Integration (r6): unknown earlier use of a cap never blocks the estimate -- a what-if assumes none (an illustration);
+  // otherwise the estimate states that the stay's own units are assumed still available (made explicit below).
+  for (const c of conds) if (c.status === "unresolved" && c.needs && c.kind !== "day_count_rule" && c.kind !== "minimum_stay" && !PRIOR_IDS.includes(c.id)) reqs.push(c.needs);
   const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : !rowCap && t.dayCap ? [t.dayCap.evidence] : [])];
   const evidenceRequirements = [`the hospital’s discharge summary or bill showing ${a.who}’s admission and discharge dates and times`, `the ${product} claim form`];
   const base = { calculator: "hospital_cash" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
-  const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds));
+  const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds.filter((c) => !PRIOR_IDS.includes(c.id))));
   if (unresolvedNow) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
 
   // Payable days under the wording's rule, then the hospital-cash calculator.
@@ -260,7 +262,10 @@ export function hospitalCash(a: {
   let cents = Math.round(hc.potentialAmount * 100);
   steps.push({ id: "s_amount", op: "multiply", inputs: ["rate", last], out: cents });
   let lastMoney = "s_amount";
-  const capLines: string[] = [], assumed: string[] = [];
+  const capLines: string[] = [], assumed: string[] = [], available: string[] = [];
+  /** Integration (r6): earlier use not known (and not a what-if): the estimate assumes what this stay needs is still
+   * available, says so, and the prior-use condition is settled by that stated assumption. */
+  const assumeAvailable = (cond: CalcCondition, text: string) => { available.push(text); cond.status = "established"; cond.basis = "assumption"; cond.needs = null; cond.householdWords = null; };
   const notPayable = (reason: string) => finish({ ...base, kind: "not_payable", conditions: conds, requirements: [], amount: null, currency: r.currency ?? null, record: null, steps: [], reason });
   // A1: earlier use of a cap that resets over a longer period than the stay.
   if (capTerm && capOp) {
@@ -268,7 +273,14 @@ export function hospitalCash(a: {
     if (capSpansStays(capTerm.reset)) {
       const cond = conds.find((c) => c.id === "c_cap_prior_use")!;
       const unit = capTerm.unit ?? unitNoun(rateUnit);
-      if (cond.status === "unresolved") { capTerm.priorUse = "assumed_none"; assumed.push(`assuming no earlier use of the ${capTerm.max}-${unit.replace(/s$/, "")} limit this ${resetWords(capTerm.reset)}`); }
+      if (cond.status === "unresolved" && a.whatIf) { capTerm.priorUse = "assumed_none"; assumed.push(`assuming no earlier use of the ${capTerm.max}-${unit.replace(/s$/, "")} limit this ${resetWords(capTerm.reset)}`); }
+      else if (cond.status === "unresolved") {
+        // The stay's payable units (already capped at the limit when the stay alone exceeds it) are assumed available.
+        const n = hc.payableDays;
+        capTerm.priorUse = "assumed_available";
+        assumeAvailable(cond, n >= Number(capOp.value) ? `assuming none of the ${capOp.value} ${unit} has been used this ${resetWords(capTerm.reset)}`
+          : `assuming at least ${n} of the ${capOp.value} ${n === 1 ? unit.replace(/s$/, "") : unit} ${n === 1 ? "is" : "are"} still available this ${resetWords(capTerm.reset)}`);
+      }
       else if (priorPeriods != null && priorPeriods > 0) {
         if (priorPeriods >= Number(capOp.value)) return notPayable(`the ${capOp.value} ${unit} for this ${resetWords(capTerm.reset)} are already used (“${puWords}”; the wording: “${capTerm.span.text}”)`);
         capTerm.priorUse = "household_figure"; capTerm.priorOperandId = "prior_periods";
@@ -287,7 +299,8 @@ export function hospitalCash(a: {
     let capId = "money_cap", left = Math.round(moneyCapTerm.max * 100);
     if (capSpansStays(moneyCapTerm.reset)) {
       const cond = conds.find((c) => c.id === "c_money_cap_prior_use")!;
-      if (cond.status === "unresolved") { moneyCapTerm.priorUse = "assumed_none"; assumed.push(`assuming no earlier use of the ${money(left, r.currency)} limit this ${resetWords(moneyCapTerm.reset)}`); }
+      if (cond.status === "unresolved" && a.whatIf) { moneyCapTerm.priorUse = "assumed_none"; assumed.push(`assuming no earlier use of the ${money(left, r.currency)} limit this ${resetWords(moneyCapTerm.reset)}`); }
+      else if (cond.status === "unresolved") { moneyCapTerm.priorUse = "assumed_available"; assumeAvailable(cond, `assuming at least ${money(Math.min(cents, left), r.currency)} of the ${money(left, r.currency)} limit is still available this ${resetWords(moneyCapTerm.reset)}`); }
       else if (priorMinor != null && priorMinor > 0) {
         if (priorMinor >= left) return notPayable(`the ${money(left, r.currency)} for this ${resetWords(moneyCapTerm.reset)} is already used (“${puWords}”; the wording: “${moneyCapTerm.span.text}”)`);
         moneyCapTerm.priorUse = "household_figure"; moneyCapTerm.priorOperandId = "prior_paid";
@@ -304,7 +317,7 @@ export function hospitalCash(a: {
   const kind = ops.some((o) => o.source === "assumption") || assumed.length ? "conditional_illustration" : "indicative_estimate";
   if (kind === "conditional_illustration" && !a.whatIf) return { refused: "an assumed figure is used only for a what-if the household asked (purpose what_if)" };
   if (kind === "indicative_estimate" && !settledStatus(conds)) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
-  const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : null;
+  const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : available.length ? available.join(" and ") : null;
   const record: RecordWithUnitTerms = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption, unresolvedText: "", unitTerms };
   const lines = [`payable days under “${t.dayRule!.words}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
   return finish({ ...base, kind, conditions: conds, requirements: [], amount: cents / 100, currency: r.currency, record, steps: lines });

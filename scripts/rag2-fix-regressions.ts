@@ -365,6 +365,8 @@ async function main() {
     const t = r.turns[0];
     await check("F19c D19 (S6b.2): the first-full-day rule end to end through calculate -- S$240 (4 and 5 October), never nights x rate", () => {
       assert.match(t.v, /Indicative estimate[^.]*S\$240\b/, info(t)); assert.doesNotMatch(t.v, /S\$360/); assert.deepEqual(t.trace.gate, []);
+      // Integration (r6): earlier use of the 90-day yearly limit is unknown -> the estimate states its assumption.
+      assert.match(t.v, /S\$240, assuming at least 2 of the 90 [^.]*still available this (?:policy )?year\./, info(t));
     });
   }
   { const r = await converse(ACCOUNT_N, hospitalCash(ACCOUNT_N, N.rohan.id, FF, /Daily hospital cash/, null, null, (d) => `Indicative estimate: FamilyFirst daily hospital cash for 3 days comes to S$360.`), ["Rohan had 3 nights in hospital with dengue. How much will FamilyFirst pay?"]);

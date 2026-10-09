@@ -161,11 +161,18 @@ async function main() {
 
   // ------------------------------------------------------------------------------------------------ H: hospital cash
   const B_ADM = "2026-09-03T22:15+08:00", B_DIS = "2026-09-06T09:30+08:00"; // 59 h 15 min: 2 complete periods
-  await check("H1 L4 shape, earlier use unknown, not a what-if -> unresolved with the specific fact (asked of the household); never refused as 'per year'", async () => {
+  // Expectation changed (integration r6, coordinator's decision): earlier use of a capped allowance that is not known
+  // makes the estimate CONDITIONAL on a stated assumption (the stay's own periods still available) instead of
+  // unresolved; the figure is the same as with no earlier use, and the assumption is part of the record and sentence.
+  await check("H1 L4 shape, earlier use unknown, not a what-if -> the estimate, assuming the stay's periods are still available (stated); never refused as 'per year'", async () => {
     const c = ok(await hc("CARE", "Hospital cash", M.ben.id, B_ADM, B_DIS));
-    assert.equal(c.kind, "unresolved"); assert.equal(c.amount, null);
-    assert.ok(c.requirements.some((r) => /already been paid for this year/.test(r) && /90/.test(r)), c.requirements.join(" | "));
-    assert.ok(c.missing.some((m) => m.key === "c_cap_prior_use" && m.ask === "household"), JSON.stringify(c.missing));
+    assert.equal(c.kind, "indicative_estimate"); assert.equal(c.amount, 120, "the same figure as with no earlier use");
+    const rec = recordOk(c);
+    assert.equal(rec.unitTerms!.caps[0].priorUse, "assumed_available");
+    assert.match(rec.assumption ?? "", /^assuming at least 2 of the 90 \S.* are still available this year$/, rec.assumption ?? "");
+    assert.equal(rec.conditions.find((x) => x.id === "c_cap_prior_use")?.basis, "assumption");
+    assert.ok(!c.requirements.length && !c.missing?.some((m) => m.key === "c_cap_prior_use"), "earlier use is not asked");
+    assert.ok(UT.checkUnitTerms({ ...rec, assumption: null }, pageText), "an estimate without its assumption fails the re-check");
     assert.equal(c.printed[0].value, 60, "the child's rate is still cited");
   });
   await check("H2 earlier use settled in the household's words -> indicative estimate 2 x S$60 = S$120, cap applied with its reset", async () => {
@@ -188,7 +195,7 @@ async function main() {
     const a = ok(await hc("REORD", "Hospital cash", M.ana.id, B_ADM, B_DIS, NONE()));
     assert.equal(a.amount, 160); assert.equal((a.record as Rec).unitTerms!.caps[0].reset, "year"); recordOk(a);
     const u = ok(await hc("PY", "Hospital income", M.ana.id, B_ADM, B_DIS));
-    assert.equal(u.kind, "unresolved"); assert.ok(u.requirements.some((r) => /this policy year/.test(r)), u.requirements.join(" | "));
+    assert.equal(u.kind, "indicative_estimate"); assert.equal(u.amount, 140); assert.match((u.record as Rec).assumption ?? "", /still available this policy year$/); recordOk(u);
     const p = ok(await hc("PY", "Hospital income", M.ana.id, B_ADM, B_DIS, NONE("c_cap_prior_use", "nothing claimed this policy year")));
     assert.equal(p.amount, 140); assert.equal((p.record as Rec).unitTerms!.caps[0].reset, "policy_year"); recordOk(p);
   });
@@ -197,7 +204,7 @@ async function main() {
     assert.equal(c.kind, "indicative_estimate"); assert.equal(c.amount, 150);
     assert.deepEqual((c.record as Rec).unitTerms!.caps.map((x) => [x.max, x.unit, x.reset]), [[90, "days", "year"]]); recordOk(c);
   });
-  await check("H6 cap boundary, prior use known: 85 used + 5 = exactly at the cap; + 6 = one over (only 5 paid); 90 used -> nothing; unknown -> unresolved", async () => {
+  await check("H6 cap boundary, prior use known: 85 used + 5 = exactly at the cap; + 6 = one over (only 5 paid); 90 used -> nothing; unknown -> the estimate with its stated assumption", async () => {
     const A = "2026-03-01T08:00+08:00";
     const plus = (h: number) => new Date(Date.parse(A) + h * 3_600_000).toISOString().replace(/\.000Z$/, "Z");
     const pu = (n: number) => ({ prior_use: { periods: n, words: `Ana already had ${n} days of hospital cash this year` } });
@@ -211,7 +218,8 @@ async function main() {
     const bad = await hc("CARE", "Hospital cash", M.ana.id, A, plus(25), { prior_use: { periods: 12, words: "she was in hospital earlier this year" } });
     assert.ok("refused" in bad, "a figure not in the household's words is refused");
     const unknown = ok(await hc("CARE", "Hospital cash", M.ana.id, A, plus(6 * 24 + 1)));
-    assert.equal(unknown.kind, "unresolved");
+    assert.equal(unknown.kind, "indicative_estimate"); assert.equal(unknown.amount, 600);
+    assert.equal((unknown.record as Rec).assumption, "assuming at least 6 of the 90 complete 24-hour periods are still available this year"); recordOk(unknown);
   });
   await check("H7 cap boundary, no earlier use: 90 complete periods = 90 x S$100; 91 periods -> still S$9,000", async () => {
     const A = "2026-01-02T08:00+08:00";
@@ -220,8 +228,13 @@ async function main() {
     assert.equal(n90.amount, 9000); recordOk(n90);
     const n91 = ok(await hc("CARE", "Hospital cash", M.ana.id, A, plus(91 * 24 + 2), NONE()));
     assert.equal(n91.amount, 9000, "one over the cap pays the cap"); recordOk(n91);
+    // Integration (r6): the stay alone passes the cap and earlier use is not known -- the cap applies, and the
+    // assumption covers earlier use.
+    const n91u = ok(await hc("CARE", "Hospital cash", M.ana.id, A, plus(91 * 24 + 2)));
+    assert.equal(n91u.kind, "indicative_estimate"); assert.equal(n91u.amount, 9000);
+    assert.match((n91u.record as Rec).assumption ?? "", /^assuming none of the 90 \S.* has been used this year$/); recordOk(n91u);
   });
-  await check("H8 daily rate with an annual monetary cap: 5 nights S$500; 40 nights capped at S$3,000; S$2,800 already paid -> S$200; S$3,000 paid -> nothing; unknown -> unresolved", async () => {
+  await check("H8 daily rate with an annual monetary cap: 5 nights S$500; 40 nights capped at S$3,000; S$2,800 already paid -> S$200; S$3,000 paid -> nothing; unknown -> the estimate with its stated assumption", async () => {
     const MC = "c_money_cap_prior_use";
     const five = ok(await hc("MONEY", "Hospital allowance", M.ana.id, "2026-05-01", "2026-05-06", NONE(MC)));
     assert.equal(five.kind, "indicative_estimate"); assert.equal(five.amount, 500);
@@ -234,7 +247,8 @@ async function main() {
     const none = ok(await hc("MONEY", "Hospital allowance", M.ana.id, "2026-05-01", "2026-05-06", { prior_use: { amount: 3000, currency: "SGD", words: "they already paid S$3,000 this year" } }));
     assert.equal(none.kind, "not_payable");
     const unk = ok(await hc("MONEY", "Hospital allowance", M.ana.id, "2026-05-01", "2026-05-06"));
-    assert.equal(unk.kind, "unresolved"); assert.ok(unk.requirements.some((r) => /S\$3,000 per year/.test(r)), unk.requirements.join(" | "));
+    assert.equal(unk.kind, "indicative_estimate"); assert.equal(unk.amount, 500);
+    assert.equal((unk.record as Rec).assumption, "assuming at least S$500 of the S$3,000 limit is still available this year"); recordOk(unk);
   });
   await check("H9 genuinely annual benefits are still refused as a per-day rate", async () => {
     for (const b of ["Wellness benefit", "Annual allowance"]) {

@@ -131,5 +131,13 @@ t("C19 L3b: the conditional S$600 for Mei passes; S$600 alone fails on its condi
   assert.ok(bad(grade(s, mk("Mei's PlayWell plan pays S$600 per dislocation."))).some((c) => /stated with/.test(c.name)));
   assert.ok(bad(grade(s, mk("Mei's PlayWell plan lists S$900, payable if confirmed by X-ray."))).some((c) => /never states S\$900/.test(c.name)));
 });
+// Integration (r6): L4 / L4b require the figure WITH its stated assumption about earlier use of the yearly limit.
+t("C20 L4 / L4b: the estimate passes only with its assumption about earlier use of the 90-period yearly limit", () => {
+  for (const [id, fig, n] of [["L4", "S$120", 2], ["L4b", "S$300", 3]] as const) {
+    const re = new RegExp(sc(id).turns[0].expect.says![0].pattern, "i");
+    assert.ok(re.test(`Indicative estimate: CareDay hospital cash of S$${fig.slice(2) === "120" ? 60 : 100} for ${n} complete 24-hour periods comes to ${fig}, assuming at least ${n} of the 90 complete 24-hour periods are still available this year.`), id + " with the assumption");
+    assert.ok(!re.test(`Indicative estimate: CareDay hospital cash for ${n} complete 24-hour periods comes to ${fig}.`), id + " without it");
+  }
+});
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

@@ -237,6 +237,10 @@ async function main() {
       need(r, 2);
       assert.match(r.turns[0].v, /Indicative estimate[^.]*S\$240\b/, "turn 1" + ctxOf(r.turns[0]));
       assert.match(r.turns[1].v, /Indicative estimate[^.]*S\$480\b/, "turn 2" + ctxOf(r.turns[1]));
+      // Integration (r6): earlier use of the 90-day yearly limit is not known, so each estimate states its assumption
+      // (the figures are unchanged).
+      assert.match(r.turns[0].v, /S\$240, assuming at least 2 of the 90 [^.]*still available this (?:policy )?year\./, "turn 1 assumption" + ctxOf(r.turns[0]));
+      assert.match(r.turns[1].v, /S\$480, assuming at least 4 of the 90 [^.]*still available this (?:policy )?year\./, "turn 2 assumption" + ctxOf(r.turns[1]));
     }); }
 
   // ============================ 8. missing conditions -> partial answer ============================

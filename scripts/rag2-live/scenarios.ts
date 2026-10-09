@@ -152,6 +152,8 @@ export const SCENARIOS: Scenario[] = [
       user: "Mei was admitted to hospital on 3 Sep 2026 at 10:15 pm and discharged on 6 Sep 2026 at 9:30 am. How much hospital cash can we claim from CareDay?",
       expect: {
         figures: ["S$120"],
+        // Integration (r6): earlier use of the 90-per-year limit is not known, so the estimate must say what it assumes.
+        says: [{ pattern: "S\\$120[^.]*\\bassuming\\b[^.]*\\b90\\b[^.]*(still available|has been used)", about: "the estimate with its assumption about earlier use of the 90-period yearly limit" }],
         forbidden: [
           { figure: "S$180", why: "3 nights / 3 days x S$60: not complete 24-hour periods", stage: "calculation" },
           { figure: "S$240", why: "4 calendar days x S$60", stage: "calculation" },
@@ -234,6 +236,8 @@ export const PARAPHRASES: Scenario[] = [
       user: "Grace got warded on 14 September 2026 at 9.50pm and went home on 18 September 2026 at 8.20am. What does CareDay give her in hospital cash for that stay?",
       expect: {
         figures: ["S$300"],
+        // Integration (r6): earlier use of the 90-per-year limit is not known, so the estimate must say what it assumes.
+        says: [{ pattern: "S\\$300[^.]*\\bassuming\\b[^.]*\\b90\\b[^.]*(still available|has been used)", about: "the estimate with its assumption about earlier use of the 90-period yearly limit" }],
         forbidden: [
           { figure: "S$400", why: "4 nights x S$100: nights are not complete 24-hour periods", stage: "calculation" },
           { figure: "S$500", why: "5 calendar days x S$100", stage: "calculation" },
