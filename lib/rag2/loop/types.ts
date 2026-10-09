@@ -82,6 +82,8 @@ export type TraceTurn = {
   /** What the save-time gate reported for the composed answer (run in report mode before saving; the gate itself then
    * runs again inside saveTurn and repairs the saved answer). */
   gate: { where: string; figure: string; reason: string }[];
+  /** Round 8 (F1): the composed sentences the save-time gate was given (before it left any out). */
+  composed?: string[];
   /** Pending question re-asked after a side question (interruption). */
   reasked?: string | null;
   corrections?: { key: string; from: unknown; to: unknown }[];

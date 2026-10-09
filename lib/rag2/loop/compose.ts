@@ -444,6 +444,42 @@ export function attributeHouseholdFigures(text: string, c: Pick<CalcOutcome, "re
   return t;
 }
 /** Integration (r6): the estimate sentence (the one stating the result) carries the record's assumption. */
+/** Round 8 (F1): the conditions a conditional illustration is stated with (each only when not already said): the rate
+ * as amended by an endorsement, the assumption about earlier use of a capped allowance the record made, and the cause
+ * limit its own document prints (quoted, cited). Figure-free, so nothing is added the save-time gate would check. */
+export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<Ctx, "state" | "stale" | "policyNames">): { text: string; evidenceIds: string[] } {
+  const rec = c.record;
+  if (!rec) return { text, evidenceIds: [] };
+  const plain = (x: string) => x.toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
+  const add: string[] = [], ids: string[] = [];
+  if (rec.unitTerms?.amendingDocumentIds?.length && !/\bendorse|\bamend|\brevis/i.test(text)) add.push("using the daily rate as revised by the endorsement");
+  const assumed = /\bassuming\b.*$/i.exec(rec.assumption ?? "")?.[0]?.trim();
+  if (assumed && !plain(text).includes(plain(assumed))) add.push(assumed);
+  const names = [...(ctx.policyNames?.values() ?? []), ...Object.values(ctx.state.docNames ?? {}), rec.benefit].filter(Boolean).sort((a, b) => b.length - a.length);
+  let bare = text;
+  for (const n of names) bare = bare.split(n).join(" ");
+  if (!/\baccident/i.test(bare)) {
+    const own = Object.values(ctx.state.evidence).filter((e) => e.policyId === rec.policyId && !ctx.stale?.has(e.id) && !e.table);
+    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length);
+    // The clause that limits cover to accidents ("caused solely by an accident"), else one that says accident only.
+    let pick: { e: (typeof own)[number]; line: string } | null = null;
+    for (const test of [(l: string) => CAUSE_LIMIT.test(l), (l: string) => /\bonly\b/i.test(l)]) {
+      for (const e of own) { const line = linesOf(e).find(test); if (line) { pick = { e, line }; break; } }
+      if (pick) break;
+    }
+    if (pick) {
+      add.push(`and only for a stay the insurer accepts as caused by an accident (the policy says “${pick.line.replace(/[;:,.\s]+$/, "")}”)`);
+      ids.push(evidenceIdOf(ctx.state, pick.e));
+    }
+  }
+  if (!add.length) return { text, evidenceIds: [] };
+  const amount = c.amount != null ? moneyFiguresIn(text).find((f) => same(f.value, c.amount!)) : undefined;
+  const parts = sentencesOf(text);
+  const i = amount ? parts.findIndex((p) => p.includes(amount.raw)) : parts.length - 1;
+  if (i < 0) return { text, evidenceIds: [] };
+  parts[i] = parts[i].replace(/[.!]?\s*$/, `, ${add.join(", ")}.`);
+  return { text: parts.join(" "), evidenceIds: ids };
+}
 export function withAssumption(text: string, assumption: string, amount: number, currency: string): string {
   const plain = (s: string) => s.toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
   if (plain(text).includes(plain(assumption))) return text;
@@ -475,11 +511,15 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
     // Integration (r6): an estimate that assumes earlier use of a capped allowance leaves what this stay needs states
     // that assumption in its own sentence (the save-time gate rejects it otherwise).
     if (c.kind === "indicative_estimate" && c.record.assumption?.trim()) text = withAssumption(text, c.record.assumption.trim(), c.amount, c.currency);
+    // Round 8 (F1): a what-if says what else it assumes and what it turns on -- the rate as amended, earlier use of a
+    // capped allowance, and the document's cause limit -- so it is never read as the amount for the actual stay.
+    let extraIds: string[] = [];
+    if (c.kind === "conditional_illustration") { const w = illustrationConditions(text, c, ctx); text = w.text; extraIds = w.evidenceIds; }
     const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
     if (!fig) { drop(text, "does not state the calculation’s result"); return; }
     out.calculations.push({ ...c.record, sentence: partOf(fig.raw) });
     out.calcs.push(c);
-    const ids = evidenceIds();
+    const ids = [...new Set([...evidenceIds(), ...extraIds])];
     out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
     out.sentences.push({ text, evidenceIds: ids, estimate: c.kind === "indicative_estimate", factKeys, kind: c.kind });
     return;

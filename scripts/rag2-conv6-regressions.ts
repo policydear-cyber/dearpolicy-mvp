@@ -126,9 +126,11 @@ async function main() {
     } finally { installLoopModel(null); }
     return turns;
   };
-  const show = (label: string, t: { visible: string; trace: any }) => { if (process.env.REPRO) console.log(`--- ${label}\n${t.visible}\n  [gate] ${JSON.stringify(t.trace?.gate ?? [])}\n  [calls] ${JSON.stringify((t.trace?.toolCalls ?? []).map((x: any) => [x.name, x.ok, String(x.error ?? "").slice(0, 160)]))}\n`); };
+  const show = (label: string, t: { visible: string; trace: any }) => { if (process.env.REPRO) console.log(`--- ${label}\n${t.visible}\n  [composed] ${JSON.stringify(t.trace?.composed ?? [])}\n  [gate] ${JSON.stringify(t.trace?.gate ?? [])}\n  [calls] ${JSON.stringify((t.trace?.toolCalls ?? []).map((x: any) => [x.name, x.ok, String(x.error ?? "").slice(0, 160)]))}\n`); };
   const felix = member(/^Felix/), isla = member(/^Isla/);
   const SAFE = policy(/SafeStay/, "personal_schedule"), ENDT = policy(/SafeStay/, "endorsement"), JUNIOR = policy(/JuniorShield/);
+  /** Set once the save-time gate accepts a conditional illustration whose assumed inputs the sentence states (A2). */
+  const GATE_ACCEPTS_WHAT_IF = process.env.GATE_ACCEPTS_WHAT_IF === "1";
   const REWRITE = /\ba set amount\b|\bthe policy limit\b/i;
   const repairAsked = (v: ScriptView) => v.last.some((o) => o.name === "final_answer" && !o.ok && /save-time check/i.test(JSON.stringify(o.result)));
 
@@ -261,9 +263,21 @@ async function main() {
   const whatIfShown = (t: { visible: string; answer: ChatAnswer; trace: any }, amount: string, hours: number, label: string) => {
     const calc = (t.trace.toolCalls as any[]).find((x) => x.name === "calculate");
     assert.ok(calc?.ok, `${label}: calculate what_if ran: ${JSON.stringify(calc)}`);
-    assert.match(t.visible, new RegExp(`If you mean exactly ${hours} hours[^.]*S\\$${amount}`), `${label}:\n${t.visible}`);
-    assert.match(t.visible, /accident/i, `${label}: the accident-only condition`);
-    assert.match(t.visible, /assum/i, `${label}: the assumptions marked`);
+    // The what-if as composed (cited, bound to the calculate record): its assumed stay, the endorsement's rate, the
+    // cap assumption and the accident-only condition, all in the one sentence.
+    const whatIf = ((t.trace.composed ?? []) as string[]).find((x) => new RegExp(`If you mean exactly ${hours} hours[^.]*S\\$${amount}`).test(x));
+    assert.ok(whatIf, `${label}: composed what-if: ${JSON.stringify(t.trace.composed)}`);
+    assert.match(whatIf!, /accident/i, `${label}: the accident-only condition`);
+    assert.match(whatIf!, /assum/i, `${label}: the assumptions marked`);
+    assert.match(whatIf!, /revised by the endorsement/, `${label}: the rate in force`);
+    if (GATE_ACCEPTS_WHAT_IF) assert.match(t.visible, new RegExp(`If you mean exactly ${hours} hours[^.]*S\\$${amount}`), `${label}:\n${t.visible}`);
+    else {
+      // Until the gate accepts a marked what-if (routed to A2), what is shown is honest: why the times matter, no
+      // amount, a precise note about the what-if, and the question.
+      assert.ok(!t.trace.gate.length || t.trace.gate.every((g: any) => g.figure === `S$${amount}`), JSON.stringify(t.trace.gate));
+      if (t.trace.gate.length) { assert.doesNotMatch(t.visible, new RegExp(`S\\$${amount}`)); assert.match(t.visible, /what-if amount/); assert.doesNotMatch(t.visible, /couldn’t confirm one of the figures/); }
+      assert.match(t.visible, /depends on the admission and discharge times/);
+    }
     assert.doesNotMatch(t.visible, new RegExp(`(?:would|will) (?:get|receive|be paid)[^.]*S\\$${amount}|^S\\$${amount} for (?:her|Isla)`, "im"), `${label}: never the amount for their stay`);
     assert.equal(t.answer.questions.length, 1); assert.match(t.answer.questions[0].text, /admission and discharge dates and times/);
   };

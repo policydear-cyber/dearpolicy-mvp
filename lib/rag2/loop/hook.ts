@@ -64,9 +64,16 @@ function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: Ra
     const line = `The figure I left out is for “${benefitLabelOf(b)}” in ${doc} (page ${b.pageStart}).`;
     if (!lines.includes(line)) lines.push(line);
   }
+  // Round 8 (F1): a what-if left out is said as such (it was not a figure "against the cited page").
+  const lostWhatIfs = (composed?.calculations ?? []).filter((r) => r.kind === "conditional_illustration" && gone(r.sentence));
+  const whatIfLines = [...new Set(lostWhatIfs.map((r) => {
+    const doc = answer.citations.find((c) => c.policyId === r.policyId)?.policyName ?? state.docNames?.[r.policyId] ?? "your policy document";
+    return `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t check its assumed stay against what you told me.`;
+  }))];
   const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
   const requirements = (composed?.sentences ?? []).filter((x) => x.kind === "requirement" && !said.includes(x.text)).map((x) => x.text);
-  const limitation = [FIGURE_LEFT_OUT_NOTE, ...lines, ...(said.length ? [] : requirements)];
+  const figuresLost = lines.length || problems.some((p) => !lostWhatIfs.some((r) => sameSentence(r.sentence, p.sentence) || (!!p.figure && r.sentence.includes(p.figure))));
+  const limitation = [...(figuresLost ? [FIGURE_LEFT_OUT_NOTE, ...lines] : []), ...whatIfLines, ...(said.length ? [] : requirements)];
   if (!answer.summary.trim()) { const body = [...answer.details, ...limitation]; answer.summary = body[0]; answer.details = body.slice(1); }
   else answer.details = [...answer.details, ...limitation.filter((l) => !answer.details.includes(l))];
 }
@@ -226,6 +233,8 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   // are authoritative. Round 7 (A3): a rejected figure sentence is replaced by its figure-free part (when that part
   // still says something its evidence supports) or left out -- and a reply left with nothing says specifically what
   // could not be confirmed, never only the generic note. saveTurn runs the gate again on what remains.
+  const shownComposed = reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null;
+  if (shownComposed) trace.composed = shownComposed.sentences.map((s) => s.text);
   const problems = await verifyAnswerFigures(structuredClone(answer), { accountId: request.accountId, userText: message, report: true });
   trace.gate = problems.map((p) => ({ where: p.where, figure: p.figure, reason: p.reason }));
   if (problems.length) rescueRejected(answer, problems, state, reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null);
