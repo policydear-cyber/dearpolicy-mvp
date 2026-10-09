@@ -126,6 +126,16 @@ const brief = (r: unknown): string => { const s = JSON.stringify(r) ?? ""; retur
 
 const SELF_MENTION = /^(?:i|me|my|myself|mine|my own|self)$/i;
 /** Round 7 (A3): told once to a turn running short of budget or whose tools keep failing. */
+/** Round 8 (A3): the household's reply typed into a question card: the chat page sends "<question>: <answer>" (the
+ * question without its question mark). Null when the message is not that reply to the pending fact question. */
+export function inlineAnswer(pending: LoopPending | null | undefined, message: string): { pending: Extract<LoopPending, { kind: "fact" }>; answer: string } | null {
+  if (pending?.kind !== "fact") return null;
+  const sq = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase().replace(/[’']/g, "'");
+  const q = sq(pending.question.replace(/\?\s*$/, "")), m = sq(message);
+  if (!m.startsWith(q)) return null;
+  const rest = message.replace(/\s+/g, " ").trim().slice(q.length).replace(/^\s*\??\s*[:\-–—]\s*/, "").trim();
+  return rest.length >= 1 ? { pending, answer: rest } : null;
+}
 export const BUDGET_NOTICE = "This question's model-use budget is running low or a tool keeps failing: do not retry failing tools or search again. End the turn now with final_answer -- the printed figures you already have, cited -- and say what is still missing; or ask_user for the one missing fact.";
 /** The stops a turn's own budget causes (a partial answer is given); provider errors, cancellations and household
  * allowances keep their own honest text. */
@@ -178,6 +188,16 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const trace: TraceTurn = { turn: state.turn, userMessage: input.message, modelId: input.model.id, modelKind: input.model.kind, steps: 0, usage: { input: 0, output: 0 }, latencyMs: 0, toolCalls: [], evidenceChosen: [], outcome: "budget_exhausted", dropped: [], gate: [], calls: [], limit: null };
   const corrections: LoopOutput["corrections"] = [];
   const pendingBefore = state.pending;
+  // Round 8 (A3): an answer typed into the question card ("<question>: <answer>") answers THAT question. It is
+  // recorded under the asked fact as the household's own report and the question is resolved in the saved state --
+  // before the model runs, so it is never asked again (the model still explains the conditional benefit).
+  const inline = inlineAnswer(pendingBefore, input.message);
+  if (inline) {
+    const subject = inline.pending.subjectId ?? state.claim?.subjectId ?? state.subjectId;
+    const claim = subject ? (state.claim?.subjectId === subject ? state.claim : (state.otherClaims?.[subject] ?? (!state.claim ? (state.claim = { subjectId: subject, facts: {}, derived: [] }) : null))) : null;
+    if (claim && !claim.facts[inline.pending.factKey]) claim.facts[inline.pending.factKey] = { value: inline.answer, words: inline.answer, turn: state.turn, source: "user_reported", basis: "stated" };
+    state.pending = null;
+  }
   const userTexts = [...state.history.map((h) => h.user), input.message];
   const messages: LoopMessage[] = [{ role: "system", content: SYSTEM_PROMPT + "\n\n" + stateNote(state, input.people, state.speakerId) }];
   for (const h of state.history.slice(-6)) { messages.push({ role: "user", content: h.user }); messages.push({ role: "assistant", content: h.assistant }); }
@@ -321,6 +341,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let lastMention: string | null = null;
   /** Round 7: facts the household's message gave, recorded this turn (their words, who about). */
   const recordedNow: { key: string; words: string; subject: string }[] = [];
+  if (inline) { const subject = inline.pending.subjectId ?? state.claim?.subjectId ?? state.subjectId; if (subject) recordedNow.push({ key: inline.pending.factKey, words: inline.answer, subject }); }
   /** Round 7: the one bounded repair of a final_answer that left the household's answer with nothing citable. */
   let finalRepaired = false;
   /** Round 7: the household answered the claim question pending from the last turn (facts recorded for its subject). */
