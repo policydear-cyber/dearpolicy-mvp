@@ -26,6 +26,19 @@
       "calls": 37,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "r6-L3-L5-plus-paraphrases",
+      "tested_code_sha": "d80664c5430c02c84d59de1cb3d9523ac592c0cd",
+      "request_sha": "9a4d6ef47cd90f69b717255ab2766c69cd981a67",
+      "at": "2026-10-09T08:28:41.387Z",
+      "preflight": false,
+      "run_cap_usd": 0.491556,
+      "spent_usd": 0.009243,
+      "reserved_unsettled_usd": 0,
+      "calls": 41,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

@@ -1,0 +1,1625 @@
+{
+  "scenario": "L3b",
+  "title": "Dislocated elbow: a benefit whose condition is evidence (X-ray or MRI), stated conditionally",
+  "conversationId": "514d45a9-59e6-4285-be26-d9e674a8e73c",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Mei landed badly on her elbow at gymnastics this afternoon and the clinic says it's dislocated. Is that something her PlayWell plan helps with?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "I’m sorry Mei hurt herself. Mei’s PlayWell plan lists a Dislocation benefit of an amount that is only shown after claim evidence has been reviewed per dislocation, payable once when diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.\nWas the dislocation confirmed by X-ray or MRI?",
+      "timings": {
+        "acceptedMs": 10,
+        "firstAssistantPersistedMs": 9061,
+        "answerSeenMs": 9311,
+        "modelMs": 7952,
+        "upstreamMs": 7942,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 24,
+          "at": "2026-10-09T08:28:08.149Z",
+          "estInputTokens": 9690,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.001969,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4599,
+            "output": 18,
+            "cached": 4440
+          },
+          "latencyMs": 1234,
+          "upstreamMs": 1234,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 25,
+          "at": "2026-10-09T08:28:09.387Z",
+          "estInputTokens": 9914,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019914,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4713,
+            "output": 89,
+            "cached": 4473
+          },
+          "latencyMs": 1349,
+          "upstreamMs": 1349,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 26,
+          "at": "2026-10-09T08:28:10.740Z",
+          "estInputTokens": 10361,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020361000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4958,
+            "output": 45,
+            "cached": 4587
+          },
+          "latencyMs": 1391,
+          "upstreamMs": 1391,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 27,
+          "at": "2026-10-09T08:28:12.142Z",
+          "estInputTokens": 12368,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0022368,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 6351,
+            "output": 159,
+            "cached": 4832
+          },
+          "latencyMs": 1867,
+          "upstreamMs": 1867,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 28,
+          "at": "2026-10-09T08:28:14.019Z",
+          "estInputTokens": 14748,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024748,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7892,
+            "output": 171,
+            "cached": 6225
+          },
+          "latencyMs": 2111,
+          "upstreamMs": 2111,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 24,
+          "at": "2026-10-09T08:28:08.149Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 9880,
+          "reservedUsd": 0.001988,
+          "chargedUsd": 0.00006929999999999999,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1229,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4599,
+            "output": 18,
+            "cached": 4440,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 1
+        },
+        {
+          "seq": 25,
+          "at": "2026-10-09T08:28:09.388Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10111,
+          "reservedUsd": 0.0020111,
+          "chargedUsd": 0.00011323,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1347,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4713,
+            "output": 89,
+            "cached": 4473,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 1
+        },
+        {
+          "seq": 26,
+          "at": "2026-10-09T08:28:10.741Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10576,
+          "reservedUsd": 0.0020576000000000006,
+          "chargedUsd": 0.00010547,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1390,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4958,
+            "output": 45,
+            "cached": 4587,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 1
+        },
+        {
+          "seq": 27,
+          "at": "2026-10-09T08:28:12.142Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 12592,
+          "reservedUsd": 0.0022592,
+          "chargedUsd": 0.00027972,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1866,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 6351,
+            "output": 159,
+            "cached": 4832,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 1
+        },
+        {
+          "seq": 28,
+          "at": "2026-10-09T08:28:14.019Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 14991,
+          "reservedUsd": 0.0024991,
+          "chargedUsd": 0.00031445,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2110,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 7892,
+            "output": 171,
+            "cached": 6225,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 7981,
+          "output_tokens": 123,
+          "cached_tokens": 6345,
+          "cost_usd": 0.000289,
+          "latency_ms": 1817,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:06.920Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4599,
+          "output_tokens": 18,
+          "cached_tokens": 4440,
+          "cost_usd": 0.000069,
+          "latency_ms": 1235,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:09.384Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4713,
+          "output_tokens": 89,
+          "cached_tokens": 4473,
+          "cost_usd": 0.000113,
+          "latency_ms": 1350,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:10.738Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4958,
+          "output_tokens": 45,
+          "cached_tokens": 4587,
+          "cost_usd": 0.000105,
+          "latency_ms": 1392,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:12.133Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 6351,
+          "output_tokens": 159,
+          "cached_tokens": 4832,
+          "cost_usd": 0.00028,
+          "latency_ms": 1867,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:14.010Z"
+        },
+        {
+          "attempt_index": 4,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 7892,
+          "output_tokens": 171,
+          "cached_tokens": 6225,
+          "cost_usd": 0.000314,
+          "latency_ms": 2111,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:16.132Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 28513,
+        "output": 482
+      },
+      "costUsd": {
+        "charged": 0.00088217,
+        "reserved": 0.010815000000000002,
+        "ledger": 0.0011699999999999998
+      }
+    },
+    {
+      "turn": 2,
+      "user": "Yes, the doctor at the clinic did an X-ray and it showed the dislocation.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Mei’s PlayWell plan lists a Dislocation benefit of S$600 per dislocation, payable once when diagnosed by a registered medical practitioner and confirmed by X-ray or MRI; you said the clinic doctor’s X-ray showed the dislocation.",
+      "timings": {
+        "acceptedMs": 11,
+        "firstAssistantPersistedMs": 6140,
+        "answerSeenMs": 6201,
+        "modelMs": 5062,
+        "upstreamMs": 5059,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 29,
+          "at": "2026-10-09T08:28:17.460Z",
+          "estInputTokens": 10082,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020082,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4847,
+            "output": 69,
+            "cached": 0
+          },
+          "latencyMs": 1216,
+          "upstreamMs": 1216,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 30,
+          "at": "2026-10-09T08:28:18.680Z",
+          "estInputTokens": 10504,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020504,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 5073,
+            "output": 58,
+            "cached": 4721
+          },
+          "latencyMs": 1754,
+          "upstreamMs": 1754,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 31,
+          "at": "2026-10-09T08:28:20.441Z",
+          "estInputTokens": 13082,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0023082,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "systemPromptSha256": "00678fb151519c6c4e67bf6fc4487060ce48191cdb506f4280a64e4daaec6797",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 6525,
+            "output": 113,
+            "cached": 4947
+          },
+          "latencyMs": 2092,
+          "upstreamMs": 2092,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 29,
+          "at": "2026-10-09T08:28:17.460Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10272,
+          "reservedUsd": 0.0020272,
+          "chargedUsd": 0.0005192,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1215,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4847,
+            "output": 69,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 2
+        },
+        {
+          "seq": 30,
+          "at": "2026-10-09T08:28:18.680Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10708,
+          "reservedUsd": 0.0020708000000000002,
+          "chargedUsd": 0.00011140999999999999,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1753,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 5073,
+            "output": 58,
+            "cached": 4721,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 2
+        },
+        {
+          "seq": 31,
+          "at": "2026-10-09T08:28:20.441Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 13295,
+          "reservedUsd": 0.0023295,
+          "chargedUsd": 0.00026377,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2091,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 6525,
+            "output": 113,
+            "cached": 4947,
+            "reasoning": 0
+          },
+          "scenario": "L3b",
+          "turn": 2
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 4,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 7892,
+          "output_tokens": 171,
+          "cached_tokens": 6225,
+          "cost_usd": 0.000314,
+          "latency_ms": 2111,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:16.132Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4847,
+          "output_tokens": 69,
+          "cached_tokens": 0,
+          "cost_usd": 0.000519,
+          "latency_ms": 1216,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:18.677Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 5073,
+          "output_tokens": 58,
+          "cached_tokens": 4721,
+          "cost_usd": 0.000111,
+          "latency_ms": 1755,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:20.435Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 6525,
+          "output_tokens": 113,
+          "cached_tokens": 4947,
+          "cost_usd": 0.000264,
+          "latency_ms": 2093,
+          "prompt_version": "rag2-loop-v5",
+          "created_at": "2026-10-09T08:28:22.534Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 16445,
+        "output": 240
+      },
+      "costUsd": {
+        "charged": 0.00089438,
+        "reserved": 0.0064275,
+        "ledger": 0.0012079999999999999
+      }
+    }
+  ],
+  "totalMs": 15521,
+  "firstUsefulResponseMs": 9061,
+  "tokens": {
+    "input": 44958,
+    "output": 722
+  },
+  "costUsd": 0.00177655,
+  "calls": 8,
+  "verdict": {
+    "scenario": "L3b",
+    "verdict": "PASS",
+    "failureStage": null,
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page PLAYWELL p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "stored page PLAYWELL p2 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "Was the dislocation confirmed by X-ray or MRI?"
+      },
+      {
+        "turn": 1,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 1,
+        "name": "shows S$600",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$900",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "S$600 stated with its diagnosis / X-ray or MRI condition",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "conditional"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "does not re-ask how it happened (the message says)",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "no re-ask"
+      },
+      {
+        "turn": 1,
+        "name": "about mei",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: mei"
+      },
+      {
+        "turn": 1,
+        "name": "figure bound to mei / PLAYWELL",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "bound"
+      },
+      {
+        "turn": 1,
+        "name": "cites PLAYWELL p1 \"Dislocation benefit (per dislocation)\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 1,
+        "name": "cites PLAYWELL p2 \"Dislocation benefit is payable once per \"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 2,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 2,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 2,
+        "name": "does not re-ask the X-ray the household just described",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "no re-ask"
+      },
+      {
+        "turn": 2,
+        "name": "about mei",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: mei"
+      },
+      {
+        "turn": 2,
+        "name": "records x.?ray|scan|imag|confirm|diagnos in their words",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "dislocation_imaging_confirmation=\"the doctor at the clinic did an X-ray and it showed the dislocation\""
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": "74000000-0000-4000-8000-000000000004",
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "facts": {
+        "injury": {
+          "turn": 1,
+          "basis": "paraphrased",
+          "value": "dislocated elbow",
+          "words": "the clinic says it's dislocated",
+          "source": "user_reported"
+        },
+        "how_it_happened": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "landed badly on her elbow at gymnastics",
+          "words": "landed badly on her elbow at gymnastics",
+          "source": "user_reported"
+        },
+        "dislocation_imaging_confirmation": {
+          "turn": 2,
+          "basis": "stated",
+          "value": "yes",
+          "words": "the doctor at the clinic did an X-ray and it showed the dislocation",
+          "source": "user_reported"
+        }
+      },
+      "derived": [],
+      "subjectId": "74000000-0000-4000-8000-000000000004"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "ask_user",
+        "steps": 5,
+        "usage": {
+          "input": 28513,
+          "output": 482
+        },
+        "latencyMs": 7989,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Mei"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "how_it_happened",
+                  "value": "landed badly on her elbow at gymnastics",
+                  "words": "landed badly on her elbow at gymnastics"
+                },
+                {
+                  "key": "injury",
+                  "value": "dislocated elbow",
+                  "words": "the clinic says it's dislocated"
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "PlayWell accident injury dislocation benefits",
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "PlayWell Junior Accident Cover dislocation elbow dislocated joint benefit definition exclusions accident gymnastics",
+              "policy_ids": [
+                "74000000-0000-4000-8000-000000000105"
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":4}",
+            "evidenceIds": [
+              "e7",
+              "e8",
+              "e9",
+              "e10"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "want": "any",
+              "benefit": "Dislocation",
+              "policy_id": "74000000-0000-4000-8000-000000000105",
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":600,\"column\":\"Sum insured\",\"row\":\"Dislocation benefit (per dislocation)\"}",
+            "evidenceIds": [
+              "e11"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "kind": "fact",
+              "preface": "I’m sorry Mei hurt herself.",
+              "fact_key": "dislocation_imaging_confirmation",
+              "question": "Was the dislocation confirmed by X-ray or MRI?",
+              "statements": [
+                {
+                  "text": "Mei’s PlayWell plan lists a Dislocation benefit of S$600 per dislocation, payable once when diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+                  "benefit": "Dislocation benefit (per dislocation)",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000004",
+                  "evidence_ids": [
+                    "e9"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004",
+              "because_evidence_ids": [
+                "e9"
+              ]
+            },
+            "name": "ask_user",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e9",
+          "e11"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 2,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 3,
+        "usage": {
+          "input": 16445,
+          "output": 240
+        },
+        "latencyMs": 5077,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "dislocation_imaging_confirmation",
+                  "value": "yes",
+                  "words": "the doctor at the clinic did an X-ray and it showed the dislocation"
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 5,
+              "query": "PlayWell dislocation benefit registered medical practitioner X-ray MRI confirmed once per dislocation",
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":5}",
+            "evidenceIds": [
+              "e9",
+              "e12",
+              "e8",
+              "e13",
+              "e7"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "Mei’s PlayWell plan lists a Dislocation benefit of S$600 per dislocation, payable once when diagnosed by a registered medical practitioner and confirmed by X-ray or MRI; you said the clinic doctor’s X-ray showed the dislocation.",
+                  "benefit": "Dislocation benefit (per dislocation)",
+                  "evidence_ids": [
+                    "e8",
+                    "e9"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e8",
+          "e9"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 238,
+            "role": "table_header",
+            "text": "Policy owner                  Daniel Lim Wen Jie",
+            "start": 190,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "support": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "support": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 289,
+            "role": "table_header",
+            "text": "Insured child                 Mei Lim Xin Hui",
+            "start": 244,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "support": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:live-playwell"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 243,
+            "role": "table_header",
+            "text": "Parent or guardian            Daniel Lim Wen Jie",
+            "start": 195,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 289,
+          "text": "Insured child                 Mei Lim Xin Hui",
+          "start": 244,
+          "onPage": 1
+        },
+        "support": {
+          "end": 289,
+          "text": "Insured child                 Mei Lim Xin Hui",
+          "start": 244,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 233,
+            "role": "table_header",
+            "text": "Policyholder                  Daniel Lim Wen Jie",
+            "start": 185,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "support": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "support": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 150,
+          "text": "Tidewater Assurance                                                     Certificate TA-JA-480327\nPlayWell Junior Accident Cover - Certificate of Cover",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 150,
+          "text": "PlayWell Junior Accident Cover - Certificate of Cover",
+          "start": 97,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 433,
+            "role": "table_header",
+            "text": "Benefit                                                 Sum insured",
+            "start": 366,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 619,
+          "text": "Table of benefits\nBenefit                                                 Sum insured\nDislocation benefit (per dislocation)                   S$600\nBurns benefit (per accident)                            S$900\nOutpatient physiotherapy (per accident)                 S$300",
+          "start": 348,
+          "onPage": 1
+        },
+        "support": {
+          "end": 495,
+          "text": "Dislocation benefit (per dislocation)                   S$600",
+          "start": 434,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 253,
+          "text": "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+          "start": 116,
+          "onPage": 2
+        },
+        "support": {
+          "end": 253,
+          "text": "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+          "start": 116,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 114,
+          "text": "General conditions\nThis certificate covers Injury caused solely by an Accident while the insured child is covered.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 114,
+          "text": "This certificate covers Injury caused solely by an Accident while the insured child is covered.",
+          "start": 19,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "select_table_value",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "cell": {
+            "end": 495,
+            "text": "S$600",
+            "start": 490
+          },
+          "tableId": "74000000-0000-4000-8000-000000000105:p1:t2",
+          "rowLabel": "Dislocation benefit (per dislocation)",
+          "appliesTo": {
+            "kind": "everyone",
+            "value": "everyone"
+          },
+          "columnLeaf": "Sum insured",
+          "columnHeader": "Sum insured"
+        },
+        "context": [
+          {
+            "end": 433,
+            "role": "table_header",
+            "text": "Benefit                                                 Sum insured",
+            "start": 366,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 495,
+          "text": "Dislocation benefit (per dislocation)                   S$600",
+          "start": 434,
+          "onPage": 1
+        },
+        "support": {
+          "end": 495,
+          "text": "Dislocation benefit (per dislocation)                   S$600",
+          "start": 434,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "support": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 996,
+          "text": "Schedule of benefits\nBenefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500\nFracture benefit (per fracture)                         S$1,200       S$750\nAccidental dental treatment (per accident)              S$800         S$400\nAccidental death                                        S$100,000     S$20,000",
+          "start": 591,
+          "onPage": 1
+        },
+        "support": {
+          "end": 765,
+          "text": "Accident medical expenses (per accident)                S$3,000       S$1,500",
+          "start": 688,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-sunhaven"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000004",
+        "citations": [
+          {
+            "chunkId": "rag2:e9",
+            "excerpt": "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+            "insurer": "Tidewater Assurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000105",
+            "pageStart": 2,
+            "policyName": "PlayWell Junior Accident Cover",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e11",
+            "excerpt": "Benefit                                                 Sum insured\nDislocation benefit (per dislocation)                   S$600",
+            "insurer": "Tidewater Assurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000105",
+            "pageStart": 1,
+            "policyName": "PlayWell Junior Accident Cover",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "value": 600,
+            "column": "Sum insured",
+            "benefit": "Dislocation benefit (per dislocation)",
+            "pageEnd": 1,
+            "passage": "Dislocation benefit (per dislocation)                   S$600",
+            "currency": "SGD",
+            "policyId": "74000000-0000-4000-8000-000000000105",
+            "sentence": "Mei’s PlayWell plan lists a Dislocation benefit of S$600 per dislocation, payable once when diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+            "pageStart": 1,
+            "subjectId": "74000000-0000-4000-8000-000000000004",
+            "documentHash": "sha256:live-playwell"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": [
+          {
+            "id": "rag_fact_dislocation_imaging_confirmation",
+            "why": "This changes what your policy pays under: “Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.” (page 2)",
+            "text": "Was the dislocation confirmed by X-ray or MRI?",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "turn": 2,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000004",
+        "citations": [
+          {
+            "chunkId": "rag2:e8",
+            "excerpt": "Benefit                                                 Sum insured\nDislocation benefit (per dislocation)                   S$600",
+            "insurer": "Tidewater Assurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000105",
+            "pageStart": 1,
+            "policyName": "PlayWell Junior Accident Cover",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e9",
+            "excerpt": "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.",
+            "insurer": "Tidewater Assurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000105",
+            "pageStart": 2,
+            "policyName": "PlayWell Junior Accident Cover",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "value": 600,
+            "column": null,
+            "benefit": "Dislocation benefit (per dislocation)",
+            "pageEnd": 1,
+            "passage": "Table of benefits\nBenefit                                                 Sum insured\nDislocation benefit (per dislocation)                   S$600\nBurns benefit (per accident)                            S$900\nOutpatient physiotherapy (per accident)                 S$300",
+            "currency": "SGD",
+            "policyId": "74000000-0000-4000-8000-000000000105",
+            "sentence": "Mei’s PlayWell plan lists a Dislocation benefit of S$600 per dislocation, payable once when diagnosed by a registered medical practitioner and confirmed by X-ray or MRI; you said the clinic doctor’s X-ray showed the dislocation.",
+            "pageStart": 1,
+            "subjectId": "74000000-0000-4000-8000-000000000004",
+            "documentHash": "sha256:live-playwell"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}
