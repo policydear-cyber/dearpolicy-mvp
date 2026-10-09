@@ -114,7 +114,8 @@ async function t(name: string, fn: () => Promise<void> | void) {
       const m = new HostedLoopModel({ provider: "openai", model: "gpt-strip-test" }, http);
       const out = await m.next(input);
       assert.equal(bodies.length, 2); assert.ok(!("temperature" in bodies[1])); assert.equal(bodies[1].tool_choice, "required");
-      assert.deepEqual(out.usage, { input: 5, output: 2 });
+      // ReportedUsage carries the cached part since A1 (openAiUsage); none reported here.
+      assert.deepEqual(out.usage, { input: 5, output: 2, cached: 0 });
       await m.next(input); assert.equal(bodies.length, 3, "remembered: no second 400"); assert.ok(!("temperature" in bodies[2]));
       assert.ok(!("temperature" in loopRequestSettings("openai", "gpt-strip-test", 2000)));
     } finally { if (saved.key == null) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = saved.key; if (saved.det != null) process.env.DEARPOLICY_DETERMINISTIC_MODEL = saved.det; }
