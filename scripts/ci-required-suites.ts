@@ -129,4 +129,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "rag2:live-fetch-guard-pdf-test",
   "ingest:live-checker-test",
   "routing:test",
+  "trial:guard-test",
 ];

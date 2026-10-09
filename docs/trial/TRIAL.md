@@ -10,7 +10,7 @@ come from the real AI model.
 |---|---|
 | The app: the same code, upload page, reading of PDFs (including scanned pages) and chat | The data: a made-up household and made-up policies. Never upload real documents here. |
 | The AI model: OpenAI gpt-6-luna, the model production uses | Storage: a database and file folder inside the Codespace. Nothing goes to the production database or the live site. |
-| The cost: every answer spends a little from a **trial budget of US$0.25**. The budget is kept across restarts and nothing runs past it. | Sign-in: you are automatically signed in as the test household. There is no sign-up page in the trial. |
+| The cost: every answer spends a little from a **trial budget of US$0.25** (less if the test runs already used more of the US$0.50 exercise allowance; the start-up message shows the exact amount). The budget is kept across restarts and the app refuses model calls past it. This is the app's own counter, not a provider hard limit. | Sign-in: you are automatically signed in as the test household. There is no sign-up page in the trial. |
 
 When the trial budget is used up, the chat answers "the assistant model returned an error" instead of calling the
 model. Uploads still work.

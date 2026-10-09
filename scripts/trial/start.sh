@@ -15,7 +15,18 @@ if [ "${CODESPACES:-}" != "true" ]; then
 fi
 export TRIAL_MODE=1 NODE_ENV=test NEXT_TELEMETRY_DISABLED=1
 export DATABASE_URL="${TRIAL_DATABASE_URL:-postgres://postgres:postgres@localhost:5432/dearpolicy_trial}"
-export TRIAL_CAP_USD="${TRIAL_CAP_USD:-0.25}"
+# The trial spends from the same US$0.50 exercise allowance as the recorded live runs: the cap is the smaller of
+# TRIAL_CAP_USD (default 0.25) and what docs/rag-migration/live/LEDGER.json leaves of exercise_cap_usd.
+TRIAL_CAP_USD="$(node -e '
+const l=require("./docs/rag-migration/live/LEDGER.json");
+const spent=(l.runs||[]).reduce((a,r)=>a+Number(r.spent_usd||0)+Number(r.reserved_unsettled_usd||0),0);
+const left=Math.floor((Number(l.exercise_cap_usd)-spent)*1e4)/1e4;
+const want=Number(process.env.TRIAL_CAP_USD||"0.25");
+process.stdout.write(String(Math.min(want,left)));')"
+if ! node -e 'process.exit(Number(process.argv[1])>0?0:1)' "$TRIAL_CAP_USD"; then
+  echo "[trial] refused: the US\$0.50 exercise allowance is used up (docs/rag-migration/live/LEDGER.json)." >&2; exit 1
+fi
+export TRIAL_CAP_USD
 export CHAT_MODEL=openai:gpt-6-luna JUDGEMENT_MODEL=openai:gpt-6-luna NARRATION_MODEL=openai:gpt-6-luna READING_MODEL=openai:gpt-6-luna
 export DEARPOLICY_RAG_LOOP_RUN_MAX_USD="$TRIAL_CAP_USD" DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1
 unset OPENAI_BASE_URL ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY PINECONE_API_KEY VIRUSTOTAL_API_KEY DEARPOLICY_DETERMINISTIC_MODEL VERCEL VERCEL_ENV || true

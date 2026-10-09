@@ -242,6 +242,8 @@ jobs:
         run: npm run ingest:live-checker-test
       - name: Catalogue routing (a request for the documents on file or the policies held is answered as one, in a fresh chat and mid-claim; a claim statement or question is never read as one)
         run: npm run routing:test
+      - name: "Hands-on trial guard: Codespace only, local database, OpenAI only, persisted cap within the exercise allowance, own forwarded origin only"
+        run: npm run trial:guard-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
