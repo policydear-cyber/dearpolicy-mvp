@@ -521,3 +521,24 @@ export function versionInForce(asOf: string, effective: string | null, ends: str
   if (ends && asOf > ends) return { side: null, reason: `the amended terms (effective ${effective}) ended on ${ends}, before ${asOf}` };
   return { side: "after", reason: `the change took effect on ${effective}` };
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Row codes and row-level categories: a schedule's first column is often an item code ("A", "B", "1", "2a") with the
+// benefit's name in the next column, and some tables print WHO a row is for in a cell of its own ("Category: Child
+// (each)") rather than in the column headings. The code is never the benefit's name; the category cell is a person
+// dimension of that row.
+// ---------------------------------------------------------------------------------------------------------------
+/** An item code printed in a table's first column ("A", "B2", "1", "2a", "(iii)", "4."). */
+export function isRowCode(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  return /^\(?(?:[A-Z]{1,2}\d{0,2}|\d{1,3}[a-z]?|[ivx]{1,5})[.)]?$/.test(t);
+}
+/** A heading for an item-code column. */
+export const CODE_HEADER = /^(?:no\.?|item(?:\s*no\.?)?|#|s\/?n|ref\.?|code|clause)$/i;
+/** A heading for a column that says, per row, who the row is printed for. */
+export const CATEGORY_HEADER = /^(?:category|insured(?: person)?|class(?: of insured)?|cover type|person(?: covered)?|relationship|member(?: type)?|applies to|for)$/i;
+/** The benefit's own name in a table row's cells: the first cell that is neither an item code nor a figure. */
+export function rowLabelOf(cells: string[]): string {
+  const i = cells.findIndex((c) => !isRowCode(c) && !/^(?:S\$|SGD|US\$|\$)?\s?\d[\d,]*(?:\.\d+)?\b/.test(c.trim()));
+  return i >= 0 ? cells[i] : cells[0] ?? "";
+}

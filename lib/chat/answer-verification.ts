@@ -39,7 +39,7 @@ import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, name
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { checkUnitTerms } from "@/lib/claims/unit-terms";
-import { columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
+import { CATEGORY_HEADER, isRowCode, rowLabelOf, columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
 
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
@@ -492,7 +492,11 @@ function tableHeadFor(lines: string[], at: number, cells: number): TableHead | n
 function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null; doc?: Doc | null; sentence?: string | null; userText?: string } = {}): string | null {
   const rows = passageRows(b.passage).filter((r) => amountAppears(value, r));
   if (!rows.length) return "the amount is not printed in the cited passage";
-  if (rows.some((r) => rowCells(r).length < 3)) return null; // a row with one value prints one figure for everyone it covers
+  // A row with one value prints one figure for everyone it covers -- an item code ("A", "1") and the benefit's name are
+  // not value columns ("No. | Benefit | Amount payable" is one amount column, not one column per person or tier). A
+  // row that says in a cell of its own who it is for ("Category: Child (each)") is still checked for that person.
+  const valueCells = (r: string) => { const c = rowCells(r); return c.length > 1 && isRowCode(c[0]) ? c.slice(1) : c; };
+  if (rows.some((r) => valueCells(r).length < 3)) return rowCategoryProblem(rows, rangeText.split(/\n/), subject, opts.ownerId ?? null);
   const unbound = "the row prints one column per person or tier, and the figure is not bound to a column";
   const lines = rangeText.split(/\n/);
   const col = norm(b.column ?? "");
@@ -529,6 +533,8 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
     if (how === "other" || (how === "bare" && !currenciesStatedIn(t.full[j] + " " + b.passage).includes(currency))) return "the currency printed in the column is not the figure’s";
     const dims = columnDimensions(t.full[j]);
     // Agent G: the column's class against the person's established class (an unknown class never passes).
+    const rowCls = rowCategoryProblem([row], lines, subject, opts.ownerId ?? null);
+    if (rowCls) return rowCls;
     const cls = classProblem(dims.version ? t.full[j].replace(dims.version.words, " ").replace(/\s*\/\s*$|^\s*\/\s*/g, "").trim() || null : t.full[j], subject, opts.ownerId ?? null);
     if (cls) return cls;
     if (dims.stage && opts.sentence != null && !new RegExp("\\b" + dims.stage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[ -]/g, "[ -]") + "\\b", "i").test(opts.sentence)) return `the figure is printed in the “${t.full[j]}” column, and the sentence does not say it is for that stage`;
@@ -539,6 +545,49 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
     return versionProblem(dims, t.full, opts.doc ?? null, opts.sentence ?? null, opts.userText ?? "", { value, later, beforeLabels });
   }
   return col ? "the table column the figure is stated for is not printed above its row" : unbound;
+}
+/** A row's own category cell (under a "Category" / "Insured" / "Class" heading): the person the figure is stated for
+ * must be in that class, as for a person column. */
+function rowCategoryProblem(rows: string[], lines: string[], subject: Person | undefined, ownerId: string | null): string | null {
+  for (const row of rows) {
+    const cells = rowCells(row);
+    const at = lines.findIndex((l) => norm(l).includes(norm(row).slice(0, 60)));
+    if (at < 0) continue;
+    const t = tableHeadFor(lines, at, cells.length);
+    if (!t) continue;
+    const off = cells.length - Math.min(t.head.length, cells.length);
+    const j = t.head.findIndex((h) => CATEGORY_HEADER.test(h.trim()));
+    if (j < 0 || j + off < 0) continue;
+    const cell = cells[j + off] ?? "";
+    if (!cell || columnApplicability(cell).kind === "none") continue;
+    const why = classProblem(cell, subject, ownerId);
+    if (why) return why.replace("the column", `the row's “${t.head[j]}” cell (“${cell}”)`);
+  }
+  return null;
+}
+/** A sentence that names a DIFFERENT row of the same table than the one the figure is printed on: it uses words that
+ * only that other row's label has, and none that only the bound row's label has ("simple fracture" for a figure on the
+ * "Compound (open) fracture" row). Null when it does not. */
+function otherRowProblem(sentence: string, value: number, passage: string, rangeText: string, label: string): string | null {
+  const rowLine = passageRows(passage).find((r) => amountAppears(value, r));
+  if (!rowLine || rowCells(rowLine).length < 2) return null;
+  const lines = rangeText.split(/\n/);
+  const at = lines.findIndex((l) => norm(l).includes(norm(rowLine).slice(0, 60)));
+  if (at < 0) return null;
+  const isRow = (l: string) => rowCells(l).length >= 2 && /\d/.test(l) && !!l.trim();
+  let a = at, z = at;
+  while (a > 0 && isRow(lines[a - 1])) a--;
+  while (z + 1 < lines.length && isRow(lines[z + 1])) z++;
+  const mine = benefitWords(label), said = benefitWords(sentence);
+  for (let i = a; i <= z; i++) {
+    if (i === at) continue;
+    const other = rowLabelOf(rowCells(lines[i]));
+    if (!other || norm(other) === norm(label)) continue;
+    const theirs = benefitWords(other);
+    const onlyTheirs = [...theirs].filter((w) => !mine.has(w)), onlyMine = [...mine].filter((w) => !theirs.has(w));
+    if (onlyMine.length && onlyTheirs.some((w) => said.has(w)) && !onlyMine.some((w) => said.has(w))) return `the sentence names another row’s benefit (“${other}”), not the row the figure is printed on`;
+  }
+  return null;
 }
 /** The version dimension: the figure's column must be the version in force on the date the sentence is about. */
 function versionProblem(dims: ColumnDimensions, headers: string[], doc: Doc | null, sentence: string | null, userText: string, row: { value: number; later: number[]; beforeLabels: string[] } = { value: NaN, later: [], beforeLabels: [] }): string | null {
@@ -620,9 +669,15 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   if (how === "absent") return "the figure is not printed in the cited passage";
   if (how === "other") return "the figure is printed in another currency in the cited passage";
   if (how === "bare") { const named = currenciesStatedIn(shown); if (!(named.length === 1 && named[0] === currency)) { const c = columnCurrency(b, rangeText); if (c !== currency) return "the cited passage prints the figure without its currency"; } }
-  const benefit = (opts.benefit ?? b.benefit ?? "").trim();
+  let benefit = (opts.benefit ?? b.benefit ?? "").trim();
   if (!benefit) return "the figure is not bound to a benefit";
+  // An item code bound as the benefit ("A", "4"): the benefit is the row's own name printed beside that code.
+  if (isRowCode(benefit)) {
+    const cells = rowCells(passageRows(shown).find((r) => amountAppears(value, r)) ?? "");
+    if (cells.some((c) => c.trim().replace(/[.)]$/, "") === benefit.replace(/[.)]$/, ""))) benefit = rowLabelOf(cells);
+  }
   if (sentence != null && !namesBenefit(sentence, benefit)) return "the sentence does not name the benefit the figure is printed for";
+  if (sentence != null) { const other = otherRowProblem(sentence, value, shown, rangeText, benefit); if (other) return other; }
   const row = benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
   const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner, doc, sentence, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, sentence, ctx);
   if (row) {

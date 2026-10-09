@@ -20,7 +20,7 @@ import { tokens } from "./search";
 import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
 import { columnApplicability, columnFitProblem, personApplicability, relationOf, type PersonApplicability, type RelationClass } from "./people";
 import { personClause } from "@/lib/policies/member-tiers";
-import { columnDimensions, datesIn, versionInForce, versionPairOf, type ColumnDimensions, type VersionSide } from "@/lib/claims/person";
+import { CATEGORY_HEADER, CODE_HEADER, isRowCode, columnDimensions, datesIn, versionInForce, versionPairOf, type ColumnDimensions, type VersionSide } from "@/lib/claims/person";
 import { parseCell, type Period } from "./value-terms";
 
 export type ColumnKind = "label" | "condition" | "amount" | "percent" | "count" | "unit" | "notes";
@@ -189,7 +189,7 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
   const tables: Table[] = [];
   let open: Open | null = null;
   let n = 0;
-  const finish = () => { if (open && open.t.rows.length) { finalizeKinds(open.t); tables.push(open.t); } open = null; };
+  const finish = () => { if (open && open.t.rows.length) { finalizeKinds(open.t); relabelCodeColumn(open.t); tables.push(open.t); } open = null; };
   const start = (l: Line, header: Line | null, columns: Column[], implicit: boolean) => {
     open = { t: { tableId: `${policyId}:p${l.page}:t${++n}`, policyId, pageStart: l.page, pageEnd: l.page, headerPage: header ? l.page : null, headerLine: header ? header.text : null, columns, rows: [], headed: !!header, continued: false }, header, tabbed: l.tabbed, implicit, section: null, suspended: false };
   };
@@ -252,6 +252,20 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
   }
   finish();
   return tables;
+}
+
+/** A first column of item codes ("Item | Benefit | ..." with A, B, C or "No. | Benefit | ..." with 1, 2, 3): the
+ * benefit's name is the next text column, and that is the row's label (the code is never the benefit). */
+function relabelCodeColumn(t: Table) {
+  if (t.columns.length < 3) return;
+  const codes = t.rows.filter((r) => r.cells[0]);
+  const codeCol = (t.headed && CODE_HEADER.test(t.columns[0].header.trim())) || (codes.length >= 2 && codes.every((r) => isRowCode(r.cells[0]!.text)));
+  if (!codeCol) return;
+  const next = t.columns[1];
+  if (!t.rows.some((r) => r.cells[1] && /[A-Za-z]{3}/.test(r.cells[1].text))) return;
+  next.kind = "label";
+  t.columns[0].kind = "label";
+  for (const r of t.rows) if (r.cells[1] && !isRowCode(r.cells[1].text)) { r.label = r.cells[1].text; r.labelCell = r.cells[1]; }
 }
 
 function finalizeKinds(t: Table) {
@@ -627,7 +641,8 @@ function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnH
   const ev = (t: Table, r: Row, col: Column | null, cell: Cell | null): EvidenceRef => {
     const text = L.pages.get(r.page) ?? "";
     return evidenceAt({ policyId: L.doc.id, documentHash: L.doc.fileHash, page: r.page, pageText: text, start: r.lineStart, end: r.lineEnd, pageStart: t.headerPage ?? r.page, subjectId,
-      table: { tableId: t.tableId, rowLabel: r.label, columnHeader: col?.header ?? "", columnLeaf: col?.leaf ?? null, appliesTo: col?.appliesTo ?? (col ? { kind: "everyone", value: "everyone" } : null), cell: cell ? { text: cell.text, start: cell.start, end: cell.end } : null } });
+      table: { tableId: t.tableId, rowLabel: r.label, columnHeader: col?.header ?? "", columnLeaf: col?.leaf ?? null, appliesTo: col?.appliesTo ?? (col ? { kind: "everyone", value: "everyone" } : null), cell: cell ? { text: cell.text, start: cell.start, end: cell.end } : null,
+        row: { cells: t.columns.flatMap((c) => { const x = r.cells[c.index]; return x ? [{ header: c.header, text: x.text, start: x.start, end: x.end }] : []; }) } } });
   };
   const results: SelectedValue[] = [];
   const problems: TableSelection[] = [];
@@ -675,6 +690,15 @@ function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hint
       if (hints.applicability.cls === "unknown" && classed.length > 1) return { status: "ambiguous", options: classed.map((c) => ({ label: c.header, detail: r.cells[c.index]?.text ?? "(blank)", evidence: ev(t, r, c, r.cells[c.index]) })), question: `Which column of the ${r.label} row applies to ${hints.name} — ${classed.map((c) => c.header).join(" or ")}?`, reason: `${hints.name}: ${why}` };
       return { status: "missing", reason: `${hints.name}: ${why}`, evidence: ev(t, r, col, r.cells[col.index]), unresolved: hints.applicability.cls === "unknown" ? { kind: "person_class", needs: `whether ${hints.name} is covered as an adult or a child (a date of birth on file, or the schedule's category for them)` } : null };
     }
+  }
+  // A row that prints who it is for in a cell of its own ("Category: Child (each)"): that cell is the row's person
+  // dimension, checked like a person column.
+  for (const c of t.columns) {
+    if (!t.headed || !CATEGORY_HEADER.test(c.header.trim()) || !r.cells[c.index] || !hints.applicability) continue;
+    const rowApp = columnApplicability(r.cells[c.index]!.text);
+    if (rowApp.kind === "none") continue;
+    const why = columnFitProblem(rowApp, hints.applicability, { isOwner: hints.isDocOwner, header: `${c.header}: ${r.cells[c.index]!.text}` });
+    if (why) return { status: "missing", reason: `${hints.name}: the ${r.label} row is printed for “${r.cells[c.index]!.text}” (${why})`, evidence: ev(t, r, col, r.cells[col.index]) };
   }
   const cell = r.cells[col.index];
   if (!cell || NOT_A_VALUE.test(cell.text)) return { status: "missing", reason: cell ? `the ${col.header} column prints “${cell.text}” for ${r.label}` : `the ${col.header} column prints nothing for ${r.label}`, evidence: ev(t, r, col, cell) };

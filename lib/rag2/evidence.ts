@@ -21,6 +21,10 @@ export type EvidenceTableRef = {
   appliesTo: AppliesTo | null;
   /** The value cell itself: verbatim text and offsets in the row page's stored text. */
   cell?: { text: string; start: number; end: number } | null;
+  /** The whole row the value is printed on, every cell with its column header (verbatim, with offsets), so that the
+   * row's other values -- the earlier value of an amended row, another person's column -- can be cited as what they
+   * are (rowCellBinding). */
+  row?: { cells: { header: string; text: string; start: number; end: number }[] } | null;
 };
 
 export type EvidencePassage = {
@@ -246,4 +250,14 @@ export function refineEvidence(ref: EvidenceRef, pages: Map<number, string>, abo
   const context = contextFor(support, pages);
   ref.context = context.length ? context : null;
   return ref;
+}
+
+/** A binding for ANOTHER cell of the row a table value was read from (its earlier "Existing" value, for example): the
+ * same row passage, with the column that prints `value`. Null when the ref carries no row or no single cell prints it. */
+export function rowCellBinding(ref: EvidenceRef, benefit: string, value: number, currency: string): FigureBinding | null {
+  const cells = ref?.table?.row?.cells ?? [];
+  const hits = cells.filter((c) => numbersIn(c.text).some((n) => Math.abs(n - value) < 1e-9));
+  if (hits.length !== 1) return null;
+  const b = toFigureBinding(ref, benefit, value, currency);
+  return b ? { ...b, column: hits[0].header || null } : null;
 }
