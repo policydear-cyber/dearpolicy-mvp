@@ -547,6 +547,7 @@ export function conditionalFraming(text: string, benefits: { label: string; poli
   let plain = text;
   for (const n of names) plain = plain.split(n).join(" ");
   const saysCause = CAUSE_WORDING.test(plain);
+  const alreadyConditional = /\b(?:if|provided|subject to|as long as|only when|on condition|unless)\b/i.test(text);
   const clauses: string[] = [], ids: string[] = [], causeQuotes: string[] = [];
   const seen = new Set<string>();
   for (const b of benefits) {
@@ -567,7 +568,8 @@ export function conditionalFraming(text: string, benefits: { label: string; poli
           if (!saysCause) { causeQuotes.push(sentence.replace(/[;:\s]+$/, "")); ids.push(evidenceIdOf(ctx.state, e)); }
           continue;
         }
-        if (!aboutBenefit || !CONDITION.test(sentence) || /\bnot (?:covered|payable)\b|\bexclu/i.test(sentence)) continue;
+        // The benefit's own condition: a sentence the model already wrote as conditional keeps its own wording.
+        if (alreadyConditional || !aboutBenefit || !CONDITION.test(sentence) || /\bnot (?:covered|payable)\b|\bexclu/i.test(sentence)) continue;
         seen.add(sentence);
         const words = contentWords(sentence).filter((w) => !keyWords.includes(w));
         // Established only by reviewed medical evidence recorded for the claim -- never by the household's report.
