@@ -140,12 +140,19 @@ test("live ingestion journey", async ({ page }) => {
     if (!PREFLIGHT) { soft(!stuck, `${q.id} "${user}": still thinking after ${THINK_MS / 1000} s`); soft(!error, `${q.id} "${user}": error shown: ${error}`); }
     return t;
   }
-  async function ask(q: Question, phase: string) {
-    let t = await turn(q, phase, q.text, "composer", async () => { await page.getByLabel("Message to DearPolicy").fill(q.text); await page.getByRole("button", { name: /send/i }).click(); });
+  let lastTurn: any = null;
+  async function ask(q: Question, phase: string, conversation: string | null = null, nextTurnAnswers = false) {
+    // A scripted turn that answers the chat's own pending question goes where a person would type it.
+    const inlineFirst = lastTurn?.pendingQuestion ? answers().last().locator("input[aria-label='Your answer']") : null;
+    let t = inlineFirst && (await inlineFirst.count())
+      ? await turn(q, phase, q.text, `inline answer (asked: ${lastTurn.pendingQuestion})`, async () => { await inlineFirst.fill(q.text); await inlineFirst.press("Enter"); })
+      : await turn(q, phase, q.text, "composer", async () => { await page.getByLabel("Message to DearPolicy").fill(q.text); await page.getByRole("button", { name: /send/i }).click(); });
+    t.conversation = conversation;
     // The chat's own follow-up questions (a person to choose, a fact to give), answered from the fixture.
     for (let n = 0; n < 4 && t.pendingQuestion && !t.error && !t.stuck; n++) {
       const rule = q.answers.find((r) => r.when.test(t.pendingQuestion!));
-      if (!rule) { t.unansweredFollowUp = true; write("transcript.json", transcript); break; }
+      // No fixture rule: the conversation's next scripted turn answers it (else it stays unanswered, and is reported).
+      if (!rule) { if (!nextTurnAnswers) { t.unansweredFollowUp = true; write("transcript.json", transcript); } break; }
       const last = answers().last();
       const buttons = last.locator(".quick-replies button:enabled");
       const options = (await buttons.allTextContents()).map((s) => s.trim());
@@ -154,24 +161,38 @@ test("live ingestion journey", async ({ page }) => {
       if (pick) t = await turn(q, phase, pick, `button (asked: ${t.pendingQuestion})`, () => buttons.filter({ hasText: pick }).first().click());
       else if (await inline.count()) t = await turn(q, phase, rule.reply, `inline answer (asked: ${t.pendingQuestion})`, async () => { await inline.fill(rule.reply); await inline.press("Enter"); });
       else t = await turn(q, phase, rule.reply, `composer (asked: ${t.pendingQuestion})`, async () => { await page.getByLabel("Message to DearPolicy").fill(rule.reply); await page.getByRole("button", { name: /send/i }).click(); });
+      t.conversation = conversation;
     }
+    lastTurn = t;
+    write("transcript.json", transcript);
   }
-  await page.goto("/chat");
-  await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
-  for (const q of PREFLIGHT ? qs.conversation.slice(0, 1) : qs.conversation) await ask(q, "conversation");
-  step("conversation asked", { turns: transcript.length });
+  // Each conversation is its own chat.
+  for (const c of PREFLIGHT ? qs.conversations.slice(0, 1).map((c) => ({ ...c, turns: c.turns.slice(0, 1) })) : qs.conversations) {
+    await page.goto("/chat");
+    await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
+    lastTurn = null;
+    for (const [k, q] of c.turns.entries()) await ask(q, "conversation", c.id, k < c.turns.length - 1);
+  }
+  step("conversations asked", { conversations: qs.conversations.length, turns: transcript.length });
 
   if (!PREFLIGHT) {
     // 5. Reopen the saved conversation from history and ask a follow-up.
     await page.goto("/chat");
     await page.locator("details.chat-history > summary").click();
     await expect(page.locator(".history-open").first()).toBeVisible({ timeout: 30_000 });
-    const opened = (await page.locator(".history-open").first().innerText()).trim();
-    await page.locator(".history-open").first().click();
+    // The conversation named by the reopen turn (else the latest), found in history by its first question.
+    const want = qs.conversations.find((c) => c.id === qs.reopen[0]?.conversation) ?? qs.conversations[qs.conversations.length - 1];
+    const hint = (want?.turns[0]?.text ?? "").slice(0, 24);
+    const byTitle = hint ? page.locator(".history-open").filter({ hasText: hint }).first() : null;
+    const entry = byTitle && (await byTitle.count()) ? byTitle : page.locator(".history-open").first();
+    const opened = (await entry.innerText()).trim();
+    await entry.click();
     await expect(answers().first()).toBeVisible({ timeout: 60_000 });
     await shot(page, "reopened");
-    soft((await answers().count()) >= qs.conversation.length, `reopened conversation shows ${await answers().count()} answers`);
-    for (const q of qs.reopen) await ask(q, "reopen");
+    const priorAnswers = transcript.filter((t) => t.conversation === want?.id).length;
+    soft((await answers().count()) >= priorAnswers, `reopened conversation ${want?.id} shows ${await answers().count()} answers, ${priorAnswers} were given`);
+    lastTurn = null;
+    for (const q of qs.reopen) await ask(q, "reopen", want?.id ?? null);
     step("reopened and followed up", { opened });
 
     // 6. Delete one source on the Policies page, then ask again.
@@ -190,7 +211,8 @@ test("live ingestion journey", async ({ page }) => {
         await page.goto("/chat");
         if (!qs.afterDeleteSameConversation) await page.getByRole("button", { name: "New chat" }).click().catch(() => undefined);
         else { await page.locator("details.chat-history > summary").click(); await page.locator(".history-open").first().click(); await expect(answers().first()).toBeVisible({ timeout: 60_000 }); }
-        for (const q of qs.afterDelete) await ask(q, "after_delete");
+        lastTurn = null;
+        for (const q of qs.afterDelete) await ask(q, "after_delete", "after-delete");
         step("deleted a source and asked again", { file: qs.deleteSource });
       }
     }

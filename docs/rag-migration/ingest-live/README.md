@@ -12,8 +12,8 @@ call behind the rag2 live guard (one run ledger, reservation before every reques
 | `e2e/ingest-live/ingest-live.spec.ts` | the journey: family page → upload each source (no profile hint) → processing → library → questions (answers the chat's own follow-ups from the fixture) → reopen from history + follow-up → delete one source → ask again |
 | `scripts/ingest-live/dump.ts` | READ ONLY transaction: page text per document, documents, person links, detected names, coverage/benefit/condition rows, jobs, `model_executions`, usage, chat messages |
 | `scripts/ingest-live/check.ts` | deterministic grader (no AI judge); `check-regressions.ts` tests it |
-| `scripts/ingest-live/fixture/` | `HOUSEHOLD.json`, `QUESTIONS.json`, `source/*.pdf` (agent T's files; QUESTIONS is a placeholder until T's arrives) |
-| `scripts/ingest-live/sealed/EXPECTED.json` | the expectations; CI moves it out of the checkout before the app starts and the harness copies it into the run folder only after the conversations. A placeholder (`"placeholder": true`) is never graded PASS |
+| `scripts/ingest-live/fixture/` | `HOUSEHOLD.json`, `QUESTIONS.json` (agent T's eight conversations C1–C8, plus E1's reopen R1, delete `hx-endorsement.pdf`, re-ask D1), `source/*.pdf` (T's) |
+| `scripts/ingest-live/sealed/` | `EXPECTED.json` (machine checks E1 translated from T's facts/answers; R1 and D1 are E1's) and T's own `EXPECTED.source.json/.md`. CI moves the folder out of the checkout before the app starts; the harness copies it into the run folder only after the conversations. A placeholder (`"placeholder": true`) is never graded PASS |
 | `.github/workflows/ingest-live.yml` | the CI run (same gate, secret handling, leak scan, ledger and commit-back as `rag2-live-smoke.yml`) |
 
 ## Requesting a run
@@ -40,8 +40,8 @@ flock /home/user/.heavy.lock npm run ingest:live -- --preflight --run-id local-p
 ```
 
 ## Fixture formats
-`QUESTIONS.json`: `{ "upload_order": [files], "conversation": [{ "id", "text", "answers": [{ "when": "<regex on the chat's
-question>", "reply": "..." }] }], "reopen": [...], "delete_source": "<file>", "after_delete": [...] }`.
+`QUESTIONS.json`: `{ "upload_order": [files], "conversations": [{ "id": "C3", "turns": [{ "q": "Q3", "user": "..." }] }] (each a New chat; a later turn answers the chat's pending question), or "conversation": [{ "id", "text", "answers": [{ "when": "<regex on the chat's
+question>", "reply": "..." }] }], "reopen": [{ "conversation": "C5", "id", "text" }], "delete_source": "<file>", "after_delete": [...] }`.
 `EXPECTED.json`: `{ "documents": [{ "file", "linked_people": [names], "pages": [{ "page", "must_contain": [..] }] }],
 "turns": { "<id>": { "must_include", "must_include_any", "must_not_include", "person", "version": "<file that must be
 cited>", "citations": [{ "file", "page" }], "must_not_cite", "ask_follow_up" } } }`.

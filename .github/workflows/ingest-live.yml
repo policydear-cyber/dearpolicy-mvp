@@ -63,8 +63,7 @@ jobs:
       - name: "Seal the expectations away from the app (copied into the run folder only after the conversations)"
         run: |
           if grep -rIl -e "ingest-live/sealed" -e "EXPECTED.json" app lib components 2>/dev/null; then echo "::error::app code references the sealed expectations"; exit 1; fi
-          mkdir -p "$RUNNER_TEMP/sealed"
-          mv scripts/ingest-live/sealed/EXPECTED.json "$RUNNER_TEMP/sealed/EXPECTED.json"
+          mv scripts/ingest-live/sealed "$RUNNER_TEMP/sealed"
 
       - uses: actions/setup-node@v4
         with:
@@ -167,7 +166,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898099+github-actions[bot]@users.noreply.github.com"
-          git checkout -- scripts/ingest-live/sealed 2>/dev/null || true
           if [ -n "$D" ]; then git add "$D"; fi
           git add docs/rag-migration/live/LEDGER.json
           kind="live"; if [ "$PREFLIGHT" = "true" ]; then kind="preflight"; fi

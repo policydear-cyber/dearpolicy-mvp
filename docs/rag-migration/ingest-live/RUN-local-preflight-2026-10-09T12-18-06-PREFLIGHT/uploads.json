@@ -1,7 +1,7 @@
 [
   {
     "file": "hx-text.pdf",
-    "uploadedAt": "2026-10-09T12:07:23.199Z",
+    "uploadedAt": "2026-10-09T12:18:18.160Z",
     "screenshots": [
       "screenshots/02-upload-1-received.png",
       "screenshots/03-upload-1-processing.png",
@@ -9,20 +9,25 @@
     ],
     "states": [
       {
-        "at": 1150,
+        "at": 1102,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 7726,
         "state": "not_scanned_prototype/extracting:reading_pdf",
         "message": "Reading pages and extracting text…"
       },
       {
-        "at": 6812,
+        "at": 10264,
         "state": "not_scanned_prototype/queued:retrying",
         "message": "DearPolicy is still reading this document and will finish automatically."
       }
     ],
-    "policyId": "febfa399-8dad-46b7-965a-9c424360f0e6",
+    "policyId": "66c5a09f-6da0-4ef8-a42d-de7984f4a478",
     "productName": null,
     "finalStatus": "not_scanned_prototype/queued",
-    "msToFinal": 91896,
+    "msToFinal": 92744,
     "ready": false,
     "error": null,
     "message": "DearPolicy is still reading this document and will finish automatically.",
@@ -33,7 +38,7 @@
   },
   {
     "file": "hx-endorsement.pdf",
-    "uploadedAt": "2026-10-09T12:08:55.457Z",
+    "uploadedAt": "2026-10-09T12:19:51.207Z",
     "screenshots": [
       "screenshots/05-upload-2-received.png",
       "screenshots/06-upload-2-processing.png",
@@ -41,20 +46,20 @@
     ],
     "states": [
       {
-        "at": 679,
+        "at": 638,
         "state": "uploaded/queued:queued",
         "message": "Document received — reading and extracting information."
       },
       {
-        "at": 4698,
+        "at": 4636,
         "state": "not_scanned_prototype/queued:retrying",
         "message": "DearPolicy is still reading this document and will finish automatically."
       }
     ],
-    "policyId": "8782e617-c7e4-4ba5-a790-201d90924d22",
+    "policyId": "fcd99dbd-b5cd-428c-8cda-d2e5535077b5",
     "productName": null,
     "finalStatus": "not_scanned_prototype/queued",
-    "msToFinal": 92026,
+    "msToFinal": 91644,
     "ready": false,
     "error": null,
     "message": "DearPolicy is still reading this document and will finish automatically.",
@@ -65,7 +70,7 @@
   },
   {
     "file": "hx-scanned.pdf",
-    "uploadedAt": "2026-10-09T12:10:27.658Z",
+    "uploadedAt": "2026-10-09T12:21:23.066Z",
     "screenshots": [
       "screenshots/08-upload-3-received.png",
       "screenshots/09-upload-3-processing.png",
@@ -73,20 +78,20 @@
     ],
     "states": [
       {
-        "at": 650,
+        "at": 677,
         "state": "uploaded/queued:queued",
         "message": "Document received — reading and extracting information."
       },
       {
-        "at": 4703,
+        "at": 4676,
         "state": "not_scanned_prototype/queued:retrying",
         "message": "DearPolicy is still reading this document and will finish automatically."
       }
     ],
-    "policyId": "3fecafc1-8dfe-4b1b-bff1-c83fcbafb196",
+    "policyId": "6cd4bb34-5037-4158-83b7-c3c6ba161676",
     "productName": null,
     "finalStatus": "not_scanned_prototype/queued",
-    "msToFinal": 92000,
+    "msToFinal": 91906,
     "ready": false,
     "error": null,
     "message": "DearPolicy is still reading this document and will finish automatically.",

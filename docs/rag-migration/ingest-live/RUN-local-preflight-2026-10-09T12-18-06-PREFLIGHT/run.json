@@ -1,5 +1,5 @@
 {
-  "testedCodeSha": "393af0c0b4491c9e889feb8153c48dc2be5e29bd",
+  "testedCodeSha": "340bc291b019b70383445043f75c982a4daae766",
   "requestSha": null,
   "modelsRequested": {
     "CHAT_MODEL": "openai:gpt-6-luna",
@@ -13,9 +13,9 @@
   "mode": "relay",
   "keyNote": null,
   "availability": null,
-  "startedAt": "2026-10-09T12:07:12.504Z",
-  "commit": "393af0c0b4491c9e889feb8153c48dc2be5e29bd",
-  "tree": "0eec1df119e6a07cba86c4dc13a7163516b778f1",
+  "startedAt": "2026-10-09T12:18:06.644Z",
+  "commit": "340bc291b019b70383445043f75c982a4daae766",
+  "tree": "e37aa9f042ee577dfcd830daba099c986a1dc41b",
   "buildId": "HbHdRsSJofgujTjv5XSXg",
   "fixture": "scripts/ingest-live/fixture",
   "sources": [
@@ -26,7 +26,7 @@
   "runCapUsd": 0.05,
   "account": {
     "note": "fresh synthetic account (sign-up path: lib/household/repo.ts ensureDefaultHousehold)",
-    "householdRef": "00d6bbb6"
+    "householdRef": "2ed79400"
   },
   "budgetAfterProcessing": {
     "capUsd": 0.05,
@@ -52,7 +52,7 @@
   "httpCalls": [
     {
       "seq": 1,
-      "at": "2026-10-09T12:07:27.776Z",
+      "at": "2026-10-09T12:18:27.388Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -75,7 +75,7 @@
     },
     {
       "seq": 2,
-      "at": "2026-10-09T12:08:00.572Z",
+      "at": "2026-10-09T12:19:01.527Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -98,7 +98,7 @@
     },
     {
       "seq": 3,
-      "at": "2026-10-09T12:08:56.601Z",
+      "at": "2026-10-09T12:19:52.334Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -121,7 +121,7 @@
     },
     {
       "seq": 4,
-      "at": "2026-10-09T12:09:02.220Z",
+      "at": "2026-10-09T12:20:03.543Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -144,7 +144,7 @@
     },
     {
       "seq": 5,
-      "at": "2026-10-09T12:09:28.017Z",
+      "at": "2026-10-09T12:20:23.665Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -167,30 +167,7 @@
     },
     {
       "seq": 6,
-      "at": "2026-10-09T12:10:28.767Z",
-      "host": "127.0.0.1",
-      "path": "/v1/chat/completions",
-      "method": "POST",
-      "model": "gpt-6-luna",
-      "maxOutputTokens": 6000,
-      "estInputTokens": 3912,
-      "reservedUsd": 0,
-      "chargedUsd": 0,
-      "ok": false,
-      "settings": {
-        "temperature": 0,
-        "max_completion_tokens": 6000,
-        "reasoning_effort": "none",
-        "response_format": "json_object"
-      },
-      "systemSha": "66cbcda12f82bd5f",
-      "kind": "structured",
-      "wouldReserveUsd": 0.0033912,
-      "refused": "preflight: no model call made"
-    },
-    {
-      "seq": 7,
-      "at": "2026-10-09T12:10:29.113Z",
+      "at": "2026-10-09T12:21:25.756Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -218,8 +195,31 @@
       "refused": "preflight: no model call made"
     },
     {
+      "seq": 7,
+      "at": "2026-10-09T12:21:26.298Z",
+      "host": "127.0.0.1",
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "model": "gpt-6-luna",
+      "maxOutputTokens": 6000,
+      "estInputTokens": 3912,
+      "reservedUsd": 0,
+      "chargedUsd": 0,
+      "ok": false,
+      "settings": {
+        "temperature": 0,
+        "max_completion_tokens": 6000,
+        "reasoning_effort": "none",
+        "response_format": "json_object"
+      },
+      "systemSha": "66cbcda12f82bd5f",
+      "kind": "structured",
+      "wouldReserveUsd": 0.0033912,
+      "refused": "preflight: no model call made"
+    },
+    {
       "seq": 8,
-      "at": "2026-10-09T12:11:00.380Z",
+      "at": "2026-10-09T12:21:58.255Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -248,7 +248,7 @@
     },
     {
       "seq": 9,
-      "at": "2026-10-09T12:11:05.286Z",
+      "at": "2026-10-09T12:22:08.218Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -271,7 +271,7 @@
     },
     {
       "seq": 10,
-      "at": "2026-10-09T12:12:01.387Z",
+      "at": "2026-10-09T12:22:59.586Z",
       "host": "127.0.0.1",
       "path": "/v1/chat/completions",
       "method": "POST",
@@ -302,8 +302,8 @@
   "loopCalls": [
     {
       "seq": 1,
-      "at": "2026-10-09T12:12:02.900Z",
-      "estInputTokens": 9811,
+      "at": "2026-10-09T12:22:59.290Z",
+      "estInputTokens": 9805,
       "maxOutputTokens": 2000,
       "reservedUsd": 0,
       "requestedModel": "openai:gpt-6-luna",
@@ -347,24 +347,7 @@
       "cached_tokens": 0,
       "output_tokens": 0,
       "cost_usd": null,
-      "latency_ms": 13,
-      "guardSeq": null
-    },
-    {
-      "operation": "policy_extraction",
-      "attempt_index": 0,
-      "requested_provider": "openai",
-      "requested_model": "gpt-6-luna",
-      "resolved_provider": "openai",
-      "resolved_model": null,
-      "provider_request_id": null,
-      "status": "failed",
-      "error_category": "model_provider",
-      "input_tokens": 0,
-      "cached_tokens": 0,
-      "output_tokens": 0,
-      "cost_usd": null,
-      "latency_ms": 0,
+      "latency_ms": 8,
       "guardSeq": null
     },
     {
@@ -398,7 +381,7 @@
       "cached_tokens": 0,
       "output_tokens": 0,
       "cost_usd": null,
-      "latency_ms": 0,
+      "latency_ms": 2,
       "guardSeq": null
     },
     {
@@ -415,7 +398,7 @@
       "cached_tokens": 0,
       "output_tokens": 0,
       "cost_usd": null,
-      "latency_ms": 0,
+      "latency_ms": 1,
       "guardSeq": null
     },
     {
@@ -449,24 +432,7 @@
       "cached_tokens": 0,
       "output_tokens": 0,
       "cost_usd": null,
-      "latency_ms": 455,
-      "guardSeq": null
-    },
-    {
-      "operation": "hosted_ocr",
-      "attempt_index": 0,
-      "requested_provider": "openai",
-      "requested_model": "gpt-6-luna",
-      "resolved_provider": "openai",
-      "resolved_model": null,
-      "provider_request_id": null,
-      "status": "failed",
-      "error_category": "model_provider",
-      "input_tokens": 0,
-      "cached_tokens": 0,
-      "output_tokens": 0,
-      "cost_usd": null,
-      "latency_ms": 7,
+      "latency_ms": 481,
       "guardSeq": null
     },
     {
@@ -504,6 +470,23 @@
       "guardSeq": null
     },
     {
+      "operation": "policy_extraction",
+      "attempt_index": 0,
+      "requested_provider": "openai",
+      "requested_model": "gpt-6-luna",
+      "resolved_provider": "openai",
+      "resolved_model": null,
+      "provider_request_id": null,
+      "status": "failed",
+      "error_category": "model_provider",
+      "input_tokens": 0,
+      "cached_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": null,
+      "latency_ms": 1,
+      "guardSeq": null
+    },
+    {
       "operation": "rag_answer",
       "attempt_index": 0,
       "requested_provider": "openai",
@@ -517,7 +500,24 @@
       "cached_tokens": 0,
       "output_tokens": 0,
       "cost_usd": null,
-      "latency_ms": 2,
+      "latency_ms": 1,
+      "guardSeq": null
+    },
+    {
+      "operation": "hosted_ocr",
+      "attempt_index": 0,
+      "requested_provider": "openai",
+      "requested_model": "gpt-6-luna",
+      "resolved_provider": "openai",
+      "resolved_model": null,
+      "provider_request_id": null,
+      "status": "failed",
+      "error_category": "model_provider",
+      "input_tokens": 0,
+      "cached_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": null,
+      "latency_ms": 6,
       "guardSeq": null
     }
   ],
@@ -527,6 +527,6 @@
     "rowsWithoutCall": 11,
     "callsWithoutRow": []
   },
-  "finishedAt": "2026-10-09T12:12:05.132Z",
+  "finishedAt": "2026-10-09T12:23:01.678Z",
   "verdict": "PREFLIGHT (not graded)"
 }

@@ -62,5 +62,17 @@ t("a wrong automatic link fails", () => assert.ok(failedChecks(folder((f) => { f
 t("placeholder expectations are never a PASS", () => assert.equal(grade(folder((f) => { f["EXPECTED.json"] = { ...expected, placeholder: true }; })).verdict, "UNGRADED (placeholder EXPECTED.json)"));
 t("no EXPECTED.json: ungraded", () => assert.equal(grade(folder((f) => { delete f["EXPECTED.json"]; })).verdict, "UNGRADED"));
 t("relationships from free text", () => { assert.equal(appRelationship("Self (policy owner / speaker)"), "self"); assert.equal(appRelationship("Spouse of Simon"), "spouse"); assert.equal(appRelationship("Son"), "child"); assert.equal(appRelationship("Daughter"), "child"); });
-t("the placeholder questions load", () => { const q = readQuestions("scripts/ingest-live/fixture"); assert.ok(q.conversation.length >= 1 && q.deleteSource && q.afterDelete.length >= 1); });
+t("the fixture questions load (agent T's conversations + reopen / delete)", () => {
+  const q = readQuestions("scripts/ingest-live/fixture");
+  assert.equal(q.conversations.length, 8);
+  assert.deepEqual(q.conversations.find((c) => c.id === "C3")!.turns.map((x) => x.id), ["Q3", "Q4"]);
+  assert.match(q.conversations[0].turns[0].text, /policy number/);
+  assert.ok(q.deleteSource && q.afterDelete.length && q.reopen[0].conversation === "C5");
+});
+t("the sealed expectations cover every question asked", () => {
+  const q = readQuestions("scripts/ingest-live/fixture");
+  const e = JSON.parse(fs.readFileSync("scripts/ingest-live/sealed/EXPECTED.json", "utf8"));
+  for (const id of [...q.conversation, ...q.reopen, ...q.afterDelete].map((x) => x.id)) assert.ok(e.turns[id], `no expectation for ${id}`);
+  assert.ok(!e.placeholder);
+});
 console.log(`ingest-live checker regressions ${n}/${n} passed`);

@@ -11,8 +11,10 @@ import path from "node:path";
 
 export type Member = { displayName: string; preferredName: string | null; relationship: string; dateOfBirth: string | null; ref: string | null };
 export type Reply = { when: RegExp; reply: string };
-export type Question = { id: string; text: string; answers: Reply[] };
-export type Questions = { placeholder: boolean; uploadOrder: string[] | null; conversation: Question[]; reopen: Question[]; deleteSource: string | null; afterDelete: Question[]; afterDeleteSameConversation: boolean };
+export type Question = { id: string; text: string; answers: Reply[]; conversation?: string };
+/** One chat (a New chat each): its turns in order; a later turn answers what the chat asked before it. */
+export type Conversation = { id: string; turns: Question[] };
+export type Questions = { placeholder: boolean; uploadOrder: string[] | null; conversations: Conversation[]; conversation: Question[]; reopen: Question[]; deleteSource: string | null; afterDelete: Question[]; afterDeleteSameConversation: boolean };
 
 const RELATIONSHIPS = ["self", "spouse", "parent", "child", "sibling", "grandparent", "dependant", "other"];
 /** The app's relationship for free text such as "Self (policy owner / speaker)", "Spouse of Simon", "Son". */
@@ -41,7 +43,8 @@ export function readHousehold(fixture: string): Member[] {
 }
 function question(q: Record<string, unknown>, i: number, prefix: string): Question {
   const answers = (Array.isArray(q.answers) ? q.answers : Array.isArray(q.follow_up_answers) ? q.follow_up_answers : []) as Record<string, unknown>[];
-  return { id: String(q.id ?? `${prefix}${i + 1}`), text: String(q.text ?? q.question ?? q.q ?? "").trim(),
+  return { id: String(q.id ?? (typeof q.q === "string" && /^[A-Z]+\d+$/.test(q.q) ? q.q : `${prefix}${i + 1}`)), text: String(q.text ?? q.question ?? q.user ?? (typeof q.q === "string" && !/^[A-Z]+\d+$/.test(q.q) ? q.q : "")).trim(),
+    ...(typeof q.conversation === "string" ? { conversation: q.conversation } : {}),
     answers: answers.map((a) => ({ when: new RegExp(String(a.when ?? a.if_asked ?? "."), "i"), reply: String(a.reply ?? a.answer ?? "") })).filter((a) => a.reply) };
 }
 export function readQuestions(fixture: string, file = "QUESTIONS.json"): Questions {
@@ -51,9 +54,13 @@ export function readQuestions(fixture: string, file = "QUESTIONS.json"): Questio
   const j = JSON.parse(fs.readFileSync(p, "utf8"));
   const conv = (Array.isArray(j) ? j : j.conversation ?? j.questions ?? []) as Record<string, unknown>[];
   const list = (x: unknown, prefix: string) => (Array.isArray(x) ? x : x ? [x] : []).map((q, i) => question(typeof q === "string" ? { text: q } : q as Record<string, unknown>, i, prefix));
+  // Agent T's shape: { conversations: [{ id, turns: [{ q: "Q3", user: "..." }] }] }; the older flat list is one chat.
+  const conversations: Conversation[] = Array.isArray(j.conversations)
+    ? (j.conversations as Record<string, unknown>[]).map((c, ci) => ({ id: String(c.id ?? `C${ci + 1}`), turns: list(c.turns, `C${ci + 1}T`).filter((q) => q.text) }))
+    : [{ id: "C1", turns: list(conv, "Q").filter((q) => q.text) }];
   return {
     placeholder: !!j.placeholder, uploadOrder: Array.isArray(j.upload_order) ? j.upload_order : null,
-    conversation: list(conv, "Q").filter((q) => q.text), reopen: list(j.reopen ?? j.follow_up, "R").filter((q) => q.text),
+    conversations, conversation: conversations.flatMap((c) => c.turns), reopen: list(j.reopen ?? j.follow_up, "R").filter((q) => q.text),
     deleteSource: typeof (j.delete_source ?? j.deleteSource) === "string" ? (j.delete_source ?? j.deleteSource) : null,
     afterDelete: list(j.after_delete ?? j.afterDelete, "D").filter((q) => q.text), afterDeleteSameConversation: !!j.after_delete_same_conversation,
   };

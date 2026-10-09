@@ -126,7 +126,11 @@ async function main() {
     log.end();
   }
   // Only now, after every conversation: the expectations come into the run folder.
-  if (expectedPath && fs.existsSync(expectedPath)) fs.copyFileSync(expectedPath, path.join(outDir, "EXPECTED.json"));
+  if (expectedPath && fs.existsSync(expectedPath)) {
+    fs.copyFileSync(expectedPath, path.join(outDir, "EXPECTED.json"));
+    // The author's own expectations (prose, verbatim facts) travel with the machine checks derived from them.
+    for (const f of ["EXPECTED.source.json", "EXPECTED.source.md"]) if (fs.existsSync(path.join(path.dirname(expectedPath), f))) fs.copyFileSync(path.join(path.dirname(expectedPath), f), path.join(outDir, f));
+  }
   for (const f of [".processing-done", ".dump-done"]) fs.rmSync(path.join(outDir, f), { force: true });
   run.finishedAt = new Date().toISOString();
   save();

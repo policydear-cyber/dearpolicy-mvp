@@ -1,82 +1,103 @@
 {
-  "placeholder": true,
-  "note": "PLACEHOLDER written by agent E1 until agent T's expected/QUESTIONS.json replaces it. Format: see docs/rag-migration/ingest-live/README.md.",
+  "conversations": [
+    {
+      "id": "C1",
+      "turns": [
+        {
+          "q": "Q1",
+          "user": "What's the policy number on our Meridian Harbour plan, and when does it run out?"
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "turns": [
+        {
+          "q": "Q2",
+          "user": "If something happened to Isla in an accident, how much is the accidental death payout for her? Is it the same as mine?"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "two_turn_follow_up": true,
+      "turns": [
+        {
+          "q": "Q3",
+          "user": "Felix fell off the monkey bars at school yesterday and broke his wrist. How much can we claim from the Meridian policy?",
+          "expected_behaviour": "ask whether the fracture is simple/closed or compound/open (bone through skin), as certified by doctor with X-ray"
+        },
+        {
+          "q": "Q4",
+          "user": "The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin."
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "turns": [
+        {
+          "q": "Q5",
+          "user": "I was in hospital after that car accident in March. They admitted me at 9:40pm on 14 March and I was discharged at 8:20am on 18 March. How much hospital cash should Meridian pay me?"
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "turns": [
+        {
+          "q": "Q6",
+          "user": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?"
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "turns": [
+        {
+          "q": "Q7",
+          "user": "How much are we actually paying for the Meridian policy every year?"
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "turns": [
+        {
+          "q": "Q8",
+          "user": "Isla might need to stay in hospital two nights next week. Will her JuniorShield plan pay the $150 a day?"
+        }
+      ]
+    },
+    {
+      "id": "C8",
+      "side_question": true,
+      "turns": [
+        {
+          "q": "Q9",
+          "user": "Oh, by the way, if one of the kids gets dengue, which of our policies would actually pay anything?"
+        }
+      ]
+    }
+  ],
+  "source": "agent T (/mnt/files/ingest-author/expected/QUESTIONS.json); reopen / delete_source / after_delete added by agent E1",
   "upload_order": [
     "hx-text.pdf",
     "hx-endorsement.pdf",
     "hx-scanned.pdf"
   ],
-  "conversation": [
-    {
-      "id": "Q1",
-      "text": "How much hospital daily allowance would Isla get now if she is hospitalised after an accident?",
-      "answers": [
-        {
-          "when": "which|who",
-          "reply": "Isla"
-        },
-        {
-          "when": "accident|illness",
-          "reply": "It was an accident: she fell at the playground."
-        },
-        {
-          "when": "when|date",
-          "reply": "Last week, in October 2026."
-        },
-        {
-          "when": "how many|days|nights",
-          "reply": "3 days in hospital."
-        }
-      ]
-    },
-    {
-      "id": "Q2",
-      "text": "Felix was in hospital for 3 days with dengue fever. What can we claim?",
-      "answers": [
-        {
-          "when": "accident|illness|cause",
-          "reply": "It was an illness, dengue fever, not an accident."
-        },
-        {
-          "when": "when|date",
-          "reply": "Last month, in September 2026."
-        }
-      ]
-    },
-    {
-      "id": "Q3",
-      "text": "What does my scanned document say, and who is it for?"
-    }
-  ],
   "reopen": [
     {
       "id": "R1",
-      "text": "And for Isla, how much would 5 days in hospital be after that same accident?"
+      "conversation": "C5",
+      "text": "So if Isla was in hospital for exactly 3 days in August after falling at the playground, how much would Meridian pay?"
     }
   ],
   "delete_source": "hx-endorsement.pdf",
   "after_delete": [
     {
       "id": "D1",
-      "text": "How much hospital daily allowance would Isla get now if she is hospitalised after an accident?",
-      "answers": [
-        {
-          "when": "which|who",
-          "reply": "Isla"
-        },
-        {
-          "when": "accident|illness",
-          "reply": "It was an accident."
-        },
-        {
-          "when": "when|date",
-          "reply": "Last week, in October 2026."
-        },
-        {
-          "when": "how many|days|nights",
-          "reply": "3 days in hospital."
-        }
-      ]
+      "text": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?"
     }
   ]
 }
