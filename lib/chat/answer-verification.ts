@@ -421,8 +421,39 @@ function questionDate(sentence: string | null, userText: string, effective: stri
   const pick = (t: string) => datesIn(t).filter((x) => x !== effective);
   return (sentence ? pick(sentence)[0] : undefined) ?? pick(userText)[0] ?? new Date().toISOString().slice(0, 10);
 }
-/** A sentence that presents a figure as the earlier value ("previously S$1,000,000", "raised from S$1,000,000 to ..."). */
-const PRESENTED_AS_EARLIER = /\b(?:previous(?:ly)?|formerly|originally|earlier|before (?:the |this |that )?(?:endorsement|amendment|alteration|change|revision)|(?:raised|increased|reduced|decreased|cut|lowered|changed|amended|revised|moved) from|up from|down from|replac(?:es|ed|ing))\b/i;
+/** Whether `sentence` presents the figure `value` itself as the EARLIER value of a change, decided at the figure's own
+ * position: a marker must stand directly before that figure ("Before S$X; After S$Y", "from S$X to S$Y", "raised ...
+ * from S$X", "previously S$X", "was S$X, now S$Y", "replacing S$X", or the table's own column label quoted next to it),
+ * and the later value of the same row must be stated in the sentence too. A marker attached to another figure ("was
+ * S$500 ... the limit is S$X") or anywhere else in the sentence does not count. */
+const CHANGE_VERB = /\b(?:raised|raises|increased|increases|reduced|reduces|decreased|decreases|lowered|lowers|cut|changed|changes|amended|amends|revised|revises|moved|moves|went|goes|rose|rises|fell|falls|dropped|drops|adjusted|adjusts|altered|alters)\b/i;
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+export function earlierValuePresented(sentence: string, value: number, beforeLabels: string[], laterValues: number[]): boolean {
+  const s = sentence ?? "";
+  if (!laterValues.length || !moneyFiguresIn(s).some((f) => laterValues.some((l) => same(l, f.value)))) return false;
+  const labels = [...new Set(beforeLabels.map((l) => l.trim()).filter((l) => l.length >= 2 && l.length <= 40))].map(escRe);
+  const marker = new RegExp("(?:^|[^\\p{L}])(" + ["previous(?:ly)?", "formerly", "originally", "earlier", "old", "original", "existing", "prior", "before", "was", "were", "from", "replacing", "replaces", "replaced", "up from", "down from", ...labels].join("|") + ")"
+    + "(?:\\s+(?:of|at|the|a|an|limit|amount|figure|sum|value|level|benefit|cover))*\\s*[:=–—-]?\\s*[\"“”‘’'(]?\\s*$", "iu");
+  // ... or a marker directly after it ("S$X before the change, S$Y from ...", "S$X (Before)", "S$X previously").
+  const postMarker = new RegExp("^\\s*[,;]?\\s*[\"“”‘’'(]?\\s*(?:(?:before|prior to)\\s+(?:the\\s+|this\\s+|that\\s+|its\\s+)?(?:endorsement|amendment|alteration|change|revision|reduction|increase|decrease|update)|previously|originally|formerly|earlier|(?:in|under|on) the (?:earlier|previous|old|original|former) (?:schedule|policy|terms|version)|(?:as )?the (?:old|previous|earlier|original|former) (?:figure|value|amount|limit|sum)" + (labels.length ? "|(?:" + labels.join("|") + ")[\"“”‘’')]" : "") + ")(?![\\p{L}])", "iu");
+  const all = [...s.matchAll(FIGURE), ...s.matchAll(BARE_DOLLAR)].map((m) => ({ at: m.index!, end: m.index! + m[0].length, raw: m[0] })).sort((a, b) => a.at - b.at);
+  for (let i = 0; i < all.length; i++) {
+    const f = all[i];
+    const v = moneyFiguresIn(f.raw)[0];
+    if (!v || !same(v.value, value)) continue;
+    const prevEnd = i > 0 ? all[i - 1].end : 0;
+    const nextAt = i + 1 < all.length ? all[i + 1].at : s.length;
+    if (postMarker.test(s.slice(f.end, nextAt))) return true;
+    const m = s.slice(prevEnd, f.at).match(marker);
+    if (!m) continue;
+    const word = m[1].toLowerCase(), after = s.slice(f.end);
+    const laterAfter = () => all.slice(i + 1).some((g) => moneyFiguresIn(g.raw).some((x) => laterValues.some((l) => same(l, x.value))));
+    if (word === "from") { if (!(CHANGE_VERB.test(s.slice(0, f.at)) || /^\s*[,)]?\s*(?:to|→|->|–|—)\s/i.test(after)) || !(laterAfter() || CHANGE_VERB.test(s.slice(0, f.at)))) continue; }
+    else if (word === "was" || word === "were") { if (!/\b(?:now|currently|today|at present)\b/i.test(after) || !laterAfter()) continue; }
+    return true;
+  }
+  return false;
+}
 const brandWords = (product: string | null) => (product ?? "").toLowerCase().match(/[a-z][a-z0-9]{3,}/g)?.filter((w) => !/^(?:plan|plans|insurance|assurance|policy|family|health|life|personal|accident|hospital|integrated|shield|cover|care|protect|protection|benefit|benefits|schedule|endorsement|group|term|whole|travel|medical|critical|illness|guard|plus|basic|standard|premier|gold|silver|platinum)$/.test(w)) ?? [];
 
 type TableHead = { top: number; head: string[]; full: string[] };
@@ -501,12 +532,16 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
     const cls = classProblem(dims.version ? t.full[j].replace(dims.version.words, " ").replace(/\s*\/\s*$|^\s*\/\s*/g, "").trim() || null : t.full[j], subject, opts.ownerId ?? null);
     if (cls) return cls;
     if (dims.stage && opts.sentence != null && !new RegExp("\\b" + dims.stage.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/[ -]/g, "[ -]") + "\\b", "i").test(opts.sentence)) return `the figure is printed in the “${t.full[j]}” column, and the sentence does not say it is for that stage`;
-    return versionProblem(dims, t.full, opts.doc ?? null, opts.sentence ?? null, opts.userText ?? "");
+    // The row's other versions: the later (after) values, and the labels of the earlier (before) columns.
+    const sideOf = (x: number) => columnDimensions(t.full[x]).version?.side ?? null;
+    const later = value_js.filter((x) => sideOf(x) === "after").flatMap((x) => (cells[x + off] ?? "").replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const beforeLabels = value_js.filter((x) => sideOf(x) === "before").flatMap((x) => [t.head[x], columnDimensions(t.full[x]).version?.words ?? ""]);
+    return versionProblem(dims, t.full, opts.doc ?? null, opts.sentence ?? null, opts.userText ?? "", { value, later, beforeLabels });
   }
   return col ? "the table column the figure is stated for is not printed above its row" : unbound;
 }
 /** The version dimension: the figure's column must be the version in force on the date the sentence is about. */
-function versionProblem(dims: ColumnDimensions, headers: string[], doc: Doc | null, sentence: string | null, userText: string): string | null {
+function versionProblem(dims: ColumnDimensions, headers: string[], doc: Doc | null, sentence: string | null, userText: string, row: { value: number; later: number[]; beforeLabels: string[] } = { value: NaN, later: [], beforeLabels: [] }): string | null {
   if (!dims.version || !versionPairOf(headers)) return null;
   const own = headers.map((h) => columnDimensions(h).version?.effective).find(Boolean) ?? null;
   const eff = dims.version.effective ?? own ?? (doc ? changeDateOf(doc) : null);
@@ -519,8 +554,9 @@ function versionProblem(dims: ColumnDimensions, headers: string[], doc: Doc | nu
     return `the figure is the amended value, which takes effect on ${eff}, after the date the sentence is about (${asOf})`;
   }
   if (v.side === "before") return null;
-  if (sentence != null && PRESENTED_AS_EARLIER.test(sentence)) return null;
-  if (!v.side && !eff) return "the figure is the earlier value, and " + v.reason;
+  // The earlier value of a change, presented as such next to the figure, with the later (in-force) value stated too.
+  if (v.side === "after" && sentence != null && earlierValuePresented(sentence, row.value, row.beforeLabels, row.later)) return null;
+  if (!v.side) return (eff ? `the figure is the value before the change effective ${eff}, and ` : "the figure is the earlier value, and ") + v.reason;
   return `the figure is the value before the change effective ${eff}, and the sentence states it for ${asOf}, when the amended value applies`;
 }
 /** An endorsement's link: it must amend a policy of this household that speaks for the person (same policy number,

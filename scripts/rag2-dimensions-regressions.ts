@@ -251,6 +251,45 @@ async function main() {
     assert.ok((await verifyAnswerFigures(a2, { accountId: ACCOUNT_P, userText: "" })).length >= 1, "another version");
   });
 
+  // =========================================================================== the earlier value of a change, presented as such
+  const kRow = (v: number) => ({ who: LIVE.daniel, benefit: "Annual claim limit", passage: kPassage, column: null, value: v });
+  await check("P1 the earlier value passes when a marker stands at that figure and the later, in-force value is stated (every form, three insurers)", async () => {
+    // The live L5b sentence, exactly as the model wrote it ("raised ... from X to Y").
+    await gate("L5b", KE, [kRow(1_000_000), kRow(1_500_000)], "Yes—the endorsement effective 1 July 2026 raised your KestrelShield “Annual claim limit” from S$1,000,000 to S$1,500,000, so the current limit is S$1,500,000 (page 1).", "accepted", undefined, "Has my KestrelShield limit changed?");
+    // The H3-S001 quote shape: the column labels printed next to the values.
+    await gate("Before X; After Y quoted", KE, [kRow(1_000_000), kRow(1_500_000)], "“Annual claim limit: Before S$1,000,000; After S$1,500,000” (page 1).", "accepted", undefined, "What's my KestrelShield annual claim limit?");
+    await gate("X before the change, Y from ...", KE, [kRow(1_000_000), kRow(1_500_000)], "Annual claim limit: S$1,000,000 before the change, S$1,500,000 from 1 July 2026 (raised).", "accepted");
+    const d = doc("P_ENDT"), yl = passageOf(d, "Yearly claim limit"), rb = passageOf(d, "Room and board");
+    const y = (v: number) => ({ who: M.aaron, benefit: "Yearly claim limit", passage: yl, column: null, value: v });
+    await gate("from X to Y", d, [y(800_000), y(1_200_000)], "The endorsement takes Aaron's yearly claim limit from S$800,000 to S$1,200,000.", "accepted");
+    await gate("replacing X", d, [{ who: M.aaron, benefit: "Room and board (per day)", passage: rb, column: null, value: 550 }, { who: M.aaron, benefit: "Room and board (per day)", passage: rb, column: null, value: 400 }], "Aaron's room and board benefit is S$550 a day, replacing S$400.", "accepted");
+    await gate("labels quoted before the values", d, [y(800_000), y(1_200_000)], "Aaron's yearly claim limit: “Previous” S$800,000, “Revised” S$1,200,000.", "accepted");
+    await gate("label quoted after the value", d, [y(800_000), y(1_200_000)], "Aaron's yearly claim limit is S$1,200,000 (Revised), S$800,000 (Previous).", "accepted");
+    const n = doc("N_ENDT"), al = line(n, "Annual limit");
+    await gate("previously X", n, [{ who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – New", value: 650_000 }, { who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – Old", value: 500_000 }], "Devi's annual limit is now S$650,000 (previously S$500,000).", "accepted");
+    await gate("was X, now Y", n, [{ who: M.ethan, benefit: "Annual limit", passage: al, column: "Child – Old", value: 250_000 }, { who: M.ethan, benefit: "Annual limit", passage: al, column: "Child – New", value: 300_000 }], "Ethan's annual limit was S$250,000 and is now S$300,000.", "accepted");
+    await gate("Old label quoted", n, [{ who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – Old", value: 500_000 }, { who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – New", value: 650_000 }], "Devi's annual limit: Adult – Old S$500,000; Adult – New S$650,000.", "accepted");
+  });
+  await check("P2 still blocked: the earlier value stated as current, with no marker, with a marker on another figure, or without the later value", async () => {
+    await gate("stated as current (later value elsewhere)", KE, [kRow(1_000_000), kRow(1_500_000)], "Your annual claim limit is S$1,000,000, and the endorsement prints S$1,500,000.", "rejected", /before the change/);
+    await gate("marker on another figure", KE, [kRow(1_000_000), kRow(1_500_000)], "Since July the annual claim limit was S$1,500,000, and your annual claim limit is S$1,000,000.", "rejected", /before the change/);
+    await gate("marker but no later value", KE, [kRow(1_000_000)], "Your annual claim limit was previously S$1,000,000.", "rejected", /before the change/);
+    await gate("'was' without 'now'", KE, [kRow(1_000_000), kRow(1_500_000)], "Your annual claim limit was S$1,000,000 and is S$1,500,000.", "rejected", /before the change/);
+    await gate("'from' with no change and no 'to'", doc("P_ENDT"), [{ who: M.aaron, benefit: "Yearly claim limit", passage: passageOf(doc("P_ENDT"), "Yearly claim limit"), column: "Previous", value: 800_000 }, { who: M.aaron, benefit: "Yearly claim limit", passage: passageOf(doc("P_ENDT"), "Yearly claim limit"), column: "Revised", value: 1_200_000 }], "Aaron's yearly claim limit is S$1,200,000; claims are paid from S$800,000 upwards.", "rejected", /before the change/);
+  });
+  await check("P3 a change marker does not let through the wrong person, policy or endorsement", async () => {
+    const fc = doc("P_FC_ENDT"), p = passageOf(fc, "Outpatient fracture");
+    await gate("wrong person", fc, [{ who: M.caleb, benefit: "Outpatient fracture benefit", passage: p, column: "Before", value: 1_000 }, { who: M.caleb, benefit: "Outpatient fracture benefit", passage: p, column: "After", value: 1_400 }], "Caleb's outpatient fracture benefit went from S$1,000 to S$1,400.", "rejected", /adults|class/);
+    const n = doc("N_ENDT"), al = line(n, "Annual limit");
+    await gate("wrong policy", n, [{ who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – Old", value: 500_000 }, { who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – New", value: 650_000 }], "Devi's Voyager annual limit went from S$500,000 to S$650,000.", "rejected", /another policy/);
+    const f = doc("N_ENDT_FUT"), sb = passageOf(f, "Surgical benefit");
+    await gate("not yet in force", f, [{ who: M.devi, benefit: "Surgical benefit", passage: sb, column: null, value: 20_000 }, { who: M.devi, benefit: "Surgical benefit", passage: sb, column: null, value: 26_000 }], "Devi's surgical benefit goes from S$20,000 to S$26,000.", "rejected", /takes effect/, "What is my surgical benefit on 1 November 2026?");
+    const e = doc("N_ENDT_EXP"), dw = passageOf(e, "Daily ward allowance");
+    await gate("ended", e, [{ who: M.devi, benefit: "Daily ward allowance", passage: dw, column: null, value: 150 }, { who: M.devi, benefit: "Daily ward allowance", passage: dw, column: null, value: 200 }], "Devi's daily ward allowance went from S$150 to S$200.", "rejected", /ended on 2026-06-30/);
+    const u = doc("N_UNREL"), ul = passageOf(u, "Annual limit");
+    await gate("unrelated policy", u, [{ who: M.devi, benefit: "Annual limit", passage: ul, column: null, value: 500_000 }, { who: M.devi, benefit: "Annual limit", passage: ul, column: null, value: 777_000 }], "Devi's annual limit went from S$500,000 to S$777,000.", "rejected", /not one of this household/);
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2:dimensions-test ${results.length - failed.length}/${results.length} passed`);
   await db.close();
