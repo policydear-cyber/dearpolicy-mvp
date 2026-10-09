@@ -21,6 +21,7 @@ import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./stor
 import { columnApplicability, columnFitProblem, personApplicability, relationOf, type PersonApplicability, type RelationClass } from "./people";
 import { personClause } from "@/lib/policies/member-tiers";
 import { columnDimensions, datesIn, versionInForce, versionPairOf, type ColumnDimensions, type VersionSide } from "@/lib/claims/person";
+import { parseCell, type Period } from "./value-terms";
 
 export type ColumnKind = "label" | "condition" | "amount" | "percent" | "count" | "unit" | "notes";
 export type Cell = { text: string; start: number; end: number };
@@ -265,52 +266,7 @@ function finalizeKinds(t: Table) {
 // Values
 // ---------------------------------------------------------------------------------------------------------------
 
-export type Period = "day" | "night" | "visit" | "week" | "month" | "year" | "policy_year" | "event" | "accident" | "lifetime" | "claim" | "operation" | null;
-export type ParsedValue =
-  | { kind: "money"; cents: number; amount: number; currency: string; unit: string | null; period: Period; raw: string }
-  | { kind: "percent"; ppm: number; percent: number; unit: "%"; period: Period; raw: string }
-  | { kind: "count"; count: number; unit: string; period: Period; raw: string }
-  | { kind: "text"; text: string; raw: string };
-
-/** Integer cents from a printed amount ("1,234.5" -> 123450); exact (string arithmetic, no float). */
-export function toCents(digits: string): number {
-  const [w, f = ""] = digits.replace(/,/g, "").split(".");
-  return Number(w) * 100 + Number((f + "00").slice(0, 2)) + (f.length > 2 && Number(f[2]) >= 5 ? 1 : 0);
-}
-export function periodIn(text: string): Period {
-  const t = text.toLowerCase();
-  if (/\bper (?:policy|insurance) year\b|\bpolicy year\b/.test(t)) return "policy_year";
-  if (/\bper day\b|\ba day\b|\bdaily\b|\/day\b|\bper night\b/.test(t)) return /night/.test(t) ? "night" : "day";
-  if (/\bper visit\b|\bper session\b/.test(t)) return "visit";
-  if (/\bper week\b|\bweekly\b/.test(t)) return "week";
-  if (/\bper month\b|\bmonthly\b/.test(t)) return "month";
-  if (/\bper (?:annum|year)\b|\bannual(?:ly)?\b|\bp\.a\.\b|\byearly\b/.test(t)) return "year";
-  if (/\bper (?:accident|injury)\b/.test(t)) return "accident";
-  if (/\bper (?:event|occurrence|disability|admission)\b/.test(t)) return "event";
-  if (/\bper (?:operation|surgery)\b/.test(t)) return "operation";
-  if (/\bper claim\b/.test(t)) return "claim";
-  if (/\blifetime\b/.test(t)) return "lifetime";
-  return null;
-}
-/** The value one cell prints (with the column's currency for a bare figure under "Benefit (S$)"). */
-export function parseCell(text: string, columnCurrency: string | null = null, context = ""): ParsedValue {
-  const raw = text.trim();
-  const period = periodIn(raw) ?? periodIn(context);
-  const m = raw.match(/(SGD|USD|MYR|HKD|AUD|EUR|GBP|S\$|SG\$|US\$|HK\$|A\$|RM|€|£)\s?(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|million)\b)?/i);
-  if (m) {
-    const mult = m[3] ? (/^k$/i.test(m[3]) ? 1000 : 1_000_000) : 1;
-    const cents = toCents(m[2]) * mult;
-    return { kind: "money", cents, amount: cents / 100, currency: normCurrency(m[1]), unit: period ? "per " + period.replace("_", " ") : null, period, raw };
-  }
-  const p = raw.match(/^(\d+(?:\.\d+)?)\s?%/);
-  if (p) { const ppm = Math.round(Number(p[1]) * 10000); return { kind: "percent", ppm, percent: ppm / 10000, unit: "%", period, raw }; }
-  const c = raw.match(/^(\d+)\s*(days?|nights?|visits?|weeks?|months?|years?|sessions?|times)\b/i);
-  if (c) return { kind: "count", count: Number(c[1]), unit: c[2].toLowerCase().replace(/s$/, ""), period, raw };
-  const bare = raw.match(/^(\d[\d,]*(?:\.\d+)?)$/);
-  if (bare && columnCurrency) { const cents = toCents(bare[1]); return { kind: "money", cents, amount: cents / 100, currency: columnCurrency, unit: period ? "per " + period : null, period, raw }; }
-  if (bare) return { kind: "count", count: Number(bare[1].replace(/,/g, "")), unit: "", period, raw };
-  return { kind: "text", text: raw, raw };
-}
+export { parseCell, periodIn, toCents, type ParsedValue, type Period } from "./value-terms";
 
 // ---------------------------------------------------------------------------------------------------------------
 // Selecting one value
