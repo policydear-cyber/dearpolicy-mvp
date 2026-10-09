@@ -123,6 +123,7 @@ import { registryAnswer, otherPoliciesOnFile } from "./registry-answers";
 import { amendmentAnswer } from "./amendment-answers";
 import { correctTypos } from "./typos";
 import { documentQuestionAnswer, printedLinesAnswer, printedRepair, provenanceAnswer } from "./document-questions";
+import { catalogueRequest } from "./intent-catalogue";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
@@ -1664,18 +1665,24 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   // Round 10: a question about the uploads themselves (what couldn't be read and why, copies, a
   // bundle, pages out of order), or about a letter, claim decision, bill, app screenshot or the
   // family's own notes: answered from that paper, said for what it is (lib/chat/document-questions.ts).
+  // A request for the catalogue itself ("list my docs", "show me my files", "which policies do you have for us") is
+  // answered as one, mid-claim too -- never read as the claim's next message (lib/chat/intent-catalogue.ts).
+  const catalogue=whatIfReply||request.personChoiceId?null:catalogueRequest(request.submittedQuestion??request.question,context.family.flatMap(p=>[p.display_name,p.preferred_name??""]).filter(Boolean));
+  // The documents on file are listed from the uploads; the policies held, mid-claim, the same way (the portfolio
+  // answer below is for a chat not in a claim, and a question it already reads as one keeps going there).
+  const catalogueOfUploads=!!catalogue&&(catalogue.noun==="documents"||(conversation.state.intent==="claim"||!!conversation.state.pending)&&!COVERAGE_OVERVIEW.test(request.submittedQuestion??request.question));
   if(!whatIfReply&&!context.outside&&!request.personChoiceId){
     if(!state.documents&&context.carriedDocuments)state={...state,documents:context.carriedDocuments};
     const current=context.family.find(p=>p.id===(request.familyMemberId??conversation.family_member_id))??null;
     // Round 10: "is that from the policy?": which document and page the last answer came from, not that answer again.
     // (While the claim waits on its question, a message is its answer; a question of its own is answered on the side, above.)
     // (While the claim waits on its question, a message is its answer -- unless it disputes a figure a policy change replaced.)
-    const registry=state.pending&&/:\s/.test(request.question)?null:(await amendmentAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,topic:state.activeQuery??state.sideQuery??null}).catch(()=>null)??(state.pending?null:await registryAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,family:context.family,people:context.people,
+    const registry=catalogueOfUploads||state.pending&&/:\s/.test(request.question)?null:(await amendmentAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,topic:state.activeQuery??state.sideQuery??null}).catch(()=>null)??(state.pending?null:await registryAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,family:context.family,people:context.people,
       previous:state.documents?.kind==="registry"?state.documents.asked??null:null,ambiguous:!!context.ambiguity&&context.ambiguity.status!=="resolved"}).catch(()=>null)));
     const paper=await provenanceAnswer({accountId:request.accountId,conversationId:conversation.id,question:request.submittedQuestion??request.question}).catch(()=>null)
       ??(registry?{summary:registry.summary,details:registry.details,nextSteps:[],citations:registry.citations,personId:registry.personId,
         patch:{intent:"policy_question" as const,documents:{kind:"registry" as const,ids:[],asked:registry.asked},activeQuery:registry.keepTopic&&state.activeQuery?state.activeQuery:registry.topic?(request.submittedQuestion??request.question).replace(/[?.!\s]+$/,"")+" on the "+registry.topic+"?":request.submittedQuestion??request.question}}:null)
-      ??await documentQuestionAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,family:context.family,current,state,subjects:context.people}).catch(()=>null);
+      ??await documentQuestionAnswer({accountId:request.accountId,question:catalogueOfUploads?catalogue!.canonical.replace(/ policies$/," documents"):request.submittedQuestion??request.question,family:context.family,current,state,subjects:context.people}).catch(()=>null);
     if(paper){
       state={...state,...paper.patch};
       answer.mode="answer";answer.summary=paper.summary;answer.details=paper.details;answer.nextSteps=paper.nextSteps;answer.citations=paper.citations;answer.confidence=null;
@@ -2005,7 +2012,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(scope&&!otherKind){state.intent="policy_question";state.activeQuery=sentNow.replace(/[?.!\s]+$/,"")+" on the "+scope+"?";carriedQuestion=state.activeQuery;}
         }
         // "What is Kai Ting covered for?", "list all our policies": the policies on file, per person.
-        if(!pendingBefore&&!reportsSomething&&COVERAGE_OVERVIEW.test(sentNow)&&!topicsNow.length&&!coverageTopics(sentNow).length){state.intent="portfolio";state.activeQuery=sentNow;}
+        if(!pendingBefore&&!reportsSomething&&(COVERAGE_OVERVIEW.test(sentNow)||catalogue?.noun==="policies")&&!topicsNow.length&&!coverageTopics(sentNow).length){state.intent="portfolio";state.activeQuery=sentNow;}
         // Round 12: "show me the full list" after a short answer: the same question, every line.
         if(!pendingBefore&&!reportsSomething&&before.activeQuery&&before.intent&&before.intent!=="claim"&&FULL_LIST_FOLLOW_UP.test(sentNow)&&!COVERAGE_OVERVIEW.test(sentNow)&&sentNow.split(/\s+/).length<=8&&!explicitPeople(sentNow,context.family).length){
           state.intent="policy_question";state.activeQuery=before.activeQuery;carriedQuestion=before.activeQuery;wantsFullList=true;
