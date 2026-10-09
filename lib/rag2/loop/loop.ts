@@ -23,7 +23,7 @@ import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -403,12 +403,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
    * restate it as its evidence prints it; the second answer is final (hook.ts drops what the gate still rejects and
    * names the benefit and document). Never a rewrite by us: nothing is added to what the model wrote. */
   const gateRepair = async (c: Composed): Promise<string | null> => {
-    const texts = [...c.sentences.map((s) => s.text), ...(c.notes ?? [])];
+    // The same paragraphs the hook shows (a removal limitation kept with the figure it qualifies).
+    const texts = keepLimitationWithFigure([...c.sentences.map((s) => s.text), ...(c.notes ?? [])]);
     const dateDrops = c.dropped.some((d) => d.reason.startsWith(DATE_ABSENCE_REASON));
-    if (!dateDrops && !texts.some((t) => moneyFiguresIn(t).length)) return null;
+    if (!dateDrops && !texts.length) return null;
     const draft = { mode: "answer", summary: texts[0] ?? "", details: texts.slice(1), claimItems: [], nextSteps: c.nextSteps, confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], figureBindings: c.figureBindings, computations: c.computations, ...(c.calculations.length ? { calculations: c.calculations } : {}) } as unknown as ChatAnswer;
     let problems: Awaited<ReturnType<typeof verifyAnswerFigures>> = [];
-    if (texts.some((t) => moneyFiguresIn(t).length)) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true }); } catch { return null; }
+    if (texts.length) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true }); } catch { return null; }
     const squash = (x: string) => x.replace(/\s+/g, " ").trim().toLowerCase();
     const lines = problems.flatMap((p) => {
       const b = squash(p.sentence);
@@ -420,7 +421,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     });
     for (const d of c.dropped) if (d.reason.startsWith(DATE_ABSENCE_REASON)) lines.push(`"${d.sentence}" -- ${d.reason}`);
     if (!lines.length) return null;
-    return `the save-time check would not show ${lines.length > 1 ? "these sentences" : "this sentence"}: ${[...new Set(lines)].join("; ")}. Call final_answer again with the same sentences, rewriting only ${lines.length > 1 ? "these" : "this one"}: state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. "previously X, and Y from <date>"), or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.`;
+    return `the save-time check would not show ${lines.length > 1 ? "these sentences" : "this sentence"}: ${[...new Set(lines)].join("; ")}. Call final_answer again with the same sentences, rewriting only ${lines.length > 1 ? "these" : "this one"} so that what the check says is missing or wrong is fixed: if it says a limitation is not stated (e.g. an amendment document was removed, so the current amount may differ), keep the figure and state that limitation in the same sentence; state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. "previously X, and Y from <date>"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.`;
   };
   /** Round 8 (F1): after the one repair, a sentence still left out for claiming a printed date is absent is named
    * precisely -- the benefit and the document -- instead of the generic note. */

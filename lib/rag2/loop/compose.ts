@@ -14,6 +14,7 @@ import { calcOutcomes } from "../calc/tool";
 import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
+import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
 import { printedPeriodsOf } from "@/lib/chat/assertions";
 import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import type { ComputeOk, TableValueOperand } from "../compute";
@@ -244,6 +245,19 @@ export function printedDateIn(text: string): string | null {
   const m = new RegExp(String.raw`\b(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:${MONTHS})\.?,?\s+\d{4}|(?:${MONTHS})\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/.]\d{1,2}[/.]\d{4})\b`, "i").exec(text);
   return m ? m[0] : null;
 }
+/** Round 8b: a figure-free sentence saying an amendment document was removed (so the current amount may differ) stays
+ * in the same paragraph as the figure sentence right after it, which it qualifies -- shown together, and checked by
+ * the save-time gate as that figure's limitation. */
+export function keepLimitationWithFigure(body: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < body.length; i++) {
+    const s = body[i], next = body[i + 1];
+    if (next != null && STATES_REMOVAL_LIMITATION.test(s) && !moneyFiguresIn(s).length && moneyFiguresIn(next).length) { out.push(s + " " + next); i++; continue; }
+    out.push(s);
+  }
+  return out;
+}
+
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
   const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
   // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).

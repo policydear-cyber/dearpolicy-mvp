@@ -14,7 +14,7 @@ import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
-import { DECISION_NOTE, DROPPED_NOTE, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
+import { DECISION_NOTE, DROPPED_NOTE, keepLimitationWithFigure, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
@@ -207,7 +207,7 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     const lead = notes.length ? [notes.join(" "), ...texts] : texts;
     // Agent P (task 3): the composer's notes are user-facing caveats (or, when nothing could be kept, one accurate
     // explanation) -- never commentary on what was removed.
-    const body = [...lead, ...(c.notes ?? []), ...(unknownPeople.length ? [unknownPersonText(unknownPeople)] : [])];
+    const body = keepLimitationWithFigure([...lead, ...(c.notes ?? []), ...(unknownPeople.length ? [unknownPersonText(unknownPeople)] : [])]);
     answer.summary = body[0] ?? (c.dropped.length ? DROPPED_NOTE : FALLBACK_TEXT);
     answer.details = body.slice(1);
     if (c.sentences.some((s) => s.estimate)) answer.disclaimer = ESTIMATE_NOTICE;

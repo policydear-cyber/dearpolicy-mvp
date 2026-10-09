@@ -88,7 +88,7 @@ async function startHarness() {
     const c = (await db.query("SELECT state FROM chat_conversations WHERE id=$1", [conversationId])).rows[0] as { state: any };
     return { answer: m.answer_json, state: c.state };
   };
-  return { send, saved };
+  return { send, saved, db };
 }
 
 /** Wraps the scripted model so each call reports the tokens its request would cost (about 4 characters a token) and
@@ -292,6 +292,53 @@ async function main() {
     show("H3", asIfReal[1]);
     assert.doesNotMatch(asIfReal[1].visible, /S\$330/, asIfReal[1].visible);
   });
+
+  // ------------------------------------------------------------------------------------------- D1 (replay)
+  // The endorsement was deleted before D1 (as in the dump): the tools flag the schedule's policy, the save-time gate
+  // accepts the remaining schedule's S$80 only with that limitation, and the loop's one repair passes the gate's
+  // reason back so the model can add it.
+  const endtState = String((TB.policies as any[]).find((p) => p.id === ENDT).lifecycle_state);
+  assert.notEqual(endtState, "active", "the dump's endorsement is removed");
+  await h.db.query("UPDATE policies SET lifecycle_state=$2, updated_at=now() WHERE id=$1", [ENDT, endtState]);
+  const D1 = "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?";
+  const HDA = "Hospital daily allowance (per day of confinement, max 60 days per policy year)";
+  const d1Head = [
+    () => [call("policies_for", { topic: "hospital", subject_id: felix }), call("policies_for", { topic: "hospital", subject_id: isla })],
+    () => [call("search_passages", { k: 10, query: "endorsement letter changes amendment hospital allowance daily hospital cash benefit endorsement" })],
+    () => [call("select_table_value", { tier: "Child", want: "amount", benefit: HDA, policy_id: SAFE, subject_id: felix }), call("select_table_value", { tier: "Child", want: "amount", benefit: HDA, policy_id: SAFE, subject_id: isla })],
+    () => [call("search_passages", { k: 20, query: "accident-only confinement results solely and directly from an accident" })],
+  ];
+  const flagged = (v: ScriptView) => { if (!JSON.stringify(v.turn.map((o) => o.result)).includes("removedAmendments")) throw new Error("script: no tool result carried removedAmendments"); };
+  const d1Values = (v: ScriptView) => { const vs = v.turn.filter((o) => o.name === "select_table_value" && o.ok).map((o) => o.result.data.valueId as string); return [...new Set(vs)]; };
+  const d1Answer = (first: (v: ScriptView) => Record<string, unknown>[], repaired: (v: ScriptView) => Record<string, unknown>[]): ScriptTurn[] => [{ steps: [...d1Head,
+    (v) => { flagged(v); return [call("final_answer", { subject_id: felix, sentences: first(v) })]; },
+    (v) => [call("final_answer", { subject_id: felix, sentences: repaired(v) })],
+  ] }];
+  const accidentOnly = (v: ScriptView) => ({ text: "The SafeStay allowance is accident-only, so it applies only when confinement results solely and directly from an accident and begins within 90 days of it.", subject_id: felix, evidence_ids: [hit(v, /solely and directly/)] });
+  const LIVE_D1 = "I can’t confirm that the endorsement letter changed anything: the current documents I can see show no recorded amendments, and the SafeStay schedule lists Felix and Isla at S$80 per day under “Hospital daily allowance,” up to 60 days per policy year.";
+  const d1 = await run(d1Answer(
+    (v) => [{ text: LIVE_D1, benefit: HDA, value_ids: d1Values(v), subject_id: felix }, accidentOnly(v)],
+    (v) => [{ text: "An amendment document for the SafeStay policy was removed from your library, so the current amount may differ from what the remaining schedule shows: it lists Felix and Isla at S$80 per day under “Hospital daily allowance,” up to 60 days per policy year.", benefit: HDA, value_ids: d1Values(v), subject_id: felix }, accidentOnly(v)],
+  ), [D1]);
+  show("D1", d1[0]);
+  const d1Shown = (t: { visible: string; trace: any }, label: string) => {
+    const asked = (t.trace.toolCalls as any[]).filter((x) => x.name === "final_answer" && !x.ok);
+    assert.equal(asked.length, 1, `${label}: one bounded repair: ${JSON.stringify(t.trace.toolCalls.map((x: any) => [x.name, x.ok]))}`);
+    assert.match(String(asked[0].error), /removed from the library/, `${label}: the repair carries the gate's reason`);
+    assert.match(t.visible, /S\$80 per day/, `${label}:\n${t.visible}`);
+    assert.match(t.visible, /(?:amendment|endorsement)[^.]*(?:removed|deleted)[^.]*(?:may differ|can[’']t confirm)/i, `${label}: the limitation:\n${t.visible}`);
+    assert.doesNotMatch(t.visible, /no recorded amendments|S\$110|couldn’t confirm one of the figures/i, `${label}:\n${t.visible}`);
+    assert.match(t.visible, /accident-only/);
+    assert.deepEqual(t.trace.gate, []);
+  };
+  await check("D1 endorsement deleted: the remaining schedule's S$80 is stated with the limitation (repaired once from the gate's reason); never \"no recorded amendments\"", () => d1Shown(d1[0], "D1"));
+  // Paraphrase / layout: the limitation in the sentence before the figure, the first attempt saying nothing amends it.
+  const d2 = await run(d1Answer(
+    (v) => [{ text: "Nothing on file amends SafeStay, so Felix's and Isla's hospital daily allowance is S$80 per day.", benefit: HDA, value_ids: d1Values(v), subject_id: felix }, accidentOnly(v)],
+    (v) => [{ text: "An endorsement to the SafeStay policy was deleted from your documents, so I can’t confirm the current daily amount.", subject_id: felix }, { text: "The remaining SafeStay schedule shows S$80 per day for each child under “Hospital daily allowance”.", benefit: HDA, value_ids: d1Values(v), subject_id: felix }, accidentOnly(v)],
+  ), ["Was the kids' SafeStay daily hospital allowance changed by the endorsement? What is it now?"]);
+  show("D1 paraphrase", d2[0]);
+  await check("D2 paraphrase (limitation in the previous sentence): the same", () => d1Shown(d2[0], "D2"));
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2 conv6 regressions ${results.length - failed.length}/${results.length} passed`);
