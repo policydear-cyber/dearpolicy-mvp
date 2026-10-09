@@ -201,19 +201,46 @@ function isNonNegativeInteger(value: unknown): value is number {
  *  completed_24h          "for each complete period of 24 hours" -- completed 24-hour periods from admission;
  *  per_night              "for each night" -- local midnights spent in hospital;
  *  calendar_day_inclusive "each day or part of a day" -- every local calendar date of the stay, both ends included. */
-export type PolicyDayRule = "first_full_day" | "completed_24h" | "per_night" | "calendar_day_inclusive";
+/** completed_24h_remainder: each complete 24 hours is a day, and a remaining part of at least `remainderHours` counts as one
+ * more day ("Any remaining period of 12 hours or more counts as one further day"). */
+export type PolicyDayRule = "first_full_day" | "completed_24h" | "completed_24h_remainder" | "per_night" | "calendar_day_inclusive";
 
 const RULE_WORDING: [PolicyDayRule, RegExp][] = [
   ["first_full_day", /\bfirst\s+(?:full|complete|whole)\s+(?:calendar\s+)?day\b|\b(?:each|every|per)\s+(?:full|complete|whole)\s+(?:calendar\s+)?day\b/i],
-  ["completed_24h", /\b(?:each|every|per)\s+(?:complete(?:d)?\s+|full\s+|continuous\s+)?(?:period\s+of\s+)?(?:24|twenty[- ]four)[- ]hours?\b|\bcomplete(?:d)?\s+(?:period\s+of\s+)?(?:24|twenty[- ]four)[- ]hours?\b/i],
+  ["completed_24h", /\b(?:each|every|per)\s+(?:complete(?:d)?\s+|full\s+|continuous\s+)?(?:period\s+of\s+)?(?:24|twenty[- ]four)(?:[- ]hours?|\s+(?:consecutive|continuous)\s+hours?)\b|\bcomplete(?:d)?\s+(?:period\s+of\s+)?(?:24|twenty[- ]four)(?:[- ]hours?|\s+(?:consecutive|continuous)\s+hours?)\b/i],
   ["per_night", /\b(?:each|every|per)\s+night\b|\bnights?\s+(?:spent|stayed)\s+in\s+hospital\b|\bper\s+overnight\b/i],
   ["calendar_day_inclusive", /\b(?:each|every|per)\s+(?:calendar\s+)?day\s+or\s+part\s+(?:of\s+a\s+day|thereof)\b|\bpart\s+of\s+a\s+day\s+(?:counts|is\s+counted)\s+as\s+a\s+(?:full\s+)?day\b/i],
 ];
-/** The day-count rule `text` states, with the matched words; null when it states none (or states two different ones). */
-export function dayRuleFromWording(text: string): { rule: PolicyDayRule; words: string } | null {
-  const found = RULE_WORDING.map(([rule, re]) => { const m = re.exec(text ?? ""); return m ? { rule, words: m[0] } : null; }).filter((x): x is { rule: PolicyDayRule; words: string } => !!x);
+/** A remaining part of a day that counts as one more day ("Any remaining period of 12 hours or more counts as one further
+ * day", "plus one more day if the remainder is 12 hours or more"): the hours. */
+const REMAINDER_WORDING: RegExp[] = [
+  /\b(?:remaining|remainder|balance|residual)(?:\s+(?:period|part|portion|time))?(?:\s+of)?\s+(\d{1,2})\s+(?:consecutive\s+)?hours?\s+or\s+(?:more|longer)\s+(?:counts?|is\s+counted|shall\s+count|will\s+count|is\s+treated|shall\s+be\s+counted)\s+as\s+(?:one\s+|a\s+|an\s+)?(?:further|additional|another|extra|more|full)?\s*(?:full\s+)?day\b/i,
+  /\b(?:plus\s+)?(?:one\s+more|a\s+further|an\s+additional|another|one\s+further|one\s+additional)\s+day\s+(?:if|where|when)\s+the\s+(?:remainder|remaining\s+(?:period|part|time)|balance)\s+is\s+(\d{1,2})\s+hours?\s+or\s+(?:more|longer)\b/i,
+];
+export type DayRuleWording = { rule: PolicyDayRule; words: string; remainderHours?: number };
+/** The day-count rule `text` states, with the matched words; null when it states none (or states two different ones).
+ * A remainder clause refines a complete-24-hours rule stated in the same text (completed_24h_remainder); a remainder
+ * clause without a 24-hour period is not a rule on its own. */
+export function dayRuleFromWording(text: string): DayRuleWording | null {
+  const found: DayRuleWording[] = RULE_WORDING.map(([rule, re]) => { const m = re.exec(text ?? ""); return m ? { rule, words: m[0] } : null; }).filter((x): x is { rule: PolicyDayRule; words: string } => !!x);
+  const rem = REMAINDER_WORDING.map((re) => re.exec(text ?? "")).filter((m): m is RegExpExecArray => !!m);
+  const hours = new Set(rem.map((m) => Number(m[1])));
+  if (rem.length && found.some((f) => f.rule === "completed_24h")) {
+    if (hours.size !== 1) return null;
+    const h = [...hours][0];
+    if (!(h > 0 && h < 24)) return null;
+    const rest = found.filter((f) => f.rule !== "completed_24h");
+    if (rest.length) return null;
+    return { rule: "completed_24h_remainder", words: (text ?? "").trim(), remainderHours: h };
+  }
   const rules = new Set(found.map((f) => f.rule));
   return rules.size === 1 ? found[0] : null;
+}
+/** A remainder clause on its own (no 24-hour period in the same text): the hours, else null (terms.ts joins it to the
+ * complete-24-hours sentence before it). */
+export function remainderHoursIn(text: string): number | null {
+  const m = REMAINDER_WORDING.map((re) => re.exec(text ?? "")).find(Boolean);
+  return m ? Number(m[1]) : null;
 }
 /** Integration (D30): an exception the wording states for the admission or discharge day of a calendar-day rule, e.g.
  * "The day of admission counts as a full day only if admission is before 12:00 noon" -> admission, before, 720 min.
@@ -250,12 +277,13 @@ export function dayEdgeExceptionsFromWording(text: string): DayEdgeException[] {
 const localMinutes = (iso: string | null) => { const m = /T(\d{2}):(\d{2})/.exec(iso ?? ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
 /** Whether a rule needs the admission and discharge TIMES (not only the dates). */
 export function dayRuleNeedsTimes(rule: PolicyDayRule): boolean {
-  return rule === "first_full_day" || rule === "completed_24h";
+  return rule === "first_full_day" || rule === "completed_24h" || rule === "completed_24h_remainder";
 }
 const LOCAL_MIDNIGHT = /T00:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 /** Payable days under a policy's rule, through computeHospitalDays (waiting days are applied by the hospital-cash
  * calculator's own offset, so 0 here). Calendar dates are the hospital's local dates (the recorded offset). */
-export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null, edges: DayEdgeException[] = []): DayCountResult {
+export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null, edges: DayEdgeException[] = [], opts: { remainderHours?: number | null } = {}): DayCountResult {
+  if (rule === "completed_24h_remainder") return completedWithRemainder(admissionISO, dischargeISO, opts.remainderHours ?? null);
   const r0 = payableDaysUnderRuleBase(rule, admissionISO, dischargeISO);
   if (r0.status !== "calculated" || rule !== "first_full_day" || !edges.length) return r0;
   // Stated exceptions for the admission / discharge day (first-full-day wording only, where those days are otherwise
@@ -272,8 +300,22 @@ export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string |
   }
   return extra ? { ...r0, grossNights: r0.grossNights + extra, wardNights: r0.wardNights + extra } : r0;
 }
-function payableDaysUnderRuleBase(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null): DayCountResult {
-  const map: Record<PolicyDayRule, { rule: DayCountRule; edge: DayCountEdgeInclusion }> = {
+/** Each complete 24 hours from admission is a day; the remaining part counts as one more day when it is at least
+ * `remainderHours` (a stay shorter than that counts no day). Both instants need their UTC offset. */
+function completedWithRemainder(admissionISO: string | null, dischargeISO: string | null, remainderHours: number | null): DayCountResult {
+  if (remainderHours == null || !(remainderHours > 0 && remainderHours < 24)) return { status: "blocked", reasonCode: "MISSING_DAY_COUNT_RULE", message: "the wording's remainder (the hours that count as one more day) is not stated" };
+  if (!admissionISO) return { status: "blocked", reasonCode: "MISSING_ADMISSION_DATE", message: "the admission date and time are needed" };
+  if (!dischargeISO) return { status: "blocked", reasonCode: "STAY_ONGOING", message: "the discharge date and time are needed" };
+  const a = parseIsoWithOffset(admissionISO), d = parseIsoWithOffset(dischargeISO);
+  if (!a || !d) return { status: "blocked", reasonCode: "MISSING_TIMEZONE_OFFSET", message: "the admission and discharge times need the hospital's UTC offset" };
+  const minutes = Math.floor((d.getTime() - a.getTime()) / 60_000);
+  if (minutes < 0) return { status: "blocked", reasonCode: "INVALID_DATE_RANGE", message: "the discharge is before the admission" };
+  const full = Math.floor(minutes / 1440), rest = minutes - full * 1440;
+  const days = full + (rest >= remainderHours * 60 ? 1 : 0);
+  return { status: "calculated", grossNights: days, wardNights: days, icuNights: 0 };
+}
+function payableDaysUnderRuleBase(rule: Exclude<PolicyDayRule, "completed_24h_remainder">, admissionISO: string | null, dischargeISO: string | null): DayCountResult {
+  const map: Record<Exclude<PolicyDayRule, "completed_24h_remainder">, { rule: DayCountRule; edge: DayCountEdgeInclusion }> = {
     first_full_day: { rule: "calendar_day", edge: { admissionDayIncluded: false, dischargeDayIncluded: false } },
     completed_24h: { rule: "completed_24h_period", edge: { admissionDayIncluded: false, dischargeDayIncluded: false } },
     per_night: { rule: "calendar_day", edge: { admissionDayIncluded: true, dischargeDayIncluded: false } },

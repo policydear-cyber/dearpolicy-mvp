@@ -68,7 +68,8 @@ export function recomputeCalculation(r: Pick<CalculationRecord, "operands" | "st
       case "day_count": {
         const a = get(s.inputs[0], ["datetime", "date"]), b = get(s.inputs[1], ["datetime", "date"]);
         if (typeof a === "string") return { ok: false, error: a }; if (typeof b === "string") return { ok: false, error: b };
-        const d = payableDaysUnderRule(s.rule, a.s ?? null, b.s ?? null, Array.isArray(s.edges) ? s.edges : []);
+        if (s.rule === "completed_24h_remainder" && !(typeof s.remainderHours === "number" && s.remainderHours > 0 && s.remainderHours < 24)) return { ok: false, error: "the day count's remainder hours are not stated" };
+        const d = payableDaysUnderRule(s.rule, a.s ?? null, b.s ?? null, Array.isArray(s.edges) ? s.edges : [], { remainderHours: s.remainderHours ?? null });
         if (d.status !== "calculated") return { ok: false, error: `the day count cannot be worked out: ${d.message}` };
         out = { unit: "count", n: d.grossNights }; break;
       }

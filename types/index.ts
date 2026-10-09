@@ -277,7 +277,9 @@ export type CalcCondition = {
 /** One recomputable step. Inputs name operand ids or earlier step ids; values are integer minor units for money,
  * whole numbers for counts, ppm for percentages. */
 export type CalcStep =
-  | { id:string; op:"day_count"; rule:"first_full_day"|"completed_24h"|"per_night"|"calendar_day_inclusive"; inputs:[string,string]; out:number;
+  | { id:string; op:"day_count"; rule:"first_full_day"|"completed_24h"|"completed_24h_remainder"|"per_night"|"calendar_day_inclusive"; inputs:[string,string]; out:number;
+      /** completed_24h_remainder: the remaining hours that count as one more day, as the wording states them. */
+      remainderHours?:number;
       /** Exceptions the wording states for the admission / discharge day ("counts as a full day if before 12:00 noon"). */
       edges?:{ edge:"admission"|"discharge"; when:"before"|"after"; minutes:number }[] }
   | { id:string; op:"days_after_waiting"; inputs:[string]; waitingDays:number; out:number }
