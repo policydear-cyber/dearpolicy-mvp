@@ -8,7 +8,7 @@
  * deterministic model, no network): once as the first message of a chat, and once after a claim conversation
  * (a flood, an injury, a hospital stay) left the chat in a claim.
  *
- *   node --import tsx scripts/routing-regressions.ts        (ROUTING_PURE_ONLY=1: part 1 only)
+ *   node --import tsx scripts/routing-regressions.ts
  */
 process.env.DEARPOLICY_DETERMINISTIC_MODEL = "synthetic-e2e";
 process.env.E2E_RUN_ID = "routing";
@@ -117,7 +117,7 @@ async function endToEnd() {
 async function main() {
   const out = console.log.bind(console);
   await pure();
-  if (process.env.ROUTING_PURE_ONLY !== "1") {
+  {
     globalThis.fetch = (async (input: RequestInfo | URL) => { throw new Error("network disabled: " + String(input)); }) as typeof fetch;
     console.info = () => undefined; console.debug = () => undefined; console.warn = () => undefined; console.error = () => undefined;
     console.log = (...args: unknown[]) => { if (typeof args[0] === "string" && /^(?:recognizer|chat route):/.test(args[0])) out(...args); };
