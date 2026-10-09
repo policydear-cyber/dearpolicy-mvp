@@ -29,9 +29,10 @@ import { ACCOUNT_T } from "../../scripts/fixtures/rag2-adv/household";
 import { AdvModel } from "../../scripts/fixtures/rag2-adv/model";
 import { ALL } from "../../scripts/fixtures/rag2-adv/scenarios";
 import { ACCOUNT_L } from "../../scripts/fixtures/rag2-live/household";
-import { liveSafetyChecks, RunCapGuardModel } from "./rag2-live-guard";
+import { liveSafetyChecks, PREFLIGHT_REFUSAL, RunCapGuardModel } from "./rag2-live-guard";
+import { installFetchGuard } from "./rag2-live-fetch-guard";
 import { HostedLoopModel } from "@/lib/rag2/loop/hosted-model";
-import { RunCostLedger } from "@/lib/rag2/loop/usage-meter";
+import { installSharedRunLedger, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
 
 const KEY = Symbol.for("dearpolicy.rag2.loop.model");
 if (process.env.NODE_ENV === "production" || (process.env.VERCEL ?? "") || (process.env.VERCEL_ENV ?? "")) throw new Error("test-only server refused in a production build");
@@ -40,6 +41,12 @@ const host = (() => { try { return new URL(process.env.DATABASE_URL ?? "").hostn
 if (!["localhost", "127.0.0.1"].includes(host)) throw new Error(`refusing non-local database host "${host}"`);
 const LIVE = process.env.E2E_RAG2_LIVE === "1";
 const live = LIVE ? liveSafetyChecks() : null;
+// ONE run ledger for the whole process, and a guard on globalThis.fetch installed BEFORE Next.js exists: every model
+// request the server makes (the loop, lib/ai judgement / narration / reading, retries, verification) is reserved and
+// settled on it, or refused (e2e/support/rag2-live-fetch-guard.ts).
+const runLedger = live ? new RunCostLedger(live.capUsd) : null;
+if (runLedger) installSharedRunLedger(runLedger);
+const fetchGuard = live && runLedger ? installFetchGuard({ ledger: runLedger, preflightRefusal: live.preflight ? PREFLIGHT_REFUSAL : null }) : null;
 process.env.DEV_AUTH_ENABLED = "1";
 process.env.DEV_ACCOUNT_ID = LIVE ? ACCOUNT_L : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
@@ -50,13 +57,13 @@ async function main() {
   await app.prepare();
   const handle = app.getRequestHandler();
   const { pool } = await import("@/lib/db/client");
-  const guard = live ? new RunCapGuardModel(new HostedLoopModel(live.choice), new RunCostLedger(live.capUsd), live.price, live.preflight) : null;
+  const guard = live ? new RunCapGuardModel(new HostedLoopModel(live.choice), runLedger!, live.price, live.preflight, { reserve: false }) : null;
   if (guard) (globalThis as Record<symbol, unknown>)[KEY] = guard;
   http.createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     if (LIVE && url.pathname.startsWith("/__rag2adv/")) { res.writeHead(404).end(JSON.stringify({ error: "scripted-model routes are off in the live server" })); return; }
     if (guard && url.pathname === "/__rag2live/budget") {
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ model: guard.id, price: guard.price, mode: live!.mode, preflight: guard.preflight, ledger: guard.ledger.snapshot(), calls: guard.calls }));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ model: guard.id, price: guard.price, mode: live!.mode, preflight: guard.preflight, ledger: { ...guard.ledger.snapshot(), failed: fetchGuard?.calls.filter((c) => !c.refused && !c.ok).length ?? 0 }, calls: guard.calls, httpCalls: fetchGuard?.calls ?? [] }));
       return;
     }
     if (url.pathname === "/__rag2adv/scenario" && req.method === "POST") {

@@ -122,8 +122,27 @@ const PRICES:Record<string,Price>={
   "groq:llama-3.3-70b-versatile":{input:0.59,output:0.79},
   "groq:llama-3.1-8b-instant":{input:0.05,output:0.08},
   "openai:gpt-5-mini":{input:0.25,output:2},
-  "openai:gpt-6-luna":{input:0.10,output:0.50},
+  // https://developers.openai.com/api/docs/models/gpt-6-luna (checked 2026-10-09): input $0.10, cached input $0.01,
+  // output $0.50 per 1M tokens.
+  "openai:gpt-6-luna":{input:0.10,output:0.50,cachedInput:0.01},
 };
+/** What a provider:model requires of a request, beyond its price -- recorded from the provider's own model page, next
+ * to the price table so a model change brings its request rules with it. `chatCompletionsWithTools` is merged into a
+ * Chat Completions request that carries tools (lib/rag2/loop/hosted-model.ts openAiRequest). */
+export type ModelCapability={
+  chatCompletionsWithTools?:{set:Record<string,unknown>;source:string};
+  contextTokens?:number;maxOutputTokens?:number;
+};
+const CAPABILITIES:Record<string,ModelCapability>={
+  "openai:gpt-6-luna":{
+    chatCompletionsWithTools:{set:{reasoning_effort:"none"},
+      source:"https://developers.openai.com/api/docs/models/gpt-6-luna: \"Chat Completions supports function calling only with `reasoning_effort` set to `none`.\""},
+    contextTokens:1_050_000,maxOutputTokens:128_000,
+  },
+};
+export function capabilityFor(choice:ModelChoice):ModelCapability|null{
+  return CAPABILITIES[choice.provider+":"+choice.model]??CAPABILITIES[choice.provider+":"+choice.model.replace(/-\d{8}$/,"")]??null;
+}
 export function priceFor(choice:ModelChoice):Price|null{
   return PRICES[choice.provider+":"+choice.model]??PRICES[choice.provider+":"+choice.model.replace(/-\d{8}$/,"")]??null;
 }

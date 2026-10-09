@@ -81,6 +81,13 @@ export function liveSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice
   const choice = modelFor("chat");
   if (choice.provider !== "openai") fail(`the chat model resolves to ${choice.provider}:${choice.model}; set CHAT_MODEL=openai:<model>`);
   if (env.RAG2_LIVE_EXPECT_MODEL && `${choice.provider}:${choice.model}` !== env.RAG2_LIVE_EXPECT_MODEL) fail(`the chat model resolves to ${choice.provider}:${choice.model}, not ${env.RAG2_LIVE_EXPECT_MODEL}`);
+  // Every role the run configures resolves to exactly that model (no silent substitution, e.g. a missing key falling
+  // back to another provider). The CI run sets all four, mirroring production.
+  for (const [role, v] of [["chat", env.CHAT_MODEL], ["judgement", env.JUDGEMENT_MODEL], ["narration", env.NARRATION_MODEL], ["reading", env.READING_MODEL]] as const) {
+    if (!v) continue;
+    const got = modelFor(role);
+    if (`${got.provider}:${got.model}` !== v.trim()) fail(`${role} model resolves to ${got.provider}:${got.model}, not ${v.trim()} (substituted)`);
+  }
   const price = priceFor(choice);
   if (!price) fail(`no price on file for ${choice.provider}:${choice.model} in lib/ai/providers.ts: refusing to run (fail closed)`);
   return { choice, price: price!, capUsd: Math.min(cap, meterCap), mode, preflight };
@@ -91,7 +98,9 @@ export class RunCapGuardModel implements LoopModel {
   readonly id: string;
   readonly choice: ModelChoice;
   readonly calls: GuardCall[] = [];
-  constructor(private readonly inner: LoopModel, readonly ledger: RunCostLedger, readonly price: Price, readonly preflight = false) {
+  /** reserve=false (the live server): the process-wide fetch guard reserves and settles every provider request on the
+   * same ledger; this guard then only refuses a call whose worst case no longer fits, and records it. */
+  constructor(private readonly inner: LoopModel, readonly ledger: RunCostLedger, readonly price: Price, readonly preflight = false, private readonly opts: { reserve?: boolean } = {}) {
     if (!inner.choice) throw new Error("the guarded model must be a hosted model with a provider choice");
     this.id = inner.id; this.choice = inner.choice;
   }
@@ -106,6 +115,22 @@ export class RunCapGuardModel implements LoopModel {
       // Nothing reserved, nothing sent. "spend" keeps the meter from retrying it.
       this.calls.push({ ...base, reservedUsd: 0, chargedUsd: 0, ok: false, refused: PREFLIGHT_REFUSAL });
       throw new Error(`${PREFLIGHT_REFUSAL} (no spend)`);
+    }
+    if (this.opts.reserve === false) {
+      if (usd > this.ledger.remainingUsd + 1e-12) {
+        const why = `run cap US$${this.ledger.capUsd}: US$${this.ledger.spentUsd.toFixed(6)} spent + US$${this.ledger.reservedUsd.toFixed(6)} reserved; the next call may cost up to US$${usd.toFixed(6)}`;
+        this.calls.push({ ...base, chargedUsd: 0, ok: false, refused: why });
+        throw new Error(`live run spend cap reached, no model call made: ${why}`);
+      }
+      const t0 = Date.now();
+      try {
+        const out = await this.inner.next(input);
+        this.calls.push({ ...base, chargedUsd: null, ok: true, usage: out.usage, latencyMs: Date.now() - t0, upstreamMs: out.latencyMs, resolvedModel: out.resolvedModel ?? null, settings: loopRequestSettings(this.choice.provider, this.choice.model, input.maxOutputTokens) });
+        return out;
+      } catch (error) {
+        this.calls.push({ ...base, chargedUsd: null, ok: false, error: (error instanceof Error ? error.message : String(error)).slice(0, 200), latencyMs: Date.now() - t0, settings: loopRequestSettings(this.choice.provider, this.choice.model, input.maxOutputTokens) });
+        throw error;
+      }
     }
     const r = this.ledger.reserve(usd, est, input.maxOutputTokens);
     if ("refused" in r) {

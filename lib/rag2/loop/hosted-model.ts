@@ -8,7 +8,7 @@
  * Under the deterministic model stand-in (DEARPOLICY_DETERMINISTIC_MODEL) no network call is made: a test must install
  * the scripted model instead (scripted-model.ts).
  */
-import { apiKeyFor, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice } from "@/lib/ai/providers";
+import { apiKeyFor, capabilityFor, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
 import { deterministicModelRequested } from "@/lib/ai/deterministic-model";
 import type { LoopMessage, LoopModel, ModelTurnInput, ModelTurnOutput, ToolCall } from "./types";
 
@@ -21,14 +21,17 @@ function parseArgs(raw: unknown): Record<string, unknown> {
   try { const v = JSON.parse(raw); return v && typeof v === "object" ? v : {}; } catch { return { __unparsed: raw }; }
 }
 
-/** OpenAI-style request body for a turn (exported for the adapter test). */
-export function openAiRequest(model: string, input: ModelTurnInput) {
+/** OpenAI-style request body for a turn (exported for the adapter test). With the provider given, what that model
+ * requires of a Chat Completions request with tools (lib/ai/providers.ts capabilityFor -- e.g. gpt-6-luna:
+ * reasoning_effort "none") is applied. */
+export function openAiRequest(model: string, input: ModelTurnInput, provider?: Provider) {
   const messages = input.messages.map((m) => {
     if (m.role === "assistant") return { role: "assistant", content: m.content ?? null, ...(m.toolCalls?.length ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments) } })) } : {}) };
     if (m.role === "tool") return { role: "tool", tool_call_id: m.toolCallId, content: m.content };
     return { role: m.role, content: m.content };
   });
-  return { model, temperature: 0, max_completion_tokens: input.maxOutputTokens, tool_choice: "required", parallel_tool_calls: true, messages, tools: input.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })) };
+  const required = provider ? capabilityFor({ provider, model })?.chatCompletionsWithTools?.set ?? {} : {};
+  return { model, temperature: 0, max_completion_tokens: input.maxOutputTokens, tool_choice: "required", parallel_tool_calls: true, ...required, messages, tools: input.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })) };
 }
 /** Reads an OpenAI-style reply into tool calls (exported for the adapter test). */
 export function openAiReply(payload: any): { toolCalls: ToolCall[]; text: string | null; usage: { input: number; output: number }; model: string | null } {
@@ -66,7 +69,7 @@ function applyLearned(body: Record<string, unknown>, learned: Set<string> | unde
 }
 /** The request settings the loop sends for a model, after anything that model is known to reject (for run records). */
 export function loopRequestSettings(provider: string, model: string, maxOutputTokens: number): Record<string, unknown> {
-  const body: Record<string, unknown> = { temperature: 0, max_completion_tokens: maxOutputTokens, tool_choice: "required", parallel_tool_calls: true };
+  const body: Record<string, unknown> = { temperature: 0, max_completion_tokens: maxOutputTokens, tool_choice: "required", parallel_tool_calls: true, ...(capabilityFor({ provider: provider as Provider, model })?.chatCompletionsWithTools?.set ?? {}) };
   if (provider !== "openai") { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; delete body.parallel_tool_calls; }
   applyLearned(body, LEARNED.get(`${provider}:${model}`));
   return body;
@@ -99,7 +102,7 @@ export class HostedLoopModel implements LoopModel {
         read = anthropicReply(await res.json());
       } else {
         const base = provider === "groq" ? (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1") : provider === "gemini" ? "https://generativelanguage.googleapis.com/v1beta/openai" : (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1");
-        const body: Record<string, unknown> = openAiRequest(model, input);
+        const body: Record<string, unknown> = openAiRequest(model, input, provider);
         if (provider !== "openai") { body.max_tokens = body.max_completion_tokens; delete body.max_completion_tokens; delete body.parallel_tool_calls; }
         // Agent H: a model that rejects an optional request setting with a 400 naming it (a reasoning-class model pins
         // temperature; some reject parallel_tool_calls; older ones want max_tokens) is asked again once without it, and

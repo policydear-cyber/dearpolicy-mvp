@@ -95,6 +95,16 @@ export class RunCostLedger {
   }
   snapshot() { return { capUsd: this.capUsd, spentUsd: this.spentUsd, reservedUsd: this.reservedUsd, remainingUsd: this.remainingUsd, calls: this.calls, refusals: this.refusals, open: this.open.size }; }
 }
+/** Agent H (live runs): ONE run ledger for the whole process. When a test server installs it (the live smoke's fetch
+ * guard, e2e/support/rag2-live-fetch-guard.ts, reserves and settles every provider request on it), the meter refuses a
+ * call whose worst case no longer fits what that ledger has left -- it does not reserve a second time; the request
+ * itself is reserved where it is sent. */
+const SHARED_LEDGER = Symbol.for("dearpolicy.rag2.live.run-ledger");
+export function installSharedRunLedger(ledger: RunCostLedger | null): void { (globalThis as { [SHARED_LEDGER]?: RunCostLedger | null })[SHARED_LEDGER] = ledger; }
+export function sharedRunLedger(): RunCostLedger | null {
+  const l = (globalThis as { [SHARED_LEDGER]?: unknown })[SHARED_LEDGER];
+  return l && typeof (l as RunCostLedger).reserve === "function" ? (l as RunCostLedger) : null;
+}
 /** What the meter's in-flight calls in this process have reserved against the run budget (shared by every turn). */
 const RUN_RESERVED = Symbol.for("dearpolicy.rag2.loop.run-reserved");
 function runReserved(): { usd: number } { const g = globalThis as { [RUN_RESERVED]?: { usd: number } }; return (g[RUN_RESERVED] ??= { usd: 0 }); }
@@ -188,8 +198,11 @@ export class LoopUsageMeter {
         if (!price) return { ok: false, stop: { kind: "run_budget", detail: `no price on file for ${this.o.model.id}: refused (DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1)` } };
         reserveUsd = maxCallCostUsd(price, reserveInputTokens(input), maxOutputTokens);
       }
-      const stop = await this.refusal(input, reserveUsd);
+      const shared = this.hosted ? sharedRunLedger() : null;
+      if (shared && reserveUsd > shared.remainingUsd + 1e-12) return { ok: false, stop: { kind: "run_budget", detail: `run ledger: US$${shared.spentUsd.toFixed(6)} spent + US$${shared.reservedUsd.toFixed(6)} reserved of US$${shared.capUsd}; the next call may cost up to US$${reserveUsd.toFixed(6)}` } };
+      const stop = await this.refusal(input, shared ? 0 : reserveUsd);
       if (stop) return { ok: false, stop };
+      if (shared) reserveUsd = 0; // reserved and settled on the shared ledger where the request is sent
       runReserved().usd += reserveUsd;
       let held = reserveUsd > 0;
       const release = () => { if (held) { runReserved().usd = Math.max(0, runReserved().usd - reserveUsd); held = false; } };
