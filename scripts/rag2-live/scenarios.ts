@@ -56,6 +56,8 @@ export type TurnExpect = {
   factRecorded?: { keyPattern: string; wordsInclude: string };
   /** The pending claim question must be put back after a side question. */
   pendingReasked?: { pattern: string };
+  /** Round 6c: `figure` may be shown, but only in a sentence that also states this condition (regex). */
+  figureOnlyWith?: { figure: string; pattern: string; about: string };
   /** Usefulness with the right conditions: every sentence stating `figure` also states its condition (regex). */
   conditional?: { figure: string; pattern: string; about: string };
 };
@@ -120,7 +122,11 @@ export const SCENARIOS: Scenario[] = [
       {
         user: "Kai broke his arm yesterday. Can we claim for it?",
         expect: {
-          noMoney: true, asks: { pattern: QUESTION_CAUSE, about: "how the arm was broken (accident or not)" }, passages: [P.accidentOnly],
+          // Round 6c: the Child fracture figure may be given before the cause is known only with the policy's
+          // accident-only cover condition (SUNHAVEN p2); asking how it happened stays required.
+          figureOnlyWith: { figure: "S$750", pattern: "caused[^.]{0,60}accident|accidents? only|only[^.]{0,60}accident|depends on how it happened", about: "the accident-only cover condition" },
+          forbidden: [{ figure: "S$1,200", why: "the Adult column, not Kai's", stage: "person-version resolution" }], onlyPrintedFigures: true,
+          asks: { pattern: QUESTION_CAUSE, about: "how the arm was broken (accident or not)" }, passages: [P.accidentOnly],
           subject: "kai", factNotRecorded: [{ key: "cause", value: "accident", why: "the household has not said how it happened" }],
         },
       },

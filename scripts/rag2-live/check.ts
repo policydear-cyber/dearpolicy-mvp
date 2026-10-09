@@ -17,6 +17,9 @@ import { pathToFileURL } from "node:url";
 import { pool } from "@/lib/db/client";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import { renderedAssistantText } from "@/components/assistant-message";
+import { withoutNegatedDecisions } from "@/lib/rag2/loop/statements";
+import { WITHHELD_AMOUNT_TEXT } from "@/lib/chat/monetary-boundary";
+const WITHHELD = new RegExp(WITHHELD_AMOUNT_TEXT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 import type { CalculationRecord, ChatAnswer } from "@/types";
 import { ACCOUNT_L, DOCS, L, doc, type MemberKey } from "../fixtures/rag2-live/household";
 import { SCENARIOS, STAGES, type Passage, type Scenario, type Stage, type TurnExpect } from "./scenarios";
@@ -101,7 +104,11 @@ function gradeTurn(t: LoadedTurn, e: TurnExpect, conv: LoadedConversation, out: 
   add("estimate never called a payout", payout.length === 0, "presentation", payout[0] ?? "none");
   // Round 6: every turn -- a printed benefit is never a decision, payment or entitlement; at most ONE question, asked
   // once (by its card, never repeated in the body); asking a material question is never by itself a failure.
-  const entitled = sentences(t.visible).filter((s) => ENTITLEMENT.test(s));
+  // Round 6c: negation- and scope-aware, like the composer ("a limit, not a guaranteed payment" is not a decision).
+  const entitled = sentences(t.visible).filter((s) => ENTITLEMENT.test(withoutNegatedDecisions(s)));
+  // Round 6c: a printed figure is never replaced by the withheld-amount wording inside a sentence.
+  const withheld = sentences(t.visible).filter((s) => WITHHELD.test(s));
+  add("no withheld-amount wording", withheld.length === 0, "presentation", withheld[0] ?? "none");
   add("never states approval, payment or entitlement", entitled.length === 0, "verification", entitled[0] ?? "none");
   const multi = t.questions.filter((q) => (q.match(/\?/g) ?? []).length > 1);
   add("at most one question", t.questions.length <= 1 && !multi.length, "model reasoning-tool selection", t.questions.length > 1 ? `asked ${t.questions.length}: ${t.questions.join(" | ")}` : multi[0] ?? (t.questions[0] ?? "none"));
@@ -131,6 +138,11 @@ function gradeTurn(t: LoadedTurn, e: TurnExpect, conv: LoadedConversation, out: 
     const with_ = sentences(t.visible).filter((s) => moneyIn(s).includes(v));
     const ok = with_.length > 0 && with_.every((s) => new RegExp(c.pattern, "i").test(s));
     add(`${c.figure} stated with ${c.about}`, ok, "model reasoning-tool selection", !with_.length ? "figure not shown" : ok ? "conditional" : `unconditional: "${with_.find((s) => !new RegExp(c.pattern, "i").test(s))}"`);
+  }
+  if (e.figureOnlyWith) {
+    const c = e.figureOnlyWith, v = amount(c.figure);
+    const bad = sentences(t.visible).filter((s) => moneyIn(s).includes(v) && !new RegExp(c.pattern, "i").test(s));
+    add(`${c.figure} only with ${c.about}`, bad.length === 0, "model reasoning-tool selection", bad[0] ?? (shown.includes(v) ? "with its condition" : "not shown"));
   }
   if (e.noMoney) add("no money figure", shown.length === 0, "model reasoning-tool selection", shown.length ? `shows ${shown.join(", ")}` : "none");
   if (e.noMoneyNear) { const bad = sentences(t.visible).filter((s) => new RegExp(e.noMoneyNear!, "i").test(s) && moneyIn(s).length); add(`no figure near /${e.noMoneyNear}/`, bad.length === 0, "model reasoning-tool selection", bad[0] ?? "none"); }

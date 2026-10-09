@@ -139,5 +139,29 @@ t("C20 L4 / L4b: the estimate passes only with its assumption about earlier use 
     assert.ok(!re.test(`Indicative estimate: CareDay hospital cash for ${n} complete 24-hour periods comes to ${fig}.`), id + " without it");
   }
 });
+// ------------------------------------------------------------------ Round 6c: real-model defects as checker cases
+const t1 = { ...sc("L3"), turns: [sc("L3").turns[0]] };
+const first = (summary: string, binds: any[] = []): LoadedConversation => ({
+  conversationId: "test", pages, state: { ragLoop: { evidence: {}, claim: { subjectId: L.kai.id, facts: { injury: { value: "broke his arm", words: "Kai broke his arm yesterday." } } }, turns: [] } },
+  turns: [{ index: 0, user: t1.turns[0].user, content: summary, answer: { details: [], citations: [cite("SUNHAVEN", 2, "This policy covers Bodily Injury caused solely and directly by an Accident.")], summary, resolvedFamilyMemberId: L.kai.id, figureBindings: binds, questions: [{ id: "q", text: "How did Kai break his arm?", type: "text" }] }, visible: visibleText({ details: [], summary, questions: [{ text: "How did Kai break his arm?" }] }, summary), questions: ["How did Kai break his arm?"], userAt: null, assistantAt: null, trace: { outcome: "ask_user", toolCalls: [], evidenceChosen: [], dropped: [], gate: [] } }],
+});
+t("C21 L3 t1: S$750 before the cause is known passes only with the accident-only condition; how it happened is still asked", () => {
+  const ok = grade(t1, first("Kai's SunHaven Family Accident Guard lists a Fracture benefit (per fracture) of S$750 for a child, payable if the fracture is confirmed by X-ray, and only for what the policy covers, which depends on how it happened: “This policy covers Bodily Injury caused solely and directly by an Accident.”"));
+  assert.equal(ok.verdict, "PASS", JSON.stringify(bad(ok)));
+  const noCause = grade(t1, first("Kai's SunHaven Family Accident Guard lists a Fracture benefit (per fracture) of S$750 for a child, payable if the fracture is confirmed by X-ray."));
+  assert.ok(bad(noCause).some((c) => /only with the accident-only cover condition/.test(c.name)), JSON.stringify(bad(noCause)));
+});
+t("C22 the withheld-amount wording spliced into a sentence FAILS at presentation (it passed L3b in the live run)", () => {
+  const v = grade(t1, first("Kai's SunHaven Family Accident Guard lists a Fracture benefit (per fracture) of an amount that is only shown after claim evidence has been reviewed for a child."));
+  assert.ok(bad(v).some((c) => c.name === "no withheld-amount wording" && c.stage === "presentation"), JSON.stringify(bad(v)));
+});
+t("C23 'a limit, not a guaranteed payment' is not an entitlement; 'guaranteed payout of' still is", () => {
+  const l2 = { ...sc("L2"), turns: [sc("L2").turns[0]] };
+  const mk = (summary: string): LoadedConversation => ({ conversationId: "t", pages, state: { ragLoop: { evidence: {}, claim: null, turns: [] } },
+    turns: [{ index: 0, user: l2.turns[0].user, answer: { details: [], questions: [], citations: [cite("SUNHAVEN", 1, "Accidental dental treatment (per accident)   S$800   S$400")], summary, resolvedFamilyMemberId: L.kai.id, figureBindings: [{ value: 400, policyId: doc("SUNHAVEN").id, subjectId: L.kai.id, column: "Child" }] }, visible: summary, questions: [], userAt: null, assistantAt: null, trace: { outcome: "final_answer", toolCalls: [], evidenceChosen: [], dropped: [], gate: [] } }] });
+  const ok = grade(l2, mk("For Kai, SunHaven's Accidental dental treatment (per accident) benefit is up to S$400 per accident; this is a limit, not a guaranteed payment."));
+  assert.equal(ok.verdict, "PASS", JSON.stringify(bad(ok)));
+  assert.ok(bad(grade(l2, mk("Kai has a guaranteed payout of S$400 per accident."))).some((c) => c.name === "never states approval, payment or entitlement"));
+});
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);
