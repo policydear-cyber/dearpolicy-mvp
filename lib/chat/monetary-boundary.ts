@@ -179,12 +179,14 @@ function writtenMoney(raw: string): { value: number; currency: string } | null {
  * of a sentence that is a computation or a calculated estimate (those stay gated by their own records). The save-time
  * gate (lib/chat/answer-verification.ts) verifies every such binding against the cited page. */
 function printedFigureCheck(answer: ChatAnswer): { ok: (sentence: string, raw: string) => boolean; used: Map<string, NonNullable<ChatAnswer["figureBindings"]>[number]> } {
-  const gated = [...(answer.computations ?? []), ...(answer.calculations ?? [])].map((r) => squashText((r as { sentence?: string }).sentence ?? "")).filter(Boolean);
+  const gated = [...(answer.computations ?? []), ...(answer.calculations ?? []).filter((k) => k?.kind !== "conditional_illustration")].map((r) => squashText((r as { sentence?: string }).sentence ?? "")).filter(Boolean);
+  const illustrations = (answer.calculations ?? []).filter((k) => k?.kind === "conditional_illustration").map((k) => ({ s: squashText(k.sentence ?? ""), v: k.result?.value, c: k.result?.currency }));
   const bound = (answer.figureBindings ?? []).filter((b) => b && typeof b.sentence === "string" && b.sentence.trim() && b.policyId && b.passage && Number.isFinite(b.value) && b.currency);
   const used = new Map<string, (typeof bound)[number]>();
   const ok = (sentence: string, raw: string) => {
     const s = squashText(sentence), m = writtenMoney(raw);
     if (!m || gated.some((g) => s.includes(g) || g.includes(s))) return false;
+    if (illustrations.some((k) => k.s && (s.includes(k.s) || k.s.includes(s)) && Math.abs((k.v ?? NaN) - m.value) < 1e-9 && k.c === m.currency)) return true;
     const b = bound.find((x) => { const bs = squashText(x.sentence); return (s.includes(bs) || bs.includes(s)) && Math.abs(x.value - m.value) < 1e-9 && x.currency.toUpperCase() === m.currency; });
     if (b) used.set(`${b.policyId}|${b.pageStart}|${b.benefit}|${b.value}|${b.currency}`, b);
     return !!b;

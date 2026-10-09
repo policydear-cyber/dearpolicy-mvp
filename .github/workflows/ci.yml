@@ -222,6 +222,12 @@ jobs:
         run: npm run rag2:conv4-test
       - name: Conversational RAG round 7 (the live ingestion run's loop defects replayed on its own stored rows -- a preface explaining why a fact is needed is shown; a passage already shown is not repeated; a turn out of budget gives a useful partial answer; row-context figure checks)
         run: npm run rag2:conv5-test
+      - name: "rag2 conv6: verified repair of rejected sentences, a supplied answer resolves the pending question, duration what-ifs only when validated"
+        run: npm run rag2:conv6-test
+      - name: "rag2 deletion semantics: a deleted amendment leaves current terms unknown; unrelated deletions, newer amendments and stated reversals handled"
+        run: npm run rag2:deletion-semantics-test
+      - name: "Scanned-page reprocessing: the read-only detection query finds pages stored empty before the OCR fix"
+        run: npm run ingest:scanned-detect-test
       - name: Calculate on ingested documents (the live run's stored rows -- a product, insurer or policy number resolves to the schedule; an endorsement's in-force rate for the stay's dates; the schedule's own complete-24-hours-plus-remainder rule; the save-time gate re-checks the remainder hours and the endorsement link)
         run: npm run rag2:calc-ingested-test
       - name: Gate and table reading for ingested documents (item-code columns, long compound labels, a single amount column, a row's own category cell as a person check, whole-row evidence)
