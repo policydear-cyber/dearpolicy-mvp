@@ -10,7 +10,7 @@ import path from "node:path";
 import {
   containsForbiddenPhrase, containsMoney, enforceLiveChatMonetaryBoundary, FORBIDDEN_MONETARY_PHRASES, INDICATIVE_ESTIMATE_NOTICE,
   isValidPolicyStatedLimit, liveClaimContext, POLICY_STATED_LIMIT_LABEL, POLICY_STATED_LIMIT_NOTICE, PRELIMINARY_ASSESSMENT_NOTICE, sanitizeStoredAnswer,
-  scrubMonetaryText, WITHHELD_AMOUNT_TEXT,
+  scrubMonetaryText, WITHHELD_AMOUNT_TEXT, WITHHELD_SENTENCE_NOTE,
 } from "@/lib/chat/monetary-boundary";
 import { assessmentFromBenefit, policyStatedLimitFor } from "@/lib/chat/policy-analysis";
 import type { PolicyBenefit, PolicySource, SubjectFacts } from "@/lib/chat/types";
@@ -215,6 +215,37 @@ test("every exit of the live workflow passes the boundary: claim sections before
   assert.ok(saves.length >= 6, "found every persistence exit");
   for (const save of saves) assert.match(save, /answer:enforceLiveChatMonetaryBoundary\(answer,/, `unbounded exit: ${save.slice(0, 120)}`);
   for (const route of ["app/api/chat/history/[id]/route.ts", "app/api/chat/jobs/[id]/route.ts"]) assert.match(readFileSync(route, "utf8"), /sanitizeStoredAnswer\(/, `${route} sanitizes stored answers`);
+});
+
+// ------------------------------------------------ Round 6c: whole sentences; verified printed figures in claim turns
+function intakeAnswer(summary: string, extra: Partial<ChatAnswer> = {}): ChatAnswer {
+  return { mode: "fact_finding", summary, details: [], claimItems: [], nextSteps: [], confidence: null, citations: [{ chunkId: "rag2:e1", policyId: "pol-sun", policyName: "SYNTHETIC SunHaven", pageStart: 1, pageEnd: 1, excerpt: "Fracture benefit (per fracture)   S$1,200   S$750" }],
+    disclaimer: "", claimSessionId: null, questions: [{ id: "rag_fact_x", text: "Has a registered medical practitioner confirmed it by X-ray?", type: "text" }], knownFacts: [], missingFacts: [], ...extra } as ChatAnswer;
+}
+const fractureBinding = (sentence: string) => ({ policyId: "pol-sun", subjectId: "kid-1", benefit: "Fracture benefit (per fracture)", documentHash: "sha256:x", pageStart: 1, pageEnd: 1, passage: "Fracture benefit (per fracture)   S$1,200   S$750", column: "Child", sentence, value: 750, currency: "SGD" });
+const FRACTURE = "The policy lists a Fracture benefit (per fracture) of S$750 for a child, payable if the fracture is confirmed by X-ray.";
+test("a printed figure with its verified binding is shown whole in a claim-intake turn, and labelled as a policy-stated limit", () => {
+  const out = deterministic("bound printed figure", () => enforceLiveChatMonetaryBoundary(intakeAnswer(FRACTURE + " How it happened decides cover.", { figureBindings: [fractureBinding(FRACTURE)] })));
+  assert.match(out.summary, /of S\$750 for a child, payable if/);
+  assert.ok(!out.summary.includes(WITHHELD_AMOUNT_TEXT));
+  assert.equal(out.policyStatedLimits?.length, 1); assert.equal(out.policyStatedLimits![0].amount, 750);
+  assert.equal(out.policyStatedLimits![0].label, "Policy-stated coverage limit"); assert.ok(out.policyStatedLimits![0].binding, "the card carries its own binding");
+  assert.deepEqual(enforceLiveChatMonetaryBoundary(JSON.parse(JSON.stringify(out))), out, "idempotent (the read-side boundary serves the same)");
+});
+test("an unbound figure, a figure bound to another sentence, and an estimate are never shown: the whole sentence is left out, with one honest note, never a placeholder", () => {
+  const unbound = enforceLiveChatMonetaryBoundary(intakeAnswer(FRACTURE + " How it happened decides cover."));
+  const elsewhere = enforceLiveChatMonetaryBoundary(intakeAnswer(FRACTURE, { figureBindings: [fractureBinding("Another sentence entirely.")] }));
+  const estimate = enforceLiveChatMonetaryBoundary(intakeAnswer(FRACTURE, { figureBindings: [fractureBinding(FRACTURE)], calculations: [{ sentence: FRACTURE } as never] }));
+  for (const [label, out] of [["unbound", unbound], ["bound elsewhere", elsewhere], ["estimate", estimate]] as const) {
+    const text = [out.summary, ...out.details, ...out.nextSteps].join(" ");
+    assert.equal(containsMoney(text), false, `${label}: ${text}`);
+    assert.ok(!text.includes(WITHHELD_AMOUNT_TEXT), `${label}: placeholder spliced: ${text}`);
+    assert.ok(text.includes(WITHHELD_SENTENCE_NOTE), `${label}: honest note`);
+    assert.equal((out.policyStatedLimits ?? []).length, 0, `${label}: no card`);
+  }
+  assert.match(unbound.summary, /How it happened decides cover\./, "the figure-free sentence stays");
+  const whole = enforceLiveChatMonetaryBoundary(unsafeAnswer());
+  assert.ok(![whole.summary, ...whole.details, ...whole.nextSteps].join(" ").includes(WITHHELD_AMOUNT_TEXT), "claim-assessment text never carries the placeholder");
 });
 
 test("an amount that states no currency is still withheld before review when a money cue introduces it; non-money numbers are untouched", () => {

@@ -160,6 +160,87 @@ export function liveClaimContext(intent: string | undefined, answer: Pick<ChatAn
   return answer.claimItems.length > 0;
 }
 
+
+// ------------------------------------------------------------------ Round 6c: whole sentences, verified printed figures
+/** Said once when a sentence stating an amount had to be left out (the amount is never replaced inside a sentence). */
+export const WITHHELD_SENTENCE_NOTE = "I left out a sentence that stated an amount: until claim evidence has been reviewed, I only show amounts printed in your policy and checked against it.";
+const squashText = (t: string) => (t ?? "").toLowerCase().normalize("NFKC").replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
+const sentenceParts = (t: string) => (t ?? "").split(/(?<=[.!?])\s+(?=[A-Z“"(])/).filter((x) => x.trim());
+/** The value and currency a written money figure states (null when its currency is not written unambiguously). */
+function writtenMoney(raw: string): { value: number; currency: string } | null {
+  const r = raw.replace(/\s+/g, "");
+  const n = Number((r.match(/\d[\d,]*(?:\.\d+)?/)?.[0] ?? "").replace(/,/g, ""));
+  if (!Number.isFinite(n)) return null;
+  const mult = /(?:m|mil|million)$/i.test(r) ? 1e6 : /(?:k|thousand)$/i.test(r) ? 1e3 : /(?:bn|billion)$/i.test(r) ? 1e9 : 1;
+  const cur = /^S\$|SGD/i.test(r) ? "SGD" : /^US\$|USD/i.test(r) ? "USD" : (r.match(new RegExp(`\\b(${CURRENCY_CODES})\\b`, "i"))?.[1]?.toUpperCase() ?? null);
+  return cur ? { value: n * mult, currency: cur } : null;
+}
+/** A printed policy figure the answer carries a FigureBinding for, in the sentence that states it -- never a figure
+ * of a sentence that is a computation or a calculated estimate (those stay gated by their own records). The save-time
+ * gate (lib/chat/answer-verification.ts) verifies every such binding against the cited page. */
+function printedFigureCheck(answer: ChatAnswer): { ok: (sentence: string, raw: string) => boolean; used: Map<string, NonNullable<ChatAnswer["figureBindings"]>[number]> } {
+  const gated = [...(answer.computations ?? []), ...(answer.calculations ?? [])].map((r) => squashText((r as { sentence?: string }).sentence ?? "")).filter(Boolean);
+  const bound = (answer.figureBindings ?? []).filter((b) => b && typeof b.sentence === "string" && b.sentence.trim() && b.policyId && b.passage && Number.isFinite(b.value) && b.currency);
+  const used = new Map<string, (typeof bound)[number]>();
+  const ok = (sentence: string, raw: string) => {
+    const s = squashText(sentence), m = writtenMoney(raw);
+    if (!m || gated.some((g) => s.includes(g) || g.includes(s))) return false;
+    const b = bound.find((x) => { const bs = squashText(x.sentence); return (s.includes(bs) || bs.includes(s)) && Math.abs(x.value - m.value) < 1e-9 && x.currency.toUpperCase() === m.currency; });
+    if (b) used.set(`${b.policyId}|${b.pageStart}|${b.benefit}|${b.value}|${b.currency}`, b);
+    return !!b;
+  };
+  return { ok, used };
+}
+const PREMIUM_BEFORE = /\bpremiums?(?: of| is| was| due| payable)?:?\s*$/i, PREMIUM_AFTER = /^\s*(?:premiums?\b|(?:a|per|each) (?:month|year) in premiums?)/i;
+const PHRASES: [RegExp, string][] = [
+  [/potential payouts?|expected payouts?|claimable amounts?|estimated claim amounts?|estimated settlements?|approved amounts?|amounts? you will receive/gi, "possible benefit"],
+  [/potential reimbursements?/gi, "possible reimbursement"],
+  [/you (can|could|will|would|should) (claim|receive|get) (up to |about |around )?/gi, "the policy may respond with "],
+];
+/** The text with every sentence that states an amount it may not show removed WHOLE (a common phrasing is first
+ * rewritten without its figure: "S$1,000 lump sum" -> "a lump sum"); a premium figure and a figure `keep` accepts
+ * stay. Never splices placeholder wording into a sentence. */
+export function withholdSentences(text: string, keep: (sentence: string, raw: string) => boolean = () => false): { text: string; dropped: number } {
+  let dropped = 0;
+  const kept: string[] = [];
+  for (const sentence of sentenceParts(text ?? "")) {
+    const figures = (x: string) => [...x.matchAll(new RegExp(MONEY_PATTERN.source, "gi"))].filter((m) => !(PREMIUM_BEFORE.test(x.slice(Math.max(0, m.index! - 30), m.index!)) || PREMIUM_AFTER.test(x.slice(m.index! + m[0].length, m.index! + m[0].length + 30)))).map((m) => m[0]);
+    const cued = (x: string) => new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "i").test(x);
+    let out = sentence;
+    if (figures(out).some((f) => !keep(sentence, f)) || cued(out)) {
+      out = withoutFigures(out);
+      if (figures(out).length || cued(out)) { dropped++; continue; }
+    }
+    for (const [re, to] of PHRASES) out = out.replace(re, to);
+    kept.push(out);
+  }
+  return { text: kept.join(" "), dropped };
+}
+/** The answer's text fields with unshowable sentences removed, and the one honest note when any was. */
+function withholdAnswerText(answer: ChatAnswer, keep: (sentence: string, raw: string) => boolean): void {
+  let dropped = 0;
+  const pass = (t: string) => { const r = withholdSentences(t, keep); dropped += r.dropped; return r.text; };
+  answer.summary = pass(answer.summary);
+  answer.details = answer.details.map(pass).filter((d) => d.trim());
+  answer.nextSteps = answer.nextSteps.map(pass).filter((d) => d.trim());
+  answer.missingFacts = answer.missingFacts.map(pass).filter((d) => d.trim());
+  if (dropped) {
+    if (!answer.summary.trim()) answer.summary = WITHHELD_SENTENCE_NOTE;
+    else if (answer.summary !== WITHHELD_SENTENCE_NOTE && !answer.details.includes(WITHHELD_SENTENCE_NOTE)) answer.details.push(WITHHELD_SENTENCE_NOTE);
+  }
+}
+/** Round 6c: a printed figure kept because of its verified binding is labelled as the existing policy-stated-limit
+ * source labels one (POLICY_STATED_LIMIT_LABEL with POLICY_STATED_LIMIT_NOTICE, its own binding, never totalled). */
+function limitsFromBindings(answer: ChatAnswer, used: ReturnType<typeof printedFigureCheck>["used"], limits: PolicyStatedLimit[]): void {
+  for (const b of used.values()) {
+    const citation = (answer.citations ?? []).find((c) => c.policyId === b.policyId && (c.pageStart ?? -1) <= b.pageStart && b.pageStart <= (c.pageEnd ?? c.pageStart ?? -1))
+      ?? { chunkId: `binding:${b.policyId}:${b.pageStart}`, policyId: b.policyId, policyName: "Policy document", pageStart: b.pageStart, pageEnd: b.pageEnd, excerpt: b.passage };
+    const amountText = (b.currency === "SGD" ? "S$" : b.currency + " ") + b.value.toLocaleString("en-SG", { minimumFractionDigits: Number.isInteger(b.value) ? 0 : 2 });
+    const limit: PolicyStatedLimit = { kind: "policy_stated_limit", label: POLICY_STATED_LIMIT_LABEL, notice: POLICY_STATED_LIMIT_NOTICE, benefitTitle: b.benefit, ownerName: null, amount: b.value, currency: b.currency, amountText, quote: b.passage, citation, binding: { policyId: b.policyId, subjectId: b.subjectId, benefit: b.benefit, documentHash: b.documentHash, pageStart: b.pageStart, pageEnd: b.pageEnd, passage: b.passage, ...(b.column !== undefined ? { column: b.column } : {}) } };
+    if (isValidPolicyStatedLimit(limit) && !limits.some((l) => sameLimit(l, limit))) limits.push(limit);
+  }
+}
+
 export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { claimContext?: boolean } = {}): ChatAnswer {
   const limits: PolicyStatedLimit[] = [...(answer.policyStatedLimits ?? [])].filter(isValidPolicyStatedLimit);
   const claimContext = options.claimContext ?? (answer.mode !== "answer" || answer.claimItems.length > 0);
@@ -185,10 +266,13 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
   if (claimContext) {
     // A claim turn never carries the policy-fact exemption forward.
     delete answer.verifiedPolicyFactsOnly; delete answer.verifiedPolicyFigures;
-    answer.summary = scrubMonetaryText(answer.summary);
-    answer.details = answer.details.map(scrubMonetaryText);
-    answer.nextSteps = answer.nextSteps.map(scrubMonetaryText);
-    answer.missingFacts = answer.missingFacts.map(scrubMonetaryText);
+    // Round 6c: a sentence is shown whole or not at all. A figure printed in the policy and bound to its page (the
+    // save-time gate verifies the binding) is shown, labelled as a policy-stated limit; payout and estimate amounts
+    // (and anything unbound) are never shown before review -- their sentence is left out, with one honest note.
+    const printed = printedFigureCheck(answer);
+    withholdAnswerText(answer, printed.ok);
+    limitsFromBindings(answer, printed.used, limits);
+    answer.policyStatedLimits = limits;
     if (answer.assessmentKind === "preliminary") answer.disclaimer = PRELIMINARY_ASSESSMENT_NOTICE;
   } else {
     answer.summary = answer.summary.replace(/potential payouts?/gi, "possible benefit");
@@ -196,12 +280,8 @@ export function enforceLiveChatMonetaryBoundary(answer: ChatAnswer, options: { c
     // assertions state; anything else in its text is withheld.
     if (verifiedPolicyFactAnswer(answer)) {
       const allowed = new Set((answer.verifiedPolicyFigures ?? []).map(moneyKey));
-      const keep = (text: string) => text
-        .replace(new RegExp(MONEY_PATTERN.source, "gi"), (m) => allowed.has(moneyKey(m)) ? m : WITHHELD_AMOUNT_TEXT)
-        .replace(new RegExp(CUED_BARE_AMOUNT_PATTERN.source, "gi"), (_m, cue: string, gap: string) => `${cue}${gap}${WITHHELD_AMOUNT_TEXT}`);
-      answer.summary = keep(answer.summary);
-      answer.details = answer.details.map(keep);
-      answer.nextSteps = answer.nextSteps.map(keep);
+      // Round 6c: a sentence with an unverified figure is left out whole (never a placeholder inside it).
+      withholdAnswerText(answer, (_sentence, raw) => allowed.has(moneyKey(raw)));
     }
   }
   if (answer.composition) answer.composition = { ...answer.composition, disclaimer: INDICATIVE_ESTIMATE_NOTICE };
