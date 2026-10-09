@@ -1,8 +1,1 @@
-{
-  "run_id": "preflight-2",
-  "scenarios": [
-    "L1"
-  ],
-  "run_cap_usd": 0.5,
-  "preflight": true
-}
+{"run_id":"live-L1","scenarios":["L1"],"run_cap_usd":0.50,"preflight":false}
