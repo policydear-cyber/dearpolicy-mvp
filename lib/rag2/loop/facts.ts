@@ -47,6 +47,8 @@ const POLICY_TERM = /\b(?:accident(?:al|ally|s)?|illness(?:es)?|sickness|disease
 const POLICY_KEY = /^(?:cause|cause_of_\w+|accident\w*|illness\w*|sickness|disease|diagnosis|diagnosed\w*|condition_type|critical_illness\w*|pre_?existing\w*|disab\w*|claim_type|benefit_type)$/;
 /** Quantities and conclusions the policy derives: never household facts. */
 const DERIVED_KEY = /(?:^|_)(?:payable|claimable|eligible|eligibility|entitled|entitlement|covered|coverage|benefit_days|payout|reimbursable|admissible)(?:_|$)/;
+const ABSENT_VALUE = /^(?:not\s+(?:yet\s+)?(?:stated|given|mentioned|said|specified|provided|known|disclosed|recorded|clear)|unknown|unspecified|unstated|n\/?a|none\s+given|tbd|to\s+be\s+confirmed|unclear|no\s+(?:information|info|details?)(?:\s+given)?|\?+)\.?$/i;
+const DONT_KNOW = /\b(?:not\s+sure|unsure|don'?t\s+know|do\s+not\s+know|no\s+idea|can'?t\s+remember|cannot\s+remember|not\s+certain|don'?t\s+remember)\b/i;
 const YES = /\b(?:yes|yeah|yep|yup|was|were|did|got|has|had|admitted|warded|hospitali[sz]ed|stayed)\b/i;
 const NO = /\b(?:no|not|never|nope|didn't|wasn't|weren't|didnt|wasnt)\b/i;
 
@@ -56,6 +58,9 @@ export function checkFact(f: { key: string; value: string; words: string }, user
   const key = normalizeKey(f.key), value = String(f.value ?? "").trim(), words = String(f.words ?? "").trim();
   if (!key || !value) return { ok: false, error: "a fact needs a key and a value" };
   if (DERIVED_KEY.test(key)) return { ok: false, error: `${key} is something the policy works out, not something the household said: record what they said (e.g. nights in hospital, admission and discharge dates and times, the bill) and let the calculation apply the policy wording` };
+  // Round 6 (real model, L3): "not stated" / "unknown" is the absence of a fact, not a fact. Recording it would mark the
+  // question as answered and block asking it. It is accepted only when the household's own words say they don't know.
+  if (ABSENT_VALUE.test(value) && !(documentText == null && DONT_KNOW.test(words))) return { ok: false, error: `${key}="${value}" records that the household has not said it: leave ${key} unrecorded (ask for it if it matters); record only what they actually said` };
   const source: FactSource = documentText != null ? "document" : "user_reported";
   const said = documentText != null ? documentText : words;
   if (source === "user_reported" && !quotedFrom(words, userTexts)) return { ok: false, error: "words must quote the household's own message verbatim (a fact is recorded only from what they said)" };

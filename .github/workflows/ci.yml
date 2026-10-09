@@ -216,6 +216,8 @@ jobs:
         run: npm run rag2:conv2-test
       - name: "rag2 conv3: real-model defects (printed figure never masked, material conditions, negation-aware decision check, person questions only when needed, rule passages cited)"
         run: npm run rag2:conv3-test
+      - name: "rag2 facts: a recorded fact is something the household said (never a not-stated placeholder)"
+        run: npm run rag2:facts-test
       - name: Catalogue routing (a request for the documents on file or the policies held is answered as one, in a fresh chat and mid-claim; a claim statement or question is never read as one)
         run: npm run routing:test
 
