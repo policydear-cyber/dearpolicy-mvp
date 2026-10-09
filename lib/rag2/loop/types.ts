@@ -6,6 +6,7 @@
 import type { EvidenceRef } from "../evidence";
 import type { JsonSchema } from "../tools";
 import type { ModelChoice } from "@/lib/ai/providers";
+import type { TableValueOperand } from "../compute";
 
 export type ToolCall = { id: string; name: string; arguments: Record<string, unknown> };
 export type LoopMessage =
@@ -53,7 +54,15 @@ export type LoopPending =
   | { kind: "person"; question: string; mention: string | null; options: { id: string; label: string }[]; turn: number;
       /** "speaker": who is typing (a shared household login); "subject": who the question is about (default). */
       purpose?: "speaker" | "subject" }
-  | { kind: "fact"; question: string; factKey: string; subjectId: string | null; why: string; options?: string[]; turn: number };
+  | { kind: "fact"; question: string; factKey: string; subjectId: string | null; why: string; options?: string[]; turn: number;
+      /** Round 7: the evidence ids that made the fact matter (the benefit / clause the question is about). */
+      evidenceIds?: string[] };
+/** Round 7: a cited, bound statement of a printed benefit the conversation has already made (with the evidence and
+ * table-value ids it rests on), so a later turn -- the household answering the question about it -- can explain it
+ * again with the same citation and binding. */
+export type EstablishedStatement = { text: string; evidenceIds: string[]; valueIds: string[]; benefit: string | null; subjectId: string | null; turn: number };
+/** Round 7: a table value issued by select_table_value, kept across turns (value ids stay citable later). */
+export type PersistedValue = { operand: TableValueOperand; selected: unknown; subjectId: string };
 export type EvidenceEntry = EvidenceRef & { id: string; via: string; label?: string | null };
 export type TraceToolCall = { name: string; args: Record<string, unknown>; ok: boolean; error?: string; evidenceIds: string[]; summary?: string };
 export type TraceTurn = {
@@ -100,6 +109,10 @@ export type RagLoopState = {
   claimRecord?: { id: string; memberId: string } | null;
   history: { user: string; assistant: string }[];
   turns: TraceTurn[];
+  /** Round 7: table values issued in earlier turns (value id -> value), still citable while their document is current. */
+  values?: Record<string, PersistedValue>;
+  /** Round 7: benefits already stated, cited and bound in this conversation (newest last). */
+  established?: EstablishedStatement[];
 };
 
 export function emptyLoopState(): RagLoopState {

@@ -29,7 +29,9 @@ export type ComposedSentence = { text: string; evidenceIds: string[]; estimate: 
   /** Agent P: for a requirement, the fact concepts it asks the household for (admission, discharge, bill, ...). */
   asks?: string[];
   /** Agent P: the condition clause appended to a printed benefit whose conditions are not established. */
-  condition?: string };
+  condition?: string;
+  /** Round 7: the table-value ids the sentence cites, and the benefit as the model named it (a passage figure's label). */
+  valueIds?: string[]; benefit?: string | null };
 export type Composed = {
   sentences: ComposedSentence[]; nextSteps: string[];
   figureBindings: BoundFigure[]; computations: ComputationRecord[];
@@ -55,6 +57,28 @@ export const SUM_NOTE = "Printed limits added together aren’t an amount the in
 export const INSTRUCTION_NOTE = "Some text in your document reads as an instruction rather than policy wording, so I haven’t treated it as part of your policy.";
 export const CALC_NOTE = "I couldn’t check that figure against the policy’s own calculation, so I haven’t given one.";
 export const INCOMPLETE_NOTE = "This may not be everything your documents say about it.";
+/** Round 7: what still remains once the household has told us a fact a benefit's condition turns on -- their report is
+ * not a reviewed record, the insurer checks the documents and decides -- and the practical next step. Medical wording
+ * when the condition is medical (a doctor's diagnosis or certification, an X-ray / MRI / scan). Figure-free; never a
+ * decision, a payment or an entitlement. */
+export const REPORTED_MEDICAL_NOTE = "What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.";
+export const REPORTED_NOTE = "What you’ve told me is your own account: the insurer will check it against the documents it asks for and decides the claim after reviewing them.";
+export const REPORTED_MEDICAL_STEP = "When you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.";
+export const REPORTED_STEP = "When you make the claim, include the documents that show the policy’s condition is met, with the insurer’s claim form.";
+const MEDICAL_CONDITION = /\b(?:medical practitioner|doctor|physician|specialist|x-?rays?|mri|scans?|ultrasound|diagnos\w*|certif\w*|medical report)\b/i;
+export function reportedFactFollowUp(conditionTexts: string[]): { note: string; step: string } {
+  const medical = conditionTexts.some((t) => MEDICAL_CONDITION.test(t));
+  return medical ? { note: REPORTED_MEDICAL_NOTE, step: REPORTED_MEDICAL_STEP } : { note: REPORTED_NOTE, step: REPORTED_STEP };
+}
+/** Round 7: the household's own words for a fact, said back as theirs (\"You told me ...\") -- null when nothing is left. */
+export function sayBack(words: string): string | null {
+  let w = String(words ?? "").replace(/\s+/g, " ").trim().replace(/^(?:yes|yeah|yep|yup|no|nope)\b[,.!]?\s*/i, "").replace(/[.!;,\s]+$/, "");
+  if (!w) return null;
+  if (/^(?:i|i['’]m|i['’]ve|we|we['’]re|my|our|me|us)\b/i.test(w)) return `You told me: “${w}”.`;
+  if (/^(?:The|A|An|He|She|They|It|This|That|There|Her|His|Their|Both|Yes|No)\b/.test(w)) w = w[0].toLowerCase() + w.slice(1);
+  return `You told me ${w}.`;
+}
+
 /** Internal markers (trace / categorisation only; never shown to the household). */
 export const UNSUPPORTED_NOTE = "unsupported";
 export const STEP_NOTE = "step";
@@ -306,7 +330,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     out.figureBindings.push(...bindings); out.computations.push(...records);
     const ids = [...new Set([...evIds, ...refs.map((r) => evidenceIdOf(ctx.state, r))])];
     out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
-    out.sentences.push({ text, evidenceIds: ids, estimate: result?.kind === "indicative_estimate", factKeys, ...(conditioned.some((c) => c.at === i) ? { condition: conditioned.find((c) => c.at === i)!.words.join(" ") } : {}) });
+    out.sentences.push({ text, evidenceIds: ids, estimate: result?.kind === "indicative_estimate", factKeys, ...(valIds.length ? { valueIds: valIds } : {}), ...(typeof s.benefit === "string" && s.benefit.trim() ? { benefit: s.benefit.trim() } : {}), ...(conditioned.some((c) => c.at === i) ? { condition: conditioned.find((c) => c.at === i)!.words.join(" ") } : {}) });
   }
   for (const x of out.sentences) x.at ??= cur;
   cur = -1;

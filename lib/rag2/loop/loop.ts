@@ -22,10 +22,10 @@ import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, evidenceIdOf, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
-import type { EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
+import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
 
 export type LoopPerson = { id: string; name: string; relationship: string };
 export type LoopInput = { accountId: string; message: string; state: RagLoopState; people: LoopPerson[];
@@ -141,6 +141,13 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // Agent F (D6): evidence remembered from earlier turns is re-checked every turn: a document deleted, replaced by a
   // newer version, or not this household's supplies nothing any more (the composer refuses sentences citing it).
   const { stale, policyNames } = await revalidateEvidence(input.accountId, state);
+  // Round 7: table values issued in earlier turns stay citable (value ids are unique across the conversation) while
+  // their document is still current; a benefit already stated, cited and bound stays available to explain again.
+  for (const [id, v] of Object.entries(state.values ?? {})) {
+    const eid = v?.operand?.evidence ? evidenceIdOf(state, v.operand.evidence, "select_table_value") : null;
+    if (eid && !stale.has(eid)) ctx.values.set(id, v as Parameters<typeof ctx.values.set>[1]);
+  }
+  if (state.established) state.established = state.established.filter((e) => e.evidenceIds.every((id) => state.evidence[id] && !stale.has(id)) && e.valueIds.every((id) => ctx.values.has(id)));
   /** Integration (agent C's request 3): what the latest calculate result for each person still needs from the
    * household (fact key, why, the evidence ids that make it matter), in the order it should be asked. */
   const calcMissing = new Map<string, { key: string; why: string; evidenceIds: string[] }[]>();
@@ -280,6 +287,56 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   let askBecause: string[] = [];
   /** The mention the latest resolve_person call of this turn was asked about. */
   let lastMention: string | null = null;
+  /** Round 7: facts the household's message gave, recorded this turn (their words, who about). */
+  const recordedNow: { key: string; words: string; subject: string }[] = [];
+  /** Round 7: the one bounded repair of a final_answer that left the household's answer with nothing citable. */
+  let finalRepaired = false;
+  /** Round 7: the household answered the claim question pending from the last turn (facts recorded for its subject). */
+  const answeredRequest = (): { pending: Extract<LoopPending, { kind: "fact" }>; facts: { key: string; words: string }[]; subject: string } | null => {
+    if (pendingBefore?.kind !== "fact") return null;
+    const subject = pendingBefore.subjectId ?? state.claim?.subjectId ?? state.subjectId;
+    const facts = recordedNow.filter((r) => !subject || r.subject === subject);
+    return subject && facts.length ? { pending: pendingBefore, facts, subject } : null;
+  };
+  /** Round 7: the benefit statements this conversation already made about what the pending question was for (sharing
+   * its evidence, else made when it was asked), still citable now. */
+  const establishedFor = (pending: Extract<LoopPending, { kind: "fact" }>, subject: string): EstablishedStatement[] => {
+    const usable = (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every((id) => state.evidence[id] && !stale.has(id)) && e.valueIds.every((id) => ctx.values.has(id)));
+    const because = new Set(pending.evidenceIds ?? []);
+    const related = usable.filter((e) => e.evidenceIds.some((id) => because.has(id)));
+    return (related.length ? related : usable.filter((e) => e.turn === pending.turn)).slice(-2);
+  };
+  const cited = (c: Composed) => c.sentences.some((s) => s.evidenceIds.length > 0);
+  /** Round 7: the turn a requested fact was given in moves the claim forward: their words said back as theirs, the
+   * benefit explained again (cited, bound), what still remains (the insurer's review of the documents) and a next step. */
+  const forward = (composed: Composed, sentencesIn: Record<string, unknown>[], nextSteps: unknown, subjectId: string | null): { composed: Composed; repair: string | null } => {
+    const ans = answeredRequest();
+    if (!ans) return { composed, repair: null };
+    const est = establishedFor(ans.pending, ans.subject);
+    const echoes = ans.facts.map((f) => sayBack(f.words)).filter((x): x is string => !!x).map((text) => ({ text }));
+    const attributed = (c: Composed) => c.sentences.some((s) => /\byou(?:['’]ve| have)? (?:said|told (?:me|us)|mentioned|let me know)\b/i.test(s.text));
+    let out = composed;
+    if (!cited(out) && est.length) {
+      if (!finalRepaired) {
+        finalRepaired = true;
+        const why = composed.dropped.length ? ` (not shown: ${composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" -- ${d.reason}`).join("; ")})` : "";
+        return { composed, repair: `the household answered your question ("${ans.pending.question}")${why}. Do not only say back what they told you. Answer with final_answer: (1) what they told you, as "You told me ..." -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: ${est.map((e) => `"${e.text}" evidence_ids=[${e.evidenceIds.join(", ")}] value_ids=[${e.valueIds.join(", ")}]${e.benefit ? ` benefit="${e.benefit}"` : ""}`).join("; ")}; (3) what still remains (the insurer checks the documents it asks for and decides the claim); (4) the next step.` };
+      }
+      // The model repeated it: the answer is composed from what the conversation already established (and checked by
+      // the same composer and save-time gate as any sentence the model writes).
+      const fallback = composeFinal({ sentences: [...echoes, ...est.map((e) => ({ text: e.text, evidence_ids: e.evidenceIds, value_ids: e.valueIds, ...(e.benefit ? { benefit: e.benefit } : {}), ...(e.subjectId ? { subject_id: e.subjectId } : {}) }))], nextSteps, subjectId: subjectId ?? ans.subject }, composeCtx());
+      if (cited(fallback)) out = fallback;
+    } else if (cited(out) && !attributed(out) && echoes.length) {
+      const again = composeFinal({ sentences: [...echoes, ...sentencesIn], nextSteps, subjectId }, composeCtx());
+      if (cited(again)) out = again;
+    }
+    if (cited(out)) {
+      const f = reportedFactFollowUp([...out.sentences.flatMap((s) => s.evidenceIds), ...(ans.pending.evidenceIds ?? [])].map((id) => state.evidence[id]?.passage.text ?? "").concat(ans.pending.why));
+      if (![...out.sentences.map((s) => s.text), ...out.notes].some((t) => /\binsurer\b/i.test(t))) out.notes = [...out.notes, f.note];
+      if (!out.nextSteps.length) out.nextSteps = [f.step];
+    }
+    return { composed: out, repair: null };
+  };
   /** Loop actions (note_facts / ask_user / final_answer): checked against the conversation rules. */
   const action = (call: ToolCall): { result: Record<string, unknown>; terminal?: LoopReply } => {
     const a = { ...call.arguments };
@@ -334,6 +391,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
           if (withdrawn.length) scrubWithdrawn(withdrawn);
         } else if (!old || (old.basis === "paraphrased" && chk.basis === "stated")) claim.facts[key] = old ? { ...entry, previous: old.previous } : entry;
         recorded.push(key);
+        recordedNow.push({ key, words: entry.words, subject });
         if (chk.basis === "paraphrased") unconfirmed.push(key);
         // The pending question is answered by this fact (under its own key, or another key for the same fact).
         const answers = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subject) === subject && (p.factKey === key || !!knownFactFor(p.factKey, { [key]: claim.facts[key] }));
@@ -412,7 +470,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
-      const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
+      const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
       return { result: { ok: true }, terminal: { kind: "ask", pending, preface: null, composed } };
     }
     // final_answer
@@ -428,8 +486,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const mapped = ids.map((id) => (stale.has(id) ? liveEquivalent(state, stale, id) ?? id : id));
       return { ...x, evidence_ids: [...new Set(mapped)] };
     });
-    const composed = composeFinal({ sentences: sentencesIn, nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, composeCtx());
-    if (!composed.sentences.length && !composed.dropped.length) return { result: { ok: false, error: "final_answer needs at least one sentence" } };
+    const first = composeFinal({ sentences: sentencesIn, nextSteps: a.next_steps, subjectId: (a.subject_id as string) ?? null }, composeCtx());
+    if (!first.sentences.length && !first.dropped.length) return { result: { ok: false, error: "final_answer needs at least one sentence" } };
+    const fw = forward(first, sentencesIn, a.next_steps, (a.subject_id as string) ?? null);
+    if (fw.repair) return { result: { ok: false, error: fw.repair } };
+    const composed = fw.composed;
     return { result: { ok: true }, terminal: { kind: "final", composed } };
   };
 
@@ -506,6 +567,17 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
 
   let reasked: LoopPending | null = null;
   const done = reply as LoopReply | null;
+  /** Round 7: each printed benefit this turn stated, cited and bound, kept with its ids (newest last). */
+  const remember = (c: Composed) => {
+    for (const s of c.sentences) {
+      if (s.estimate || s.kind === "requirement" || !s.evidenceIds.length) continue;
+      const b = c.figureBindings.find((x) => !!x.sentence && (s.text.includes(x.sentence) || x.sentence.includes(s.text)));
+      if (!b) continue;
+      const subjectId = b.subjectId ?? c.subjectId ?? null;
+      const entry: EstablishedStatement = { text: s.text, evidenceIds: [...s.evidenceIds], valueIds: (s.valueIds ?? []).filter((id) => ctx.values.has(id)), benefit: s.benefit ?? b.benefit ?? null, subjectId, turn: state.turn };
+      state.established = [...(state.established ?? []).filter((e) => !(e.text === entry.text && e.subjectId === entry.subjectId)), entry].slice(-6);
+    }
+  };
   let final: LoopReply;
   if (!done) {
     const kind = stop?.kind ?? "turn_calls";
@@ -517,6 +589,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     final = done;
     const c = done.composed;
     if (c) {
+      remember(c);
       trace.dropped = c.dropped;
       trace.evidenceChosen.push(...c.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id)));
       for (const sent of c.sentences) for (const id of sent.evidenceIds) await narrow(id, sent.text);
@@ -531,6 +604,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   else if (done.kind === "final") {
     final = done;
     const c = done.composed;
+    remember(c);
     trace.outcome = "final_answer";
     trace.dropped = c.dropped;
     trace.evidenceChosen.push(...c.evidenceIds.filter((id) => !trace.evidenceChosen.includes(id)));
@@ -556,6 +630,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const id of askBecause.length ? askBecause : trace.evidenceChosen) await narrow(id, CAUSE_KEYS.has(p.factKey) ? "accident accidental" : p.question + " " + p.factKey.replace(/_/g, " "));
   }
   if (corrections.length) trace.corrections = corrections.map(({ key, from, to }) => ({ key, from, to }));
+  // Round 7: the table values issued so far stay citable on later turns (the most recent ones).
+  if (ctx.values.size) state.values = Object.fromEntries([...ctx.values.entries()].slice(-24).map(([id, v]) => [id, { operand: v.operand, selected: v.selected, subjectId: v.subjectId }]));
   // Agent F (D6): remember the names of the documents this turn's evidence came from (readable now).
   for (const e of Object.values(state.evidence)) { const n = policyNames.get(e.policyId); if (n) (state.docNames ??= {})[e.policyId] = n; }
   // Agent G: a correction or a withdrawn source reaches the PERSISTED claim too (only a record this conversation already

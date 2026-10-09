@@ -44,5 +44,9 @@ export function stateNote(s: RagLoopState, people: { id: string; name: string; r
     if (s.claim.derived.length) lines.push(`- Earlier estimates (from the facts above): ${s.claim.derived.map((d) => `"${d.sentence}"`).join(" ")}`);
   }
   for (const [id, c] of Object.entries(s.otherClaims ?? {})) if (Object.keys(c.facts).length) lines.push(`- Facts recorded for ${name(id)} id=${id}: ${factLine(c.facts)}`);
+  // Round 7: benefits already stated, cited and bound -- their ids stay citable, so answering the household's reply to
+  // a question about one re-uses them instead of only saying back what they said.
+  const est = (s.established ?? []).slice(-4);
+  if (est.length) lines.push(`- Benefits already explained in this conversation (still citable: when the household answers a question about one, say what they told you as "You told me ...", explain the benefit again citing these same ids, and say what still remains): ${est.map((e) => `"${e.text}"${e.subjectId ? ` (about ${name(e.subjectId)})` : ""} evidence_ids=[${e.evidenceIds.join(", ")}]${e.valueIds.length ? ` value_ids=[${e.valueIds.join(", ")}]` : ""}${e.benefit ? ` benefit="${e.benefit}"` : ""}`).join("; ")}`);
   return lines.join("\n");
 }
