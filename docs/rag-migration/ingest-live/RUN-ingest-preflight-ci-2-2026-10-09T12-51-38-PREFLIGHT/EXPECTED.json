@@ -1,0 +1,251 @@
+{
+  "note": "Machine checks translated by agent E1 from agent T's EXPECTED.source.json (facts F01-F21, answers Q1-Q9; T's prose 'forbidden' items kept there). R1 and D1 are E1's: R1 = 3 days x S$110 (child, after 01 July 2026, accident) = S$330; D1 = the same question after the endorsement is deleted.",
+  "derived_from": "scripts/ingest-live/sealed/EXPECTED.source.json",
+  "documents": [
+    {
+      "file": "hx-text.pdf",
+      "linked_people": [
+        "Simon Alastair Hartwell",
+        "Leonie Brigitte Hartwell",
+        "Felix Oran Hartwell",
+        "Isla Maren Hartwell"
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "MHA-HC-2025-0748213",
+            "S$150,000",
+            "S$40,000",
+            "S$120",
+            "S$80",
+            "S$600",
+            "S$1,500"
+          ]
+        },
+        {
+          "page": 2,
+          "must_contain": [
+            "24 consecutive hours",
+            "Accident-only cover"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "hx-endorsement.pdf",
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "ME-26-0412",
+            "MHA-HC-2025-0748213",
+            "S$110",
+            "01 July 2026"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "hx-scanned.pdf",
+      "linked_people": [
+        "Isla Maren Hartwell"
+      ],
+      "scanned": true,
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "KBJ-26-00391",
+            "S$150",
+            "S$500"
+          ]
+        }
+      ]
+    }
+  ],
+  "turns": {
+    "Q1": {
+      "must_include": [
+        "MHA-HC-2025-0748213"
+      ],
+      "must_include_any": [
+        [
+          "31 January 2027",
+          "31 Jan 2027",
+          "31/01/2027",
+          "2027-01-31",
+          "31 Jan. 2027"
+        ]
+      ],
+      "must_not_include": [
+        "MHA-HC-2025-0748218",
+        "01 Feb 2027",
+        "1 February 2027",
+        "14 March 2027"
+      ],
+      "citations": [
+        {
+          "file": "hx-text.pdf",
+          "page": 1
+        }
+      ],
+      "ask_follow_up": false
+    },
+    "Q2": {
+      "must_include": [
+        "S$40,000",
+        "S$150,000"
+      ],
+      "citations": [
+        {
+          "file": "hx-text.pdf",
+          "page": 1
+        }
+      ],
+      "ask_follow_up": false
+    },
+    "Q3": {
+      "person": "Felix Oran Hartwell",
+      "ask_follow_up": true,
+      "must_not_include": [
+        "S$2,100",
+        "S$2,500"
+      ]
+    },
+    "Q4": {
+      "person": "Felix Oran Hartwell",
+      "must_include": [
+        "S$600"
+      ],
+      "must_not_include": [
+        "S$2,100",
+        "S$2,600"
+      ],
+      "citations": [
+        {
+          "file": "hx-text.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "Q5": {
+      "person": "Simon Alastair Hartwell",
+      "must_include": [
+        "S$360"
+      ],
+      "must_not_include": [
+        "S$480",
+        "S$330",
+        "S$440"
+      ],
+      "citations": [
+        {
+          "file": "hx-text.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "Q6": {
+      "must_include": [
+        "S$110"
+      ],
+      "must_include_any": [
+        [
+          "01 July 2026",
+          "1 July 2026",
+          "1 Jul 2026",
+          "01 Jul 2026"
+        ]
+      ],
+      "version": "hx-endorsement.pdf",
+      "citations": [
+        {
+          "file": "hx-endorsement.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "Q7": {
+      "must_include_any": [
+        [
+          "not stated",
+          "isn't stated",
+          "is not stated",
+          "not shown",
+          "isn't shown",
+          "doesn't show",
+          "does not show",
+          "not in your",
+          "not in the",
+          "don't show",
+          "do not show",
+          "no premium",
+          "doesn't state",
+          "does not state",
+          "doesn't mention",
+          "does not mention",
+          "couldn't find",
+          "could not find"
+        ]
+      ]
+    },
+    "Q8": {
+      "person": "Isla Maren Hartwell",
+      "must_include_any": [
+        [
+          "4th",
+          "fourth"
+        ]
+      ],
+      "must_not_include": [
+        "S$300",
+        "S$450"
+      ],
+      "citations": [
+        {
+          "file": "hx-scanned.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "Q9": {
+      "must_include": [
+        "S$500"
+      ],
+      "must_include_any": [
+        [
+          "accident only",
+          "accident-only",
+          "only covers accidents",
+          "accidents only",
+          "only for accidents",
+          "only pays for accidents"
+        ]
+      ],
+      "citations": [
+        {
+          "file": "hx-scanned.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "R1": {
+      "person": "Isla Maren Hartwell",
+      "must_include": [
+        "S$330"
+      ],
+      "must_not_include": [
+        "S$240"
+      ]
+    },
+    "D1": {
+      "must_not_cite": [
+        "hx-endorsement.pdf"
+      ],
+      "must_not_include": [
+        "S$110"
+      ]
+    }
+  }
+}

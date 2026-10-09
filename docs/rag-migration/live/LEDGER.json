@@ -78,6 +78,19 @@
       "calls": 20,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "ingest-preflight-ci-2",
+      "tested_code_sha": "d9e201102589d3aa9472b4c302aa514668fff2d9",
+      "request_sha": "41eb9afa801524bed88f8e3343c0d4f23bcf7c14",
+      "at": "2026-10-09T12:59:25.918Z",
+      "preflight": true,
+      "run_cap_usd": 0.1,
+      "spent_usd": 0,
+      "reserved_unsettled_usd": 0,
+      "calls": 0,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
