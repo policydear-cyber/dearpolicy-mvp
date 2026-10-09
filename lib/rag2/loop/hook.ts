@@ -9,12 +9,14 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { getConversation, historyToken, openConversation, ChatConflict } from "@/lib/chat/store";
 import { enforceLiveChatMonetaryBoundary } from "@/lib/chat/monetary-boundary";
-import { verifyAnswerFigures } from "@/lib/chat/answer-verification";
+import { sentencesOf, verifyAnswerFigures, type FigureProblem } from "@/lib/chat/answer-verification";
+import { containsMoney, withholdSentences } from "@/lib/chat/monetary-boundary";
+import { checkCitedStatement } from "./statements";
 import type { ChatContext, ChatRequest } from "@/lib/chat/workflow";
 import type { ChatResult, ConversationState } from "@/lib/chat/types";
 import type { ClaimPerson } from "@/lib/claims/person";
 import type { ChatAnswer, ChatCitation, ChatQuestion } from "@/types";
-import { DECISION_NOTE, DROPPED_NOTE, PAYOUT_NOTE, SUM_NOTE } from "./compose";
+import { DECISION_NOTE, DROPPED_NOTE, PAYOUT_NOTE, SUM_NOTE, type Composed } from "./compose";
 import { syncCalcClaimRecord, syncLoopClaimState } from "../calc/claim-record";
 import { ANYONE, FALLBACK_TEXT, runLoop, type LoopPerson } from "./loop";
 import { loopModel } from "./model";
@@ -27,6 +29,53 @@ export const ESTIMATE_NOTICE = "Indicative estimates are worked out from your do
 export const RESUME_NOTE = "When you’re ready, here is the question I was on.";
 /** The composer's caveats an asking turn says before its question (never "nothing could be confirmed"). */
 const ASK_NOTES = new Set([PAYOUT_NOTE, DECISION_NOTE, SUM_NOTE]);
+
+// ------------------------------------------------------------------ Round 7 (A3): when the gate rejects a figure
+const squashT = (t: string) => (t ?? "").replace(/\s+/g, " ").trim();
+/** The benefit a binding is for, as a household would read it: its label, or (when the label is only an item number
+ * such as "A") the row's longest worded cell. */
+export function benefitLabelOf(b: { benefit: string; passage: string }): string {
+  if ((b.benefit.match(/[A-Za-z]{3,}/g) ?? []).length >= 2) return b.benefit.trim();
+  const cells = (b.passage.split("\n").find((l) => /\d/.test(l)) ?? b.passage).split(/\t+| {2,}/).map((c) => c.trim());
+  const worded = cells.filter((c) => (c.match(/[A-Za-z]{3,}/g) ?? []).length >= 2 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\b/.test(c)).sort((x, y) => y.length - x.length);
+  return worded[0] ?? b.benefit.trim();
+}
+function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: RagLoopState, composed: Composed | null): void {
+  const rejected = (s: string) => problems.some((p) => { const a = squashT(s), b = squashT(p.sentence); return (b && (a.includes(b) || b.includes(a))) || (!!p.figure && s.includes(p.figure)); });
+  const evidenceOf = (s: string) => (composed?.sentences ?? []).find((x) => { const a = squashT(x.text), b = squashT(s); return a.includes(b) || b.includes(a); })?.evidenceIds ?? [];
+  const lostSentences: string[] = [];
+  const rescue = (field: string): string => sentencesOf(field).map((s) => {
+    if (!rejected(s)) return s;
+    lostSentences.push(s);
+    const r = withholdSentences(s).text.trim();
+    if (!r || containsMoney(r) || (r.match(/[A-Za-z]{3,}/g) ?? []).length < 6) return "";
+    // The figure-free part must still say only what its own evidence says.
+    const ids = evidenceOf(s).filter((id) => state.evidence[id]);
+    if (!ids.length) return "";
+    const why = checkCitedStatement(r, ids.map((id) => ({ policyId: state.evidence[id].policyId, subjectId: state.evidence[id].subjectId ?? null, text: [state.evidence[id].table?.rowLabel ?? "", state.evidence[id].passage.text].join("\n") })), { people: [], policyNames: new Map(), subjectId: null });
+    return why ? "" : r;
+  }).filter(Boolean).join(" ");
+  answer.summary = rescue(answer.summary);
+  answer.details = answer.details.map(rescue).filter((d) => d.trim());
+  const gone = (sentence: string) => lostSentences.some((l) => { const a = squashT(l), b = squashT(sentence); return a.includes(b) || b.includes(a); });
+  answer.figureBindings = (answer.figureBindings ?? []).filter((b) => !gone(b.sentence));
+  answer.computations = (answer.computations ?? []).filter((r) => !gone(r.sentence));
+  if (answer.calculations) answer.calculations = answer.calculations.filter((r) => !gone(r.sentence));
+  const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
+  if (said.length) { if (!answer.summary.trim()) { answer.summary = answer.details[0]; answer.details = answer.details.slice(1); } return; }
+  // Nothing supported is left: say specifically what could not be confirmed (benefit, document, page), or the
+  // composer's own requirement -- never the rejected figure, and never only a generic note.
+  const lines: string[] = [];
+  for (const s of lostSentences) for (const b of (composed?.figureBindings ?? []).filter((x) => { const a = squashT(x.sentence), c = squashT(s); return a.includes(c) || c.includes(a); })) {
+    const doc = answer.citations.find((c) => c.policyId === b.policyId)?.policyName ?? state.docNames?.[b.policyId] ?? "your policy document";
+    const line = `I found “${benefitLabelOf(b)}” in ${doc} (page ${b.pageStart}), but I couldn’t confirm its amount against that page, so I haven’t stated it.`;
+    if (!lines.includes(line)) lines.push(line);
+  }
+  const requirements = (composed?.sentences ?? []).filter((x) => x.kind === "requirement").map((x) => x.text);
+  const body = [...lines, ...requirements];
+  answer.summary = body[0] ?? "I couldn’t confirm the amounts against your documents, so I haven’t stated them; the cited pages below show what they print.";
+  answer.details = [...body.slice(1), ...answer.details];
+}
 
 export async function prepareLoopChat(request: ChatRequest): Promise<ChatContext> {
   const family = (await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`, [request.accountId])).rows;
@@ -179,9 +228,14 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   answer.conversationId = conversation.id;
   answer.conversationRevision = conversation.revision + 1;
   enforceLiveChatMonetaryBoundary(answer, { claimContext: false });
-  // The save-time gate, applied here first so the turn's record shows its outcome; saveTurn runs it again.
-  const problems = await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message });
+  // The save-time gate, applied here first (in report mode) so the turn's record shows its outcome; its rejections
+  // are authoritative. Round 7 (A3): a rejected figure sentence is replaced by its figure-free part (when that part
+  // still says something its evidence supports) or left out -- and a reply left with nothing says specifically what
+  // could not be confirmed, never only the generic note. saveTurn runs the gate again on what remains.
+  const problems = await verifyAnswerFigures(structuredClone(answer), { accountId: request.accountId, userText: message, report: true });
   trace.gate = problems.map((p) => ({ where: p.where, figure: p.figure, reason: p.reason }));
+  if (problems.length) rescueRejected(answer, problems, state, reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null);
+  await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message });
   const visible = [answer.summary, ...answer.details, ...answer.questions.map((q) => q.text)].join(" ");
   state.history = [...state.history, { user: message, assistant: visible }].slice(-8);
   state.turns = [...state.turns, trace].slice(-12) as TraceTurn[];
