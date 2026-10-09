@@ -1,0 +1,1451 @@
+[
+  {
+    "id": "Q1",
+    "phase": "conversation",
+    "user": "What's the policy number on our Meridian Harbour plan, and when does it run out?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nThe Meridian Harbour SafeStay Family Hospital Cash & Personal Accident Plan policy number is MHA-HC-2025-0748213, and its cover runs through 31 January 2027 (inclusive).\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 4643,
+    "at": "2026-10-09T18:49:27.133Z",
+    "screenshot": "screenshots/12-chat-Q1-1.png",
+    "conversation": "C1",
+    "loop": null,
+    "storedCitations": []
+  },
+  {
+    "id": "Q2",
+    "phase": "conversation",
+    "user": "If something happened to Isla in an accident, how much is the accidental death payout for her? Is it the same as mine?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nUnder the SafeStay Family Hospital Cash & Personal Accident Plan, Isla’s “Accidental death or permanent total disablement (lump sum)” benefit is S$40,000; the same benefit for you is S$150,000, so it is not the same amount (the schedule lists Child and Adult amounts respectively).\n\nIsla’s JuniorShield certificate also lists “Child accidental death” at S$20,000.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 11202,
+    "at": "2026-10-09T18:49:31.963Z",
+    "screenshot": "screenshots/13-chat-Q2-1.png",
+    "conversation": "C2",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 4,
+      "limit": null,
+      "latencyMs": 9455,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 40988,
+        "output": 767
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4902,
+          "output": 105,
+          "attempt": 1,
+          "costUsd": 0.00011556,
+          "latencyMs": 1822
+        },
+        {
+          "ok": true,
+          "input": 6703,
+          "output": 215,
+          "attempt": 1,
+          "costUsd": 0.00034796,
+          "latencyMs": 2716
+        },
+        {
+          "ok": true,
+          "input": 13468,
+          "output": 281,
+          "attempt": 1,
+          "costUsd": 0.00089537,
+          "latencyMs": 2719
+        },
+        {
+          "ok": true,
+          "input": 15915,
+          "output": 166,
+          "attempt": 1,
+          "costUsd": 0.00047372,
+          "latencyMs": 2095
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 2,
+          "args": {
+            "topic": "accidental death",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 1,
+          "args": {
+            "topic": "accidental death",
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":10}",
+          "evidence": 10,
+          "args": {
+            "k": 10,
+            "query": "accidental death benefit amount child adult personal accident death sum insured percentage conditions",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+              "7568b0a5-3951-49e1-bc86-2f69948fbf96"
+            ],
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":9}",
+          "evidence": 9,
+          "args": {
+            "k": 10,
+            "query": "accidental death benefit amount adult personal accident death sum insured percentage conditions",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae"
+            ],
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":40000,\"column\":\"Child (each)\",\"row\":\"Accidental death or permanent total disablement (lump sum)\"}",
+          "evidence": 1,
+          "args": {
+            "tier": "Child",
+            "want": "amount",
+            "benefit": "Accidental death or permanent total disablement (lump sum)",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v2\",\"value\":150000,\"column\":\"Adult (each)\",\"row\":\"Accidental death or permanent total disablement (lump sum)\"}",
+          "evidence": 1,
+          "args": {
+            "tier": "Adult",
+            "want": "amount",
+            "benefit": "Accidental death or permanent total disablement (lump sum)",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":5}",
+          "evidence": 5,
+          "args": {
+            "k": 5,
+            "query": "accidental death or permanent total disablement benefit conditions death accident clause",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae"
+            ],
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [],
+      "evidenceChosen": [
+        "e7",
+        "e16",
+        "e17",
+        "e5"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  },
+  {
+    "id": "Q3",
+    "phase": "conversation",
+    "user": "Felix fell off the monkey bars at school yesterday and broke his wrist. How much can we claim from the Meridian policy?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nSorry Felix got hurt. For Felix, the policy lists S$600 for “Fractured bones (per Accident) — Simple (closed) fracture” and S$1,500 for “Fractured bones (per Accident) — Compound (open) fracture”; the type must be certified in writing by a registered medical practitioner and confirmed by X-ray, and only one of these benefits is payable for the same bone in the same accident.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nDid the broken bone break through the skin, and has the fracture been confirmed by X-ray and certified in writing by a registered medical practitioner?\nThis changes what your policy pays under: “Items D and E: the type of fracture must be certified in writing by a registered medical practitioner and confirmed by X-ray. Only one of Item D or” (page 1); “4.4 For Items D and E, a Compound fracture means a fracture in which the broken bone breaks through the skin. All” (page 2)\nAnswer\nShow full assessment",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": "Did the broken bone break through the skin, and has the fracture been confirmed by X-ray and certified in writing by a registered medical practitioner?",
+    "ms": 12745,
+    "at": "2026-10-09T18:49:43.365Z",
+    "screenshot": "screenshots/14-chat-Q3-1.png",
+    "conversation": "C3",
+    "loop": {
+      "outcome": "ask_user",
+      "steps": 5,
+      "limit": null,
+      "latencyMs": 10629,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 36753,
+        "output": 792
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4901,
+          "output": 18,
+          "attempt": 1,
+          "costUsd": 0.00007196000000000001,
+          "latencyMs": 1113
+        },
+        {
+          "ok": true,
+          "input": 5019,
+          "output": 91,
+          "attempt": 1,
+          "costUsd": 0.00011765,
+          "latencyMs": 1837
+        },
+        {
+          "ok": true,
+          "input": 5222,
+          "output": 119,
+          "attempt": 1,
+          "costUsd": 0.00014132999999999998,
+          "latencyMs": 1953
+        },
+        {
+          "ok": true,
+          "input": 9582,
+          "output": 291,
+          "attempt": 1,
+          "costUsd": 0.0006450599999999999,
+          "latencyMs": 2934
+        },
+        {
+          "ok": true,
+          "input": 12029,
+          "output": 273,
+          "attempt": 1,
+          "costUsd": 0.00048836,
+          "latencyMs": 2740
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "resolve_person",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\"}",
+          "evidence": 0,
+          "args": {
+            "mention": "Felix"
+          }
+        },
+        {
+          "name": "note_facts",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0,
+          "args": {
+            "facts": [
+              {
+                "key": "how_it_happened",
+                "value": "fell off the monkey bars at school",
+                "words": "fell off the monkey bars at school yesterday"
+              },
+              {
+                "key": "injury",
+                "value": "broke his wrist",
+                "words": "broke his wrist"
+              }
+            ],
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 1,
+          "args": {
+            "topic": "accident",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":10}",
+          "evidence": 10,
+          "args": {
+            "k": 10,
+            "query": "Meridian policy wrist fracture broken wrist accidental injury benefit claim X-ray registered medical practitioner",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":600,\"column\":\"Child (each)\",\"row\":\"Fractured bones (per Accident) — Simple (closed) fracture\"}",
+          "evidence": 1,
+          "args": {
+            "tier": "Child",
+            "want": "amount",
+            "benefit": "Fractured bones (per Accident) — Simple (closed) fracture",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v2\",\"value\":1500,\"column\":\"Child (each)\",\"row\":\"Fractured bones (per Accident) — Compound (open) fracture\"}",
+          "evidence": 1,
+          "args": {
+            "tier": "Child",
+            "want": "amount",
+            "benefit": "Fractured bones (per Accident) — Compound (open) fracture",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":5}",
+          "evidence": 5,
+          "args": {
+            "k": 5,
+            "query": "Item D simple closed fracture wrist fracture classification compound breaks through skin X-ray certified registered medical practitioner Clause 4.4",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae"
+            ],
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "ask_user",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [],
+      "evidenceChosen": [
+        "e2",
+        "e6",
+        "e12",
+        "e13"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 2,
+        "pageEnd": 2
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  },
+  {
+    "id": "Q4",
+    "phase": "conversation",
+    "user": "The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin.",
+    "via": "inline answer (asked: Did the broken bone break through the skin, and has the fracture been confirmed by X-ray and certified in writing by a registered medical practitioner?)",
+    "answer": "DearPolicy\n\nYou told me, “The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin.”\n\nFor Felix, the policy lists S$600 for “Fractured bones (per Accident) — Simple (closed) fracture” and S$1,500 for “Fractured bones (per Accident) — Compound (open) fracture”; the type must be certified in writing by a registered medical practitioner and confirmed by X-ray, and only one of these benefits is payable for the same bone in the same accident.\n\nBased on what you reported, Felix’s fracture matches the closed-fracture description, but the documents do not establish that the doctor certified the fracture type in writing, so I can’t determine a claim amount from this information.\n\nWhat you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.\n\nNEXT STEP\n\nWhen you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 6145,
+    "at": "2026-10-09T18:49:56.198Z",
+    "screenshot": "screenshots/15-chat-Q4-1.png",
+    "conversation": "C3",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 2,
+      "limit": null,
+      "latencyMs": 4496,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 11188,
+        "output": 487
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 5451,
+          "output": 103,
+          "attempt": 1,
+          "costUsd": 0.0005966,
+          "latencyMs": 1615
+        },
+        {
+          "ok": true,
+          "input": 5737,
+          "output": 384,
+          "attempt": 1,
+          "costUsd": 0.00028645,
+          "latencyMs": 2868
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "note_facts",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0,
+          "args": {
+            "facts": [
+              {
+                "key": "fracture_confirmation_and_open_closed",
+                "value": "The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin.",
+                "words": "The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin."
+              }
+            ],
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [],
+      "evidenceChosen": [
+        "e2",
+        "e6",
+        "e12",
+        "e13"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 2,
+        "pageEnd": 2
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  },
+  {
+    "id": "Q5",
+    "phase": "conversation",
+    "user": "I was in hospital after that car accident in March. They admitted me at 9:40pm on 14 March and I was discharged at 8:20am on 18 March. How much hospital cash should Meridian pay me?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nFor you, Meridian’s “Hospital daily allowance” is S$120 per day, up to 60 days per policy year, and its wording counts each complete 24-hour period plus a remaining period of 12 hours or more as another day (page 1; page 2).\n\nOnly the insurer decides whether an amount is paid, owed or claimable, after it reviews the claim.\n\nNEXT STEP\n\nMeridian’s claim wording asks for written notice within 30 days of the accident and supporting documents including the hospital discharge summary showing admission and discharge times; check the policy’s claims requirements.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2"
+    ],
+    "pendingQuestion": null,
+    "ms": 18780,
+    "at": "2026-10-09T18:50:02.567Z",
+    "screenshot": "screenshots/16-chat-Q5-1.png",
+    "conversation": "C4",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 7,
+      "limit": null,
+      "latencyMs": 16402,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 56777,
+        "output": 995
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4924,
+          "output": 17,
+          "attempt": 1,
+          "costUsd": 0.00007376,
+          "latencyMs": 1676
+        },
+        {
+          "ok": true,
+          "input": 5043,
+          "output": 129,
+          "attempt": 1,
+          "costUsd": 0.00013698,
+          "latencyMs": 1834
+        },
+        {
+          "ok": true,
+          "input": 5339,
+          "output": 46,
+          "attempt": 1,
+          "costUsd": 0.00011437,
+          "latencyMs": 1675
+        },
+        {
+          "ok": true,
+          "input": 6097,
+          "output": 195,
+          "attempt": 1,
+          "costUsd": 0.00023803,
+          "latencyMs": 2554
+        },
+        {
+          "ok": true,
+          "input": 11236,
+          "output": 97,
+          "attempt": 1,
+          "costUsd": 0.00063471,
+          "latencyMs": 1681
+        },
+        {
+          "ok": true,
+          "input": 11680,
+          "output": 176,
+          "attempt": 1,
+          "costUsd": 0.00025610000000000005,
+          "latencyMs": 1958
+        },
+        {
+          "ok": true,
+          "input": 12458,
+          "output": 335,
+          "attempt": 1,
+          "costUsd": 0.00037344,
+          "latencyMs": 4944
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "resolve_person",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\"}",
+          "evidence": 0,
+          "args": {
+            "mention": "I"
+          }
+        },
+        {
+          "name": "note_facts",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0,
+          "args": {
+            "facts": [
+              {
+                "key": "how_it_happened",
+                "value": "car accident",
+                "words": "car accident"
+              },
+              {
+                "key": "admission_datetime",
+                "value": "14 March at 9:40pm",
+                "words": "They admitted me at 9:40pm on 14 March"
+              },
+              {
+                "key": "discharge_datetime",
+                "value": "18 March at 8:20am",
+                "words": "I was discharged at 8:20am on 18 March"
+              }
+            ],
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 1,
+          "args": {
+            "topic": "hospital cash",
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":9}",
+          "evidence": 9,
+          "args": {
+            "k": 10,
+            "query": "hospital cash daily benefit accident admission discharge full days 24 hours waiting period minimum stay day cap",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae"
+            ],
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":4}",
+          "evidence": 4,
+          "args": {
+            "k": 10,
+            "query": "endorsement amendment hospital cash benefit effective 1 July 2026",
+            "policy_ids": [
+              "08a681fc-750b-4f42-8c23-ae701fc41db8"
+            ],
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":120,\"column\":\"Adult (each)\",\"row\":\"Hospital daily allowance (per day of confinement, max 60 days per policy year) — see Cl…",
+          "evidence": 1,
+          "args": {
+            "tier": "Adult",
+            "want": "amount",
+            "benefit": "Hospital daily allowance (per day of confinement, max 60 days per policy year)",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d"
+          }
+        },
+        {
+          "name": "calculate",
+          "ok": true,
+          "error": null,
+          "summary": "{\"amount\":360,\"kind\":\"indicative_estimate\"}",
+          "evidence": 2,
+          "args": {
+            "benefit": "Hospital daily allowance (per day of confinement, max 60 days per policy year)",
+            "purpose": "claim",
+            "admission": {
+              "at": "2026-03-14T21:40+08:00",
+              "words": "They admitted me at 9:40pm on 14 March"
+            },
+            "discharge": {
+              "at": "2026-03-18T08:20+08:00",
+              "words": "I was discharged at 8:20am on 18 March"
+            },
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "calculator": "hospital_cash",
+            "subject_id": "c4df38bf-b5a8-45d3-a876-55fa2eac307d",
+            "rate_value_id": "v1"
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [
+        {
+          "reason": "calls a calculated benefit a payout",
+          "sentence": "Based on the admission and discharge times you gave, the indicative estimate is S$360 for three payable days; this is not a confirmed payout."
+        },
+        {
+          "reason": "S$80 is printed in none of the evidence the sentence cites",
+          "sentence": "The endorsement changed the Child amount from S$80 to S$110 per day effective 1 July 2026, while the Adult amount remained unchanged; your March stay is before that effective date, so the Adult rate above applies (page 1)."
+        }
+      ],
+      "evidenceChosen": [
+        "e15",
+        "e16"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 2,
+        "pageEnd": 2
+      }
+    ]
+  },
+  {
+    "id": "Q6",
+    "phase": "conversation",
+    "user": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t confirm an answer to that from your documents.",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [],
+    "pendingQuestion": null,
+    "ms": 7682,
+    "at": "2026-10-09T18:50:21.538Z",
+    "screenshot": "screenshots/17-chat-Q6-1.png",
+    "conversation": "C5",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 2,
+      "limit": null,
+      "latencyMs": 5266,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 15059,
+        "output": 493
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4895,
+          "output": 129,
+          "attempt": 1,
+          "costUsd": 0.00012686,
+          "latencyMs": 1836
+        },
+        {
+          "ok": true,
+          "input": 10164,
+          "output": 364,
+          "attempt": 1,
+          "costUsd": 0.0007691900000000001,
+          "latencyMs": 3410
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 1,
+          "args": {
+            "topic": "hospital",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 2,
+          "args": {
+            "topic": "hospital",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":10}",
+          "evidence": 10,
+          "args": {
+            "k": 10,
+            "query": "endorsement letter amendment daily hospital allowance hospital cash daily benefit children"
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [
+        {
+          "reason": "shows an internal id (e8)",
+          "sentence": "Yes—the endorsement changed the SafeStay Family Hospital Cash & Personal Accident Plan’s “Hospital daily allowance (per day of confinement)” for each child from S$80 to S$110 per day, effective 1 July 2026; confinement days before that date remain at the earlier rate. citee8"
+        },
+        {
+          "reason": "shows an internal id (e8, e6, e13)",
+          "sentence": "So Felix and Isla each have a current SafeStay allowance of S$110 per day for confinement days on or after 1 July 2026, subject to the policy’s accident-only condition and 60-day-per-policy-year maximum. citee8e6e13"
+        },
+        {
+          "reason": "shows an internal id (e5, e11)",
+          "sentence": "Isla also has a separate JuniorShield “Daily hospital income” benefit of S$150 per day, up to 30 days per policy year, payable only from the fourth consecutive hospitalisation day. citee5e11"
+        }
+      ],
+      "evidenceChosen": []
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 2,
+        "pageEnd": 2
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 2,
+        "pageEnd": 2
+      },
+      {
+        "policyId": "08a681fc-750b-4f42-8c23-ae701fc41db8",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  },
+  {
+    "id": "Q7",
+    "phase": "conversation",
+    "user": "How much are we actually paying for the Meridian policy every year?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI can’t tell from the Meridian documents available here how much the annual premium is; the policy schedule lists the family plan and cover period but no premium amount.\n\nThe endorsement refers to a revised premium but does not state its amount.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 9191,
+    "at": "2026-10-09T18:50:29.380Z",
+    "screenshot": "screenshots/18-chat-Q7-1.png",
+    "conversation": "C6",
+    "loop": null,
+    "storedCitations": []
+  },
+  {
+    "id": "Q8",
+    "phase": "conversation",
+    "user": "Isla might need to stay in hospital two nights next week. Will her JuniorShield plan pay the $150 a day?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nIsla’s JuniorShield plan lists “Daily hospital income” at S$150 per day, up to 30 days per policy year, but it is payable only from the fourth consecutive day of hospitalisation, with the first three days not payable; a two-night stay would not reach that threshold, so it would not pay this benefit for that stay.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 16774,
+    "at": "2026-10-09T18:50:38.777Z",
+    "screenshot": "screenshots/19-chat-Q8-1.png",
+    "conversation": "C7",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 4,
+      "limit": null,
+      "latencyMs": 14839,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 26435,
+        "output": 470
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4901,
+          "output": 18,
+          "attempt": 1,
+          "costUsd": 0.00007196000000000001,
+          "latencyMs": 1219
+        },
+        {
+          "ok": true,
+          "input": 5019,
+          "output": 44,
+          "attempt": 1,
+          "costUsd": 0.00009415000000000001,
+          "latencyMs": 8693
+        },
+        {
+          "ok": true,
+          "input": 5836,
+          "output": 267,
+          "attempt": 1,
+          "costUsd": 0.00027673000000000004,
+          "latencyMs": 2849
+        },
+        {
+          "ok": true,
+          "input": 10679,
+          "output": 141,
+          "attempt": 1,
+          "costUsd": 0.0006245,
+          "latencyMs": 2048
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "resolve_person",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\"}",
+          "evidence": 0,
+          "args": {
+            "mention": "Isla"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 2,
+          "args": {
+            "topic": "hospital cash",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":3}",
+          "evidence": 3,
+          "args": {
+            "k": 10,
+            "query": "JuniorShield hospital income daily benefit $150 per day hospital stay eligibility minimum nights waiting period exclusions",
+            "policy_ids": [
+              "7568b0a5-3951-49e1-bc86-2f69948fbf96"
+            ],
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":150,\"column\":\"Amount payable\",\"row\":\"Daily hospital income*\"}",
+          "evidence": 1,
+          "args": {
+            "want": "amount",
+            "benefit": "Hospital income",
+            "policy_id": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":8}",
+          "evidence": 8,
+          "args": {
+            "k": 10,
+            "query": "hospital cash daily benefit admission discharge day count rule minimum stay waiting days",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae"
+            ],
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [],
+      "evidenceChosen": [
+        "e3",
+        "e4",
+        "e6"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  },
+  {
+    "id": "Q9",
+    "phase": "conversation",
+    "user": "Oh, by the way, if one of the kids gets dengue, which of our policies would actually pay anything?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nFor Felix, the SafeStay Family Hospital Cash & Personal Accident Plan is accident-only, so its hospital and medical-expense benefits would not pay for dengue illness (the child hospital daily allowance is currently S$110 per day from 1 July 2026, but only for eligible accident-related confinement).\n\nFor Isla, JuniorShield Child Hospital Income Plan lists “Hand, foot & mouth disease or dengue fever hospitalisation (lump sum)” of S$500, so that is the policy benefit specifically relevant to dengue hospitalisation.\n\nI found no dengue-specific benefit for Felix in the policies listed for him; the documents available here may not include every policy the household has.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 10210,
+    "at": "2026-10-09T18:50:55.749Z",
+    "screenshot": "screenshots/20-chat-Q9-1.png",
+    "conversation": "C8",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 3,
+      "limit": null,
+      "latencyMs": 8435,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 28378,
+        "output": 711
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4899,
+          "output": 117,
+          "attempt": 1,
+          "costUsd": 0.00012126,
+          "latencyMs": 2583
+        },
+        {
+          "ok": true,
+          "input": 6431,
+          "output": 239,
+          "attempt": 1,
+          "costUsd": 0.00033303000000000006,
+          "latencyMs": 2218
+        },
+        {
+          "ok": true,
+          "input": 17048,
+          "output": 355,
+          "attempt": 1,
+          "costUsd": 0.00131485,
+          "latencyMs": 3592
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 1,
+          "args": {
+            "topic": "dengue illness, hospitalisation, infectious disease",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 2,
+          "args": {
+            "topic": "dengue illness, hospitalisation, infectious disease",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":10}",
+          "evidence": 10,
+          "args": {
+            "k": 10,
+            "query": "dengue fever illness infectious disease hospital cash benefit exclusions definition hospital confinement",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":10}",
+          "evidence": 10,
+          "args": {
+            "k": 10,
+            "query": "dengue fever illness infectious disease hospital cash benefit exclusions definition hospital confinement",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":6}",
+          "evidence": 6,
+          "args": {
+            "k": 10,
+            "query": "dengue fever medical expenses reimbursement infectious disease exclusion",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":8}",
+          "evidence": 8,
+          "args": {
+            "k": 10,
+            "query": "dengue fever medical expenses reimbursement infectious disease exclusion",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [
+        {
+          "reason": "not supported by its evidence: it is about Isla Maren Hartwell but its evidence was read for someone else",
+          "sentence": "Isla also has the SafeStay plan, but its benefits are accident-only and therefore would not pay for dengue illness."
+        }
+      ],
+      "evidenceChosen": [
+        "e5",
+        "e8",
+        "e14",
+        "e1"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 2,
+        "pageEnd": 2
+      },
+      {
+        "policyId": "08a681fc-750b-4f42-8c23-ae701fc41db8",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  },
+  {
+    "id": "R1",
+    "phase": "reopen",
+    "user": "So if Isla was in hospital for exactly 3 days in August after falling at the playground, how much would Meridian pay?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nFor Isla, Meridian’s amended “Hospital daily allowance (per day of confinement)” is S$110 per day from 1 July 2026, replacing the earlier S$80 per day; the policy counts complete 24-hour periods, then a remaining period of 12 hours or more as another day, and disregards less than 12 hours.\n\nA FACT THAT CHANGES THIS ASSESSMENT\nWhat were Isla’s actual hospital admission and discharge dates and times?\nThis changes what your policy pays under: “of discharge shown on the hospital record. Each complete period of 24 consecutive hours counts as one day. Any” (page 2); “remaining period of 12 hours or more counts as one further day; any remaining period of less than 12 hours is” (page 2)\nAnswer\nShow full assessment",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 2",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": "What were Isla’s actual hospital admission and discharge dates and times?",
+    "ms": 13213,
+    "at": "2026-10-09T18:51:06.699Z",
+    "screenshot": "screenshots/22-chat-R1-1.png",
+    "conversation": "C5",
+    "unansweredFollowUp": true,
+    "loop": null,
+    "storedCitations": []
+  },
+  {
+    "id": "D1",
+    "phase": "after_delete",
+    "user": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI can’t confirm what the endorsement changed because its document was removed from the library; it took effect on 1 July 2026, so the current amount may differ from the remaining schedule. The remaining schedule lists “Hospital daily allowance” at S$80 per day for each child, up to 60 days per policy year, but this is the issued schedule amount rather than confirmed current cover.\n\nFor Isla, the separate “Daily hospital income” benefit is S$150 per day, up to 30 days per policy year, payable only from the fourth consecutive hospitalisation day; the first three days are not payable.\n\nSOURCES",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [
+      "Meridian Harbour Assurance Pte. Ltd. · SafeStay Family Hospital Cash & Personal Accident PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1",
+      "Kestrel Bay Insurance (Singapore) Ltd. · JuniorShield Child Hospital Income PlanYour uploaded documentPage 1"
+    ],
+    "pendingQuestion": null,
+    "ms": 10696,
+    "at": "2026-10-09T18:51:22.324Z",
+    "screenshot": "screenshots/24-chat-D1-1.png",
+    "conversation": "after-delete",
+    "loop": {
+      "outcome": "final_answer",
+      "steps": 4,
+      "limit": null,
+      "latencyMs": 9683,
+      "modelId": "openai:gpt-6-luna",
+      "usage": {
+        "input": 43088,
+        "output": 815
+      },
+      "calls": [
+        {
+          "ok": true,
+          "input": 4895,
+          "output": 130,
+          "attempt": 1,
+          "costUsd": 0.00012529,
+          "latencyMs": 1780
+        },
+        {
+          "ok": true,
+          "input": 10875,
+          "output": 278,
+          "attempt": 1,
+          "costUsd": 0.00079729,
+          "latencyMs": 2474
+        },
+        {
+          "ok": true,
+          "input": 12690,
+          "output": 74,
+          "attempt": 1,
+          "costUsd": 0.00033859000000000005,
+          "latencyMs": 1545
+        },
+        {
+          "ok": true,
+          "input": 14628,
+          "output": 333,
+          "attempt": 1,
+          "costUsd": 0.00049854,
+          "latencyMs": 3830
+        }
+      ],
+      "toolCalls": [
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 1,
+          "args": {
+            "topic": "hospital cash",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "policies_for",
+          "ok": true,
+          "error": null,
+          "summary": "{}",
+          "evidence": 2,
+          "args": {
+            "topic": "hospital cash",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":10}",
+          "evidence": 10,
+          "args": {
+            "k": 10,
+            "query": "endorsement letter amended daily hospital allowance hospital cash daily benefit"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":80,\"column\":\"Child (each)\",\"row\":\"Hospital daily allowance (per day of confinement, max 60 days per policy year) — see Cla…",
+          "evidence": 1,
+          "args": {
+            "tier": "Child",
+            "want": "amount",
+            "benefit": "Hospital daily allowance (per day of confinement, max 60 days per policy year)",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "401ff378-31d1-45a9-ab24-f05e79dcb3fe"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v2\",\"value\":80,\"column\":\"Child (each)\",\"row\":\"Hospital daily allowance (per day of confinement, max 60 days per policy year) — see Cla…",
+          "evidence": 1,
+          "args": {
+            "tier": "Child",
+            "want": "amount",
+            "benefit": "Hospital daily allowance (per day of confinement, max 60 days per policy year)",
+            "policy_id": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "select_table_value",
+          "ok": true,
+          "error": null,
+          "summary": "{\"status\":\"ok\",\"valueId\":\"v3\",\"value\":150,\"column\":\"Amount payable\",\"row\":\"Daily hospital income*\"}",
+          "evidence": 1,
+          "args": {
+            "want": "amount",
+            "benefit": "Daily hospital income",
+            "policy_id": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+            "subject_id": "a2bd32dd-b2fc-4740-952d-e92f1fab0133"
+          }
+        },
+        {
+          "name": "search_passages",
+          "ok": true,
+          "error": null,
+          "summary": "{\"hits\":5}",
+          "evidence": 5,
+          "args": {
+            "k": 5,
+            "query": "Hospital daily allowance Item B payable only where confinement results solely and directly from an Accident; how days counted Clause 4.2",
+            "policy_ids": [
+              "9f2440f8-6e0b-47ad-ad83-8dca21377dae"
+            ]
+          }
+        },
+        {
+          "name": "final_answer",
+          "ok": true,
+          "error": null,
+          "summary": null,
+          "evidence": 0
+        }
+      ],
+      "gate": [],
+      "dropped": [
+        {
+          "reason": "S$150 is printed in none of the evidence the sentence cites",
+          "sentence": "The removed endorsement relates to the SafeStay policy, not Isla’s separate JuniorShield certificate, so the documents show no endorsement change to that S$150 daily hospital income figure."
+        }
+      ],
+      "evidenceChosen": [
+        "e14",
+        "e7",
+        "e15"
+      ]
+    },
+    "storedCitations": [
+      {
+        "policyId": "9f2440f8-6e0b-47ad-ad83-8dca21377dae",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+        "pageStart": 1,
+        "pageEnd": 1
+      },
+      {
+        "policyId": "7568b0a5-3951-49e1-bc86-2f69948fbf96",
+        "pageStart": 1,
+        "pageEnd": 1
+      }
+    ]
+  }
+]
