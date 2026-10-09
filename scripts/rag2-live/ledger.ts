@@ -28,7 +28,7 @@ export function remainingUsd(l: Ledger): number {
 export function validateRequest(r: any): RunRequest {
   const fail = (m: string): never => { throw new Error("run-request.json refused: " + m); };
   if (typeof r?.run_id !== "string" || !/^[A-Za-z0-9._-]{1,40}$/.test(r.run_id)) fail("run_id: 1-40 of A-Z a-z 0-9 . _ -");
-  if (!Array.isArray(r.scenarios) || !r.scenarios.length || !r.scenarios.every((s: unknown) => typeof s === "string" && /^L[1-6]$/.test(s))) fail("scenarios: a non-empty list of L1..L6");
+  if (!Array.isArray(r.scenarios) || !r.scenarios.length || !r.scenarios.every((s: unknown) => typeof s === "string" && /^L[1-6][a-z]?$/.test(s))) fail("scenarios: a non-empty list of scenario ids (L1..L6, optional letter suffix)");
   const cap = Number(r.run_cap_usd);
   if (!Number.isFinite(cap) || cap <= 0 || cap > EXERCISE_CAP_USD) fail("run_cap_usd must be > 0 and <= 0.50");
   if (typeof r.preflight !== "boolean") fail("preflight must be true or false");
