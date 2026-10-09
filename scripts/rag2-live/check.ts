@@ -27,6 +27,7 @@ const WITHHELD = new RegExp(WITHHELD_AMOUNT_TEXT.replace(/[.*+?^${}()|[\]\\]/g, 
 import type { CalculationRecord, ChatAnswer } from "@/types";
 import { ACCOUNT_L, DOCS, L, doc, type MemberKey } from "../fixtures/rag2-live/household";
 import { SCENARIOS, STAGES, type Passage, type Scenario, type Stage, type TurnExpect } from "./scenarios";
+import { factsFrom, moneyValues, sentenceChecks } from "./check-sentences";
 
 export type Check = { turn: number; name: string; ok: boolean; stage: Stage; detail: string };
 export type LoadedTurn = {
@@ -238,6 +239,20 @@ export function fixtureChecks(s: Scenario, conv: LoadedConversation): Check[] {
   return out;
 }
 
+/** The expected facts for the whole-answer rules: every printed page of the live household's documents, their effective
+ * and expiry dates, the scenario's expected figures and calculations; a forbidden figure the scenario names as
+ * "superseded" is paired with that turn's expected figure. */
+export function scenarioFacts(s: Scenario) {
+  const texts: string[] = DOCS.flatMap((d) => [...Object.values(d.pages ?? {}).map(String), ...[d.effective, d.expiry].filter(Boolean).map(String)]);
+  const sup: { old: number; new: number; label?: string }[] = [];
+  for (const turn of s.turns) {
+    const e: any = turn.expect;
+    texts.push(...(e.figures ?? []), JSON.stringify(e.calculation ?? ""), JSON.stringify(e.calc ?? ""));
+    for (const f of (e.forbidden ?? []) as any[]) if (/supersed/i.test(f.why ?? "") && e.figures?.length) sup.push({ old: moneyValues(f.figure)[0], new: moneyValues(e.figures[0])[0], label: f.why });
+  }
+  return factsFrom(texts, sup.filter((x) => Number.isFinite(x.old) && Number.isFinite(x.new)));
+}
+
 export function grade(s: Scenario, conv: LoadedConversation): Verdict {
   const checks = fixtureChecks(s, conv);
   let incomplete: string | null = null;
@@ -248,6 +263,8 @@ export function grade(s: Scenario, conv: LoadedConversation): Verdict {
     const lim = t.trace?.limit;
     if (lim || (t.trace && !["final_answer", "ask_user"].includes(t.trace.outcome))) incomplete = incomplete ?? `turn ${i + 1} stopped: ${lim?.kind ?? t.trace?.outcome} ${lim?.detail ?? ""}`.trim();
     gradeTurn(t, turn.expect, conv, checks);
+    // Round 8: every sentence of the visible answer against the household's documents (the expected facts).
+    if (!lim) for (const c of sentenceChecks(t.visible, scenarioFacts(s), s.turns.slice(0, i + 1).map((x) => x.user).join("\n"))) checks.push({ turn: i + 1, name: c.name, ok: c.ok, stage: "verification", detail: c.detail });
   });
   const failed = checks.filter((c) => !c.ok);
   const stage = failed.length ? STAGES.find((st) => failed.some((c) => c.stage === st)) ?? null : null;

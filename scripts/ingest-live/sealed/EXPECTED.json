@@ -1,5 +1,5 @@
 {
-  "note": "Machine checks translated by agent E1 from agent T's EXPECTED.source.json (facts F01-F21, answers Q1-Q9; T's prose 'forbidden' items kept there). R1 and D1 are E1's: R1 = 3 days x S$110 (child, after 01 July 2026, accident) = S$330; D1 = the same question after the endorsement is deleted.",
+  "note": "Machine checks translated by agent E1 from agent T's EXPECTED.source.json (facts F01-F21, answers Q1-Q9; T's prose 'forbidden' items kept there). R1 and D1 are E1's: R1 = 3 days x S$110 (child, after 01 July 2026, accident) = S$330; D1 = the same question after the endorsement is deleted. Round 8 corrections (coordinator, per the user's instruction): see CORRECTIONS.md.",
   "derived_from": "scripts/ingest-live/sealed/EXPECTED.source.json",
   "documents": [
     {
@@ -127,7 +127,8 @@
           "file": "hx-text.pdf",
           "page": 1
         }
-      ]
+      ],
+      "not_reasked": true
     },
     "Q5": {
       "person": "Simon Alastair Hartwell",
@@ -228,15 +229,43 @@
           "file": "hx-scanned.pdf",
           "page": 1
         }
+      ],
+      "forbidden_sentences": [
+        {
+          "pattern": "(?:S\\$80|S\\$110)[^.]*(?:dengue|illness)|(?:dengue|illness)[^.]*(?:S\\$80|S\\$110)",
+          "unless": "\\b(?:not|no|never|won['\u2019]t|wouldn['\u2019]t|doesn['\u2019]t|does not|excludes?|only)\\b",
+          "why": "Meridian's daily allowance presented as paying for dengue (source Q9 forbidden 1)"
+        },
+        {
+          "pattern": "JuniorShield[^.]*\\b(?:Felix|Simon|Leonie|adults?)\\b|\\b(?:Felix|Simon|Leonie|adults?)\\b[^.]*JuniorShield",
+          "unless": "\\b(?:not|no|only|isn['\u2019]t|doesn['\u2019]t|does not)\\b",
+          "why": "JuniorShield presented as covering Felix or the adults (source Q9 forbidden 2)"
+        }
       ]
     },
     "R1": {
       "person": "Isla Maren Hartwell",
-      "must_include": [
-        "S$330"
-      ],
       "must_not_include": [
         "S$240"
+      ],
+      "accept_any": [
+        {
+          "label": "asks for the admission and discharge times",
+          "ask": "admi(?:t|ssion)|discharg|times?|hours"
+        },
+        {
+          "label": "S$330 conditioned on exactly 72 hours",
+          "must_include": [
+            "S$330"
+          ],
+          "condition": "72 hours|exactly 3 (?:full |complete )?days|three (?:full |complete )?(?:24-hour )?(?:days|periods)|3 complete (?:24-hour )?periods|if (?:she|Isla) (?:was|is) (?:in hospital|confined) for exactly"
+        }
+      ],
+      "conditioned_figures": [
+        {
+          "figure": "S$330",
+          "condition": "72 hours|exactly 3 (?:full |complete )?days|three (?:full |complete )?(?:24-hour )?(?:days|periods)|3 complete (?:24-hour )?periods|exactly"
+        }
       ]
     },
     "D1": {
@@ -245,7 +274,22 @@
       ],
       "must_not_include": [
         "S$110"
+      ],
+      "note": "After hx-endorsement.pdf is deleted: S$80 (the remaining schedule) is accepted only with a stated limitation that an amendment document was removed and the current amount may differ (whole-answer rule 5, superseded + amendment removed)."
+    }
+  },
+  "superseded": [
+    {
+      "old": "S$80 per day",
+      "new": "S$110 per day",
+      "label": "SafeStay child hospital daily allowance (Item B, Child)",
+      "by": "hx-endorsement.pdf",
+      "effective": "01 July 2026",
+      "source_facts": [
+        "F10",
+        "F11",
+        "F12"
       ]
     }
-  }
+  ]
 }

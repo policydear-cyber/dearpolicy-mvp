@@ -19,6 +19,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FIGURE_LEFT_OUT_NOTE } from "@/lib/chat/answer-verification";
 import { turnUsefulness, type LoadedTurn } from "../rag2-live/check";
+import { factsFrom, moneyValues, sentenceChecks, visibleSentences, type Superseded } from "../rag2-live/check-sentences";
 
 type Check = { scope: string; check: string; ok: boolean; detail: string };
 const read = (dir: string, f: string) => { const p = path.join(dir, f); return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : null; };
@@ -103,6 +104,25 @@ export function annotateTranscript(dir: string) {
   fs.writeFileSync(path.join(dir, "transcript.json"), JSON.stringify(paired.map(({ stored, trace, ...t }) => ({ ...t, loop: loopDiagnostics(trace), storedCitations: ((stored?.answer_json?.citations ?? []) as any[]).map((c) => ({ policyId: c.policyId, pageStart: c.pageStart ?? null, pageEnd: c.pageEnd ?? null })) })), null, 2));
 }
 
+/** The expected facts the whole-answer rules compare against: every figure and date in the author's verbatim facts and
+ * expected answers (EXPECTED.source.json), the machine expectations' own figures, and the superseded pairs. */
+export function expectedFacts(dir: string, expected: any, amendmentRemovedBy: string | null) {
+  const source = read(dir, "EXPECTED.source.json");
+  const texts: string[] = [];
+  for (const f of (source?.facts ?? []) as any[]) texts.push(...((f.verbatim ?? []) as string[]));
+  for (const a of (source?.answers ?? []) as any[]) texts.push(String(a.expected ?? ""), ...((a.arithmetic ?? []) as string[]));
+  for (const e of Object.values((g(expected, "turns") ?? {}) as Record<string, any>)) texts.push(...((g(e, "must_include", "mustInclude") ?? []) as string[]), ...(((g(e, "accept_any", "acceptAny") ?? []) as any[]).flatMap((x) => x.must_include ?? [])), ...((g(e, "figures_also", "figuresAlso") ?? []) as string[]));
+  const sup: (Superseded & { by?: string })[] = ((g(expected, "superseded") ?? []) as any[]).map((x) => ({ old: moneyValues(String(x.old))[0], new: moneyValues(String(x.new))[0], label: x.label, by: x.by })).filter((x) => Number.isFinite(x.old) && Number.isFinite(x.new));
+  return factsFrom(texts, sup, !!amendmentRemovedBy && sup.some((x) => x.by === amendmentRemovedBy));
+}
+const norm1 = (q: string) => String(q ?? "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+/** Whether two questions are the same question (identical, or 80% of the words shared). */
+export function sameQuestion(a: string, b: string) {
+  const x = norm1(a), y = norm1(b); if (!x || !y) return false; if (x === y) return true;
+  const wa = new Set(x.split(" ")), wb = new Set(y.split(" ")); const common = [...wa].filter((w) => wb.has(w)).length;
+  return common / Math.max(wa.size, wb.size) >= 0.8;
+}
+
 export function grade(dir: string) {
   const expected = read(dir, "EXPECTED.json");
   const transcript: any[] = read(dir, "transcript.json") ?? [];
@@ -154,6 +174,10 @@ export function grade(dir: string) {
     const scope = `${t.id} (${t.phase}) "${String(t.user).slice(0, 60)}"`;
     const u = t.error ? { ok: false, detail: `error: ${t.error}` } : t.stuck ? { ok: false, detail: "no reply in time" } : usefulReply(t.stored, t.trace, t.user);
     add(scope, "useful reply (a cited figure or condition, one material question, or what the documents do not say)", u.ok, u.detail);
+    if (!t.error && !t.stuck && t.answer) {
+      const context = turns.filter((x) => x.conversation === t.conversation && new Date(x.at ?? 0) <= new Date(t.at ?? 0)).map((x) => x.user).join("\n");
+      for (const c of sentenceChecks(t.answer, expectedFacts(dir, expected, t.phase === "after_delete" ? deletedFile : null), context)) add(scope, c.name, c.ok, c.detail);
+    }
     if (t.phase === "after_delete") add(scope, "asked after a confirmed deletion", deletionConfirmed, deletionConfirmed ? "" : "the deletion was not confirmed: this turn tests nothing");
     if (t.phase === "after_delete" && deletedFile) {
       const cites = ((t.stored?.answer_json?.citations ?? []) as any[]).map((c) => fileOf.get(c.policyId) ?? (c.policyId === deleted.policyId ? deletedFile : null));
@@ -183,10 +207,38 @@ export function grade(dir: string) {
       const first1 = person.split(/\s+/)[0];
       add(id, `about ${person}`, resolved ? has(resolved, person) || has(person, resolved) : has(finalText, first1), resolved ? `resolved to ${resolved}` : `no stored subject; answer ${has(finalText, first1) ? "names" : "does not name"} ${first1}`);
     }
+    // Alternatives (round 8): at least one must hold -- e.g. R1: a justified question for the admission / discharge
+    // times, OR the figure explicitly conditioned on exactly 72 hours.
+    const alts = (g(e, "accept_any", "acceptAny") ?? []) as any[];
+    if (alts.length) {
+      const holds = alts.map((a) => (a.ask ? !!last.pendingQuestion && new RegExp(a.ask, "i").test(last.pendingQuestion) : true)
+        && ((a.must_include ?? []) as string[]).every((m) => has(finalText, m)) && (!a.condition || new RegExp(a.condition, "i").test(finalText)));
+      add(id, `one accepted answer: ${alts.map((a) => a.label ?? JSON.stringify(a)).join(" | ")}`, holds.some(Boolean), last.pendingQuestion ? `asks: "${last.pendingQuestion}"` : `answer: "${finalText.slice(0, 160)}"`);
+    }
+    // A figure that is right only under a condition must be stated with it, in the same or the previous sentence.
+    for (const cf of (g(e, "conditioned_figures", "conditionedFigures") ?? []) as { figure: string; condition: string }[]) {
+      const sents = visibleSentences(text);
+      const bare = sents.filter((x, k) => has(x, cf.figure) && !new RegExp(cf.condition, "i").test(x) && !(k > 0 && new RegExp(cf.condition, "i").test(sents[k - 1])));
+      add(id, `${cf.figure} only with its condition`, !bare.length, bare.map((x) => `"${x.slice(0, 140)}"`).join("; "));
+    }
+    for (const fs1 of (g(e, "forbidden_sentences", "forbiddenSentences") ?? []) as { pattern: string; unless?: string; why: string }[]) {
+      const bad = visibleSentences(text).filter((x) => new RegExp(fs1.pattern, "i").test(x) && !(fs1.unless && new RegExp(fs1.unless, "i").test(x)));
+      add(id, `never: ${fs1.why}`, !bad.length, bad.map((x) => `"${x.slice(0, 140)}"`).join("; "));
+    }
+    // The question the chat asked before this turn, once answered, must not be asked again (visible or stored).
+    if (g(e, "not_reasked", "notReasked")) {
+      const prev = turns.filter((x) => x.conversation === first.conversation && new Date(x.at ?? 0) < new Date(first.at ?? 0)).pop();
+      const pending = prev?.pendingQuestion ?? null;
+      const storedQs = ((last.stored?.answer_json?.questions ?? []) as any[]).map((q) => String(q?.text ?? q ?? ""));
+      const again = pending ? [last.pendingQuestion ?? "", ...storedQs].filter((q) => q && sameQuestion(q, pending)) : [];
+      add(id, "the answered question is not asked again", !!pending && !again.length, pending ? (again.length ? `asked again: "${again[0]}"` : `answered: "${pending}"`) : "no earlier pending question found");
+    }
     const fu = g(e, "ask_follow_up", "askFollowUp");
     if (fu === true) add(id, "asks a follow-up before answering", !!first.pendingQuestion, first.pendingQuestion ?? "no question asked");
     if (fu === false) add(id, "answers without an unnecessary follow-up", !first.pendingQuestion, first.pendingQuestion ?? "");
-    if (mine.some((t) => t.unansweredFollowUp)) add(id, "follow-up answerable from the fixture", false, `unanswered: ${mine.find((t) => t.unansweredFollowUp)?.pendingQuestion}`);
+    // A question the expectations accept as the answer (accept_any "ask") is the end of the turn, not a gap in the fixture.
+    const acceptedAsk = (q: string | null) => !!q && alts.some((a) => a.ask && new RegExp(a.ask, "i").test(q));
+    if (mine.some((t) => t.unansweredFollowUp && !acceptedAsk(t.pendingQuestion))) add(id, "follow-up answerable from the fixture", false, `unanswered: ${mine.find((t) => t.unansweredFollowUp)?.pendingQuestion}`);
   }
   const failed = checks.filter((c) => !c.ok);
   const preflight = !!run?.preflight || transcript.some((t) => /preflight/i.test(t.answer ?? ""));

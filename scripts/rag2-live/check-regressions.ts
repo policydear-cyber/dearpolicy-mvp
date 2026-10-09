@@ -215,5 +215,13 @@ t("C26 L3b turn 2 that says back the X-ray, re-states the cited S$600 with its c
   assert.equal(turnUsefulness({ ...mk("I need one more detail first.").turns[1], questions: ["Which clinic did Mei go to?"] }).ok, true, "one material question is useful");
 });
 
+// Round 8: every sentence of the visible answer, fallback prose included, against the household's documents.
+const wa = (v: ReturnType<typeof grade>) => v.checks.filter((c) => !c.ok && /^(every figure|every date|no placeholder|no uncertainty|no superseded)/.test(c.name)).map((c) => c.name);
+t("C30 L5 the right limit with a wrong neighbouring date FAILS (whole answer)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, summary: endt.summary + " The endorsement took effect on 1 September 2026." }]))).includes("every date stated is one the expected facts give")));
+t("C31 L5 fallback prose with a placeholder ('a set amount') FAILS although S$1,500,000 is right", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["Before the endorsement the limit was a set amount."] }]))).includes("no placeholder where the documents give a figure")));
+t("C32 L5 'the effective date is not confirmed' FAILS (the endorsement prints 01 Jul 2026)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["The endorsement's effective date is not confirmed in your records."] }]))).includes("no uncertainty the expected facts contradict")));
+t("C33 L5 S$1,000,000 stated as current in a second sentence FAILS (whole answer)", () => assert.ok(wa(grade(sc("L5"), conv("L5", [{ ...endt, details: ["Your limit for this year is S$1,000,000."] }]))).includes("no superseded figure presented as current")));
+t("C34 L5 the correct answer has no whole-answer failure", () => assert.deepEqual(wa(grade(sc("L5"), conv("L5", [endt]))), []));
+
 console.log(`\nrag2-live checker regressions ${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

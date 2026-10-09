@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { grade, norm, pairTurns, usefulReply } from "./check";
+import { grade, norm, pairTurns, sameQuestion, usefulReply } from "./check";
+import { factsFrom, sentenceChecks, datesIn, moneyValues } from "../rag2-live/check-sentences";
 import { appRelationship, readQuestions } from "./fixture";
 
 const P = { text: "11111111-1111-4111-8111-111111111111", end: "22222222-2222-4222-8222-222222222222" };
@@ -22,6 +23,7 @@ const expected = {
 function folder(mut: (f: Record<string, any>) => void = () => undefined) {
   const f: Record<string, any> = {
     "EXPECTED.json": expected,
+    "EXPECTED.source.json": { facts: [{ id: "F1", verbatim: ["S$80 per day", "S$110 per day", "01 July 2026"] }], answers: [] },
     "members.json": { "Isla Maren Hartwell": ISLA },
     "uploads.json": [{ file: "a.pdf", policyId: P.text, ready: true, finalStatus: "clean/ready" }, { file: "b.pdf", policyId: P.end, ready: true, finalStatus: "clean/ready" }],
     "linking.json": [{ file: "a.pdf", policyId: P.text, linked: ["Isla Maren Hartwell"], detected: [] }, { file: "b.pdf", policyId: P.end, linked: [], detected: [] }],
@@ -100,4 +102,47 @@ if (fs.existsSync(path.join(RUN1, "dump-final", "dump.json"))) {
     assert.ok(fails.some((c) => /asked after a confirmed deletion|deleted through the page and confirmed/.test(c)));
   });
 }
+// Round 8: the WHOLE visible answer, sentence by sentence, against the expected facts (run 2's real answers).
+const RUN2 = "docs/rag-migration/ingest-live/RUN-ingest-live-2-2026-10-09T14-53-47";
+const SEALED = "scripts/ingest-live/sealed";
+const sealedFacts = (removed: boolean) => {
+  const src = JSON.parse(fs.readFileSync(path.join(SEALED, "EXPECTED.source.json"), "utf8"));
+  const exp = JSON.parse(fs.readFileSync(path.join(SEALED, "EXPECTED.json"), "utf8"));
+  const texts = [...src.facts.flatMap((f: any) => f.verbatim), ...src.answers.flatMap((a: any) => [a.expected, ...(a.arithmetic ?? [])])];
+  return factsFrom(texts, exp.superseded.map((x: any) => ({ old: moneyValues(x.old)[0], new: moneyValues(x.new)[0], label: x.label })), removed);
+};
+const failing = (answer: string, removed = false, ctx = "") => sentenceChecks(answer, sealedFacts(removed), ctx).filter((c) => !c.ok).map((c) => c.name);
+t("dates and money are read in every common form", () => { assert.deepEqual(datesIn("from 1 July 2026, 01 Jul 2026, July 1, 2026, 2026-07-01").map((d) => d.iso), ["2026-07-01", "2026-07-01", "2026-07-01", "2026-07-01"]); assert.deepEqual(moneyValues("S$1,500 and $150 and 30%"), [1500, 150]); });
+if (fs.existsSync(path.join(RUN2, "transcript.json"))) {
+  const run2 = JSON.parse(fs.readFileSync(path.join(RUN2, "transcript.json"), "utf8"));
+  const ans = (id: string) => run2.filter((x: any) => x.id === id).pop().answer as string;
+  t("run 2 Q9: 'a set amount' fails although S$500 elsewhere is right", () => assert.ok(failing(ans("Q9")).includes("no placeholder where the documents give a figure")));
+  t("run 2 Q9: 'the endorsement's effective date is not confirmed' fails (the facts give 01 July 2026)", () => assert.ok(failing(ans("Q9")).includes("no uncertainty the expected facts contradict")));
+  t("run 2 D1: S$80 as current cover after the endorsement was deleted fails", () => assert.ok(failing(ans("D1"), true).includes("no superseded figure presented as current")));
+  t("D1 with the limitation stated passes", () => assert.deepEqual(failing("The SafeStay schedule lists S$80 per day for each child. An endorsement you uploaded earlier was removed, so the current amount may differ from this.", true), []));
+  t("D1: a vague 'no recorded amendments' is not the limitation", () => assert.ok(failing("The documents show no recorded amendments, and the schedule lists S$80 per day for each child.", true).includes("no superseded figure presented as current")));
+  for (const id of ["Q1", "Q2", "Q3", "Q5", "Q6", "Q7", "Q8"]) t(`run 2 ${id}: every sentence consistent (no false alarm)`, () => assert.deepEqual(failing(ans(id), false, run2.filter((x: any) => x.conversation === run2.find((y: any) => y.id === id).conversation).map((x: any) => x.user).join("\n")), []));
+  t("a wrong figure next to a right one fails", () => assert.ok(failing("The child allowance is S$110 per day from 01 July 2026. Adults get S$95 per day.").includes("every figure stated is one the expected facts give")));
+  t("a wrong date next to a right figure fails", () => assert.ok(failing("The child allowance is S$110 per day from 1 August 2026.").includes("every date stated is one the expected facts give")));
+  t("before the deletion, S$80 marked as the earlier rate passes; stated as current fails", () => { assert.deepEqual(failing("It was S$80 per day before 01 July 2026 and is S$110 per day now."), []); assert.ok(failing("Each child gets S$80 per day.").includes("no superseded figure presented as current")); });
+  t("an honest uncertainty the facts do not contradict passes", () => assert.deepEqual(sentenceChecks("The effective date is not confirmed in your documents.", factsFrom(["S$80"]), "").filter((c) => !c.ok), []));
+  // Graded run 2 with the corrected expectations.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-run2-"));
+  fs.cpSync(RUN2, dir, { recursive: true });
+  for (const f of ["EXPECTED.json", "EXPECTED.source.json"]) fs.copyFileSync(path.join(SEALED, f), path.join(dir, f));
+  const v2 = grade(dir);
+  const fail2 = v2.checks.filter((c) => !c.ok).map((c) => `${c.scope}: ${c.check}`);
+  t("run 2 Q4: the answered fracture question asked again fails (stored questions checked)", () => assert.ok(fail2.some((c) => /^Q4: the answered question is not asked again/.test(c))));
+  t("run 2 R1: asking for the admission / discharge times is an accepted answer", () => assert.ok(!fail2.some((c) => /^R1:/.test(c)), fail2.filter((c) => /^R1/.test(c)).join("; ")));
+  t("run 2 is FAIL with exactly the expected defects", () => { assert.equal(v2.verdict, "FAIL"); assert.equal(fail2.length, 5, fail2.join("\n")); });
+  t("sameQuestion: rephrasing with the same words is the same question", () => assert.ok(sameQuestion("Has a registered medical practitioner certified the fracture type in writing and confirmed it by X-ray?", "Has a registered medical practitioner certified the wrist fracture in writing and confirmed it by X-ray?")));
+}
+// R1 alternatives on a synthetic folder.
+const r1 = (answer: string, pending: string | null) => grade(folder((f) => {
+  f["EXPECTED.json"] = { ...expected, turns: { R1: { accept_any: [{ label: "asks for times", ask: "admi|discharg|times" }, { label: "conditioned", must_include: ["S$330"], condition: "72 hours|exactly 3" }], conditioned_figures: [{ figure: "S$330", condition: "72 hours|exactly" }], figures_also: ["S$330"] } } };
+  f["transcript.json"].push({ id: "R1", phase: "reopen", user: "3 days in August?", answer, pendingQuestion: pending, error: null, stuck: false });
+})).checks.filter((c) => !c.ok && c.scope === "R1").map((c) => c.check);
+t("R1: an unconditioned S$330 fails", () => assert.ok(r1("Isla would get S$330 for 3 days.", null).length > 0));
+t("R1: S$330 conditioned on exactly 72 hours passes", () => assert.deepEqual(r1("If Isla was confined for exactly 72 hours, that is 3 days at S$110 = S$330.", null), []));
+t("R1: asking for the admission and discharge times passes", () => assert.deepEqual(r1("Isla's allowance is S$110 per day.", "What were the admission and discharge times?"), []));
 console.log(`ingest-live checker regressions ${n}/${n} passed`);
