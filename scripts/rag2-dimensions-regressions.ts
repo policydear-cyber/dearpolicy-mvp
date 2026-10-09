@@ -290,6 +290,32 @@ async function main() {
     await gate("unrelated policy", u, [{ who: M.devi, benefit: "Annual limit", passage: ul, column: null, value: 500_000 }, { who: M.devi, benefit: "Annual limit", passage: ul, column: null, value: 777_000 }], "Devi's annual limit went from S$500,000 to S$777,000.", "rejected", /not one of this household/);
   });
 
+  await check("P4 round 8: a unit between the figure and its marker, and a contrastive revision clause (\"…, but the endorsement revises it to …\")", async () => {
+    const d = doc("P_ENDT"), rb = passageOf(d, "Room and board"), yl = passageOf(d, "Yearly claim limit");
+    const r = (v: number) => ({ who: M.aaron, benefit: "Room and board (per day)", passage: rb, column: null, value: v });
+    const y = (v: number) => ({ who: M.aaron, benefit: "Yearly claim limit", passage: yl, column: null, value: v });
+    await gate("S$X per day before the endorsement", d, [r(400), r(550)], "Aaron's room and board benefit was S$400 per day before the endorsement; it is now S$550 per day.", "accepted");
+    await gate("paraphrase: a year prior to the alteration", d, [y(800_000), y(1_200_000)], "Aaron's yearly claim limit is S$1,200,000, up from S$800,000 a year prior to the alteration.", "accepted");
+    await gate("the schedule lists X, but an endorsement revises it to Y", d, [r(400), r(550)], "The schedule lists S$400 per day for Aaron's room and board, but an endorsement revises it to S$550 per day from 1 June 2026.", "accepted");
+    const n = doc("N_ENDT"), al = line(n, "Annual limit");
+    await gate("paraphrase: while the endorsement raises this to", n, [{ who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – Old", value: 500_000 }, { who: M.devi, benefit: "Annual limit", passage: al, column: "Adult – New", value: 650_000 }], "The old schedule shows Devi's annual limit as S$500,000, while Endorsement 2 raises this to S$650,000.", "accepted");
+    // Still blocked.
+    await gate("contrast without a revision verb", d, [r(400), r(550)], "Aaron's room and board benefit is S$400 per day, and the endorsement prints S$550 per day.", "rejected", /before the change/);
+    await gate("contrast without the later value", d, [r(400)], "The schedule lists S$400 per day for Aaron's room and board, but an endorsement revises it.", "rejected", /before the change/);
+    await gate("the earlier value in the later clause", d, [y(1_200_000), y(800_000)], "An endorsement revises Aaron's yearly claim limit to S$800,000, but the schedule lists S$1,200,000.", "rejected", /before the change/);
+    await gate("stated as current with a unit", KE, [kRow(1_000_000), kRow(1_500_000)], "Your annual claim limit is S$1,000,000 per year; the endorsement prints S$1,500,000.", "rejected", /before the change/);
+  });
+  await check("W1 round 8: an assumed what-if date must fall inside the period the household named", async () => {
+    const { assumedDateProblem } = await import("@/lib/chat/answer-verification");
+    assert.equal(assumedDateProblem("exactly 3 days in August", "2026-08-10"), null);
+    assert.equal(assumedDateProblem("She was in for 2 days in Aug 2026", "2026-08-30"), null, "paraphrase");
+    assert.match(assumedDateProblem("exactly 3 days in August", "2026-09-01") ?? "", /outside the period/);
+    assert.match(assumedDateProblem("in for 2 days in August 2025", "2026-08-05") ?? "", /outside the period/);
+    assert.match(assumedDateProblem("exactly 3 days", "2026-08-05") ?? "", /not inside a period/);
+    assert.equal(assumedDateProblem("admitted on 3 August 2026", "2026-08-03"), null);
+    assert.match(assumedDateProblem("admitted on 3 August 2026", "2026-08-04") ?? "", /not the date/);
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2:dimensions-test ${results.length - failed.length}/${results.length} passed`);
   await db.close();

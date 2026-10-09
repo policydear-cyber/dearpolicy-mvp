@@ -451,6 +451,11 @@ function questionDate(sentence: string | null, userText: string, effective: stri
  * from S$X", "previously S$X", "was S$X, now S$Y", "replacing S$X", or the table's own column label quoted next to it),
  * and the later value of the same row must be stated in the sentence too. A marker attached to another figure ("was
  * S$500 ... the limit is S$X") or anywhere else in the sentence does not count. */
+/** A unit or period printed between a figure and a marker after it ("S$80 per day before the endorsement"). */
+const UNIT_AFTER = "(?:\\s*(?:per|a|an|each|every)\\s+[\\p{L}]+(?:\\s+(?:of|in)\\s+[\\p{L}]+){0,2}|\\s*\\/\\s*[\\p{L}]+)?";
+/** "…, but / and / while the endorsement revises / raises / changes it to" -- the clause between an earlier value and its
+ * later value. */
+const CONTRAST_REVISION = new RegExp("^" + UNIT_AFTER + "[^.;!?]{0,80}?\\b(?:but|and|however|whereas|while|though|although)\\b[^.;!?]{0,120}?\\b(?:revis|rais|increas|reduc|lower|chang|amend|replac|cut|lift|bump|adjust|alter|mov)\\w*\\b(?:\\s+[\\p{L}’']+){0,4}?\\s+(?:to|up to|down to|at)\\s*$", "iu");
 const CHANGE_VERB = /\b(?:raised|raises|increased|increases|reduced|reduces|decreased|decreases|lowered|lowers|cut|changed|changes|amended|amends|revised|revises|moved|moves|went|goes|rose|rises|fell|falls|dropped|drops|adjusted|adjusts|altered|alters)\b/i;
 const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export function earlierValuePresented(sentence: string, value: number, beforeLabels: string[], laterValues: number[]): boolean {
@@ -460,7 +465,7 @@ export function earlierValuePresented(sentence: string, value: number, beforeLab
   const marker = new RegExp("(?:^|[^\\p{L}])(" + ["previous(?:ly)?", "formerly", "originally", "earlier", "old", "original", "existing", "prior", "before", "was", "were", "from", "replacing", "replaces", "replaced", "up from", "down from", ...labels].join("|") + ")"
     + "(?:\\s+(?:of|at|the|a|an|limit|amount|figure|sum|value|level|benefit|cover))*\\s*[:=–—-]?\\s*[\"“”‘’'(]?\\s*$", "iu");
   // ... or a marker directly after it ("S$X before the change, S$Y from ...", "S$X (Before)", "S$X previously").
-  const postMarker = new RegExp("^\\s*[,;]?\\s*[\"“”‘’'(]?\\s*(?:(?:before|prior to)\\s+(?:the\\s+|this\\s+|that\\s+|its\\s+)?(?:endorsement|amendment|alteration|change|revision|reduction|increase|decrease|update)|previously|originally|formerly|earlier|(?:in|under|on) the (?:earlier|previous|old|original|former) (?:schedule|policy|terms|version)|(?:as )?the (?:old|previous|earlier|original|former) (?:figure|value|amount|limit|sum)" + (labels.length ? "|(?:" + labels.join("|") + ")[\"“”‘’')]" : "") + ")(?![\\p{L}])", "iu");
+  const postMarker = new RegExp("^" + UNIT_AFTER + "\\s*[,;]?\\s*[\"“”‘’'(]?\\s*(?:(?:before|prior to)\\s+(?:the\\s+|this\\s+|that\\s+|its\\s+)?(?:endorsement|amendment|alteration|change|revision|reduction|increase|decrease|update)|previously|originally|formerly|earlier|(?:in|under|on) the (?:earlier|previous|old|original|former) (?:schedule|policy|terms|version)|(?:as )?the (?:old|previous|earlier|original|former) (?:figure|value|amount|limit|sum)" + (labels.length ? "|(?:" + labels.join("|") + ")[\"“”‘’')]" : "") + ")(?![\\p{L}])", "iu");
   const all = [...s.matchAll(FIGURE), ...s.matchAll(BARE_DOLLAR)].map((m) => ({ at: m.index!, end: m.index! + m[0].length, raw: m[0] })).sort((a, b) => a.at - b.at);
   for (let i = 0; i < all.length; i++) {
     const f = all[i];
@@ -469,6 +474,9 @@ export function earlierValuePresented(sentence: string, value: number, beforeLab
     const prevEnd = i > 0 ? all[i - 1].end : 0;
     const nextAt = i + 1 < all.length ? all[i + 1].at : s.length;
     if (postMarker.test(s.slice(f.end, nextAt))) return true;
+    // A contrastive revision in the next clause ("… lists S$X per day, but the endorsement revises it to S$Y …"): the
+    // figure sits in the earlier clause and the very next figure is the row's later value.
+    if (i + 1 < all.length && moneyFiguresIn(all[i + 1].raw).some((x) => laterValues.some((l) => same(l, x.value))) && CONTRAST_REVISION.test(s.slice(f.end, all[i + 1].at))) return true;
     const m = s.slice(prevEnd, f.at).match(marker);
     if (!m) continue;
     const word = m[1].toLowerCase(), after = s.slice(f.end);
@@ -906,6 +914,22 @@ function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: C
   const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true, ownerId: doc.owner, doc, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, null, ctx);
   return col ? `${o.label}: ${col}` : null;
 }
+const DURATION_WORDS = /\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|a couple of|a few)\s+(?:full\s+|whole\s+)?(?:days?|nights?|weeks?|hours?)\b/i;
+const STATES_ASSUMPTION = /\bif you mean\b|\bassum(?:e|es|ed|ing|ption)\b|\bsuppos(?:e|ing)\b|\bhypothetical\w*\b|\bfor (?:that|this|such an?) (?:assumed|hypothetical)\b/i;
+const MONTH_WORDS: [RegExp, number][] = ["jan(?:uary)?", "feb(?:ruary)?", "mar(?:ch)?", "apr(?:il)?", "may", "june?", "july?", "aug(?:ust)?", "sep(?:t(?:ember)?)?", "oct(?:ober)?", "nov(?:ember)?", "dec(?:ember)?"].map((w, i) => [new RegExp("\\b" + w + "\\b", "i"), i + 1]);
+/** An assumed date (what-if) must fall inside the period the household's own words name: the exact date they gave, or
+ * the month (and year, if they gave one) they named. Null when it does. */
+export function assumedDateProblem(words: string, isoDay: string): string | null {
+  // (datesIn reads a bare "August 2026" as its first day: only a date the words give with its day counts as exact.)
+  const exact = datesIn(words).filter((d) => !d.endsWith("-01") || /\b0?1(?:st)?\s+[A-Za-z]{3}|[A-Za-z]{3,}\.?\s+0?1(?:st)?\b|\d{4}-\d{2}-01\b|\b0?1\/\d{1,2}\/\d{4}/.test(words));
+  if (exact.length) return exact.includes(isoDay) ? null : "the assumed date is not the date in the household’s words";
+  const months = MONTH_WORDS.filter(([re]) => re.test(words)).map(([, n]) => n);
+  if (!months.length) return "the assumed date is not inside a period the household named";
+  const [y, mo] = isoDay.split("-").map(Number);
+  const years = (words.match(/\b(?:19|20)\d{2}\b/g) ?? []).map(Number);
+  if (!months.includes(mo) || (years.length && !years.includes(y))) return "the assumed date is outside the period the household named";
+  return null;
+}
 /** Re-runs one benefit calculation for one sentence; null when it stands. */
 export function calculationProblem(r: CalculationRecord, sentence: string, ctx: Ctx): string | null {
   if (!r || typeof r !== "object" || !Array.isArray(r.operands) || !Array.isArray(r.conditions)) return "the calculation record is malformed";
@@ -920,7 +944,13 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     if (r.assumption?.trim() && !norm(sentence).includes(norm(r.assumption))) return "the estimate does not state its assumption (" + r.assumption.trim() + ")";
   } else {
     if (!/\bif\b/i.test(sentence)) return "an illustration does not state its what-if";
-    if (!WHAT_IF.test(ctx.userText)) return "an illustration is given though the household did not ask a what-if";
+    // Assumed times (marked source "assumption" on the record) resolve a stay the household gave only as a duration
+    // ("exactly 3 days in August"): accepted when their words with that duration are quoted from this message.
+    const assumedTimes = r.operands.filter((o) => o?.source === "assumption" && (o.unit === "date" || o.unit === "datetime"));
+    const resolvesDuration = assumedTimes.length > 0 && assumedTimes.every((o) => o.source === "assumption" && DURATION_WORDS.test(o.attribution ?? "") && quotedBy(o.attribution, [ctx.userText]));
+    if (!WHAT_IF.test(ctx.userText) && !resolvesDuration) return "an illustration is given though the household did not ask a what-if";
+    // Never the figure for their actual stay: the sentence states the assumption it rests on.
+    if (assumedTimes.length && !STATES_ASSUMPTION.test(sentence)) return "an illustration does not state the times it assumes";
   }
   // Operands.
   for (const o of r.operands) {
@@ -937,7 +967,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       if (o.unit === "money" && moneyFiguresIn(sentence).some((f) => same(f.value, o.value as number)) && !CALC_ATTRIBUTED.test(sentence) && !ATTRIBUTION.test(sentence) && o.source === "household") return `${o.label}: the household’s figure is stated without saying it is theirs`;
     } else {
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.value));
-      if (!m || !numsOf(o.attribution).some((n) => n === Number(m[3]))) return `${o.label}: the date is not the one in the household’s words`;
+      if (!m) return `${o.label}: the date is not the one in the household’s words`;
+      if (o.source === "assumption") { const p = assumedDateProblem(o.attribution, m[0]); if (p) return `${o.label}: ${p}`; }
+      else if (!numsOf(o.attribution).some((n) => n === Number(m[3]))) return `${o.label}: the date is not the one in the household’s words`;
     }
   }
   // Steps.
