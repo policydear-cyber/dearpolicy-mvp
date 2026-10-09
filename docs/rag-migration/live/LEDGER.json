@@ -52,6 +52,19 @@
       "calls": 14,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "r6-final-candidate",
+      "tested_code_sha": "9fe5ee8cc7f81036f831fdea9428c455bc15872c",
+      "request_sha": "76a4cbfd890a9c72eecace024ae111e3e7c67ec1",
+      "at": "2026-10-09T10:00:09.349Z",
+      "preflight": false,
+      "run_cap_usd": 0.479432,
+      "spent_usd": 0.014055,
+      "reserved_unsettled_usd": 0,
+      "calls": 56,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

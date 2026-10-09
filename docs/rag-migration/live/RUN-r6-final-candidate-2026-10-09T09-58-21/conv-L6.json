@@ -1,0 +1,1256 @@
+{
+  "scenario": "L6",
+  "title": "A question the documents do not answer",
+  "conversationId": "903048b4-a2e1-444d-8251-985cda257fc3",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "If one of us is injured overseas, does SunHaven pay for emergency medical evacuation, and up to how much?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "SunHaven Family Accident Guard covers bodily injury caused solely and directly by an accident, and accidents are covered anywhere in the world; however, its listed benefits do not include emergency medical evacuation, so the documents do not state an evacuation benefit or maximum amount for any covered family member.",
+      "timings": {
+        "acceptedMs": 12,
+        "firstAssistantPersistedMs": 10049,
+        "answerSeenMs": 10072,
+        "modelMs": 8945,
+        "upstreamMs": 8941,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 53,
+          "at": "2026-10-09T10:00:00.120Z",
+          "estInputTokens": 9821,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019821,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4671,
+            "output": 183,
+            "cached": 4517
+          },
+          "latencyMs": 1986,
+          "upstreamMs": 1986,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 54,
+          "at": "2026-10-09T10:00:02.132Z",
+          "estInputTokens": 17199,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0027199,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 7,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10639,
+            "output": 76,
+            "cached": 4545
+          },
+          "latencyMs": 1876,
+          "upstreamMs": 1876,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 55,
+          "at": "2026-10-09T10:00:04.016Z",
+          "estInputTokens": 19652,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0029652,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 9,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 12059,
+            "output": 77,
+            "cached": 10513
+          },
+          "latencyMs": 3119,
+          "upstreamMs": 3119,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 56,
+          "at": "2026-10-09T10:00:07.142Z",
+          "estInputTokens": 22406,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0032405999999999997,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 13676,
+            "output": 97,
+            "cached": 11933
+          },
+          "latencyMs": 1964,
+          "upstreamMs": 1964,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 53,
+          "at": "2026-10-09T10:00:00.121Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10011,
+          "reservedUsd": 0.0020011,
+          "chargedUsd": 0.00015207,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1985,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4671,
+            "output": 183,
+            "cached": 4517,
+            "reasoning": 0
+          },
+          "scenario": "L6",
+          "turn": 1
+        },
+        {
+          "seq": 54,
+          "at": "2026-10-09T10:00:02.133Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 17424,
+          "reservedUsd": 0.0027424000000000003,
+          "chargedUsd": 0.0006928500000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1876,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 10639,
+            "output": 76,
+            "cached": 4545,
+            "reasoning": 0
+          },
+          "scenario": "L6",
+          "turn": 1
+        },
+        {
+          "seq": 55,
+          "at": "2026-10-09T10:00:04.016Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 19886,
+          "reservedUsd": 0.0029886000000000005,
+          "chargedUsd": 0.00029823,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 3118,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 12059,
+            "output": 77,
+            "cached": 10513,
+            "reasoning": 0
+          },
+          "scenario": "L6",
+          "turn": 1
+        },
+        {
+          "seq": 56,
+          "at": "2026-10-09T10:00:07.143Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 22650,
+          "reservedUsd": 0.003265,
+          "chargedUsd": 0.00034213,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1962,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 13676,
+            "output": 97,
+            "cached": 11933,
+            "reasoning": 0
+          },
+          "scenario": "L6",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 9159,
+          "output_tokens": 106,
+          "cached_tokens": 8579,
+          "cost_usd": 0.000197,
+          "latency_ms": 1483,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:59.010Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4671,
+          "output_tokens": 183,
+          "cached_tokens": 4517,
+          "cost_usd": 0.000152,
+          "latency_ms": 1987,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T10:00:02.108Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 10639,
+          "output_tokens": 76,
+          "cached_tokens": 4545,
+          "cost_usd": 0.000693,
+          "latency_ms": 1877,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T10:00:04.010Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 12059,
+          "output_tokens": 77,
+          "cached_tokens": 10513,
+          "cost_usd": 0.000298,
+          "latency_ms": 3120,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T10:00:07.136Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 13676,
+          "output_tokens": 97,
+          "cached_tokens": 11933,
+          "cost_usd": 0.000342,
+          "latency_ms": 1965,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T10:00:09.108Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 41045,
+        "output": 433
+      },
+      "costUsd": {
+        "charged": 0.00148528,
+        "reserved": 0.010997100000000001,
+        "ledger": 0.0016820000000000001
+      }
+    }
+  ],
+  "totalMs": 10078,
+  "firstUsefulResponseMs": 10049,
+  "tokens": {
+    "input": 41045,
+    "output": 433
+  },
+  "costUsd": 0.00148528,
+  "calls": 4,
+  "verdict": {
+    "scenario": "L6",
+    "verdict": "PASS",
+    "failureStage": null,
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 1,
+        "name": "no figure near /evacuat/",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "asks no question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "says the documents do not say",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "yes"
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 4,
+        "usage": {
+          "input": 41045,
+          "output": 433
+        },
+        "latencyMs": 8991,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "topic": "overseas emergency medical evacuation",
+              "subject_id": "74000000-0000-4000-8000-000000000001"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "overseas emergency medical evacuation",
+              "subject_id": "74000000-0000-4000-8000-000000000002"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e3",
+              "e9",
+              "e5",
+              "e10"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "overseas emergency medical evacuation",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e3",
+              "e11",
+              "e5",
+              "e12"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "overseas emergency medical evacuation",
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e13",
+              "e3",
+              "e14",
+              "e5",
+              "e15"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "SunHaven emergency medical evacuation overseas injury limit maximum amount conditions",
+              "policy_ids": [
+                "74000000-0000-4000-8000-000000000101"
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":5}",
+            "evidenceIds": [
+              "e16",
+              "e17",
+              "e18",
+              "e19",
+              "e20"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 20,
+              "query": "emergency medical evacuation repatriation overseas accident assistance expenses maximum limit",
+              "policy_ids": [
+                "74000000-0000-4000-8000-000000000101"
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":6}",
+            "evidenceIds": [
+              "e20",
+              "e18",
+              "e19",
+              "e21",
+              "e17",
+              "e16"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "SunHaven Family Accident Guard covers bodily injury caused solely and directly by an accident, and accidents are covered anywhere in the world; however, its listed benefits do not include emergency medical evacuation, so the documents do not state an evacuation benefit or maximum amount for any covered family member.",
+                  "benefit": "Emergency medical evacuation",
+                  "evidence_ids": [
+                    "e16",
+                    "e21",
+                    "e20"
+                  ]
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e16",
+          "e21",
+          "e20"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 289,
+            "role": "table_header",
+            "text": "Insured child                 Mei Lim Xin Hui",
+            "start": 244,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "support": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:live-playwell"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 243,
+          "text": "Parent or guardian            Daniel Lim Wen Jie",
+          "start": 195,
+          "onPage": 1
+        },
+        "support": {
+          "end": 243,
+          "text": "Parent or guardian            Daniel Lim Wen Jie",
+          "start": 195,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 233,
+            "role": "table_header",
+            "text": "Policyholder                  Daniel Lim Wen Jie",
+            "start": 185,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "support": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 421,
+          "text": "Daniel Lim Wen Jie            Adult         11 Mar 1980",
+          "start": 366,
+          "onPage": 1
+        },
+        "support": {
+          "end": 421,
+          "text": "Daniel Lim Wen Jie            Adult         11 Mar 1980",
+          "start": 366,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 238,
+            "role": "table_header",
+            "text": "Policy owner                  Daniel Lim Wen Jie",
+            "start": 190,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "support": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 434,
+          "text": "Daniel Lim Wen Jie            Insured Adult     11 Mar 1980",
+          "start": 375,
+          "onPage": 1
+        },
+        "support": {
+          "end": 434,
+          "text": "Daniel Lim Wen Jie            Insured Adult     11 Mar 1980",
+          "start": 375,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-careday"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "passage": {
+          "end": 93,
+          "text": "Effective date: 01 Jul 2026",
+          "start": 66,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000104",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel-endt1"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 133,
+          "text": "Life assured: Daniel Lim Wen Jie",
+          "start": 101,
+          "onPage": 1
+        },
+        "support": {
+          "end": 133,
+          "text": "Life assured: Daniel Lim Wen Jie",
+          "start": 101,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 477,
+          "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+          "start": 422,
+          "onPage": 1
+        },
+        "support": {
+          "end": 477,
+          "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+          "start": 422,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 494,
+          "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+          "start": 435,
+          "onPage": 1
+        },
+        "support": {
+          "end": 494,
+          "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+          "start": 435,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:live-careday"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "support": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "support": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 243,
+            "role": "table_header",
+            "text": "Parent or guardian            Daniel Lim Wen Jie",
+            "start": 195,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 289,
+          "text": "Insured child                 Mei Lim Xin Hui",
+          "start": 244,
+          "onPage": 1
+        },
+        "support": {
+          "end": 289,
+          "text": "Insured child                 Mei Lim Xin Hui",
+          "start": 244,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "support": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e15": {
+        "id": "e15",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "support": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e16": {
+        "id": "e16",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 237,
+          "text": "Section 2 - What is covered\nThis policy covers Bodily Injury caused solely and directly by an Accident. A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 103,
+          "text": "This policy covers Bodily Injury caused solely and directly by an Accident.",
+          "start": 28,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e17": {
+        "id": "e17",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 140,
+          "text": "Harbourline General Insurance                                           Policy HG-PA-771204\nSunHaven Family Accident Guard - Policy Schedule",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 140,
+          "text": "SunHaven Family Accident Guard - Policy Schedule",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e18": {
+        "id": "e18",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "support": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e19": {
+        "id": "e19",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "support": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e20": {
+        "id": "e20",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 996,
+          "text": "Schedule of benefits\nBenefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500\nFracture benefit (per fracture)                         S$1,200       S$750\nAccidental dental treatment (per accident)              S$800         S$400\nAccidental death                                        S$100,000     S$20,000",
+          "start": 591,
+          "onPage": 1
+        },
+        "support": {
+          "end": 765,
+          "text": "Accident medical expenses (per accident)                S$3,000       S$1,500",
+          "start": 688,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e21": {
+        "id": "e21",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 597,
+          "text": "Section 4 - Where you are covered\nThis policy covers Accidents anywhere in the world.",
+          "start": 512,
+          "onPage": 2
+        },
+        "support": {
+          "end": 597,
+          "text": "This policy covers Accidents anywhere in the world.",
+          "start": 546,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [
+          {
+            "chunkId": "rag2:e16",
+            "excerpt": "This policy covers Bodily Injury caused solely and directly by an Accident.",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 2,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e21",
+            "excerpt": "This policy covers Accidents anywhere in the world.",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 2,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e20",
+            "excerpt": "Benefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

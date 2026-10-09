@@ -1,0 +1,1520 @@
+{
+  "scenario": "L4",
+  "title": "Hospital cash: admission and discharge dates and times in one message",
+  "conversationId": "36b57d9b-aa50-42a0-bcc8-50bbd182949b",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Mei was admitted to hospital on 3 Sep 2026 at 10:15 pm and discharged on 6 Sep 2026 at 9:30 am. How much hospital cash can we claim from CareDay?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "For Mei, CareDay lists Hospital cash at S$60 for each complete 24 hours, up to 90 periods per year; based on the admission and discharge times you gave, the indicative estimate is S$120, assuming at least 2 of the 90 complete 24-hour periods are still available this year.",
+      "timings": {
+        "acceptedMs": 10,
+        "firstAssistantPersistedMs": 10919,
+        "answerSeenMs": 11100,
+        "modelMs": 9779,
+        "upstreamMs": 9775,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 17,
+          "at": "2026-10-09T09:58:57.553Z",
+          "estInputTokens": 9837,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019837,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4693,
+            "output": 18,
+            "cached": 4517
+          },
+          "latencyMs": 1241,
+          "upstreamMs": 1241,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 18,
+          "at": "2026-10-09T09:58:58.801Z",
+          "estInputTokens": 10061,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020061,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4807,
+            "output": 123,
+            "cached": 4567
+          },
+          "latencyMs": 1493,
+          "upstreamMs": 1493,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 19,
+          "at": "2026-10-09T09:59:00.299Z",
+          "estInputTokens": 10448,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020448,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 5077,
+            "output": 40,
+            "cached": 4681
+          },
+          "latencyMs": 1304,
+          "upstreamMs": 1304,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 20,
+          "at": "2026-10-09T09:59:01.614Z",
+          "estInputTokens": 12443,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0022443000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 6465,
+            "output": 163,
+            "cached": 4951
+          },
+          "latencyMs": 1882,
+          "upstreamMs": 1882,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 21,
+          "at": "2026-10-09T09:59:03.510Z",
+          "estInputTokens": 15243,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025243,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8378,
+            "output": 155,
+            "cached": 6339
+          },
+          "latencyMs": 2113,
+          "upstreamMs": 2113,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 22,
+          "at": "2026-10-09T09:59:05.642Z",
+          "estInputTokens": 16252,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0026252,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 13,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9031,
+            "output": 126,
+            "cached": 8252
+          },
+          "latencyMs": 1746,
+          "upstreamMs": 1746,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 17,
+          "at": "2026-10-09T09:58:57.554Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10027,
+          "reservedUsd": 0.0020027,
+          "chargedUsd": 0.00007177000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1241,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4693,
+            "output": 18,
+            "cached": 4517,
+            "reasoning": 0
+          },
+          "scenario": "L4",
+          "turn": 1
+        },
+        {
+          "seq": 18,
+          "at": "2026-10-09T09:58:58.802Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10258,
+          "reservedUsd": 0.0020258,
+          "chargedUsd": 0.00013117,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1492,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4807,
+            "output": 123,
+            "cached": 4567,
+            "reasoning": 0
+          },
+          "scenario": "L4",
+          "turn": 1
+        },
+        {
+          "seq": 19,
+          "at": "2026-10-09T09:59:00.299Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10663,
+          "reservedUsd": 0.0020663,
+          "chargedUsd": 0.00010640999999999999,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1304,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 5077,
+            "output": 40,
+            "cached": 4681,
+            "reasoning": 0
+          },
+          "scenario": "L4",
+          "turn": 1
+        },
+        {
+          "seq": 20,
+          "at": "2026-10-09T09:59:01.614Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 12667,
+          "reservedUsd": 0.0022667,
+          "chargedUsd": 0.00028241,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1881,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 6465,
+            "output": 163,
+            "cached": 4951,
+            "reasoning": 0
+          },
+          "scenario": "L4",
+          "turn": 1
+        },
+        {
+          "seq": 21,
+          "at": "2026-10-09T09:59:03.511Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15486,
+          "reservedUsd": 0.0025486000000000003,
+          "chargedUsd": 0.00034479000000000004,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2111,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 8378,
+            "output": 155,
+            "cached": 6339,
+            "reasoning": 0
+          },
+          "scenario": "L4",
+          "turn": 1
+        },
+        {
+          "seq": 22,
+          "at": "2026-10-09T09:59:05.643Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 16520,
+          "reservedUsd": 0.002652,
+          "chargedUsd": 0.00022342000000000003,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1746,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 9031,
+            "output": 126,
+            "cached": 8252,
+            "reasoning": 0
+          },
+          "scenario": "L4",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 10614,
+          "output_tokens": 255,
+          "cached_tokens": 7867,
+          "cost_usd": 0.000481,
+          "latency_ms": 2364,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:56.325Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4693,
+          "output_tokens": 18,
+          "cached_tokens": 4517,
+          "cost_usd": 0.000072,
+          "latency_ms": 1242,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:58.796Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4807,
+          "output_tokens": 123,
+          "cached_tokens": 4567,
+          "cost_usd": 0.000131,
+          "latency_ms": 1494,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:00.296Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 5077,
+          "output_tokens": 40,
+          "cached_tokens": 4681,
+          "cost_usd": 0.000106,
+          "latency_ms": 1304,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:01.605Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 6465,
+          "output_tokens": 163,
+          "cached_tokens": 4951,
+          "cost_usd": 0.000282,
+          "latency_ms": 1883,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:03.497Z"
+        },
+        {
+          "attempt_index": 4,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8378,
+          "output_tokens": 155,
+          "cached_tokens": 6339,
+          "cost_usd": 0.000345,
+          "latency_ms": 2113,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:05.624Z"
+        },
+        {
+          "attempt_index": 5,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 9031,
+          "output_tokens": 126,
+          "cached_tokens": 8252,
+          "cost_usd": 0.000223,
+          "latency_ms": 1747,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:07.390Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 38451,
+        "output": 625
+      },
+      "costUsd": {
+        "charged": 0.00115997,
+        "reserved": 0.0135621,
+        "ledger": 0.00164
+      }
+    }
+  ],
+  "totalMs": 11105,
+  "firstUsefulResponseMs": 10919,
+  "tokens": {
+    "input": 38451,
+    "output": 625
+  },
+  "costUsd": 0.00115997,
+  "calls": 6,
+  "verdict": {
+    "scenario": "L4",
+    "verdict": "PASS",
+    "failureStage": null,
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page CAREDAY p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "stored page CAREDAY p2 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 1,
+        "name": "shows S$120",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$180",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$240",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$200",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$300",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "does not re-ask the admission / discharge dates and times already given",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "no re-ask"
+      },
+      {
+        "turn": 1,
+        "name": "says the estimate with its assumption about earlier use of the 90-period yearly limit",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "yes"
+      },
+      {
+        "turn": 1,
+        "name": "about mei",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: mei"
+      },
+      {
+        "turn": 1,
+        "name": "cites CAREDAY p1 \"Hospital cash (each complete 24 hours, m\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 1,
+        "name": "cites CAREDAY p2 \"Hospital cash is payable for each comple\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 1,
+        "name": "calculation record recomputes",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "recomputed 120, saved 120"
+      },
+      {
+        "turn": 1,
+        "name": "calculation result 120",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "indicative_estimate 120"
+      },
+      {
+        "turn": 1,
+        "name": "operand Hospital cash, Insured Child = 60",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "saved 60"
+      },
+      {
+        "turn": 1,
+        "name": "operand admission = 2026-09-03T22:15",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "saved \"2026-09-03T22:15+08:00\""
+      },
+      {
+        "turn": 1,
+        "name": "operand discharge = 2026-09-06T09:30",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "saved \"2026-09-06T09:30+08:00\""
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": "74000000-0000-4000-8000-000000000004",
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": {
+      "calcs": {
+        "kd34e00842f": {
+          "kind": "indicative_estimate",
+          "turn": 1,
+          "calcId": "kd34e00842f",
+          "benefit": "Hospital cash",
+          "factKeys": [
+            "admission_datetime",
+            "discharge_datetime"
+          ],
+          "policyId": "74000000-0000-4000-8000-000000000102",
+          "withdrawn": null,
+          "evidenceIds": [
+            "e11",
+            "e12"
+          ]
+        }
+      },
+      "facts": {
+        "admission_datetime": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "2026-09-03T22:15+08:00",
+          "words": "admitted to hospital on 3 Sep 2026 at 10:15 pm",
+          "source": "user_reported"
+        },
+        "discharge_datetime": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "2026-09-06T09:30+08:00",
+          "words": "discharged on 6 Sep 2026 at 9:30 am",
+          "source": "user_reported"
+        }
+      },
+      "derived": [
+        {
+          "turn": 1,
+          "factKeys": [
+            "admission_datetime",
+            "discharge_datetime"
+          ],
+          "sentence": "For Mei, CareDay lists Hospital cash at S$60 for each complete 24 hours, up to 90 periods per year; based on the admission and discharge times you gave, the indicative estimate is S$120, assuming at least 2 of the 90 complete 24-hour periods are still available this year.",
+          "evidenceIds": [
+            "e11",
+            "e12",
+            "e8",
+            "e10"
+          ]
+        }
+      ],
+      "subjectId": "74000000-0000-4000-8000-000000000004"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 6,
+        "usage": {
+          "input": 38451,
+          "output": 625
+        },
+        "latencyMs": 9842,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Mei"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "admission_datetime",
+                  "value": "2026-09-03T22:15+08:00",
+                  "words": "admitted to hospital on 3 Sep 2026 at 10:15 pm"
+                },
+                {
+                  "key": "discharge_datetime",
+                  "value": "2026-09-06T09:30+08:00",
+                  "words": "discharged on 6 Sep 2026 at 9:30 am"
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "hospital cash",
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "CareDay Hospital Cash Plan hospital cash daily benefit day-count rule minimum stay waiting days maximum days prior use",
+              "policy_ids": [
+                "74000000-0000-4000-8000-000000000102"
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":4}",
+            "evidenceIds": [
+              "e7",
+              "e8",
+              "e9",
+              "e10"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "want": "any",
+              "benefit": "Hospital Cash",
+              "policy_id": "74000000-0000-4000-8000-000000000102",
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":60,\"column\":\"Insured Child\",\"row\":\"Hospital cash (each complete 24 hours, max 90 per year)\"}",
+            "evidenceIds": [
+              "e2",
+              "e11"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "benefit": "Hospital cash",
+              "purpose": "claim",
+              "admission": {
+                "at": "2026-09-03T22:15+08:00",
+                "words": "admitted to hospital on 3 Sep 2026 at 10:15 pm"
+              },
+              "discharge": {
+                "at": "2026-09-06T09:30+08:00",
+                "words": "discharged on 6 Sep 2026 at 9:30 am"
+              },
+              "policy_id": "74000000-0000-4000-8000-000000000102",
+              "calculator": "hospital_cash",
+              "subject_id": "74000000-0000-4000-8000-000000000004",
+              "rate_value_id": "v1"
+            },
+            "name": "calculate",
+            "summary": "{\"amount\":120,\"kind\":\"indicative_estimate\"}",
+            "evidenceIds": [
+              "e11",
+              "e12"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "For Mei, CareDay lists Hospital cash at S$60 for each complete 24 hours, up to 90 periods per year; based on the admission and discharge times you gave, the indicative estimate is S$120.",
+                  "benefit": "Hospital cash",
+                  "result_id": "kd34e00842f",
+                  "value_ids": [
+                    "v1"
+                  ]
+                }
+              ],
+              "next_steps": [
+                "Submit the hospital’s discharge summary and CareDay claim form."
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000004"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e11",
+          "e12",
+          "e8",
+          "e10"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 238,
+            "role": "table_header",
+            "text": "Policy owner                  Daniel Lim Wen Jie",
+            "start": 190,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "support": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "support": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 289,
+            "role": "table_header",
+            "text": "Insured child                 Mei Lim Xin Hui",
+            "start": 244,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "support": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:live-playwell"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 243,
+            "role": "table_header",
+            "text": "Parent or guardian            Daniel Lim Wen Jie",
+            "start": 195,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 289,
+          "text": "Insured child                 Mei Lim Xin Hui",
+          "start": 244,
+          "onPage": 1
+        },
+        "support": {
+          "end": 289,
+          "text": "Insured child                 Mei Lim Xin Hui",
+          "start": 244,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 233,
+            "role": "table_header",
+            "text": "Policyholder                  Daniel Lim Wen Jie",
+            "start": 185,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "support": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "support": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 145,
+          "text": "Meridian Mutual Assurance                                               Policy MM-HC-205518\nCareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 145,
+          "text": "CareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 721,
+            "role": "table_header",
+            "text": "Benefit                                                       Insured Adult   Insured Child",
+            "start": 630,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 888,
+          "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 616,
+          "onPage": 1
+        },
+        "support": {
+          "end": 804,
+          "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+          "start": 722,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 438,
+          "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+          "start": 303,
+          "onPage": 2
+        },
+        "support": {
+          "end": 438,
+          "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+          "start": 303,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 301,
+          "text": "Conditions\nHospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 173,
+          "text": "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission.",
+          "start": 11,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "select_table_value",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "cell": {
+            "end": 804,
+            "text": "S$60",
+            "start": 800
+          },
+          "tableId": "74000000-0000-4000-8000-000000000102:p1:t3",
+          "rowLabel": "Hospital cash (each complete 24 hours, max 90 per year)",
+          "appliesTo": {
+            "kind": "person_class",
+            "value": "Insured Child",
+            "personClass": "child"
+          },
+          "columnLeaf": "Insured Child",
+          "columnHeader": "Insured Child"
+        },
+        "context": [
+          {
+            "end": 721,
+            "role": "table_header",
+            "text": "Benefit                                                       Insured Adult   Insured Child",
+            "start": 630,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 804,
+          "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+          "start": 722,
+          "onPage": 1
+        },
+        "support": {
+          "end": 804,
+          "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+          "start": 722,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "calculate",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 721,
+            "role": "table_header",
+            "text": "Benefit                                                       Insured Adult   Insured Child",
+            "start": 630,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 804,
+          "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+          "start": 722,
+          "onPage": 1
+        },
+        "support": {
+          "end": 804,
+          "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+          "start": 722,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000004",
+        "documentHash": "sha256:live-careday"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000004",
+        "citations": [
+          {
+            "chunkId": "rag2:e11",
+            "excerpt": "Benefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+            "insurer": "Meridian Mutual Assurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "pageStart": 1,
+            "policyName": "CareDay Hospital Cash Plan",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e10",
+            "excerpt": "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission.",
+            "insurer": "Meridian Mutual Assurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "pageStart": 2,
+            "policyName": "CareDay Hospital Cash Plan",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [],
+        "calculations": [
+          {
+            "id": "kd34e00842f",
+            "kind": "indicative_estimate",
+            "steps": [
+              {
+                "id": "s_days",
+                "op": "day_count",
+                "out": 2,
+                "rule": "completed_24h",
+                "inputs": [
+                  "admission",
+                  "discharge"
+                ]
+              },
+              {
+                "id": "s_capped",
+                "op": "min_count",
+                "out": 2,
+                "inputs": [
+                  "s_days",
+                  "day_cap"
+                ]
+              },
+              {
+                "id": "s_amount",
+                "op": "multiply",
+                "out": 12000,
+                "inputs": [
+                  "rate",
+                  "s_capped"
+                ]
+              }
+            ],
+            "result": {
+              "value": 120,
+              "currency": "SGD"
+            },
+            "benefit": "Hospital cash",
+            "currency": "SGD",
+            "operands": [
+              {
+                "id": "rate",
+                "row": "Hospital cash (each complete 24 hours, max 90 per year)",
+                "role": "rate",
+                "unit": "money",
+                "label": "Hospital cash (each complete 24 hours, max 90 per year)",
+                "value": 60,
+                "column": "Insured Child",
+                "period": "day",
+                "source": "document",
+                "binding": {
+                  "column": "Insured Child",
+                  "benefit": "Hospital cash (each complete 24 hours, max 90 per year)",
+                  "pageEnd": 1,
+                  "passage": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+                  "policyId": "74000000-0000-4000-8000-000000000102",
+                  "pageStart": 1,
+                  "subjectId": "74000000-0000-4000-8000-000000000004",
+                  "documentHash": "sha256:live-careday"
+                },
+                "currency": "SGD"
+              },
+              {
+                "id": "admission",
+                "role": "admission",
+                "unit": "datetime",
+                "label": "admission",
+                "value": "2026-09-03T22:15+08:00",
+                "source": "household",
+                "currency": null,
+                "attribution": "admitted to hospital on 3 Sep 2026 at 10:15 pm"
+              },
+              {
+                "id": "discharge",
+                "role": "discharge",
+                "unit": "datetime",
+                "label": "discharge",
+                "value": "2026-09-06T09:30+08:00",
+                "source": "household",
+                "currency": null,
+                "attribution": "discharged on 6 Sep 2026 at 9:30 am"
+              },
+              {
+                "id": "day_cap",
+                "row": "Hospital cash (each complete 24 hours, max 90 per year)",
+                "role": "day_cap",
+                "unit": "count",
+                "label": "Hospital cash maximum complete 24-hour periods",
+                "value": 90,
+                "column": null,
+                "period": "year",
+                "source": "document",
+                "binding": {
+                  "column": null,
+                  "benefit": "Hospital cash",
+                  "pageEnd": 1,
+                  "passage": "Hospital cash (each complete 24 hours, max 90 per year)",
+                  "policyId": "74000000-0000-4000-8000-000000000102",
+                  "pageStart": 1,
+                  "subjectId": "74000000-0000-4000-8000-000000000004",
+                  "documentHash": "sha256:live-careday"
+                },
+                "currency": null
+              }
+            ],
+            "policyId": "74000000-0000-4000-8000-000000000102",
+            "rounding": {
+              "mode": "half_up",
+              "source": "default",
+              "precision": 2
+            },
+            "sentence": "For Mei, CareDay lists Hospital cash at S$60 for each complete 24 hours, up to 90 periods per year; based on the admission and discharge times you gave, the indicative estimate is S$120, assuming at least 2 of the 90 complete 24-hour periods are still available this year.",
+            "subjectId": "74000000-0000-4000-8000-000000000004",
+            "unitTerms": {
+              "caps": [
+                {
+                  "max": 90,
+                  "kind": "count",
+                  "span": {
+                    "end": 776,
+                    "page": 1,
+                    "text": "max 90 per year",
+                    "start": 761,
+                    "source": "label",
+                    "policyId": "74000000-0000-4000-8000-000000000102"
+                  },
+                  "unit": null,
+                  "reset": "year",
+                  "currency": null,
+                  "priorUse": "assumed_available",
+                  "operandId": "day_cap"
+                }
+              ],
+              "rate": {
+                "span": {
+                  "end": 759,
+                  "page": 1,
+                  "text": "each complete 24 hours",
+                  "start": 737,
+                  "source": "label",
+                  "policyId": "74000000-0000-4000-8000-000000000102"
+                },
+                "unit": "complete_24h"
+              },
+              "durationRule": {
+                "rule": "completed_24h",
+                "span": {
+                  "end": 759,
+                  "page": 1,
+                  "text": "each complete 24 hours",
+                  "start": 737,
+                  "source": "label",
+                  "policyId": "74000000-0000-4000-8000-000000000102"
+                }
+              }
+            },
+            "assumption": "assuming at least 2 of the 90 complete 24-hour periods are still available this year",
+            "calculator": "hospital_cash",
+            "conditions": [
+              {
+                "id": "c_day_rule",
+                "kind": "day_count_rule",
+                "text": "Days are counted as the wording states: “Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60”",
+                "basis": "document",
+                "status": "established",
+                "passage": {
+                  "text": "Hospital cash (each complete 24 hours, max 90 per year)       S$100           S$60",
+                  "pageEnd": 1,
+                  "policyId": "74000000-0000-4000-8000-000000000102",
+                  "pageStart": 1
+                }
+              },
+              {
+                "id": "c_waiting",
+                "kind": "waiting_period",
+                "text": "No excess / waiting period is printed for this benefit.",
+                "basis": "absent",
+                "status": "not_applicable"
+              },
+              {
+                "id": "c_day_cap",
+                "kind": "day_cap",
+                "text": "At most 90 complete 24-hour periods per year: “max 90 per year”",
+                "basis": "document",
+                "status": "established",
+                "passage": {
+                  "text": "Hospital cash (each complete 24 hours, max 90 per year)",
+                  "pageEnd": 1,
+                  "policyId": "74000000-0000-4000-8000-000000000102",
+                  "pageStart": 1
+                }
+              },
+              {
+                "id": "c_cap_prior_use",
+                "kind": "day_cap",
+                "text": "The limit of 90 complete 24-hour periods applies per year: periods of hospital cash already paid this year count against it (“max 90 per year”).",
+                "basis": "assumption",
+                "needs": null,
+                "status": "established",
+                "passage": {
+                  "text": "Hospital cash (each complete 24 hours, max 90 per year)",
+                  "pageEnd": 1,
+                  "policyId": "74000000-0000-4000-8000-000000000102",
+                  "pageStart": 1
+                },
+                "householdWords": null
+              }
+            ],
+            "documentHash": "sha256:live-careday",
+            "unresolvedText": "I worked out Mei’s hospital cash under CareDay Hospital Cash Plan, but I couldn’t confirm the figure against your documents.",
+            "evidenceRequirements": [
+              "the hospital’s discharge summary or bill showing Mei’s admission and discharge dates and times",
+              "the CareDay Hospital Cash Plan claim form"
+            ]
+          }
+        ],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

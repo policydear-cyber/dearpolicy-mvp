@@ -1,0 +1,1717 @@
+{
+  "scenario": "L2",
+  "title": "Adult / Child table, then a person correction",
+  "conversationId": "fe39e964-093b-46d9-9113-aaa821ffc91d",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "What does our SunHaven plan pay for accidental dental treatment for Kai?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "For Kai, SunHaven’s “Accidental dental treatment (per accident)” benefit pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$400 per accident.",
+      "timings": {
+        "acceptedMs": 9,
+        "firstAssistantPersistedMs": 5613,
+        "answerSeenMs": 5674,
+        "modelMs": 5034,
+        "upstreamMs": 5032,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 45,
+          "at": "2026-10-09T09:59:47.185Z",
+          "estInputTokens": 9808,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019808,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4662,
+            "output": 17,
+            "cached": 4517
+          },
+          "latencyMs": 686,
+          "upstreamMs": 686,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 46,
+          "at": "2026-10-09T09:59:47.876Z",
+          "estInputTokens": 10030,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.002003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4773,
+            "output": 107,
+            "cached": 4536
+          },
+          "latencyMs": 1471,
+          "upstreamMs": 1471,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 47,
+          "at": "2026-10-09T09:59:49.361Z",
+          "estInputTokens": 14926,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024926,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 7,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8266,
+            "output": 76,
+            "cached": 4647
+          },
+          "latencyMs": 1469,
+          "upstreamMs": 1469,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 48,
+          "at": "2026-10-09T09:59:50.841Z",
+          "estInputTokens": 15525,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025525,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 9,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8617,
+            "output": 107,
+            "cached": 8140
+          },
+          "latencyMs": 1408,
+          "upstreamMs": 1408,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 45,
+          "at": "2026-10-09T09:59:47.186Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 9998,
+          "reservedUsd": 0.0019998000000000004,
+          "chargedUsd": 0.00006817,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 686,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4662,
+            "output": 17,
+            "cached": 4517,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 1
+        },
+        {
+          "seq": 46,
+          "at": "2026-10-09T09:59:47.877Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10227,
+          "reservedUsd": 0.0020227,
+          "chargedUsd": 0.00012256,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1471,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4773,
+            "output": 107,
+            "cached": 4536,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 1
+        },
+        {
+          "seq": 47,
+          "at": "2026-10-09T09:59:49.362Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15140,
+          "reservedUsd": 0.002514,
+          "chargedUsd": 0.00044637,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1469,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 8266,
+            "output": 76,
+            "cached": 4647,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 1
+        },
+        {
+          "seq": 48,
+          "at": "2026-10-09T09:59:50.841Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15750,
+          "reservedUsd": 0.002575,
+          "chargedUsd": 0.00018260000000000002,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1406,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 8617,
+            "output": 107,
+            "cached": 8140,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8302,
+          "output_tokens": 117,
+          "cached_tokens": 7749,
+          "cost_usd": 0.000191,
+          "latency_ms": 1668,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:46.421Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4662,
+          "output_tokens": 17,
+          "cached_tokens": 4517,
+          "cost_usd": 0.000068,
+          "latency_ms": 687,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:47.873Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4773,
+          "output_tokens": 107,
+          "cached_tokens": 4536,
+          "cost_usd": 0.000123,
+          "latency_ms": 1472,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:49.349Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8266,
+          "output_tokens": 76,
+          "cached_tokens": 4647,
+          "cost_usd": 0.000446,
+          "latency_ms": 1470,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:50.833Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8617,
+          "output_tokens": 107,
+          "cached_tokens": 8140,
+          "cost_usd": 0.000183,
+          "latency_ms": 1408,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:52.250Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 26318,
+        "output": 307
+      },
+      "costUsd": {
+        "charged": 0.0008197,
+        "reserved": 0.009111500000000002,
+        "ledger": 0.001011
+      }
+    },
+    {
+      "turn": 2,
+      "user": "Sorry, I meant Grace, not Kai.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "For Grace, SunHaven’s “Accidental dental treatment (per accident)” pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$800 per accident.",
+      "timings": {
+        "acceptedMs": 22,
+        "firstAssistantPersistedMs": 6695,
+        "answerSeenMs": 6730,
+        "modelMs": 5588,
+        "upstreamMs": 5584,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 49,
+          "at": "2026-10-09T09:59:53.397Z",
+          "estInputTokens": 9935,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019935,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4744,
+            "output": 17,
+            "cached": 0
+          },
+          "latencyMs": 1087,
+          "upstreamMs": 1087,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 50,
+          "at": "2026-10-09T09:59:54.489Z",
+          "estInputTokens": 10161,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020161,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4858,
+            "output": 109,
+            "cached": 4618
+          },
+          "latencyMs": 1528,
+          "upstreamMs": 1528,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 51,
+          "at": "2026-10-09T09:59:56.029Z",
+          "estInputTokens": 15628,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0025628,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 9,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8705,
+            "output": 72,
+            "cached": 4732
+          },
+          "latencyMs": 1490,
+          "upstreamMs": 1490,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 52,
+          "at": "2026-10-09T09:59:57.526Z",
+          "estInputTokens": 16365,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0026365,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 9159,
+            "output": 106,
+            "cached": 8579
+          },
+          "latencyMs": 1483,
+          "upstreamMs": 1483,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 49,
+          "at": "2026-10-09T09:59:53.398Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10125,
+          "reservedUsd": 0.0020125,
+          "chargedUsd": 0.00048290000000000003,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1086,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4744,
+            "output": 17,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 2
+        },
+        {
+          "seq": 50,
+          "at": "2026-10-09T09:59:54.489Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10358,
+          "reservedUsd": 0.0020358,
+          "chargedUsd": 0.00012468,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1528,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4858,
+            "output": 109,
+            "cached": 4618,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 2
+        },
+        {
+          "seq": 51,
+          "at": "2026-10-09T09:59:56.029Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 15842,
+          "reservedUsd": 0.0025841999999999996,
+          "chargedUsd": 0.00048062,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1489,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 8705,
+            "output": 72,
+            "cached": 4732,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 2
+        },
+        {
+          "seq": 52,
+          "at": "2026-10-09T09:59:57.527Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 16588,
+          "reservedUsd": 0.0026588000000000002,
+          "chargedUsd": 0.00019679000000000002,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1481,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 9159,
+            "output": 106,
+            "cached": 8579,
+            "reasoning": 0
+          },
+          "scenario": "L2",
+          "turn": 2
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8617,
+          "output_tokens": 107,
+          "cached_tokens": 8140,
+          "cost_usd": 0.000183,
+          "latency_ms": 1408,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:52.250Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4744,
+          "output_tokens": 17,
+          "cached_tokens": 0,
+          "cost_usd": 0.000483,
+          "latency_ms": 1088,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:54.486Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4858,
+          "output_tokens": 109,
+          "cached_tokens": 4618,
+          "cost_usd": 0.000125,
+          "latency_ms": 1528,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:56.018Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8705,
+          "output_tokens": 72,
+          "cached_tokens": 4732,
+          "cost_usd": 0.000481,
+          "latency_ms": 1491,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:57.520Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 9159,
+          "output_tokens": 106,
+          "cached_tokens": 8579,
+          "cost_usd": 0.000197,
+          "latency_ms": 1483,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:59:59.010Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 27466,
+        "output": 304
+      },
+      "costUsd": {
+        "charged": 0.0012849900000000002,
+        "reserved": 0.009291299999999999,
+        "ledger": 0.0014689999999999998
+      }
+    }
+  ],
+  "totalMs": 12412,
+  "firstUsefulResponseMs": 5613,
+  "tokens": {
+    "input": 53784,
+    "output": 611
+  },
+  "costUsd": 0.00210469,
+  "calls": 8,
+  "verdict": {
+    "scenario": "L2",
+    "verdict": "PASS",
+    "failureStage": null,
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page SUNHAVEN p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 2,
+        "name": "stored page SUNHAVEN p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 1,
+        "name": "shows S$400",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$800",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "about kai",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: kai"
+      },
+      {
+        "turn": 1,
+        "name": "figure bound to kai / SUNHAVEN / Child",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "bound"
+      },
+      {
+        "turn": 1,
+        "name": "cites SUNHAVEN p1 \"Accidental dental treatment (per acciden\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 2,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 2,
+        "name": "shows S$800",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "present"
+      },
+      {
+        "turn": 2,
+        "name": "never states S$400",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 2,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 2,
+        "name": "about grace",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: grace"
+      },
+      {
+        "turn": 2,
+        "name": "figure bound to grace / SUNHAVEN / Adult",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "bound"
+      },
+      {
+        "turn": 2,
+        "name": "cites SUNHAVEN p1 \"Accidental dental treatment (per acciden\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": "74000000-0000-4000-8000-000000000002",
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 4,
+        "usage": {
+          "input": 26318,
+          "output": 307
+        },
+        "latencyMs": 5068,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Kai"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "accidental dental treatment",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "SunHaven accidental dental treatment dental expenses accident benefit",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":8}",
+            "evidenceIds": [
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "tier": "Child",
+              "want": "amount",
+              "benefit": "Accidental dental treatment (per accident)",
+              "policy_id": "74000000-0000-4000-8000-000000000101",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":400,\"column\":\"Child\",\"row\":\"Accidental dental treatment (per accident)\"}",
+            "evidenceIds": [
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "For Kai, SunHaven’s “Accidental dental treatment (per accident)” benefit pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$400 per accident.",
+                  "benefit": "Accidental dental treatment (per accident)",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "evidence_ids": [
+                    "e6"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e6",
+          "e13"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 2,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 4,
+        "usage": {
+          "input": 27466,
+          "output": 304
+        },
+        "latencyMs": 5615,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Grace"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "accidental dental treatment",
+              "subject_id": "74000000-0000-4000-8000-000000000002"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e14",
+              "e3",
+              "e15"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "SunHaven accidental dental treatment benefit conditions sound natural teeth Accident",
+              "subject_id": "74000000-0000-4000-8000-000000000002"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":9}",
+            "evidenceIds": [
+              "e6",
+              "e5",
+              "e7",
+              "e12",
+              "e8",
+              "e9",
+              "e10",
+              "e16",
+              "e11"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "want": "amount",
+              "benefit": "Accidental dental treatment (per accident)",
+              "policy_id": "74000000-0000-4000-8000-000000000101",
+              "subject_id": "74000000-0000-4000-8000-000000000002"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v2\",\"value\":800,\"column\":\"Adult\",\"row\":\"Accidental dental treatment (per accident)\"}",
+            "evidenceIds": [
+              "e15",
+              "e17"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "For Grace, SunHaven’s “Accidental dental treatment (per accident)” pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$800 per accident.",
+                  "benefit": "Accidental dental treatment (per accident)",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "evidence_ids": [
+                    "e6"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000002"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e6",
+          "e17"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 238,
+            "role": "table_header",
+            "text": "Policy owner                  Daniel Lim Wen Jie",
+            "start": 190,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "support": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "support": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 233,
+            "role": "table_header",
+            "text": "Policyholder                  Daniel Lim Wen Jie",
+            "start": 185,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "support": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "support": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 996,
+          "text": "Schedule of benefits\nBenefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500\nFracture benefit (per fracture)                         S$1,200       S$750\nAccidental dental treatment (per accident)              S$800         S$400\nAccidental death                                        S$100,000     S$20,000",
+          "start": 591,
+          "onPage": 1
+        },
+        "support": {
+          "end": 917,
+          "text": "Accidental dental treatment (per accident)              S$800         S$400",
+          "start": 842,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "support": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 140,
+          "text": "Harbourline General Insurance                                           Policy HG-PA-771204\nSunHaven Family Accident Guard - Policy Schedule",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 140,
+          "text": "SunHaven Family Accident Guard - Policy Schedule",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "support": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 888,
+          "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 616,
+          "onPage": 1
+        },
+        "support": {
+          "end": 629,
+          "text": "Benefit table",
+          "start": 616,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 478,
+          "text": "Illness and accident are both covered.",
+          "start": 440,
+          "onPage": 2
+        },
+        "support": {
+          "end": 478,
+          "text": "Illness and accident are both covered.",
+          "start": 440,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 597,
+          "text": "Section 4 - Where you are covered\nThis policy covers Accidents anywhere in the world.",
+          "start": 512,
+          "onPage": 2
+        },
+        "support": {
+          "end": 597,
+          "text": "This policy covers Accidents anywhere in the world.",
+          "start": 546,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 237,
+          "text": "Section 2 - What is covered\nThis policy covers Bodily Injury caused solely and directly by an Accident. A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 103,
+          "text": "This policy covers Bodily Injury caused solely and directly by an Accident.",
+          "start": 28,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "select_table_value",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "cell": {
+            "end": 917,
+            "text": "S$400",
+            "start": 912
+          },
+          "tableId": "74000000-0000-4000-8000-000000000101:p1:t3",
+          "rowLabel": "Accidental dental treatment (per accident)",
+          "appliesTo": {
+            "kind": "person_class",
+            "value": "Child",
+            "personClass": "child"
+          },
+          "columnLeaf": "Child",
+          "columnHeader": "Child"
+        },
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 917,
+          "text": "Accidental dental treatment (per accident)              S$800         S$400",
+          "start": 842,
+          "onPage": 1
+        },
+        "support": {
+          "end": 917,
+          "text": "Accidental dental treatment (per accident)              S$800         S$400",
+          "start": 842,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 494,
+          "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+          "start": 435,
+          "onPage": 1
+        },
+        "support": {
+          "end": 494,
+          "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+          "start": 435,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:live-careday"
+      },
+      "e15": {
+        "id": "e15",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 477,
+          "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+          "start": 422,
+          "onPage": 1
+        },
+        "support": {
+          "end": 477,
+          "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+          "start": 422,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e16": {
+        "id": "e16",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 301,
+          "text": "Conditions\nHospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 10,
+          "text": "Conditions",
+          "start": 0,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:live-careday"
+      },
+      "e17": {
+        "id": "e17",
+        "via": "select_table_value",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "cell": {
+            "end": 903,
+            "text": "S$800",
+            "start": 898
+          },
+          "tableId": "74000000-0000-4000-8000-000000000101:p1:t3",
+          "rowLabel": "Accidental dental treatment (per accident)",
+          "appliesTo": {
+            "kind": "person_class",
+            "value": "Adult",
+            "personClass": "adult"
+          },
+          "columnLeaf": "Adult",
+          "columnHeader": "Adult"
+        },
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 917,
+          "text": "Accidental dental treatment (per accident)              S$800         S$400",
+          "start": 842,
+          "onPage": 1
+        },
+        "support": {
+          "end": 917,
+          "text": "Accidental dental treatment (per accident)              S$800         S$400",
+          "start": 842,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000002",
+        "documentHash": "sha256:live-sunhaven"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000003",
+        "citations": [
+          {
+            "chunkId": "rag2:e6",
+            "excerpt": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 2,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e13",
+            "excerpt": "Benefit                                                 Adult         Child\nAccidental dental treatment (per accident)              S$800         S$400",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "value": 400,
+            "column": "Child",
+            "benefit": "Accidental dental treatment (per accident)",
+            "pageEnd": 1,
+            "passage": "Accidental dental treatment (per accident)              S$800         S$400",
+            "currency": "SGD",
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "sentence": "For Kai, SunHaven’s “Accidental dental treatment (per accident)” benefit pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$400 per accident.",
+            "pageStart": 1,
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 2,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000002",
+        "citations": [
+          {
+            "chunkId": "rag2:e6",
+            "excerpt": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 2,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e17",
+            "excerpt": "Benefit                                                 Adult         Child\nAccidental dental treatment (per accident)              S$800         S$400",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "value": 800,
+            "column": "Adult",
+            "benefit": "Accidental dental treatment (per accident)",
+            "pageEnd": 1,
+            "passage": "Accidental dental treatment (per accident)              S$800         S$400",
+            "currency": "SGD",
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "sentence": "For Grace, SunHaven’s “Accidental dental treatment (per accident)” pays the cost of treatment to sound natural teeth damaged by an Accident, up to S$800 per accident.",
+            "pageStart": 1,
+            "subjectId": "74000000-0000-4000-8000-000000000002",
+            "documentHash": "sha256:live-sunhaven"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}
