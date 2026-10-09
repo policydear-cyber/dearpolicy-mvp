@@ -7,6 +7,9 @@
  *      citations, never shown and never a reason to leave the whole answer out ("I couldn't confirm an answer").
  *   N  "this is not a confirmed payout" is the opposite of calling an estimate a payout: the indicative estimate is
  *      shown; a sentence that does call it a payout is sent back once (wording only) and the restated one shown.
+ *   K  (ingest-live-4) an endorsement is linked to its policy's people by the same policy number and product when the
+ *      insurer's name is read differently; a number alone on another product is not enough.
+ *   R  (ingest-live-4) the one gate repair names only what the check said: no example limitation the model can copy.
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -200,6 +203,55 @@ async function main() {
     assert.equal(formRepairAsked(t).length, 1, JSON.stringify((t.trace.toolCalls as any[]).map((x) => [x.name, x.ok, String(x.error ?? "").slice(0, 200)])));
     assert.match(t.visible, /S\$360/, t.visible);
     assert.doesNotMatch(t.visible, /Your payout/i, t.visible); assert.match(t.visible, /indicative estimate is S\$360/, t.visible);
+  });
+
+  // ------------------------------------------------------------------------------------------- linking (run 4)
+  // ingest-live-4: the endorsement's insurer was read as "Meridian Harbour Assurance" (the schedule: "... Pte. Ltd."),
+  // so it was linked to nobody and every child figure it printed was refused for Isla and Felix.
+  const { linkRelatedReferenceDocuments } = await import("@/lib/policies/linking");
+  const sched = (TB.policies as any[]).find((p) => p.document_role === "personal_schedule");
+  const people = async (id: string) => ((await h.db.query("SELECT family_member_id::text AS m FROM policy_members WHERE policy_id=$1 ORDER BY 1", [id])).rows as { m: string }[]).map((r) => r.m);
+  const addDoc = async (id: string, insurer: string, product: string, number: string) => {
+    await h.db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,processing_status,original_filename,storage_key,quarantine_status,lifecycle_state,file_hash)
+      VALUES($1,$2,$3,$4,$5,$6,'hospital_cash','endorsement',false,'ready',$8,$8,'scan_clean','active',$7)`, [id, ACCOUNT, sched.family_member_id, insurer, product, number, "sha256:" + id, id + ".pdf"]);
+    await linkRelatedReferenceDocuments(ACCOUNT, id, null);
+    return people(id);
+  };
+  const want = await people(sched.id);
+  await check("K1 run 4: an endorsement whose insurer is read without \"Pte. Ltd.\" but prints the schedule's policy number and product is linked to the schedule's people", async () => {
+    assert.ok(want.length >= 4, "the schedule's people: " + want.length);
+    assert.deepEqual(await addDoc("11111111-1111-4111-8111-000000000001", "Meridian Harbour Assurance", sched.product_name, sched.policy_number), want);
+  });
+  await check("K2 layout: the policy number printed with spaces and lower case is the same number", async () => {
+    assert.deepEqual(await addDoc("11111111-1111-4111-8111-000000000002", "Meridian Harbour", sched.product_name.toUpperCase(), String(sched.policy_number).toLowerCase().replace(/-/g, " ")), want);
+  });
+  await check("K3 the same number on another product is not linked (a number alone is not enough)", async () => {
+    assert.deepEqual(await addDoc("11111111-1111-4111-8111-000000000003", "Other Insurer Ltd", "Other Hospital Plan", sched.policy_number), []);
+  });
+
+  // ------------------------------------------------------------------------------------------- Q2 (run 4)
+  // The one repair asked the model to add "a limitation" with an amendment-removal example; the model added a removal
+  // that had not happened. The repair names only what the check said.
+  const Q2 = ["If something happened to Isla in an accident, how much is the accidental death payout for her? Is it the same as mine?"];
+  const AD = "Accidental death or permanent total disablement (lump sum)";
+  const q2Head = [
+    () => [call("resolve_person", { mention: "Isla" })],
+    () => [call("search_passages", { k: 10, query: "accidental death permanent total disablement lump sum child adult", policy_ids: [SAFE], subject_id: isla })],
+    () => [call("select_table_value", { tier: "Child", want: "amount", benefit: AD, policy_id: SAFE, subject_id: isla })],
+  ];
+  const adult = (v: ScriptView) => hit(v, /S\$\s?150,000/);
+  const q2 = await run([{ steps: [...q2Head,
+    (v) => [call("final_answer", { subject_id: isla, sentences: [{ text: "For Isla, SafeStay lists S$40,000 for “Accidental death or permanent total disablement (lump sum)”, and for you it lists S$150,000, so it is not the same.", benefit: AD, value_ids: [data(v, "select_table_value").valueId], evidence_ids: [adult(v)] }] })],
+    (v) => [call("final_answer", { subject_id: isla, sentences: [{ text: "For Isla, SafeStay lists S$40,000 for “Accidental death or permanent total disablement (lump sum)”.", benefit: AD, value_ids: [data(v, "select_table_value").valueId] }] })],
+  ] }], Q2);
+  show("Q2", q2[0]);
+  await check("R1 Q2 (run 4): the one repair names only what the check said -- no amendment-removal example -- and the answer states no removal that did not happen", () => {
+    const t = q2[0];
+    const asked = (t.trace.toolCalls as any[]).filter((x) => x.name === "final_answer" && !x.ok);
+    assert.equal(asked.length, 1, JSON.stringify((t.trace.toolCalls as any[]).map((x) => [x.name, x.ok])));
+    assert.doesNotMatch(String(asked[0].error), /removed|amendment document/i, String(asked[0].error));
+    assert.doesNotMatch(t.visible, /removed from the library|document was removed/i, t.visible);
+    assert.match(t.visible, /S\$40,000/, t.visible);
   });
 
   const failed = results.filter((r) => !r.ok);
