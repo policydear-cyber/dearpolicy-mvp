@@ -18,7 +18,7 @@ import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
 import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
-import { confirmed, contentWords, factConcept, numbersIn } from "./facts";
+import { CAUSE_KEYS, confirmed, contentWords, EVENT_KEY, factConcept, numbersIn } from "./facts";
 import { checkCitedStatement, instructionLines, internalIdsIn, payoutOrDecision, stripInternalIds, unsafeNextStep, withoutInstructions, PAYOUT as PAYOUT_WORDS } from "./statements";
 
 export type ComputeCall = { operation: string; operands: Record<string, unknown>[] };
@@ -244,7 +244,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (figures.length && !result) {
       const benefits = [...values.map((v) => ({ label: v!.operand.benefit, policyId: v!.operand.evidence.policyId })), ...evIds.map((id) => ctx.state.evidence[id]).filter((e) => e.table?.rowLabel).map((e) => ({ label: e.table!.rowLabel, policyId: e.policyId }))];
       const cond = conditionalFraming(text, benefits, ctx);
-      if (cond) { text = cond.text; if (!evIds.includes(cond.evidenceId)) evIds = [...evIds, cond.evidenceId]; conditioned.push({ at: i, words: cond.words }); }
+      if (cond) { text = cond.text; evIds = [...new Set([...evIds, ...cond.evidenceIds])]; conditioned.push({ at: i, words: cond.words }); }
     }
     const refs: EvidenceRef[] = [...evIds.map((id) => ctx.state.evidence[id]), ...values.map((v) => v!.operand.evidence), ...(result?.evidence ?? [])];
     const bindings: BoundFigure[] = [], records: ComputationRecord[] = [];
@@ -490,10 +490,36 @@ export function requirementConcepts(c: Pick<CalcOutcome, "requirements" | "condi
 /** Agent P (task 6): the policy's condition for paying a printed benefit, from the passages read in this conversation. */
 const BENEFIT_GENERIC = new Set(["benefit", "daily", "per", "each", "max", "maximum", "limit", "amount", "sum", "cover", "plan", "insured", "payable", "total", "year", "day", "days", "complete", "hour", "hours", "policy", "child", "adult", "the"].map((w) => contentWords(w)[0] ?? w));
 const CONDITION = /\b(?:only if|if|provided(?: that)?|subject to|as long as|on condition that)\b|\b(?:must|has to|have to|needs? to|shall)\s+be\b|\b(?:confirmed|certified|diagnosed|verified|supported)\s+by\b/i;
-const ALREADY_CONDITIONAL = /\b(?:if|provided|subject to|as long as|only when|on condition|unless)\b/i;
-export function conditionalFraming(text: string, benefits: { label: string; policyId: string }[], ctx: Pick<Ctx, "state" | "stale">): { text: string; evidenceId: string; words: string[] } | null {
-  if (!benefits.length || ALREADY_CONDITIONAL.test(text) || /\bnot\b|\bexclu/i.test(text)) return null;
-  const facts = Object.values(ctx.state.claim?.facts ?? {});
+/** Wording that limits cover by what caused the event (accident-only cover, an illness exclusion). */
+const CAUSE_WORDING = /\baccident(?:al|ally|s)?\b|\b(?:illness|sickness|disease|degenerative)\b/i;
+/** The cause is what the wording turns on: caused by / solely / directly / due to / arising from / resulting from. */
+const CAUSE_LIMIT = /\b(?:caused|solely|directly|due to|arising (?:from|out of)|resulting from|as a result of|attributable to)\b/i;
+/** A policy-level statement of what the document covers ("This policy covers ...", "The plan does not cover ..."). */
+const COVER_SCOPE = /\b(?:this|the) (?:policy|plan|certificate|cover|insurance)\b[^.]{0,60}\b(?:covers?|insures?)\b|\bis not covered\b|\bare not covered\b/i;
+/**
+ * Round 6c (A3): every unestablished material condition the selected benefit's own passages (read this conversation,
+ * same document) impose on it, appended to a sentence that states the benefit's printed figure:
+ *  - the benefit's own conditions (\"payable once per fracture confirmed by X-ray and certified by ...\"), unless the
+ *    sentence already carries them or reviewed medical evidence on the claim establishes them;
+ *  - while the claim records an event but not how it happened, the document's cause condition: a cover-scope or
+ *    benefit sentence that limits cover by cause (accident-only cover, an illness exclusion).
+ * Null when there is nothing to add.
+ */
+export function conditionalFraming(text: string, benefits: { label: string; policyId: string }[], ctx: Pick<Ctx, "state" | "stale"> & Partial<Pick<Ctx, "policyNames">>): { text: string; evidenceId: string; evidenceIds: string[]; words: string[] } | null {
+  if (!benefits.length || /\bnot\b|\bexclu/i.test(text)) return null;
+  const claim = ctx.state.claim;
+  const facts = Object.values(claim?.facts ?? {});
+  const keys = Object.keys(claim?.facts ?? {});
+  const causeUnknown = !!claim && keys.some((k) => EVENT_KEY.test(k)) && !keys.some((k) => CAUSE_KEYS.has(k) && confirmed(claim.facts[k]));
+  const own = new Set(contentWords(text));
+  // Whether the sentence itself already says the cause condition -- not counting a product's name or a benefit's
+  // printed label that merely contains the word ("Family Accident Guard", "Accidental dental treatment").
+  const names = [...(ctx.policyNames?.values() ?? []), ...Object.values(ctx.state.docNames ?? {}), ...benefits.map((b) => b.label)].filter(Boolean).sort((a, b) => b.length - a.length);
+  let plain = text;
+  for (const n of names) plain = plain.split(n).join(" ");
+  const saysCause = CAUSE_WORDING.test(plain);
+  const clauses: string[] = [], ids: string[] = [], causeQuotes: string[] = [];
+  const seen = new Set<string>();
   for (const b of benefits) {
     const label = b.label.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
     const keyWords = contentWords(label).filter((w) => !BENEFIT_GENERIC.has(w));
@@ -503,14 +529,21 @@ export function conditionalFraming(text: string, benefits: { label: string; poli
       if (e.policyId !== b.policyId || ctx.stale?.has(e.id) || e.table) continue;
       for (const line of withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/)) {
         const sentence = line.replace(/\s+/g, " ").trim();
-        if (!sentence || moneyFiguresIn(sentence).length || !CONDITION.test(sentence) || /\bnot (?:covered|payable)\b|\bexclu/i.test(sentence)) continue;
+        if (!sentence || seen.has(sentence) || moneyFiguresIn(sentence).length) continue;
         const have = new Set(contentWords(sentence));
-        if (!keyWords.every((w) => have.has(w))) continue;
+        const aboutBenefit = keyWords.every((w) => have.has(w));
+        // The cause condition, while how it happened is not known.
+        if (causeUnknown && CAUSE_WORDING.test(sentence) && CAUSE_LIMIT.test(sentence) && (aboutBenefit || COVER_SCOPE.test(sentence))) {
+          seen.add(sentence);
+          if (!saysCause) { causeQuotes.push(sentence.replace(/[;:\s]+$/, "")); ids.push(evidenceIdOf(ctx.state, e)); }
+          continue;
+        }
+        if (!aboutBenefit || !CONDITION.test(sentence) || /\bnot (?:covered|payable)\b|\bexclu/i.test(sentence)) continue;
+        seen.add(sentence);
         const words = contentWords(sentence).filter((w) => !keyWords.includes(w));
         // Established only by reviewed medical evidence recorded for the claim -- never by the household's report.
         if (facts.some((f) => f.source === "medical_evidence" && contentWords(f.words).filter((w) => words.includes(w)).length >= 2)) continue;
         // The sentence already carries the condition.
-        const own = new Set(contentWords(text));
         if (words.length && words.filter((w) => own.has(w)).length / words.length >= 0.6) continue;
         const body = sentence.replace(/[.;:\s]+$/, "");
         let clause: string | null = null;
@@ -523,13 +556,14 @@ export function conditionalFraming(text: string, benefits: { label: string; poli
         else if (iff) clause = `payable only if ${iff}`;
         else if (subj) clause = `subject to ${subj}`;
         if (!clause || clause.length > 200) clause = `payable only if the policy’s conditions for it are met (“${body}”)`;
-        const id = evidenceIdOf(ctx.state, e);
-        const framed = text.replace(/[.!\s]+$/, "") + ", " + clause + ".";
-        return { text: framed, evidenceId: id, words: contentWords(clause) };
+        clauses.push(clause); ids.push(evidenceIdOf(ctx.state, e));
       }
     }
   }
-  return null;
+  if (causeQuotes.length) clauses.push(`${clauses.length ? "and " : ""}only for what the policy covers, which depends on how it happened: “${causeQuotes.map((q) => q.replace(/[.\s]+$/, "")).join(". ")}.”`);
+  if (!clauses.length) return null;
+  const framed = text.replace(/[.!\s]+$/, "") + ", " + clauses.join(", ") + (clauses.at(-1)!.endsWith("”") ? "" : ".");
+  return { text: framed, evidenceId: ids[0], evidenceIds: [...new Set(ids)], words: contentWords(clauses.join(" ")) };
 }
 
 const QUALIFIER_START = /^(?:however|but|except|unless|only (?:if|when|after|for)|(?:this|that|it) (?:does not|doesn['’]t|only|is only|excludes|won['’]t)|not\b|note that|although|though|provided|subject to|(?:this|that|the) limit)\b/i;
