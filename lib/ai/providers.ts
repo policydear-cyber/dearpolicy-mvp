@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { deterministicHostedDocumentText, deterministicHostedReply, deterministicModelEnabled } from "./deterministic-model";
+import { deterministicHostedDocumentText, deterministicHostedReply, deterministicModelEnabled, deterministicModelRequested } from "./deterministic-model";
+/** Integration (r6): whether the deterministic stand-in is requested, for callers that must refuse rather than use it
+ * (the conversation loop's hosted model). The stand-in itself stays reachable only from the guarded calls below. */
+export function deterministicStandInRequested(env: NodeJS.ProcessEnv = process.env): boolean { return deterministicModelRequested(env); }
 
 /** Which model does which job, as three settings.
  *
@@ -128,7 +131,7 @@ const PRICES:Record<string,Price>={
 };
 /** What a provider:model requires of a request, beyond its price -- recorded from the provider's own model page, next
  * to the price table so a model change brings its request rules with it. `chatCompletionsWithTools` is merged into a
- * Chat Completions request that carries tools (lib/rag2/loop/hosted-model.ts openAiRequest). */
+ * Chat Completions request that carries tools (the conversational loop's hosted model, openAiRequest). */
 export type ModelCapability={
   chatCompletionsWithTools?:{set:Record<string,unknown>;source:string};
   contextTokens?:number;maxOutputTokens?:number;
@@ -317,8 +320,16 @@ const AnthropicShape=z.object({
   model:z.string().optional(),
   content:z.array(z.object({type:z.string(),text:z.string().optional()})),
   stop_reason:z.string().nullable().optional(),
-  usage:z.object({input_tokens:z.number(),output_tokens:z.number(),cache_read_input_tokens:z.number().optional()}).optional(),
+  usage:z.object({input_tokens:z.number(),output_tokens:z.number(),cache_read_input_tokens:z.number().nullable().optional(),cache_creation_input_tokens:z.number().nullable().optional()}).optional(),
 });
+/** Anthropic usage: input_tokens EXCLUDES cache reads and cache writes, so both are added back to give every input
+ * token (the same normalisation as the conversation loop's hosted model); the cache reads are the cached part, so
+ * "input minus cached" is never negative. Cache writes are priced as ordinary input. */
+export function anthropicUsageOf(u:{input_tokens?:number|null;output_tokens?:number|null;cache_read_input_tokens?:number|null;cache_creation_input_tokens?:number|null}|null|undefined):{input:number;output:number;cached:number}{
+  const n=(x:unknown)=>typeof x==="number"&&Number.isFinite(x)&&x>0?Math.floor(x):0;
+  const read=n(u?.cache_read_input_tokens),write=n(u?.cache_creation_input_tokens);
+  return {input:n(u?.input_tokens)+read+write,output:n(u?.output_tokens),cached:read};
+}
 export async function anthropicMessages(choice:ModelChoice,args:{system:string;user:string;jsonSchema:unknown;temperature?:number;maxOutputTokens?:number;timeoutMs?:number;attempts?:number}):Promise<HostedReply>{
   const key=apiKeyFor("anthropic");
   if(!key)throw new Error("No API key configured for anthropic");
@@ -339,7 +350,7 @@ export async function anthropicMessages(choice:ModelChoice,args:{system:string;u
   // The model may wrap the object in a code fence; the object is what counts.
   const content=text.replace(/^\s*```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"");
   return {content,truncated:payload.stop_reason==="max_tokens",
-    usage:{input:payload.usage?.input_tokens??0,output:payload.usage?.output_tokens??0,cached:payload.usage?.cache_read_input_tokens},
+    usage:anthropicUsageOf(payload.usage),
     resolved:{resolvedModel:payload.model??null,providerRequestId:payload.id??null,finishReason:payload.stop_reason??null,region:null}};
 }
 /** Gemini, natively. Google issues two kinds of key: AI Studio keys ("AIza…")
@@ -491,7 +502,7 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
   if (!response.ok) throw failedResponse(response.status, await response.text());
   const payload = AnthropicShape.parse(await response.json());
   const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
-  return { text, truncated: payload.stop_reason === "max_tokens", usage: { input: payload.usage?.input_tokens ?? 0, output: payload.usage?.output_tokens ?? 0, cached: payload.usage?.cache_read_input_tokens },
+  return { text, truncated: payload.stop_reason === "max_tokens", usage: anthropicUsageOf(payload.usage),
     resolved: { resolvedModel: payload.model ?? null, providerRequestId: payload.id ?? null, finishReason: payload.stop_reason ?? null, region: null } };
 }
 

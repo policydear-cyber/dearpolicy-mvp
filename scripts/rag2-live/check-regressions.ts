@@ -124,7 +124,7 @@ t("C18 every scenario (L1-L6, L3b, L4b, L5b) is source-grounded: each expected p
 });
 t("C19 L3b: the conditional S$600 for Mei passes; S$600 alone fails on its condition; 'S$900' (burns) fails", () => {
   const s = { ...sc("L3b"), turns: [sc("L3b").turns[0]] };
-  const mk = (summary: string, binds = [{ value: 600, policyId: doc("PLAYWELL").id, subjectId: L.mei.id, column: "Sum insured" }]): LoadedConversation => ({ conversationId: "t", pages, state: { ragLoop: { evidence: {}, claim: null, turns: [] } },
+  const mk = (summary: string, binds = [{ value: 600, policyId: doc("PLAYWELL").id, subjectId: L.mei.id, column: "Sum insured" }]): LoadedConversation => (<any>{ conversationId: "t", pages, state: { ragLoop: { evidence: {}, claim: null, turns: [] } },
     turns: [{ index: 0, user: s.turns[0].user, answer: { details: [], questions: [], citations: [cite("PLAYWELL", 1, "Dislocation benefit (per dislocation)   S$600"), cite("PLAYWELL", 2, "Dislocation benefit is payable once per dislocation that is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI.")], summary, resolvedFamilyMemberId: L.mei.id, figureBindings: binds }, visible: summary, questions: [], userAt: null, assistantAt: null, trace: { outcome: "final_answer", toolCalls: [], evidenceChosen: [], dropped: [], gate: [] } }] });
   const ok = grade(s, mk("Mei's PlayWell Junior Accident Cover lists a Dislocation benefit of S$600 per dislocation, payable if the dislocation is diagnosed by a registered medical practitioner and confirmed by X-ray or MRI."));
   assert.equal(ok.verdict, "PASS", JSON.stringify(bad(ok)));

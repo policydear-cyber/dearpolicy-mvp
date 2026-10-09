@@ -8,8 +8,7 @@
  * Under the deterministic model stand-in (DEARPOLICY_DETERMINISTIC_MODEL) no network call is made: a test must install
  * the scripted model instead (scripted-model.ts).
  */
-import { apiKeyFor, capabilityFor, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
-import { deterministicModelRequested } from "@/lib/ai/deterministic-model";
+import { apiKeyFor, capabilityFor, deterministicStandInRequested, isQuotaExhaustedBody, modelFor, ProviderQuotaExhausted, type ModelChoice, type Provider } from "@/lib/ai/providers";
 import type { LoopMessage, LoopModel, ModelTurnInput, ModelTurnOutput, ToolCall } from "./types";
 
 type Fetch = typeof fetch;
@@ -98,7 +97,7 @@ export class HostedLoopModel implements LoopModel {
     this.id = `${choice.provider}:${choice.provider === "gemini" ? GEMINI_ALIASES[choice.model] ?? choice.model : choice.model}`;
   }
   async next(input: ModelTurnInput): Promise<ModelTurnOutput> {
-    if (deterministicModelRequested()) throw new Error("the deterministic model stand-in is on: the conversation loop needs a scripted test model (no network call is made)");
+    if (deterministicStandInRequested()) throw new Error("the deterministic model stand-in is on: the conversation loop needs a scripted test model (no network call is made)");
     const { provider } = this.choice;
     const key = apiKeyFor(provider);
     if (!key) throw new Error(`no API key configured for ${provider}`);

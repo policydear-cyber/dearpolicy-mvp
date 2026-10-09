@@ -38,6 +38,7 @@ import { dayEdgeExceptionsFromWording, dayRuleFromWording } from "@/lib/claims/d
 import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
+import { checkUnitTerms } from "@/lib/claims/unit-terms";
 import { columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
 
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
@@ -796,6 +797,9 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
   // Steps.
   const re = recomputeCalculation(r);
   if (!re.ok) return re.error;
+  // Integration (r6): the rate's unit terms re-read from their spans on the stored pages (records made before r6
+  // carry none and are checked as before).
+  if (r.unitTerms) { const u = checkUnitTerms(r, (pid, p) => ctx.docs.get(pid)?.pages.get(p)); if (u) return u; }
   // Conditions.
   const ruleCond = r.conditions.find((c) => c.kind === "day_count_rule");
   for (const c of r.conditions) {

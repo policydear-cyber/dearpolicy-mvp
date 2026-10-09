@@ -1,3 +1,5 @@
+import type { UnitTerms } from "@/lib/claims/unit-terms";
+
 export type FamilyMember = { id:string; displayName:string; relationship:string; policyCount?:number };
 export type Policy = { id:string; familyMemberId:string; insurer:string|null; productName:string|null; policyNumber:string|null; policyType:string|null; status:string; processingStatus:string; originalFilename:string; pageCount:number|null; createdAt:string };
 export type RetrievedChunk = {
@@ -303,6 +305,10 @@ export type CalculationRecord = {
   assumption?:string|null;
   /** Shown instead of the sentence if the record fails verification: the specific unresolved requirement (no figures). */
   unresolvedText:string;
+  /** A1 (r6): the rate's unit terms (unit, duration rule, caps with reset periods and how earlier use is settled), each
+   * with its source span; re-checked by the save-time gate (lib/claims/unit-terms.ts checkUnitTerms). Absent on
+   * records made before r6. */
+  unitTerms?:UnitTerms;
 };
 
 export type ChatAnswer = {

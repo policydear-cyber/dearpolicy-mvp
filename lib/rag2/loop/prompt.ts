@@ -4,7 +4,7 @@
  */
 import type { LoopFact, RagLoopState } from "./types";
 
-export const LOOP_PROMPT_VERSION = "rag2-loop-v4";
+export const LOOP_PROMPT_VERSION = "rag2-loop-v5";
 
 export const SYSTEM_PROMPT = [
   "You are DearPolicy's assistant for a Singapore household. You answer questions about the household's own insurance documents and help them work out what they could claim. You can only know what the tools return from their documents.",

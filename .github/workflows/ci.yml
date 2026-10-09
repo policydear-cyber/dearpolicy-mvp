@@ -208,6 +208,14 @@ jobs:
         run: npm run rag2:gaps-test
       - name: Conversational RAG presentation (what the household sees -- no duplicated question, names as the household uses them, no internal commentary after a failed verification, an unknown person said plainly, facts in the message never asked again, unestablished conditions said as conditional)
         run: npm run rag2:presentation-test
+      - name: Conversational RAG unit terms (a value's rate unit, payable-duration rule and each cap with its own reset period, read with source spans; caps applied; earlier use of a cap that resets over a year settled or stated as an assumption; cached tokens counted once)
+        run: npm run rag2:units-test
+      - name: Table dimensions (a figure bound to every dimension of its row -- the person's class, the plan / tier, the schedule version in force on the date, the benefit stage -- at table selection and at the save-time gate)
+        run: npm run rag2:dimensions-test
+      - name: Conversational RAG conversation round 6 (a question shown once, by its card; statements before a question composed and gated like an answer; no inline evidence ids; the live L3 / L4 conversations replayed with the scripted test model)
+        run: npm run rag2:conv2-test
+      - name: Catalogue routing (a request for the documents on file or the policies held is answered as one, in a fresh chat and mid-claim; a claim statement or question is never read as one)
+        run: npm run routing:test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

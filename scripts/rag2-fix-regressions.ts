@@ -384,10 +384,14 @@ async function main() {
   { const ref = (await import("@/lib/telemetry/pseudonymize")).pseudonymizeId(ACCOUNT_T);
     const count = async () => (await H.db.query("SELECT count(*)::int AS n, coalesce(sum(input_tokens),0)::int AS i FROM model_executions WHERE household_ref=$1", [ref])).rows[0] as { n: number; i: number };
     const before = await count();
-    const r = await converse(ACCOUNT_T, [{ usage: { input: 70_000, output: 1_000 }, steps: [] }], ["Tell me everything about every policy."]);
+    // Integration (r6, mechanics only): each scripted call reports 60,000 input tokens (was 70,000). The loop's prompt
+    // and tool schema have grown (the next call is now estimated at about 9,000 tokens), so 71,000 used left too little
+    // room for the second call to be made at all; with 61,000 used the second call is made and reports more than was
+    // left, which is what F22 / F23 test (two metered calls; the budget "used up").
+    const r = await converse(ACCOUNT_T, [{ usage: { input: 60_000, output: 1_000 }, steps: [] }], ["Tell me everything about every policy."]);
     const after = await count();
     await check("F22 D22: test-only scripted model calls are metered (model_executions rows with their tokens, zero cost)", () => {
-      assert.ok(after.n - before.n >= 2, `rows +${after.n - before.n}`); assert.ok(after.i - before.i >= 140_000, `tokens +${after.i - before.i}`);
+      assert.ok(after.n - before.n >= 2, `rows +${after.n - before.n}`); assert.ok(after.i - before.i >= 2 * 60_000, `tokens +${after.i - before.i}`);
     });
     await check("F23 D23: a spent token budget stops the turn with a specific honest reply (not a generic 'ask again')", () => {
       const t = r.turns[0]; assert.equal(t.trace.outcome, "budget_exhausted", info(t)); assert.equal(t.trace.limit.kind, "turn_tokens_used");

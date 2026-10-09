@@ -82,12 +82,12 @@ async function main() {
     assert.equal(req.tools[0].type, "function"); assert.equal(req.tools[0].function.name, "resolve_person"); assert.equal(req.tool_choice, "required");
     assert.equal(req.messages[2].tool_calls[0].function.arguments, "{\"mention\":\"me\"}"); assert.equal(req.messages[3].tool_call_id, "c1");
     const rep = H.openAiReply({ model: "gpt-x-2026", usage: { prompt_tokens: 120, completion_tokens: 30 }, choices: [{ message: { content: null, tool_calls: [{ id: "t9", type: "function", function: { name: "final_answer", arguments: "{\"sentences\":[]}" } }] } }] });
-    assert.deepEqual(rep.toolCalls, [{ id: "t9", name: "final_answer", arguments: { sentences: [] } }]); assert.deepEqual(rep.usage, { input: 120, output: 30 });
+    assert.deepEqual(rep.toolCalls, [{ id: "t9", name: "final_answer", arguments: { sentences: [] } }]); assert.deepEqual(rep.usage, { input: 120, output: 30, cached: 0 }); // r6 (A1): cached input tokens are reported too (none here)
     const areq = H.anthropicRequest("claude-x", input) as any;
     assert.equal(areq.system, "s"); assert.equal(areq.tools[0].input_schema.type, "object");
     assert.equal(areq.messages[1].content[0].type, "tool_use"); assert.equal(areq.messages[2].content[0].type, "tool_result");
     const arep = H.anthropicReply({ model: "claude-x", usage: { input_tokens: 7, output_tokens: 3 }, content: [{ type: "tool_use", id: "u1", name: "ask_user", input: { kind: "person", question: "Who?" } }] });
-    assert.equal(arep.toolCalls[0].name, "ask_user"); assert.deepEqual(arep.usage, { input: 7, output: 3 });
+    assert.equal(arep.toolCalls[0].name, "ask_user"); assert.deepEqual(arep.usage, { input: 7, output: 3, cached: 0 });
     const saved = process.env.DEARPOLICY_DETERMINISTIC_MODEL; delete process.env.DEARPOLICY_DETERMINISTIC_MODEL;
     try {
       const seen: any[] = [];
@@ -168,7 +168,8 @@ async function main() {
   await check("D-c1 injury: the facts stated are recorded, and ONE question that changes the amount (nights, for hospital cash) is asked", () => {
     const a = c1.saved.answer;
     assert.equal(a.mode, "fact_finding"); assert.equal(a.questions.length, 1); assert.match(a.questions[0].text, /how many nights/i);
-    assert.equal((visible(a).match(/\?/g) ?? []).length, 2); // the question, in the summary and on its card
+    // Expectation changed (agent A3, r6): the question is shown once, by its card (components/assistant-message.ts).
+    assert.equal((visible(a).match(/\?/g) ?? []).length, 1);
     assert.doesNotMatch(visible(a), MONEY);
     // Expectation changed (agent C): no cause=accident is recorded from "fell off the monkey bars"; how it happened is
     // recorded in the household's words, and the injury as their (paraphrased, unconfirmed) report.
