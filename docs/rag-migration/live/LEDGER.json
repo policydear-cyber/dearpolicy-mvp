@@ -65,6 +65,19 @@
       "calls": 56,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "r6-facts-fix-L3-L3b",
+      "tested_code_sha": "d97131c60b14b51039e15b746ff7b384512d9544",
+      "request_sha": "0e6cb1f159ede81f9d71d9c63ee77f03255fd132",
+      "at": "2026-10-09T10:10:29.699Z",
+      "preflight": false,
+      "run_cap_usd": 0.465377,
+      "spent_usd": 0.005287,
+      "reserved_unsettled_usd": 0,
+      "calls": 20,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
