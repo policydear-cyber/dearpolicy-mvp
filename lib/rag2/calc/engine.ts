@@ -21,6 +21,8 @@ import { applyDeductionCore, divHalfUp } from "@/lib/claims/calculators/deductio
 import { toFigureBinding, type EvidenceRef } from "../evidence";
 import type { TableValueOperand } from "../compute";
 import type { BenefitTerms } from "./terms";
+import { capSpansStays, PER_DAY_UNITS, readValueTerms, resetWords, type CountCap, type MoneyCap } from "../value-terms";
+import { checkUnitTerms, isPeriodCap, recordSpan, resetNamedIn, valueTermsOf, type RecordCap, type RecordWithUnitTerms, type UnitTerms } from "./unit-terms";
 
 export type HouseholdInput = { value: number | string; currency?: string | null; words: string; kind: "household" | "assumption" };
 export type DocValue = { operand: TableValueOperand; valueId?: string | null };
@@ -91,6 +93,8 @@ function finish(o: Omit<CalcOutcome, "calcId" | "unresolvedText"> & { who: strin
   if (o.record) {
     const rec = recomputeCalculation(o.record);
     if (!rec.ok) return { refused: "internal: the calculation record does not re-run: " + rec.error };
+    const unitProblem = checkUnitTerms(o.record as RecordWithUnitTerms);
+    if (unitProblem) return { refused: "internal: the calculation's unit terms do not re-check: " + unitProblem };
     o.record.id = calcId; o.record.unresolvedText = unresolvedText;
   }
   const { who: _w, product: _p, ...rest } = o; void _w; void _p;
@@ -102,12 +106,21 @@ export function hospitalCash(a: {
   subjectId: string; who: string; benefit: string; terms: BenefitTerms; rate: DocValue; dayCap?: DocValue | null;
   admission?: HouseholdInput | null; discharge?: HouseholdInput | null; ongoing?: boolean | null;
   settled?: { id: string; status: "established" | "not_applicable"; words: string }[]; whatIf: boolean;
+  /** A1: what the household said about earlier use of a cap that resets over a year / policy year / disability: a
+   * number of periods already paid, or an amount already paid (in the rate's currency), with their words. */
+  priorUse?: { periods?: number | null; amount?: number | null; currency?: string | null; words: string } | null;
 }): CalcOutcome | Refusal {
   const t = a.terms, product = t.productName ?? "this policy";
   const r = a.rate.operand;
   if (r.valueKind !== "money" || r.cents == null || !r.currency) return { refused: "the hospital cash rate must be a printed amount (a value_id from select_table_value)" };
   if (r.evidence.policyId !== t.policyId) return { refused: "the rate is from another document than the one calculated for" };
-  if (r.period && !["day", "night"].includes(r.period)) return { refused: `the rate is printed per ${r.period}, not per day` };
+  // A1: the rate's own unit terms (value-terms.ts) -- its unit, duration rule and caps, each with its span. A period
+  // that belongs to a cap clause ("max 90 per year") is the cap's reset period, never the rate's unit.
+  const rt = valueTermsOf(r.evidence);
+  const rateUnit = rt.rateUnit?.unit ?? null;
+  if (rateUnit && !PER_DAY_UNITS.includes(rateUnit)) return { refused: `the rate is printed per ${rateUnit.replace("_", " ")}, not per day` };
+  if (!rateUnit && r.period && !["day", "night"].includes(r.period)) return { refused: `the rate is printed per ${r.period.replace("_", " ")}, not per day` };
+  const unitTerms: UnitTerms = { rate: { unit: rateUnit, span: rt.rateUnit ? recordSpan(t.policyId, rt.rateUnit.span) : null }, durationRule: rt.durationRule ? { rule: rt.durationRule.rule, span: recordSpan(t.policyId, rt.durationRule.span) } : null, caps: [] };
   const rateOp = docOperand("rate", "rate", a.rate, a.subjectId); if (typeof rateOp === "string") return { refused: rateOp };
   const printed = [printedOf(a.rate, a.subjectId)];
   const conds: CalcCondition[] = [];
@@ -122,13 +135,26 @@ export function hospitalCash(a: {
   // Waiting (excess) period.
   if (t.waitingDays) conds.push({ id: "c_waiting", kind: "waiting_period", text: `No benefit for the first ${t.waitingDays.value} day(s): “${t.waitingDays.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(t.waitingDays.evidence) });
   else conds.push({ id: "c_waiting", kind: "waiting_period", text: "No excess / waiting period is printed for this benefit.", status: "not_applicable", basis: "absent" });
-  // Day cap: a printed count (value) or the wording.
+  // Day cap: a printed count (value), a cap clause of the rate's own row ("max 90 per year"), or the wording.
   let capOp: Extract<CalcOperand, { source: "document" }> | null = null;
+  let capTerm: RecordCap | null = null;
+  const rowCap = rt.caps.find(isPeriodCap) as CountCap | undefined;
   if (a.dayCap) {
     const c = docOperand("day_cap", "day_cap", a.dayCap, a.subjectId); if (typeof c === "string") return { refused: c };
     if (c.unit !== "count") return { refused: "the day cap must be a printed number of days" };
     capOp = c; printed.push(printedOf(a.dayCap, a.subjectId));
-    conds.push({ id: "c_day_cap", kind: "day_cap", text: `At most ${c.value} days (${c.row}).`, status: "established", basis: "document", passage: passageOf(a.dayCap.operand.evidence) });
+    const e = a.dayCap.operand.evidence;
+    capTerm = { operandId: "day_cap", kind: "count", max: c.value, currency: null, unit: "days", reset: resetNamedIn(e.table?.rowLabel ?? e.passage.text), span: { policyId: t.policyId, page: e.passage.onPage, start: e.passage.start, end: e.passage.end, text: e.passage.text, source: "row" }, priorUse: "not_counted" };
+    conds.push({ id: "c_day_cap", kind: "day_cap", text: `At most ${c.value} days (${c.row}).`, status: "established", basis: "document", passage: passageOf(e) });
+  } else if (rowCap) {
+    // A1: the cap clause printed in the rate's own row ("each complete 24 hours, max 90 per year"): bound to the cell
+    // that prints it (the label cell: one figure for every column the row covers).
+    const e = rowCap.span.source === "label" ? narrowToLabel(r.evidence, rowCap.span.text) : r.evidence;
+    const binding: FigureBinding | null = toFigureBinding({ ...e, subjectId: e.subjectId ?? a.subjectId }, a.benefit, rowCap.max, "");
+    if (!binding) return { refused: `the maximum “${rowCap.span.text}” could not be bound to the passage that prints it` };
+    capOp = { id: "day_cap", source: "document", role: "day_cap", label: `${a.benefit} maximum ${rowCap.unit ?? unitNoun(rateUnit)}`, unit: "count", value: rowCap.max, currency: null, period: rowCap.reset, row: r.evidence.table?.rowLabel ?? e.passage.text, column: binding.column ?? null, binding };
+    capTerm = { operandId: "day_cap", kind: "count", max: rowCap.max, currency: null, unit: rowCap.unit, reset: rowCap.reset, span: recordSpan(t.policyId, rowCap.span), priorUse: "not_counted" };
+    conds.push({ id: "c_day_cap", kind: "day_cap", text: `At most ${rowCap.max} ${rowCap.unit ?? unitNoun(rateUnit)}${rowCap.reset ? ` per ${resetWords(rowCap.reset)}` : " (the wording does not say over what period)"}: “${rowCap.span.text}”`, status: "established", basis: "document", passage: passageOf(e) });
   } else if (t.dayCap) {
     // Agent F: a day cap printed in the benefit's own row label ("Daily hospital cash (max 90 days per year)  S$200
     // S$120") applies to every column: it is bound to the label cell that prints it (one figure for everyone the row
@@ -138,14 +164,62 @@ export function hospitalCash(a: {
     const inLabel = e0.passage.text.split(/\t|\s{3,}/).length >= 3 && new RegExp("(?<![\\d.,])" + t.dayCap.value + "(?![\\d.,])").test(labelCell);
     const e = inLabel ? { ...e0, passage: { ...e0.passage, text: labelCell, start: e0.passage.start + e0.passage.text.indexOf(labelCell), end: e0.passage.start + e0.passage.text.indexOf(labelCell) + labelCell.length }, table: null, support: null, context: null } : e0;
     const binding: FigureBinding | null = toFigureBinding({ ...e, subjectId: e.subjectId ?? a.subjectId }, a.benefit, t.dayCap.value, "");
-    if (binding) capOp = { id: "day_cap", source: "document", role: "day_cap", label: `${a.benefit} maximum days`, unit: "count", value: t.dayCap.value, currency: null, period: null, row: e.table?.rowLabel ?? e.passage.text, column: binding.column ?? null, binding };
+    // A1: the cap's own reset period, read from the clause that prints it.
+    const clause = readValueTerms([{ source: "passage", text: e0.passage.text, page: e0.passage.onPage, offset: e0.passage.start }]).caps.find((x) => x.kind === "count" && x.max === t.dayCap!.value) as CountCap | undefined;
+    if (binding) {
+      capOp = { id: "day_cap", source: "document", role: "day_cap", label: `${a.benefit} maximum days`, unit: "count", value: t.dayCap.value, currency: null, period: clause?.reset ?? null, row: e.table?.rowLabel ?? e.passage.text, column: binding.column ?? null, binding };
+      capTerm = clause ? { operandId: "day_cap", kind: "count", max: clause.max, currency: null, unit: clause.unit, reset: clause.reset, span: recordSpan(t.policyId, clause.span), priorUse: "not_counted" }
+        : { operandId: "day_cap", kind: "count", max: t.dayCap.value, currency: null, unit: "days", reset: null, span: { policyId: t.policyId, page: e0.passage.onPage, start: e0.passage.start, end: e0.passage.end, text: e0.passage.text, source: "wording" }, priorUse: "not_counted" };
+    }
     conds.push({ id: "c_day_cap", kind: "day_cap", text: `At most ${t.dayCap.value} days: “${e.passage.text}”`, status: "established", basis: "document", passage: passageOf(e) });
   } else conds.push({ id: "c_day_cap", kind: "day_cap", text: "No maximum number of days is printed for this benefit.", status: "not_applicable", basis: "absent" });
+  // A1: a monetary maximum printed with the rate ("S$100 per day, maximum S$3,000 per year"), with its own period.
+  let moneyCapOp: Extract<CalcOperand, { source: "document" }> | null = null;
+  let moneyCapTerm: RecordCap | null = null;
+  const rowMoneyCap = rt.caps.find((x) => x.kind === "money") as MoneyCap | undefined;
+  if (rowMoneyCap) {
+    if (rowMoneyCap.currency !== r.currency) return { refused: `mixed currencies (${r.currency} rate, ${rowMoneyCap.currency} maximum) are never combined` };
+    const e = rowMoneyCap.span.source === "label" ? narrowToLabel(r.evidence, rowMoneyCap.span.text) : r.evidence;
+    const binding: FigureBinding | null = toFigureBinding({ ...e, subjectId: e.subjectId ?? a.subjectId }, a.benefit, rowMoneyCap.cents / 100, rowMoneyCap.currency);
+    if (!binding) return { refused: `the maximum “${rowMoneyCap.span.text}” could not be bound to the passage that prints it` };
+    moneyCapOp = { id: "money_cap", source: "document", role: "cap", label: `${a.benefit} maximum`, unit: "money", value: rowMoneyCap.cents / 100, currency: rowMoneyCap.currency, period: rowMoneyCap.reset, row: r.evidence.table?.rowLabel ?? e.passage.text, column: binding.column ?? null, binding };
+    moneyCapTerm = { operandId: "money_cap", kind: "money", max: rowMoneyCap.cents / 100, currency: rowMoneyCap.currency, unit: null, reset: rowMoneyCap.reset, span: recordSpan(t.policyId, rowMoneyCap.span), priorUse: "not_counted" };
+    conds.push({ id: "c_money_cap", kind: "day_cap", text: `At most ${money(rowMoneyCap.cents, rowMoneyCap.currency)}${rowMoneyCap.reset ? ` per ${resetWords(rowMoneyCap.reset)}` : " (the wording does not say over what period)"}: “${rowMoneyCap.span.text}”`, status: "established", basis: "document", passage: passageOf(e) });
+  }
+  // A1: a cap that resets over a year / policy year / disability counts earlier use in that period: the household
+  // settles it (in their words, or a figure), a what-if states its assumption, or the calculation stays unresolved.
+  const priorFor = (term: RecordCap | null, op: Extract<CalcOperand, { source: "document" }> | null, id: string) => {
+    if (!term || !op || !capSpansStays(term.reset)) return;
+    const limit = term.kind === "count" ? `${term.max} ${term.unit ?? unitNoun(rateUnit)}` : money(Math.round(term.max * 100), term.currency!);
+    conds.push({ id, kind: "day_cap", text: `The limit of ${limit} applies per ${resetWords(term.reset)}: ${term.kind === "count" ? "periods" : "amounts"} of ${a.benefit.toLowerCase()} already paid this ${resetWords(term.reset)} count against it (“${term.span.text}”).`, status: "unresolved", basis: "none", passage: { policyId: t.policyId, pageStart: op.binding.pageStart, pageEnd: op.binding.pageEnd, text: op.binding.passage },
+      needs: term.kind === "count" ? `how many ${term.unit ?? unitNoun(rateUnit)} of ${a.benefit.toLowerCase()} ${a.who} has already been paid for this ${resetWords(term.reset)} (the limit is ${limit} per ${resetWords(term.reset)}), or that there were none` : `how much ${a.benefit.toLowerCase()} ${a.who} has already been paid this ${resetWords(term.reset)} (the limit is ${limit} per ${resetWords(term.reset)}), or that there was none` });
+  };
+  priorFor(capTerm, capOp, "c_cap_prior_use");
+  priorFor(moneyCapTerm, moneyCapOp, "c_money_cap_prior_use");
   // Minimum stay.
   if (t.minimumStayHours) conds.push({ id: "c_min_stay", kind: "minimum_stay", text: `The stay must last at least ${t.minimumStayHours.value} hours: “${t.minimumStayHours.evidence.passage.text}”`, status: "unresolved", basis: "document", passage: passageOf(t.minimumStayHours.evidence), needs: `${a.who}’s admission and discharge times (the stay must last at least ${t.minimumStayHours.value} hours)` });
   // Benefit-specific exclusions: the household settles them in their own words, or they stay open.
   t.exclusions.forEach((x, i) => conds.push({ id: "c_excl_" + (i + 1), kind: "exclusion", text: `Exclusion: “${x.evidence.passage.text}”`, status: "unresolved", basis: "none", passage: passageOf(x.evidence), needs: `whether this applies to ${a.who}’s stay: “${x.evidence.passage.text}”` }));
   applySettled(conds, a.settled ?? []);
+  // A1: earlier use given as a figure, in the household's words (the figure must be in them).
+  let priorPeriods: number | null = null, priorMinor: number | null = null;
+  const pu = a.priorUse, puWords = pu?.words?.trim() ?? "";
+  const inWords = (n: number) => (puWords.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number).some((x) => Math.abs(x - n) < 1e-9);
+  const settleByFigure = (id: string) => { const c = conds.find((x) => x.id === id); if (c) { c.status = "established"; c.basis = "household"; c.householdWords = puWords; c.needs = null; } };
+  if (pu && puWords) {
+    if (pu.periods != null && conds.some((c) => c.id === "c_cap_prior_use")) {
+      if (!Number.isInteger(pu.periods) || pu.periods < 0) return { refused: "prior_use.periods must be a whole number" };
+      if (pu.periods > 0 && !inWords(pu.periods)) return { refused: "prior_use: the number of periods is not in the household's words" };
+      priorPeriods = pu.periods; settleByFigure("c_cap_prior_use");
+    }
+    if (pu.amount != null && conds.some((c) => c.id === "c_money_cap_prior_use")) {
+      if (!Number.isFinite(pu.amount) || pu.amount < 0) return { refused: "prior_use.amount must be an amount" };
+      if ((pu.currency ?? r.currency).toUpperCase() !== r.currency) return { refused: `prior_use: the amount is not in ${r.currency} (DearPolicy never converts currencies)` };
+      if (pu.amount > 0 && !inWords(pu.amount)) return { refused: "prior_use: the amount is not in the household's words" };
+      priorMinor = Math.round(pu.amount * 100); settleByFigure("c_money_cap_prior_use");
+    }
+  }
+  const PRIOR_IDS = ["c_cap_prior_use", "c_money_cap_prior_use"];
 
   // Inputs the rule needs.
   const rule = t.dayRule?.value ?? null;
@@ -159,8 +233,9 @@ export function hospitalCash(a: {
     if (hours >= t.minimumStayHours!.value) { minStay.status = "established"; minStay.basis = "derived"; minStay.needs = null; }
     else return finish({ kind: "not_payable", calculator: "hospital_cash", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, conditions: conds, requirements: [], amount: null, currency: r.currency, record: null, steps: [], reason: `the stay lasted ${Math.floor(hours)} hours and the wording requires at least ${t.minimumStayHours!.value}`, evidence: [r.evidence, t.minimumStayHours!.evidence], evidenceRequirements: [], who: a.who, product });
   }
-  for (const c of conds) if (c.status === "unresolved" && c.needs && c.kind !== "day_count_rule" && c.kind !== "minimum_stay") reqs.push(c.needs);
-  const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : t.dayCap ? [t.dayCap.evidence] : [])];
+  // (A what-if may assume no earlier use of a cap -- stated as its assumption; anything else needs the household.)
+  for (const c of conds) if (c.status === "unresolved" && c.needs && c.kind !== "day_count_rule" && c.kind !== "minimum_stay" && !(a.whatIf && PRIOR_IDS.includes(c.id))) reqs.push(c.needs);
+  const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : !rowCap && t.dayCap ? [t.dayCap.evidence] : [])];
   const evidenceRequirements = [`the hospital’s discharge summary or bill showing ${a.who}’s admission and discharge dates and times`, `the ${product} claim form`];
   const base = { calculator: "hospital_cash" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
   const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds));
@@ -182,14 +257,69 @@ export function hospitalCash(a: {
   if (waiting > 0) { steps.push({ id: "s_after_wait", op: "days_after_waiting", inputs: [last], waitingDays: waiting, out: Math.max(0, days.grossNights - waiting) }); last = "s_after_wait"; }
   if (capOp) { ops.push(capOp); steps.push({ id: "s_capped", op: "min_count", inputs: [last, capOp.id], out: hc.payableDays }); last = "s_capped"; }
   if (hc.status === "not_applicable") return finish({ ...base, kind: "not_payable", conditions: conds, requirements: [], amount: null, currency: r.currency, record: null, steps: [], reason: `no day of the stay counts under the wording (“${t.dayRule!.evidence.passage.text}”${waiting ? `, after the first ${waiting} day(s)` : ""})` });
-  const cents = Math.round(hc.potentialAmount * 100);
+  let cents = Math.round(hc.potentialAmount * 100);
   steps.push({ id: "s_amount", op: "multiply", inputs: ["rate", last], out: cents });
-  const kind = ops.some((o) => o.source === "assumption") ? "conditional_illustration" : "indicative_estimate";
+  let lastMoney = "s_amount";
+  const capLines: string[] = [], assumed: string[] = [];
+  const notPayable = (reason: string) => finish({ ...base, kind: "not_payable", conditions: conds, requirements: [], amount: null, currency: r.currency ?? null, record: null, steps: [], reason });
+  // A1: earlier use of a cap that resets over a longer period than the stay.
+  if (capTerm && capOp) {
+    unitTerms.caps.push(capTerm);
+    if (capSpansStays(capTerm.reset)) {
+      const cond = conds.find((c) => c.id === "c_cap_prior_use")!;
+      const unit = capTerm.unit ?? unitNoun(rateUnit);
+      if (cond.status === "unresolved") { capTerm.priorUse = "assumed_none"; assumed.push(`assuming no earlier use of the ${capTerm.max}-${unit.replace(/s$/, "")} limit this ${resetWords(capTerm.reset)}`); }
+      else if (priorPeriods != null && priorPeriods > 0) {
+        if (priorPeriods >= Number(capOp.value)) return notPayable(`the ${capOp.value} ${unit} for this ${resetWords(capTerm.reset)} are already used (“${puWords}”; the wording: “${capTerm.span.text}”)`);
+        capTerm.priorUse = "household_figure"; capTerm.priorOperandId = "prior_periods";
+        ops.push(householdOperand("prior_periods", "count", `${unit} already paid this ${resetWords(capTerm.reset)}`, "count", { value: priorPeriods, words: puWords, kind: "household" }));
+        const capMoney = r.cents * Number(capOp.value), priorMoney = r.cents * priorPeriods, left = Math.max(0, capMoney - priorMoney);
+        steps.push({ id: "s_cap_value", op: "multiply", inputs: ["rate", "day_cap"], out: capMoney }, { id: "s_prior_value", op: "multiply", inputs: ["rate", "prior_periods"], out: priorMoney }, { id: "s_cap_left", op: "deductible", inputs: ["s_cap_value", "s_prior_value"], out: left });
+        const out = Math.min(cents, left);
+        steps.push({ id: "s_within_cap", op: "min", inputs: [lastMoney, "s_cap_left"], out }); lastMoney = "s_within_cap"; cents = out;
+        capLines.push(`${capOp.value} ${unit} per ${resetWords(capTerm.reset)}, ${priorPeriods} already paid (your words): ${Number(capOp.value) - priorPeriods} left, at most ${money(left, r.currency)}: ${money(cents, r.currency)}`);
+      } else capTerm.priorUse = "household_none";
+    }
+  }
+  if (moneyCapTerm && moneyCapOp) {
+    unitTerms.caps.push(moneyCapTerm);
+    ops.push(moneyCapOp); printed.push({ label: moneyCapOp.label, value: moneyCapOp.value, unit: "money", currency: moneyCapOp.currency, evidence: r.evidence, binding: moneyCapOp.binding, valueId: null });
+    let capId = "money_cap", left = Math.round(moneyCapTerm.max * 100);
+    if (capSpansStays(moneyCapTerm.reset)) {
+      const cond = conds.find((c) => c.id === "c_money_cap_prior_use")!;
+      if (cond.status === "unresolved") { moneyCapTerm.priorUse = "assumed_none"; assumed.push(`assuming no earlier use of the ${money(left, r.currency)} limit this ${resetWords(moneyCapTerm.reset)}`); }
+      else if (priorMinor != null && priorMinor > 0) {
+        if (priorMinor >= left) return notPayable(`the ${money(left, r.currency)} for this ${resetWords(moneyCapTerm.reset)} is already used (“${puWords}”; the wording: “${moneyCapTerm.span.text}”)`);
+        moneyCapTerm.priorUse = "household_figure"; moneyCapTerm.priorOperandId = "prior_paid";
+        ops.push(householdOperand("prior_paid", "amount", `${a.benefit} already paid this ${resetWords(moneyCapTerm.reset)}`, "money", { value: priorMinor / 100, currency: r.currency, words: puWords, kind: "household" }));
+        left = left - priorMinor;
+        steps.push({ id: "s_money_cap_left", op: "deductible", inputs: ["money_cap", "prior_paid"], out: left }); capId = "s_money_cap_left";
+      } else moneyCapTerm.priorUse = "household_none";
+    }
+    const out = Math.min(cents, left);
+    steps.push({ id: "s_money_capped", op: "min", inputs: [lastMoney, capId], out }); lastMoney = "s_money_capped";
+    capLines.push(`up to ${money(left, r.currency)}${capId !== "money_cap" ? " left" : ""} (“${moneyCapTerm.span.text}”): ${money(out, r.currency)}`);
+    cents = out;
+  }
+  const kind = ops.some((o) => o.source === "assumption") || assumed.length ? "conditional_illustration" : "indicative_estimate";
   if (kind === "conditional_illustration" && !a.whatIf) return { refused: "an assumed figure is used only for a what-if the household asked (purpose what_if)" };
   if (kind === "indicative_estimate" && !settledStatus(conds)) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
-  const record: Omit<CalculationRecord, "sentence"> = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption: kind === "conditional_illustration" ? [a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()).join("; ") : null, unresolvedText: "" };
-  const lines = [`payable days under “${t.dayRule!.words}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(cents, r.currency)}`];
+  const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : null;
+  const record: RecordWithUnitTerms = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption, unresolvedText: "", unitTerms };
+  const lines = [`payable days under “${t.dayRule!.words}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
   return finish({ ...base, kind, conditions: conds, requirements: [], amount: cents / 100, currency: r.currency, record, steps: lines });
+}
+
+/** The noun for a rate unit's periods ("complete 24-hour periods", "days", "nights"). */
+function unitNoun(u: string | null): string {
+  return u === "complete_24h" ? "complete 24-hour periods" : u === "night" ? "nights" : "days";
+}
+/** A passage narrowed to the label cell of a table row that prints `text` (one figure for every column of the row). */
+function narrowToLabel(e0: EvidenceRef, text: string): EvidenceRef {
+  const labelCell = e0.passage.text.split(/\t|\s{3,}/)[0]?.trim() ?? "";
+  const i = labelCell ? e0.passage.text.indexOf(labelCell) : -1;
+  if (i < 0 || !labelCell.includes(text)) return e0;
+  return { ...e0, passage: { ...e0.passage, text: labelCell, start: e0.passage.start + i, end: e0.passage.start + i + labelCell.length }, table: null, support: null, context: null };
 }
 
 // --------------------------------------------------------------------------------------------- bill reimbursement

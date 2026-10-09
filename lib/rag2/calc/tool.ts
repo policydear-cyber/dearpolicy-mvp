@@ -32,6 +32,7 @@ export const CALCULATE_TOOL: ToolDef = {
     subject_id: str("The household member."), policy_id: str("The document."), benefit: str("The benefit, as the document words it."),
     rate_value_id: str("hospital_cash: the daily rate's value id."), day_cap_value_id: str("hospital_cash: a printed maximum number of days (value id), when the table prints one."),
     admission: AT, discharge: AT, stay_ongoing: { type: "boolean" },
+    prior_use: { type: "object", description: "hospital_cash: what the household said about earlier use of a limit that runs per year / policy year / disability (\"max 90 per year\"): periods already paid, or the amount already paid. Only from their words; never guessed. (\"None this year\" settles it through settled instead.)", properties: { periods: { type: "integer", minimum: 0 }, amount: { type: "number", minimum: 0 }, currency: str("ISO code of the amount."), words: str("The household's own words, quoted verbatim.") }, required: ["words"], additionalProperties: false },
     bill: INPUT("bill_reimbursement: the bill amount the household gave.", { amount: { type: "number", minimum: 0 }, currency: str("ISO code the household gave.") }, ["amount", "currency"]),
     sub_limit_value_ids: { type: "array", items: { type: "string" }, description: "Printed sub-limits applied to the bill first (value ids)." },
     limit_value_ids: { type: "array", items: { type: "string" }, description: "Printed limits applied last (per admission / per year), value ids." },
@@ -88,7 +89,10 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     const adm = household("admission", "at"), dis = household("discharge", "at");
     if (typeof adm === "string") return fail(adm); if (typeof dis === "string") return fail(dis);
     const t2 = await readBenefitTerms({ accountId: ctx.accountId, policyId, benefit, subjectId, rowLabel: rate.operand.evidence.table?.rowLabel ?? null });
-    out = hospitalCash({ subjectId, who, benefit, terms: t2 ?? terms, rate, dayCap: cap, admission: adm, discharge: dis, ongoing: a.stay_ongoing === true, settled, whatIf });
+    const pu = a.prior_use as { periods?: number; amount?: number; currency?: string; words?: string } | undefined;
+    if (pu && !String(pu.words ?? "").trim()) return fail("prior_use: the household's own words are required");
+    const priorUse = pu ? { periods: typeof pu.periods === "number" ? pu.periods : null, amount: typeof pu.amount === "number" ? pu.amount : null, currency: typeof pu.currency === "string" ? pu.currency.toUpperCase() : null, words: String(pu.words) } : null;
+    out = hospitalCash({ subjectId, who, benefit, terms: t2 ?? terms, rate, dayCap: cap, admission: adm, discharge: dis, ongoing: a.stay_ongoing === true, settled, whatIf, priorUse });
   } else if (a.calculator === "bill_reimbursement") {
     const subs = values("sub_limit_value_ids"), lims = values("limit_value_ids"); if (typeof subs === "string") return fail(subs); if (typeof lims === "string") return fail(lims);
     for (const p of (a.passage_limits as Record<string, unknown>[]) ?? []) { const v = await passageFigure(ctx, policyId, subjectId, p); if (typeof v === "string") return fail(v); (p.applies === "sub_limit" ? subs : lims).push(v); }
