@@ -7,6 +7,7 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { trustedPolicyStatePredicate } from "@/lib/policies/trusted";
+import { amendmentRemovalsFor, isAmendmentRole, type AmendmentRemoval, type DocMeta } from "@/lib/claims/person";
 
 export type DocRow = {
   id: string; ownerId: string; insurer: string | null; productName: string | null; policyNumber: string | null; groupPolicyNumber: string | null;
@@ -116,4 +117,39 @@ export function resolveDocumentRef(docs: DocRow[], ref: string): { doc: DocRow; 
   const bases = [...new Map(hits.map((d) => { const b = familyBase(policyFamily(docs, d), d); return [b.id, b] as const; })).values()];
   if (bases.length === 1) return { doc: bases[0], by };
   return { error: `policy_id must be a document id${bases.length > 1 ? ` (“${r}” matches more than one policy)` : ` (“${r}” is not one)`}; the readable documents are: ${listing()}` };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Round 8: removed amendment documents (metadata only -- a removed document's text is never selected)
+// ---------------------------------------------------------------------------------------------------------------
+/** Every document row of the household as metadata (role, numbers, lifecycle, dates, supersedes link) -- no text. */
+export async function loadDocMeta(accountId: string): Promise<DocMeta[]> {
+  const rows = (await query<Record<string, unknown>>(
+    `SELECT p.id::text AS id, p.document_role AS role, p.policy_number, to_jsonb(p)->>'group_policy_number' AS group_policy_number,
+            (p.lifecycle_state='active') AS active, (p.superseded_at IS NOT NULL) AS superseded,
+            (SELECT n.id::text FROM policies n WHERE n.account_id=p.account_id AND n.supersedes_id=p.id LIMIT 1) AS superseded_by,
+            CASE WHEN p.lifecycle_state<>'active' THEN p.updated_at WHEN p.superseded_at IS NOT NULL THEN p.superseded_at END AS removed_on,
+            to_jsonb(p)->>'effective_date' AS effective_date, to_jsonb(p)->>'document_date' AS document_date, p.created_at
+       FROM policies p WHERE p.account_id=$1`, [accountId]).catch(() => ({ rows: [] as Record<string, unknown>[] }))).rows;
+  const ts = (v: unknown) => (v == null ? null : v instanceof Date ? v.toISOString() : String(v));
+  return rows.map((r) => ({ id: String(r.id), role: (r.role as string) ?? null, policyNumber: (r.policy_number as string) ?? null, groupPolicyNumber: (r.group_policy_number as string) ?? null,
+    active: !!r.active, superseded: !!r.superseded, supersededById: (r.superseded_by as string) ?? null, removedOn: ts(r.removed_on), effectiveDate: iso(r.effective_date), documentDate: iso(r.document_date), createdAt: ts(r.created_at) }));
+}
+/** For each readable (active) base document, the removed amendments of its policy and what they mean (see
+ * lib/claims/person.ts amendmentRemovalsFor). Only ACTIVE documents' text is read (for an explicit reversal). */
+export async function amendmentRemovals(accountId: string, docs: DocRow[]): Promise<Map<string, AmendmentRemoval[]>> {
+  const out = new Map<string, AmendmentRemoval[]>();
+  const meta = await loadDocMeta(accountId);
+  if (!meta.some((m) => isAmendmentRole(m.role) && (!m.active || m.superseded))) return out;
+  const texts = new Map<string, string>();
+  // (The policy's remaining readable documents -- not only `docs` -- may print a reversal.)
+  const readable = meta.filter((m) => m.active && !m.superseded).map((m) => m.id);
+  for (const p of await loadPages(accountId, readable)) texts.set(p.policyId, (texts.get(p.policyId) ?? "") + "\n" + p.text);
+  for (const d of docs) {
+    const base = meta.find((m) => m.id === d.id);
+    if (!base) continue;
+    const r = amendmentRemovalsFor(base, meta, texts);
+    if (r.length) out.set(d.id, r);
+  }
+  return out;
 }

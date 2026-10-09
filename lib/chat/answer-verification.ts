@@ -39,7 +39,7 @@ import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, name
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { checkUnitTerms } from "@/lib/claims/unit-terms";
-import { CATEGORY_HEADER, isRowCode, rowLabelOf, columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
+import { CATEGORY_HEADER, isRowCode, rowLabelOf, amendmentRemovalsFor, isAmendmentRole, STATES_REMOVAL_LIMITATION, SAYS_NOT_AMENDED, type AmendmentRemoval, type DocMeta, columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
 
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
@@ -337,7 +337,9 @@ function classProblem(column: string | null | undefined, subject: Person | undef
   const why = columnFitProblem(col, p, { isOwner: subject && ownerId ? subject.id === ownerId : null, header: column ?? null });
   return why ? "the figure cannot be used for this person: " + why : null;
 }
-type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[]; house: HouseDoc[] };
+type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[]; house: HouseDoc[];
+  /** Round 8: for each cited active document, the removed amendments of its policy (metadata only). */
+  removals: Map<string, AmendmentRemoval[]> };
 
 function bindingsOf(answer: ChatAnswer): FigureBinding[] {
   const out: FigureBinding[] = [...(answer.figureBindings ?? [])];
@@ -387,7 +389,30 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
     const links = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1`, [accountId]).catch(() => ({ rows: [] }))).rows;
     for (const r of all) house.push({ id: r.id, owner: r.owner, members: new Set([r.owner, ...links.filter((l) => l.policy_id === r.id).map((l) => l.member)]), product: r.product ?? null, policyNumber: r.policy_number ?? null, role: r.role ?? null });
   }
-  return { docs, people, house, userFigures: moneyFiguresIn(userText), userNumbers: (userText.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number), userText, householdTexts };
+  // Round 8: removed (deleted / superseded) amendment documents of the cited policies -- read from document METADATA
+  // only; a removed document's text is never loaded. Active documents' text is used only for an explicit reversal.
+  const removals = new Map<string, AmendmentRemoval[]>();
+  if (docs.size) {
+    const meta = (await query<Record<string, unknown>>(
+      `SELECT p.id::text AS id, p.document_role AS role, p.policy_number, to_jsonb(p)->>'group_policy_number' AS group_policy_number,
+              (p.lifecycle_state='active') AS active, (p.superseded_at IS NOT NULL) AS superseded,
+              (SELECT n.id::text FROM policies n WHERE n.account_id=p.account_id AND n.supersedes_id=p.id LIMIT 1) AS superseded_by,
+              CASE WHEN p.lifecycle_state<>'active' THEN p.updated_at WHEN p.superseded_at IS NOT NULL THEN p.superseded_at END AS removed_on,
+              left(to_jsonb(p)->>'effective_date', 10) AS effective_date, left(to_jsonb(p)->>'document_date', 10) AS document_date, p.created_at
+         FROM policies p WHERE p.account_id=$1`, [accountId]).catch(() => ({ rows: [] as Record<string, unknown>[] }))).rows
+      .map((r): DocMeta => ({ id: String(r.id), role: (r.role as string) ?? null, policyNumber: (r.policy_number as string) ?? null, groupPolicyNumber: (r.group_policy_number as string) ?? null, active: !!r.active, superseded: !!r.superseded,
+        supersededById: (r.superseded_by as string) ?? null, removedOn: r.removed_on == null ? null : r.removed_on instanceof Date ? r.removed_on.toISOString() : String(r.removed_on), effectiveDate: (r.effective_date as string) ?? null, documentDate: (r.document_date as string) ?? null,
+        createdAt: r.created_at == null ? null : r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at) }));
+    if (meta.some((m) => isAmendmentRole(m.role) && (!m.active || m.superseded))) {
+      const activeIds = meta.filter((m) => m.active && !m.superseded).map((m) => m.id);
+      const texts = new Map<string, string>();
+      for (const r of (await query<{ policy_id: string; text: string }>(`SELECT pp.policy_id::text AS policy_id, pp.text FROM policy_pages pp JOIN policies p ON p.id=pp.policy_id AND p.account_id=pp.account_id
+          WHERE pp.account_id=$1 AND pp.policy_id::text=ANY($2::text[]) AND ${activePredicate("p")} AND p.superseded_at IS NULL`, [accountId, activeIds]).catch(() => ({ rows: [] as { policy_id: string; text: string }[] }))).rows)
+        texts.set(r.policy_id, (texts.get(r.policy_id) ?? "") + "\n" + (r.text ?? ""));
+      for (const id of docs.keys()) { const base = meta.find((m) => m.id === id); if (!base) continue; const r = amendmentRemovalsFor(base, meta, texts); if (r.length) removals.set(id, r); }
+    }
+  }
+  return { docs, people, house, removals, userFigures: moneyFiguresIn(userText), userNumbers: (userText.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number), userText, householdTexts };
 }
 
 // ---- table dimensions ---------------------------------------------------------------------------------------
@@ -691,6 +716,21 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   return column;
 }
 
+// ---- round 8: a policy whose amendment document was removed ------------------------------------------------
+/** A figure grounded on the remaining schedule of a policy whose amendment document was deleted / superseded (and not
+ * replaced or explicitly reversed) is not confirmed current cover: the sentence (or the one just before it) must say
+ * so -- unless it is about a date before that amendment took effect. */
+function removalProblem(b: FigureBinding, sentence: string, previous: string | null, ctx: Ctx): string | null {
+  const list = (ctx.removals.get(b.policyId) ?? []).filter((r): r is Extract<AmendmentRemoval, { kind: "amendment_removed" }> => r.kind === "amendment_removed");
+  if (!list.length) return null;
+  const asOf = questionDate(sentence, ctx.userText, null);
+  const live = list.filter((r) => !r.effectiveDate || r.effectiveDate <= asOf);
+  if (!live.length) return null;
+  if (STATES_REMOVAL_LIMITATION.test(sentence) || (previous != null && STATES_REMOVAL_LIMITATION.test(previous))) return null;
+  const r = live[0];
+  return `an amendment document (${r.documentRole}) for this policy was ${r.removal === "deleted" ? "removed from the library" : "replaced"}${r.removedOn ? ` on ${r.removedOn}` : ""}, so the remaining schedule's figure is not confirmed current cover, and the sentence presents it without saying that the current amount may differ`;
+}
+
 // ---- rule 1: the household's own figures ------------------------------------------------------------------
 const ATTRIBUTION = /\byou(?:['’]ve| have)? (?:asked about|mentioned|said|told (?:me|us)|wrote|reported|gave|quoted|entered|typed|noted|stated|put)\b|\baccording to you\b|\bin your (?:message|question)\b|\b(?:the )?(?:figure|amount|bill|number|sum) you (?:gave|mentioned|quoted|wrote|entered)\b/i;
 const USER_FORBIDDEN = /\b(?:cover\w*|insured|assured|limits?|limited|caps?|capped|maximum|max|up to|pays|payable|payouts?|(?:will|would|could|can|may) (?:be )?pa(?:y|id)|reimburs\w*|claimable|entitle\w*|benefits?|totals?|totall?ing|altogether|in all|combined|add(?:s|ed)? up|sum insured|estimat\w*|refund\w*|compensat\w*|deductible|co-?insurance|excess|premiums?|polic(?:y|ies)|plan|schedule|insurer)\b/i;
@@ -976,7 +1016,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const all = fields.flatMap((f) => sentencesOf(f.get()).map((s) => ({ field: f, sentence: s, figures: moneyFiguresIn(s) })));
   const anyFigure = all.some((x) => x.figures.length);
   const anyCover = all.some((x) => COVER_CLAIM.test(x.sentence.trim()));
-  if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length) return [];
+  if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length && !all.some((x) => SAYS_NOT_AMENDED.test(x.sentence))) return [];
   const ctx = await loadContext(opts.accountId, answer, opts.userText ?? "");
   const problems: FigureProblem[] = [];
   const debug = gateDebug();
@@ -1007,6 +1047,10 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   };
   const drop = new Map<typeof fields[number], Set<string>>();
   const bad = (x: typeof all[number], figure: string, reason: string) => { problems.push({ where: x.field.where, figure, sentence: x.sentence, reason }); (drop.get(x.field) ?? drop.set(x.field, new Set()).get(x.field)!).add(x.sentence); };
+  const previousOf = (x: typeof all[number]) => { const i = all.indexOf(x); return i > 0 && all[i - 1].field === x.field ? all[i - 1].sentence : null; };
+  // Round 8: a policy whose amendment document was removed is not thereby "not amended".
+  const flaggedCited = [...new Set([...(answer.citations ?? []).map((c) => c?.policyId), ...bindings.map((b) => b?.policyId)].filter((id): id is string => !!id && (ctx.removals.get(id) ?? []).some((r) => r.kind === "amendment_removed")))];
+  if (flaggedCited.length) for (const x of all) if (SAYS_NOT_AMENDED.test(x.sentence) && !STATES_REMOVAL_LIMITATION.test(x.sentence)) bad(x, "", "an amendment document for this policy was removed from the library; that does not establish that the policy has no amendments or that nothing changed");
   for (const x of all) {
     const key = norm(x.sentence);
     // A sentence labelled as an indicative estimate stands only with a calculation (or computation) record of its own:
@@ -1016,7 +1060,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
       const own = bindings.filter((b) => b && norm(b.sentence) === key && same(b.value, f.value) && b.currency === f.currency);
       const reasons: string[] = [];
       let ok = false;
-      for (const b of own) { const p = groundProblem(b, f.value, f.currency, ctx, x.sentence); if (!p) { ok = true; break; } reasons.push(p); }
+      for (const b of own) { const p = groundProblem(b, f.value, f.currency, ctx, x.sentence) ?? removalProblem(b, x.sentence, previousOf(x), ctx); if (!p) { ok = true; break; } reasons.push(p); }
       if (ok) continue;
       for (const c of computations.filter((c) => c && norm(c.sentence) === key)) { const p = computationProblem(c, f, x.sentence, ctx); if (!p) { ok = true; break; } if (same(c.result?.value, f.value)) reasons.push(p); }
       if (ok) continue;

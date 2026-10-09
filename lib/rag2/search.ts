@@ -9,13 +9,16 @@
 import { query } from "@/lib/db/client";
 import { pineconeEnabled, searchPolicyPassages } from "@/lib/rag/pinecone";
 import { evidenceAt, refineEvidence, type EvidenceRef } from "./evidence";
-import { loadDocs, loadLinks, loadPages, type DocRow } from "./store";
+import { amendmentRemovals, loadDocs, loadLinks, loadPages, type DocRow } from "./store";
+import type { AmendmentRemoval } from "@/lib/claims/person";
 
 export type PassageHit = {
   policyId: string; productName: string | null; insurer: string | null; page: number;
   text: string; score: number; matched: string[]; evidence: EvidenceRef;
 };
-export type SearchResult = { query: string; retrieval: "lexical" | "lexical+semantic"; hits: PassageHit[]; searchedPolicyIds: string[] };
+export type SearchResult = { query: string; retrieval: "lexical" | "lexical+semantic"; hits: PassageHit[]; searchedPolicyIds: string[];
+  /** Round 8: searched policies whose amendment document was deleted or superseded (metadata only, never its text). */
+  removedAmendments?: { policyId: string; removals: AmendmentRemoval[] }[] };
 
 const STOP = new Set("a an and are as at be by can do does for from has have how i if in is it its me my of on or our per the their this to was we what when where which who will with you your about any much many cover covered covering insurance policy".split(" "));
 /** Lower-case word tokens with a light plural / -ing fold ("fractures" -> "fracture"). */
@@ -124,7 +127,9 @@ export async function searchPassages(args: { accountId: string; query: string; s
       evidence,
     };
   });
-  return { query: args.query, retrieval: semantic ? "lexical+semantic" : "lexical", hits, searchedPolicyIds: docs.map((d) => d.id) };
+  const removals = await amendmentRemovals(args.accountId, docs).catch(() => new Map<string, AmendmentRemoval[]>());
+  const flagged = [...removals].map(([policyId, r]) => ({ policyId, removals: r }));
+  return { query: args.query, retrieval: semantic ? "lexical+semantic" : "lexical", hits, searchedPolicyIds: docs.map((d) => d.id), ...(flagged.length ? { removedAmendments: flagged } : {}) };
 }
 
 export type PageRead = { status: "ok"; policyId: string; page: number; pageCount: number; text: string; productName: string | null; evidence: EvidenceRef } | { status: "missing"; reason: string };

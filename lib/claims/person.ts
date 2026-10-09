@@ -542,3 +542,52 @@ export function rowLabelOf(cells: string[]): string {
   const i = cells.findIndex((c) => !isRowCode(c) && !/^(?:S\$|SGD|US\$|\$)?\s?\d[\d,]*(?:\.\d+)?\b/.test(c.trim()));
   return i >= 0 ? cells[i] : cells[0] ?? "";
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Removed amendment documents. Deleting an uploaded endorsement does not mean the insurer reversed it: the policy's
+// current terms are then unknown from the library. Decided from document METADATA only (role, policy number,
+// lifecycle state, dates, the supersedes link) -- a removed document's text is never read -- plus, for an explicit
+// reversal, the text of the policy's REMAINING (active) documents.
+// ---------------------------------------------------------------------------------------------------------------
+/** A document row's metadata (no text). */
+export type DocMeta = { id: string; role: string | null; policyNumber: string | null; groupPolicyNumber?: string | null; active: boolean; superseded: boolean;
+  supersededById?: string | null; removedOn?: string | null; effectiveDate?: string | null; documentDate?: string | null; createdAt?: string | null };
+/** What a removed amendment means for the policy: (a) the current terms may differ; (d) a remaining document says the
+ * change was reversed / cancelled. (b) an unrelated document and (c) one replaced by a newer valid amendment yield no
+ * entry at all. */
+export type AmendmentRemoval =
+  | { kind: "amendment_removed"; documentId: string; documentRole: string; policyNumber: string | null; removal: "deleted" | "superseded"; removedOn: string | null; effectiveDate: string | null; note: string }
+  | { kind: "amendment_reversed"; documentId: string; documentRole: string; policyNumber: string | null; reversedBy: string; reversalText: string; note: string };
+export const isAmendmentRole = (role: string | null | undefined) => /endorse|alteration|amendment|rider|addendum/i.test(role ?? "");
+const polKey = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const REVERSAL = /\b(?:endorsement|amendment|alteration)\b[^.\n]{0,120}?\b(?:is|are|has been|have been|was|were|hereby)\s+(?:cancel+ed|revoked|reversed|rescinded|withdrawn|voided|annulled)\b|\b(?:cancel+ation|reversal|revocation|withdrawal|rescission) of (?:the |our )?(?:endorsement|amendment|alteration)\b/i;
+/** The removed amendments of `base`'s policy (same policy / group number) and what they mean on `asOf`.
+ * `docs`: every document row of the household (active or not, metadata only); `activeTexts`: page text of ACTIVE
+ * documents only (for an explicit reversal). */
+export function amendmentRemovalsFor(base: DocMeta, docs: DocMeta[], activeTexts: Map<string, string> = new Map()): AmendmentRemoval[] {
+  if (isAmendmentRole(base.role)) return [];
+  const keys = [polKey(base.policyNumber), polKey(base.groupPolicyNumber)].filter((k) => k.length >= 4);
+  if (!keys.length) return [];
+  const same = (d: DocMeta) => d.id !== base.id && [polKey(d.policyNumber), polKey(d.groupPolicyNumber)].some((k) => k.length >= 4 && keys.includes(k));
+  const family = docs.filter(same);
+  const liveAmendments = family.filter((d) => d.active && !d.superseded && isAmendmentRole(d.role));
+  const out: AmendmentRemoval[] = [];
+  for (const r of family.filter((d) => isAmendmentRole(d.role) && (!d.active || d.superseded))) {
+    // (c) replaced: a live document supersedes it, or a live amendment of the same policy takes effect on or after it.
+    if (r.supersededById && docs.some((d) => d.id === r.supersededById && d.active && !d.superseded)) continue;
+    const rEff = r.effectiveDate ?? r.documentDate ?? null;
+    if (liveAmendments.some((a) => { const aEff = a.effectiveDate ?? a.documentDate ?? null; return !!aEff && (!rEff || aEff >= rEff) && (a.createdAt ?? "") >= (r.createdAt ?? ""); })) continue;
+    const role = r.role ?? "amendment";
+    // (d) explicit reversal printed by a remaining document of the policy.
+    const rev = [base, ...family.filter((d) => d.active && !d.superseded)].map((d) => { const t = activeTexts.get(d.id) ?? ""; const m = t.match(REVERSAL); return m ? { id: d.id, text: (t.split("\n").find((l) => REVERSAL.test(l)) ?? m[0]).trim() } : null; }).find(Boolean);
+    if (rev) { out.push({ kind: "amendment_reversed", documentId: r.id, documentRole: role, policyNumber: r.policyNumber, reversedBy: rev.id, reversalText: rev.text, note: `A remaining document of this policy says the change was reversed: “${rev.text}”.` }); continue; }
+    const removal = !r.active ? "deleted" as const : "superseded" as const;
+    out.push({ kind: "amendment_removed", documentId: r.id, documentRole: role, policyNumber: r.policyNumber, removal, removedOn: r.removedOn ? r.removedOn.slice(0, 10) : null, effectiveDate: rEff ? rEff.slice(0, 10) : null,
+      note: `An amendment document (${role}) for policy ${r.policyNumber ?? "this policy"} was ${removal === "deleted" ? "removed from the library" : "replaced"}${r.removedOn ? ` on ${r.removedOn.slice(0, 10)}` : ""}${rEff ? `; it took effect on ${rEff.slice(0, 10)}` : ""}. The remaining schedule shows the terms as issued; the current amounts may differ. Do not say the policy has no amendments, and do not present a schedule amount as confirmed current cover without saying this.` });
+  }
+  return out;
+}
+/** Words that state the limitation: an amendment document was removed, or the current amount may differ. */
+export const STATES_REMOVAL_LIMITATION = /\b(?:amend\w*|endorse\w*|alteration|change (?:letter|document))\b[^.;]{0,120}?\b(?:removed|deleted|no longer (?:in|available|on file))\b|\b(?:removed|deleted)\b[^.;]{0,120}?\b(?:amend\w*|endorse\w*|alteration)\b|\b(?:may|might|could)\s+(?:now\s+|since\s+)?(?:differ|be different|have changed|not (?:be|reflect) (?:the |your )?current)\b|\bmay not reflect\b|\bnot (?:confirmed|able to confirm) (?:as )?(?:the )?current\b/i;
+/** A sentence that says the policy has not been amended (what a removed amendment does NOT establish). */
+export const SAYS_NOT_AMENDED = /\bno (?:recorded |other |current )?(?:amendments?|endorsements?|alterations?|changes)\b|\b(?:has|have|was|were) not been (?:amended|endorsed|altered|changed)\b|\b(?:did|does|has) not change(?:d)? anything\b/i;

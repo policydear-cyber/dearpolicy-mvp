@@ -17,7 +17,8 @@
  */
 import { evidenceAt, type AppliesTo, type EvidenceAmendment, type EvidenceRef } from "./evidence";
 import { tokens } from "./search";
-import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
+import { amendmentRemovals, loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
+import type { AmendmentRemoval } from "@/lib/claims/person";
 import { columnApplicability, columnFitProblem, personApplicability, relationOf, type PersonApplicability, type RelationClass } from "./people";
 import { personClause } from "@/lib/policies/member-tiers";
 import { CATEGORY_HEADER, CODE_HEADER, isRowCode, columnDimensions, datesIn, versionInForce, versionPairOf, type ColumnDimensions, type VersionSide } from "@/lib/claims/person";
@@ -301,6 +302,9 @@ export type SelectedValue = {
   amends?: EvidenceAmendment | null;
   evidence: EvidenceRef;
   amendedFrom?: { value: number; currency: string | null; evidence: EvidenceRef; note: string } | null;
+  /** Round 8: the policy's amendment documents that were deleted or superseded (metadata only), when the value is read
+   * from the remaining schedule: the current amount may differ. */
+  removedAmendments?: AmendmentRemoval[] | null;
   notes: string[];
 };
 export type TableSelection =
@@ -602,6 +606,10 @@ export async function selectTableValue(args: { accountId: string; policyId: stri
     amended.evidence.amends = amends;
     return { ...amended, amends, amendedFrom: { value: picked.value, currency: picked.currency, evidence: picked.evidence, note: `amended by the endorsement effective ${eff}` }, notes: [...amended.notes, `Amended by the endorsement effective ${eff} to policy ${doc.policyNumber ?? doc.productName ?? ""}`.trimEnd() + `; the schedule printed ${fmt(picked)}.`] };
   }
+  // Round 8: an amendment document of this policy was deleted / superseded (and not replaced or reversed): the value
+  // is the schedule as issued, which may no longer be the current amount on the question's date.
+  const removed = ((await amendmentRemovals(args.accountId, [doc])).get(doc.id) ?? []).filter((r) => r.kind === "amendment_removed" && (!r.effectiveDate || r.effectiveDate <= asOf));
+  if (removed.length) { picked.removedAmendments = removed; picked.notes.push(...removed.map((r) => r.note)); }
   return picked;
 }
 

@@ -10,7 +10,8 @@
  */
 import { evidenceAt, type EvidenceRef } from "./evidence";
 import { tokens } from "./search";
-import { loadDocs, loadLinks, loadMembers, loadPages, type DocRow, type LinkRow } from "./store";
+import { amendmentRemovals, loadDocs, loadLinks, loadMembers, loadPages, type DocRow, type LinkRow } from "./store";
+import type { AmendmentRemoval } from "@/lib/claims/person";
 import { AMENDS, isoDate, printedEffectiveDate } from "./tables";
 
 export type CoverRole = "insured" | "recorded_insured" | "owner_only" | "nominee" | "assignee" | "beneficiary" | "not_named";
@@ -21,7 +22,9 @@ export type PolicyCoverage = {
   policyId: string; productName: string | null; insurer: string | null; policyNumber: string | null; documentRole: string | null;
   role: CoverRole; insures: InsuredKind; covered: boolean | null; tier: string | null; topicMatch: boolean | null;
   inForce: InForce;
-  version: { documentHash: string | null; documentDate: string | null; amendments: Amendment[]; enrolment: { policyId: string; evidence: EvidenceRef | null } | null; current: string };
+  version: { documentHash: string | null; documentDate: string | null; amendments: Amendment[]; enrolment: { policyId: string; evidence: EvidenceRef | null } | null; current: string;
+    /** Round 8: amendment documents of this policy that were deleted or superseded (metadata only, never their text). */
+    removedAmendments?: AmendmentRemoval[] };
   reasons: string[]; undetermined: string[]; evidence: EvidenceRef[];
 };
 export type PoliciesForResult = { subjectId: string; subjectName: string | null; asOf: string; covering: PolicyCoverage[]; notCovering: PolicyCoverage[]; undetermined: string[] };
@@ -128,6 +131,7 @@ export async function policiesFor(args: { accountId: string; subjectId: string; 
   // A doc whose policy number equals another group's group number joins that group.
   for (const d of docs) { const k2 = normNo(d.policyNumber); if (k2 && groups.has(k2) && keyOf(d) !== k2) { groups.get(keyOf(d))!.splice(groups.get(keyOf(d))!.indexOf(d), 1); groups.get(k2)!.push(d); } }
 
+  const removals = await amendmentRemovals(args.accountId, docs);
   const covering: PolicyCoverage[] = [], notCovering: PolicyCoverage[] = [], undetermined: string[] = [];
   for (const group of groups.values()) {
     if (!group.length) continue;
@@ -170,8 +174,15 @@ export async function policiesFor(args: { accountId: string; subjectId: string; 
         return { policyId: g.id, productName: g.productName, effectiveDate: eff, inForce: eff ? eff <= asOf : null, evidence: evx };
       }).sort((a, b) => String(a.effectiveDate).localeCompare(String(b.effectiveDate)));
       for (const a of amendments) if (a.effectiveDate == null) und.push(`an endorsement of ${d.productName ?? "this policy"} prints no effective date`);
-      const live = amendments.filter((a) => a.inForce);
-      const current = live.length ? `the schedule as amended by the endorsement effective ${live[live.length - 1].effectiveDate}` : "the schedule as issued";
+      // (A remaining letter that cancels an earlier amendment is not itself an amendment in force.)
+      const reversers = new Set((removals.get(d.id) ?? []).flatMap((r) => (r.kind === "amendment_reversed" ? [r.reversedBy] : [])));
+      const live = amendments.filter((a) => a.inForce && !reversers.has(a.policyId));
+      const removed = (removals.get(d.id) ?? []).filter((r) => r.kind === "amendment_removed");
+      const reversed = (removals.get(d.id) ?? []).filter((r) => r.kind === "amendment_reversed");
+      const current = live.length ? `the schedule as amended by the endorsement effective ${live[live.length - 1].effectiveDate}`
+        : removed.length ? "not established: an amendment document for this policy was removed from the library, so the current terms may differ from the schedule as issued"
+        : reversed.length ? "the schedule as issued (a remaining document says an earlier amendment was reversed)" : "the schedule as issued";
+      for (const r of removed) und.push(r.note);
       const pending = amendments.filter((a) => a.inForce === false);
       if (pending.length) und.push(`an endorsement effective ${pending.map((a) => a.effectiveDate).join(", ")} is not yet in force on ${asOf}`);
       if (inForce.evidence) evidence.push(inForce.evidence);
@@ -179,7 +190,7 @@ export async function policiesFor(args: { accountId: string; subjectId: string; 
       const row: PolicyCoverage = {
         policyId: d.id, productName: d.productName, insurer: d.insurer, policyNumber: d.policyNumber, documentRole: d.documentRole,
         role, insures: kind, covered, tier: link?.tier ?? null, topicMatch, inForce,
-        version: { documentHash: d.fileHash, documentDate: d.documentDate, amendments, enrolment, current },
+        version: { documentHash: d.fileHash, documentDate: d.documentDate, amendments, enrolment, current, ...(removals.get(d.id)?.length ? { removedAmendments: removals.get(d.id)! } : {}) },
         reasons, undetermined: und, evidence,
       };
       if (covered === false || (covered && reasons.length)) notCovering.push(row);
