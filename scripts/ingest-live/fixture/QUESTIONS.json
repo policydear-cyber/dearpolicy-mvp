@@ -1,0 +1,82 @@
+{
+  "placeholder": true,
+  "note": "PLACEHOLDER written by agent E1 until agent T's expected/QUESTIONS.json replaces it. Format: see docs/rag-migration/ingest-live/README.md.",
+  "upload_order": [
+    "hx-text.pdf",
+    "hx-endorsement.pdf",
+    "hx-scanned.pdf"
+  ],
+  "conversation": [
+    {
+      "id": "Q1",
+      "text": "How much hospital daily allowance would Isla get now if she is hospitalised after an accident?",
+      "answers": [
+        {
+          "when": "which|who",
+          "reply": "Isla"
+        },
+        {
+          "when": "accident|illness",
+          "reply": "It was an accident: she fell at the playground."
+        },
+        {
+          "when": "when|date",
+          "reply": "Last week, in October 2026."
+        },
+        {
+          "when": "how many|days|nights",
+          "reply": "3 days in hospital."
+        }
+      ]
+    },
+    {
+      "id": "Q2",
+      "text": "Felix was in hospital for 3 days with dengue fever. What can we claim?",
+      "answers": [
+        {
+          "when": "accident|illness|cause",
+          "reply": "It was an illness, dengue fever, not an accident."
+        },
+        {
+          "when": "when|date",
+          "reply": "Last month, in September 2026."
+        }
+      ]
+    },
+    {
+      "id": "Q3",
+      "text": "What does my scanned document say, and who is it for?"
+    }
+  ],
+  "reopen": [
+    {
+      "id": "R1",
+      "text": "And for Isla, how much would 5 days in hospital be after that same accident?"
+    }
+  ],
+  "delete_source": "hx-endorsement.pdf",
+  "after_delete": [
+    {
+      "id": "D1",
+      "text": "How much hospital daily allowance would Isla get now if she is hospitalised after an accident?",
+      "answers": [
+        {
+          "when": "which|who",
+          "reply": "Isla"
+        },
+        {
+          "when": "accident|illness",
+          "reply": "It was an accident."
+        },
+        {
+          "when": "when|date",
+          "reply": "Last week, in October 2026."
+        },
+        {
+          "when": "how many|days|nights",
+          "reply": "3 days in hospital."
+        }
+      ]
+    }
+  ]
+}

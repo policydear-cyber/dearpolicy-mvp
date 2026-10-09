@@ -25,10 +25,12 @@ export function remainingUsd(l: Ledger): number {
   const used = l.runs.reduce((n, r) => n + (Number(r.spent_usd) || 0) + (Number(r.reserved_unsettled_usd) || 0), 0);
   return round6(Math.min(l.exercise_cap_usd, EXERCISE_CAP_USD) - used);
 }
-export function validateRequest(r: any): RunRequest {
+/** kind "ingest" (scripts/ingest-live/run-request.json): no scenarios; the live ingestion test shares this ledger. */
+export function validateRequest(r: any, kind: "rag2" | "ingest" = "rag2"): RunRequest {
   const fail = (m: string): never => { throw new Error("run-request.json refused: " + m); };
   if (typeof r?.run_id !== "string" || !/^[A-Za-z0-9._-]{1,40}$/.test(r.run_id)) fail("run_id: 1-40 of A-Z a-z 0-9 . _ -");
-  if (!Array.isArray(r.scenarios) || !r.scenarios.length || !r.scenarios.every((s: unknown) => typeof s === "string" && /^L[1-6][a-z]?$/.test(s))) fail("scenarios: a non-empty list of scenario ids (L1..L6, optional letter suffix)");
+  if (kind === "ingest") r = { ...r, scenarios: ["ingest"] };
+  else if (!Array.isArray(r.scenarios) || !r.scenarios.length || !r.scenarios.every((s: unknown) => typeof s === "string" && /^L[1-6][a-z]?$/.test(s))) fail("scenarios: a non-empty list of scenario ids (L1..L6, optional letter suffix)");
   const cap = Number(r.run_cap_usd);
   if (!Number.isFinite(cap) || cap <= 0 || cap > EXERCISE_CAP_USD) fail("run_cap_usd must be > 0 and <= 0.50");
   if (typeof r.preflight !== "boolean") fail("preflight must be true or false");
@@ -65,7 +67,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     const ledgerPath = need("ledger");
     const ledger = validateLedger(JSON.parse(fs.readFileSync(ledgerPath, "utf8")));
     if (cmd === "plan") {
-      const req = validateRequest(JSON.parse(fs.readFileSync(need("request"), "utf8")));
+      const req = validateRequest(JSON.parse(fs.readFileSync(need("request"), "utf8")), arg("kind") === "ingest" ? "ingest" : "rag2");
       const p = planRun(ledger, req);
       if (!p.ok) throw new Error(p.reason);
       const out = { run_id: req.run_id, scenarios: req.scenarios.join(","), cap: String(p.capUsd), remaining: String(p.remainingUsd), preflight: String(req.preflight) };

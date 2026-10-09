@@ -37,7 +37,7 @@ export function reconcile(calls: GuardCall[], rows: ExecRow[]) {
   }
   const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
   return {
-    pairs: pairs.map((p) => ({ seq: p.seq, by: p.by, rowCostUsd: p.row.cost_usd ?? null, guardUsd: sent.find((c) => c.seq === p.seq)?.chargedUsd ?? null })),
+    pairs: pairs.map((p) => ({ seq: p.seq, by: p.by, rowIndex: rows.indexOf(p.row), rowCostUsd: p.row.cost_usd ?? null, guardUsd: sent.find((c) => c.seq === p.seq)?.chargedUsd ?? null })),
     rowsWithoutCall: left, callsWithoutRow: sent.filter((c) => free.has(c.seq)).map((c) => c.seq),
     guardUsd: sum(sent.map((c) => c.chargedUsd ?? 0)), rowsUsd: sum(rows.map((r) => r.cost_usd ?? 0)),
   };

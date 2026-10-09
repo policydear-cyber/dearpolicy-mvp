@@ -1,0 +1,100 @@
+{
+  "placeholder": true,
+  "note": "PLACEHOLDER written by agent E1 (not authored from the documents' full content). A live run graded against it is reported UNGRADED. Agent T's EXPECTED.json replaces it.",
+  "documents": [
+    {
+      "file": "hx-text.pdf",
+      "linked_people": [
+        "Simon Alastair Hartwell",
+        "Leonie Brigitte Hartwell",
+        "Felix Oran Hartwell",
+        "Isla Maren Hartwell"
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "MHA-HC-2025-0748213"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "hx-endorsement.pdf",
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "S$110",
+            "01 July 2026"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "hx-scanned.pdf",
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": []
+        }
+      ],
+      "scanned": true
+    }
+  ],
+  "turns": {
+    "Q1": {
+      "person": "Isla Maren Hartwell",
+      "must_include": [
+        "110"
+      ],
+      "must_not_include": [
+        "S$80 per day"
+      ],
+      "citations": [
+        {
+          "file": "hx-endorsement.pdf",
+          "page": 1
+        }
+      ],
+      "version": "hx-endorsement.pdf"
+    },
+    "Q2": {
+      "person": "Felix Oran Hartwell",
+      "must_include_any": [
+        [
+          "accident",
+          "Accident"
+        ]
+      ],
+      "must_not_include": [
+        "S$330",
+        "S$240"
+      ],
+      "ask_follow_up": false
+    },
+    "Q3": {
+      "citations": [
+        {
+          "file": "hx-scanned.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "R1": {
+      "person": "Isla Maren Hartwell",
+      "must_include": [
+        "550"
+      ]
+    },
+    "D1": {
+      "person": "Isla Maren Hartwell",
+      "must_not_cite": [
+        "hx-endorsement.pdf"
+      ],
+      "must_not_include": [
+        "S$110"
+      ]
+    }
+  }
+}
