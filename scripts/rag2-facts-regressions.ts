@@ -13,7 +13,7 @@ ok("F1 'not stated' from words that do not say it is refused", () => {
   const r = checkFact({ key: "how_it_happened", value: "not stated", words: "Kai broke his arm yesterday." }, users);
   assert.equal(r.ok, false);
 });
-for (const v of ["unknown", "Not mentioned", "N/A", "unspecified", "not given", "TBD", "no details given"]) {
+for (const v of ["unknown", "Not mentioned", "N/A", "unspecified", "not given", "to be confirmed", "no details given"]) {
   ok(`F2 placeholder "${v}" is refused`, () => assert.equal(checkFact({ key: "cause", value: v, words: "Kai broke his arm yesterday." }, users).ok, false));
 }
 ok("F3 the household saying they are not sure may be recorded (so it is never asked again)", () => {
