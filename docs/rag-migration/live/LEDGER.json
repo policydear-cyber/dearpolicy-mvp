@@ -13,6 +13,19 @@
       "calls": 4,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "live-L2-L6",
+      "tested_code_sha": "7095559e88e52ac076e90cfe9832bf2af6e92f17",
+      "request_sha": "3bb5534a975dc171911eb98d6c6d2e8134348800",
+      "at": "2026-10-09T05:15:37.560Z",
+      "preflight": false,
+      "run_cap_usd": 0.498889,
+      "spent_usd": 0.007333,
+      "reserved_unsettled_usd": 0,
+      "calls": 37,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
