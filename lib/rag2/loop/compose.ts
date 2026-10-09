@@ -158,6 +158,20 @@ function saidBackOnly(text: string, ctx: Ctx): boolean {
   return contentWords(rest).every((w) => saidWords.has(w) || nameWords.has(w) || RELATION_WORDS.has(w));
 }
 
+/** Round 7 (A3): words that claim cover, a payment or an amount the policy sets (these always need evidence). */
+const COVER_CLAIM = /\b(?:covers?|covered|coverage|insures?|insured for|pays?|paid|payable|pay-?outs?|benefits?|limits?|capped|maximum|max\b|excluded|exclusions?|eligib\w*|entitle\w*|claimable|deductible|co-?insurance|sum assured|premiums?|reimburs\w*|waiting period|approved|guarantee\w*|refund\w*)\b/i;
+/** A sentence explaining that something cannot be worked out yet, or what is needed and why. */
+const EXPLAINS_NEED = /\b(?:can(?:no|['’])t|cannot|unable to|not able to|couldn['’]t|could not)\s+(?:yet\s+)?(?:determine|work out|calculate|tell|confirm|say|estimate|count|know)\b|\b(?:I|we)\s+(?:still\s+|also\s+|first\s+)?need\b|\bto work (?:it|this|that|the \w+) out\b|\bdepends on\b|\bwithout (?:the|your|his|her|their|those|these)\b|\bbefore I can\b/i;
+/** Round 7 (A3): an uncited sentence that explains why a fact is needed, mentioning only the household's own numbers
+ * (\"I can't determine the amount from 'exactly 3 days' alone because ... counts from the admission and discharge
+ * times\"): no money figure, no number the household did not give, and no cover / payment / amount claim. */
+function explainsNeedOnly(text: string, ctx: Ctx): boolean {
+  if (!EXPLAINS_NEED.test(text) || moneyFiguresIn(text).length || COVER_CLAIM.test(text) || payoutOrDecision(text)) return false;
+  const said = (ctx.userTexts?.length ? ctx.userTexts : [ctx.userText]).join("\n");
+  const saidNums = new Set(numbersIn(said));
+  return numbersIn(text).every((n) => saidNums.has(n));
+}
+
 /** A gate record for an indicative per-day / multiple estimate: a printed per-period amount times a whole count the
  * household gave (after any printed day cap). The gate recomputes it and checks the sentence states the count. */
 function estimateRecord(result: ComputeOk, call: ComputeCall | undefined, ctx: Ctx, subjectId: string): { record: Omit<ComputationRecord, "sentence">; operand: ComputationOperand } | null {
@@ -252,6 +266,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const figures = moneyFiguresIn(text);
     if (!evIds.length && !values.length && !result) {
       if (saidBackOnly(text, ctx)) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
+      // Round 7 (A3): a sentence that only refers to the household's own stated facts, or explains why a fact is
+      // still needed, makes no cover or amount claim and needs no document citation.
+      if (explainsNeedOnly(text, ctx)) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
       if (figures.length || /\d/.test(text) || COVERISH.test(text)) { drop(text, "states cover or a figure without citing evidence"); continue; }
       out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] });
       continue;
