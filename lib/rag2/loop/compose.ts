@@ -11,6 +11,7 @@
  */
 import type { BoundFigure, CalculationRecord, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { calcOutcomes } from "../calc/tool";
+import { dayRuleFromWording } from "@/lib/claims/day-count";
 import type { CalcOutcome } from "../calc/engine";
 import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { printedPeriodsOf } from "@/lib/chat/assertions";
@@ -376,7 +377,7 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
   const sid = subjectId ?? c.subjectId;
   if (sid !== c.subjectId) { drop(text, "the sentence is about another person than the calculation"); return; }
   const partOf = (raw: string) => sentencesOf(text).find((p) => p.includes(raw)) ?? text;
-  const evidenceIds = () => [...new Set([...evIds, ...c.evidence.map((e) => evidenceIdOf(ctx.state, e))])];
+  const evidenceIds = () => [...new Set([...evIds, ...c.evidence.map((e) => evidenceIdOf(ctx.state, e)), ...recordRuleEvidence(c, ctx)])];
   if (c.kind === "indicative_estimate" || c.kind === "conditional_illustration") {
     if (!c.record || c.amount == null || !c.currency) { drop(text, "the calculation has no result"); return; }
     if (PAYOUT.test(text)) { drop(text, "calls a calculated benefit a payout"); return; }
@@ -420,6 +421,34 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
   out.evidenceIds.push(...ids.filter((x) => !out.evidenceIds.includes(x)));
   out.sentences.push({ text, evidenceIds: ids, estimate: false, factKeys: [], kind: "printed" });
   requirementOf(c, ctx, out, evIds);
+}
+
+/**
+ * Round 6c (A3): the passages a calculation's own rules rest on, cited with the sentence that states its result -- the
+ * wording of the benefit that states the day-count / duration rule the record applied (\"Hospital cash is payable for
+ * each complete period of 24 hours ...\"), and every document passage a record condition quotes. Only passages a tool
+ * returned this conversation, of the calculation's own document, about its own benefit (the benefit is what the
+ * sentence is about, before its \"is payable\" / \"pays\").
+ */
+function recordRuleEvidence(c: CalcOutcome, ctx: Ctx): string[] {
+  const out: string[] = [];
+  const rec = c.record as (CalcOutcome["record"] & { unitTerms?: { durationRule?: { rule?: string } | null } }) | null;
+  const rule = rec?.unitTerms?.durationRule?.rule ?? (rec?.steps ?? []).map((st) => (st as { rule?: string }).rule).find(Boolean) ?? null;
+  const keyWords = contentWords(String(c.benefit ?? "").replace(/\([^)]*\)/g, " ")).filter((w) => !BENEFIT_GENERIC.has(w));
+  const quoted = (c.conditions ?? []).filter((x) => x.basis === "document" && x.passage?.text && x.passage.policyId === c.policyId).map((x) => x.passage!.text.replace(/\s+/g, " ").trim());
+  for (const e of Object.values(ctx.state.evidence)) {
+    if (e.policyId !== c.policyId || ctx.stale?.has(e.id) || e.table) continue;
+    const text = withoutInstructions(e.passage.text).replace(/\s+/g, " ").trim();
+    let hit = quoted.some((q) => q.length >= 12 && (text.includes(q) || q.includes(text)));
+    if (!hit && rule && keyWords.length) for (const sentence of text.split(/(?<=[.;])\s+/)) {
+      const subject = sentence.split(/\b(?:is|are) (?:payable|paid)\b|\bpays?\b/i)[0] ?? "";
+      if (subject === sentence) continue;
+      const have = new Set(contentWords(subject));
+      if (keyWords.every((w) => have.has(w)) && dayRuleFromWording(sentence)?.rule === rule) { hit = true; break; }
+    }
+    if (hit) out.push(e.id);
+  }
+  return out;
 }
 /** Agent F (D24): an unresolved calculation's specific requirement (figure-free), said once. */
 function requirementOf(c: CalcOutcome, ctx: Ctx, out: Composed, evIds: string[]): void {
