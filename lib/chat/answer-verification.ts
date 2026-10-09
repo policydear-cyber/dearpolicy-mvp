@@ -39,6 +39,7 @@ import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, name
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import { checkUnitTerms } from "@/lib/claims/unit-terms";
+import { loadDocMeta } from "@/lib/lifecycle/amendment-metadata";
 import { CATEGORY_HEADER, isRowCode, rowLabelOf, amendmentRemovalsFor, isAmendmentRole, STATES_REMOVAL_LIMITATION, SAYS_NOT_AMENDED, type AmendmentRemoval, type DocMeta, columnApplicability, columnDimensions, columnFitProblem, datesIn, personApplicability, versionInForce, versionPairOf, type ColumnDimensions } from "@/lib/claims/person";
 
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
@@ -399,16 +400,7 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
   // only; a removed document's text is never loaded. Active documents' text is used only for an explicit reversal.
   const removals = new Map<string, AmendmentRemoval[]>();
   if (docs.size && anyRemovedAmendment) {
-    const meta = (await query<Record<string, unknown>>(
-      `SELECT p.id::text AS id, p.document_role AS role, p.policy_number, to_jsonb(p)->>'group_policy_number' AS group_policy_number,
-              (p.lifecycle_state='active') AS active, (p.superseded_at IS NOT NULL) AS superseded,
-              (SELECT n.id::text FROM policies n WHERE n.account_id=p.account_id AND n.supersedes_id=p.id LIMIT 1) AS superseded_by,
-              CASE WHEN p.lifecycle_state<>'active' THEN p.updated_at WHEN p.superseded_at IS NOT NULL THEN p.superseded_at END AS removed_on,
-              left(to_jsonb(p)->>'effective_date', 10) AS effective_date, left(to_jsonb(p)->>'document_date', 10) AS document_date, p.created_at
-         FROM policies p WHERE p.account_id=$1`, [accountId]).catch(() => ({ rows: [] as Record<string, unknown>[] }))).rows
-      .map((r): DocMeta => ({ id: String(r.id), role: (r.role as string) ?? null, policyNumber: (r.policy_number as string) ?? null, groupPolicyNumber: (r.group_policy_number as string) ?? null, active: !!r.active, superseded: !!r.superseded,
-        supersededById: (r.superseded_by as string) ?? null, removedOn: r.removed_on == null ? null : r.removed_on instanceof Date ? r.removed_on.toISOString() : String(r.removed_on), effectiveDate: (r.effective_date as string) ?? null, documentDate: (r.document_date as string) ?? null,
-        createdAt: r.created_at == null ? null : r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at) }));
+    const meta = await loadDocMeta(accountId);
     if (meta.some((m) => isAmendmentRole(m.role) && (!m.active || m.superseded))) {
       const activeIds = meta.filter((m) => m.active && !m.superseded).map((m) => m.id);
       const texts = new Map<string, string>();

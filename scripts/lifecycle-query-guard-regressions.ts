@@ -115,6 +115,7 @@ function unguardedOccurrences(text: string, table: GuardedTable): number {
  */
 const INTENTIONAL_INTERNAL_READS: Record<string, string> = {
   "lib/lifecycle/coordinator.ts": "the deletion coordinator itself -- must read a resource regardless of its current lifecycle state to validate/transition/retry a deletion request",
+  "lib/lifecycle/amendment-metadata.ts": "metadata only (role, numbers, active/superseded, dates; never text) of removed amendment documents, so a deleted endorsement is reported as 'current terms unconfirmed', not as the insurer reversing it",
 };
 
 // Baseline recorded when this regression was introduced (see this file's

@@ -66,8 +66,11 @@ export class InternalReadAuthorizationError extends Error {}
  * coordinator.ts must be able to see a row regardless of its current
  * lifecycle_state to validate, transition, or retry a deletion request
  * against it (a row already pending_deletion/soft_deleted from a prior
- * attempt is exactly what an idempotent retry needs to see). */
-const ALLOWED_INTERNAL_READ_CONTEXTS = ["deletion_coordinator"] as const;
+ * attempt is exactly what an idempotent retry needs to see).
+ * "amendment_removal_metadata": lib/lifecycle/amendment-metadata.ts reads document METADATA (never text) of removed
+ * amendments, so an answer says a policy's current terms are unconfirmed instead of treating the deletion as the
+ * insurer reversing the amendment. */
+const ALLOWED_INTERNAL_READ_CONTEXTS = ["deletion_coordinator", "amendment_removal_metadata"] as const;
 export type InternalReadContext = (typeof ALLOWED_INTERNAL_READ_CONTEXTS)[number];
 
 /** Names and authorizes an application read that deliberately does NOT
