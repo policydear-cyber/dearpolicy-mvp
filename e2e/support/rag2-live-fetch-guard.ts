@@ -14,7 +14,14 @@
  * installSharedRunLedger): the loop's usage meter checks it before every loop call. Never records request headers, the
  * key, or message content -- per call: host, path, model requested / reported, max output, reservation, charge,
  * usage, status, upstream latency, request settings.
+ *
+ * A request carrying a PDF (a Chat Completions file content part: scanned pages read by the reading model) is reserved
+ * for its text AND its page images: the base64 characters / 2.5 plus PDF_PAGE_IMAGE_TOKENS per page (counted with
+ * pdf-lib) -- the provider bills extracted text and page images (developers.openai.com/api/docs/guides/pdf-files).
+ * Each call records the provider's request id (response `id`), which model_executions.provider_request_id also holds,
+ * so the app's own ledger rows can be joined to the guard's calls one to one.
  */
+import { createHash } from "node:crypto";
 import { costUsd, priceFor } from "@/lib/ai/providers";
 import { maxCallCostUsd, type RunCostLedger } from "@/lib/rag2/loop/usage-meter";
 
@@ -22,12 +29,44 @@ export const OTHER_PROVIDER_HOSTS = [
   "generativelanguage.googleapis.com", "aiplatform.googleapis.com", "api.anthropic.com", "api.groq.com", "api.mistral.ai",
   "api.cohere.ai", "api.cohere.com", "api.together.xyz", "openrouter.ai", "api.deepseek.com", "api.x.ai", "api.perplexity.ai",
   "api.fireworks.ai", "bedrock-runtime.amazonaws.com", "openai.azure.com",
+  // Not chat models, but billable services an upload could reach: hosted embeddings / vector index, malware scanning.
+  "pinecone.io", "virustotal.com",
 ];
+/** Reserved input tokens per PDF page for its page image, on top of the base64 characters / 2.5 (deliberately high). */
+export const PDF_PAGE_IMAGE_TOKENS = 6000;
+type PdfPart = { pages: number | null; base64Chars: number };
+/** The PDF file parts of a Chat Completions body ({type:"file", file:{file_data:"data:application/pdf;base64,..."}}). */
+export async function pdfPartsOf(body: Record<string, unknown>): Promise<PdfPart[]> {
+  const out: PdfPart[] = [];
+  for (const m of Array.isArray(body.messages) ? body.messages as { content?: unknown }[] : []) {
+    for (const p of Array.isArray(m?.content) ? m.content as { type?: string; file?: { file_data?: unknown; file_id?: unknown } }[] : []) {
+      if (p?.type !== "file") continue;
+      const data = typeof p.file?.file_data === "string" ? p.file.file_data : "";
+      const b64 = data.replace(/^data:[^,]*,/, "");
+      let pages: number | null = null;
+      try { const { PDFDocument } = await import("pdf-lib"); pages = (await PDFDocument.load(Buffer.from(b64, "base64"), { ignoreEncryption: true, updateMetadata: false })).getPageCount(); } catch { pages = null; }
+      out.push({ pages, base64Chars: b64.length });
+    }
+  }
+  return out;
+}
+/** Worst-case input tokens of a request body: characters / 2.5, plus PDF_PAGE_IMAGE_TOKENS per PDF page. A PDF whose
+ * pages cannot be counted is refused by the caller (it cannot be bounded). */
+export function reservedInputTokens(rawChars: number, pdfs: PdfPart[]): number {
+  return Math.ceil(rawChars / 2.5) + pdfs.reduce((n, p) => n + (p.pages ?? 0) * PDF_PAGE_IMAGE_TOKENS, 0);
+}
 export type HttpCall = {
   seq: number; at: string; host: string; path: string; method: string; model: string | null; maxOutputTokens: number | null;
   estInputTokens: number | null; reservedUsd: number; chargedUsd: number; ok: boolean; status?: number; refused?: string; error?: string;
   usage?: { input: number; output: number; cached: number; reasoning: number | null } | null; providerModel?: string | null; upstreamMs?: number;
   settings?: Record<string, unknown>;
+  /** The provider's id for this call (response `id`) = model_executions.provider_request_id. */
+  providerRequestId?: string | null;
+  /** loop (tools), document (a PDF file part), structured (one JSON object), other. */
+  kind?: "loop" | "document" | "structured" | "other";
+  /** sha256 (first 16 hex) of the system message: which app prompt made the call, without recording it. */
+  systemSha?: string | null;
+  pdf?: { pages: number | null; bytes: number }[];
 };
 export type FetchGuard = { calls: HttpCall[]; uninstall: () => void };
 
@@ -60,10 +99,16 @@ export function installFetchGuard(opts: { ledger: RunCostLedger; env?: NodeJS.Pr
     const maxOut = Number(body.max_completion_tokens ?? body.max_tokens ?? body.max_output_tokens);
     rec.maxOutputTokens = Number.isFinite(maxOut) && maxOut > 0 ? maxOut : null;
     rec.settings = Object.fromEntries(["temperature", "max_completion_tokens", "max_tokens", "tool_choice", "parallel_tool_calls", "reasoning_effort", "response_format"].filter((k) => k in body).map((k) => [k, k === "response_format" ? (body.response_format as { type?: string })?.type ?? null : body[k]]));
+    const pdfs = await pdfPartsOf(body);
+    const sys = Array.isArray(body.messages) ? (body.messages as { role?: string; content?: unknown }[]).find((m) => m?.role === "system") : undefined;
+    rec.systemSha = typeof sys?.content === "string" ? createHash("sha256").update(sys.content, "utf8").digest("hex").slice(0, 16) : null;
+    rec.kind = Array.isArray(body.tools) && body.tools.length ? "loop" : pdfs.length ? "document" : (body.response_format as { type?: string } | undefined)?.type === "json_object" ? "structured" : "other";
+    if (pdfs.length) rec.pdf = pdfs.map((p) => ({ pages: p.pages, bytes: Math.floor(p.base64Chars * 3 / 4) }));
     if (!rec.maxOutputTokens) refuse(`${model ?? "the model"}: no bounded max output tokens on the request`);
+    if (pdfs.some((p) => p.pages == null)) refuse("a PDF file part whose pages cannot be counted cannot be bounded");
     const price = model ? priceFor({ provider: "openai", model }) : null;
     if (!price) refuse(`no price on file for openai:${model}`);
-    rec.estInputTokens = Math.ceil(raw!.length / 2.5);
+    rec.estInputTokens = reservedInputTokens(raw!.length, pdfs);
     const usd = maxCallCostUsd(price!, rec.estInputTokens, rec.maxOutputTokens!);
     const r = opts.ledger.reserve(usd, rec.estInputTokens, rec.maxOutputTokens!);
     if ("refused" in r) refuse(`run cap: ${r.refused}`);
@@ -75,9 +120,10 @@ export function installFetchGuard(opts: { ledger: RunCostLedger; env?: NodeJS.Pr
       rec.upstreamMs = Date.now() - t0; rec.status = res.status; rec.ok = res.ok;
       let actual: number | null = null;
       if (res.ok) {
-        const payload = await res.clone().json().catch(() => null) as { model?: string; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number } } } | null;
+        const payload = await res.clone().json().catch(() => null) as { id?: string; model?: string; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number }; completion_tokens_details?: { reasoning_tokens?: number } } } | null;
         const u = payload?.usage;
         rec.providerModel = payload?.model ?? null;
+        rec.providerRequestId = typeof payload?.id === "string" ? payload.id : null;
         if (u && ((u.prompt_tokens ?? 0) > 0 || (u.completion_tokens ?? 0) > 0)) {
           rec.usage = { input: u.prompt_tokens ?? 0, output: u.completion_tokens ?? 0, cached: u.prompt_tokens_details?.cached_tokens ?? 0, reasoning: u.completion_tokens_details?.reasoning_tokens ?? null };
           actual = costUsd({ provider: "openai", model: model! }, { input: rec.usage.input, output: rec.usage.output, cached: rec.usage.cached });

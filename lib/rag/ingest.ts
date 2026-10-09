@@ -451,7 +451,7 @@ export async function processPolicy(args: ProcessPolicyArgs) {
         args,
         "ocr",
         25,
-        `Reading ${ocrPageNumbers.length} scanned page${ocrPageNumbers.length === 1 ? "" : "s"} with PaddleOCR…`,
+        `Reading ${ocrPageNumbers.length} scanned page${ocrPageNumbers.length === 1 ? "" : "s"}…`,
         "extracting",
       );
       try {

@@ -17,6 +17,7 @@
     "claims:test": "node --import tsx scripts/claim-smoke.ts",
     "replay": "node --import tsx -e \"import('./scripts/real-household-replay.ts').then(m=>m.runRealHouseholdReplay())\"",
     "ocr:test": "node --import tsx scripts/ocr-regressions.ts",
+    "ocr:openai-test": "node --import tsx scripts/ocr-openai-regressions.ts",
     "eval:extraction": "node --import tsx scripts/extraction-eval.ts",
     "system:test": "node --import tsx scripts/system-database-regressions.ts",
     "claims:evidence-test": "node --import tsx scripts/claim-evidence-regressions.ts",

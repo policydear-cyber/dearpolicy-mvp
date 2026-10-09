@@ -1,6 +1,6 @@
 import { PDFDocument, degrees } from "pdf-lib";
 import { randomUUID } from "node:crypto";
-import { hostedDocumentToText, modelFor } from "@/lib/ai/providers";
+import { costUsd, documentReaderFor, hostedDocumentToText, modelFor } from "@/lib/ai/providers";
 import { assertUnderSpendCap, recordUsage } from "@/lib/ai/ledger";
 import { recordModelExecution, assertVerifiedForMonetaryUse } from "@/lib/ai/provenance";
 import type { PdfPage } from "@/lib/documents/pdf";
@@ -75,22 +75,29 @@ async function attemptHostedOcr(args: { accountId: string; resourceId?: string; 
     });
   } catch (error) {
     const durationMs = Date.now() - started;
-    await recordUsage({ role: "reading", choice, input: 0, output: 0, durationMs, ok: false });
+    // Booked to the model that was asked to read (the configured reader, or the document-capable fallback).
+    const asked = documentReaderFor(choice) ?? choice;
+    await recordUsage({ accountId: args.accountId, role: "reading", choice: asked, input: 0, output: 0, durationMs, ok: false });
     await recordModelExecution({
       correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
       householdId: args.accountId, resourceId: args.resourceId ?? null,
-      requested: { provider: choice.provider, model: choice.model, capability: "reading" },
-      requestedAt, resolved: null, status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
+      requested: { provider: choice.provider, model: choice.model, capability: "reading", inputArtifactType: "application/pdf" },
+      requestedAt, resolved: asked.provider !== choice.provider || asked.model !== choice.model ? { resolvedModel: null, providerRequestId: null, finishReason: null, region: null, resolvedProvider: asked.provider } : null,
+      status: "failed", errorCategory: "model_provider", latencyMs: durationMs,
     });
     throw error;
   }
   const durationMs = Date.now() - started;
-  await recordUsage({ role: "reading", choice, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
+  // Usage, price and provenance belong to the model that actually read the pages (reply.servedBy): the configured
+  // reading model, or -- when it cannot look at documents -- the fallback provider, recorded as the resolved provider.
+  const served = reply.servedBy ?? choice;
+  await recordUsage({ accountId: args.accountId, role: "reading", choice: served, input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached, durationMs, ok: true });
   const record = await recordModelExecution({
     correlationId: args.correlationId, attemptGroupId, attemptIndex: 0, operation: "hosted_ocr", role: "reading",
-      householdId: args.accountId, resourceId: args.resourceId ?? null,
-    requested: { provider: choice.provider, model: choice.model, capability: "reading" },
-    requestedAt, resolved: reply.resolved, status: "succeeded", usage: reply.usage, latencyMs: durationMs,
+    householdId: args.accountId, resourceId: args.resourceId ?? null,
+    requested: { provider: choice.provider, model: choice.model, capability: "reading", inputArtifactType: "application/pdf" },
+    requestedAt, resolved: { ...reply.resolved, resolvedProvider: reply.resolved.resolvedProvider ?? served.provider }, status: "succeeded", usage: reply.usage,
+    costUsd: costUsd(served, { input: reply.usage.input, output: reply.usage.output, cached: reply.usage.cached }), latencyMs: durationMs,
   });
   // Checkpoint 14b: hosted_ocr output feeds claim-evidence/document
   // extraction directly -- gate here, the one real chokepoint, rather than

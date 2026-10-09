@@ -134,12 +134,26 @@ const PRICES:Record<string,Price>={
  * Chat Completions request that carries tools (the conversational loop's hosted model, openAiRequest). */
 export type ModelCapability={
   chatCompletionsWithTools?:{set:Record<string,unknown>;source:string};
+  /** Merged into a Chat Completions request WITHOUT tools that asks for one JSON object (openAiCompatible: document
+   * reading, judgement, narration). */
+  chatCompletionsStructured?:{set:Record<string,unknown>;source:string};
+  /** The model reads a PDF given as a Chat Completions file content part (text layer AND page images), so a scanned
+   * page with no text layer can be transcribed by the configured reading model itself (openAiDocumentText). */
+  documentInput?:{set:Record<string,unknown>;maxFileBytes:number;source:string};
   contextTokens?:number;maxOutputTokens?:number;
 };
 const CAPABILITIES:Record<string,ModelCapability>={
   "openai:gpt-6-luna":{
     chatCompletionsWithTools:{set:{reasoning_effort:"none"},
       source:"https://developers.openai.com/api/docs/models/gpt-6-luna: \"Chat Completions supports function calling only with `reasoning_effort` set to `none`.\""},
+    // max_completion_tokens is "An upper bound for the number of tokens that can be generated for a completion,
+    // including visible output tokens and reasoning tokens" (Chat Completions API reference) and the model's default
+    // reasoning effort is medium (model page). The structured calls' output budgets (700-4 000 tokens) were sized for
+    // the JSON alone, so reasoning is turned off for them: the budget then bounds the visible JSON, as intended.
+    chatCompletionsStructured:{set:{reasoning_effort:"none"},
+      source:"https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create (max_completion_tokens includes reasoning tokens); https://developers.openai.com/api/docs/models/gpt-6-luna (reasoning.effort supports none ... medium (default))"},
+    documentInput:{set:{reasoning_effort:"none"},maxFileBytes:50*1024*1024,
+      source:"https://developers.openai.com/api/docs/models/gpt-6-luna: input Text, Image; https://developers.openai.com/api/docs/guides/pdf-files: on models with vision capabilities the API extracts both text and page images; Chat Completions accepts only PDF files as file content parts ({type:'file', file:{filename, file_data:'data:application/pdf;base64,...'}}); each file must be under 50 MB; Chat Completions file inputs don't support detail"},
     contextTokens:1_050_000,maxOutputTokens:128_000,
   },
 };
@@ -170,7 +184,9 @@ export function costUsd(choice:ModelChoice,usage:{input:number;output:number;cac
  * field is null, honestly, rather than falling back to the requested model
  * name -- lib/ai/provenance.ts treats a null resolvedModel as grounds to
  * mark the execution unverified. */
-export type ResolvedModelIdentity={resolvedModel:string|null;providerRequestId:string|null;finishReason:string|null;region:string|null};
+export type ResolvedModelIdentity={resolvedModel:string|null;providerRequestId:string|null;finishReason:string|null;region:string|null;
+  /** The provider that actually served the call, when it is not the requested one (a document-reading fallback). */
+  resolvedProvider?:Provider|null};
 export type HostedReply={content:string;truncated:boolean;usage:{input:number;output:number;cached?:number};resolved:ResolvedModelIdentity};
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms));
 /** The provider account has run out of paid quota or credit (OpenAI
@@ -282,6 +298,7 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
     model:choice.model,temperature:args.temperature??0,
     ...(args.maxOutputTokens?(choice.provider==="openai"?{max_completion_tokens:args.maxOutputTokens}:{max_tokens:args.maxOutputTokens}):{}),
     response_format:{type:"json_object"},
+    ...(choice.provider==="openai"?capabilityFor(choice)?.chatCompletionsStructured?.set??{}:{}),
     messages:[
       {role:"system",content:args.system+"\n\nReply with a single JSON object and nothing else. It must match this JSON Schema exactly:\n"+JSON.stringify(args.jsonSchema)},
       {role:"user",content:args.user},
@@ -306,6 +323,7 @@ export async function openAiCompatible(choice:ModelChoice,args:{system:string;us
       if("max_completion_tokens" in params&&/max_completion_tokens/i.test(text)){learn("max_completion_tokens");params.max_tokens=params.max_completion_tokens;delete params.max_completion_tokens;continue;}
       if("max_tokens" in params&&/max_tokens/i.test(text)){learn("max_tokens");params.max_completion_tokens=params.max_tokens;delete params.max_tokens;continue;}
       if("response_format" in params&&/response_format/i.test(text)){learn("response_format");delete params.response_format;continue;}
+      if("reasoning_effort" in params&&/reasoning_effort/i.test(text)){learn("reasoning_effort");delete params.reasoning_effort;continue;}
     }
     throw failedResponse(response.status,text);
   }
@@ -467,16 +485,86 @@ export async function hostedStructuredCompletion(choice:ModelChoice,args:{system
 // layer. Used in place of a locally-run OCR program: production runs on
 // Vercel, which cannot spawn a local Python/PaddleOCR process (no GPU, no
 // persistent disk to install it on, and a much shorter execution window than
-// a 30-minute OCR job needs). Anthropic and Gemini both accept a PDF
-// document natively and return its text — no separate image-rendering step
-// needed. Local development keeps using PaddleOCR by default; see
-// lib/documents/ocr.ts for how the two paths are chosen.
+// a 30-minute OCR job needs). Anthropic, Gemini and OpenAI vision models all
+// accept a PDF document natively and return its text — no separate
+// image-rendering step needed. See lib/documents/ocr.ts.
 // ---------------------------------------------------------------------------
-export type HostedDocumentReply = { text: string; truncated: boolean; usage: { input: number; output: number; cached?: number }; resolved: ResolvedModelIdentity };
+/** servedBy: the provider:model that actually read the pages (the requested reading model, or a document-capable
+ * fallback when the reading model cannot look at documents) -- usage, price and provenance are booked to it. */
+export type HostedDocumentReply = { text: string; truncated: boolean; usage: { input: number; output: number; cached?: number }; resolved: ResolvedModelIdentity; servedBy: ModelChoice };
 
 const HOSTED_DOCUMENT_PROVIDERS: Provider[] = ["anthropic", "gemini"];
-export function supportsHostedDocumentReading(provider: Provider) {
-  return HOSTED_DOCUMENT_PROVIDERS.includes(provider);
+/** Whether this reading model can itself look at a PDF page (a scan with no text layer). Anthropic and Gemini always
+ * can; an OpenAI model can when its capability record says it takes PDF file input (vision models, e.g. gpt-6-luna).
+ * Given a bare provider (older callers), OpenAI is not assumed. */
+export function supportsHostedDocumentReading(target: Provider | ModelChoice) {
+  const choice = typeof target === "string" ? null : target;
+  const provider = typeof target === "string" ? target : target.provider;
+  if (HOSTED_DOCUMENT_PROVIDERS.includes(provider)) return true;
+  return provider === "openai" && !!choice && !!capabilityFor(choice)?.documentInput;
+}
+/** The model that reads scanned pages: the configured reading model when it can look at documents; otherwise the
+ * first document-capable provider with a key (the older fallback); otherwise null -- the pages stay unread, visibly. */
+export function documentReaderFor(reading: ModelChoice = modelFor("reading")): ModelChoice | null {
+  if (deterministicModelEnabled()) return reading; // synthetic journeys: the stand-in reads (see hostedDocumentToText)
+  if (supportsHostedDocumentReading(reading) && apiKeyFor(reading.provider)) return reading;
+  if (apiKeyFor("gemini")) return { provider: "gemini", model: "flash-lite" };
+  if (apiKeyFor("anthropic")) return { provider: "anthropic", model: "claude-haiku-4-5" };
+  return null;
+}
+
+const OpenAIDocumentShape = z.object({
+  id: z.string().optional(),
+  model: z.string().optional(),
+  choices: z.array(z.object({ message: z.object({ content: z.string().nullable() }), finish_reason: z.string().nullable().optional() })).min(1),
+  usage: z.object({ prompt_tokens: z.number().optional(), completion_tokens: z.number().optional(), prompt_tokens_details: z.object({ cached_tokens: z.number().optional() }).optional() }).optional(),
+});
+/** The exact Chat Completions body for reading a PDF (exported for the request-shape regression and the live guard's
+ * reservation): the pages go as ONE file content part -- {type:"file", file:{filename, file_data:"data:application/pdf;
+ * base64,..."}} (developers.openai.com/api/docs/guides/pdf-files) -- followed by the instruction text; no `detail`
+ * (Chat Completions file inputs do not support it); max_completion_tokens always set. */
+export function openAiDocumentRequest(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number }, strip: Set<string> = new Set()) {
+  const body: Record<string, unknown> = {
+    model: choice.model, temperature: 0, max_completion_tokens: Math.max(1, Math.floor(args.maxOutputTokens ?? 4096)),
+    response_format: { type: "json_object" },
+    ...(capabilityFor(choice)?.documentInput?.set ?? {}),
+    messages: [
+      { role: "system", content: args.system },
+      { role: "user", content: [
+        { type: "file", file: { filename: "pages.pdf", file_data: "data:application/pdf;base64," + args.pdfBase64 } },
+        { type: "text", text: args.user },
+      ] },
+    ],
+  };
+  for (const k of strip) delete body[k];
+  return body;
+}
+async function openAiDocumentText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
+  const key = apiKeyFor("openai");
+  if (!key) throw new Error("No API key configured for openai");
+  const limit = capabilityFor(choice)?.documentInput?.maxFileBytes ?? 50 * 1024 * 1024;
+  if (Math.floor(args.pdfBase64.length * 3 / 4) >= limit) throw new Error("The pages to read are larger than " + describeChoice(choice) + " accepts in one request (" + Math.round(limit / 1048576) + " MB).");
+  const timeoutMs = args.timeoutMs ?? 120_000;
+  const stripKey = choice.provider + ":" + choice.model;
+  const strip = new Set([...(LEARNED_PARAMETER_STRIPS.get(stripKey) ?? [])].filter((k) => k !== "max_completion_tokens" && k !== "max_tokens"));
+  let response!: Response;
+  // A 400 naming an optional setting is sent once more without it (at most three); the output bound is never dropped.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const body = JSON.stringify(openAiDocumentRequest(choice, args, strip));
+    response = await withRetries((signal) => fetch(openAiBase("openai") + "/chat/completions", { method: "POST", signal, headers: { "content-type": "application/json", authorization: "Bearer " + key }, body }), timeoutMs, 3);
+    if (response.ok) break;
+    const text = await response.text();
+    const optional = response.status === 400 ? ["temperature", "reasoning_effort", "response_format"].find((k) => !strip.has(k) && new RegExp(k, "i").test(text)) : undefined;
+    if (optional) { strip.add(optional); const set = LEARNED_PARAMETER_STRIPS.get(stripKey) ?? new Set<string>(); set.add(optional); LEARNED_PARAMETER_STRIPS.set(stripKey, set); continue; }
+    throw failedResponse(response.status, text);
+  }
+  if (!response.ok) throw failedResponse(response.status, await response.text());
+  const payload = OpenAIDocumentShape.parse(await response.json());
+  const finish = payload.choices[0].finish_reason ?? null;
+  return { text: payload.choices[0].message.content ?? "", truncated: finish === "length",
+    usage: { input: payload.usage?.prompt_tokens ?? 0, output: payload.usage?.completion_tokens ?? 0, cached: payload.usage?.prompt_tokens_details?.cached_tokens },
+    resolved: { resolvedModel: payload.model ?? null, providerRequestId: payload.id ?? null, finishReason: finish, region: null, resolvedProvider: "openai" },
+    servedBy: choice };
 }
 
 async function anthropicDocumentText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
@@ -503,7 +591,7 @@ async function anthropicDocumentText(choice: ModelChoice, args: { system: string
   const payload = AnthropicShape.parse(await response.json());
   const text = payload.content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
   return { text, truncated: payload.stop_reason === "max_tokens", usage: anthropicUsageOf(payload.usage),
-    resolved: { resolvedModel: payload.model ?? null, providerRequestId: payload.id ?? null, finishReason: payload.stop_reason ?? null, region: null } };
+    resolved: { resolvedModel: payload.model ?? null, providerRequestId: payload.id ?? null, finishReason: payload.stop_reason ?? null, region: null, resolvedProvider: "anthropic" }, servedBy: choice };
 }
 
 async function geminiDocumentText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
@@ -524,23 +612,19 @@ async function geminiDocumentText(choice: ModelChoice, args: { system: string; u
   const candidate = payload.candidates?.[0];
   const text = (candidate?.content?.parts ?? []).map((part) => part.text ?? "").join("");
   return { text, truncated: candidate?.finishReason === "MAX_TOKENS", usage: { input: payload.usageMetadata?.promptTokenCount ?? 0, output: payload.usageMetadata?.candidatesTokenCount ?? 0, cached: payload.usageMetadata?.cachedContentTokenCount },
-    resolved: { resolvedModel: payload.modelVersion ?? null, providerRequestId: payload.responseId ?? null, finishReason: candidate?.finishReason ?? null, region: null } };
+    resolved: { resolvedModel: payload.modelVersion ?? null, providerRequestId: payload.responseId ?? null, finishReason: candidate?.finishReason ?? null, region: null, resolvedProvider: "gemini" }, servedBy: choice };
 }
 
-/** Reads a (small, single- or few-page) PDF document natively, returning its
- * text. Throws a clear error for providers that do not support document
- * input yet rather than guessing. */
+/** Reads a (small, single- or few-page) PDF document natively, returning its text: with the configured reading model
+ * when it can look at documents (OpenAI vision models included), else with a document-capable fallback provider
+ * (reply.servedBy names it). Throws a clear error when nothing configured can read documents rather than guessing. */
 export async function hostedDocumentToText(choice: ModelChoice, args: { system: string; user: string; pdfBase64: string; maxOutputTokens?: number; timeoutMs?: number }): Promise<HostedDocumentReply> {
   // Synthetic browser/CI journeys only; impossible in production (see
   // lib/ai/deterministic-model.ts and lib/launch/guards.ts).
-  if (deterministicModelEnabled()) return deterministicHostedDocumentText(args);
-  if (choice.provider === "anthropic") return anthropicDocumentText(choice, args);
-  if (choice.provider === "gemini") return geminiDocumentText(choice, args);
-  // Scanned-page reading is only implemented for Anthropic and Gemini. When
-  // the reading role points at another provider (OpenAI, Groq), a scanned
-  // page falls back to whichever document-capable key is configured instead
-  // of failing the whole document.
-  if (apiKeyFor("gemini")) return geminiDocumentText({ provider: "gemini", model: "flash-lite" }, args);
-  if (apiKeyFor("anthropic")) return anthropicDocumentText({ provider: "anthropic", model: "claude-haiku-4-5" }, args);
-  throw new Error(describeChoice(choice) + " does not support reading scanned PDF pages yet. Use an Anthropic or Gemini preset for MODEL_PRESET/READING_MODEL, or run local PaddleOCR instead.");
+  if (deterministicModelEnabled()) return { ...(await deterministicHostedDocumentText(args)), servedBy: choice };
+  const reader = documentReaderFor(choice);
+  if (!reader) throw new Error(describeChoice(choice) + " cannot read scanned PDF pages and no document-capable model is configured.");
+  if (reader.provider === "anthropic") return anthropicDocumentText(reader, args);
+  if (reader.provider === "gemini") return geminiDocumentText(reader, args);
+  return openAiDocumentText(reader, args);
 }
