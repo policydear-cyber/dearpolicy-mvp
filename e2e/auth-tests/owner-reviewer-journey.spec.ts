@@ -569,7 +569,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
       expect(hhName.toLowerCase(), "only ever delete a synthetic household").toContain(PREFIX.toLowerCase());
       await page.getByLabel("Household name").fill(hhName);
       await page.getByRole("button", { name: "Permanently delete household" }).click();
-      await page.waitForURL((u) => u.pathname === "/", { timeout: 60_000 });
+      await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }); // its own confirmation page
       expect((await api(page, "/api/policies")).status).toBe(404);
     }
     for (const id of [ids.factualConversation]) expect([401, 403, 404]).toContain((await api(owner, `/api/chat/history/${id}`)).status);

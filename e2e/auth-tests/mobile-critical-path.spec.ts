@@ -68,7 +68,7 @@ test.describe.serial("mobile critical path", () => {
     await signInThroughUi(page, email, password, "/household");
     await page.getByLabel("Household name").fill(household);
     await page.getByRole("button", { name: "Permanently delete household" }).tap();
-    await page.waitForURL((u) => u.pathname === "/", { timeout: 60_000 });
+    await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }); // its own confirmation page
     expect((await api(page, "/api/policies")).status).toBe(404);
     await signOutThroughUi(page);
   });

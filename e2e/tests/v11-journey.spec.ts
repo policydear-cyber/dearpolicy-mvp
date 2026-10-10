@@ -527,7 +527,8 @@ test.describe.serial("V1.1 release journey", () => {
       if (!hhName.toLowerCase().includes(PREFIX.toLowerCase())) { soft(false, `refusing to delete a non-synthetic household "${hhName}"`); continue; }
       await page.getByLabel("Household name").fill(hhName);
       await page.getByRole("button", { name: "Permanently delete household" }).click();
-      await page.waitForURL((u) => u.pathname === "/", { timeout: 60_000 }).catch(() => soft(false, `household ${hhName} deletion did not return home (${email})`));
+      // "Permanently delete household" lands on its own confirmation page (app/household/deleted).
+      await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }).catch(() => soft(false, `household ${hhName} deletion did not reach its confirmation page (${email})`));
       void password;
     }
     await writeFile(path.join(OUT, "journey.json"), JSON.stringify({ ...journey, ids: { householdA: ids.household, householdB: ids.householdB }, failures }, null, 2));

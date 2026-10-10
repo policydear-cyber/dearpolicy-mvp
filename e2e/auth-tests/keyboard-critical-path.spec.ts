@@ -117,7 +117,7 @@ test.describe.serial("keyboard-only critical path", () => {
     await page.keyboard.type(hh);
     await tabTo(page, (f) => f.text === "Permanently delete household", "the delete household button");
     await page.keyboard.press("Enter");
-    await page.waitForURL((u) => u.pathname === "/", { timeout: 60_000 });
+    await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }); // its own confirmation page
     expect((await api(page, "/api/policies")).status).toBe(404);
   });
 });
