@@ -338,6 +338,15 @@ function classProblem(column: string | null | undefined, subject: Person | undef
   const why = columnFitProblem(col, p, { isOwner: subject && ownerId ? subject.id === ownerId : null, header: column ?? null });
   return why ? "the figure cannot be used for this person: " + why : null;
 }
+/** A sentence saying an amendment / endorsement document was removed (deleted / taken out / replaced). */
+export const CLAIMS_REMOVAL = /\b(?:amend\w*|endorse\w*|alteration)\b[^.;]{0,120}?\b(?:was|were|has been|have been|had been|is|are)\s+(?:removed|deleted|taken out)\b/i;
+/** Whether this household has any removed (deleted / superseded) amendment document at all (metadata only). */
+async function householdRemovedAmendment(accountId: string): Promise<boolean> {
+  const r = await query<{ any: boolean }>(`SELECT EXISTS (SELECT 1 FROM policies q WHERE q.account_id=$1 AND (q.lifecycle_state<>'active' OR q.superseded_at IS NOT NULL)
+      AND coalesce(to_jsonb(q)->>'document_role','') ~* 'endorse|alteration|amendment|rider|addendum') AS any`, [accountId]).catch(() => null);
+  // Unknown (the query failed): never reject on it.
+  return r ? !!r.rows[0]?.any : true;
+}
 type Ctx = { docs: Map<string, Doc>; people: Person[]; userFigures: StatedFigure[]; userNumbers: number[]; userText: string; householdTexts: string[]; house: HouseDoc[];
   /** Round 8: for each cited active document, the removed amendments of its policy (metadata only). */
   removals: Map<string, AmendmentRemoval[]> };
@@ -1052,7 +1061,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const all = fields.flatMap((f) => sentencesOf(f.get()).map((s) => ({ field: f, sentence: s, figures: moneyFiguresIn(s) })));
   const anyFigure = all.some((x) => x.figures.length);
   const anyCover = all.some((x) => COVER_CLAIM.test(x.sentence.trim()));
-  if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length && !all.some((x) => SAYS_NOT_AMENDED.test(x.sentence))) return [];
+  if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length && !all.some((x) => SAYS_NOT_AMENDED.test(x.sentence) || CLAIMS_REMOVAL.test(x.sentence))) return [];
   const ctx = await loadContext(opts.accountId, answer, opts.userText ?? "");
   const problems: FigureProblem[] = [];
   const debug = gateDebug();
@@ -1089,6 +1098,10 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   // Round 8: a policy whose amendment document was removed is not thereby "not amended".
   const flaggedCited = [...new Set([...(answer.citations ?? []).map((c) => c?.policyId), ...bindings.map((b) => b?.policyId)].filter((id): id is string => !!id && (ctx.removals.get(id) ?? []).some((r) => r.kind === "amendment_removed")))];
   if (flaggedCited.length) for (const x of all) if (SAYS_NOT_AMENDED.test(x.sentence) && !STATES_REMOVAL_LIMITATION.test(x.sentence)) bad(x, "", "an amendment document for this policy was removed from the library; that does not establish that the policy has no amendments or that nothing changed");
+  // Round 8d: the reverse -- a sentence saying an amendment document was removed, in a household that has never removed
+  // (deleted or superseded) one, states something false (ingest-live-6: the only sentence left of a comparison).
+  const removalClaims = all.filter((x) => CLAIMS_REMOVAL.test(x.sentence));
+  if (removalClaims.length && !(await householdRemovedAmendment(opts.accountId))) for (const x of removalClaims) bad(x, "", "no amendment document of this household was removed or replaced; do not say one was");
   for (const x of all) {
     const key = norm(x.sentence);
     // A sentence labelled as an indicative estimate stands only with a calculation (or computation) record of its own:

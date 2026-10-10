@@ -28,8 +28,14 @@ model. Uploads still work.
 
 Without this secret the trial still starts, in **preflight**. Uploads and reading of text work, but every AI call is
 refused and the chat says the model is unavailable.
+In preflight an uploaded PDF stays at *Reading*: its text is read, but the AI step that sorts it is refused, so it
+is retried and never finishes. This is expected; add the secret to use the trial.
 
 ## Start the trial
+
+**A codespace already exists:** `dearpolicy-trial-check` (2-core, stopped, nothing spent; it was used for the start-up
+check on 10 Oct 2026). After adding the secret, open <https://github.com/codespaces>, click its name, and wait 1–2
+minutes. Use it instead of creating another one -- the allowance is for one codespace. To start from scratch instead:
 
 1. Open the repository on GitHub: `policydear-cyber/dearpolicy-mvp`.
 2. Click the green **Code** button, then the **Codespaces** tab.

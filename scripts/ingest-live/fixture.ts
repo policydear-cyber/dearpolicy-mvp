@@ -43,7 +43,7 @@ export function readHousehold(fixture: string): Member[] {
 }
 function question(q: Record<string, unknown>, i: number, prefix: string): Question {
   const answers = (Array.isArray(q.answers) ? q.answers : Array.isArray(q.follow_up_answers) ? q.follow_up_answers : []) as Record<string, unknown>[];
-  return { id: String(q.id ?? (typeof q.q === "string" && /^[A-Z]+\d+$/.test(q.q) ? q.q : `${prefix}${i + 1}`)), text: String(q.text ?? q.question ?? q.user ?? (typeof q.q === "string" && !/^[A-Z]+\d+$/.test(q.q) ? q.q : "")).trim(),
+  return { id: String(q.id ?? (typeof q.q === "string" && /^[A-Z]+\d+[A-Z]?$/.test(q.q) ? q.q : `${prefix}${i + 1}`)), text: String(q.text ?? q.question ?? q.user ?? (typeof q.q === "string" && !/^[A-Z]+\d+[A-Z]?$/.test(q.q) ? q.q : "")).trim(),
     ...(typeof q.conversation === "string" ? { conversation: q.conversation } : {}),
     answers: answers.map((a) => ({ when: new RegExp(String(a.when ?? a.if_asked ?? "."), "i"), reply: String(a.reply ?? a.answer ?? "") })).filter((a) => a.reply) };
 }

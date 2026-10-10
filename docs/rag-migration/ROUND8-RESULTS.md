@@ -82,6 +82,68 @@ The run-5b Q7 failure is a **checker phrase miss**, not a wrong answer. "they sh
 but not the premium amount" is correct, but the accepted-phrase list has no "but not the premium". I did not change
 the expectation after seeing this run.
 
+## Round 8d: trial isolation, fixed allowance, Q2 comparison, real Codespace check
+
+**Tested app code for the live run:** `fa53170` (request `6605ad0`). Later commits fix only what this round found
+(below); CI covers them.
+
+**Isolation first.** `scripts/trial/start.sh` now runs `scripts/trial/isolation.mjs` before any database command,
+`db:setup`, build or model call. It refuses: a remote `TRIAL_DATABASE_URL` / `DATABASE_URL` (or a host override in the
+URL), a non-local `PGHOST`, `PGSERVICE`, non-local storage, any Supabase or Vercel variable, and not being in a
+Codespace. `trial:start-isolation-test` 4/4 proves a remote URL is refused with no `psql`, `pg_isready`, `npm` or
+server run; it fails against the old script.
+
+**Budget, stated honestly.** One Codespace, one fixed US$0.15 allowance (`trial-codespace-1`), reserved in
+`docs/rag-migration/live/LEDGER.json` *before* the trial starts. Automated runs can spend only what is left after that
+reservation. A damaged, foreign or incomplete local spend record is refused, never reset to zero (`trial:guard-test`
+T16–T17, `trial:start-isolation-test` S3). **Not enforced:** two Codespaces created at once would each get US$0.15
+(worst case US$0.30, still inside the US$0.50 exercise cap). Recreating the Codespace requires recording its spend in
+the ledger and closing the allowance first. This is not a provider-side cutoff.
+
+**Q2 diagnosis (run 5b trace).** Three causes, fixed generally: (1) S$40,000 was cited from the row with no
+`select_table_value`, so it had no column; the composer now binds a figure to the one person column whose cell prints
+it (the gate's column rule is unchanged). (2) The S$150,000 sentence said "the same benefit"; a back-reference now
+names the benefit the sentence before named. (3) The binding took the subject from the search, not the sentence's
+own `subject_id`. Swapped adult/child figures are still refused (`rag2:conv7-test` C2).
+
+**Live run ingest-live-6 (one run, cap US$0.05, spent US$0.011667).** [RUN-ingest-live-6](ingest-live/RUN-ingest-live-6-2026-10-10T09-27-10/report.md)
+- **Q2 (original): pass.** "S$40,000 … in the Child (each) column" for Isla, "S$150,000 in the Adult (each) column"
+  for Simon, plus the separate JuniorShield S$20,000. Every figure and person was correct.
+- **Paraphrase: fail.** The model added "your amounts differ by S$110,000", a figure printed nowhere. The composer
+  correctly dropped that sentence, but without the one repair. The only sentence left claimed "an amendment document …
+  was removed from the library", which never happened in this run. Two general fixes followed: an unprinted-figure drop
+  now goes into the one repair, and the gate refuses a removal claim in a household that never removed an amendment.
+  These are proven by a scripted replay of this exact answer (`rag2:conv7-test` C5–C6), **not** by a second live run.
+  No rerun was made.
+- Harness: the paraphrase was labelled `C2T1` instead of `Q2P` (the turn-id pattern did not allow a letter suffix),
+  so the verdict also reported "Q2P never asked". Fixed in `scripts/ingest-live/fixture.ts`.
+
+**Exercise spend: US$0.322889 of US$0.50**, plus US$0.15 reserved for the trial: **US$0.027111 left for automated
+runs.**
+
+**Start-up checks.**
+- CI `trial startup (dev container)` builds `.devcontainer` as a fresh container and checks: postCreate, the
+  postStart server, preflight mode, the ledger binding, CSRF on the forwarded address, 4 people, 3 uploads, one chat
+  answer, a container restart with build reuse, and the remote-database refusal inside the container. It found a
+  bug (`sudo -u postgres` needs a password in this image; fixed with `runuser`) and passed on `fa53170`.
+- **A real Codespace** (`dearpolicy-trial-check`, 2-core, preflight, US$0) was then opened in a browser. Two things
+  failed and one was fixed:
+  - **Fixed:** the server started, then died when postStart returned. Codespaces ends that session; CI's dev-container
+    CLI does not, which is why CI passed. The server now runs under `setsid`. After `git pull`, a stop and start
+    through the GitHub API, the server came back by itself and was still up 8 minutes later.
+  - **Checked on the private address** `https://<codespace>-3000.app.github.dev` (GitHub sign-in required):
+    - the portfolio loads;
+    - adding a person passes CSRF;
+    - a PDF upload is received;
+    - one chat turn returns the honest preflight stop ("the assistant model returned an error").
+  - **Not checked:** a real-model answer inside the Codespace. No `OPENAI_TEST_API_KEY` Codespaces secret exists yet.
+  - **Not fixed:** in preflight, an uploaded PDF stays at "Reading" (documented). Also, the first message typed into
+    a freshly loaded chat page was lost once; the second attempt worked.
+
+**Model variability.** One live sample per question. Q2 passed in runs 3 and 6 and failed in runs 4 and 5b. The
+paraphrase failed on a self-computed difference. Expect further phrasing-dependent misses. The gate makes them safe
+(a figure left out, never a wrong figure shown), not absent.
+
 ## Remaining limitations (not fixed)
 
 - **Two-person comparisons from tier tables can lose their figures.** In run 5b Q2 the gate refused S$40,000 (the

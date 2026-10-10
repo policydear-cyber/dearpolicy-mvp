@@ -315,6 +315,37 @@ async function main() {
     assert.doesNotMatch(t.visible, /S\$150,000/, t.visible); assert.match(t.visible, /S\$40,000/, t.visible);
   });
 
+  // ------------------------------------------------------------------------------------------- Q2 paraphrase (run 6)
+  // ingest-live-6: the comparison sentence added a difference the model worked out itself ("differ by S$110,000"), so
+  // the composer left it out without the one repair; the only sentence left said an amendment document "was removed
+  // from the library" -- in a household that never removed one. Now: the unprinted-figure drop is part of the one
+  // repair, and a removal that did not happen is refused.
+  const diffFirst = (v: ScriptView) => [
+    { text: "Yes—the Meridian schedule lists “Accidental death or permanent total disablement (lump sum)” as S$150,000 for you, Simon, and S$40,000 for Isla, so your amounts differ by S$110,000.", benefit: ADB, subject_id: simon, evidence_ids: [row(v)] },
+    { text: "An amendment document for this policy was removed from the library, so the current amounts may differ from these schedule figures." },
+  ];
+  const restated = (v: ScriptView) => [
+    { text: "For you, SafeStay’s “Accidental death or permanent total disablement (lump sum)” is S$150,000.", benefit: ADB, subject_id: simon, evidence_ids: [row(v)] },
+    { text: "For Isla, that benefit is S$40,000, so the two amounts are different.", benefit: ADB, subject_id: isla, evidence_ids: [row(v)] },
+  ];
+  const Q2P = ["Under the Meridian plan, compare the accident death cover for me and for my daughter Isla -- are the two amounts different?"];
+  const run6 = await run([{ steps: [...q2cHead, (v) => [call("final_answer", { subject_id: isla, sentences: diffFirst(v) })], (v) => [call("final_answer", { subject_id: isla, sentences: restated(v) })]] }], Q2P);
+  show("Q2 paraphrase (run 6)", run6[0]);
+  await check("C5 Q2 paraphrase (run 6, replayed): a worked-out difference and a removal that never happened go back in the one repair; the restated comparison passes with both printed figures", () => {
+    const t = run6[0];
+    const asked = (t.trace.toolCalls as any[]).filter((x) => x.name === "final_answer" && !x.ok);
+    assert.equal(asked.length, 1, JSON.stringify((t.trace.toolCalls as any[]).map((x) => [x.name, x.ok])));
+    assert.match(String(asked[0].error), /S\$110,000 is printed in none/, String(asked[0].error));
+    assert.match(String(asked[0].error), /no amendment document of this household was removed/, String(asked[0].error));
+    assert.match(t.visible, /S\$150,000/, t.visible); assert.match(t.visible, /S\$40,000/, t.visible);
+    assert.doesNotMatch(t.visible, /removed from the library|S\$110,000/, t.visible);
+  });
+  const run6Same = await run([{ steps: [...q2cHead, (v) => [call("final_answer", { subject_id: isla, sentences: diffFirst(v) })], (v) => [call("final_answer", { subject_id: isla, sentences: diffFirst(v) })]] }], Q2P);
+  await check("C6 if the model repeats itself after the repair, the false removal sentence is still not shown", () => {
+    const t = run6Same[0];
+    assert.doesNotMatch(t.visible, /removed from the library|S\$110,000/, t.visible);
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nrag2 conv7 regressions ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);
