@@ -138,7 +138,8 @@ test.describe.serial("synthetic household journey", () => {
       const p = all.find((x) => x.id === pid)!;
       const c = card(page, p);
       await c.getByRole("button", { name: who, exact: true }).click();
-      await expect(page.locator(".upload-panel .upload-status")).toContainText("Saved");
+      // The confirmation is shown with the library it changed (the library notice), not under the upload form.
+      await expect(page.getByTestId("library-notice")).toContainText("Saved");
       await expect(c.getByRole("button", { name: `${who} ✓` })).toBeVisible();
     }
     const linked = await policies(page);

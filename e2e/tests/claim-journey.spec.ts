@@ -92,8 +92,15 @@ test.describe.serial("synthetic claim journey", () => {
     await page.goto("/chat");
     await page.getByLabel("Message to DearPolicy").fill(`${PREFIX}-Claimant here. I was diagnosed with stage 2 breast cancer. How much can I claim?`);
     await page.getByRole("button", { name: /send/i }).click();
-    const answer = page.locator(".preliminary-assessment, .fact-finding").first();
+    // While a fact is still needed, the open question is the turn: it is shown first, and the full assessment
+    // (fact-finding plan, preliminary notice) sits behind "Show full assessment" (app/chat/page.tsx).
+    const answer = page.locator(".fact-question, .preliminary-assessment, .fact-finding").first();
     await expect(answer).toBeVisible({ timeout: 180_000 });
+    const collapsed = page.getByTestId("assessment-details").last();
+    if (await collapsed.count()) {
+      await expect(page.locator(".fact-question").last()).toBeVisible();
+      await collapsed.locator("summary").click();
+    }
     await expect(page.getByTestId("preliminary-assessment")).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toContainText(/Critical illness/i);
