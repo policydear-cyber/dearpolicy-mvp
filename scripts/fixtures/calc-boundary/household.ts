@@ -1,5 +1,5 @@
 /**
- * Synthetic household for scripts/calc-boundary-regressions.ts (npm run calc:boundary-test). Every insurer, product,
+ * Synthetic household for scripts/rag2-calc-boundary-regressions.ts (npm run rag2:calc-boundary-test). Every insurer, product,
  * person and number is invented. Each document isolates one day-count wording: an inclusive "by 12 noon" exception,
  * "on or before", an exclusive "before", the same clause repeated, two different clauses, benefit-level wording over
  * plan-level wording, an endorsement that supersedes the clause from a stated effective date, one whose effective date

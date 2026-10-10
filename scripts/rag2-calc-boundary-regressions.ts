@@ -1,5 +1,5 @@
 /**
- * Round 8e: day-count boundary defects reproduced independently (npm run calc:boundary-test).
+ * Round 8e: day-count boundary defects reproduced independently (npm run rag2:calc-boundary-test).
  *
  * Every expected value below is written by hand from the policy wording and the calendar -- none is produced by the
  * implementation under test -- so a defect shared by the calculator and the save-time recompute (both call

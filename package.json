@@ -170,7 +170,7 @@
     "rag2:live-fetch-guard-pdf-test": "node --import tsx scripts/rag2-live/fetch-guard-pdf-regressions.ts",
     "trial:guard-test": "node --import tsx scripts/trial/trial-guard-regressions.ts",
     "trial:start-isolation-test": "node --import tsx scripts/trial/start-isolation-regressions.ts",
-    "calc:boundary-test": "node --import tsx scripts/calc-boundary-regressions.ts",
+    "rag2:calc-boundary-test": "node --import tsx scripts/rag2-calc-boundary-regressions.ts",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",
     "ingest:live-check": "node --import tsx scripts/ingest-live/check.ts",
     "ingest:live-checker-test": "node --import tsx scripts/ingest-live/check-regressions.ts",
