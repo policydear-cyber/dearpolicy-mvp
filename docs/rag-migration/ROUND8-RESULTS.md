@@ -208,6 +208,73 @@ scripted; no model wrote it. Each case was run against `20ee59e` (before the fix
   extracted leaves the day as a conflict.
 - These are synthetic, deterministic cases. They show these boundaries are handled, not general reliability.
 
+## Round 8f: browser E2E, two day-count ambiguities, trial status
+
+### Browser E2E: the eight failures
+
+The cause was **both**: missing test stack / authentication configuration, and intended application changes that
+the assertions had not followed. No application defect was found, and no check was relaxed or skipped to get green.
+
+- **Wrong stack (configuration).** `e2e/playwright.config.ts` (the development-identity stack) also picked up specs
+  written for other stacks:
+  - v11-journey, v11-ux-login, v11-ux-r5, v11-ux-screens: real sessions. Here "Supabase Auth is not configured" and
+    "admin createUser failed: fetch failed" appeared because the test-only Auth stand-in was not running.
+  - rag2-conversation: needs its scripted-loop server; `/__rag2adv/scenario` returned Next's 404 page.
+  - v1-core-loop: phased certification. It ran in a household A that the other journeys had already filled, hence
+    "already has a profile marked self".
+
+  Each now runs on its own existing isolated stack, as its own job in `browser-e2e.yml`. The stacks are the
+  `fake-gotrue` Auth stand-in, fake VirusTotal, the deterministic or scripted model and local Postgres. Synthetic keys
+  only; no production credential.
+- **Stale assertions (the app changed on purpose).** Each check was updated to the current UI with the same or a
+  stronger condition:
+  - Link and delete confirmations are the library notice.
+  - Household deletion lands on `/household/deleted`.
+  - While a question is open, the full assessment sits behind "Show full assessment"; the question must be visible
+    before the assessment is opened.
+  - The claim interview asks one fact first. The preliminary notice is required whenever a claim card is shown, and no
+    card (now including `.claim-result`) may carry a figure.
+  - No hospital-cash plan is opened for a person without that benefit; this is now asserted.
+  - The death plan is labelled "Death".
+  - **Judgement call:** claim-journey test 1 used to require *no* printed figure in a factual answer. Since V1.1 such
+    answers state printed figures with their page. The test now requires every money figure to cite its page and be
+    one the documents print with their currency (S$200,000 / US$100,000), never the no-currency schedule's 50,000, and
+    never a total.
+
+**Results on `2249c63`** (Browser E2E run 38057755407, all synthetic):
+
+| Job | Result |
+|---|---|
+| browser-e2e (development identity) | 14 passed, 1 skipped: injury-chat. That skip was already there: it runs only when its own injury fixture is seeded, and it was never among the eight. |
+| v11-auth (test-only Auth stand-in) | 7 passed |
+| rag2-conversation (scripted loop) | 8 passed |
+| v1-core-loop | phase B 1 passed, phase A 1 passed. The other phase's describe block skips by design. |
+
+CI on the same SHA passed 151/151 steps, including typecheck, build and `rag2:calc-boundary-test` 25/25.
+
+### Day-count ambiguities
+
+- **Equal admission and discharge timestamps** under "each day or part of a day" no longer award a day. The calculator
+  asks for the actual times (`ZERO_LENGTH_STAY`), and no amount is shown. Under the other rules, the same instants
+  count 0 days, which awards nothing. Controls that still count:
+  - a valid same-day stay, 09:00 → 20:00: 1 day under "part of a day", S$100 through the full path;
+  - a stay one second long;
+  - date-only same-date input.
+- **Different offsets.** Elapsed rules use exact instants. For example, 1 Oct 09:00 +08:00 to 3 Oct 01:00Z is
+  48 h = 2 periods, the same as when both are written in one offset. Calendar-day rules with different offsets are not
+  counted; the hospital's local times are asked for (`MIXED_TIMEZONE_OFFSETS`). One shared offset is the stated basis,
+  because the calculate tool asks for the times "with the hospital's time zone".
+
+### Trial status (existing codespace `dearpolicy-trial-check`; no second codespace, no new allocation)
+
+| Question | Status |
+|---|---|
+| Does a fresh Codespace start? | Yes on `fa53170`: this codespace was created fresh, and post-create and post-start ran. The server then died after post-start; it was fixed (`setsid`) and checked by a real stop/start. The dev-container start-up job passed on a fresh container at `1f13964`; the trial scripts are unchanged since. **Not re-created on the final head**, so as not to make a second codespace. |
+| Is its forwarded port private? | **Yes, rechecked on the final candidate.** An unauthenticated request to `https://dearpolicy-trial-check-…-3000.app.github.dev/__trial/usage` gets a 302 to GitHub sign-in. |
+| Upload and answer? | In preflight (no key), via the private address: adding a person passed CSRF, an upload was received, and one chat turn returned the honest preflight stop. **A real-model answer is untested**: there is still no `OPENAI_TEST_API_KEY` Codespaces secret. In preflight an upload stays at "Reading". |
+| Do stop and restart keep data and spend? | After a real stop/start, the server came back by itself, and `.trial/ledger.json` (bound to `trial-codespace-1` and this codespace) was kept. Keeping the household was checked after a restart only in the dev-container CI job. **Not re-checked in the real codespace after the latest restart**: the browser extension was disconnected. |
+| Is the reserved allowance still available? | Yes. `trial-codespace-1` is still open, with US$0.15 reserved and US$0 spent; the codespace's own counter shows 0 calls. |
+
 ## Remaining limitations (not fixed)
 
 - **Two-person comparisons from tier tables can lose their figures.** In run 5b Q2 the gate refused S$40,000 (the
