@@ -154,10 +154,17 @@ test.describe.serial("synthetic claim journey", () => {
     await page.getByRole("button", { name: "New chat" }).click();
     const answer = await ask(page, `${patientName}: what is the waiting period for critical illness on the Living Care plan?`);
     await expect(answer).toContainText("90 days");
-    // Before review no policy amount is shown, with or without a stated currency.
+    // A factual answer may state a printed figure (V1.1: with its page and whether it is confirmed current), never an
+    // estimate. Each money figure must sit on a line that cites its page, in the currency its document writes:
+    // S$200,000 (SGD schedule) and US$100,000 (USD schedule) only; the schedule that writes no currency ("50,000") is
+    // never shown as an amount, and nothing is totalled.
     const text1 = await answer.innerText();
-    expect(text1).not.toMatch(MONEY);
-    expect(text1).not.toMatch(/\b(?:50|100|200),000\b/);
+    for (const l of text1.split("\n").filter((x) => MONEY.test(x))) {
+      expect(l, "a money figure cites its page").toMatch(/\(page \d+/);
+      expect(l, "only the amounts the documents print with their currency").toMatch(/S\$200,000|US\$100,000/);
+    }
+    expect(text1).not.toMatch(/(?<![$\d,])50,000\b/);
+    expect(text1).not.toMatch(/\b(?:300|250|150),000\b|total/i);
     const citations = answer.locator("details.citations");
     await expect(citations).toContainText("Living Care");
     await expect(citations).toContainText("Page 5");

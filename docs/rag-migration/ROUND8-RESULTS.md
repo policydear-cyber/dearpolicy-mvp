@@ -195,9 +195,14 @@ scripted; no model wrote it. Each case was run against `20ee59e` (before the fix
 
 ### Limitations
 
-- A zero-length stay under "each day or part of a day" still counts 1 day. It is left as that rule's own convention;
-  no universal rule was imposed.
-- Admission and discharge recorded at different UTC offsets are each read at their own local date.
+- (Closed in round 8f) Equal admission and discharge timestamps under "each day or part of a day" no longer award a
+  day: the actual times are asked for (`ZERO_LENGTH_STAY`). Under the other rules they count 0 days, which awards
+  nothing.
+- (Closed in round 8f) Rules that count elapsed time (complete 24 hours, with or without a remainder) use the exact
+  instants whatever the offsets. For calendar-day rules, admission and discharge recorded at different UTC offsets are
+  not counted: the hospital's local times are asked for (`MIXED_TIMEZONE_OFFSETS`). One shared offset is taken as the
+  hospital's local time, because the calculate tool asks for the times "with the hospital's time zone". No hospital
+  time-zone register exists, so that convention is the stated basis.
 - "Midnight" in an exception is read as 00:00.
 - Amendment precedence uses the document's stored effective date only. An endorsement whose effective date was not
   extracted leaves the day as a conflict.
