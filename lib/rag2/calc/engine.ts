@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import type { CalcCondition, CalcOperand, CalcStep, CalculationRecord, FigureBinding } from "@/types";
 import { calculateHospitalCash } from "@/lib/claims/calculators/hospital-cash";
 import { calculateMedicalReimbursement, type DeductionStep } from "@/lib/claims/calculators/medical-reimbursement";
-import { dayRuleNeedsTimes, payableDaysUnderRule, type PolicyDayRule } from "@/lib/claims/day-count";
+import { dayRuleNeedsTimes, isCalendarDate, isoInstantProblem, payableDaysUnderRule, type PolicyDayRule } from "@/lib/claims/day-count";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
 import { applyDeductionCore, divHalfUp } from "@/lib/claims/calculators/deductions";
 import { toFigureBinding, type EvidenceRef } from "../evidence";
@@ -228,7 +228,19 @@ export function hospitalCash(a: {
   // Inputs the rule needs.
   const rule = t.dayRule?.value ?? null;
   const needTimes = (rule ? dayRuleNeedsTimes(rule) : false) || !!t.minimumStayHours;
-  const okInput = (h: HouseholdInput | null | undefined) => !!h && typeof h.value === "string" && (ISO_DT.test(h.value) || (!needTimes && ISO_D.test(h.value))) && !!h.words?.trim();
+  // Round 8e: a date or time that does not exist (2026-02-30, 24:00) is not an input -- it is never rolled over.
+  const realValue = (v: string) => (ISO_DT.test(v) ? !isoInstantProblem(v) : ISO_D.test(v) && isCalendarDate(v));
+  const okInput = (h: HouseholdInput | null | undefined) => !!h && typeof h.value === "string" && (ISO_DT.test(h.value) || (!needTimes && ISO_D.test(h.value))) && realValue(h.value) && !!h.words?.trim();
+  const unreal = [a.admission, a.discharge].find((h) => !!h && typeof h.value === "string" && (ISO_DT.test(h.value) || ISO_D.test(h.value)) && !realValue(h.value));
+  if (unreal) reqs.push(`${a.who}’s ${unreal === a.admission ? "admission" : "discharge"} date${needTimes ? " and time" : ""} again: ${String(unreal.value).slice(0, 10)} ${isCalendarDate(String(unreal.value).slice(0, 10)) ? "has a time of day or UTC offset that does not exist" : "is not a calendar date"} (“${unreal.words}”)`);
+  // Round 8e: different admission / discharge day exceptions in the wording, with no scope or effective date saying which
+  // applies: the count is withheld and the conflict named.
+  if (rule === "first_full_day" && t.dayEdgeConflict?.length) for (const c of t.dayEdgeConflict) {
+    const pages = [...new Set(c.passages.map((p) => p.passage.onPage))].join(", ");
+    const why = `the wording states different exceptions for the day of ${c.edge} (page${c.passages.length > 1 ? "s" : ""} ${pages}: ${c.passages.map((p) => `“${p.passage.text}”`).join(" / ")}), and which one applies is not established`;
+    conds.push({ id: `c_day_edge_conflict_${c.edge}`, kind: "day_count_rule", text: why, status: "unresolved", basis: "none", needs: `how ${product} counts the day of ${c.edge} (${why}; only the insurer can confirm it)` });
+    reqs.push(`how ${product} counts the day of ${c.edge}: ${why} (only the insurer can confirm it)`);
+  }
   if (a.ongoing) reqs.push(`${a.who}’s discharge date${needTimes ? " and time" : ""} (the stay is still ongoing; the benefit is worked out on the completed stay)`);
   else if (!okInput(a.admission) || !okInput(a.discharge)) reqs.push(`${a.who}’s admission and discharge dates${needTimes ? " and times (with the hospital’s time zone)" : ""}`);
   const minStay = conds.find((c) => c.id === "c_min_stay");

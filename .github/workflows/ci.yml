@@ -248,6 +248,8 @@ jobs:
         run: npm run trial:guard-test
       - name: "Trial start-up: a remote database, foreign storage or a broken trial budget is refused before any setup runs"
         run: npm run trial:start-isolation-test
+      - name: "Day-count boundaries (hand-specified): midnight and zero-length stays, inclusive / exclusive times, impossible dates, repeated / conflicting / amended day exceptions, invalid birth dates -- module, full calculate path and saved records"
+        run: npm run calc:boundary-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

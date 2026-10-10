@@ -4,7 +4,7 @@
  * the verbatim passage (an EvidenceRef on the stored page of the version read). Read from the household's readable
  * pages only (lib/rag2/store.ts). Nothing is defaulted: what the wording does not state is reported as not stated.
  */
-import { dayEdgeExceptionsFromWording, dayRuleFromWording, remainderHoursIn, type DayEdgeException, type PolicyDayRule } from "@/lib/claims/day-count";
+import { dayEdgeExceptionsFromWording, dayRuleFromWording, remainderHoursIn, sameDayEdge, type DayEdgeException, type PolicyDayRule } from "@/lib/claims/day-count";
 import { evidenceFor, type EvidenceRef } from "../evidence";
 import { loadDocs, pageMap } from "../store";
 
@@ -26,9 +26,27 @@ export type BenefitTerms = {
   limitOrder: Term<"limit_first" | "deductible_first"> | null;
   /** Two passages stating opposite orders (never resolved by picking one). */
   limitOrderConflict: EvidenceRef[];
-  /** Integration (D30): admission / discharge day exceptions of the day-count rule, each with its passage. */
+  /** Integration (D30): admission / discharge day exceptions of the day-count rule, each with its passage. The same
+   * exception repeated is one entry (its first passage). */
   dayEdges: Term<DayEdgeException>[];
+  /** Round 8e: passages of this document stating DIFFERENT exceptions for the same day at the same scope (the benefit's
+   * own wording, or plan-level wording when the benefit states none) -- never resolved by picking the first or last. */
+  dayEdgeConflict: { edge: "admission" | "discharge"; passages: EvidenceRef[] }[];
 };
+
+/** Round 8e: one day's exceptions from one scope reduced to the one it states, or a conflict. Repeated identical
+ * wording is one exception; two different ones are a conflict. */
+export function resolveDayEdgeScope(found: Term<DayEdgeException>[]): { edges: Term<DayEdgeException>[]; conflict: { edge: "admission" | "discharge"; passages: EvidenceRef[] }[] } {
+  const edges: Term<DayEdgeException>[] = [], conflict: { edge: "admission" | "discharge"; passages: EvidenceRef[] }[] = [];
+  for (const edge of ["admission", "discharge"] as const) {
+    const all = found.filter((x) => x.value.edge === edge);
+    const distinct: Term<DayEdgeException>[] = [];
+    for (const x of all) if (!distinct.some((d) => sameDayEdge(d.value, x.value))) distinct.push(x);
+    if (distinct.length === 1) edges.push(distinct[0]);
+    else if (distinct.length > 1) conflict.push({ edge, passages: all.map((x) => x.evidence) });
+  }
+  return { edges, conflict };
+}
 
 const GENERIC = new Set(["benefit", "benefits", "limit", "amount", "cover", "payable", "maximum", "per", "day", "days", "each", "the", "and", "for", "policy", "year", "plan", "insured", "under", "with", "from", "sum"]);
 const words = (s: string) => (s.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !GENERIC.has(w));
@@ -72,7 +90,7 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
   if (!doc) return null;
   const pages = await pageMap(args.accountId, args.policyId);
   const want = [...new Set(words(args.benefit).map(stem))];
-  const terms: BenefitTerms = { policyId: doc.id, documentHash: doc.fileHash, productName: doc.productName, dayRule: null, dayRuleConflict: [], waitingDays: null, minimumStayHours: null, dayCap: null, exclusions: [], deductionOrder: null, limitOrder: null, limitOrderConflict: [], dayEdges: [] };
+  const terms: BenefitTerms = { policyId: doc.id, documentHash: doc.fileHash, productName: doc.productName, dayRule: null, dayRuleConflict: [], waitingDays: null, minimumStayHours: null, dayCap: null, exclusions: [], deductionOrder: null, limitOrder: null, limitOrderConflict: [], dayEdges: [], dayEdgeConflict: [] };
   const ev = (page: number, text: string, start: number) => evidenceFor({ policyId: doc.id, documentHash: doc.fileHash, page, pageText: pages.get(page) ?? "", passage: text, near: start, subjectId: args.subjectId });
   type RuleTerm = Term<PolicyDayRule> & { remainderHours?: number };
   const rules: RuleTerm[] = [];
@@ -95,10 +113,12 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
     prev = null;
   };
   const limitOrders: Term<"limit_first" | "deductible_first">[] = [];
-  const noteEdges = (page: number, s: { text: string; start: number }) => {
+  // Round 8e: every exception is kept with its scope (the benefit's own wording, or plan-level); duplicates and
+  // conflicts are resolved after the whole document is read (resolveDayEdgeScope), never by keeping the first.
+  const benefitEdges: Term<DayEdgeException>[] = [], planEdges: Term<DayEdgeException>[] = [];
+  const noteEdges = (page: number, s: { text: string; start: number }, into: Term<DayEdgeException>[]) => {
     for (const x of dayEdgeExceptionsFromWording(s.text)) {
-      if (terms.dayEdges.some((d) => d.value.edge === x.edge)) continue;
-      const e = ev(page, s.text, s.start); if (e) terms.dayEdges.push({ value: x, words: s.text, evidence: e });
+      const e = ev(page, s.text, s.start); if (e) into.push({ value: x, words: s.text, evidence: e });
     }
   };
   const noteLimitOrder = (page: number, s: { text: string; start: number }) => {
@@ -116,7 +136,7 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
         const d = DED_FIRST.test(s.text) ? "deductible_first" : CO_FIRST.test(s.text) ? "co_insurance_first" : null;
         if (d && !terms.deductionOrder) { const e = ev(page, s.text, s.start); if (e) terms.deductionOrder = { value: d, words: s.text, evidence: e }; }
         // A plan-level statement of the order of the excess and the limit counts only when it names no other benefit.
-        if (!/\bbenefit\b|\breimbursement\b|\bcash\b|\bincome\b/i.test(s.text)) { noteLimitOrder(page, s); noteEdges(page, s); noteRule(page, s, planRules, dayRuleFromWording(s.text) ? ev(page, s.text, s.start) : null); }
+        if (!/\bbenefit\b|\breimbursement\b|\bcash\b|\bincome\b/i.test(s.text)) { noteLimitOrder(page, s); noteEdges(page, s, planEdges); noteRule(page, s, planRules, dayRuleFromWording(s.text) ? ev(page, s.text, s.start) : null); }
         else prev = null;
         continue;
       }
@@ -133,15 +153,74 @@ export async function readBenefitTerms(args: { accountId: string; policyId: stri
       const d = DED_FIRST.test(s.text) ? "deductible_first" : CO_FIRST.test(s.text) ? "co_insurance_first" : null;
       if (d && !terms.deductionOrder) terms.deductionOrder = { value: d, words: s.text, evidence: e };
       noteLimitOrder(page, s);
-      noteEdges(page, s);
+      noteEdges(page, s, benefitEdges);
     }
   }
   const orders = new Set(limitOrders.map((o) => o.value));
   if (orders.size === 1) terms.limitOrder = limitOrders[0];
   else if (orders.size > 1) terms.limitOrderConflict = limitOrders.map((o) => o.evidence);
+  // The benefit's own wording on a day takes precedence over plan-level wording on the same day (scope); within one
+  // scope, different exceptions for the same day are a conflict.
+  const own = resolveDayEdgeScope(benefitEdges), plan = resolveDayEdgeScope(planEdges);
+  for (const edge of ["admission", "discharge"] as const) {
+    const ownHas = own.edges.some((x) => x.value.edge === edge) || own.conflict.some((c) => c.edge === edge);
+    const from = ownHas ? own : plan;
+    terms.dayEdges.push(...from.edges.filter((x) => x.value.edge === edge));
+    terms.dayEdgeConflict.push(...from.conflict.filter((c) => c.edge === edge));
+  }
   const use = rules.length ? rules : planRules;
   const distinct = new Set(use.map((r) => r.value + "|" + (r.remainderHours ?? "")));
   if (distinct.size === 1) terms.dayRule = use[0];
   else if (distinct.size > 1) terms.dayRuleConflict = use.map((r) => r.evidence);
   return terms;
+}
+
+/** Round 8e: an amendment document of the same policy, with the day exceptions its own wording states. */
+export type AmendmentDayEdges = { documentId: string; effectiveDate: string | null; edges: Term<DayEdgeException>[]; conflict: { edge: "admission" | "discharge"; passages: EvidenceRef[] }[] };
+/** Round 8e: the day exceptions that apply to a stay, given the policy's own terms and its amendment documents.
+ * An amendment that states an exception for a day supersedes the policy's wording on that day only when its effective
+ * date is stated and falls on or before that day of the stay (`dates.admission` / `dates.discharge`, local YYYY-MM-DD).
+ * Among amendments in force, the latest effective date applies; two in force from the same date that differ, or one
+ * whose effective date is not stated but differs from what applies, make the day a conflict (named, never picked). */
+export function applyAmendmentDayEdges(base: Pick<BenefitTerms, "dayEdges" | "dayEdgeConflict">, amendments: AmendmentDayEdges[], dates: { admission: string | null; discharge: string | null }): Pick<BenefitTerms, "dayEdges" | "dayEdgeConflict"> {
+  const out: Pick<BenefitTerms, "dayEdges" | "dayEdgeConflict"> = { dayEdges: [], dayEdgeConflict: [] };
+  for (const edge of ["admission", "discharge"] as const) {
+    const baseEdges = base.dayEdges.filter((x) => x.value.edge === edge), baseConflict = base.dayEdgeConflict.filter((c) => c.edge === edge);
+    const stating = amendments.filter((a) => a.edges.some((x) => x.value.edge === edge) || a.conflict.some((c) => c.edge === edge));
+    const keepBase = () => { out.dayEdges.push(...baseEdges); out.dayEdgeConflict.push(...baseConflict); };
+    if (!stating.length) { keepBase(); continue; }
+    const on = dates[edge];
+    const valid = (d: string | null) => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const inForce = valid(on) ? stating.filter((a) => valid(a.effectiveDate) && a.effectiveDate! <= on!) : [];
+    const undated = stating.filter((a) => !valid(a.effectiveDate));
+    const conflictWith = (passages: EvidenceRef[]) => out.dayEdgeConflict.push({ edge, passages });
+    const passagesOf = (list: AmendmentDayEdges[]) => list.flatMap((a) => [...a.edges.filter((x) => x.value.edge === edge).map((x) => x.evidence), ...a.conflict.filter((c) => c.edge === edge).flatMap((c) => c.passages)]);
+    let applies: { edges: Term<DayEdgeException>[]; conflict: boolean; passages: EvidenceRef[] };
+    if (inForce.length) {
+      const latest = inForce.map((a) => a.effectiveDate!).sort().pop()!;
+      const top = inForce.filter((a) => a.effectiveDate === latest);
+      const tops = top.flatMap((a) => a.edges.filter((x) => x.value.edge === edge));
+      const distinct = tops.filter((x, i) => tops.findIndex((y) => sameDayEdge(x.value, y.value)) === i);
+      applies = { edges: distinct.slice(0, 1), conflict: distinct.length !== 1 || top.some((a) => a.conflict.some((c) => c.edge === edge)), passages: passagesOf(top) };
+    } else if (!valid(on) && stating.some((a) => valid(a.effectiveDate))) {
+      // The stay's date is not known, so which version applies is not established.
+      const same = stating.every((a) => a.conflict.every((c) => c.edge !== edge) && a.edges.filter((x) => x.value.edge === edge).every((x) => baseEdges.some((b) => sameDayEdge(b.value, x.value))));
+      if (same && !baseConflict.length) { keepBase(); continue; }
+      conflictWith([...baseEdges.map((x) => x.evidence), ...passagesOf(stating)]); continue;
+    } else applies = { edges: baseEdges, conflict: baseConflict.length > 0, passages: [...baseEdges.map((x) => x.evidence), ...baseConflict.flatMap((c) => c.passages)] };
+    // An amendment whose effective date is not stated, saying something else than what applies, leaves it open.
+    const disagrees = undated.filter((a) => a.conflict.some((c) => c.edge === edge) || a.edges.filter((x) => x.value.edge === edge).some((x) => !applies.edges.some((y) => sameDayEdge(y.value, x.value))) || (applies.edges.length === 0 && !applies.conflict));
+    if (applies.conflict || disagrees.length) { conflictWith([...applies.passages, ...passagesOf(disagrees)]); continue; }
+    out.dayEdges.push(...applies.edges);
+  }
+  return out;
+}
+/** Round 8e: the day exceptions each amendment document of the policy states for this benefit (its own wording). */
+export async function amendmentDayEdges(args: { accountId: string; amendments: { id: string; effectiveDate: string | null }[]; benefit: string; subjectId: string }): Promise<AmendmentDayEdges[]> {
+  const out: AmendmentDayEdges[] = [];
+  for (const a of args.amendments) {
+    const t = await readBenefitTerms({ accountId: args.accountId, policyId: a.id, benefit: args.benefit, subjectId: args.subjectId });
+    if (t && (t.dayEdges.length || t.dayEdgeConflict.length)) out.push({ documentId: a.id, effectiveDate: a.effectiveDate, edges: t.dayEdges, conflict: t.dayEdgeConflict });
+  }
+  return out;
 }

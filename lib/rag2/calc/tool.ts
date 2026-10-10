@@ -12,7 +12,8 @@ import { selectTableValue, type SelectedValue } from "../tables";
 import { columnApplicability, columnFitProblem, personApplicability } from "@/lib/claims/person";
 import type { TableValueOperand } from "../compute";
 import { billReimbursement, hospitalCash, lumpSum, type CalcOutcome, type DocValue, type HouseholdInput, type Refusal } from "./engine";
-import { readBenefitTerms } from "./terms";
+import { isCalendarDate } from "@/lib/claims/day-count";
+import { amendmentDayEdges, applyAmendmentDayEdges, readBenefitTerms } from "./terms";
 
 const outcomes = new WeakMap<ToolContext, Map<string, CalcOutcome>>();
 /** The calculations made in this tool context (calc id -> outcome). */
@@ -107,7 +108,16 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     const pu = a.prior_use as { periods?: number; amount?: number; currency?: string; words?: string } | undefined;
     if (pu && !String(pu.words ?? "").trim()) return fail("prior_use: the household's own words are required");
     const priorUse = pu ? { periods: typeof pu.periods === "number" ? pu.periods : null, amount: typeof pu.amount === "number" ? pu.amount : null, currency: typeof pu.currency === "string" ? pu.currency.toUpperCase() : null, words: String(pu.words) } : null;
-    out = hospitalCash({ subjectId, who, benefit, terms: t2 ?? terms, rate, dayCap: cap, admission: adm, discharge: dis, ongoing: a.stay_ongoing === true, settled, whatIf, priorUse });
+    // Round 8e: an amendment document of this policy that restates the admission / discharge day exception supersedes
+    // the schedule's only from its stated effective date (applyAmendmentDayEdges); otherwise the day is a conflict.
+    let chosen = t2 ?? terms;
+    const amendDocs = family.filter((d) => d.id !== policyId && /endorse|alteration|amendment/i.test(d.documentRole ?? ""));
+    if (amendDocs.length) {
+      const ae = await amendmentDayEdges({ accountId: ctx.accountId, amendments: amendDocs.map((d) => ({ id: d.id, effectiveDate: d.effectiveDate })), benefit, subjectId });
+      const localDate = (h: HouseholdInput | null) => (h && typeof h.value === "string" && isCalendarDate(h.value.slice(0, 10)) ? h.value.slice(0, 10) : null);
+      if (ae.length) chosen = { ...chosen, ...applyAmendmentDayEdges(chosen, ae, { admission: localDate(adm), discharge: localDate(dis) }) };
+    }
+    out = hospitalCash({ subjectId, who, benefit, terms: chosen, rate, dayCap: cap, admission: adm, discharge: dis, ongoing: a.stay_ongoing === true, settled, whatIf, priorUse });
   } else if (a.calculator === "bill_reimbursement") {
     const subs = values("sub_limit_value_ids"), lims = values("limit_value_ids"); if (typeof subs === "string") return fail(subs); if (typeof lims === "string") return fail(lims);
     for (const p of (a.passage_limits as Record<string, unknown>[]) ?? []) { const v = await passageFigure(ctx, policyId, subjectId, p); if (typeof v === "string") return fail(v); (p.applies === "sub_limit" ? subs : lims).push(v); }

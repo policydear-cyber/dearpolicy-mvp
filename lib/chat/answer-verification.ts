@@ -34,7 +34,7 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { BoundFigure, CalculationRecord, CalcOperand, ChatAnswer, ComputationOperand, ComputationRecord, FigureBinding, FigurePeriod } from "@/types";
 import { recomputeCalculation } from "@/lib/claims/calc-record";
-import { dayEdgeExceptionsFromWording, dayRuleFromWording } from "@/lib/claims/day-count";
+import { dayEdgeExceptionsFromWording, dayRuleFromWording, distinctDayEdges } from "@/lib/claims/day-count";
 import { amountAppears, amountPrintedWith, benefitRowProblem, benefitWords, namesBenefit, negated, normalPassage, passageRows, printedPeriodsOf, rowCells } from "./assertions";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { cleanScannedLine, looksScanned } from "./scanned-text";
@@ -363,7 +363,9 @@ function bindingsOf(answer: ChatAnswer): FigureBinding[] {
 /** The documents the answer's bindings and citations name (this household's, active -- the lifecycle predicate --
  * with their release state, version and pages), the household's people, and the household's own figures. */
 async function loadContext(accountId: string, answer: ChatAnswer, userText: string): Promise<Ctx> {
-  const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.calculations ?? []).map((k) => k?.policyId), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
+  const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.calculations ?? []).map((k) => k?.policyId),
+    // Round 8e: a condition may quote an amendment document of the calculation's policy (an admission-day exception it restates).
+    ...(answer.calculations ?? []).flatMap((k) => (k?.conditions ?? []).map((c) => c?.passage?.policyId)), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
   const docs = new Map<string, Doc>();
   // Whether this household has any removed (deleted / superseded) amendment document at all -- asked in the same query
   // as the cited documents, so the metadata read below costs nothing for the many households that have none.
@@ -997,8 +999,14 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     if (!c || !["established", "unresolved", "not_applicable"].includes(c.status)) return "a condition has no status";
     if (c.status === "unresolved") { if (r.kind === "indicative_estimate") return `a condition is unresolved: ${c.text}`; continue; }
     if (c.basis === "document") {
-      const doc = ctx.docs.get(r.policyId);
-      if (!c.passage || c.passage.policyId !== r.policyId || !doc) return `a condition’s passage is not from the calculation’s document: ${c.text}`;
+      // Round 8e: or an active amendment document of the same policy (same policy number) -- e.g. an endorsement that
+      // restates the admission-day exception from its effective date.
+      const own = ctx.docs.get(r.policyId);
+      const pol = (d: { policyNumber: string | null } | undefined) => (d?.policyNumber ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const other = c.passage && c.passage.policyId !== r.policyId ? ctx.docs.get(c.passage.policyId) : null;
+      const amending = !!other && !!own && pol(other).length >= 4 && pol(other) === pol(own) && isAmendmentRole(other.role) && c.kind === "day_count_rule";
+      const doc = amending ? other! : own;
+      if (!c.passage || (c.passage.policyId !== r.policyId && !amending) || !doc) return `a condition’s passage is not from the calculation’s document: ${c.text}`;
       const pages: string[] = []; for (let p = c.passage.pageStart; p <= c.passage.pageEnd; p++) pages.push(doc.pages.get(p) ?? "");
       if (!norm(pages.join("\n")).includes(norm(c.passage.text))) return `a condition’s passage is not on its page: ${c.text}`;
     } else if (c.basis === "household") {
@@ -1026,6 +1034,11 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       // Integration (D30): every admission / discharge-day exception applied must be stated by an established passage.
       const stated = r.conditions.filter((c) => c.kind === "day_count_rule" && c.status === "established" && c.basis === "document" && c.passage).flatMap((c) => dayEdgeExceptionsFromWording(c.passage!.text));
       for (const e of st.edges ?? []) if (!stated.some((x) => x.edge === e.edge && x.when === e.when && x.minutes === e.minutes)) return `the day count applies a ${e.edge}-day exception the cited wording does not state`;
+      // Round 8e: an exception repeated in the record counts once (the recompute dedupes), and two different exceptions
+      // for the same day -- in the record or in its cited wording -- are a conflict, never one picked.
+      const applied = distinctDayEdges(st.edges ?? []);
+      if (!("edges" in applied)) return `the day count applies different ${("conflict" in applied ? applied.conflict[0]?.edge : null) ?? "admission / discharge"}-day exceptions`;
+      for (const e of applied.edges) if (stated.some((x) => x.edge === e.edge && !(x.when === e.when && x.minutes === e.minutes))) return `the cited wording states different ${e.edge}-day exceptions, and which one applies is not established`;
     }
     if (st.op === "days_after_waiting") {
       const w = r.conditions.find((c) => c.kind === "waiting_period" && c.status === "established" && c.basis === "document");

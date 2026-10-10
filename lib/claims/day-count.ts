@@ -64,6 +64,10 @@ export type DayCountBlockReasonCode =
   | "MISSING_ADMISSION_DATE"
   | "STAY_ONGOING"
   | "INVALID_DATE_RANGE"
+  /** A timestamp that is not a real calendar date / time of day / UTC offset (2026-02-30, 24:00, +25:00). */
+  | "INVALID_DATE"
+  /** Two stated admission (or discharge) day exceptions that say different things. */
+  | "CONFLICTING_DAY_EXCEPTION"
   | "MISSING_TIMEZONE_OFFSET"
   | "MISSING_DAY_COUNT_RULE"
   | "MISSING_EDGE_INCLUSION"
@@ -92,10 +96,44 @@ export type DayCountResult = {
 
 const OFFSET_RE = /(Z|[+-]\d{2}:?\d{2})$/;
 
+/** Days in a month of the proleptic Gregorian calendar (leap years: divisible by 4, except centuries not divisible by 400). */
+export function daysInMonth(year: number, month: number): number {
+  if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+  return [4, 6, 9, 11].includes(month) ? 30 : 31;
+}
+/** A real calendar date "YYYY-MM-DD" (2026-02-30 and 2026-13-01 are not; 2028-02-29 is). */
+export function isCalendarDate(value: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? "");
+  if (!m) return false;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth(y, mo);
+}
+const ISO_FULL = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|([+-])(\d{2}):?(\d{2}))$/;
+/** Why an ISO 8601 timestamp with an offset is not a real instant (null when it is): the calendar date must exist, the
+ * time be 00:00:00-23:59:59 and the offset within -12:00..+14:00 with minutes 00-59. JavaScript's Date would otherwise
+ * roll 2026-02-30 over to 2 March. */
+export function isoInstantProblem(value: string): string | null {
+  const m = ISO_FULL.exec(value ?? "");
+  if (!m) return OFFSET_RE.test(value ?? "") ? `“${value}” is not a date and time` : `“${value}” has no UTC offset`;
+  if (!isCalendarDate(m[1])) return `${m[1]} is not a calendar date`;
+  const hh = Number(m[2]), mm = Number(m[3]), ss = m[4] == null ? 0 : Number(m[4]);
+  if (hh > 23 || mm > 59 || ss > 59) return `${m[2]}:${m[3]}${m[4] ? ":" + m[4] : ""} is not a time of day`;
+  if (m[5] !== "Z") {
+    const oh = Number(m[7]), om = Number(m[8]), off = (m[6] === "-" ? -1 : 1) * (oh * 60 + om);
+    if (om > 59 || off < -12 * 60 || off > 14 * 60) return `${m[5]} is not a UTC offset`;
+  }
+  return null;
+}
 function parseIsoWithOffset(value: string): Date | null {
   if (!OFFSET_RE.test(value)) return null;
+  if (isoInstantProblem(value)) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+/** The blocked result for a timestamp that is missing its offset, or is not a real instant. */
+function badInstant(which: string, value: string): DayCountBlocked {
+  if (!OFFSET_RE.test(value)) return { status: "blocked", reasonCode: "MISSING_TIMEZONE_OFFSET", message: `The ${which} date/time has no explicit timezone offset.` };
+  return { status: "blocked", reasonCode: "INVALID_DATE", message: `The ${which} date/time is not valid: ${isoInstantProblem(value) ?? value}.` };
 }
 
 function utcCalendarDate(d: Date): number {
@@ -138,9 +176,9 @@ export function computeHospitalDays(input: DayCountInput): DayCountResult {
   if (!input.admissionISO) return { status: "blocked", reasonCode: "MISSING_ADMISSION_DATE", message: "The admission date/time is missing." };
   if (input.dischargeISO === null) return { status: "blocked", reasonCode: "STAY_ONGOING", message: "The hospital stay is still ongoing. A day count needs a completed stay." };
   const admission = parseIsoWithOffset(input.admissionISO);
-  if (!admission) return { status: "blocked", reasonCode: "MISSING_TIMEZONE_OFFSET", message: "The admission date/time has no explicit timezone offset." };
+  if (!admission) return badInstant("admission", input.admissionISO);
   const discharge = parseIsoWithOffset(input.dischargeISO);
-  if (!discharge) return { status: "blocked", reasonCode: "MISSING_TIMEZONE_OFFSET", message: "The discharge date/time has no explicit timezone offset." };
+  if (!discharge) return badInstant("discharge", input.dischargeISO);
   if (discharge.getTime() < admission.getTime()) return { status: "blocked", reasonCode: "INVALID_DATE_RANGE", message: "The discharge date/time is before the admission date/time." };
   if (!input.rule) return { status: "blocked", reasonCode: "MISSING_DAY_COUNT_RULE", message: "The policy's day-count rule (calendar day vs. completed 24-hour period) has not been evidenced." };
   if (!input.edgeInclusion) return { status: "blocked", reasonCode: "MISSING_EDGE_INCLUSION", message: "Whether the admission/discharge day itself is payable has not been evidenced." };
@@ -173,7 +211,8 @@ export function computeHospitalDays(input: DayCountInput): DayCountResult {
       if (period.dischargeISO === null) return { status: "blocked", reasonCode: "STAY_ONGOING", message: "An ICU period within this admission is still ongoing." };
       const icuStart = parseIsoWithOffset(period.admissionISO);
       const icuEnd = parseIsoWithOffset(period.dischargeISO);
-      if (!icuStart || !icuEnd) return { status: "blocked", reasonCode: "MISSING_TIMEZONE_OFFSET", message: "An ICU period's date/time has no explicit timezone offset." };
+      if (!icuStart) return badInstant("ICU admission", period.admissionISO);
+      if (!icuEnd) return badInstant("ICU discharge", period.dischargeISO);
       if (icuEnd.getTime() < icuStart.getTime() || icuStart.getTime() < admission.getTime() || icuEnd.getTime() > discharge.getTime()) {
         return { status: "blocked", reasonCode: "INVALID_ICU_PERIOD", message: "An ICU period falls outside the reported admission/discharge range." };
       }
@@ -244,12 +283,28 @@ export function remainderHoursIn(text: string): number | null {
 }
 /** Integration (D30): an exception the wording states for the admission or discharge day of a calendar-day rule, e.g.
  * "The day of admission counts as a full day only if admission is before 12:00 noon" -> admission, before, 720 min.
- * `minutes` is the local time of day (the hospital's recorded offset). */
-export type DayEdgeException = { edge: "admission" | "discharge"; when: "before" | "after"; minutes: number };
+ * `minutes` is the local time of day (the hospital's recorded offset). `when` keeps the wording's own comparison:
+ * "before" / "earlier than" exclude the stated time; "on or before" / "by" / "not later than" include it; "after" /
+ * "later than" exclude it; "on or after" / "at or after" / "not earlier than" include it. */
+export type DayEdgeWhen = "before" | "on_or_before" | "after" | "on_or_after";
+export type DayEdgeException = { edge: "admission" | "discharge"; when: DayEdgeWhen; minutes: number };
+export const DAY_EDGE_WHEN: readonly DayEdgeWhen[] = ["before", "on_or_before", "after", "on_or_after"];
 const TIME_RE = String.raw`(?:(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?|noon|midday|hrs|hours)?|(noon|midday|midnight))`;
 const EDGE_DAY = /\b(?:(?:the\s+)?day\s+of\s+(admission|discharge)|(admission|discharge)\s+day)\b/i;
 const FULL_DAY = /\b(?:counts?|counted|is\s+treated|treated|is\s+regarded|regarded|is\s+considered|considered|will\s+count)\s+as\s+(?:a\s+)?(?:full|whole|complete)\s+day\b/i;
-const WHEN_TIME = new RegExp(String.raw`\b(before|after|by|earlier\s+than|later\s+than)\s+` + TIME_RE, "i");
+/** The comparison words, longest first ("on or before" before "before"). */
+const WHEN_WORDS: [RegExp, DayEdgeWhen][] = [
+  [/(?:on|at)\s+or\s+before|not\s+later\s+than|no\s+later\s+than|at\s+the\s+latest\s+by|by/, "on_or_before"],
+  [/(?:on|at)\s+or\s+after|not\s+earlier\s+than|no\s+earlier\s+than/, "on_or_after"],
+  [/before|earlier\s+than|prior\s+to/, "before"],
+  [/after|later\s+than/, "after"],
+];
+const WHEN_TIME = new RegExp(String.raw`\b(` + WHEN_WORDS.map(([re]) => re.source).join("|") + String.raw`)\s+(?:(?:the|a)\s+)?` + TIME_RE, "i");
+function whenOf(words: string): DayEdgeWhen {
+  const w = words.toLowerCase().replace(/\s+/g, " ").trim();
+  for (const [re, when] of WHEN_WORDS) if (new RegExp(`^(?:${re.source})$`).test(w)) return when;
+  return "before";
+}
 function minutesOf(m: RegExpExecArray, at: number): number | null {
   const word = (m[at + 3] ?? m[at + 2] ?? "").toLowerCase().replace(/\./g, "");
   if (m[at + 3]) return m[at + 3].toLowerCase() === "midnight" ? 0 : 720;
@@ -259,9 +314,11 @@ function minutesOf(m: RegExpExecArray, at: number): number | null {
   if (word === "noon" || word === "midday") { if (h !== 12) return null; }
   else if (word === "pm" && h < 12) h += 12;
   else if (word === "am" && h === 12) h = 0;
+  if (h * 60 + min > 1440) return null;
   return h * 60 + min;
 }
-/** The admission / discharge day exceptions a passage states (each sentence read on its own); none when it states none. */
+/** The admission / discharge day exceptions a passage states (each sentence read on its own); none when it states none.
+ * The same exception stated twice is returned once. */
 export function dayEdgeExceptionsFromWording(text: string): DayEdgeException[] {
   const out: DayEdgeException[] = [];
   for (const sentence of (text ?? "").split(/(?<=\.)\s+|\n+/)) {
@@ -269,17 +326,43 @@ export function dayEdgeExceptionsFromWording(text: string): DayEdgeException[] {
     if (!d || !full || !w) continue;
     if (/\bnot\s+(?:be\s+)?(?:count|counted|treated|regarded|considered)\b/i.test(sentence)) continue;
     const minutes = minutesOf(w, 2); if (minutes == null) continue;
-    const word = w[1].toLowerCase();
-    out.push({ edge: (d[1] ?? d[2]).toLowerCase() as "admission" | "discharge", when: word === "after" || word.startsWith("later") ? "after" : "before", minutes });
+    const e: DayEdgeException = { edge: (d[1] ?? d[2]).toLowerCase() as "admission" | "discharge", when: whenOf(w[1]), minutes };
+    if (!out.some((x) => sameDayEdge(x, e))) out.push(e);
   }
   return out;
 }
-const localMinutes = (iso: string | null) => { const m = /T(\d{2}):(\d{2})/.exec(iso ?? ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+/** Two exceptions that say the same thing (same day, same comparison, same time). */
+export function sameDayEdge(a: DayEdgeException, b: DayEdgeException): boolean {
+  return a.edge === b.edge && a.when === b.when && a.minutes === b.minutes;
+}
+/** Exceptions with the duplicates removed, or the conflict: the same day given two different exceptions (never resolved
+ * here by picking one -- the caller resolves it from document scope / version, or withholds the count). */
+export function distinctDayEdges(edges: DayEdgeException[]): { edges: DayEdgeException[] } | { conflict: DayEdgeException[] } | { invalid: unknown } {
+  const out: DayEdgeException[] = [];
+  for (const e of edges) {
+    if (!e || (e.edge !== "admission" && e.edge !== "discharge") || !DAY_EDGE_WHEN.includes(e.when) || !Number.isInteger(e.minutes) || e.minutes < 0 || e.minutes > 1440) return { invalid: e };
+    if (!out.some((x) => sameDayEdge(x, e))) out.push(e);
+  }
+  for (const edge of ["admission", "discharge"] as const) { const same = out.filter((x) => x.edge === edge); if (same.length > 1) return { conflict: same }; }
+  return { edges: out };
+}
+/** Whether a local time of day (seconds since local midnight) meets an exception's comparison with its stated time. */
+export function meetsDayEdge(e: DayEdgeException, localSeconds: number): boolean {
+  const at = e.minutes * 60;
+  switch (e.when) {
+    case "before": return localSeconds < at;
+    case "on_or_before": return localSeconds <= at;
+    case "after": return localSeconds > at;
+    case "on_or_after": return localSeconds >= at;
+  }
+}
+/** Seconds since local midnight, at the offset the timestamp was recorded in (null when it has no valid time). */
+const localSeconds = (iso: string | null) => { const m = ISO_FULL.exec(iso ?? ""); return m ? Number(m[2]) * 3600 + Number(m[3]) * 60 + (m[4] ? Number(m[4]) : 0) : null; };
 /** Whether a rule needs the admission and discharge TIMES (not only the dates). */
 export function dayRuleNeedsTimes(rule: PolicyDayRule): boolean {
   return rule === "first_full_day" || rule === "completed_24h" || rule === "completed_24h_remainder";
 }
-const LOCAL_MIDNIGHT = /T00:00(?::00(?:\.0+)?)?(?:Z|[+-]\d{2}:?\d{2})$/;
+const atLocalMidnight = (iso: string | null) => localSeconds(iso) === 0 && !/\.\d*[1-9]/.test(iso ?? "");
 /** Payable days under a policy's rule, through computeHospitalDays (waiting days are applied by the hospital-cash
  * calculator's own offset, so 0 here). Calendar dates are the hospital's local dates (the recorded offset). */
 export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null, edges: DayEdgeException[] = [], opts: { remainderHours?: number | null } = {}): DayCountResult {
@@ -287,16 +370,20 @@ export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string |
   const r0 = payableDaysUnderRuleBase(rule, admissionISO, dischargeISO);
   if (r0.status !== "calculated" || rule !== "first_full_day" || !edges.length) return r0;
   // Stated exceptions for the admission / discharge day (first-full-day wording only, where those days are otherwise
-  // never counted). A same-day stay has no separate edge days.
+  // never counted). The same exception stated twice counts once; two different exceptions for one day are a conflict.
+  const d = distinctDayEdges(edges);
+  if ("invalid" in d) return { status: "blocked", reasonCode: "MISSING_EDGE_INCLUSION", message: `an admission / discharge day exception is not one the wording can state: ${JSON.stringify(d.invalid)}` };
+  if ("conflict" in d) return { status: "blocked", reasonCode: "CONFLICTING_DAY_EXCEPTION", message: `the wording states different exceptions for the day of ${d.conflict[0]?.edge ?? "admission or discharge"}, and which one applies is not established` };
+  // A same-day stay has no separate edge days.
   const sameDay = (admissionISO ?? "").slice(0, 10) === (dischargeISO ?? "").slice(0, 10);
   if (sameDay) return r0;
   let extra = 0;
-  const midnight = !!admissionISO && LOCAL_MIDNIGHT.test(admissionISO);
-  for (const e of edges) {
-    const t = localMinutes(e.edge === "admission" ? admissionISO : dischargeISO);
-    if (t == null) return { status: "blocked", reasonCode: "MISSING_EDGE_INCLUSION", message: `the ${e.edge} time is needed: the wording counts the day of ${e.edge} as a full day only ${e.when} a stated time` };
-    if (e.edge === "admission" && midnight) continue; // already a full day
-    if (e.when === "before" ? t < e.minutes : t > e.minutes) extra++;
+  for (const e of d.edges) {
+    const t = localSeconds(e.edge === "admission" ? admissionISO : dischargeISO);
+    if (t == null) return { status: "blocked", reasonCode: "MISSING_EDGE_INCLUSION", message: `the ${e.edge} time is needed: the wording counts the day of ${e.edge} as a full day only ${e.when.replace(/_/g, " ")} a stated time` };
+    // An admission at local midnight on an earlier date than the discharge already makes that day a complete day.
+    if (e.edge === "admission" && atLocalMidnight(admissionISO)) continue;
+    if (meetsDayEdge(e, t)) extra++;
   }
   return extra ? { ...r0, grossNights: r0.grossNights + extra, wardNights: r0.wardNights + extra } : r0;
 }
@@ -307,12 +394,25 @@ function completedWithRemainder(admissionISO: string | null, dischargeISO: strin
   if (!admissionISO) return { status: "blocked", reasonCode: "MISSING_ADMISSION_DATE", message: "the admission date and time are needed" };
   if (!dischargeISO) return { status: "blocked", reasonCode: "STAY_ONGOING", message: "the discharge date and time are needed" };
   const a = parseIsoWithOffset(admissionISO), d = parseIsoWithOffset(dischargeISO);
-  if (!a || !d) return { status: "blocked", reasonCode: "MISSING_TIMEZONE_OFFSET", message: "the admission and discharge times need the hospital's UTC offset" };
-  const minutes = Math.floor((d.getTime() - a.getTime()) / 60_000);
-  if (minutes < 0) return { status: "blocked", reasonCode: "INVALID_DATE_RANGE", message: "the discharge is before the admission" };
-  const full = Math.floor(minutes / 1440), rest = minutes - full * 1440;
-  const days = full + (rest >= remainderHours * 60 ? 1 : 0);
+  if (!a) return badInstant("admission", admissionISO);
+  if (!d) return badInstant("discharge", dischargeISO);
+  const ms = d.getTime() - a.getTime();
+  if (ms < 0) return { status: "blocked", reasonCode: "INVALID_DATE_RANGE", message: "the discharge is before the admission" };
+  // Whole seconds (a remainder one second short of the stated hours does not count).
+  const seconds = Math.floor(ms / 1000);
+  const full = Math.floor(seconds / 86_400), rest = seconds - full * 86_400;
+  const days = full + (rest >= remainderHours * 3600 ? 1 : 0);
   return { status: "calculated", grossNights: days, wardNights: days, icuNights: 0 };
+}
+/** The local calendar date (YYYY-MM-DD, as a day number) of a valid timestamp at the offset it was recorded in. */
+const localDayNumber = (iso: string) => { const [y, m, d] = iso.slice(0, 10).split("-").map(Number); return Date.UTC(y, m - 1, d) / MS_PER_DAY; };
+/** first_full_day: the local calendar days lying wholly inside the stay -- from a local midnight at or after admission
+ * to the next local midnight at or before discharge. A stay that never contains a whole day counts 0, whatever time it
+ * starts (00:00 -> 01:00 the same day is 0; 00:00 to 00:00 the next day is 1). */
+function wholeLocalDays(admissionISO: string, dischargeISO: string): number {
+  const first = localDayNumber(admissionISO) + (atLocalMidnight(admissionISO) ? 0 : 1);
+  const endMidnight = localDayNumber(dischargeISO); // the last local midnight at or before discharge
+  return Math.max(0, endMidnight - first);
 }
 function payableDaysUnderRuleBase(rule: Exclude<PolicyDayRule, "completed_24h_remainder">, admissionISO: string | null, dischargeISO: string | null): DayCountResult {
   const map: Record<Exclude<PolicyDayRule, "completed_24h_remainder">, { rule: DayCountRule; edge: DayCountEdgeInclusion }> = {
@@ -326,12 +426,12 @@ function payableDaysUnderRuleBase(rule: Exclude<PolicyDayRule, "completed_24h_re
   // it is read as that local date (noon UTC keeps the date whatever the offset). The other rules need the times.
   const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
   if (rule === "per_night" || rule === "calendar_day_inclusive") {
+    for (const [which, v] of [["admission", admissionISO], ["discharge", dischargeISO]] as const) if (v && DATE_ONLY.test(v) && !isCalendarDate(v)) return { status: "blocked", reasonCode: "INVALID_DATE", message: `The ${which} date is not valid: ${v} is not a calendar date.` };
     if (admissionISO && DATE_ONLY.test(admissionISO)) admissionISO += "T12:00Z";
     if (dischargeISO && DATE_ONLY.test(dischargeISO)) dischargeISO += "T12:00Z";
   }
   const r = computeHospitalDays({ admissionISO, dischargeISO, rule: m.rule, edgeInclusion: m.edge, icuPeriods: [], icuMode: null, waitingDays: 0, calendarBasis: "recorded_offset" });
   if (r.status !== "calculated" || rule !== "first_full_day") return r;
-  // A stay that begins exactly at local midnight makes the admission day itself a full day.
-  if (admissionISO && LOCAL_MIDNIGHT.test(admissionISO)) return { ...r, grossNights: r.grossNights + 1, wardNights: r.wardNights + 1 };
-  return r;
+  const n = wholeLocalDays(admissionISO!, dischargeISO!);
+  return { ...r, grossNights: n, wardNights: n };
 }

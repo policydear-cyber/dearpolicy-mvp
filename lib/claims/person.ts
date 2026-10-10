@@ -1,3 +1,4 @@
+import { isCalendarDate } from "./day-count";
 export type ClaimPerson = { id: string; display_name: string; preferred_name: string | null; relationship: string };
 export type ClaimPersonResolution =
   | { status: "resolved"; person: ClaimPerson; explicit: boolean }
@@ -400,9 +401,16 @@ const ageAt = (dob: string, asOf: string) => { const [y, m, d] = dob.slice(0, 10
 export function personApplicability(m: { relationship: string | null; notes?: string | null; dateOfBirth?: string | null }, opts: { asOf?: string | null; category?: string | null } = {}): PersonApplicability {
   const { relation } = memberRelation(m.relationship, m.notes);
   const asOf = (opts.asOf ?? new Date().toISOString()).slice(0, 10);
-  const age = m.dateOfBirth && /^\d{4}-\d{2}-\d{2}/.test(m.dateOfBirth) ? ageAt(m.dateOfBirth, asOf) : null;
   const cat = opts.category ? columnApplicability(opts.category) : null;
+  // Round 8e: a date of birth on file that is not a calendar date, or is after the date asked about, establishes no
+  // age -- and the class is then not guessed from the relationship instead (the explicit data is wrong, not absent).
+  const dob = m.dateOfBirth ? String(m.dateOfBirth).slice(0, 10) : null;
+  const dobProblem = !dob ? null : !isCalendarDate(dob) ? `the date of birth on file (${dob}) is not a calendar date`
+    : !isCalendarDate(asOf) ? `the date asked about (${asOf}) is not a calendar date` : dob > asOf ? `the date of birth on file (${dob}) is after ${asOf}` : null;
+  const age = dob && !dobProblem ? ageAt(dob, asOf) : null;
+  // A category the policy itself lists them under is the policy's own definition (it does not rest on the age).
   if (cat?.kind === "class" && (cat.cls === "child" || cat.cls === "adult")) return { cls: cat.cls, relation, age, basis: "category", detail: `listed by the policy as ${opts.category}` };
+  if (dobProblem) return { cls: "unknown", relation, age: null, basis: "none", detail: `${dobProblem}, so whether they are an adult or a child is not established` };
   if (age != null) {
     if (age < 18) return { cls: "child", relation, age, basis: "date_of_birth", detail: `aged ${age}` };
     if (age >= 26 || !CHILD_RELATIONS.includes(relation)) return { cls: "adult", relation, age, basis: "date_of_birth", detail: `aged ${age}` };

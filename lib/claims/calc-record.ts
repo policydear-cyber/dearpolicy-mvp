@@ -8,7 +8,7 @@
  * save-time gate (lib/chat/answer-verification.ts), which trusts nothing in the record but re-runs it. Pure.
  */
 import type { CalculationRecord, CalcOperand, CalcStep } from "@/types";
-import { payableDaysUnderRule } from "./day-count";
+import { isCalendarDate, isoInstantProblem, payableDaysUnderRule } from "./day-count";
 import { applyDeductionCore, capCore, divHalfUp } from "./calculators/deductions";
 
 export type CalcValue = { unit: "money" | "count" | "percent" | "datetime" | "date"; n: number; s?: string; currency?: string | null };
@@ -30,6 +30,9 @@ export function operandValue(o: CalcOperand): CalcValue | string {
     return { unit: "percent", n: Math.round(o.value * 10_000) };
   }
   if (typeof o.value !== "string" || !o.value) return `operand ${o.id} is not a ${o.unit}`;
+  // Round 8e: a date / time that does not exist is never rolled over into another (2026-02-30 is not 2 March).
+  if (o.unit === "datetime") { const p = isoInstantProblem(o.value); if (p) return `operand ${o.id} is not a real date and time: ${p}`; }
+  if (o.unit === "date" && !isCalendarDate(o.value)) return `operand ${o.id} is not a calendar date: ${o.value}`;
   return { unit: o.unit, n: 0, s: o.value };
 }
 
