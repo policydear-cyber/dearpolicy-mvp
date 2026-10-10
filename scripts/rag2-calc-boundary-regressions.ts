@@ -52,6 +52,29 @@ async function main() {
     expectRow("zero-duration, each night", 0, days("per_night", "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"));
     expectRow("zero-duration with the noon exception: a same-day stay has no edge days", 0, days("first_full_day", "2026-10-01T09:00:00+08:00", "2026-10-01T09:00:00+08:00", [NOON_BEFORE]));
   });
+  await check("U1b round 8f: equal timestamps never award a day under “each day or part of a day” (the times are asked for); valid same-day stays are unchanged", () => {
+    expectRow("equal instants, each day or part of a day", "ZERO_LENGTH_STAY", days("calendar_day_inclusive", "2026-10-01T09:00:00+08:00", "2026-10-01T09:00:00+08:00"));
+    for (const rule of ["first_full_day", "completed_24h", "per_night"] as Rule[]) expectRow(`equal instants, ${rule} (awards nothing)`, 0, days(rule, "2026-10-01T09:00:00+08:00", "2026-10-01T09:00:00+08:00"));
+    expectRow("equal instants written with different offsets (09:00+08:00 = 01:00Z)", "ZERO_LENGTH_STAY", days("calendar_day_inclusive", "2026-10-01T09:00:00+08:00", "2026-10-01T01:00:00Z"));
+    expectRow("equal instants, remainder rule (awards nothing)", 0, days("completed_24h_remainder", "2026-10-01T09:00:00+08:00", "2026-10-01T09:00:00+08:00", [], { remainderHours: 12 }));
+    expectRow("valid same-day stay 09:00 -> 20:00, each day or part of a day", 1, days("calendar_day_inclusive", "2026-10-01T09:00:00+08:00", "2026-10-01T20:00:00+08:00"));
+    expectRow("valid same-day stay 09:00 -> 20:00, each night", 0, days("per_night", "2026-10-01T09:00:00+08:00", "2026-10-01T20:00:00+08:00"));
+    expectRow("valid same-day stay 09:00 -> 20:00, first full day", 0, days("first_full_day", "2026-10-01T09:00:00+08:00", "2026-10-01T20:00:00+08:00"));
+    expectRow("one second long, each day or part of a day", 1, days("calendar_day_inclusive", "2026-10-01T09:00:00+08:00", "2026-10-01T09:00:01+08:00"));
+    expectRow("date only, same date (times not given), each day or part of a day", 1, days("calendar_day_inclusive", "2026-10-01", "2026-10-01"));
+  });
+  await check("U1c round 8f: elapsed rules use exact instants whatever the offsets; calendar rules ask for the hospital's time zone when the offsets differ", () => {
+    // 1 Oct 01:00 +08:00 is 30 Sep 17:00Z; 3 Oct 09:00 +08:00 is 3 Oct 01:00Z: 56 hours either way.
+    expectRow("complete 24h, both +08:00", 2, days("completed_24h", "2026-10-01T01:00:00+08:00", "2026-10-03T09:00:00+08:00"));
+    expectRow("complete 24h, the same instants as +08:00 and Z", 2, days("completed_24h", "2026-10-01T01:00:00+08:00", "2026-10-03T01:00:00Z"));
+    expectRow("complete 24h, the same instants both Z", 2, days("completed_24h", "2026-09-30T17:00:00Z", "2026-10-03T01:00:00Z"));
+    expectRow("remainder 12h, mixed offsets (56 h = 2 days + 8 h)", 2, days("completed_24h_remainder", "2026-10-01T01:00:00+08:00", "2026-10-03T01:00:00Z", [], { remainderHours: 12 }));
+    for (const rule of ["first_full_day", "per_night", "calendar_day_inclusive"] as Rule[]) expectRow(`${rule}, +08:00 and Z`, "MIXED_TIMEZONE_OFFSETS", days(rule, "2026-10-01T01:00:00+08:00", "2026-10-03T01:00:00Z"));
+    expectRow("each night, both +08:00 (the hospital's local dates): 1, 2 Oct", 2, days("per_night", "2026-10-01T01:00:00+08:00", "2026-10-03T09:00:00+08:00"));
+    expectRow("each night, both Z (UTC dates are the stated basis): 30 Sep, 1, 2 Oct", 3, days("per_night", "2026-09-30T17:00:00Z", "2026-10-03T01:00:00Z"));
+    expectRow("first full day, both +08:00: 2 Oct", 1, days("first_full_day", "2026-10-01T01:00:00+08:00", "2026-10-03T09:00:00+08:00"));
+    expectRow("+0800 and +08:00 are the same offset", 2, days("per_night", "2026-10-01T01:00:00+0800", "2026-10-03T09:00:00+08:00"));
+  });
   await check("U2 complete calendar days are still counted (midnight admission, midnight discharge, ordinary stays)", () => {
     expectRow("1 Mar 20:00 -> 4 Mar 11:00: 2 and 3 March", 2, days("first_full_day", "2026-03-01T20:00+08:00", "2026-03-04T11:00+08:00"));
     expectRow("1 Mar 00:00 -> 4 Mar 11:00: 1, 2, 3 March", 3, days("first_full_day", "2026-03-01T00:00+08:00", "2026-03-04T11:00+08:00"));
@@ -240,11 +263,26 @@ async function main() {
     const full = await path3("BY", ["2026-10-01T00:00:00+08:00", "admitted on 1 October at midnight"], ["2026-10-02T00:00:00+08:00", "discharged on 2 October at midnight"]);
     expectRow("00:00 -> 00:00 next day: 1 whole day", "indicative_estimate 1 100 kept", brief(full));
   });
-  await check("F2b defect B through the whole path: admission and discharge both 2026-10-01T00:00:00Z -> no estimate", async () => {
+  await check("F2b defect B through the whole path: admission and discharge both 2026-10-01T00:00:00Z -> no amount (first full day); under “each day or part of a day” the actual times are asked for", async () => {
     const z = await path3("BY", ["2026-10-01T00:00:00Z", "admitted on 1 October at midnight"], ["2026-10-01T00:00:00Z", "discharged on 1 October at midnight"]);
-    expectRow("zero duration at midnight: kind days amount gate", "not_payable - - -", brief(z));
+    expectRow("zero duration at midnight, first full day: kind days amount gate", "not_payable - - -", brief(z));
+    const zi = await path3("INC", ["2026-10-01T09:00:00+08:00", "admitted on 1 October at 9am"], ["2026-10-01T09:00:00+08:00", "discharged on 1 October at 9am"]);
+    expectRow("equal timestamps, each day or part of a day: kind days amount gate", "unresolved - - -", brief(zi));
+    assert.match(zi.visible, /same moment/, zi.visible);
+    const si = await path3("INC", ["2026-10-01T09:00:00+08:00", "admitted on 1 October at 9am"], ["2026-10-01T20:00:00+08:00", "discharged on 1 October at 8pm"]);
+    expectRow("valid same-day stay, each day or part of a day: 1 day", "indicative_estimate 1 100 kept", brief(si));
     const z9 = await path3("BY", ["2026-10-01T09:00:00+08:00", "admitted on 1 October at 9am"], ["2026-10-01T09:00:00+08:00", "discharged on 1 October at 9am"]);
-    expectRow("zero duration at 09:00: kind days amount gate", "not_payable - - -", brief(z9));
+    expectRow("zero duration at 09:00, first full day: kind days amount gate", "not_payable - - -", brief(z9));
+  });
+  await check("F2c round 8f through the whole path: mixed offsets under a calendar rule ask for the hospital's time zone; the same stay in one offset is calculated", async () => {
+    const mixed = await path3("BY", ["2026-10-01T09:00:00+08:00", "admitted on 1 October at 9am"], ["2026-10-03T01:00:00Z", "discharged on 3 October at 1am UTC"]);
+    expectRow("BY, +08:00 and Z: kind days amount gate", "unresolved - - -", brief(mixed));
+    assert.match(mixed.visible, /different time zones/, mixed.visible);
+    const local = await path3("BY", ["2026-10-01T09:00:00+08:00", "admitted on 1 October at 9am"], ["2026-10-03T09:00:00+08:00", "discharged on 3 October at 9am"]);
+    expectRow("BY, both +08:00 (1 Oct by noon + 2 Oct)", "indicative_estimate 2 200 kept", brief(local));
+    const elapsed = await path3("R24", ["2026-10-01T09:00:00+08:00", "admitted on 1 October at 9am"], ["2026-10-03T01:00:00Z", "discharged on 3 October at 1am UTC"]);
+    // 1 Oct 09:00 +08:00 is 1 Oct 01:00Z, so this is exactly 48 hours: 2 periods.
+    expectRow("R24 (complete 24 hours), +08:00 and Z: 48 h = 2 periods", "indicative_estimate 2 200 kept", brief(elapsed));
   });
   await check("F3 30 February is refused before any arithmetic: no estimate, and the household is asked for the date again", async () => {
     const r = await path3("R24", ["2026-02-30T09:00:00+08:00", "admitted on 30 February at 9am"], ["2026-03-03T09:00:00+08:00", "discharged on 3 March at 9am"]);

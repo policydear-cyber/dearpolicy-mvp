@@ -217,7 +217,8 @@ jobs:
       - name: Apply the repository schema to the local CI database
         run: node --import tsx e2e/support/apply-schema.ts
       - name: Build the app
-        run: npx next build
+        # next build runs as production, which refuses DATABASE_SSL=off (lib/db); the server below runs with NODE_ENV=test.
+        run: env -u DATABASE_SSL npx next build
       - name: Seed the synthetic households and start the loop test server
         run: |
           mkdir -p logs

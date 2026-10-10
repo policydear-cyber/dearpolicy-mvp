@@ -68,6 +68,12 @@ export type DayCountBlockReasonCode =
   | "INVALID_DATE"
   /** Two stated admission (or discharge) day exceptions that say different things. */
   | "CONFLICTING_DAY_EXCEPTION"
+  /** Round 8f: "each day or part of a day" with admission and discharge at the same instant -- no time in hospital is
+   * established (usually the times were not recorded): the actual times are asked for, never one day awarded. */
+  | "ZERO_LENGTH_STAY"
+  /** Round 8f: a calendar-day rule, with admission and discharge recorded at different UTC offsets: whose calendar
+   * dates count (the hospital's time zone) is not established. */
+  | "MIXED_TIMEZONE_OFFSETS"
   | "MISSING_TIMEZONE_OFFSET"
   | "MISSING_DAY_COUNT_RULE"
   | "MISSING_EDGE_INCLUSION"
@@ -366,6 +372,8 @@ const atLocalMidnight = (iso: string | null) => localSeconds(iso) === 0 && !/\.\
 /** Payable days under a policy's rule, through computeHospitalDays (waiting days are applied by the hospital-cash
  * calculator's own offset, so 0 here). Calendar dates are the hospital's local dates (the recorded offset). */
 export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null, edges: DayEdgeException[] = [], opts: { remainderHours?: number | null } = {}): DayCountResult {
+  const pre = stayBasisProblem(rule, admissionISO, dischargeISO);
+  if (pre) return pre;
   if (rule === "completed_24h_remainder") return completedWithRemainder(admissionISO, dischargeISO, opts.remainderHours ?? null);
   const r0 = payableDaysUnderRuleBase(rule, admissionISO, dischargeISO);
   if (r0.status !== "calculated" || rule !== "first_full_day" || !edges.length) return r0;
@@ -386,6 +394,23 @@ export function payableDaysUnderRule(rule: PolicyDayRule, admissionISO: string |
     if (meetsDayEdge(e, t)) extra++;
   }
   return extra ? { ...r0, grossNights: r0.grossNights + extra, wardNights: r0.wardNights + extra } : r0;
+}
+/** Round 8f: what a day count may not assume about the two timestamps (null when it may proceed).
+ *  - "Each day or part of a day", both given with times and the same instant: no time in hospital is established, so
+ *    the wording's "part of a day" is not shown to be met -- the actual times are asked for, never one day awarded.
+ *    (Under the other rules the same instants count 0 days, which awards nothing: completed periods, nights and whole
+ *    days are all absent from a zero-length stay.)
+ *  - A calendar-day rule (first full day, each night, each day or part of a day) counts the hospital's calendar dates:
+ *    two timestamps recorded at different UTC offsets do not say which time zone that is, so it is asked for. Elapsed
+ *    rules (complete 24 hours, with or without a remainder) use the exact instants and are unaffected.
+ * Invalid or offset-less timestamps are left to the rule's own checks. */
+function stayBasisProblem(rule: PolicyDayRule, admissionISO: string | null, dischargeISO: string | null): DayCountBlocked | null {
+  if (!admissionISO || !dischargeISO || !ISO_FULL.test(admissionISO) || !ISO_FULL.test(dischargeISO) || isoInstantProblem(admissionISO) || isoInstantProblem(dischargeISO)) return null;
+  if (rule === "calendar_day_inclusive" && Date.parse(admissionISO) === Date.parse(dischargeISO)) return { status: "blocked", reasonCode: "ZERO_LENGTH_STAY", message: `the admission and discharge times are the same moment (${admissionISO}), so how long the stay lasted is not known -- the actual admission and discharge times are needed` };
+  const calendarRule = rule === "first_full_day" || rule === "per_night" || rule === "calendar_day_inclusive";
+  const oa = recordedOffsetMinutes(admissionISO), od = recordedOffsetMinutes(dischargeISO);
+  if (calendarRule && oa !== od) return { status: "blocked", reasonCode: "MIXED_TIMEZONE_OFFSETS", message: `the admission (${admissionISO}) and discharge (${dischargeISO}) are recorded in different time zones, and the wording counts calendar days -- both times are needed in the hospital's local time` };
+  return null;
 }
 /** Each complete 24 hours from admission is a day; the remaining part counts as one more day when it is at least
  * `remainderHours` (a stay shorter than that counts no day). Both instants need their UTC offset. */

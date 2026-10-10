@@ -38,6 +38,7 @@ export const DOCS: Doc[] = [
   sched(9, "UND", "Brightwater Undated Cash", { 2: [RULE, "The day of admission counts as a full day if the insured person is admitted before 12 noon."] }),
   { key: "UNDE", id: id(110), owner: M.dana.id, members: [M.dana.id], product: "Brightwater Undated Cash", insurer: "Brightwater Assurance", policyNumber: "BW-UND", role: "endorsement", effectiveDate: null, hash: "sha256:bound-unde",
     pages: { 1: ["Brightwater Assurance", "Endorsement BW-UND-E1 to policy BW-UND", "The day of admission counts as a full day if the insured person is admitted before 6pm."].join("\n") } },
+  sched(13, "INC", "Brightwater Part-Day Cash", { 2: ["Hospital cash is payable for each day or part of a day in hospital."] }),
   sched(11, "R24", "Brightwater Day Income", { 2: ["Hospital cash is payable for each complete period of 24 hours in hospital."] }),
   { key: "AGE", id: id(112), owner: M.dana.id, members: [M.dana.id, M.eli.id, M.fay.id], product: "Brightwater Family Cash", insurer: "Brightwater Assurance", policyNumber: "BW-AGE", role: "schedule", effectiveDate: "2026-01-01", hash: "sha256:bound-age",
     pages: { 1: ["Brightwater Assurance", "Brightwater Family Cash - Schedule", "Insured: Dana Lim Wei Ting; Eli Lim Jun Hao; Fay Lim Xin Yi", "", row(["Benefit", "Adult", "Child"], W), row(["Hospital cash per day", "S$150", "S$80"], W)].join("\n"), 2: ["Brightwater Family Cash - conditions", RULE].join("\n") } },

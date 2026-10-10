@@ -199,7 +199,7 @@ test.describe.serial("synthetic household journey", () => {
     const c = card(page, bad);
     await c.getByRole("button", { name: "Delete" }).click();
     await c.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted");
+    await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     expect((await policies(page)).map((p) => p.id)).not.toContain(ids.bad);
 
     // Remove the child's policy, then the child's profile, through the UI.
@@ -207,7 +207,7 @@ test.describe.serial("synthetic household journey", () => {
     const cb = card(page, b);
     await cb.getByRole("button", { name: "Delete" }).click();
     await cb.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted");
+    await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     await page.goto("/family");
     const childCard = page.locator(".profile-card").filter({ has: page.locator(`input[value="${child}"]`) });
     await childCard.getByRole("button", { name: "Delete" }).click();

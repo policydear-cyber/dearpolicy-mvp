@@ -243,8 +243,12 @@ export function hospitalCash(a: {
   }
   if (a.ongoing) reqs.push(`${a.who}’s discharge date${needTimes ? " and time" : ""} (the stay is still ongoing; the benefit is worked out on the completed stay)`);
   else if (!okInput(a.admission) || !okInput(a.discharge)) reqs.push(`${a.who}’s admission and discharge dates${needTimes ? " and times (with the hospital’s time zone)" : ""}`);
+  // Round 8f: under "each day or part of a day", the same instant for admission and discharge establishes no time in
+  // hospital (usually the times were not recorded): the actual times are asked for -- one day is never awarded for it.
+  const sameInstant = rule === "calendar_day_inclusive" && okInput(a.admission) && okInput(a.discharge) && ISO_DT.test(String(a.admission!.value)) && ISO_DT.test(String(a.discharge!.value)) && Date.parse(String(a.admission!.value)) === Date.parse(String(a.discharge!.value));
+  if (sameInstant) reqs.push(`${a.who}’s actual admission and discharge times: both are given as the same moment (“${a.admission!.words}”; “${a.discharge!.words}”), so how long the stay lasted is not known`);
   const minStay = conds.find((c) => c.id === "c_min_stay");
-  if (minStay && okInput(a.admission) && okInput(a.discharge) && ISO_DT.test(String(a.admission!.value)) && ISO_DT.test(String(a.discharge!.value))) {
+  if (minStay && !sameInstant && okInput(a.admission) && okInput(a.discharge) && ISO_DT.test(String(a.admission!.value)) && ISO_DT.test(String(a.discharge!.value))) {
     const hours = (Date.parse(String(a.discharge!.value)) - Date.parse(String(a.admission!.value))) / 3_600_000;
     if (hours >= t.minimumStayHours!.value) { minStay.status = "established"; minStay.basis = "derived"; minStay.needs = null; }
     else return finish({ kind: "not_payable", calculator: "hospital_cash", subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, conditions: conds, requirements: [], amount: null, currency: r.currency, record: null, steps: [], reason: `the stay lasted ${Math.floor(hours)} hours and the wording requires at least ${t.minimumStayHours!.value}`, evidence: [r.evidence, t.minimumStayHours!.evidence], evidenceRequirements: [], who: a.who, product });

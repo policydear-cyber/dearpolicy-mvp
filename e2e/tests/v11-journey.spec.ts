@@ -445,7 +445,7 @@ test.describe.serial("V1.1 release journey", () => {
       const card = owner.locator(".document-card").filter({ hasText: p?.product_name ?? `${PREFIX}-AccidentGuard-M` }).first();
       await card.getByRole("button", { name: "Delete" }).click();
       await card.getByRole("button", { name: "Confirm delete" }).click();
-      await expect(owner.locator(".upload-panel .upload-status")).toContainText("was deleted", { timeout: 60_000 });
+      await expect(owner.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/, { timeout: 60_000 });
     });
     await newChat(owner);
     for (const q of V11_QUESTIONS.filter((x) => x.household === "A" && x.phase === "post")) await chatTurn(owner, "A", docs, "after deletion", q.id, q.text, composer(owner, q.text));

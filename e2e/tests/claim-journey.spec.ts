@@ -101,6 +101,15 @@ test.describe.serial("synthetic claim journey", () => {
       await expect(page.locator(".fact-question").last()).toBeVisible();
       await collapsed.locator("summary").click();
     }
+    if (!(await page.getByTestId("preliminary-assessment").count())) {
+      // Diagnostics (synthetic data only): what the saved answer carries when the preliminary notice is absent.
+      const h = await api<{ conversations: { id: string }[] }>(page, "/api/chat/history?scope=all");
+      const id = h.body.conversations?.[0]?.id;
+      const m = id ? await api<{ messages: { role: string; answer_json?: Record<string, unknown> | null }[] }>(page, `/api/chat/history/${id}`) : null;
+      const a = (m?.body.messages ?? []).filter((x) => x.role === "assistant").at(-1)?.answer_json as Record<string, any> | undefined;
+      const ans = (a?.answer ?? a) as Record<string, any> | undefined;
+      console.log("claim-journey diagnostics:", JSON.stringify({ mode: ans?.mode, assessmentKind: ans?.assessmentKind, summary: String(ans?.summary ?? "").slice(0, 300), questions: (ans?.questions ?? []).map((q: any) => [q.id, q.text]), claimItems: (ans?.claimItems ?? []).map((i: any) => [i.title, i.status]), factFinding: (ans?.factFinding ?? []).map((f: any) => [f.label, f.status, (f.nextQuestions ?? []).length]) }));
+    }
     await expect(page.getByTestId("preliminary-assessment")).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toContainText(/Critical illness/i);
