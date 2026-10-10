@@ -193,7 +193,8 @@ test.describe.serial("synthetic claim journey", () => {
       [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, [/Medical reimbursement/i]],
       [`${claimant}'s flight was delayed 9 hours on the trip. Can we claim?`, [/Travel/i]],
       [`${claimant} is unable to work since 2026-07-01 after an injury. What can be claimed?`, [/Disability/i]],
-      [`${PREFIX}-Relative died in a road accident on 2026-09-01. What can we claim?`, [/Accidental death/i]],
+      // The death plan is labelled "Death" (any cause; the accidental-death definition is a reviewer check).
+      [`${PREFIX}-Relative died in a road accident on 2026-09-01. What can we claim?`, [/· Death\b/, /Death certificate/]],
       [`${claimant} was diagnosed with stage 2 breast cancer on 2026-06-01. How much can I claim?`, [/Critical illness/i]],
     ];
     for (const [message, categories] of cases) {
