@@ -10,6 +10,6 @@ echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] h
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql-17 postgresql-17-pgvector >/dev/null
 sudo pg_ctlcluster 17 main start || sudo service postgresql start
-sudo -u postgres psql -qc "ALTER USER postgres PASSWORD 'postgres'"
+sudo runuser -u postgres -- psql -qc "ALTER USER postgres PASSWORD 'postgres'"
 npm ci --no-audit --no-fund
 echo "[trial] Codespace prepared: PostgreSQL 17 + pgvector, packages installed."
