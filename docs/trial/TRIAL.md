@@ -37,10 +37,9 @@ is retried and never finishes. This is expected; add the secret to use the trial
 10 Oct 2026). Use it instead of creating another one, because the allowance is for one codespace.
 1. Add the secret (above). A codespace reads secrets only when it starts, so if it is running, stop it first:
    <https://github.com/codespaces>, then **…** next to it, then **Stop codespace**.
-2. Click its name to open it. In the **Terminal** at the bottom, run once:
-   `git pull && bash scripts/trial/start.sh`.
-   This takes the latest code. It rebuilds in about 3–5 minutes and ends with *DearPolicy trial is running* in **LIVE**
-   mode.
+2. Click its name to open it. It already runs the latest code (updated on 10 Oct 2026, 22:40 SGT). Wait 1–2
+   minutes; the Terminal ends with *DearPolicy trial is running* in **LIVE** mode. (If the branch has moved on since,
+   run `git pull && bash scripts/trial/start.sh` in the Terminal.)
 3. Open the **Ports** tab, then the 🌐 globe icon next to **DearPolicy trial (3000)**.
 4. It already holds a test profile, "Simon Alastair Hartwell" (self, no date of birth), and one hx-text.pdf upload
    from the preflight check. Add his date of birth, and delete that upload on the Documents page before uploading the
