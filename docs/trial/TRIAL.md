@@ -33,9 +33,20 @@ is retried and never finishes. This is expected; add the secret to use the trial
 
 ## Start the trial
 
-**A codespace already exists:** `dearpolicy-trial-check` (2-core, stopped, nothing spent; it was used for the start-up
-check on 10 Oct 2026). After adding the secret, open <https://github.com/codespaces>, click its name, and wait 1–2
-minutes. Use it instead of creating another one -- the allowance is for one codespace. To start from scratch instead:
+**A codespace already exists:** `dearpolicy-trial-check` (2-core, nothing spent; used for the start-up checks on
+10 Oct 2026). Use it instead of creating another one, because the allowance is for one codespace.
+1. Add the secret (above). A codespace reads secrets only when it starts, so if it is running, stop it first:
+   <https://github.com/codespaces>, then **…** next to it, then **Stop codespace**.
+2. Click its name to open it. In the **Terminal** at the bottom, run once:
+   `git pull && bash scripts/trial/start.sh`.
+   This takes the latest code. It rebuilds in about 3–5 minutes and ends with *DearPolicy trial is running* in **LIVE**
+   mode.
+3. Open the **Ports** tab, then the 🌐 globe icon next to **DearPolicy trial (3000)**.
+4. It already holds a test profile, "Simon Alastair Hartwell" (self, no date of birth), and one hx-text.pdf upload
+   from the preflight check. Add his date of birth, and delete that upload on the Documents page before uploading the
+   three samples.
+
+To start from scratch instead:
 
 1. Open the repository on GitHub: `policydear-cyber/dearpolicy-mvp`.
 2. Click the green **Code** button, then the **Codespaces** tab.
@@ -96,7 +107,7 @@ minutes. Use it instead of creating another one -- the allowance is for one code
 ## Stop, restart or delete
 - **Stop** when you are done, so it does not use your free hours: GitHub, then **Code**, then **Codespaces**, then **…** next to your codespace, then **Stop codespace**. A stopped codespace keeps your household, uploads and spend.
 - **Restart:** click the codespace's name to open it again. The app starts by itself.
-- **Delete** only after the spend has been recorded (see *Budget*): **…**, then **Delete**. A new codespace does not start until a new allowance has been reserved.
+- **Delete** only after the spend has been recorded (see *Budget*): **…**, then **Delete**. A new codespace should get a new allowance first; nothing enforces this (see *Budget*).
 - **Free quota:** GitHub gives personal accounts 120 core-hours of Codespaces a month. On the 2-core machine that is **60 hours of running time**. Stopped codespaces don't use hours but count toward 15 GB of free storage. GitHub also stops an idle codespace after 30 minutes by default.
 
 ## If something goes wrong
