@@ -12,9 +12,9 @@ import { checkRequestOrigin } from "@/lib/http/csrf";
 
 const GOOD: Record<string, string> = {
   CODESPACES: "true", TRIAL_MODE: "1", NODE_ENV: "test", DATABASE_URL: "postgres://postgres:postgres@localhost:5432/dearpolicy_trial",
-  OPENAI_API_KEY: "test-value-not-a-key", CHAT_MODEL: "openai:gpt-6-luna", JUDGEMENT_MODEL: "openai:gpt-6-luna", NARRATION_MODEL: "openai:gpt-6-luna", READING_MODEL: "openai:gpt-6-luna",
+  OPENAI_API_KEY: "test-value-not-a-key", TRIAL_CAP_USD: "0.15", TRIAL_ALLOCATION_ID: "trial-codespace-1", CODESPACE_NAME: "silver-train-x7", CHAT_MODEL: "openai:gpt-6-luna", JUDGEMENT_MODEL: "openai:gpt-6-luna", NARRATION_MODEL: "openai:gpt-6-luna", READING_MODEL: "openai:gpt-6-luna",
 };
-const CLEAR = ["VERCEL", "VERCEL_ENV", "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "PINECONE_API_KEY", "VIRUSTOTAL_API_KEY", "DEARPOLICY_DETERMINISTIC_MODEL", "TRIAL_CAP_USD", "MODEL_PRESET"];
+const CLEAR = ["VERCEL", "VERCEL_ENV", "OPENAI_BASE_URL", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "PINECONE_API_KEY", "VIRUSTOTAL_API_KEY", "DEARPOLICY_DETERMINISTIC_MODEL", "TRIAL_CAP_USD", "TRIAL_ALLOCATION_ID", "MODEL_PRESET"];
 /** modelFor() reads process.env, so each case runs with process.env set to exactly that environment. */
 function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
   const saved = { ...process.env };
@@ -28,9 +28,9 @@ let n = 0;
 async function t(name: string, fn: () => void | Promise<void>) { await fn(); n++; console.log("PASS " + name); }
 
 async function main() {
-  await t("T1 a Codespace in trial mode with a local database passes (live; cap 0.25 by default)", () => {
+  await t("T1 a Codespace in trial mode with a local database passes (live; cap = the allocation)", () => {
     const r = withEnv(GOOD, () => trialSafetyChecks(process.env));
-    assert.equal(r.preflight, false); assert.equal(r.capUsd, 0.25); assert.equal(`${r.choice.provider}:${r.choice.model}`, "openai:gpt-6-luna");
+    assert.equal(r.preflight, false); assert.equal(r.capUsd, 0.15); assert.equal(`${r.choice.provider}:${r.choice.model}`, "openai:gpt-6-luna");
   });
   await t("T2 no secret: preflight (the placeholder key), still allowed", () => assert.equal(withEnv({ ...GOOD, OPENAI_API_KEY: "preflight-no-key-set" }, () => trialSafetyChecks(process.env)).preflight, true));
   await t("T3 refused outside a Codespace (CODESPACES unset)", () => refused({ ...GOOD, CODESPACES: undefined }, /GitHub Codespace/));
@@ -42,31 +42,32 @@ async function main() {
     for (const k of ["GEMINI_API_KEY", "ANTHROPIC_API_KEY", "PINECONE_API_KEY", "DEARPOLICY_DETERMINISTIC_MODEL"]) refused({ ...GOOD, [k]: "x" }, new RegExp(k));
   });
   await t("T8 refused unless every role is openai:gpt-6-luna", () => { refused({ ...GOOD, READING_MODEL: "openai:gpt-5-mini" }, /READING_MODEL/); refused({ ...GOOD, CHAT_MODEL: undefined }, /CHAT_MODEL/); });
-  await t("T9 the cap: > 0 and <= 1.00", () => { refused({ ...GOOD, TRIAL_CAP_USD: "5" }, /TRIAL_CAP_USD/); refused({ ...GOOD, TRIAL_CAP_USD: "0" }, /TRIAL_CAP_USD/); assert.equal(withEnv({ ...GOOD, TRIAL_CAP_USD: "0.10" }, () => trialSafetyChecks(process.env)).capUsd, 0.1); });
+  await t("T9 the cap: set, > 0 and <= 0.25; an allocation id and the Codespace name are required", () => { refused({ ...GOOD, TRIAL_CAP_USD: "0.30" }, /TRIAL_CAP_USD/); refused({ ...GOOD, TRIAL_CAP_USD: "0" }, /TRIAL_CAP_USD/); refused({ ...GOOD, TRIAL_CAP_USD: undefined }, /TRIAL_CAP_USD/); refused({ ...GOOD, TRIAL_ALLOCATION_ID: undefined }, /TRIAL_ALLOCATION_ID/); refused({ ...GOOD, CODESPACE_NAME: undefined }, /CODESPACE_NAME/); assert.equal(withEnv({ ...GOOD, TRIAL_CAP_USD: "0.10" }, () => trialSafetyChecks(process.env)).capUsd, 0.1); });
   await t("T10 refused without a key at all, or with NODE_ENV=production", () => { refused({ ...GOOD, OPENAI_API_KEY: undefined }, /OPENAI_API_KEY/); refused({ ...GOOD, NODE_ENV: "production" }, /NODE_ENV/); });
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "trial-ledger-"));
   const file = path.join(dir, "ledger.json");
+  const BIND = { allocationId: "trial-codespace-1", codespace: "silver-train-x7" };
   await t("T11 the trial ledger is persisted after every reservation and settlement, and survives a restart", () => {
-    const a = new PersistentTrialLedger(file, 0.25);
+    const a = new PersistentTrialLedger(file, 0.25, BIND);
     const r = a.reserve(0.01, 1000, 100); assert.ok(!("refused" in r));
     assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).inflightUsd, 0.01, "an open reservation is on disk");
     a.settle(r as any, 0.004);
     const onDisk = JSON.parse(fs.readFileSync(file, "utf8"));
     assert.equal(onDisk.spentUsd, 0.004); assert.equal(onDisk.inflightUsd, 0); assert.equal(onDisk.calls, 1);
-    const b = new PersistentTrialLedger(file, 0.25);
+    const b = new PersistentTrialLedger(file, 0.25, BIND);
     assert.equal(b.spentUsd, 0.004, "a restart keeps the spend"); assert.equal(b.state().restarts, 1);
     assert.ok(Math.abs(b.remainingUsd - 0.246) < 1e-9);
   });
   await t("T12 a reservation never settled (the process died mid-call) is counted as spent at the next start", () => {
-    const a = new PersistentTrialLedger(file, 0.25);
+    const a = new PersistentTrialLedger(file, 0.25, BIND);
     a.reserve(0.02, 1000, 100);
-    const b = new PersistentTrialLedger(file, 0.25);
+    const b = new PersistentTrialLedger(file, 0.25, BIND);
     assert.ok(Math.abs(b.spentUsd - 0.024) < 1e-9, String(b.spentUsd));
   });
   await t("T13 at the cap every model request is refused before it is sent (spend carried over from earlier runs)", async () => {
-    fs.writeFileSync(file, JSON.stringify({ capUsd: 0.25, spentUsd: 0.2495, inflightUsd: 0, calls: 40, refusals: 0, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), restarts: 3 }));
-    const ledger = new PersistentTrialLedger(file, 0.25);
+    fs.writeFileSync(file, JSON.stringify({ capUsd: 0.25, spentUsd: 0.2495, inflightUsd: 0, calls: 40, refusals: 0, startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), restarts: 3, ...BIND }));
+    const ledger = new PersistentTrialLedger(file, 0.25, BIND);
     let sent = 0;
     const target = { fetch: (async () => { sent++; return new Response("{}", { status: 200 }); }) as typeof fetch };
     const g = installFetchGuard({ ledger, env: {} as unknown as NodeJS.ProcessEnv, target });
@@ -75,7 +76,7 @@ async function main() {
     assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).refusals, 1, "the refusal is persisted too");
   });
   await t("T14 preflight refuses every model request; other providers and Pinecone are refused in any mode", async () => {
-    const ledger = new PersistentTrialLedger(path.join(dir, "l2.json"), 0.25);
+    const ledger = new PersistentTrialLedger(path.join(dir, "l2.json"), 0.25, BIND);
     let sent = 0;
     const target = { fetch: (async () => { sent++; return new Response("{}", { status: 200 }); }) as typeof fetch };
     installFetchGuard({ ledger, env: {} as unknown as NodeJS.ProcessEnv, preflightRefusal: TRIAL_PREFLIGHT_REFUSAL, target });
@@ -83,6 +84,22 @@ async function main() {
     await assert.rejects(() => target.fetch("https://generativelanguage.googleapis.com/v1beta/models/x:generateContent", { method: "POST", body: "{}" }), /refused/);
     await assert.rejects(() => target.fetch("https://idx-abc.svc.pinecone.io/records/namespaces/x/upsert", { method: "POST", body: "{}" }), /refused/);
     assert.equal(sent, 0);
+  });
+  await t("T16 a damaged spend record is refused, never read as zero spend", () => {
+    const f = path.join(dir, "damaged.json");
+    for (const body of ["{not json", "", JSON.stringify({ capUsd: 0.25, inflightUsd: 0, startedAt: "x", ...BIND }), JSON.stringify({ capUsd: 0.25, spentUsd: -1, inflightUsd: 0, startedAt: "x", ...BIND })]) {
+      fs.writeFileSync(f, body);
+      assert.throws(() => new PersistentTrialLedger(f, 0.25, BIND), /not valid JSON|incomplete or damaged/, JSON.stringify(body));
+      assert.equal(fs.readFileSync(f, "utf8"), body, "the damaged record is left as it was (not overwritten)");
+    }
+  });
+  await t("T17 a spend record of another allocation, another Codespace or another cap is refused", () => {
+    const f = path.join(dir, "foreign.json");
+    const rec = { capUsd: 0.25, spentUsd: 0.1, inflightUsd: 0, calls: 3, refusals: 0, startedAt: new Date().toISOString(), restarts: 0, ...BIND };
+    fs.writeFileSync(f, JSON.stringify({ ...rec, allocationId: "trial-codespace-0" })); assert.throws(() => new PersistentTrialLedger(f, 0.25, BIND), /allocation/);
+    fs.writeFileSync(f, JSON.stringify({ ...rec, codespace: "another-codespace" })); assert.throws(() => new PersistentTrialLedger(f, 0.25, BIND), /Codespace/);
+    fs.writeFileSync(f, JSON.stringify({ ...rec, capUsd: 0.2 })); assert.throws(() => new PersistentTrialLedger(f, 0.25, BIND), /cap/);
+    fs.writeFileSync(f, JSON.stringify(rec)); assert.ok(Math.abs(new PersistentTrialLedger(f, 0.25, BIND).spentUsd - 0.1) < 1e-9, "its own record carries over");
   });
   await t("T15 Codespaces forwarding: this Codespace's own public origin is same-origin; any other Origin stays refused by the app's unchanged CSRF check", () => {
     const env = { CODESPACES: "true", CODESPACE_NAME: "silver-train-x7", GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev" } as unknown as NodeJS.ProcessEnv;

@@ -669,7 +669,9 @@ function columnCurrency(b: FigureBinding, rangeText: string): string | null {
 }
 
 /** Rule 2: is `value` in `currency` grounded by `b` (and, when `sentence` is given, for that sentence)? Null when it is. */
-function groundProblem(b: FigureBinding | undefined, value: number, currency: string, ctx: Ctx, sentence: string | null, opts: { benefit?: string } = {}): string | null {
+/** "the same benefit lists S$150,000", "that benefit is S$80": a sentence that refers back to the benefit named just before. */
+const BENEFIT_BACK_REFERENCE = /\b(?:the same|that|this)\s+(?:benefit|item|row|cover)\b/i;
+function groundProblem(b: FigureBinding | undefined, value: number, currency: string, ctx: Ctx, sentence: string | null, opts: { benefit?: string; previous?: string | null } = {}): string | null {
   if (!b || typeof b !== "object") return "the figure has no citation of its own";
   if (currency === "$") return "a bare $ names no currency";
   const doc = ctx.docs.get(b.policyId);
@@ -707,7 +709,8 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
     const cells = rowCells(passageRows(shown).find((r) => amountAppears(value, r)) ?? "");
     if (cells.some((c) => c.trim().replace(/[.)]$/, "") === benefit.replace(/[.)]$/, ""))) benefit = rowLabelOf(cells);
   }
-  if (sentence != null && !namesBenefit(sentence, benefit)) return "the sentence does not name the benefit the figure is printed for";
+  // (A sentence that refers back to "the same benefit" names it when the sentence just before it names that benefit.)
+  if (sentence != null && !namesBenefit(sentence, benefit) && !(BENEFIT_BACK_REFERENCE.test(sentence) && opts.previous != null && namesBenefit(opts.previous, benefit))) return "the sentence does not name the benefit the figure is printed for";
   if (sentence != null) { const other = otherRowProblem(sentence, value, shown, rangeText, benefit); if (other) return other; }
   const row = benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
   const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner, doc, sentence, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, sentence, ctx);
@@ -1081,6 +1084,8 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const drop = new Map<typeof fields[number], Set<string>>();
   const bad = (x: typeof all[number], figure: string, reason: string) => { problems.push({ where: x.field.where, figure, sentence: x.sentence, reason }); (drop.get(x.field) ?? drop.set(x.field, new Set()).get(x.field)!).add(x.sentence); };
   const previousOf = (x: typeof all[number]) => { const i = all.indexOf(x); return i > 0 && all[i - 1].field === x.field ? all[i - 1].sentence : null; };
+  /** The sentence read just before, in the order shown (the summary, then each detail). */
+  const precedingOf = (x: typeof all[number]) => { const i = all.indexOf(x); return i > 0 ? all[i - 1].sentence : null; };
   // Round 8: a policy whose amendment document was removed is not thereby "not amended".
   const flaggedCited = [...new Set([...(answer.citations ?? []).map((c) => c?.policyId), ...bindings.map((b) => b?.policyId)].filter((id): id is string => !!id && (ctx.removals.get(id) ?? []).some((r) => r.kind === "amendment_removed")))];
   if (flaggedCited.length) for (const x of all) if (SAYS_NOT_AMENDED.test(x.sentence) && !STATES_REMOVAL_LIMITATION.test(x.sentence)) bad(x, "", "an amendment document for this policy was removed from the library; that does not establish that the policy has no amendments or that nothing changed");
@@ -1093,7 +1098,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
       const own = bindings.filter((b) => b && norm(b.sentence) === key && same(b.value, f.value) && b.currency === f.currency);
       const reasons: string[] = [];
       let ok = false;
-      for (const b of own) { const p = groundProblem(b, f.value, f.currency, ctx, x.sentence) ?? removalProblem(b, x.sentence, previousOf(x), ctx); if (!p) { ok = true; break; } reasons.push(p); }
+      for (const b of own) { const p = groundProblem(b, f.value, f.currency, ctx, x.sentence, { previous: precedingOf(x) }) ?? removalProblem(b, x.sentence, previousOf(x), ctx); if (!p) { ok = true; break; } reasons.push(p); }
       if (ok) continue;
       for (const c of computations.filter((c) => c && norm(c.sentence) === key)) { const p = computationProblem(c, f, x.sentence, ctx); if (!p) { ok = true; break; } if (same(c.result?.value, f.value)) reasons.push(p); }
       if (ok) continue;

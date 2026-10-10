@@ -10,6 +10,7 @@
  *   K  (ingest-live-4) an endorsement is linked to its policy's people by the same policy number and product when the
  *      insurer's name is read differently; a number alone on another product is not enough.
  *   R  (ingest-live-4) the one gate repair names only what the check said: no example limitation the model can copy.
+ *   C  (ingest-live-5b) a child / adult comparison cited from the table row: the correct one passes, swapped figures fail.
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
@@ -252,6 +253,66 @@ async function main() {
     assert.doesNotMatch(String(asked[0].error), /removed|amendment document/i, String(asked[0].error));
     assert.doesNotMatch(t.visible, /removed from the library|document was removed/i, t.visible);
     assert.match(t.visible, /S\$40,000/, t.visible);
+  });
+
+  // ------------------------------------------------------------------------------------------- Q2 child vs adult (run 5b)
+  // ingest-live-5b: both supported figures were refused. S$40,000 was cited from the table row without a select_table_value
+  // binding ("the figure is not bound to a column"), and S$150,000 sat in a sentence saying "the same benefit"
+  // ("the sentence does not name the benefit"). Now: an unbound figure printed in exactly ONE person column of its row
+  // stands only when that column applies to the person it is stated for; "the same benefit" names the benefit the
+  // sentence just before named.
+  const ADB = "Accidental death or permanent total disablement (lump sum)";
+  const Q2C = ["If something happened to Isla in an accident, how much is the accidental death payout for her? Is it the same as mine?"];
+  const q2cHead = [
+    () => [call("resolve_person", { mention: "Isla" })],
+    () => [call("resolve_person", { mention: "me" })],
+    () => [call("policies_for", { topic: "accidental death", subject_id: isla }), call("policies_for", { topic: "accidental death", subject_id: simon })],
+    () => [call("search_passages", { k: 10, query: "accidental death benefit amount child adult death due to accident exclusions conditions", policy_ids: [SAFE], subject_id: isla })],
+  ];
+  const row = (v: ScriptView) => hit(v, /S\$\s?150,000/);
+  const comparison = (sentences: (v: ScriptView) => Record<string, unknown>[]) => run([{ steps: [...q2cHead,
+    (v) => [call("final_answer", { subject_id: isla, sentences: sentences(v) })],
+    (v) => [call("final_answer", { subject_id: isla, sentences: sentences(v) })],
+  ] }], Q2C);
+  const live2 = await comparison((v) => [
+    { text: "For Isla, the SafeStay Family Hospital Cash & Personal Accident Plan lists S$40,000 for “Accidental death or permanent total disablement (lump sum)” in the Child column (page 1).", benefit: ADB, subject_id: isla, evidence_ids: [row(v)] },
+    { text: "It is not the same as yours: the same benefit lists S$150,000 in the Adult column, so Isla’s listed amount is lower than yours (page 1).", benefit: ADB, subject_id: simon, evidence_ids: [row(v)] },
+  ]);
+  show("Q2 comparison (run 5b)", live2[0]);
+  await check("C1 Q2 (run 5b, replayed): the correct child / adult comparison passes the save-time check first time -- S$40,000 for Isla, S$150,000 for the speaker, no repair", () => {
+    const t = live2[0];
+    assert.match(t.visible, /S\$40,000/, t.visible); assert.match(t.visible, /S\$150,000/, t.visible);
+    assert.deepEqual(t.trace.gate ?? [], []);
+    assert.equal((t.trace.toolCalls as any[]).filter((x) => x.name === "final_answer" && !x.ok).length, 0, "no repair was needed");
+  });
+  const swapped = await comparison((v) => [
+    { text: "For Isla, the SafeStay Family Hospital Cash & Personal Accident Plan lists S$150,000 for “Accidental death or permanent total disablement (lump sum)” (page 1).", benefit: ADB, subject_id: isla, evidence_ids: [row(v)] },
+    { text: "It is not the same as yours: the same benefit lists S$40,000 for you (page 1).", benefit: ADB, subject_id: simon, evidence_ids: [row(v)] },
+  ]);
+  show("Q2 swapped", swapped[0]);
+  await check("C2 swapped figures fail: S$150,000 (the Adult column) stated for Isla and S$40,000 (the Child column) stated for the adult are both refused, even after the one repair", () => {
+    const t = swapped[0];
+    assert.doesNotMatch(t.visible, /S\$150,000/, t.visible); assert.doesNotMatch(t.visible, /S\$40,000/, t.visible);
+    assert.equal((t.trace.toolCalls as any[]).filter((x) => x.name === "final_answer" && !x.ok).length, 1, "the one repair was asked");
+    assert.ok((t.trace.gate as any[]).some((g) => /S\$150,000/.test(g.figure)) && (t.trace.gate as any[]).some((g) => /S\$40,000/.test(g.figure)), JSON.stringify(t.trace.gate));
+  });
+  const para2 = await comparison((v) => [
+    { text: "For you, SafeStay’s “Accidental death or permanent total disablement (lump sum)” is S$150,000.", benefit: ADB, subject_id: simon, evidence_ids: [row(v)] },
+    { text: "For Isla, that benefit is S$40,000, so hers is lower than yours.", benefit: ADB, subject_id: isla, evidence_ids: [row(v)] },
+  ]);
+  show("Q2 paraphrase", para2[0]);
+  await check("C3 paraphrase / layout (adult first, “that benefit”): both figures pass", () => {
+    const t = para2[0];
+    assert.match(t.visible, /S\$150,000/, t.visible); assert.match(t.visible, /S\$40,000/, t.visible);
+    assert.deepEqual(t.trace.gate ?? [], []);
+  });
+  const noRef = await comparison((v) => [
+    { text: "For Isla, SafeStay lists S$40,000 for “Accidental death or permanent total disablement (lump sum)”.", benefit: ADB, subject_id: isla, evidence_ids: [row(v)] },
+    { text: "Yours is S$150,000.", benefit: ADB, subject_id: simon, evidence_ids: [row(v)] },
+  ]);
+  await check("C4 a sentence that neither names the benefit nor refers back to it still fails (“Yours is S$150,000.”)", () => {
+    const t = noRef[0];
+    assert.doesNotMatch(t.visible, /S\$150,000/, t.visible); assert.match(t.visible, /S\$40,000/, t.visible);
   });
 
   const failed = results.filter((r) => !r.ok);

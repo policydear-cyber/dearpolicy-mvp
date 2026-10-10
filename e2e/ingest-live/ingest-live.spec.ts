@@ -42,7 +42,8 @@ test("live ingestion journey", async ({ page }) => {
   test.setTimeout(Number(process.env.INGEST_LIVE_TEST_TIMEOUT_MS ?? 75 * 60_000));
   fs.mkdirSync(SHOTS, { recursive: true });
   const household = readHousehold(FIXTURE);
-  const qs = readQuestions(FIXTURE);
+  // A focused run reads another questions file of the fixture (INGEST_LIVE_QUESTIONS, validated by run.ts).
+  const qs = readQuestions(FIXTURE, process.env.INGEST_LIVE_QUESTIONS || "QUESTIONS.json");
   const journey: Record<string, unknown> = { preflight: PREFLIGHT, startedAt: new Date().toISOString(), steps: [] as unknown[] };
   const step = (name: string, extra: Record<string, unknown> = {}) => { (journey.steps as unknown[]).push({ name, at: new Date().toISOString(), ...extra }); write("journey.json", { ...journey, failures }); };
 
@@ -175,7 +176,7 @@ test("live ingestion journey", async ({ page }) => {
   }
   step("conversations asked", { conversations: qs.conversations.length, turns: transcript.length });
 
-  if (!PREFLIGHT) {
+  if (!PREFLIGHT && qs.reopen.length) {
     // 5. Reopen the saved conversation from history and ask a follow-up.
     await page.goto("/chat");
     await page.locator("details.chat-history > summary").click();

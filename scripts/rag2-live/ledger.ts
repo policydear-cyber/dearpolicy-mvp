@@ -16,9 +16,13 @@ export const EXERCISE_CAP_USD = 0.5;
 export type LedgerRun = {
   run_id: string; tested_code_sha: string; request_sha: string; at: string; preflight: boolean; run_cap_usd: number;
   spent_usd: number; reserved_unsettled_usd: number; calls: number; refused: number; failed: number; note?: string;
+  /** "trial_allocation": a fixed allowance reserved for the hands-on trial Codespace (scripts/trial/isolation.mjs). While
+   * "open" its whole amount counts as reserved_unsettled_usd, so no automated run can spend it; "closed" after the trial's
+   * spend is reconciled into spent_usd. Absent: an automated run. */
+  kind?: "trial_allocation"; status?: "open" | "closed";
 };
 export type Ledger = { exercise_cap_usd: number; runs: LedgerRun[] };
-export type RunRequest = { run_id: string; scenarios: string[]; run_cap_usd: number; preflight: boolean };
+export type RunRequest = { run_id: string; scenarios: string[]; run_cap_usd: number; preflight: boolean; questions?: string };
 
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 export function remainingUsd(l: Ledger): number {
@@ -34,11 +38,20 @@ export function validateRequest(r: any, kind: "rag2" | "ingest" = "rag2"): RunRe
   const cap = Number(r.run_cap_usd);
   if (!Number.isFinite(cap) || cap <= 0 || cap > EXERCISE_CAP_USD) fail("run_cap_usd must be > 0 and <= 0.50");
   if (typeof r.preflight !== "boolean") fail("preflight must be true or false");
-  return { run_id: r.run_id, scenarios: r.scenarios, run_cap_usd: cap, preflight: r.preflight };
+  // A focused ingest run: another questions file of the fixture, sealed with its own EXPECTED-<name>.json.
+  if (r.questions !== undefined && (kind !== "ingest" || typeof r.questions !== "string" || !/^QUESTIONS-[a-z0-9]{1,20}\.json$/.test(r.questions))) fail("questions: only for an ingest run, a fixture file named QUESTIONS-<lowercase letters/digits>.json");
+  return { run_id: r.run_id, scenarios: r.scenarios, run_cap_usd: cap, preflight: r.preflight, ...(r.questions ? { questions: r.questions } : {}) };
 }
 export function validateLedger(l: any): Ledger {
   if (!l || typeof l !== "object" || !Array.isArray(l.runs)) throw new Error("LEDGER.json: { exercise_cap_usd, runs: [] } expected");
   if (Number(l.exercise_cap_usd) !== EXERCISE_CAP_USD) throw new Error("LEDGER.json: exercise_cap_usd must be 0.50");
+  for (const r of l.runs as LedgerRun[]) {
+    if (r.kind === undefined) continue;
+    if (r.kind !== "trial_allocation") throw new Error(`LEDGER.json: unknown entry kind "${r.kind}" (${r.run_id})`);
+    if (r.status === "open" && !(Number(r.reserved_unsettled_usd) > 0 && Number(r.spent_usd) === 0)) throw new Error(`LEDGER.json: open trial allocation ${r.run_id} must reserve its allowance and record no spend yet`);
+    if (r.status === "closed" && Number(r.reserved_unsettled_usd) !== 0) throw new Error(`LEDGER.json: closed trial allocation ${r.run_id} must have its spend reconciled into spent_usd (reserved_unsettled_usd 0)`);
+    if (r.status !== "open" && r.status !== "closed") throw new Error(`LEDGER.json: trial allocation ${r.run_id} must be open or closed`);
+  }
   return l as Ledger;
 }
 /** The cap this run may use, or why it may not start. */
@@ -70,7 +83,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
       const req = validateRequest(JSON.parse(fs.readFileSync(need("request"), "utf8")), arg("kind") === "ingest" ? "ingest" : "rag2");
       const p = planRun(ledger, req);
       if (!p.ok) throw new Error(p.reason);
-      const out = { run_id: req.run_id, scenarios: req.scenarios.join(","), cap: String(p.capUsd), remaining: String(p.remainingUsd), preflight: String(req.preflight) };
+      const out = { run_id: req.run_id, scenarios: req.scenarios.join(","), cap: String(p.capUsd), remaining: String(p.remainingUsd), preflight: String(req.preflight), questions: req.questions ?? "QUESTIONS.json", expected: req.questions ? req.questions.replace(/^QUESTIONS/, "EXPECTED") : "EXPECTED.json" };
       if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, Object.entries(out).map(([k, v]) => `${k}=${v}`).join("\n") + "\n");
       console.log(`run ${req.run_id}: scenarios ${out.scenarios}; exercise remaining US$${p.remainingUsd}; run cap US$${p.capUsd} (request ${req.run_cap_usd}); preflight ${req.preflight}`);
     } else if (cmd === "append") {

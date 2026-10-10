@@ -1,0 +1,60 @@
+name: trial startup (dev container as a new Codespace; preflight, no secret)
+
+# The owner's hands-on trial (docs/trial/TRIAL.md) started the way a NEW Codespace starts it: the same image,
+# postCreateCommand and postStartCommand from .devcontainer/devcontainer.json, with CODESPACES=true and a made-up
+# CODESPACE_NAME. No secret is available to this workflow, so the trial runs in PREFLIGHT (every model call refused,
+# US$0). It checks the server survives postStartCommand, the forwarded-address CSRF handling, the real pages (household,
+# three uploads, one chat question), a restart, and a container stop / start. It cannot check GitHub's own port
+# forwarding or the private-port sign-in: those exist only in a real Codespace.
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/conversational-rag-v1-1]
+    paths: [".devcontainer/**", "scripts/trial/**", "e2e/support/trial-*.ts", ".github/workflows/trial-startup.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      SIM: --remote-env CODESPACES=true --remote-env CODESPACE_NAME=ci-sim-codespace --remote-env GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN=app.github.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g @devcontainers/cli@0.88.0
+      - name: "New Codespace: create the dev container (postCreate: PostgreSQL + pgvector, npm ci; postStart: start.sh)"
+        run: devcontainer up --workspace-folder . $SIM 2>&1 | tee up-first.log
+      - name: "Browser for the journey (inside the container)"
+        run: devcontainer exec --workspace-folder . $SIM bash -lc "npx playwright install --with-deps chromium > /tmp/pw-install.log 2>&1 || { tail -30 /tmp/pw-install.log; exit 1; }"
+      - name: "Checks: server after postStart, CSRF on the forwarded address, household + uploads + one chat answer, restart"
+        run: devcontainer exec --workspace-folder . $SIM bash scripts/trial/startup-check.sh first
+      - name: "Stop the Codespace and start it again (postStart runs again)"
+        run: |
+          id=$(docker ps -q --filter "label=devcontainer.local_folder=$GITHUB_WORKSPACE")
+          test -n "$id"
+          docker stop "$id"
+          devcontainer up --workspace-folder . $SIM 2>&1 | tee up-again.log
+          devcontainer exec --workspace-folder . $SIM bash scripts/trial/startup-check.sh after-restart
+      - name: "Isolation still refuses a remote database inside the container"
+        run: |
+          set +e
+          devcontainer exec --workspace-folder . $SIM bash -lc "TRIAL_DATABASE_URL=postgres://u:p@db.example.com:5432/x bash scripts/trial/start.sh" > iso.log 2>&1
+          rc=$?
+          cat iso.log
+          test "$rc" -ne 0 && grep -q "refused: TRIAL_DATABASE_URL points at" iso.log
+      - name: Results (synthetic data only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trial-startup
+          path: |
+            e2e-results/trial-startup
+            .trial/server.log
+            .trial/build.log
+            up-*.log
+          retention-days: 14

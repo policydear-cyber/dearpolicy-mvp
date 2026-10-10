@@ -17,6 +17,7 @@ import { moneyFiguresIn, sentencesOf } from "@/lib/chat/answer-verification";
 import { STATES_REMOVAL_LIMITATION } from "@/lib/claims/person";
 import { printedPeriodsOf } from "@/lib/chat/assertions";
 import { evidenceKey, toFigureBinding, type EvidenceRef } from "../evidence";
+import { parseTables } from "../tables";
 import type { ComputeOk, TableValueOperand } from "../compute";
 import type { ToolContext } from "../tools";
 import type { RagLoopState } from "./types";
@@ -258,6 +259,17 @@ export function keepLimitationWithFigure(body: string[]): string[] {
   return out;
 }
 
+/** The column of the one value cell, in the tables of a cited passage, that prints `value` (null when none or several). */
+function printedColumn(ref: EvidenceRef, value: number): string | null {
+  const hits = new Set<string>();
+  let cells = 0;
+  for (const t of parseTables(ref.policyId, [{ page: ref.page.start, text: evidenceTextOf(ref) }])) for (const r of t.rows) r.cells.forEach((c, i) => {
+    const col = t.columns[i];
+    if (!c || !col || col.kind === "label" || !numbersIn(c.text).some((n) => same(n, value))) return;
+    cells++; hits.add(col.header || col.leaf);
+  });
+  return cells === 1 && hits.size === 1 ? [...hits][0] : null;
+}
 export function composeFinal(args: { sentences: Record<string, unknown>[]; nextSteps?: unknown; subjectId?: string | null }, ctx: Ctx): Composed {
   const out: Composed = { sentences: [], nextSteps: [], figureBindings: [], computations: [], calculations: [], calcs: [], dropped: [], notes: [], evidenceIds: [], subjectId: args.subjectId && ctx.householdIds.has(args.subjectId) ? args.subjectId : ctx.state.subjectId };
   // Agent P: every drop is categorised (for an accurate, user-facing outcome) and placed (for meaning checks).
@@ -293,6 +305,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     const leak = internalIdsIn(text);
     if (leak.length) { drop(text, `shows an internal id (${leak.slice(0, 3).join(", ")})`); continue; }
     const subjectId = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : out.subjectId;
+    // Round 8d: the person a sentence explicitly says it is about (its own subject_id) is the person its figures are
+    // bound to -- not whoever a cited passage was searched for (a comparison cites one table row for two people). The
+    // save-time check then tests that person against the document's members and the column the figure is printed in.
+    const explicitSubject = typeof s.subject_id === "string" && ctx.householdIds.has(s.subject_id) ? s.subject_id : null;
     const unknownEv = evIds.filter((id) => !ctx.state.evidence[id]);
     if (unknownEv.length) { drop(text, `cites evidence no tool returned (${unknownEv.join(", ")})`); continue; }
     // Agent F (D6): evidence remembered from an earlier turn is usable only while its document is still this
@@ -379,7 +395,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // A printed table value the sentence (or its computation) cites.
       const ops: TableValueOperand[] = [...values.map((v) => v!.operand), ...(result ? [...ctx.tools.values.values()].map((v) => v.operand).filter((o) => result.evidence.some((e) => evidenceKey(e) === evidenceKey(o.evidence))) : [])];
       const op = ops.find((o) => o.valueKind === "money" && o.cents != null && same(o.cents / 100, f.value) && o.currency === f.currency);
-      let b: FigureBinding | null = op && subjectId ? toFigureBinding({ ...op.evidence, subjectId: op.evidence.subjectId ?? subjectId }, wordedBenefit(op.benefit, evidenceTextOf(op.evidence), op.evidence.table?.cell?.text), f.value, f.currency) : null;
+      let b: FigureBinding | null = op && subjectId ? toFigureBinding({ ...op.evidence, subjectId: explicitSubject ?? op.evidence.subjectId ?? subjectId }, wordedBenefit(op.benefit, evidenceTextOf(op.evidence), op.evidence.table?.cell?.text), f.value, f.currency) : null;
       // Round 7 (A3): the passages a figure may be printed in are the cited evidence AND the evidence of the table
       // values the sentence cites -- each read with its row context (the whole row, its headers), so a figure printed
       // beside the selected cell (an endorsement's earlier "Existing" amount) is found.
@@ -392,7 +408,11 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         const policyText = withoutInstructions(evidenceTextOf(ref));
         const inCell = !!ref.table?.cell && numbersIn(ref.table.cell.text).some((n) => same(n, f.value));
         // A figure printed elsewhere in the row than the selected cell is bound to the row, not to that cell's column.
-        b = benefit && numbersIn(policyText).some((n) => same(n, f.value)) ? toFigureBinding({ ...ref, ...(ref.table && !inCell ? { table: null } : {}), subjectId: ref.subjectId ?? subjectId }, benefit, f.value, f.currency) : null;
+        b = benefit && numbersIn(policyText).some((n) => same(n, f.value)) ? toFigureBinding({ ...ref, ...(ref.table && !inCell ? { table: null } : {}), subjectId: explicitSubject ?? ref.subjectId ?? subjectId }, benefit, f.value, f.currency) : null;
+        // Round 8d: a figure cited from a table passage (not from select_table_value) is bound to the column its row prints
+        // it in, when exactly one value cell holds it -- the save-time check then tests that column against the person,
+        // as for a selected value. Otherwise it stays unbound and an unbound person column is refused.
+        if (b && !b.column) { const col = printedColumn(ref, f.value); if (col) b = { ...b, column: col }; }
         if (b) break;
       }
       if (b) { bindings.push({ ...b, sentence, value: f.value, currency: f.currency }); return; }

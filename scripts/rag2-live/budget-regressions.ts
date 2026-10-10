@@ -11,7 +11,7 @@ import { loopLimits, loopRunUsage, resetLoopRunUsage } from "@/lib/ai/usage";
 import { priceFor } from "@/lib/ai/providers";
 import { estimateTokens, installSharedRunLedger, LoopUsageMeter, maxCallCostUsd, reserveInputTokens, RunCostLedger } from "@/lib/rag2/loop/usage-meter";
 import { installFetchGuard } from "../../e2e/support/rag2-live-fetch-guard";
-import { entryFor, planRun, remainingUsd, validateRequest, type Ledger } from "./ledger";
+import { entryFor, planRun, remainingUsd, validateLedger, validateRequest, type Ledger } from "./ledger";
 import type { LoopModel, ModelTurnInput, ModelTurnOutput } from "@/lib/rag2/loop/types";
 import { liveSafetyChecks, NO_KEY_PLACEHOLDER, PREFLIGHT_REFUSAL, RunCapGuardModel } from "../../e2e/support/rag2-live-guard";
 import { HostedLoopModel, loopRequestSettings, openAiRequest } from "@/lib/rag2/loop/hosted-model";
@@ -222,6 +222,21 @@ async function t(name: string, fn: () => Promise<void> | void) {
     assert.match((planRun(l, req2) as any).reason, /used up/);
     assert.throws(() => validateRequest({ run_id: "x", scenarios: ["L1"], run_cap_usd: 0.51, preflight: false }), /<= 0.50/);
     assert.equal(entryFor(null, { runId: "p", testedSha: "a", requestSha: "b", capUsd: 0.5, preflight: true }).spent_usd, 0);
+  });
+  await t("B16 a trial allocation in the ledger is reserved: automated runs cannot spend it; open/closed rules; focused ingest questions", () => {
+    const l: Ledger = validateLedger({ exercise_cap_usd: 0.5, runs: [
+      { ...entryFor({ budgetUsed: { spentUsd: 0.161222, reservedUsd: 0, calls: 1, refusals: 0, failed: 0 } }, { runId: "earlier", testedSha: "abc1234", requestSha: "def5678", capUsd: 0.2, preflight: false }) },
+      { run_id: "trial-codespace-1", kind: "trial_allocation", status: "open", tested_code_sha: "", request_sha: "", at: "x", preflight: false, run_cap_usd: 0.15, spent_usd: 0, reserved_unsettled_usd: 0.15, calls: 0, refused: 0, failed: 0 },
+    ] });
+    assert.equal(remainingUsd(l), 0.188778, "the allocation is counted as used");
+    const req = validateRequest({ run_id: "ingest-live-6", run_cap_usd: 0.5, preflight: false, questions: "QUESTIONS-q2.json" }, "ingest");
+    assert.equal((planRun(l, req) as any).capUsd, 0.188778, "a run is capped below the reserved allowance");
+    assert.equal(req.questions, "QUESTIONS-q2.json");
+    assert.throws(() => validateRequest({ run_id: "x", run_cap_usd: 0.1, preflight: false, questions: "../EXPECTED.json" }, "ingest"), /questions/);
+    assert.throws(() => validateRequest({ run_id: "x", scenarios: ["L1"], run_cap_usd: 0.1, preflight: false, questions: "QUESTIONS-q2.json" }), /questions/);
+    const bad = (r: object) => assert.throws(() => validateLedger({ exercise_cap_usd: 0.5, runs: [{ run_id: "trial-codespace-1", kind: "trial_allocation", tested_code_sha: "", request_sha: "", at: "x", preflight: false, run_cap_usd: 0.15, calls: 0, refused: 0, failed: 0, ...r }] }), /trial allocation/);
+    bad({ status: "open", spent_usd: 0, reserved_unsettled_usd: 0 }); bad({ status: "open", spent_usd: 0.01, reserved_unsettled_usd: 0.15 });
+    bad({ status: "closed", spent_usd: 0.05, reserved_unsettled_usd: 0.15 }); bad({ status: "paused", spent_usd: 0, reserved_unsettled_usd: 0.15 });
   });
   await t("B15 gpt-6-luna: Chat Completions with tools is sent with reasoning_effort \"none\" (provider capability record)", async () => {
     assert.equal((openAiRequest("gpt-6-luna", input, "openai") as any).reasoning_effort, "none");

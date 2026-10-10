@@ -10,7 +10,7 @@ come from the real AI model.
 |---|---|
 | The app: the same code, upload page, reading of PDFs (including scanned pages) and chat | The data: a made-up household and made-up policies. Never upload real documents here. |
 | The AI model: OpenAI gpt-6-luna, the model production uses | Storage: a database and file folder inside the Codespace. Nothing goes to the production database or the live site. |
-| The cost: every answer spends a little from a **trial budget of US$0.25** (less if the test runs already used more of the US$0.50 exercise allowance; the start-up message shows the exact amount). The budget is kept across restarts and the app refuses model calls past it. This is the app's own counter, not a provider hard limit. | Sign-in: you are automatically signed in as the test household. There is no sign-up page in the trial. |
+| The cost: every answer spends a little from a fixed **trial allowance of US$0.15** for **one Codespace** (see *Budget* below). The allowance is reserved in advance in the project's spend record, so the automated tests cannot use it. The app counts what this Codespace spends, keeps the count across restarts and refuses model calls past the allowance. This is the app's own counter, not a provider hard limit. | | Sign-in: you are automatically signed in as the test household. There is no sign-up page in the trial. |
 
 When the trial budget is used up, the chat answers "the assistant model returned an error" instead of calling the
 model. Uploads still work.
@@ -79,12 +79,21 @@ refused and the chat says the model is unavailable.
 - It shows the trial budget, the amount spent, what remains and the number of AI calls.
 - The same numbers are printed in the Terminal at every start, and kept in the file `.trial/ledger.json`.
 
+## Budget: one Codespace, one fixed allowance
+- The trial has **US$0.15** reserved for it in `docs/rag-migration/live/LEDGER.json` (entry `trial-codespace-1`). The automated real-model tests treat that amount as already spent, so they cannot use it.
+- The first codespace that starts records its own name in `.trial/ledger.json` and spends only from that allowance. Its spend survives **stop** and **restart**.
+- The count lives **inside the codespace**. Deleting the codespace deletes the count, and a second codespace cannot see the first one's count. So:
+  - **Use one codespace.** Two codespaces running at the same time would each believe they have the full US$0.15. Nothing outside the codespaces stops that; this is a known limitation of this small trial.
+  - **Before deleting it or creating another**, open `/__trial/usage`, then ask Claude (or a developer) to record the *spentUsd* figure in the ledger entry and close it. A new codespace then needs a new allowance (`trial-codespace-2`).
+- If `.trial/ledger.json` is damaged or belongs to another codespace or allowance, the trial **refuses to start** instead of resetting the spend to zero. The message says why.
+
 ## Stop, restart or delete
 - **Stop** when you are done, so it does not use your free hours: GitHub, then **Code**, then **Codespaces**, then **…** next to your codespace, then **Stop codespace**. A stopped codespace keeps your household, uploads and spend.
 - **Restart:** click the codespace's name to open it again. The app starts by itself.
-- **Delete** to start over with an empty household (the trial budget starts again too): **…**, then **Delete**.
+- **Delete** only after the spend has been recorded (see *Budget*): **…**, then **Delete**. A new codespace does not start until a new allowance has been reserved.
 - **Free quota:** GitHub gives personal accounts 120 core-hours of Codespaces a month. On the 2-core machine that is **60 hours of running time**. Stopped codespaces don't use hours but count toward 15 GB of free storage. GitHub also stops an idle codespace after 30 minutes by default.
 
 ## If something goes wrong
 - The tab shows an error, or never opens: in the Terminal, run `bash scripts/trial/start.sh`. It restarts the app and prints what it is doing. The app's own log is in `.trial/server.log`.
-- "The assistant model returned an error" on every question: open `/__trial/usage`. If the mode is *preflight*, the secret is missing: add it, then stop and start the codespace. If *remaining* is 0, the trial budget is used up.
+- "The assistant model returned an error" on every question: open `/__trial/usage`. If the mode is *preflight*, the secret is missing: add it, then stop and start the codespace. If *remaining* is 0, the trial allowance is used up.
+- The Terminal says **"[trial] refused: …"**: the start-up checks stopped the trial before it touched anything. The message names the reason (for example a database address that is not local, or a spend record that is damaged or belongs to another codespace). Nothing was set up or spent.

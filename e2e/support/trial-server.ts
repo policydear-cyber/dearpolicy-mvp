@@ -7,7 +7,7 @@
  *   request drain, and every model role openai:gpt-6-luna.
  * Every model request goes through the live tests' process-wide fetch guard (reserve the worst case before sending,
  * bounded output, priced model, other providers / Pinecone / VirusTotal refused) on a ledger PERSISTED in
- * .trial/ledger.json with the trial cap (TRIAL_CAP_USD, default US$0.25). Safety checks: e2e/support/trial-guard.ts.
+ * .trial/ledger.json with the trial cap (TRIAL_CAP_USD = the open trial allocation in docs/rag-migration/live/LEDGER.json). Safety checks: e2e/support/trial-guard.ts.
  *   GET /__trial/usage   cap, spent, remaining, calls, refusals, preflight (no content, no headers, no key)
  */
 import http from "node:http";
@@ -25,7 +25,7 @@ const KEY = Symbol.for("dearpolicy.rag2.loop.model");
 const trial = (() => { try { return trialSafetyChecks(); } catch (e) { console.error(e instanceof Error ? e.message : String(e)); process.exit(1); } })();
 const dir = path.resolve(".trial");
 fs.mkdirSync(dir, { recursive: true });
-const ledger = new PersistentTrialLedger(path.join(dir, "ledger.json"), trial.capUsd);
+const ledger = (() => { try { return new PersistentTrialLedger(path.join(dir, "ledger.json"), trial.capUsd, { allocationId: process.env.TRIAL_ALLOCATION_ID!, codespace: process.env.CODESPACE_NAME! }); } catch (e) { console.error("trial mode refused: " + (e instanceof Error ? e.message : String(e))); process.exit(1); } })();
 installSharedRunLedger(ledger);
 const fetchGuard = installFetchGuard({ ledger, preflightRefusal: trial.preflight ? TRIAL_PREFLIGHT_REFUSAL : null });
 const port = Number(process.env.PORT ?? 3000);

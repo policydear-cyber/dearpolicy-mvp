@@ -111,9 +111,12 @@ jobs:
           RAG2_LIVE_TESTED_SHA: ${{ steps.gate.outputs.tested }}
           RAG2_LIVE_REQUEST_SHA: ${{ steps.gate.outputs.request }}
           REQ_PREFLIGHT: ${{ steps.req.outputs.preflight }}
+          REQ_QUESTIONS: ${{ steps.req.outputs.questions }}
+          REQ_EXPECTED: ${{ steps.req.outputs.expected }}
           RUN_ID: ${{ steps.req.outputs.run_id }}
         run: |
           set +e
+          case "$REQ_QUESTIONS:$REQ_EXPECTED" in QUESTIONS.json:EXPECTED.json|QUESTIONS-*.json:EXPECTED-*.json) ;; *) echo "::error::refused: questions/expected file names"; exit 1;; esac
           key="$OPENAI_TEST_API_KEY"
           unset OPENAI_TEST_API_KEY
           present=false
@@ -132,7 +135,7 @@ jobs:
           if [ "$preflight" = "true" ]; then flag="--preflight"; runkey="preflight-no-key-set"; fi
           extra=()
           if [ -n "$avail_status" ]; then extra=(--availability-status "$avail_status" --availability-id "$avail_id"); fi
-          OPENAI_API_KEY="$runkey" RAG2_LIVE_KEY_PRESENT="$present" node --import tsx scripts/ingest-live/run.ts "$flag" --run-id "$RUN_ID" --expected "$RUNNER_TEMP/sealed/EXPECTED.json" --port 3320 --out docs/rag-migration/ingest-live "${extra[@]}"
+          OPENAI_API_KEY="$runkey" RAG2_LIVE_KEY_PRESENT="$present" node --import tsx scripts/ingest-live/run.ts "$flag" --run-id "$RUN_ID" --questions "$REQ_QUESTIONS" --expected "$RUNNER_TEMP/sealed/$REQ_EXPECTED" --port 3320 --out docs/rag-migration/ingest-live "${extra[@]}"
           rc=$?
           runkey=""
           d=$(ls -d docs/rag-migration/ingest-live/RUN-"$RUN_ID"-* 2>/dev/null | tail -n 1)

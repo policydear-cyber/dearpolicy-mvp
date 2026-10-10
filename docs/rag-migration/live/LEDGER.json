@@ -156,6 +156,22 @@
       "calls": 62,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "trial-codespace-1",
+      "kind": "trial_allocation",
+      "status": "open",
+      "tested_code_sha": "",
+      "request_sha": "",
+      "at": "2026-10-10T08:30:00.000Z",
+      "preflight": false,
+      "run_cap_usd": 0.15,
+      "spent_usd": 0,
+      "reserved_unsettled_usd": 0.15,
+      "calls": 0,
+      "refused": 0,
+      "failed": 0,
+      "note": "Fixed allowance for ONE hands-on trial Codespace (docs/trial/TRIAL.md, Budget). Reserved here so the automated live runs cannot spend it. Before that Codespace is deleted or a new one is created: record its /__trial/usage spentUsd here as spent_usd, set reserved_unsettled_usd to 0 and status to closed; a new Codespace needs a new allocation (trial-codespace-2)."
     }
   ]
 }

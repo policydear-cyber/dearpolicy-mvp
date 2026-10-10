@@ -68,3 +68,9 @@ R1 passes on alternative (a). The committed run folder itself is not rewritten.
 Why: run ingest-live-3 said "Isla's JuniorShield certificate also lists “Child accidental death” at S$20,000" -- correct,
 attributed to the other policy as T's original allows -- and the first translation failed it. The run's own report keeps
 its original verdict; the re-grade under this correction is reported separately in ROUND8-RESULTS.md.
+
+## Q2 focused run (round 8d) -- EXPECTED-q2.json
+| | T's original | Now |
+|---|---|---|
+| Forbidden 1, 2 | "S$150,000 stated for Isla"; "S$40,000 stated for Simon" | encoded for the focused run as `forbidden_sentences` (a sentence attributing the Adult amount to Isla, or the Child amount to the speaker); `EXPECTED.json` keeps Q2 as it was. *Coordinator (encodes T's own items).* |
+| Q2P | -- (T wrote no paraphrase) | the coordinator's paraphrase of Q2 ("compare the accident death cover for me and for my daughter Isla"), graded with exactly Q2's expectations, F03 the source. The question is in the fixture (`QUESTIONS-q2.json`); its expectations are sealed here, never in the app's inputs. |

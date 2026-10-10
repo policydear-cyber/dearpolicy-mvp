@@ -131,4 +131,5 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "ingest:live-checker-test",
   "routing:test",
   "trial:guard-test",
+  "trial:start-isolation-test",
 ];

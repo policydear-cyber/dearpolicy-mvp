@@ -246,6 +246,8 @@ jobs:
         run: npm run routing:test
       - name: "Hands-on trial guard: Codespace only, local database, OpenAI only, persisted cap within the exercise allowance, own forwarded origin only"
         run: npm run trial:guard-test
+      - name: "Trial start-up: a remote database, foreign storage or a broken trial budget is refused before any setup runs"
+        run: npm run trial:start-isolation-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

@@ -8,9 +8,12 @@
  *   OPENAI_BASE_URL unset or exactly https://api.openai.com/v1; no other provider key (Anthropic, Gemini, Groq), no
  *   Pinecone or VirusTotal key, no deterministic stand-in; every model role = openai:gpt-6-luna (no substitution);
  *   OPENAI_API_KEY present (the Codespaces secret OPENAI_TEST_API_KEY, passed by start.sh to the server only, or the
- *   placeholder "preflight-no-key-set" -> PREFLIGHT: every model call refused); TRIAL_CAP_USD in (0, 1.00], default 0.25.
- * The cap is PERSISTED (.trial/ledger.json): spend survives restarts; an unsettled reservation found at start (the
- * process died mid-call) is counted as spent. When the cap is reached every model request is refused before it is sent
+ *   placeholder "preflight-no-key-set" -> PREFLIGHT: every model call refused); TRIAL_CAP_USD in (0, 0.25] = the open
+ *   trial allocation reserved in docs/rag-migration/live/LEDGER.json (start.sh reads it); TRIAL_ALLOCATION_ID and
+ *   CODESPACE_NAME set.
+ * The spend is PERSISTED (.trial/ledger.json, bound to the allocation and this Codespace): it survives restarts of this
+ * Codespace; an unsettled reservation found at start (the process died mid-call) is counted as spent; a damaged or
+ * foreign record is refused. It does NOT follow a deleted or second Codespace (docs/trial/TRIAL.md, "Budget"). When the cap is reached every model request is refused before it is sent
  * and the app shows its normal "the assistant model returned an error" answer.
  */
 import fs from "node:fs";
@@ -18,10 +21,10 @@ import path from "node:path";
 import { modelFor, priceFor, type ModelChoice, type Price } from "@/lib/ai/providers";
 import { RunCostLedger, type CostReservation } from "@/lib/rag2/loop/usage-meter";
 import { NO_KEY_PLACEHOLDER, OPENAI_DIRECT_BASE } from "./rag2-live-guard";
+import { readLocalLedger, TRIAL_MAX_ALLOCATION_USD } from "../../scripts/trial/isolation.mjs";
 
 export const TRIAL_MODEL = "openai:gpt-6-luna";
-export const TRIAL_DEFAULT_CAP_USD = 0.25;
-export const TRIAL_MAX_CAP_USD = 1;
+export const TRIAL_MAX_CAP_USD = TRIAL_MAX_ALLOCATION_USD;
 export const TRIAL_PREFLIGHT_REFUSAL = "trial preflight: OPENAI_TEST_API_KEY is not set, so no model call is made";
 
 export function trialSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choice: ModelChoice; price: Price; capUsd: number; preflight: boolean } {
@@ -42,28 +45,32 @@ export function trialSafetyChecks(env: NodeJS.ProcessEnv = process.env): { choic
     const got = modelFor(role);
     if (`${got.provider}:${got.model}` !== TRIAL_MODEL) fail(`${role} resolves to ${got.provider}:${got.model}, not ${TRIAL_MODEL}`);
   }
-  const cap = Number(env.TRIAL_CAP_USD ?? TRIAL_DEFAULT_CAP_USD);
+  if (!/^trial-codespace-\d{1,3}$/.test(env.TRIAL_ALLOCATION_ID ?? "")) fail("TRIAL_ALLOCATION_ID must be set by start.sh from the open allocation in docs/rag-migration/live/LEDGER.json");
+  if (!env.CODESPACE_NAME) fail("CODESPACE_NAME must be set (one trial allowance per Codespace)");
+  if (env.TRIAL_CAP_USD == null || env.TRIAL_CAP_USD === "") fail("TRIAL_CAP_USD must be set by start.sh (the open trial allocation)");
+  const cap = Number(env.TRIAL_CAP_USD);
   if (!Number.isFinite(cap) || cap <= 0 || cap > TRIAL_MAX_CAP_USD) fail(`TRIAL_CAP_USD must be > 0 and <= ${TRIAL_MAX_CAP_USD} (got ${env.TRIAL_CAP_USD})`);
   const choice = modelFor("chat");
   const price = priceFor(choice) ?? fail(`no price on file for ${TRIAL_MODEL}`);
   return { choice, price, capUsd: cap, preflight };
 }
 
-export type TrialLedgerFile = { capUsd: number; spentUsd: number; inflightUsd: number; calls: number; refusals: number; startedAt: string; updatedAt: string; restarts: number };
-/** The run ledger, persisted after every reservation and settlement (atomic write). */
+export type TrialLedgerFile = { capUsd: number; spentUsd: number; inflightUsd: number; calls: number; refusals: number; startedAt: string; updatedAt: string; restarts: number; allocationId: string; codespace: string };
+/** The run ledger, persisted after every reservation and settlement (atomic write). Bound to ONE trial allocation and ONE
+ * Codespace: a record that is damaged, belongs to another allocation or another Codespace, or records another cap is
+ * refused (scripts/trial/isolation.mjs readLocalLedger) -- spending is never silently reset to zero. */
 export class PersistentTrialLedger extends RunCostLedger {
   readonly carriedUsd: number;
-  constructor(readonly file: string, capUsd: number) {
+  constructor(readonly file: string, capUsd: number, readonly binding: { allocationId: string; codespace: string }) {
     super(capUsd);
-    let prior: Partial<TrialLedgerFile> = {};
-    try { prior = JSON.parse(fs.readFileSync(file, "utf8")); } catch { /* first start */ }
+    const prior = readLocalLedger(file, { id: binding.allocationId, usd: capUsd }, binding.codespace);
     // What earlier runs spent, plus anything they had reserved and never settled (counted as spent: fail closed).
-    this.carriedUsd = Math.max(0, Number(prior.spentUsd) || 0) + Math.max(0, Number(prior.inflightUsd) || 0);
+    this.carriedUsd = prior ? prior.spentUsd + prior.inflightUsd : 0;
     this.spentUsd = this.carriedUsd;
-    this.calls = Number(prior.calls) || 0;
-    this.refusals = Number(prior.refusals) || 0;
-    this.startedAt = prior.startedAt ?? new Date().toISOString();
-    this.restarts = (Number(prior.restarts) || 0) + (prior.startedAt ? 1 : 0);
+    this.calls = Number(prior?.calls) || 0;
+    this.refusals = Number(prior?.refusals) || 0;
+    this.startedAt = prior?.startedAt ?? new Date().toISOString();
+    this.restarts = (Number(prior?.restarts) || 0) + (prior ? 1 : 0);
     this.persist();
   }
   private readonly startedAt: string;
@@ -71,7 +78,7 @@ export class PersistentTrialLedger extends RunCostLedger {
   override reserve(usd: number, estInputTokens: number, maxOutputTokens: number) { const r = super.reserve(usd, estInputTokens, maxOutputTokens); this.persist(); return r; }
   override settle(r: CostReservation, actualUsd: number | null) { const c = super.settle(r, actualUsd); this.persist(); return c; }
   state(): TrialLedgerFile {
-    return { capUsd: this.capUsd, spentUsd: Math.round(this.spentUsd * 1e8) / 1e8, inflightUsd: Math.round(this.reservedUsd * 1e8) / 1e8, calls: this.calls, refusals: this.refusals, startedAt: this.startedAt, updatedAt: new Date().toISOString(), restarts: this.restarts };
+    return { capUsd: this.capUsd, spentUsd: Math.round(this.spentUsd * 1e8) / 1e8, inflightUsd: Math.round(this.reservedUsd * 1e8) / 1e8, calls: this.calls, refusals: this.refusals, startedAt: this.startedAt, updatedAt: new Date().toISOString(), restarts: this.restarts, allocationId: this.binding.allocationId, codespace: this.binding.codespace };
   }
   private persist() {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });

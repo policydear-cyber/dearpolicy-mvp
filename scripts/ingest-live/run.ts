@@ -40,6 +40,10 @@ async function main() {
   const safety = liveSafetyChecks(process.env);
   if (live && safety.mode !== "direct") throw new Error("--live runs only in CI direct mode (RAG2_LIVE_MODE=direct)");
   const fixture = path.resolve(arg("fixture", "scripts/ingest-live/fixture")!);
+  // A focused run: another questions file of the same fixture (QUESTIONS-<name>.json), graded with its own sealed
+  // EXPECTED-<name>.json (passed with --expected).
+  const questionsFile = arg("questions", "QUESTIONS.json")!;
+  if (!/^QUESTIONS(?:-[a-z0-9]{1,20})?\.json$/.test(questionsFile) || !fs.existsSync(path.join(fixture, questionsFile))) throw new Error(`--questions: QUESTIONS.json or QUESTIONS-<name>.json in the fixture (got ${questionsFile})`);
   const expectedPath = arg("expected", process.env.INGEST_LIVE_EXPECTED);
   // EXPECTED.json must not be where the app could read it while it runs: never inside the fixture the browser uploads from.
   if (expectedPath && path.resolve(expectedPath).startsWith(fixture + path.sep)) throw new Error("EXPECTED.json must be sealed outside the fixture folder");
@@ -56,7 +60,7 @@ async function main() {
     label: preflight ? "PREFLIGHT -- every model request refused; US$0" : "LIVE MODEL RUN", runId, preflight, mode: safety.mode,
     keyNote: process.env.RAG2_LIVE_KEY_PRESENT === "false" ? "OPENAI_TEST_API_KEY not set" : null, availability,
     startedAt: started.toISOString(), commit: git("git rev-parse HEAD"), tree: git("git rev-parse HEAD^{tree}"), buildId: fs.readFileSync(".next/BUILD_ID", "utf8").trim(),
-    fixture: path.relative(process.cwd(), fixture), sources: fs.readdirSync(path.join(fixture, "source")), runCapUsd: safety.capUsd,
+    fixture: path.relative(process.cwd(), fixture), questions: questionsFile, sources: fs.readdirSync(path.join(fixture, "source")), runCapUsd: safety.capUsd,
   };
   const save = () => fs.writeFileSync(path.join(outDir, "run.json"), JSON.stringify(run, null, 2));
   if (availability && !preflight && availability.status !== "200") {
@@ -85,7 +89,7 @@ async function main() {
     });
     // The browser journey. Its environment carries no key and no database URL.
     const pwEnv: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, HOME: process.env.HOME, CI: process.env.CI, PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH,
-      NODE_OPTIONS: "--max-old-space-size=512", INGEST_LIVE_BASE: base, INGEST_LIVE_OUT: outDir, INGEST_LIVE_FIXTURE: fixture, INGEST_LIVE_PREFLIGHT: preflight ? "1" : "0",
+      NODE_OPTIONS: "--max-old-space-size=512", INGEST_LIVE_BASE: base, INGEST_LIVE_OUT: outDir, INGEST_LIVE_FIXTURE: fixture, INGEST_LIVE_QUESTIONS: questionsFile, INGEST_LIVE_PREFLIGHT: preflight ? "1" : "0",
       ...Object.fromEntries(["INGEST_LIVE_READY_TIMEOUT_MS", "INGEST_LIVE_THINK_MS", "INGEST_LIVE_TEST_TIMEOUT_MS"].filter((k) => process.env[k]).map((k) => [k, process.env[k]])) };
     const pwLog = fs.createWriteStream(path.join(outDir, "browser.log"));
     pw = spawn(process.execPath, ["node_modules/@playwright/test/cli.js", "test", "-c", "e2e/playwright.ingest-live.config.ts"], { env: pwEnv, stdio: ["ignore", "pipe", "pipe"] });

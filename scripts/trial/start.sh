@@ -7,29 +7,27 @@
 # every model call is refused). Never `set -x` here.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-mkdir -p .trial
 log() { printf '\n[trial] %s\n' "$*"; }
 
+# ---- 0. Isolation, before ANY database command, db:setup, build, server or model call ------------------------------
+# (scripts/trial/isolation.mjs: Codespace only; a LOCAL database -- a remote TRIAL_DATABASE_URL / DATABASE_URL / PGHOST is
+# refused before anything connects; local storage only; no Supabase or Vercel settings; the fixed trial allocation
+# reserved in docs/rag-migration/live/LEDGER.json; the local spend record readable and bound to this Codespace.)
 if [ "${CODESPACES:-}" != "true" ]; then
   echo "[trial] refused: this script runs only inside a GitHub Codespace (CODESPACES=true)." >&2; exit 1
 fi
-export TRIAL_MODE=1 NODE_ENV=test NEXT_TELEMETRY_DISABLED=1
+unset OPENAI_BASE_URL ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY PINECONE_API_KEY VIRUSTOTAL_API_KEY DEARPOLICY_DETERMINISTIC_MODEL || true
+iso="$(node scripts/trial/isolation.mjs)" || exit 1
+TRIAL_CAP_USD="$(printf '%s\n' "$iso" | sed -n 's/^cap=\([0-9.]*\)$/\1/p')"
+TRIAL_ALLOCATION_ID="$(printf '%s\n' "$iso" | sed -n 's/^allocation=\(trial-codespace-[0-9]*\)$/\1/p')"
+if [ -z "$TRIAL_CAP_USD" ] || [ -z "$TRIAL_ALLOCATION_ID" ]; then echo "[trial] refused: the isolation check gave no allocation" >&2; exit 1; fi
+export TRIAL_CAP_USD TRIAL_ALLOCATION_ID
+mkdir -p .trial
+
+export TRIAL_MODE=1 NODE_ENV=test NEXT_TELEMETRY_DISABLED=1 STORAGE_DRIVER=local
 export DATABASE_URL="${TRIAL_DATABASE_URL:-postgres://postgres:postgres@localhost:5432/dearpolicy_trial}"
-# The trial spends from the same US$0.50 exercise allowance as the recorded live runs: the cap is the smaller of
-# TRIAL_CAP_USD (default 0.25) and what docs/rag-migration/live/LEDGER.json leaves of exercise_cap_usd.
-TRIAL_CAP_USD="$(node -e '
-const l=require("./docs/rag-migration/live/LEDGER.json");
-const spent=(l.runs||[]).reduce((a,r)=>a+Number(r.spent_usd||0)+Number(r.reserved_unsettled_usd||0),0);
-const left=Math.floor((Number(l.exercise_cap_usd)-spent)*1e4)/1e4;
-const want=Number(process.env.TRIAL_CAP_USD||"0.25");
-process.stdout.write(String(Math.min(want,left)));')"
-if ! node -e 'process.exit(Number(process.argv[1])>0?0:1)' "$TRIAL_CAP_USD"; then
-  echo "[trial] refused: the US\$0.50 exercise allowance is used up (docs/rag-migration/live/LEDGER.json)." >&2; exit 1
-fi
-export TRIAL_CAP_USD
 export CHAT_MODEL=openai:gpt-6-luna JUDGEMENT_MODEL=openai:gpt-6-luna NARRATION_MODEL=openai:gpt-6-luna READING_MODEL=openai:gpt-6-luna
 export DEARPOLICY_RAG_LOOP_RUN_MAX_USD="$TRIAL_CAP_USD" DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1
-unset OPENAI_BASE_URL ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY PINECONE_API_KEY VIRUSTOTAL_API_KEY DEARPOLICY_DETERMINISTIC_MODEL VERCEL VERCEL_ENV || true
 
 log "1/4 database"
 if ! pg_isready -q -h localhost -p 5432; then
@@ -66,7 +64,7 @@ log "4/4 ready"
 url="http://localhost:3000"
 if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then url="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"; fi
 usage=$(curl -sf http://localhost:3000/__trial/usage || echo '{}')
-node -e 'const u=JSON.parse(process.argv[1]||"{}");console.log(`[trial] mode: ${process.argv[2]}\n[trial] trial budget: US$${(u.spentUsd??0).toFixed(4)} spent of US$${u.capUsd??"?"} -- US$${(u.remainingUsd??0).toFixed(4)} left (kept in .trial/ledger.json across restarts)`)' "$usage" "$mode"
+node -e 'const u=JSON.parse(process.argv[1]||"{}");console.log(`[trial] mode: ${process.argv[2]}\n[trial] trial allowance ${process.argv[3]}: US$${(u.spentUsd??0).toFixed(4)} spent of US$${u.capUsd??"?"} -- US$${(u.remainingUsd??0).toFixed(4)} left (this Codespace only; kept in .trial/ledger.json across restarts)`)' "$usage" "$mode" "$TRIAL_ALLOCATION_ID"
 cat <<EOF
 
   DearPolicy trial is running:  $url
