@@ -43,6 +43,15 @@ async function api<T = unknown>(page: Page, url: string, init?: { method?: strin
   }, { url, init });
 }
 
+/** While a fact is still needed the open question is the turn and the full assessment sits behind "Show full
+ * assessment" (app/chat/page.tsx): the question must be shown, then the assessment is opened to read it. */
+async function openAssessment(answer: import("@playwright/test").Locator) {
+  const collapsed = answer.getByTestId("assessment-details");
+  if (!(await collapsed.count())) return;
+  await expect(answer.locator(".fact-question").first()).toBeVisible();
+  await collapsed.locator("summary").click();
+}
+
 /** Sends one message through the chat UI and returns the new answer bubble. */
 async function ask(page: Page, text: string) {
   const answers = page.locator(".message.assistant:not(:has(.thinking))");
@@ -189,6 +198,7 @@ test.describe.serial("synthetic claim journey", () => {
       await page.goto("/chat");
       await page.getByRole("button", { name: "New chat" }).click();
       const answer = await ask(page, message);
+      await openAssessment(answer);
       const plan = answer.getByTestId("fact-finding");
       // On failure, show what the assistant actually said (synthetic data only).
       await expect(plan, `${message}\n--- answer ---\n${(await answer.innerText()).slice(0, 1500)}`).toBeVisible();
@@ -197,7 +207,7 @@ test.describe.serial("synthetic claim journey", () => {
       const text = await answer.innerText();
       expect(text, message).not.toMatch(FORBIDDEN);
       expect(text, message).not.toMatch(/\b(?:figures?|amounts?)\b[^.]{0,20}\bestimate\b/i);
-      for (const card of await answer.locator(".claim-item, .claim-card").allInnerTexts()) expect(card).not.toMatch(MONEY);
+      for (const card of await answer.locator(".claim-item, .claim-card, .claim-result").allInnerTexts()) expect(card).not.toMatch(MONEY);
       expect(await answer.getByTestId("indicative-estimate").count()).toBe(0);
     }
   });
