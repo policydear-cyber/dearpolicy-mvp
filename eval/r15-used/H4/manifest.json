@@ -1,0 +1,1764 @@
+{
+  "household_id": "H4",
+  "as_of": "2026-10-06",
+  "timezone": "Asia/Singapore",
+  "label": "H4 - blended family with helper",
+  "description": "Remarried couple Marcus Lim Wei Jie and Priya Varghese; Marcus's son Aiden Lim Jun Hao (studying in Australia); Priya's children Kavya Nair and Rohan Nair; helper Maricel Dela Cruz. The app login is shared, so 'my son' / 'my plan' / 'I' are ambiguous unless the user identifies themselves.",
+  "members": [
+    {
+      "id": "marcus",
+      "name": "Marcus Lim Wei Jie",
+      "relation": "husband; father of Aiden; step-father of Kavya and Rohan",
+      "dob": "1979-03-14"
+    },
+    {
+      "id": "priya",
+      "name": "Priya Varghese",
+      "relation": "wife; mother of Kavya and Rohan; step-mother of Aiden",
+      "dob": "1982-11-02"
+    },
+    {
+      "id": "aiden",
+      "name": "Aiden Lim Jun Hao",
+      "relation": "Marcus's son (Priya's step-son); full-time student in Australia",
+      "dob": "2006-07-21"
+    },
+    {
+      "id": "kavya",
+      "name": "Kavya Nair",
+      "relation": "Priya's daughter (Marcus's step-daughter)",
+      "dob": "2012-05-09"
+    },
+    {
+      "id": "rohan",
+      "name": "Rohan Nair",
+      "relation": "Priya's son (Marcus's step-son)",
+      "dob": "2015-01-30"
+    },
+    {
+      "id": "maricel",
+      "name": "Maricel Dela Cruz",
+      "relation": "foreign domestic worker (helper) employed by Marcus",
+      "dob": "1990-08-17"
+    }
+  ],
+  "documents": [
+    {
+      "file": "docs/kestrel_healthguard_schedule_2026.pdf",
+      "pages": 2,
+      "title": "HealthGuard Hospital Plan schedule (Jan 2026)",
+      "insurer": "Kestrel Life Assurance Pte Ltd",
+      "product": "HealthGuard Hospital Plan",
+      "policy_no": "KL-HG-5520417",
+      "policyholder": "Marcus Lim Wei Jie",
+      "insured": [
+        "Marcus Lim Wei Jie",
+        "Priya Varghese"
+      ],
+      "type": "hospital",
+      "status": "in force (superseded in part by endorsement for Priya from 2026-07-01)"
+    },
+    {
+      "file": "docs/kestrel_healthguard_endorsement_jul2026.pdf",
+      "pages": 2,
+      "title": "HealthGuard endorsement: Priya upgraded to Premier from 01 Jul 2026",
+      "insurer": "Kestrel Life Assurance Pte Ltd",
+      "product": "HealthGuard Hospital Plan",
+      "policy_no": "KL-HG-5520417",
+      "policyholder": "Marcus Lim Wei Jie",
+      "insured": [
+        "Priya Varghese"
+      ],
+      "type": "hospital (endorsement)",
+      "status": "in force from 2026-07-01"
+    },
+    {
+      "file": "docs/orchidia_ci_multiprotect_marcus.pdf",
+      "pages": 3,
+      "title": "CI MultiProtect (multi-pay critical illness) - Marcus",
+      "insurer": "Orchidia Insurance Ltd",
+      "product": "CI MultiProtect",
+      "policy_no": "OR-CM-7781350",
+      "policyholder": "Marcus Lim Wei Jie",
+      "insured": [
+        "Marcus Lim Wei Jie"
+      ],
+      "type": "critical illness (multi-pay, early stage)",
+      "status": "in force"
+    },
+    {
+      "file": "docs/harbourline_familypa_schedule.pdf",
+      "pages": 2,
+      "title": "FamilyPA Shield personal accident schedule",
+      "insurer": "Harbourline General Insurance Pte Ltd",
+      "product": "FamilyPA Shield",
+      "policy_no": "HG-PA-3309184",
+      "policyholder": "Priya Varghese",
+      "insured": [
+        "Priya Varghese",
+        "Marcus Lim Wei Jie",
+        "Kavya Nair",
+        "Rohan Nair"
+      ],
+      "type": "personal accident",
+      "status": "in force"
+    },
+    {
+      "file": "docs/harbourline_claim_settlement_rohan.pdf",
+      "pages": 1,
+      "title": "FamilyPA claim settlement - Rohan wrist fracture",
+      "insurer": "Harbourline General Insurance Pte Ltd",
+      "product": "FamilyPA Shield",
+      "policy_no": "HG-PA-3309184",
+      "policyholder": "Priya Varghese",
+      "insured": [
+        "Rohan Nair"
+      ],
+      "type": "claim settlement letter",
+      "status": "paid 2026-04-18"
+    },
+    {
+      "file": "docs/crestbay_student_abroad_aiden.pdf",
+      "pages": 2,
+      "title": "Student Abroad Plan (Gold) - Aiden, Australia",
+      "insurer": "Crestbay Travel Insurance Pte Ltd",
+      "product": "Student Abroad Plan",
+      "policy_no": "CB-SA-2026-118842",
+      "policyholder": "Marcus Lim Wei Jie",
+      "insured": [
+        "Aiden Lim Jun Hao"
+      ],
+      "type": "student travel",
+      "status": "in force"
+    },
+    {
+      "file": "docs/kestrel_helpercare_maricel.pdf",
+      "pages": 2,
+      "title": "HelperCare maid insurance - Maricel",
+      "insurer": "Kestrel General Insurance Pte Ltd",
+      "product": "HelperCare Maid Insurance",
+      "policy_no": "KG-MI-8806521",
+      "policyholder": "Marcus Lim Wei Jie (employer)",
+      "insured": [
+        "Maricel Dela Cruz"
+      ],
+      "type": "foreign domestic worker (maid) insurance",
+      "status": "in force"
+    }
+  ],
+  "not_uploaded": [
+    "Aiden's Overseas Student Health Cover (OSHC) policy (referred to by the Student Abroad plan, not uploaded)",
+    "MediShield Life / CPF / MediSave statements for any member",
+    "School or student group insurance for Kavya or Rohan",
+    "Any motor, home or travel policy other than Aiden's Student Abroad plan",
+    "Any life, CI or hospital policy for the children; any life or CI policy for Priya"
+  ],
+  "facts": [
+    {
+      "id": "m_marcus_dob",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "1979-03-14",
+      "evidence": "Date of birth 14 Mar 1979",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "member",
+      "aliases": [
+        "Marcus"
+      ]
+    },
+    {
+      "id": "m_priya_dob",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "1982-11-02",
+      "evidence": "Priya Varghese Adult 02 Nov 1982",
+      "person": "Priya Varghese",
+      "topic": "member",
+      "aliases": [
+        "Priya"
+      ]
+    },
+    {
+      "id": "m_kavya_dob",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "2012-05-09",
+      "evidence": "Kavya Nair Child 09 May 2012",
+      "person": "Kavya Nair",
+      "topic": "member",
+      "aliases": [
+        "Kavya"
+      ]
+    },
+    {
+      "id": "m_rohan_dob",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "2015-01-30",
+      "evidence": "Rohan Nair Child 30 Jan 2015",
+      "person": "Rohan Nair",
+      "topic": "member",
+      "aliases": [
+        "Rohan"
+      ]
+    },
+    {
+      "id": "m_aiden_dob",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "2006-07-21",
+      "evidence": [
+        "Insured student Aiden Lim Jun Hao",
+        "Date of birth 21 Jul 2006"
+      ],
+      "person": "Aiden Lim Jun Hao",
+      "topic": "member",
+      "aliases": [
+        "Aiden"
+      ]
+    },
+    {
+      "id": "m_maricel_dob",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "1990-08-17",
+      "evidence": [
+        "Insured helper Maricel Dela Cruz",
+        "Date of birth 17 Aug 1990"
+      ],
+      "person": "Maricel Dela Cruz",
+      "topic": "member",
+      "aliases": [
+        "Maricel"
+      ]
+    },
+    {
+      "id": "hg_policy_no",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "KL-HG-5520417",
+      "evidence": "Policy number KL-HG-5520417",
+      "person": null,
+      "topic": "hospital",
+      "aliases": [
+        "HealthGuard",
+        "Kestrel"
+      ]
+    },
+    {
+      "id": "hg_marcus_plan",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "HealthGuard Standard",
+      "evidence": "Marcus Lim Wei Jie HealthGuard Standard Restructured Class A S$500,000 S$1,288.00",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_priya_plan_jan",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "HealthGuard Standard",
+      "evidence": "Priya Varghese HealthGuard Standard Restructured Class A S$500,000 S$1,104.00",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_policy_year_end",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "2026-12-31",
+      "evidence": "Policy year 01 Jan 2026 to 31 Dec 2026",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_std_ward",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "Restructured hospital, Class A ward",
+      "evidence": "Ward entitlement Restructured hospital, Class A ward",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_std_limit",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "500,000",
+      "evidence": "Annual claim limit S$500,000 per insured per policy year",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_std_deductible",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "3,500",
+      "evidence": "Deductible S$3,500 per insured per policy year",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_coins",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "10%",
+      "evidence": "Co-insurance 10% of the claimable amount after deductible",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_std_proration",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "50%",
+      "evidence": "Treatment in a private hospital Eligible bill pro-rated to 50% before deductible and co-insurance",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_std_pre",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "90 days",
+      "evidence": "Pre-hospital treatment Up to 90 days before admission",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_std_post",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "180 days",
+      "evidence": "Post-hospital treatment Up to 180 days after discharge",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_marcus_premium",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "1,288.00",
+      "evidence": "S$1,288.00",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_priya_premium_std",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 1,
+      "value": "1,104.00",
+      "evidence": "S$1,104.00",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_claims_deadline",
+      "doc": "kestrel_healthguard_schedule_2026.pdf",
+      "page": 2,
+      "value": "90 days",
+      "evidence": "submitted within 90 days of discharge",
+      "person": null,
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_upgrade_date",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "2026-07-01",
+      "evidence": "Endorsement effective date 01 Jul 2026",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_priya_new_plan",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "HealthGuard Premier",
+      "evidence": "Priya Varghese HealthGuard Standard HealthGuard Premier",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_marcus_unchanged",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "No change (HealthGuard Standard)",
+      "evidence": "Marcus Lim Wei Jie HealthGuard Standard No change (HealthGuard Standard)",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_prem_ward",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "Private hospital, standard room",
+      "evidence": "Ward entitlement Private hospital, standard room",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_prem_limit",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "2,000,000",
+      "evidence": "Annual claim limit S$2,000,000 per policy year",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_prem_deductible",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "3,500",
+      "evidence": "Deductible S$3,500 per policy year",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_prem_noproration",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "None - no pro-ration for private hospitals",
+      "evidence": "Pro-ration None - no pro-ration for private hospitals",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_prem_pre",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "180 days",
+      "evidence": "Pre-hospital treatment Up to 180 days before admission",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_prem_post",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "365 days",
+      "evidence": "Post-hospital treatment Up to 365 days after discharge",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_priya_new_premium",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "2,416.00",
+      "evidence": "Revised annual premium (Priya Varghese) S$2,416.00",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_additional_premium",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 1,
+      "value": "656.00",
+      "evidence": "Additional premium, 01 Jul 2026 to 31 Dec 2026 S$656.00",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_rule_admission_before",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 2,
+      "value": "HealthGuard Standard",
+      "evidence": "Hospital admissions that begin before 01 Jul 2026 are assessed under HealthGuard Standard, even if the stay continues after that date",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_rule_preexisting_upgrade",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 2,
+      "value": "HealthGuard Standard terms",
+      "evidence": "do not apply to any condition diagnosed, treated or showing symptoms before 01 Jul 2026. Such conditions continue to be covered on HealthGuard Standard terms",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "hg_rule_deductible_carry",
+      "doc": "kestrel_healthguard_endorsement_jul2026.pdf",
+      "page": 2,
+      "value": "counts towards",
+      "evidence": "Any deductible already met in this policy year counts towards the HealthGuard Premier deductible",
+      "person": "Priya Varghese",
+      "topic": "hospital"
+    },
+    {
+      "id": "ci_life_assured",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "Marcus Lim Wei Jie",
+      "evidence": "Life assured Marcus Lim Wei Jie",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci",
+      "aliases": [
+        "CI MultiProtect",
+        "Orchidia",
+        "critical illness"
+      ]
+    },
+    {
+      "id": "ci_nominee",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "Priya Varghese",
+      "evidence": "Nomination Revocable nomination - Priya Varghese (100%)",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_sa",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "200,000",
+      "evidence": "Sum assured S$200,000",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci",
+      "aliases": [
+        "CI MultiProtect",
+        "Orchidia",
+        "critical illness"
+      ]
+    },
+    {
+      "id": "ci_start",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "2023-04-01",
+      "evidence": "Commencement date 01 Apr 2023",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_end",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "2054-04-01",
+      "evidence": "Cover ends 01 Apr 2054 (policy anniversary after age 75)",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_premium",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "2,976.00",
+      "evidence": "Annual premium S$2,976.00",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_early",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "50,000",
+      "evidence": "Early stage 25% S$50,000 1 claim per condition group",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci",
+      "aliases": [
+        "25%"
+      ]
+    },
+    {
+      "id": "ci_inter",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "100,000",
+      "evidence": "Intermediate stage 50% S$100,000 1 claim per condition group",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci",
+      "aliases": [
+        "50%"
+      ]
+    },
+    {
+      "id": "ci_severe",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "200,000",
+      "evidence": "Severe stage 100% S$200,000 per condition group",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_angio",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "20,000",
+      "evidence": "Angioplasty (special benefit) 10% S$20,000 capped at S$25,000; 1 claim",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_cap",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 1,
+      "value": "600,000",
+      "evidence": "capped at 300% of the sum assured, i.e. S$600,000",
+      "person": "Marcus Lim Wei Jie",
+      "topic": "ci"
+    },
+    {
+      "id": "ci_rule_offset",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 2,
+      "value": "less any early-stage or intermediate-stage amount already paid",
+      "evidence": "paid less any early-stage or intermediate-stage amount already paid for the same condition",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "ci_waiting",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 2,
+      "value": "90 days",
+      "evidence": "within 90 days of the commencement date or reinstatement date",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "ci_survival",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 2,
+      "value": "7 days",
+      "evidence": "must survive 7 days after diagnosis",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "ci_gap",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 2,
+      "value": "12 months",
+      "evidence": "at least 12 months between the dates of diagnosis",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "ci_recur",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 2,
+      "value": "24 months",
+      "evidence": "only if 24 months have passed since the last cancer claim",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "ci_dengue_excluded",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 2,
+      "value": "not covered",
+      "evidence": "including infectious diseases such as dengue fever, is not covered under this policy",
+      "person": null,
+      "topic": "ci",
+      "aliases": [
+        "dengue"
+      ]
+    },
+    {
+      "id": "ci_cancer_early",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 3,
+      "value": "Carcinoma in situ",
+      "evidence": "1 Cancer Carcinoma in situ Early organ cancer Major Cancer",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "ci_stroke_partial",
+      "doc": "orchidia_ci_multiprotect_marcus.pdf",
+      "page": 3,
+      "value": "Stroke, partial deficit",
+      "evidence": "3 Brain Minor brain surgery Stroke, partial deficit Stroke with permanent deficit",
+      "person": null,
+      "topic": "ci"
+    },
+    {
+      "id": "pa_policy_no",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "HG-PA-3309184",
+      "evidence": "Policy number HG-PA-3309184",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "FamilyPA",
+        "Harbourline"
+      ]
+    },
+    {
+      "id": "pa_policyholder",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "Priya Varghese",
+      "evidence": "Policyholder Priya Varghese",
+      "person": "Priya Varghese",
+      "topic": "pa"
+    },
+    {
+      "id": "pa_start",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "2026-02-01",
+      "evidence": "Period of insurance 01 Feb 2026 to 31 Jan 2027",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "FamilyPA",
+        "Harbourline"
+      ]
+    },
+    {
+      "id": "pa_end",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "2027-01-31",
+      "evidence": "Period of insurance 01 Feb 2026 to 31 Jan 2027",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "FamilyPA",
+        "Harbourline"
+      ]
+    },
+    {
+      "id": "pa_premium",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "486.00",
+      "evidence": "Annual premium S$486.00",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_insured_list",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "Priya Varghese, Marcus Lim Wei Jie, Kavya Nair, Rohan Nair",
+      "evidence": [
+        "Priya Varghese Adult",
+        "Marcus Lim Wei Jie Adult",
+        "Kavya Nair Child",
+        "Rohan Nair Child"
+      ],
+      "person": null,
+      "topic": "pa",
+      "absent_from_doc": [
+        "Aiden",
+        "Maricel"
+      ],
+      "aliases": [
+        "Kavya",
+        "Rohan",
+        "Priya",
+        "Marcus",
+        "FamilyPA",
+        "Harbourline"
+      ]
+    },
+    {
+      "id": "pa_adb_adult",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "150,000",
+      "evidence": "Accidental death & permanent disablement S$150,000 S$30,000",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_adb_child",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "30,000",
+      "evidence": "Accidental death & permanent disablement S$150,000 S$30,000",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_ame_adult",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "3,000",
+      "evidence": "Accidental medical expenses (per policy year) S$3,000 S$1,500",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_ame_child",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "1,500",
+      "evidence": "Accidental medical expenses (per policy year) S$3,000 S$1,500",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_physio_adult",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "500",
+      "evidence": "of which physiotherapy / TCM S$500 S$300",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_physio_child",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "of which physiotherapy / TCM S$500 S$300",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_dhi",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "100",
+      "evidence": "Daily hospital income (max 30 days) S$100 per day S$100 per day",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "30 days"
+      ]
+    },
+    {
+      "id": "pa_mobility",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "500",
+      "evidence": "Mobility aids S$500 S$500",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_aggregate_rule",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 1,
+      "value": "aggregate limit per insured person per policy year",
+      "evidence": "Accidental medical expenses is an aggregate limit per insured person per policy year",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "pa_named_only",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 2,
+      "value": "Only persons named in this Schedule are insured",
+      "evidence": "Only persons named in this Schedule are insured; other family members are not covered unless added by endorsement",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "not named",
+        "not covered"
+      ]
+    },
+    {
+      "id": "pa_child_age",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 2,
+      "value": "up to age 25 if in full-time education",
+      "evidence": "Children are covered up to age 18, or up to age 25 if in full-time education",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "18"
+      ]
+    },
+    {
+      "id": "pa_accident_only",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 2,
+      "value": "accident-only policy",
+      "evidence": "illness or disease of any kind (this is an accident-only policy)",
+      "person": null,
+      "topic": "pa",
+      "aliases": [
+        "accident",
+        "not covered"
+      ]
+    },
+    {
+      "id": "pa_notify",
+      "doc": "harbourline_familypa_schedule.pdf",
+      "page": 2,
+      "value": "30 days",
+      "evidence": "Claims must be notified within 30 days of the accident",
+      "person": null,
+      "topic": "pa"
+    },
+    {
+      "id": "cl_no",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "HG-CL-26-004417",
+      "evidence": "Claim number HG-CL-26-004417",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_accident_date",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "2026-04-03",
+      "evidence": "Date of accident 03 Apr 2026",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_desc",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "fractured left wrist",
+      "evidence": "Fall during school PE lesson - fractured left wrist",
+      "person": "Rohan Nair",
+      "topic": "pa_claim",
+      "aliases": [
+        "wrist"
+      ]
+    },
+    {
+      "id": "cl_settle_date",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "2026-04-18",
+      "evidence": "Date of settlement 18 Apr 2026",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_paid",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "640.00",
+      "evidence": "Total S$640.00 S$640.00",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_xray",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "95.00",
+      "evidence": "X-ray S$95.00 S$95.00",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_rohan_remaining",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "860.00",
+      "evidence": "Accidental medical expenses S$1,500.00 S$640.00 S$860.00",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_rohan_physio_remaining",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "300.00",
+      "evidence": "Physiotherapy / TCM sub-limit S$300.00 S$0.00 S$300.00",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "cl_followup",
+      "doc": "harbourline_claim_settlement_rohan.pdf",
+      "page": 1,
+      "value": "2027-01-31",
+      "evidence": "Follow-up treatment for the same accident is claimable within the remaining limits above until 31 Jan 2027",
+      "person": "Rohan Nair",
+      "topic": "pa_claim"
+    },
+    {
+      "id": "tr_cert",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "CB-SA-2026-118842",
+      "evidence": "Certificate number CB-SA-2026-118842",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel",
+      "aliases": [
+        "Student Abroad",
+        "Crestbay"
+      ]
+    },
+    {
+      "id": "tr_policyholder",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "Marcus Lim Wei Jie",
+      "evidence": "Policyholder Marcus Lim Wei Jie",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_country",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "Australia",
+      "evidence": "Country of study Australia",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_start",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "2026-02-10",
+      "evidence": "Period of insurance 10 Feb 2026 to 09 Feb 2027",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_end",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "2027-02-09",
+      "evidence": "Period of insurance 10 Feb 2026 to 09 Feb 2027",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_premium",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "1,380.00",
+      "evidence": "Premium paid S$1,380.00",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_med",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "250,000",
+      "evidence": "Overseas medical expenses S$250,000",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel",
+      "aliases": [
+        "Student Abroad",
+        "Crestbay"
+      ]
+    },
+    {
+      "id": "tr_evac",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "500,000",
+      "evidence": "Emergency medical evacuation and repatriation S$500,000",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_study",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "15,000",
+      "evidence": "Study interruption (forfeited tuition fees) S$15,000",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_belongings",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "3,000",
+      "evidence": "Personal belongings S$3,000 (S$750 per item; laptop S$1,500)",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_item",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "750",
+      "evidence": "S$750 per item",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_laptop",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "1,500",
+      "evidence": "laptop S$1,500",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_passport",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "500",
+      "evidence": "Loss of passport S$500",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_liability",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "500,000",
+      "evidence": "Personal liability S$500,000",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_compassionate",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "7,500",
+      "evidence": "Compassionate visit by a family member S$7,500",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_excess",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 1,
+      "value": "100",
+      "evidence": "Excess S$100 per medical claim; nil for evacuation",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_oshc",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 2,
+      "value": "OSHC",
+      "evidence": "medical expenses recoverable under the Overseas Student Health Cover (OSHC)",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel",
+      "aliases": [
+        "balance"
+      ]
+    },
+    {
+      "id": "tr_sg_suspended",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 2,
+      "value": "suspended",
+      "evidence": "Cover is suspended while the insured student is in Singapore",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_third_country",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 2,
+      "value": "21 days",
+      "evidence": "covered for up to 21 days per trip",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_preexisting",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 2,
+      "value": "not covered",
+      "evidence": "Pre-existing medical conditions are not covered",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tr_fulltime",
+      "doc": "crestbay_student_abroad_aiden.pdf",
+      "page": 2,
+      "value": "30 days",
+      "evidence": "cover ends 30 days after the student stops full-time study",
+      "person": "Aiden Lim Jun Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "md_policy",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "KG-MI-8806521",
+      "evidence": "Policy number KG-MI-8806521",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid",
+      "aliases": [
+        "HelperCare",
+        "maid insurance"
+      ]
+    },
+    {
+      "id": "md_employer",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "Marcus Lim Wei Jie",
+      "evidence": "Policyholder (employer) Marcus Lim Wei Jie",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_insured",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "Maricel Dela Cruz",
+      "evidence": "Insured helper Maricel Dela Cruz",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid",
+      "aliases": [
+        "HelperCare",
+        "maid insurance"
+      ]
+    },
+    {
+      "id": "md_start",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "2025-11-15",
+      "evidence": "Period of insurance 15 Nov 2025 to 14 Jan 2028",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_end",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "2028-01-14",
+      "evidence": "Period of insurance 15 Nov 2025 to 14 Jan 2028",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_premium",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "398.00",
+      "evidence": "Premium (26 months) S$398.00",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_pa",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "60,000",
+      "evidence": "Personal accident (death / permanent disablement) S$60,000",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_hosp",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "15,000",
+      "evidence": "Hospital and surgical expenses S$15,000 per year of cover",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_outpatient",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "Not covered",
+      "evidence": "Outpatient clinic visits Not covered",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_wages",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "40",
+      "evidence": "Wages and levy reimbursement while hospitalised S$40 per day, up to 30 days",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_repat",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "10,000",
+      "evidence": "Repatriation of mortal remains S$10,000",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_bond",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "5,000",
+      "evidence": "Security bond guarantee (to MOM) S$5,000",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_year1_end",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "2026-11-14",
+      "evidence": "Year of cover 1: 15 Nov 2025 to 14 Nov 2026",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_year2_start",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 1,
+      "value": "2026-11-15",
+      "evidence": "Year of cover 2: 15 Nov 2026 to 14 Jan 2028",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid"
+    },
+    {
+      "id": "md_exclusions",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 2,
+      "value": "pregnancy and childbirth",
+      "evidence": "Pre-existing conditions, and pregnancy and childbirth, are excluded",
+      "person": "Maricel Dela Cruz",
+      "topic": "maid",
+      "aliases": [
+        "excluded"
+      ]
+    },
+    {
+      "id": "md_family_not",
+      "doc": "kestrel_helpercare_maricel.pdf",
+      "page": 2,
+      "value": "not insured",
+      "evidence": "Members of the employer's family are not insured under this policy",
+      "person": null,
+      "topic": "maid"
+    }
+  ],
+  "derived_facts": [
+    {
+      "id": "dv_priya_may_16k",
+      "value": 4050,
+      "from": [
+        "hg_std_proration",
+        "hg_std_deductible",
+        "hg_coins",
+        "hg_rule_admission_before"
+      ],
+      "explain": "Priya, private hospital, admitted before 01 Jul 2026 (Standard): 16,000 x 50% = 8,000; -3,500 = 4,500; less 10% = 4,050.",
+      "aliases": []
+    },
+    {
+      "id": "dv_priya_may_16k_oop",
+      "value": 11950,
+      "from": [
+        "dv_priya_may_16k"
+      ],
+      "explain": "16,000 - 4,050",
+      "aliases": []
+    },
+    {
+      "id": "dv_priya_aug_16k",
+      "value": 11250,
+      "from": [
+        "hg_prem_deductible",
+        "hg_coins",
+        "hg_prem_noproration"
+      ],
+      "explain": "Priya on Premier (admitted on/after 01 Jul 2026, new condition): 16,000 - 3,500 = 12,500; less 10% = 11,250.",
+      "aliases": []
+    },
+    {
+      "id": "dv_priya_aug_16k_oop",
+      "value": 4750,
+      "from": [
+        "dv_priya_aug_16k"
+      ],
+      "explain": "16,000 - 11,250",
+      "aliases": []
+    },
+    {
+      "id": "dv_marcus_private_16k",
+      "value": 4050,
+      "from": [
+        "hg_std_proration",
+        "hg_std_deductible",
+        "hg_coins",
+        "hg_marcus_unchanged"
+      ],
+      "explain": "Marcus stays on Standard: private bill pro-rated 50%.",
+      "aliases": []
+    },
+    {
+      "id": "dv_marcus_classA_12k",
+      "value": 7650,
+      "from": [
+        "hg_std_deductible",
+        "hg_coins",
+        "hg_std_ward"
+      ],
+      "explain": "12,000 - 3,500 = 8,500; less 10% = 7,650.",
+      "aliases": []
+    },
+    {
+      "id": "dv_priya_premium_increase",
+      "value": 1312,
+      "from": [
+        "hg_priya_new_premium",
+        "hg_priya_premium_std"
+      ],
+      "explain": "2,416 - 1,104",
+      "aliases": []
+    },
+    {
+      "id": "dv_hosp_premium_total_now",
+      "value": 3704,
+      "from": [
+        "hg_priya_new_premium",
+        "hg_marcus_premium"
+      ],
+      "explain": "2,416 + 1,288",
+      "aliases": []
+    },
+    {
+      "id": "dv_ci_severe_after_early",
+      "value": 150000,
+      "from": [
+        "ci_severe",
+        "ci_early",
+        "ci_rule_offset"
+      ],
+      "explain": "200,000 - 50,000 (R1 offset)",
+      "aliases": []
+    },
+    {
+      "id": "dv_ci_cap_left_after_early",
+      "value": 550000,
+      "from": [
+        "ci_cap",
+        "ci_early"
+      ],
+      "explain": "600,000 - 50,000",
+      "aliases": []
+    },
+    {
+      "id": "dv_ci_wait_end",
+      "value": "2023-06-30",
+      "from": [
+        "ci_start",
+        "ci_waiting"
+      ],
+      "explain": "01 Apr 2023 + 90 days",
+      "aliases": []
+    },
+    {
+      "id": "dv_pa_family_adb_total",
+      "value": 360000,
+      "from": [
+        "pa_adb_adult",
+        "pa_adb_child",
+        "pa_insured_list"
+      ],
+      "explain": "2 adults x 150,000 + 2 children x 30,000",
+      "aliases": []
+    },
+    {
+      "id": "dv_pa_adults_adb_total",
+      "value": 300000,
+      "from": [
+        "pa_adb_adult"
+      ],
+      "explain": "2 x 150,000",
+      "aliases": []
+    },
+    {
+      "id": "dv_rohan_dhi_3",
+      "value": 300,
+      "from": [
+        "pa_dhi"
+      ],
+      "explain": "3 days x S$100",
+      "aliases": []
+    },
+    {
+      "id": "dv_kavya_dhi_5",
+      "value": 500,
+      "from": [
+        "pa_dhi"
+      ],
+      "explain": "5 days x S$100",
+      "aliases": []
+    },
+    {
+      "id": "dv_rohan_after_420",
+      "value": 440,
+      "from": [
+        "cl_rohan_remaining"
+      ],
+      "explain": "860 - 420",
+      "aliases": []
+    },
+    {
+      "id": "dv_rohan_physio_250_left",
+      "value": 50,
+      "from": [
+        "cl_rohan_physio_remaining"
+      ],
+      "explain": "300 - 250",
+      "aliases": [
+        "250"
+      ]
+    },
+    {
+      "id": "dv_rohan_after_physio_250",
+      "value": 610,
+      "from": [
+        "cl_rohan_remaining"
+      ],
+      "explain": "860 - 250",
+      "aliases": []
+    },
+    {
+      "id": "dv_rohan_physio_400_paid",
+      "value": 300,
+      "from": [
+        "cl_rohan_physio_remaining"
+      ],
+      "explain": "physio capped by 300 sub-limit",
+      "aliases": []
+    },
+    {
+      "id": "dv_aiden_oshc_balance",
+      "value": 800,
+      "from": [
+        "tr_oshc",
+        "tr_excess"
+      ],
+      "explain": "4,000 bill - 3,100 OSHC - 100 excess",
+      "aliases": []
+    },
+    {
+      "id": "dv_tr_days_left",
+      "value": 126,
+      "from": [
+        "tr_end"
+      ],
+      "explain": "06 Oct 2026 -> 09 Feb 2027",
+      "aliases": []
+    },
+    {
+      "id": "dv_pa_days_left",
+      "value": 117,
+      "from": [
+        "pa_end"
+      ],
+      "explain": "06 Oct 2026 -> 31 Jan 2027",
+      "aliases": []
+    },
+    {
+      "id": "dv_md_year1_days_left",
+      "value": 39,
+      "from": [
+        "md_year1_end"
+      ],
+      "explain": "06 Oct 2026 -> 14 Nov 2026",
+      "aliases": []
+    },
+    {
+      "id": "dv_md_wages_5",
+      "value": 200,
+      "from": [
+        "md_wages"
+      ],
+      "explain": "5 days x S$40",
+      "aliases": []
+    },
+    {
+      "id": "dv_aiden_age",
+      "value": 20,
+      "from": [
+        "m_aiden_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_aiden_age_tr_end",
+      "value": 20,
+      "from": [
+        "m_aiden_dob",
+        "tr_end"
+      ],
+      "explain": "age on 2027-02-09",
+      "aliases": []
+    },
+    {
+      "id": "dv_kavya_age",
+      "value": 14,
+      "from": [
+        "m_kavya_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_rohan_age",
+      "value": 11,
+      "from": [
+        "m_rohan_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_marcus_age",
+      "value": 47,
+      "from": [
+        "m_marcus_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_priya_age",
+      "value": 43,
+      "from": [
+        "m_priya_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_kavya_child_until",
+      "value": "2030-05-09",
+      "from": [
+        "m_kavya_dob",
+        "pa_child_age"
+      ],
+      "explain": "Kavya turns 18 on 09 May 2030 (cover beyond needs full-time education)",
+      "aliases": []
+    },
+    {
+      "id": "dv_kids_ame_compare",
+      "value": 1500,
+      "from": [
+        "pa_ame_child",
+        "cl_rohan_remaining"
+      ],
+      "explain": "Kavya has the full S$1,500 (no claim on file) vs Rohan S$860",
+      "aliases": [
+        "Kavya"
+      ]
+    },
+    {
+      "id": "dv_laptop_2200_paid",
+      "value": 1500,
+      "from": [
+        "tr_laptop"
+      ],
+      "explain": "laptop capped at S$1,500",
+      "aliases": []
+    },
+    {
+      "id": "dv_phone_1100_paid",
+      "value": 750,
+      "from": [
+        "tr_item"
+      ],
+      "explain": "per item cap S$750",
+      "aliases": []
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "trap": "Only Priya was upgraded to Premier on 01 Jul 2026; Marcus remains on HealthGuard Standard (Class A, S$500,000, 50% private pro-ration).",
+      "facts": [
+        "hg_marcus_unchanged",
+        "hg_priya_new_plan"
+      ]
+    },
+    {
+      "id": "T2",
+      "trap": "Two hospital schedules with different effective dates: admissions starting before 01 Jul 2026 use Standard terms even if the stay runs past 01 Jul.",
+      "facts": [
+        "hg_rule_admission_before"
+      ]
+    },
+    {
+      "id": "T3",
+      "trap": "Conditions with symptoms before the upgrade stay on Standard terms (no Premier benefit).",
+      "facts": [
+        "hg_rule_preexisting_upgrade"
+      ]
+    },
+    {
+      "id": "T4",
+      "trap": "Rohan's accidental medical limit is reduced by the S$640 already paid: S$860 remaining, not S$1,500. Physio sub-limit S$300 untouched.",
+      "facts": [
+        "cl_rohan_remaining",
+        "cl_rohan_physio_remaining"
+      ]
+    },
+    {
+      "id": "T5",
+      "trap": "Aiden (20, full-time student) would be age-eligible but is NOT named on FamilyPA, so not covered; his Student Abroad plan is the relevant cover overseas.",
+      "facts": [
+        "pa_named_only",
+        "pa_insured_list"
+      ]
+    },
+    {
+      "id": "T6",
+      "trap": "Maricel (helper) is covered only by HelperCare maid insurance, not by the family's PA or hospital plans; outpatient visits not covered.",
+      "facts": [
+        "md_insured",
+        "md_outpatient",
+        "pa_insured_list"
+      ]
+    },
+    {
+      "id": "T7",
+      "trap": "Step-children have different surnames (Kavya Nair, Rohan Nair; Aiden Lim). 'My son' is ambiguous with a shared login (Aiden or Rohan).",
+      "facts": [
+        "pa_insured_list",
+        "tr_cert"
+      ]
+    },
+    {
+      "id": "T8",
+      "trap": "CI multi-pay: severe stage after early stage of the same condition pays S$150,000 (offset), not S$200,000; overall cap S$600,000.",
+      "facts": [
+        "dv_ci_severe_after_early",
+        "ci_cap"
+      ]
+    },
+    {
+      "id": "T9",
+      "trap": "Angioplasty is 10% of S$200,000 = S$20,000 (cap S$25,000 is not the amount).",
+      "facts": [
+        "ci_angio"
+      ]
+    },
+    {
+      "id": "T10",
+      "trap": "Dengue is not a listed critical illness. Priya is CI nominee, not the life assured.",
+      "facts": [
+        "ci_dengue_excluded",
+        "ci_nominee"
+      ]
+    },
+    {
+      "id": "T11",
+      "trap": "Student plan is suspended while Aiden is in Singapore and pays only the balance after OSHC (OSHC policy not uploaded).",
+      "facts": [
+        "tr_sg_suspended",
+        "tr_oshc"
+      ]
+    },
+    {
+      "id": "T12",
+      "trap": "FamilyPA is accident-only: illness hospitalisation pays nothing under it.",
+      "facts": [
+        "pa_accident_only"
+      ]
+    }
+  ]
+}

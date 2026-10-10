@@ -1,0 +1,68 @@
+===== page 1 (native) =====
+MERIDIAN HARBOUR ASSURANCE
+SafeStay Family Hospital Cash & Personal Accident Plan — Policy Schedule
+Policy number	Policy owner	Period of cover
+MHA-HC-2025-0748213	Simon Alastair Hartwell	01 February 2026 to 31 January 2027 (both dates inclusive)
+Plan type: Family (2 Adults + 2 Children). Currency: Singapore Dollars (S$). Cover basis: Accident only — see Clause
+3.1.
+Insured Persons
+No.	Name of Insured Person	Category	Date of birth	Relationship to owner
+1	Simon Alastair Hartwell	Adult	17/03/1984	Self
+2	Leonie Brigitte Hartwell	Adult	02/11/1986	Spouse
+3	Felix Oran Hartwell	Child	21/06/2017	Son
+4	Isla Maren Hartwell	Child	09/01/2020	Daughter
+Schedule of Benefits
+Item	Benefit	Adult (each)	Child (each)
+A	Accidental death or permanent total disablement (lump sum)	S$150,000	S$40,000
+B	Hospital daily allowance (per day of confinement, max 60 days per policy year) — see Clause 4.2	S$120 per day	S$80 per day
+C	Intensive care unit allowance (payable in addition to Item B, max 10 days per policy year)	S$250 per day	S$180 per day
+D	Fractured bones (per Accident) — Simple (closed) fracture	S$1,000	S$600
+E	Fractured bones (per Accident) — Compound (open) fracture	S$2,500	S$1,500
+F	Medical expenses due to Accident (per Accident, reimbursement)	up to S$3,000	up to S$2,000
+G	Mobility aids & home modification (once per policy year)	up to S$1,500	up to S$1,000
+Items D and E: the type of fracture must be certified in writing by a registered medical practitioner and confirmed by X-ray. Only one of Item D or
+Item E is payable for the same bone in the same Accident. See Clause 4.4.
+This Schedule must be read together with the Policy Wording on page 2. Issued in Singapore on 24 January 2026.
+Meridian Harbour Assurance Pte. Ltd. (fictional) | Co. Reg. No. 201899999Z | SafeStay Family Plan Policy Schedule | MHA-HC-2025-0748213 Page 1 of 2
+
+===== page 2 (native) =====
+Policy Wording (extract)
+1. Definitions
+1.1 Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means,
+occurring during the Period of Cover.
+1.2 Confinement means admission as a registered in-patient in a licensed hospital in Singapore or overseas, on the
+written advice of a registered medical practitioner.
+2. Who is covered
+2.1 The Insured Persons named in the Schedule. A Child is covered from 30 days of age until the policy anniversary
+following his or her 18th birthday.
+3. Scope of cover
+3.1 Accident-only cover. All benefits in this Policy, including Items B and C, are payable only where the Confinement or
+loss results solely and directly from an Accident and begins within 90 days of that Accident. Confinement due to illness or
+disease is not covered.
+4. Benefit conditions
+4.1 Item B is payable for each day of Confinement up to the maximum number of days shown in the Schedule for each
+Insured Person in each policy year.
+4.2 How days of confinement are counted. Days are counted from the date and time of admission to the date and time
+of discharge shown on the hospital record. Each complete period of 24 consecutive hours counts as one day. Any
+remaining period of 12 hours or more counts as one further day; any remaining period of less than 12 hours is
+disregarded. A Confinement of less than 12 hours in total is not payable. Days are not counted by calendar date or by the
+number of nights.
+4.3 Item C is payable only for the hours spent in an intensive care unit, counted in the same way as Clause 4.2.
+4.4 For Items D and E, a Compound fracture means a fracture in which the broken bone breaks through the skin. All
+other fractures are Simple fractures. Hairline fractures and stress fractures are treated as Simple fractures.
+5. Exclusions
+We will not pay any benefit for any loss, Confinement or expense directly or indirectly caused by or arising from:
+5.1 intentional self-injury, suicide or attempted suicide, while sane or insane;
+5.2 participation in professional sports, motor racing, scuba diving below 30 metres, sky-diving or mountaineering
+requiring ropes or guides;
+5.3 pregnancy, childbirth or miscarriage;
+5.4 war, invasion, act of foreign enemy, civil war, rebellion, or nuclear, chemical or biological contamination;
+5.5 the Insured Person being under the influence of alcohol above the legal driving limit or of drugs not prescribed by a
+medical practitioner.
+6. Claims
+6.1 Written notice of a claim must be given within 30 days of the Accident. Claims must be supported by the hospital
+discharge summary showing date and time of admission and discharge, original bills, and any medical certification
+required by this Policy.
+6.2 Claims may be submitted at meridianharbour.example/claims or by post to Claims Department, 8 Harbourfront Walk
+#11-02, Singapore 098999.
+Meridian Harbour Assurance Pte. Ltd. (fictional) | Co. Reg. No. 201899999Z | SafeStay Family Plan Policy Schedule | MHA-HC-2025-0748213 Page 2 of 2

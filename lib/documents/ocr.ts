@@ -1,7 +1,7 @@
 import type { PdfPage } from "@/lib/documents/pdf";
 
 type BridgePage = { pageNumber: number; text: string };
-import { modelFor, supportsHostedDocumentReading } from "@/lib/ai/providers";
+import { documentReaderFor } from "@/lib/ai/providers";
 import { completePdfPagesWithHostedOcr } from "@/lib/documents/ocr-hosted";
 
 function usableCharacters(text: string) {
@@ -38,10 +38,14 @@ export function mergeOcrPages(pages: PdfPage[], ocrPages: BridgePage[]) {
  * the app, with a Python virtualenv and a GPU behind it. Production could never
  * use it -- Vercel cannot spawn that bridge at all -- so the fallback only ever
  * ran on one laptop, which meant a scanned document could be read there and not
- * read once deployed. One path now, the same everywhere: if the reading model
- * cannot look at documents, scanned pages are left as they are, and that shows
- * up in the document's own extracted text rather than as a silent difference
- * between two environments. */
+ * read once deployed. One path now, the same everywhere: the configured reading
+ * model reads the scanned pages when it can look at documents (Anthropic,
+ * Gemini, or an OpenAI vision model such as gpt-6-luna -- PDF file input);
+ * otherwise a document-capable provider with a key does. When nothing can,
+ * the scanned pages are marked UNREAD (policy_pages.extraction_method
+ * 'unreadable', and the document says which pages are missing) -- never
+ * returned as if read. Before this, an OpenAI reading model (production)
+ * returned the scanned pages unchanged and silently: they were never OCR'd. */
 export async function completePdfPagesWithOcr(args: {
   accountId: string;
   /** The document being read: provenance and the reading cache. */
@@ -54,6 +58,9 @@ export async function completePdfPagesWithOcr(args: {
   if (/^(0|false|off)$/i.test(process.env.OCR_ENABLED?.trim() ?? "")) return args.pages;
   const pageNumbers = args.pageNumbers ?? pagesNeedingOcr(args.pages);
   if (!pageNumbers.length) return args.pages;
-  if (!supportsHostedDocumentReading(modelFor("reading").provider)) return args.pages;
+  if (!documentReaderFor()) {
+    const unread = new Set(pageNumbers);
+    return args.pages.map((page) => (unread.has(page.pageNumber) ? { ...page, unreadable: true } : page));
+  }
   return completePdfPagesWithHostedOcr({ accountId: args.accountId, resourceId: args.resourceId, bytes: args.bytes, pages: args.pages, pageNumbers });
 }

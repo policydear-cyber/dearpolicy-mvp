@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# DearPolicy hands-on TRIAL (GitHub Codespace). Runs on every Codespace start (.devcontainer/devcontainer.json
+# postStartCommand); safe to run again by hand: bash scripts/trial/start.sh
+# Local Postgres 17 + pgvector, schema, a cached `next build`, then the trial server (e2e/support/trial-server.ts) on
+# 0.0.0.0:3000 in the background. The OpenAI key comes ONLY from the Codespaces secret OPENAI_TEST_API_KEY and is
+# handed to the server process alone; it is never printed. Without it the trial starts in PREFLIGHT (uploads work,
+# every model call is refused). Never `set -x` here.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+log() { printf '\n[trial] %s\n' "$*"; }
+
+# ---- 0. Isolation, before ANY database command, db:setup, build, server or model call ------------------------------
+# (scripts/trial/isolation.mjs: Codespace only; a LOCAL database -- a remote TRIAL_DATABASE_URL / DATABASE_URL / PGHOST is
+# refused before anything connects; local storage only; no Supabase or Vercel settings; the fixed trial allocation
+# reserved in docs/rag-migration/live/LEDGER.json; the local spend record readable and bound to this Codespace.)
+if [ "${CODESPACES:-}" != "true" ]; then
+  echo "[trial] refused: this script runs only inside a GitHub Codespace (CODESPACES=true)." >&2; exit 1
+fi
+unset OPENAI_BASE_URL ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY PINECONE_API_KEY VIRUSTOTAL_API_KEY DEARPOLICY_DETERMINISTIC_MODEL || true
+iso="$(node scripts/trial/isolation.mjs)" || exit 1
+TRIAL_CAP_USD="$(printf '%s\n' "$iso" | sed -n 's/^cap=\([0-9.]*\)$/\1/p')"
+TRIAL_ALLOCATION_ID="$(printf '%s\n' "$iso" | sed -n 's/^allocation=\(trial-codespace-[0-9]*\)$/\1/p')"
+if [ -z "$TRIAL_CAP_USD" ] || [ -z "$TRIAL_ALLOCATION_ID" ]; then echo "[trial] refused: the isolation check gave no allocation" >&2; exit 1; fi
+export TRIAL_CAP_USD TRIAL_ALLOCATION_ID
+mkdir -p .trial
+
+export TRIAL_MODE=1 NODE_ENV=test NEXT_TELEMETRY_DISABLED=1 STORAGE_DRIVER=local
+export DATABASE_URL="${TRIAL_DATABASE_URL:-postgres://postgres:postgres@localhost:5432/dearpolicy_trial}"
+export CHAT_MODEL=openai:gpt-6-luna JUDGEMENT_MODEL=openai:gpt-6-luna NARRATION_MODEL=openai:gpt-6-luna READING_MODEL=openai:gpt-6-luna
+export DEARPOLICY_RAG_LOOP_RUN_MAX_USD="$TRIAL_CAP_USD" DEARPOLICY_RAG_LOOP_REQUIRE_PRICE=1
+
+log "1/4 database"
+if ! pg_isready -q -h localhost -p 5432; then
+  (sudo -n pg_ctlcluster 17 main start 2>/dev/null || pg_ctlcluster 17 main start 2>/dev/null || sudo -n service postgresql start) >/dev/null
+  for _ in $(seq 1 30); do pg_isready -q -h localhost -p 5432 && break; sleep 1; done
+fi
+db=$(node -e 'process.stdout.write(new URL(process.env.DATABASE_URL).pathname.slice(1))')
+if ! PGPASSWORD=postgres psql -h localhost -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$db'" | grep -q 1; then
+  PGPASSWORD=postgres psql -h localhost -U postgres -qc "CREATE DATABASE $db"
+fi
+PGPASSWORD=postgres psql -h localhost -U postgres -d "$db" -qc "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+npm run -s db:setup
+
+log "2/4 build (cached while the code is unchanged)"
+stamp="$(git rev-parse HEAD 2>/dev/null)-$( (git status --porcelain --untracked-files=no -- . ':!.trial' 2>/dev/null || true) | sha1sum | cut -c1-12)"
+if [ ! -f .next/BUILD_ID ] || [ "$(cat .trial/build-stamp 2>/dev/null)" != "$stamp" ]; then
+  NODE_OPTIONS=--max-old-space-size="${TRIAL_BUILD_HEAP_MB:-4096}" npx next build > .trial/build.log 2>&1 || { tail -40 .trial/build.log; echo "[trial] next build failed (.trial/build.log)" >&2; exit 1; }
+  echo "$stamp" > .trial/build-stamp
+else
+  echo "[trial] reusing the existing build ($stamp)"
+fi
+
+log "3/4 server"
+if [ -f .trial/server.pid ] && kill -0 "$(cat .trial/server.pid)" 2>/dev/null; then kill "$(cat .trial/server.pid)" 2>/dev/null || true; sleep 2; fi
+if [ -n "${OPENAI_TEST_API_KEY:-}" ]; then runkey="$OPENAI_TEST_API_KEY"; mode="LIVE (the real model, gpt-6-luna)"; else runkey="preflight-no-key-set"; mode="PREFLIGHT: no OPENAI_TEST_API_KEY Codespaces secret -- uploads and reading of text work, every model call is refused"; fi
+# The key reaches the server process only (its own environment); this shell drops it at once.
+# setsid: its own session, so it outlives postStartCommand (Codespaces ends that command's session when it returns).
+setsid nohup env -u OPENAI_TEST_API_KEY OPENAI_API_KEY="$runkey" PORT=3000 node --max-old-space-size=2048 --import tsx e2e/support/trial-server.ts > .trial/server.log 2>&1 &
+echo $! > .trial/server.pid
+runkey=""
+for _ in $(seq 1 180); do grep -q "trial server on" .trial/server.log 2>/dev/null && break; if ! kill -0 "$(cat .trial/server.pid)" 2>/dev/null; then tail -20 .trial/server.log; echo "[trial] the server stopped (.trial/server.log)" >&2; exit 1; fi; sleep 1; done
+grep -q "trial server on" .trial/server.log || { tail -20 .trial/server.log; echo "[trial] the server did not start in 180 s" >&2; exit 1; }
+
+log "4/4 ready"
+url="http://localhost:3000"
+if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then url="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"; fi
+usage=$(curl -sf http://localhost:3000/__trial/usage || echo '{}')
+node -e 'const u=JSON.parse(process.argv[1]||"{}");console.log(`[trial] mode: ${process.argv[2]}\n[trial] trial allowance ${process.argv[3]}: US$${(u.spentUsd??0).toFixed(4)} spent of US$${u.capUsd??"?"} -- US$${(u.remainingUsd??0).toFixed(4)} left (this Codespace only; kept in .trial/ledger.json across restarts)`)' "$usage" "$mode" "$TRIAL_ALLOCATION_ID"
+cat <<EOF
+
+  DearPolicy trial is running:  $url
+  (Spend so far: $url/__trial/usage)
+
+  Open the link above (it is private to your GitHub account). You are already signed in as a made-up household:
+  first add the people in it on the Family page, then upload the sample PDFs on the Policies page and wait until each
+  says it is ready, then ask questions on the Chat page. Everything is test data kept inside this Codespace; the
+  answers come from the real model and each one costs a little of the trial budget above. When you are done, stop the
+  Codespace (GitHub -> Codespaces -> ... -> Stop codespace). Full steps: docs/trial/TRIAL.md
+
+EOF

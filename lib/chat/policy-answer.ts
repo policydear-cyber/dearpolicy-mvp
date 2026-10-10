@@ -28,6 +28,7 @@ import { amountAppears, dateAppears, normalPassage, rephrasingIsFaithful, verify
 import type { ClaimPerson } from "@/lib/claims/person";
 import { cleanScannedLine, looksScanned, ocrNoiseShare } from "./scanned-text";
 import { replacedFigures } from "@/lib/policies/amendments";
+import { bindPassageFact, citeLine, citePageLines } from "./answer-verification";
 import type { ChatAnswer, ChatCitation, PolicyStatedLimit } from "@/types";
 import { applyReinstatements, printedReinstatement, daysBetween, longDate, printedPeriodEnd, printedStatus, statusSentence, todayIso, type PrintedStatus } from "./policy-status";
 
@@ -1302,6 +1303,7 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
         if (rules.length) {
           const named = [...new Set(rules.map((r) => r.citation.policyName))];
           const lead = "Here is what " + (args.people.length === 1 && !isSelf(args.people[0].id) ? personName(args.people[0].id) + "’s " : "your ") + (named.length === 1 ? named[0] : "documents") + " " + (named.length === 1 ? "prints" : "print") + " about that:";
+          citePageLines(null, rules.map((r) => r.text), rules.map((r) => r.citation));
           return result({ handled: true, answer: { mode: "answer", summary: lead, details: rules.map((r) => r.text), citations: rules.map((r) => r.citation), confidence: "partial_match", nextSteps: [], questions: [], policyStatedLimits: [], verifiedPolicyFactsOnly: true,
             verifiedPolicyFigures: [...new Set(rules.flatMap((r) => r.text.match(new RegExp(MONEY_PATTERN.source, "gi")) ?? []))] } });
         }
@@ -1679,6 +1681,8 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   for (const docId of statusDocs) {
     const st = statusOf.get(docId)!, sentence = statusSentence(docName(docId), st);
     if (sentence && !lines.includes(sentence)) lines.push(sentence);
+    // Gate R17: the unpaid premium the sentence repeats is read from the status line's own page.
+    if (sentence && st.page) citeLine(null, sentence, { policyId: docId, pageStart: st.page });
     // Round 16: the lapse date a reinstatement sentence repeats is cited where it is printed (the lapse notice).
     if (sentence && st.state === "reinstated" && st.lapsedPrinted && st.lapsedDocId && st.lapsedPage && docs.has(st.lapsedDocId) && !citations.some((c) => c.policyId === st.lapsedDocId && c.pageStart === st.lapsedPage))
       citations.push({ chunkId: "lapsed:" + st.lapsedDocId + ":" + st.lapsedPage, policyId: st.lapsedDocId, policyName: docs.get(st.lapsedDocId)?.product_name ?? docName(st.lapsedDocId), insurer: docs.get(st.lapsedDocId)?.insurer ?? undefined,
@@ -1893,6 +1897,14 @@ async function answerPolicyQuestionInner(args: PolicyAnswerArgs): Promise<Policy
   // A card is for an amount on a line shown; a "who has it" listing shows no rows, so no cards.
   if (details.length) { const visible = [summary, ...details].join("\n"); limits.splice(0, limits.length, ...limits.filter((l) => visible.includes(l.benefitTitle))); }
   if (fullList) withoutListedLimitCards(details, limits);
+  // Gate R17: every line's figures are bound to the passage each fact was verified in (its own page, version, person
+  // and row), and the lines that quote a page are cited to that page (resolved on it at save time).
+  for (const t of [summary, ...details]) {
+    if (!/\d/.test(t)) continue;
+    for (const a of shown) bindPassageFact(null, t, a);
+    for (const n of replacedNotes) { bindPassageFact(null, t, n.old); if (n.now) citeLine(null, t, { policyId: n.byDocId, pageStart: n.now.page, benefit: n.now.label }); }
+    citePageLines(null, [t], citations);
+  }
   const answer: PolicyAnswer = { mode: "answer", summary, details, citations, policyStatedLimits: limits,
     verifiedPolicyFactsOnly: true, verifiedPolicyFigures: figures,
     confidence: kept.length && !conflicting.length ? (rejected.length || notFound.length ? "partial_match" : "strong_match") : "partial_match",
@@ -1999,5 +2011,8 @@ export function relevanceRepair(question: string, answerText: string, pagesByDoc
         citation: { chunkId: "page:" + docId + ":" + l.page, policyId: docId, policyName: docName(docId), pageStart: l.page, pageEnd: l.page } });
     }
   }
-  return found.sort((a, b) => b.score - a.score).slice(0, 2).reverse();
+  const picked = found.sort((a, b) => b.score - a.score).slice(0, 2).reverse();
+  // Gate R17: a quoted line's figures are read from its own page (resolved on that page at save time).
+  for (const r of picked) citeLine(null, r.text, { policyId: r.citation.policyId, pageStart: r.citation.pageStart! });
+  return picked;
 }

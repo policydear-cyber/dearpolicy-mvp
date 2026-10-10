@@ -1,0 +1,866 @@
+{
+  "verdict": "FAIL",
+  "placeholder": false,
+  "passed": 135,
+  "failed": 8,
+  "checks": [
+    {
+      "scope": "hx-text.pdf",
+      "check": "uploaded and processed",
+      "ok": true,
+      "detail": "not_scanned_prototype/ready"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1842 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$150,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$40,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$120\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$80\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$600\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$1,500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 text extracted",
+      "ok": true,
+      "detail": "native, 3002 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 contains \"24 consecutive hours\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 contains \"Accident-only cover\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "linked automatically to the right people",
+      "ok": true,
+      "detail": "linked: Felix Oran Hartwell, Isla Maren Hartwell, Leonie Brigitte Hartwell, Simon Alastair Hartwell; expected: Simon Alastair Hartwell, Leonie Brigitte Hartwell, Felix Oran Hartwell, Isla Maren Hartwell"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "uploaded and processed",
+      "ok": true,
+      "detail": "not_scanned_prototype/ready"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1250 chars"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"ME-26-0412\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"S$110\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"01 July 2026\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "uploaded and processed",
+      "ok": true,
+      "detail": "not_scanned_prototype/ready"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "ocr, 1243 chars"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"KBJ-26-00391\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"S$150\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"S$500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "linked automatically to the right people",
+      "ok": true,
+      "detail": "linked: Isla Maren Hartwell; expected: Isla Maren Hartwell"
+    },
+    {
+      "scope": "delete hx-endorsement.pdf",
+      "check": "deleted through the page and confirmed before the next question",
+      "ok": true,
+      "detail": "notice: \"Deleted SafeStay Family Hospital Cash & Personal Accident Plan. It is no longer used in answers, and your portfolio has been updated.\n✕\"; listed after: false; lifecycle: pending_deletion"
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": false,
+      "detail": "no stored answer"
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": false,
+      "detail": "S$20,000 in \"Isla’s JuniorShield certificate also lists “Child accidental death” at S$20,000.\""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3 (conversation) \"Felix fell off the monkey bars at school yesterday and broke\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "one material question"
+    },
+    {
+      "scope": "Q3 (conversation) \"Felix fell off the monkey bars at school yesterday and broke\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3 (conversation) \"Felix fell off the monkey bars at school yesterday and broke\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3 (conversation) \"Felix fell off the monkey bars at school yesterday and broke\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3 (conversation) \"Felix fell off the monkey bars at school yesterday and broke\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3 (conversation) \"Felix fell off the monkey bars at school yesterday and broke\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4 (conversation) \"The doctor said it's a closed fracture, the X-ray confirmed \"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "Q4 (conversation) \"The doctor said it's a closed fracture, the X-ray confirmed \"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4 (conversation) \"The doctor said it's a closed fracture, the X-ray confirmed \"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4 (conversation) \"The doctor said it's a closed fracture, the X-ray confirmed \"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4 (conversation) \"The doctor said it's a closed fracture, the X-ray confirmed \"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4 (conversation) \"The doctor said it's a closed fracture, the X-ray confirmed \"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5 (conversation) \"I was in hospital after that car accident in March. They adm\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "Q5 (conversation) \"I was in hospital after that car accident in March. They adm\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5 (conversation) \"I was in hospital after that car accident in March. They adm\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5 (conversation) \"I was in hospital after that car accident in March. They adm\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5 (conversation) \"I was in hospital after that car accident in March. They adm\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5 (conversation) \"I was in hospital after that car accident in March. They adm\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q6 (conversation) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "one material question"
+    },
+    {
+      "scope": "Q6 (conversation) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q6 (conversation) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q6 (conversation) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q6 (conversation) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q6 (conversation) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q7 (conversation) \"How much are we actually paying for the Meridian policy ever\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": false,
+      "detail": "no stored answer"
+    },
+    {
+      "scope": "Q7 (conversation) \"How much are we actually paying for the Meridian policy ever\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q7 (conversation) \"How much are we actually paying for the Meridian policy ever\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q7 (conversation) \"How much are we actually paying for the Meridian policy ever\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q7 (conversation) \"How much are we actually paying for the Meridian policy ever\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q7 (conversation) \"How much are we actually paying for the Meridian policy ever\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8 (conversation) \"Isla might need to stay in hospital two nights next week. Wi\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "Q8 (conversation) \"Isla might need to stay in hospital two nights next week. Wi\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8 (conversation) \"Isla might need to stay in hospital two nights next week. Wi\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8 (conversation) \"Isla might need to stay in hospital two nights next week. Wi\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8 (conversation) \"Isla might need to stay in hospital two nights next week. Wi\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8 (conversation) \"Isla might need to stay in hospital two nights next week. Wi\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9 (conversation) \"Oh, by the way, if one of the kids gets dengue, which of our\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "Q9 (conversation) \"Oh, by the way, if one of the kids gets dengue, which of our\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9 (conversation) \"Oh, by the way, if one of the kids gets dengue, which of our\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9 (conversation) \"Oh, by the way, if one of the kids gets dengue, which of our\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9 (conversation) \"Oh, by the way, if one of the kids gets dengue, which of our\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9 (conversation) \"Oh, by the way, if one of the kids gets dengue, which of our\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1 (reopen) \"So if Isla was in hospital for exactly 3 days in August afte\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": false,
+      "detail": "no stored answer"
+    },
+    {
+      "scope": "R1 (reopen) \"So if Isla was in hospital for exactly 3 days in August afte\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1 (reopen) \"So if Isla was in hospital for exactly 3 days in August afte\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1 (reopen) \"So if Isla was in hospital for exactly 3 days in August afte\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1 (reopen) \"So if Isla was in hospital for exactly 3 days in August afte\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1 (reopen) \"So if Isla was in hospital for exactly 3 days in August afte\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "asked after a confirmed deletion",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1 (after_delete) \"Did that endorsement letter change anything? How much is the\"",
+      "check": "does not rely on the deleted hx-endorsement.pdf",
+      "ok": true,
+      "detail": "cites: hx-text.pdf, hx-scanned.pdf, hx-scanned.pdf"
+    },
+    {
+      "scope": "Q1",
+      "check": "states \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "states one of [\"31 January 2027\",\"31 Jan 2027\",\"31/01/2027\",\"2027-01-31\",\"31 Jan. 2027\"]",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"MHA-HC-2025-0748218\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"01 Feb 2027\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"1 February 2027\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"14 March 2027\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "cites hx-text.pdf page 1",
+      "ok": false,
+      "detail": "cited: nothing"
+    },
+    {
+      "scope": "Q1",
+      "check": "answers without an unnecessary follow-up",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "states \"S$40,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "states \"S$150,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "cites hx-text.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-text.pdf p1, hx-text.pdf p1, hx-scanned.pdf p1"
+    },
+    {
+      "scope": "Q2",
+      "check": "answers without an unnecessary follow-up",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3",
+      "check": "never states \"S$2,100\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3",
+      "check": "never states \"S$2,500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q3",
+      "check": "about Felix Oran Hartwell",
+      "ok": true,
+      "detail": "resolved to Felix Oran Hartwell"
+    },
+    {
+      "scope": "Q3",
+      "check": "asks a follow-up before answering",
+      "ok": true,
+      "detail": "Did the broken bone break through the skin, and has the fracture been confirmed by X-ray and certified in writing by a registered medical practitioner?"
+    },
+    {
+      "scope": "Q4",
+      "check": "states \"S$600\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4",
+      "check": "never states \"S$2,100\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4",
+      "check": "never states \"S$2,600\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q4",
+      "check": "cites hx-text.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-text.pdf p1, hx-text.pdf p2, hx-text.pdf p1, hx-text.pdf p1"
+    },
+    {
+      "scope": "Q4",
+      "check": "about Felix Oran Hartwell",
+      "ok": true,
+      "detail": "resolved to Felix Oran Hartwell"
+    },
+    {
+      "scope": "Q4",
+      "check": "the answered question is not asked again",
+      "ok": true,
+      "detail": "answered: \"Did the broken bone break through the skin, and has the fracture been confirmed by X-ray and certified in writing by a registered medical practitioner?\""
+    },
+    {
+      "scope": "Q5",
+      "check": "states \"S$360\"",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "scope": "Q5",
+      "check": "never states \"S$480\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5",
+      "check": "never states \"S$330\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5",
+      "check": "never states \"S$440\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q5",
+      "check": "cites hx-text.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-text.pdf p1, hx-text.pdf p2"
+    },
+    {
+      "scope": "Q5",
+      "check": "about Simon Alastair Hartwell",
+      "ok": true,
+      "detail": "resolved to Simon Alastair Hartwell"
+    },
+    {
+      "scope": "Q6",
+      "check": "states \"S$110\"",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "scope": "Q6",
+      "check": "states one of [\"01 July 2026\",\"1 July 2026\",\"1 Jul 2026\",\"01 Jul 2026\"]",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "scope": "Q6",
+      "check": "cites hx-endorsement.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-text.pdf p2, hx-text.pdf p2, hx-endorsement.pdf p1, hx-text.pdf p1"
+    },
+    {
+      "scope": "Q6",
+      "check": "uses the current version (hx-endorsement.pdf)",
+      "ok": true,
+      "detail": "cited: hx-text.pdf, hx-endorsement.pdf"
+    },
+    {
+      "scope": "Q7",
+      "check": "states one of [\"not stated\",\"isn't stated\",\"is not stated\",\"not shown\",\"isn't shown\",\"doesn't show\",\"does not show\",\"not in your\",\"not in the\",\"don't show\",\"do not show\",\"no premium\",\"doesn't state\",\"does not state\",\"doesn't mention\",\"does not mention\",\"couldn't find\",\"could not find\"]",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8",
+      "check": "states one of [\"4th\",\"fourth\"]",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8",
+      "check": "never states \"S$300\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8",
+      "check": "never states \"S$450\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q8",
+      "check": "cites hx-scanned.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-scanned.pdf p1, hx-scanned.pdf p1"
+    },
+    {
+      "scope": "Q8",
+      "check": "about Isla Maren Hartwell",
+      "ok": true,
+      "detail": "resolved to Isla Maren Hartwell"
+    },
+    {
+      "scope": "Q9",
+      "check": "states \"S$500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9",
+      "check": "states one of [\"accident only\",\"accident-only\",\"only covers accidents\",\"accidents only\",\"only for accidents\",\"only pays for accidents\"]",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9",
+      "check": "cites hx-scanned.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-text.pdf p2, hx-endorsement.pdf p1, hx-scanned.pdf p1, hx-text.pdf p1"
+    },
+    {
+      "scope": "Q9",
+      "check": "never: Meridian's daily allowance presented as paying for dengue (source Q9 forbidden 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q9",
+      "check": "never: JuniorShield presented as covering Felix or the adults (source Q9 forbidden 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1",
+      "check": "never states \"S$240\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "R1",
+      "check": "about Isla Maren Hartwell",
+      "ok": true,
+      "detail": "no stored subject; answer names Isla"
+    },
+    {
+      "scope": "R1",
+      "check": "one accepted answer: asks for the admission and discharge times | S$330 conditioned on exactly 72 hours",
+      "ok": true,
+      "detail": "asks: \"What were Isla’s actual hospital admission and discharge dates and times?\""
+    },
+    {
+      "scope": "R1",
+      "check": "S$330 only with its condition",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1",
+      "check": "never states \"S$110\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "D1",
+      "check": "does not cite hx-endorsement.pdf",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

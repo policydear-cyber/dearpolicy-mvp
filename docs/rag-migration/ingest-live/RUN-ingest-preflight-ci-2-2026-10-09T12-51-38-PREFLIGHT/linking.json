@@ -1,0 +1,29 @@
+[
+  {
+    "file": "hx-scanned.pdf",
+    "policyId": "e1da1b54-3b91-414f-9549-f17400234baa",
+    "product": null,
+    "linked": [],
+    "detected": [],
+    "needsReview": false,
+    "reviewReason": null
+  },
+  {
+    "file": "hx-endorsement.pdf",
+    "policyId": "0a4d91f1-694c-4727-aaf4-d9a640905ee9",
+    "product": null,
+    "linked": [],
+    "detected": [],
+    "needsReview": false,
+    "reviewReason": null
+  },
+  {
+    "file": "hx-text.pdf",
+    "policyId": "ba42eb67-550b-42ef-8406-640e4a353f81",
+    "product": null,
+    "linked": [],
+    "detected": [],
+    "needsReview": false,
+    "reviewReason": null
+  }
+]

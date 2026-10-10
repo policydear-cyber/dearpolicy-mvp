@@ -1,0 +1,1551 @@
+{
+  "household_id": "H6",
+  "as_of": "2026-10-06",
+  "timezone": "Asia/Singapore",
+  "label": "H6 - young professional",
+  "description": "Ethan Yeo Zhi Hao (31), single, employee of Aurelion Analytics, owns a Shiba Inu named Mochi and a Mazda 3. One upload (scan_0915.pdf) is unreadable; his annual travel policy expired on 15 Sep 2026.",
+  "members": [
+    {
+      "id": "ethan",
+      "name": "Ethan Yeo Zhi Hao",
+      "relation": "self",
+      "dob": "1995-09-23"
+    },
+    {
+      "id": "mochi",
+      "name": "Mochi",
+      "relation": "pet dog (Shiba Inu) - not a person",
+      "dob": "2022-04-02"
+    }
+  ],
+  "documents": [
+    {
+      "file": "docs/aurelion_flexben_booklet_2026.pdf",
+      "pages": 3,
+      "title": "FlexBen 2026 employee benefits booklet (options, not elections)",
+      "insurer": "Group insurer via Aurelion Analytics (employer)",
+      "product": "FlexBen 2026",
+      "policy_no": null,
+      "policyholder": "Aurelion Analytics Pte Ltd",
+      "insured": [
+        "all confirmed employees"
+      ],
+      "type": "employer flexible benefits booklet",
+      "status": "plan year 2026"
+    },
+    {
+      "file": "docs/aurelion_flexben_enrolment_ethan.pdf",
+      "pages": 1,
+      "title": "FlexBen 2026 enrolment confirmation - Ethan's chosen options",
+      "insurer": "Group insurer via Aurelion Analytics (employer)",
+      "product": "FlexBen 2026",
+      "policy_no": "AA-01377",
+      "policyholder": "Aurelion Analytics Pte Ltd",
+      "insured": [
+        "Ethan Yeo Zhi Hao"
+      ],
+      "type": "employer benefits enrolment (elections)",
+      "status": "locked for 2026"
+    },
+    {
+      "file": "docs/pelican_homeshield_mrt_ethan.pdf",
+      "pages": 2,
+      "title": "HomeShield mortgage reducing term - Ethan",
+      "insurer": "Pelican Life Assurance Pte Ltd",
+      "product": "HomeShield Mortgage Reducing Term",
+      "policy_no": "PL-MR-6610385",
+      "policyholder": "Ethan Yeo Zhi Hao",
+      "insured": [
+        "Ethan Yeo Zhi Hao"
+      ],
+      "type": "mortgage reducing term",
+      "status": "in force"
+    },
+    {
+      "file": "docs/tembusu_pawsure_mochi.pdf",
+      "pages": 2,
+      "title": "PawSure dog insurance - Mochi (Shiba Inu)",
+      "insurer": "Tembusu General Insurance Pte Ltd",
+      "product": "PawSure Dog Insurance (Plus)",
+      "policy_no": "TG-PET-2290174",
+      "policyholder": "Ethan Yeo Zhi Hao",
+      "insured": [
+        "Mochi (dog)"
+      ],
+      "type": "pet insurance",
+      "status": "in force"
+    },
+    {
+      "file": "docs/tembusu_drivesafe_motor_ethan.pdf",
+      "pages": 2,
+      "title": "DriveSafe comprehensive motor - Mazda 3",
+      "insurer": "Tembusu General Insurance Pte Ltd",
+      "product": "DriveSafe Comprehensive",
+      "policy_no": "TG-MV-7745310",
+      "policyholder": "Ethan Yeo Zhi Hao",
+      "insured": [
+        "Ethan Yeo Zhi Hao (vehicle SNE4821K)"
+      ],
+      "type": "motor",
+      "status": "in force"
+    },
+    {
+      "file": "docs/pelican_dailycare_hospital_cash.pdf",
+      "pages": 1,
+      "title": "DailyCare hospital cash - Ethan",
+      "insurer": "Pelican Life Assurance Pte Ltd",
+      "product": "DailyCare Hospital Cash (Plan 2)",
+      "policy_no": "PL-HC-3301958",
+      "policyholder": "Ethan Yeo Zhi Hao",
+      "insured": [
+        "Ethan Yeo Zhi Hao"
+      ],
+      "type": "hospital cash",
+      "status": "in force"
+    },
+    {
+      "file": "docs/scan_0915.pdf",
+      "pages": 2,
+      "title": "scan_0915.pdf (unreadable)",
+      "insurer": null,
+      "product": null,
+      "policy_no": null,
+      "policyholder": null,
+      "insured": [],
+      "type": "unknown",
+      "status": "unreadable",
+      "user_note": "Uploaded by the user as 'company insurance doc - it was password protected'. Text extraction returns garbage; contents unknown.",
+      "unreadable": true
+    },
+    {
+      "file": "docs/tembusu_travelease_annual_2025.pdf",
+      "pages": 1,
+      "title": "TravelEase annual multi-trip (2025-26) - Ethan",
+      "insurer": "Tembusu General Insurance Pte Ltd",
+      "product": "TravelEase Annual Multi-Trip (Asia)",
+      "policy_no": "TG-TA-5530917",
+      "policyholder": "Ethan Yeo Zhi Hao",
+      "insured": [
+        "Ethan Yeo Zhi Hao"
+      ],
+      "type": "travel (annual)",
+      "status": "expired 2026-09-15"
+    }
+  ],
+  "not_uploaded": [
+    "Any Integrated Shield / MediShield Life documents",
+    "HDB / bank mortgage loan statement (actual outstanding loan)",
+    "Home contents or fire insurance",
+    "A current (renewed) travel policy",
+    "The contents of scan_0915.pdf (uploaded but unreadable)",
+    "Any policy for family members or a partner"
+  ],
+  "facts": [
+    {
+      "id": "m_ethan_dob",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "1995-09-23",
+      "evidence": [
+        "Life assured / owner Ethan Yeo Zhi Hao",
+        "Date of birth 23 Sep 1995"
+      ],
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "member",
+      "aliases": [
+        "Ethan"
+      ]
+    },
+    {
+      "id": "fb_points",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 1,
+      "value": "1,000",
+      "evidence": "Every confirmed employee receives 1,000 FlexPoints",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_conversion",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 1,
+      "value": "0.80",
+      "evidence": "converted to your Wellness Spending Account at S$0.80 per point",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_wellness_deadline",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 1,
+      "value": "2027-01-31",
+      "evidence": "must be submitted by 31 Jan 2027",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_locked",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 1,
+      "value": "30 days",
+      "evidence": "Changes are allowed only within 30 days of a qualifying life event (marriage, birth or adoption of a child)",
+      "person": null,
+      "topic": "flexben",
+      "aliases": [
+        "locked"
+      ]
+    },
+    {
+      "id": "fb_wellness_uses",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 1,
+      "value": "gym, health screening, sports equipment",
+      "evidence": "Wellness claims (gym, health screening, sports equipment)",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_ends_employment",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 1,
+      "value": "last day of employment",
+      "evidence": "All cover ends on the last day of employment",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_h1",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "40,000",
+      "evidence": "Hospital & Surgical H1 (default) Ward B1, annual limit S$40,000 0",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_h2",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "80,000",
+      "evidence": "Hospital & Surgical H2 Ward A (restructured), annual limit S$80,000 180",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_h3",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "150,000",
+      "evidence": "Hospital & Surgical H3 Private hospital, annual limit S$150,000 420",
+      "person": null,
+      "topic": "flexben",
+      "aliases": [
+        "420"
+      ]
+    },
+    {
+      "id": "fb_ci1",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "50,000",
+      "evidence": "Group Critical Illness CI1 S$50,000 200",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_gp",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "10",
+      "evidence": "Panel GP, S$10 co-payment per visit",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_d1",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "300",
+      "evidence": "Dental D1 S$300 per year 150",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_gtl_unit",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "120",
+      "evidence": "Group Term Life Top-up unit +S$100,000 per unit (max 3 units) 120 per unit",
+      "person": null,
+      "topic": "flexben",
+      "aliases": [
+        "3 units"
+      ]
+    },
+    {
+      "id": "fb_bt",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 2,
+      "value": "500,000",
+      "evidence": "Business Travel Automatic Company-authorised trips, medical S$500,000 0",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_no_deductible",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 3,
+      "value": "no deductible or co-insurance",
+      "evidence": "Group Hospital & Surgical: no deductible or co-insurance",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_preex_12m",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 3,
+      "value": "12 months",
+      "evidence": "Pre-existing conditions are covered after 12 months of continuous cover",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_ci_only_elected",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 3,
+      "value": "only to employees who elected it",
+      "evidence": "Group Critical Illness (CI1) applies only to employees who elected it",
+      "person": null,
+      "topic": "flexben"
+    },
+    {
+      "id": "fb_bt_personal",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 3,
+      "value": "Personal leisure travel is not covered",
+      "evidence": "Business Travel applies only to trips authorised by the company. Personal leisure travel is not covered",
+      "person": null,
+      "topic": "flexben",
+      "aliases": [
+        "not covered",
+        "business"
+      ]
+    },
+    {
+      "id": "fb_panel",
+      "doc": "aurelion_flexben_booklet_2026.pdf",
+      "page": 3,
+      "value": "non-panel visits are not reimbursed",
+      "evidence": "Outpatient GP visits must be at a panel clinic; non-panel visits are not reimbursed",
+      "person": null,
+      "topic": "flexben",
+      "aliases": [
+        "panel"
+      ]
+    },
+    {
+      "id": "en_date",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "2025-11-28",
+      "evidence": "Elections confirmed on 28 Nov 2025",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_h2",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "H2 - Ward A, S$80,000",
+      "evidence": "Hospital & Surgical H2 - Ward A, S$80,000 180",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben",
+      "aliases": [
+        "Ward A",
+        "80,000"
+      ]
+    },
+    {
+      "id": "en_dental",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "600",
+      "evidence": "Dental D2 - S$600 per year 280",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_optical",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "200",
+      "evidence": "Optical O1 - S$200 per year 90",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_gtl",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "200,000",
+      "evidence": "Group Term Life Core + 1 top-up unit (total S$200,000) 120",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_ci_not",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "Not elected",
+      "evidence": "Group Critical Illness Not elected 0",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben",
+      "aliases": [
+        "not covered"
+      ]
+    },
+    {
+      "id": "en_used",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "670",
+      "evidence": "FlexPoints used 670",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_remaining",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "330",
+      "evidence": "FlexPoints remaining 330",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_wellness",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "264.00",
+      "evidence": "Wellness Spending Account credit S$264.00",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "en_nominee",
+      "doc": "aurelion_flexben_enrolment_ethan.pdf",
+      "page": 1,
+      "value": "none recorded",
+      "evidence": "Group Term Life nominee: none recorded",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "flexben"
+    },
+    {
+      "id": "mr_policy",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "PL-MR-6610385",
+      "evidence": "Policy number PL-MR-6610385",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt",
+      "aliases": [
+        "HomeShield",
+        "Pelican"
+      ]
+    },
+    {
+      "id": "mr_start",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "2022-06-01",
+      "evidence": "Commencement date 01 Jun 2022",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_end",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "2047-05-31",
+      "evidence": "Policy term 25 years (cover ends 31 May 2047)",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_initial",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "480,000",
+      "evidence": "Initial sum assured S$480,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_rate",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "3.0%",
+      "evidence": "Assumed loan interest rate 3.0% per year",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_premium",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "588.00",
+      "evidence": "Annual premium S$588.00 (level), payable for 22 years",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt",
+      "aliases": [
+        "22 years"
+      ]
+    },
+    {
+      "id": "mr_benefits",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "TPD before age 65",
+      "evidence": "Death, terminal illness, total and permanent disability (TPD before age 65)",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt",
+      "aliases": [
+        "terminal illness",
+        "65"
+      ]
+    },
+    {
+      "id": "mr_not_assigned",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "Not assigned",
+      "evidence": "Assignment Not assigned",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_rule",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "policy year in which the death, terminal illness or TPD occurs",
+      "evidence": "for the policy year in which the death, terminal illness or TPD occurs",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_not_fire",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 1,
+      "value": "does not pay for damage to the property",
+      "evidence": "does not pay for damage to the property",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt",
+      "aliases": [
+        "not a fire"
+      ]
+    },
+    {
+      "id": "mr_y1",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "480,000",
+      "evidence": "1 01 Jun 2022 - 31 May 2023 S$480,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_y5",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "424,920",
+      "evidence": "5 01 Jun 2026 - 31 May 2027 S$424,920",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_y6",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "410,100",
+      "evidence": "6 01 Jun 2027 - 31 May 2028 S$410,100",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_y8",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "379,120",
+      "evidence": "8 01 Jun 2029 - 31 May 2030 S$379,120",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_y9",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "362,930",
+      "evidence": "9 01 Jun 2030 - 31 May 2031 S$362,930",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_y10",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "346,250",
+      "evidence": "10 01 Jun 2031 - 31 May 2032 S$346,250",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "mr_y25",
+      "doc": "pelican_homeshield_mrt_ethan.pdf",
+      "page": 2,
+      "value": "26,760",
+      "evidence": "25 01 Jun 2046 - 31 May 2047 S$26,760",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "mrt"
+    },
+    {
+      "id": "pet_policy",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "TG-PET-2290174",
+      "evidence": "Policy number TG-PET-2290174",
+      "person": "Mochi",
+      "topic": "pet",
+      "aliases": [
+        "PawSure",
+        "Mochi"
+      ]
+    },
+    {
+      "id": "pet_insured",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "Mochi - Shiba Inu, male",
+      "evidence": "Insured pet Mochi - Shiba Inu, male",
+      "person": "Mochi",
+      "topic": "pet",
+      "aliases": [
+        "Mochi"
+      ]
+    },
+    {
+      "id": "pet_dob",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "2022-04-02",
+      "evidence": "Pet date of birth 02 Apr 2022",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_period",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "2027-03-19",
+      "evidence": "Period of insurance 20 Mar 2026 to 19 Mar 2027",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_premium",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "612.00",
+      "evidence": "Annual premium S$612.00",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_limit",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "8,000",
+      "evidence": "Vet medical expenses (accident and illness) S$8,000 per policy year",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_excess",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "150",
+      "evidence": "Excess S$150 per claim",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_copay",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "20%",
+      "evidence": "Co-payment 20% of the claim after excess",
+      "person": "Mochi",
+      "topic": "pet",
+      "aliases": [
+        "80%"
+      ]
+    },
+    {
+      "id": "pet_tpl",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "100,000",
+      "evidence": "Third-party liability (injury or damage caused by the pet) S$100,000",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_cremation",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "Cremation or burial S$300",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_boarding",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "500",
+      "evidence": "Boarding fees if policyholder is hospitalised S$50 per day, up to S$500",
+      "person": "Mochi",
+      "topic": "pet",
+      "aliases": [
+        "50"
+      ]
+    },
+    {
+      "id": "pet_not_person",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 1,
+      "value": "does not cover medical expenses of the policyholder",
+      "evidence": "It does not cover medical expenses of the policyholder or any other person",
+      "person": null,
+      "topic": "pet",
+      "aliases": [
+        "not covered",
+        "pet only",
+        "Mochi"
+      ]
+    },
+    {
+      "id": "pet_waiting",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 2,
+      "value": "14 days",
+      "evidence": "Waiting periods: 14 days for illness and 30 days for cruciate ligament conditions",
+      "person": "Mochi",
+      "topic": "pet"
+    },
+    {
+      "id": "pet_preex",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 2,
+      "value": "patellar luxation",
+      "evidence": "Declared at proposal: patellar luxation, left hind leg - excluded",
+      "person": "Mochi",
+      "topic": "pet",
+      "aliases": [
+        "excluded",
+        "pre-existing"
+      ]
+    },
+    {
+      "id": "pet_exclusions",
+      "doc": "tembusu_pawsure_mochi.pdf",
+      "page": 2,
+      "value": "routine vaccinations",
+      "evidence": "Also excluded: routine vaccinations, sterilisation, grooming, dental scaling, and breeding costs",
+      "person": "Mochi",
+      "topic": "pet",
+      "aliases": [
+        "excluded",
+        "not covered"
+      ]
+    },
+    {
+      "id": "car_policy",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "TG-MV-7745310",
+      "evidence": "Policy number TG-MV-7745310",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor",
+      "aliases": [
+        "DriveSafe",
+        "Tembusu"
+      ]
+    },
+    {
+      "id": "car_vehicle",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "SNE4821K",
+      "evidence": "Vehicle Mazda 3 Hatchback 1.5, registration SNE4821K",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor",
+      "aliases": [
+        "Mazda"
+      ]
+    },
+    {
+      "id": "car_end",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "2026-11-30",
+      "evidence": "Period of insurance 01 Dec 2025 to 30 Nov 2026",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_named",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "Ethan Yeo Zhi Hao only",
+      "evidence": "Named driver(s) Ethan Yeo Zhi Hao only",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor",
+      "aliases": [
+        "unnamed"
+      ]
+    },
+    {
+      "id": "car_ncd",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "30%",
+      "evidence": "No Claim Discount (NCD) 30%",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_ncd_protector",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "Not purchased",
+      "evidence": "NCD Protector Not purchased",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_premium",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "1,486.20",
+      "evidence": "Premium (after NCD) S$1,486.20",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_od_excess",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "750",
+      "evidence": "Own damage excess (insured or named driver) S$750",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_unnamed",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "500",
+      "evidence": "Additional excess - unnamed driver S$500",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_young",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "2,500",
+      "evidence": "Additional excess - driver under 27 or licence under 2 years S$2,500",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor",
+      "aliases": [
+        "27"
+      ]
+    },
+    {
+      "id": "car_nonauth",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "1,000",
+      "evidence": "Additional excess - repair at non-authorised workshop S$1,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_windscreen",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "100",
+      "evidence": "Windscreen excess S$100",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_tppd",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "5,000,000",
+      "evidence": "Third-party property damage S$5,000,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_pa",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "20,000",
+      "evidence": "Personal accident (driver) S$20,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_cumulative",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 1,
+      "value": "cumulative",
+      "evidence": "Excesses are cumulative: all applicable excesses are added together for one claim",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_ncd_drop",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 2,
+      "value": "0%",
+      "evidence": "the NCD at renewal reduces by 30 percentage points (to 0% for this policy)",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor",
+      "aliases": [
+        "30 percentage points"
+      ]
+    },
+    {
+      "id": "car_ws_ncd",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 2,
+      "value": "do not affect the NCD",
+      "evidence": "Windscreen claims do not affect the NCD",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "car_report",
+      "doc": "tembusu_drivesafe_motor_ethan.pdf",
+      "page": 2,
+      "value": "24 hours",
+      "evidence": "Claims must be reported to Tembusu within 24 hours of the accident or by the next working day",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "motor"
+    },
+    {
+      "id": "hc_policy",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "PL-HC-3301958",
+      "evidence": "Policy number PL-HC-3301958",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash",
+      "aliases": [
+        "DailyCare",
+        "Pelican"
+      ]
+    },
+    {
+      "id": "hc_start",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "2026-08-15",
+      "evidence": "Commencement date 15 Aug 2026",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash"
+    },
+    {
+      "id": "hc_premium",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "324.00",
+      "evidence": "Annual premium S$324.00",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash"
+    },
+    {
+      "id": "hc_declared",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "None",
+      "evidence": "Conditions declared at application None",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash"
+    },
+    {
+      "id": "hc_ward",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "150",
+      "evidence": "Daily cash - normal ward S$150 per day",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash"
+    },
+    {
+      "id": "hc_icu",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "Daily cash - ICU S$300 per day",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash"
+    },
+    {
+      "id": "hc_max",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "180 days",
+      "evidence": "Maximum days 180 days per admission",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash"
+    },
+    {
+      "id": "hc_recup",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "500",
+      "evidence": "Recuperation benefit (7 or more consecutive days) S$500 lump sum",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash",
+      "aliases": [
+        "7"
+      ]
+    },
+    {
+      "id": "hc_day_rule",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "each full 24 hours",
+      "evidence": "A day means each full 24 hours of hospital admission. Day surgery without an overnight admission is not covered",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash",
+      "aliases": [
+        "not covered",
+        "day surgery"
+      ]
+    },
+    {
+      "id": "hc_waiting",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "2026-09-14",
+      "evidence": "no benefit for any hospitalisation starting within 30 days from the commencement date, i.e. before 14 Sep 2026",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash",
+      "aliases": [
+        "30 days",
+        "waiting period"
+      ]
+    },
+    {
+      "id": "hc_accident_day1",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "Accidents are covered from the commencement date",
+      "evidence": "Accidents are covered from the commencement date",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash",
+      "aliases": [
+        "accident"
+      ]
+    },
+    {
+      "id": "hc_preex",
+      "doc": "pelican_dailycare_hospital_cash.pdf",
+      "page": 1,
+      "value": "2028-08-14",
+      "evidence": "Any condition with signs, symptoms, diagnosis or treatment in the 12 months before the commencement date is excluded for the first 24 months of cover, i.e. until 14 Aug 2028",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "hospital_cash",
+      "aliases": [
+        "pre-existing",
+        "excluded",
+        "24 months"
+      ]
+    },
+    {
+      "id": "gb_unreadable",
+      "doc": "scan_0915.pdf",
+      "page": 1,
+      "value": "unreadable",
+      "evidence": "%PDF-ENC",
+      "person": null,
+      "topic": "unreadable",
+      "aliases": [
+        "cannot be read",
+        "unreadable",
+        "password"
+      ]
+    },
+    {
+      "id": "tv_policy",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "TG-TA-5530917",
+      "evidence": "Policy number TG-TA-5530917",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel",
+      "aliases": [
+        "TravelEase"
+      ]
+    },
+    {
+      "id": "tv_end",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "2026-09-15",
+      "evidence": "Period of insurance 16 Sep 2025 to 15 Sep 2026",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel",
+      "aliases": [
+        "expired"
+      ]
+    },
+    {
+      "id": "tv_start",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "2025-09-16",
+      "evidence": "Period of insurance 16 Sep 2025 to 15 Sep 2026",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tv_area",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "Asia only, excluding Australia and New Zealand",
+      "evidence": "Asia only, excluding Australia and New Zealand",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tv_med",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "200,000",
+      "evidence": "Overseas medical expenses S$200,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tv_cancel",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "5,000",
+      "evidence": "Trip cancellation S$5,000",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel"
+    },
+    {
+      "id": "tv_trips_start",
+      "doc": "tembusu_travelease_annual_2025.pdf",
+      "page": 1,
+      "value": "trips that start during the period of insurance",
+      "evidence": "Cover applies only to trips that start during the period of insurance. This certificate does not renew automatically",
+      "person": "Ethan Yeo Zhi Hao",
+      "topic": "travel",
+      "aliases": [
+        "does not renew automatically",
+        "expired"
+      ]
+    }
+  ],
+  "derived_facts": [
+    {
+      "id": "dv_ethan_age",
+      "value": 31,
+      "from": [
+        "m_ethan_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_wellness_check",
+      "value": 264,
+      "from": [
+        "en_remaining",
+        "fb_conversion"
+      ],
+      "explain": "330 x 0.80",
+      "aliases": []
+    },
+    {
+      "id": "dv_points_check",
+      "value": 670,
+      "from": [
+        "en_used"
+      ],
+      "explain": "180 + 280 + 90 + 120",
+      "aliases": []
+    },
+    {
+      "id": "dv_h3_extra_points",
+      "value": 240,
+      "from": [
+        "fb_h3",
+        "fb_h2"
+      ],
+      "explain": "H3 420 - H2 180",
+      "aliases": []
+    },
+    {
+      "id": "dv_if_ci_wellness",
+      "value": 104,
+      "from": [
+        "fb_ci1",
+        "en_remaining",
+        "fb_conversion"
+      ],
+      "explain": "(330 - 200) x 0.80",
+      "aliases": []
+    },
+    {
+      "id": "dv_mr_y5_drop",
+      "value": 55080,
+      "from": [
+        "mr_y1",
+        "mr_y5"
+      ],
+      "explain": "year 1 - year 5",
+      "aliases": []
+    },
+    {
+      "id": "dv_mr_y5_to_y6",
+      "value": 14820,
+      "from": [
+        "mr_y5",
+        "mr_y6"
+      ],
+      "explain": "year 5 - year 6",
+      "aliases": []
+    },
+    {
+      "id": "dv_mr_years_left",
+      "value": 21,
+      "from": [
+        "mr_end"
+      ],
+      "explain": "cover ends 31 May 2047",
+      "aliases": []
+    },
+    {
+      "id": "dv_mr_policy_year_now",
+      "value": 5,
+      "from": [
+        "mr_start",
+        "mr_y5"
+      ],
+      "explain": "06 Oct 2026 falls in 01 Jun 2026 - 31 May 2027",
+      "aliases": [
+        "424,920"
+      ]
+    },
+    {
+      "id": "dv_pet_1200",
+      "value": 840,
+      "from": [
+        "pet_excess",
+        "pet_copay"
+      ],
+      "explain": "(1,200 - 150) x 80%",
+      "aliases": []
+    },
+    {
+      "id": "dv_pet_3000",
+      "value": 2280,
+      "from": [
+        "pet_excess",
+        "pet_copay"
+      ],
+      "explain": "(3,000 - 150) x 80%",
+      "aliases": []
+    },
+    {
+      "id": "dv_pet_age",
+      "value": 4,
+      "from": [
+        "pet_dob"
+      ],
+      "explain": "Mochi's age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_pet_waiting_end",
+      "value": "2026-04-03",
+      "from": [
+        "pet_waiting",
+        "pet_period"
+      ],
+      "explain": "20 Mar 2026 + 14 days",
+      "aliases": []
+    },
+    {
+      "id": "dv_car_unnamed_young",
+      "value": 3750,
+      "from": [
+        "car_od_excess",
+        "car_unnamed",
+        "car_young",
+        "car_cumulative"
+      ],
+      "explain": "750 + 500 + 2,500",
+      "aliases": []
+    },
+    {
+      "id": "dv_car_unnamed_older",
+      "value": 1250,
+      "from": [
+        "car_od_excess",
+        "car_unnamed"
+      ],
+      "explain": "750 + 500",
+      "aliases": []
+    },
+    {
+      "id": "dv_car_ethan_nonauth",
+      "value": 1750,
+      "from": [
+        "car_od_excess",
+        "car_nonauth"
+      ],
+      "explain": "750 + 1,000",
+      "aliases": []
+    },
+    {
+      "id": "dv_car_days_left",
+      "value": 55,
+      "from": [
+        "car_end"
+      ],
+      "explain": "06 Oct -> 30 Nov 2026",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_2",
+      "value": 300,
+      "from": [
+        "hc_ward"
+      ],
+      "explain": "2 x 150",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_3",
+      "value": 450,
+      "from": [
+        "hc_ward"
+      ],
+      "explain": "3 x 150",
+      "aliases": []
+    },
+    {
+      "id": "dv_boarding_2",
+      "value": 100,
+      "from": [
+        "pet_boarding"
+      ],
+      "explain": "2 x S$50",
+      "aliases": []
+    },
+    {
+      "id": "dv_own_premiums",
+      "value": 3010.2,
+      "from": [
+        "mr_premium",
+        "pet_premium",
+        "car_premium",
+        "hc_premium"
+      ],
+      "explain": "588 + 612 + 1,486.20 + 324",
+      "aliases": [
+        "3,010.20"
+      ]
+    },
+    {
+      "id": "dv_pet_after_2280",
+      "value": 5720,
+      "from": [
+        "pet_limit",
+        "dv_pet_3000"
+      ],
+      "explain": "8,000 - 2,280",
+      "aliases": []
+    },
+    {
+      "id": "dv_pet_after_840",
+      "value": 7160,
+      "from": [
+        "pet_limit",
+        "dv_pet_1200"
+      ],
+      "explain": "8,000 - 840",
+      "aliases": []
+    },
+    {
+      "id": "dv_mr_last_premium",
+      "value": "2043-06-01",
+      "from": [
+        "mr_premium",
+        "mr_start"
+      ],
+      "explain": "22 annual premiums from 01 Jun 2022",
+      "aliases": [
+        "2043"
+      ]
+    },
+    {
+      "id": "dv_mr_premiums_left",
+      "value": 17,
+      "from": [
+        "mr_premium",
+        "mr_start"
+      ],
+      "explain": "22 - 5 paid (2022-2026)",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_5",
+      "value": 750,
+      "from": [
+        "hc_ward"
+      ],
+      "explain": "5 x 150",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_icu2_ward3",
+      "value": 1050,
+      "from": [
+        "hc_ward",
+        "hc_icu"
+      ],
+      "explain": "2 x 300 + 3 x 150",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_8",
+      "value": 1700,
+      "from": [
+        "hc_ward",
+        "hc_recup"
+      ],
+      "explain": "8 x 150 + 500",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_6",
+      "value": 900,
+      "from": [
+        "hc_ward"
+      ],
+      "explain": "6 x 150 (no recuperation below 7 days)",
+      "aliases": []
+    },
+    {
+      "id": "dv_tv_days_since",
+      "value": 21,
+      "from": [
+        "tv_end"
+      ],
+      "explain": "15 Sep -> 06 Oct 2026",
+      "aliases": []
+    },
+    {
+      "id": "dv_hc_preex_days",
+      "value": 678,
+      "from": [
+        "hc_preex"
+      ],
+      "explain": "06 Oct 2026 -> 14 Aug 2028",
+      "aliases": []
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "trap": "Booklet lists options (incl. Group CI and H3 private); Ethan's actual elections are only in the enrolment confirmation: H2 Ward A S$80,000, Group CI NOT elected.",
+      "facts": [
+        "en_h2",
+        "en_ci_not",
+        "fb_ci1"
+      ]
+    },
+    {
+      "id": "T2",
+      "trap": "Wellness credit is S$264 (330 points x 0.80), not S$330.",
+      "facts": [
+        "en_wellness"
+      ]
+    },
+    {
+      "id": "T3",
+      "trap": "Mortgage reducing term pays the sum assured of the policy year of the event (now year 5: S$424,920), not the initial S$480,000.",
+      "facts": [
+        "mr_y5",
+        "mr_rule"
+      ]
+    },
+    {
+      "id": "T4",
+      "trap": "Pet policy covers Mochi only; Ethan's own injuries (e.g. dog bite to him) are not covered; third-party liability covers others.",
+      "facts": [
+        "pet_not_person"
+      ]
+    },
+    {
+      "id": "T5",
+      "trap": "Car excesses are cumulative; unnamed young driver = 750 + 500 + 2,500 = 3,750.",
+      "facts": [
+        "dv_car_unnamed_young"
+      ]
+    },
+    {
+      "id": "T6",
+      "trap": "Hospital cash: illness admissions before 14 Sep 2026 not covered; pre-existing conditions excluded until 14 Aug 2028; day surgery not covered.",
+      "facts": [
+        "hc_waiting",
+        "hc_preex",
+        "hc_day_rule"
+      ]
+    },
+    {
+      "id": "T7",
+      "trap": "scan_0915.pdf is unreadable (garbled / password protected). Do not guess its contents.",
+      "facts": [
+        "gb_unreadable"
+      ]
+    },
+    {
+      "id": "T8",
+      "trap": "TravelEase expired 15 Sep 2026; employer Business Travel covers only company-authorised trips, not leisure.",
+      "facts": [
+        "tv_end",
+        "fb_bt_personal"
+      ]
+    },
+    {
+      "id": "T9",
+      "trap": "Windscreen claims do not affect NCD; an at-fault claim takes NCD from 30% to 0%.",
+      "facts": [
+        "car_ws_ncd",
+        "car_ncd_drop"
+      ]
+    }
+  ]
+}

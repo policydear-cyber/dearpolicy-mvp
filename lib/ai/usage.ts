@@ -95,8 +95,9 @@ export function budgetConfig(env: NodeJS.ProcessEnv = process.env): BudgetConfig
 // ---------------------------------------------------------------------------
 export type UsageRow = { operation: string; role: string; provider: string; model: string; calls: number; failedCalls: number;
   inputTokens: number; outputTokens: number; cachedTokens: number; costUsd: number; unpricedCalls: number };
+/** inputTokens include cachedTokens (the part the provider served from its prompt cache, priced at the cached rate). */
 export type UsageReport = { since: string; scope: "household" | "all_households"; calls: number; failedCalls: number;
-  inputTokens: number; outputTokens: number; costUsd: number; unpricedCalls: number; rows: UsageRow[] };
+  inputTokens: number; outputTokens: number; cachedTokens: number; costUsd: number; unpricedCalls: number; rows: UsageRow[] };
 
 /** Recorded model usage since `since`, grouped by operation and model. With
  * an accountId, only that household's calls; with null, every call on the
@@ -122,6 +123,88 @@ export async function usageByOperationAndModel(accountId: string | null, since: 
   const sum = (f: (row: UsageRow) => number) => rows.reduce((n, row) => n + f(row), 0);
   return { since: since.toISOString(), scope: accountId ? "household" : "all_households", rows,
     calls: sum((x) => x.calls), failedCalls: sum((x) => x.failedCalls), inputTokens: sum((x) => x.inputTokens),
-    outputTokens: sum((x) => x.outputTokens), costUsd: Math.round(sum((x) => x.costUsd) * 1e6) / 1e6, unpricedCalls: sum((x) => x.unpricedCalls) };
+    outputTokens: sum((x) => x.outputTokens), cachedTokens: sum((x) => x.cachedTokens), costUsd: Math.round(sum((x) => x.costUsd) * 1e6) / 1e6, unpricedCalls: sum((x) => x.unpricedCalls) };
 }
 export function startOfMonth(now = new Date()) { return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)); }
+
+// ---------------------------------------------------------------------------
+// Conversation-loop budgets (the conversation loop's usage meter checks every loop model call against these).
+//
+// Every amount here is DearPolicy's own internal limit, enforced before each call. None of them is, or makes, a
+// spend cap on the provider API key: the provider bills whatever the key is used for, and the owner's monthly
+// provider budget (US$5) is a figure these limits are kept beneath -- a setting above the ceiling is clamped down to
+// it, never honoured, and nothing here raises it.
+// ---------------------------------------------------------------------------
+export type LoopLimits = {
+  /** Model calls per chat turn, counting failed attempts and retries. */
+  maxCallsPerTurn: number;
+  /** Input + output tokens per chat turn (provider-reported; checked before each call against an estimate of it). */
+  maxTokensPerTurn: number;
+  maxOutputTokens: number;
+  /** Priced cost per chat turn (US$). */
+  maxTurnUsd: number;
+  /** Retries of a failed call (a timeout, a dropped connection, a busy provider); each retry is a counted call. */
+  retries: number;
+  /** One call's timeout, and the whole turn's model time (whichever ends first; also the chat's own model budget). */
+  callTimeoutMs: number;
+  turnTimeoutMs: number;
+  /** Loop spend per household per calendar month (US$; from model_executions), on top of the plan hard stop. */
+  householdMonthlyUsd: number;
+  /** A bounded run budget for this process (an evaluation or test run, or one Preview instance): calls and US$. */
+  runMaxCalls: number;
+  runMaxUsd: number;
+  /** Price per million tokens used for budgeting when the model has no price on file (deliberately high). */
+  fallbackPrice: { input: number; output: number };
+  /** The ceiling every US$ limit is clamped to: 80% of the owner's provider budget (US$5 when not set). */
+  ceilingUsd: number;
+};
+export function loopLimits(env: NodeJS.ProcessEnv = process.env): LoopLimits {
+  const owner = budgetConfig(env).ownerProviderBudget.amountUsd;
+  const ceilingUsd = Math.round(Math.min(5, owner ?? 5) * 0.8 * 100) / 100;
+  const int = (v: string | undefined, d: number, lo: number, hi: number) => { const x = Number(v); return v != null && v.trim() !== "" && Number.isFinite(x) && x >= lo ? Math.min(hi, Math.floor(x)) : d; };
+  const usd = (v: string | undefined, d: number) => { const x = Number(v); const want = v != null && v.trim() !== "" && Number.isFinite(x) && x >= 0 ? x : d; return Math.min(want, ceilingUsd); };
+  return {
+    maxCallsPerTurn: int(env.DEARPOLICY_RAG_LOOP_MAX_STEPS, 12, 2, 40),
+    maxTokensPerTurn: int(env.DEARPOLICY_RAG_LOOP_MAX_TOKENS, 80_000, 4_000, 200_000),
+    maxOutputTokens: int(env.DEARPOLICY_RAG_LOOP_MAX_OUTPUT_TOKENS, 2_000, 256, 16_000),
+    maxTurnUsd: usd(env.DEARPOLICY_RAG_LOOP_MAX_TURN_USD, 0.05),
+    retries: int(env.DEARPOLICY_RAG_LOOP_RETRIES, 1, 0, 2),
+    callTimeoutMs: int(env.DEARPOLICY_RAG_LOOP_CALL_TIMEOUT_MS, 45_000, 1, 120_000),
+    turnTimeoutMs: int(env.DEARPOLICY_RAG_LOOP_TURN_TIMEOUT_MS, 120_000, 1, 270_000),
+    householdMonthlyUsd: usd(env.DEARPOLICY_RAG_LOOP_HOUSEHOLD_MONTHLY_USD, 1),
+    runMaxCalls: int(env.DEARPOLICY_RAG_LOOP_RUN_MAX_CALLS, 150, 0, 5_000),
+    runMaxUsd: usd(env.DEARPOLICY_RAG_LOOP_RUN_MAX_USD, 0.5),
+    fallbackPrice: { input: 5, output: 20 },
+    ceilingUsd,
+  };
+}
+
+/** This process's loop usage (the run budget): every metered call, failed ones included. */
+type LoopRun = { calls: number; usd: number };
+const LOOP_RUN = Symbol.for("dearpolicy.rag2.loop.run");
+function loopRunState(): LoopRun { const g = globalThis as { [LOOP_RUN]?: LoopRun }; return (g[LOOP_RUN] ??= { calls: 0, usd: 0 }); }
+export function loopRunUsage(): LoopRun { return { ...loopRunState() }; }
+export function addLoopRunUsage(calls: number, usd: number) { const r = loopRunState(); r.calls += calls; r.usd += usd; }
+/** Test / evaluation-script use only: start a fresh run budget. */
+export function resetLoopRunUsage() { const r = loopRunState(); r.calls = 0; r.usd = 0; }
+
+/** The cost to budget for one call: the priced cost, else the tokens at the (high) fallback price. */
+export function budgetCostUsd(priced: number | null, usage: { input: number; output: number }, fallback: LoopLimits["fallbackPrice"]): number {
+  return priced != null ? priced : (usage.input * fallback.input + usage.output * fallback.output) / 1_000_000;
+}
+
+/** The household's conversation-loop calls and budgeted spend this calendar month (model_executions rows the loop
+ * recorded: operation rag_answer, prompt version rag2-loop*); unpriced calls are budgeted at the fallback price. */
+export async function loopHouseholdSpendThisMonth(accountId: string, fallback: LoopLimits["fallbackPrice"]): Promise<{ calls: number; usd: number }> {
+  await ensureProvenanceSchema();
+  const r = await query<{ calls: number; usd: string }>(
+    `SELECT count(*)::int AS calls,
+            coalesce(sum(coalesce(cost_usd, (input_tokens * $3::numeric + output_tokens * $4::numeric) / 1000000)), 0)::text AS usd
+       FROM model_executions
+      WHERE household_ref = $1 AND operation = 'rag_answer' AND prompt_version LIKE 'rag2-loop%' AND created_at >= $2`,
+    [pseudonymizeId(accountId), startOfMonth().toISOString(), fallback.input, fallback.output]);
+  return { calls: Number(r.rows[0]?.calls ?? 0), usd: Number(r.rows[0]?.usd ?? 0) };
+}
+
+/** Agent F (D22): the provider name recorded for a loop model that has no priced provider (the test-only scripted model). */
+export const SCRIPTED_PROVIDER = "scripted";

@@ -138,7 +138,8 @@ test.describe.serial("synthetic household journey", () => {
       const p = all.find((x) => x.id === pid)!;
       const c = card(page, p);
       await c.getByRole("button", { name: who, exact: true }).click();
-      await expect(page.locator(".upload-panel .upload-status")).toContainText("Saved");
+      // The confirmation is shown with the library it changed (the library notice), not under the upload form.
+      await expect(page.getByTestId("library-notice")).toContainText("Saved");
       await expect(c.getByRole("button", { name: `${who} ✓` })).toBeVisible();
     }
     const linked = await policies(page);
@@ -198,7 +199,7 @@ test.describe.serial("synthetic household journey", () => {
     const c = card(page, bad);
     await c.getByRole("button", { name: "Delete" }).click();
     await c.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted");
+    await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     expect((await policies(page)).map((p) => p.id)).not.toContain(ids.bad);
 
     // Remove the child's policy, then the child's profile, through the UI.
@@ -206,7 +207,7 @@ test.describe.serial("synthetic household journey", () => {
     const cb = card(page, b);
     await cb.getByRole("button", { name: "Delete" }).click();
     await cb.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted");
+    await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     await page.goto("/family");
     const childCard = page.locator(".profile-card").filter({ has: page.locator(`input[value="${child}"]`) });
     await childCard.getByRole("button", { name: "Delete" }).click();
@@ -221,7 +222,9 @@ test.describe.serial("synthetic household journey", () => {
     const householdName = String((await api(page, "/api/household")).body.activeHouseholdName);
     await page.getByPlaceholder(householdName, { exact: true }).fill(householdName);
     await page.getByRole("button", { name: "Permanently delete household" }).click();
-    await page.waitForURL((u) => u.pathname === "/");
+    // "Permanently delete household" lands on its own confirmation page (app/household/deleted).
+    await page.waitForURL((u) => u.pathname === "/household/deleted");
+    await expect(page.getByTestId("household-deleted")).toContainText("Your household has been deleted.");
     const after = await api(page, "/api/policies");
     expect(after.status).toBe(404);
     const fam = await api(page, "/api/family");

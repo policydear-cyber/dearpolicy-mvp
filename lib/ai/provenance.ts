@@ -213,7 +213,9 @@ export async function recordModelExecution(input: RecordModelExecutionInput): Pr
         input.requested.inputArtifactType ?? null,
         input.requested.inputArtifactVersion ?? null,
         input.requestedAt,
-        input.requested.provider, // resolved_provider: the provider that actually served the response never differs from requested.provider in this codebase (no cross-provider fallback exists), so it is not independently observed -- kept as its own column for forward-compatibility with a future fallback chain that DOES cross providers.
+        // resolved_provider: the provider that actually served the call. It differs from requested.provider when scanned
+        // pages were read by a document-capable fallback (lib/ai/providers.ts hostedDocumentToText, reply.servedBy).
+        input.resolved?.resolvedProvider ?? input.requested.provider,
         input.resolved?.resolvedModel ?? null,
         input.resolved?.providerRequestId ?? null,
         input.resolved?.region ?? null,

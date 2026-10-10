@@ -11,7 +11,9 @@ try { process.loadEnvFile(path.resolve(".env.local")); } catch { /* .env.local i
 // only applied schema.sql + chat-upgrade.sql, silently leaving the claim-
 // evidence/composition/critical-illness/disability/cover-conditions/model-
 // usage/coverage-ledger tables (and all RLS) missing from a fresh local
-// database.
+// database. background-jobs, rate-limit, model-provenance and v11-ingestion-evidence
+// were also missing (e.g. policy_members.benefit_tier); they are applied in the
+// same relative order as e2e/support/apply-schema.ts.
 const MIGRATIONS = [
   "sql/schema.sql",
   "sql/benefit-catalog.sql",
@@ -23,10 +25,14 @@ const MIGRATIONS = [
   "sql/model-usage.sql",
   "sql/chat-upgrade.sql",
   "sql/coverage-ledger.sql",
+  "sql/background-jobs.sql",
+  "sql/rate-limit.sql",
   "sql/lifecycle.sql",
   "sql/claim-reviewers.sql",
+  "sql/model-provenance.sql",
   "sql/processing-failure-diagnostics.sql",
   "sql/storage-purge.sql",
+  "sql/v11-ingestion-evidence.sql",
   "sql/household-rls.sql",
 ];
 

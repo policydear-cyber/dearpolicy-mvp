@@ -23,12 +23,13 @@
 import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import type { ClaimPerson } from "@/lib/claims/person";
-import type { ChatCitation } from "@/types";
+import type { ChatCitation, ComputationOperand, FigureBinding } from "@/types";
 import { inactiveDocuments } from "./policy-status";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { formatMoney, statedCurrencyCode } from "@/lib/format/currency";
-import { amountAppears, verifyAssertion, type AssertionDocument } from "./assertions";
+import { amountAppears, namesBenefit, verifyAssertion, type AssertionDocument } from "./assertions";
 import { nameAppears } from "@/lib/documents/evidence";
+import { attachOperand, bindFigure, boundOperand, citeAnswerLines, printedRowFor, rowBenefit, sumOperands } from "./answer-verification";
 
 let flagColumns: Promise<Set<string>> | null = null;
 /** Which ingestion evidence flags policy_coverages has (added by ingestion; the totals use them when present). */
@@ -150,7 +151,13 @@ const WHICH_COVER = /\b(?:which|what) (?:of (?:my|our) )?(?:policies|plans|insur
 const ENDING_SOON = /\b(?:which|what|any|anything)\b[^?]{0,30}\b(?:end|ends|ending|expire|expires|expiring|due for renewal|lapse|renew\w*)\b[^?]{0,20}\b(?:next|within|in the next|coming|soon|this year)\b/i;
 const HOW_OLD = /^\s*(?:so\s+|and\s+)?how old (?:is|will) ([\p{L} '’-]{2,40}?)(?: (?:be|now|this year|turning))?\s*\??\s*$/iu;
 
-export async function registryAnswer(args: { accountId: string; question: string; family: ClaimPerson[]; people: ClaimPerson[]; today?: Date; previous?: string | null; ambiguous?: boolean }): Promise<RegistryAnswer | null> {
+// Gate R17: each line's figures are read from the page it cites (resolved on that page at save time).
+export async function registryAnswer(args: Parameters<typeof registryAnswerInner>[0]): Promise<RegistryAnswer | null> {
+  const r = await registryAnswerInner(args);
+  if (r) citeAnswerLines(null, [r.summary, ...r.details], r.citations);
+  return r;
+}
+async function registryAnswerInner(args: { accountId: string; question: string; family: ClaimPerson[]; people: ClaimPerson[]; today?: Date; previous?: string | null; ambiguous?: boolean }): Promise<RegistryAnswer | null> {
   if (args.ambiguous) return null;
   const asked = args.question.trim();
   // "and next year?", "and the oldest?" right after one of these questions: the same question, with what this message changes.
@@ -320,7 +327,7 @@ export async function registryAnswer(args: { accountId: string; question: string
       return null;
     };
     const what1 = coverKind === "ci" ? "Critical illness cover" : "Death cover";
-    type Item = { d: Doc; amount: number; cur: string | null; joint: boolean; note: string | null; page: number | null; problem: string | null };
+    type Item = { d: Doc; amount: number; cur: string | null; joint: boolean; note: string | null; page: number | null; problem: string | null; passage?: string | null };
     /** Why a figure is not added, in plain words. */
     const plain = (reason: string) => /currency/i.test(reason) ? "its currency is missing beside it in the document"
       : /version/i.test(reason) ? "the document’s version couldn’t be confirmed"
@@ -354,7 +361,7 @@ export async function registryAnswer(args: { accountId: string; question: string
         // (A misread figure the document does not print at all is not said: that is not an item, it is an error.)
         if (!at) continue;
         const problem = !cur ? "the currency of the amount is not stated" : verify(p, d, amount, cur, at, flagsOk, r.conflict_note ?? null);
-        const item: Item = { d, amount, cur, joint, note: r.notes, page: at.page, problem };
+        const item: Item = { d, amount, cur, joint, note: r.notes, page: at.page, problem, passage: at.passage };
         const prev = mine.get(k);
         // One figure per policy: a verified one over an unverified one, then the current document's (a later endorsement's).
         if (!prev || (!!prev.problem && !problem) || (!!prev.problem === !!problem && (dateOf(d) ?? "") > (dateOf(prev.d) ?? ""))) mine.set(k, item);
@@ -372,7 +379,7 @@ export async function registryAnswer(args: { accountId: string; question: string
             const amount = Number(m[2].replace(/,/g, "")), cur = statedCurrencyCode(m[1].trim());
             const line = pg.text.split(/\n/).find((l) => l.includes(m[0])) ?? m[0];
             const problem = verify(p, d, amount, cur, { page: pg.page_number, passage: line.trim() }, null, null);
-            mine.set(k, { d, amount, cur, joint: false, note: "as the insurer’s letter dated " + (dateOf(d) ? longDate(dateOf(d)!) : "on file") + " states", page: pg.page_number, problem });
+            mine.set(k, { d, amount, cur, joint: false, note: "as the insurer’s letter dated " + (dateOf(d) ? longDate(dateOf(d)!) : "on file") + " states", page: pg.page_number, problem, passage: line.trim() });
             break;
           }
           if (mine.has(k)) break;
@@ -395,12 +402,23 @@ export async function registryAnswer(args: { accountId: string; question: string
     // Someone the question names by name is called by name ("compare Wei Jie and Mei Ling"), even the person asking.
     const byNameIds = new Set(family.filter((p) => [p.preferred_name ?? "", p.display_name].some((n) => n.trim().length >= 3 && (" " + text.toLowerCase().replace(/['’]s\b/g, " ") + " ").includes(" " + n.toLowerCase().trim() + " "))).map((p) => p.id));
     const you = (p: ClaimPerson) => isSelf(p) && !byNameIds.has(p.id);
-    const lines = byPerson.flatMap((x) => x.items.map((i) => (you(x.p) ? "You" : personName(x.p)) + " — " + (i.d.product ?? i.d.file) + ": " + money(i.amount, i.cur) + label(i.note)
+    // Gate R17: each verified figure's own printed row (bound below); a line names that row when its label is not
+    // already said ("S$360,000 critical illness cover, printed as “Maximum total payout”").
+    const rowOf = new Map<Item, { line: string; label: string; column: string | null; benefits: string[] }>();
+    for (const x of byPerson) for (const i of x.verified) {
+      const text = i.page ? pageText(i.d.id, i.page) : null;
+      const r = text && i.passage ? printedRowFor(i.passage, i.amount, text) : null;
+      if (!r) continue;
+      const sum = r.line.match(/\bsum (?:assured|insured)\b/i)?.[0];
+      rowOf.set(i, { ...r, benefits: [rowBenefit(r), ...(sum ? [sum.charAt(0).toUpperCase() + sum.slice(1).toLowerCase()] : [])] });
+    }
+    const printedAs = (i: Item, said: string) => { const r = rowOf.get(i); return r && !r.benefits.some((b) => namesBenefit(said, b)) ? ", printed as “" + r.label + "”" : ""; };
+    const lines = byPerson.flatMap((x) => x.items.map((i) => (you(x.p) ? "You" : personName(x.p)) + " — " + what + " on " + (i.d.product ?? i.d.file) + ": " + money(i.amount, i.cur) + printedAs(i, what + label(i.note)) + label(i.note)
       + (i.joint ? " (joint policy: paid once, on the first death of the people it covers)" : "")
       + (!i.cur ? " — not added: the document prints no currency for this amount, and DearPolicy never assumes one" : i.problem ? " — not added: " + plain(i.problem) : "") + "."));
     const sentences = byPerson.map((x) => {
       const whose = you(x.p) ? "Your" : personName(x.p) + "’s";
-      const parts = [...x.totals].map(([c, n]) => money(n, c) + ((x.counts.get(c) ?? 0) > 1 ? " across " + x.counts.get(c) + " policies" : " under " + (x.verified.find((i) => i.cur === c)!.d.product ?? x.verified.find((i) => i.cur === c)!.d.file)));
+      const parts = [...x.totals].map(([c, n]) => money(n, c) + ((x.counts.get(c) ?? 0) > 1 ? " across " + x.counts.get(c) + " policies" : " under " + (x.verified.find((i) => i.cur === c)!.d.product ?? x.verified.find((i) => i.cur === c)!.d.file) + printedAs(x.verified.find((i) => i.cur === c)!, what)));
       const left = x.items.length - x.verified.length;
       if (!parts.length) return whose + " " + what + " on file could not be verified against the documents, so it is not added up; each policy is listed with the reason.";
       return whose + " " + what + " on file " + (x.verified.length > 1 && x.totals.size === 1 ? "adds up to " : "is ") + parts.join(", and ")
@@ -414,7 +432,21 @@ export async function registryAnswer(args: { accountId: string; question: string
     }
     const cited = new Map<string, ChatCitation>();
     for (const x of byPerson) for (const i of x.items) { const c = i.page ? { ...cite(i.d), chunkId: "page:" + i.d.id + ":" + i.page, pageStart: i.page, pageEnd: i.page } : cite(i.d); cited.set(c.chunkId, c); }
-    return { summary: lead + " These are the policy-stated amounts, not what a claim would pay.", details: lines, citations: [...cited.values()], personId: byPerson.length === 1 ? byPerson[0].p.id : null };
+    const summary = lead + " These are the policy-stated amounts, not what a claim would pay.";
+    // Gate R17: each verified figure is bound to the row of its own page that prints it, for its own person; a
+    // person's total is the explicit record of the sum of those figures (per currency).
+    for (const x of byPerson) {
+      const ops = new Map<string, ComputationOperand[]>();
+      for (const i of x.verified) {
+        const r = rowOf.get(i);
+        if (!r || !i.page || !i.cur) continue;
+        const bs: FigureBinding[] = r.benefits.map((benefit) => ({ policyId: i.d.id, subjectId: x.p.id, benefit, documentHash: documents[i.d.id]?.fileHash ?? null, pageStart: i.page!, pageEnd: i.page!, passage: r.line, column: r.column }));
+        for (const b of bs) for (const t of [...lines, summary]) bindFigure(null, t, i.amount, i.cur, b);
+        (ops.get(i.cur) ?? ops.set(i.cur, []).get(i.cur)!).push(boundOperand(i.amount, i.cur, null, "benefit", bs[0]));
+      }
+      for (const list of ops.values()) attachOperand(null, summary, sumOperands(list));
+    }
+    return { summary, details: lines, citations: [...cited.values()], personId: byPerson.length === 1 ? byPerson[0].p.id : null };
   }
 
   // ---------------------------------------------------------------- one plan's start or end date

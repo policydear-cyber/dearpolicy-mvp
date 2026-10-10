@@ -1,0 +1,598 @@
+{
+  "scenario": "L1",
+  "title": "Direct factual question",
+  "conversationId": "542c5c00-323f-4840-a921-1e0940a17e22",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "How much ICU cash does the CareDay plan pay for Grace?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+      "timings": {
+        "acceptedMs": 530,
+        "firstAssistantPersistedMs": 830,
+        "answerSeenMs": 897,
+        "modelMs": 151,
+        "upstreamMs": 24,
+        "relayMs": 27
+      },
+      "calls": [
+        {
+          "seq": 1,
+          "at": "2026-10-08T15:03:29.744Z",
+          "estInputTokens": 8186,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018185999999999999,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "chargedUsd": 0.0018185999999999999,
+          "ok": false,
+          "error": "model service returned an error (500)",
+          "latencyMs": 40
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-08T15:03:29.792Z",
+          "estInputTokens": 8186,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018185999999999999,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "chargedUsd": 0.0005577000000000001,
+          "ok": true,
+          "usage": {
+            "input": 5377,
+            "output": 40
+          },
+          "latencyMs": 55,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        },
+        {
+          "seq": 3,
+          "at": "2026-10-08T15:03:29.866Z",
+          "estInputTokens": 12043,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0022043,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "chargedUsd": 0.0007996,
+          "ok": true,
+          "usage": {
+            "input": 7796,
+            "output": 40
+          },
+          "latencyMs": 56,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "failed",
+          "error_category": "model_provider",
+          "requested_model": "gpt-6-luna",
+          "resolved_model": null,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "cached_tokens": 0,
+          "cost_usd": null,
+          "latency_ms": 40,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:29.789Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5377,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000558,
+          "latency_ms": 55,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:29.849Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 7796,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.0008,
+          "latency_ms": 57,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:29.928Z"
+        }
+      ],
+      "relay": [
+        {
+          "at": "2026-10-08T15:03:29Z",
+          "t": 1791471809.766,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 12,
+          "error": "API returned status 500: fake: injected server error (PLUMBING TEST)",
+          "status": 500,
+          "relay_ms": 13
+        },
+        {
+          "at": "2026-10-08T15:03:29Z",
+          "t": 1791471809.799,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 3,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-2",
+          "usage": {
+            "prompt_tokens": 5377,
+            "completion_tokens": 40,
+            "total_tokens": 5417,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 4
+        },
+        {
+          "at": "2026-10-08T15:03:29Z",
+          "t": 1791471809.87,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 9,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-3",
+          "usage": {
+            "prompt_tokens": 7796,
+            "completion_tokens": 40,
+            "total_tokens": 7836,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 10
+        }
+      ],
+      "tokens": {
+        "input": 13173,
+        "output": 80
+      },
+      "costUsd": {
+        "charged": 0.0031759,
+        "ledger": 0.001358
+      }
+    }
+  ],
+  "totalMs": 916,
+  "firstUsefulResponseMs": 830,
+  "tokens": {
+    "input": 13173,
+    "output": 80
+  },
+  "costUsd": 0.0031759,
+  "calls": 3,
+  "verdict": {
+    "scenario": "L1",
+    "verdict": "FAIL",
+    "failureStage": "model reasoning-tool selection",
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page CAREDAY p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "shows S$200",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "missing; visible figures: none"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$120",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "asks no question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "about grace",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "subject after the turn: none"
+      },
+      {
+        "turn": 1,
+        "name": "figure bound to grace / CAREDAY / Insured Adult",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "bindings: none"
+      },
+      {
+        "turn": 1,
+        "name": "cites CAREDAY p1 \"ICU cash (each complete 24 hours, max 30\"",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "retrieved but not cited"
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:plumbing-fake-not-a-model",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 13173,
+          "output": 80
+        },
+        "latencyMs": 210,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "query": "How much ICU cash does the CareDay plan pay for Grace?"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":8}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 145,
+          "text": "Meridian Mutual Assurance                                               Policy MM-HC-205518\nCareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 145,
+          "text": "CareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 438,
+          "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+          "start": 303,
+          "onPage": 2
+        },
+        "support": {
+          "end": 438,
+          "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+          "start": 303,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 721,
+            "role": "table_header",
+            "text": "Benefit                                                       Insured Adult   Insured Child",
+            "start": 630,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 888,
+          "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 616,
+          "onPage": 1
+        },
+        "support": {
+          "end": 888,
+          "text": "ICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 805,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "support": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 172,
+          "text": "Kestrel Health Insurance\nKestrelShield Integrated Plan - Policy Schedule\nPolicy number: KH-IS-338861\nLife assured: Daniel Lim Wen Jie\nPolicy year 01 Apr 2026 to 31 Mar 2027",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 72,
+          "text": "KestrelShield Integrated Plan - Policy Schedule",
+          "start": 25,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 589,
+          "text": "Insured persons\nName                          Category      Date of birth\nDaniel Lim Wen Jie            Adult         11 Mar 1980\nGrace Ong Pei Shan            Adult         22 Aug 1983\nKai Lim Jun Hao               Child         06 May 2014\nMei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 292,
+          "onPage": 1
+        },
+        "support": {
+          "end": 477,
+          "text": "Grace Ong Pei Shan            Adult         22 Aug 1983",
+          "start": 422,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 614,
+          "text": "Insured members\nName                          Cover type        Date of birth\nDaniel Lim Wen Jie            Insured Adult     11 Mar 1980\nGrace Ong Pei Shan            Insured Adult     22 Aug 1983\nKai Lim Jun Hao               Insured Child     06 May 2014\nMei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 297,
+          "onPage": 1
+        },
+        "support": {
+          "end": 494,
+          "text": "Grace Ong Pei Shan            Insured Adult     22 Aug 1983",
+          "start": 435,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 301,
+          "text": "Conditions\nHospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 173,
+          "text": "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission.",
+          "start": 11,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

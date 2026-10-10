@@ -11,11 +11,11 @@ import { query } from "@/lib/db/client";
 import { activePredicate } from "@/lib/lifecycle/scopes";
 import { formatMoney } from "@/lib/format/currency";
 import { amountAppears, amountPrintedWith } from "./assertions";
-import { figuresIn } from "./answer-verification";
+import { attachOperand, boundOperand, citeLine, differenceOperands, documentHashes, figuresIn, perPeriodOperand, printedRowFor, productOperand, rowBenefit, sumOperands } from "./answer-verification";
 import { currenciesStatedIn } from "@/lib/claims/currency-evidence";
 import { summarisePremiums, type PremiumItem } from "@/lib/policies/premium-summary";
 import type { ClaimPerson } from "@/lib/claims/person";
-import type { ChatCitation } from "@/types";
+import type { ChatCitation, ComputationOperand, FigureBinding, FigurePeriod } from "@/types";
 import { documentsByPerson, noPoliciesSentence, personName } from "./household-status";
 import { longDate, printedPeriodEnd, printedStatus, todayIso, type PrintedStatus } from "./policy-status";
 
@@ -40,7 +40,47 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 
 type Line = { item: PremiumItem; docId: string | null; docName: string | null; page: number | null; role: string | null; insurer?: string | null; policyType?: string | null;
   /** Round 16: the text of the cited page, so a line says "(page N)" only beside figures that page prints. */
-  pageText?: string | null };
+  pageText?: string | null;
+  /** Gate R17: the line's figures as operands bound to the rows that print them (or explicit records of how they were worked out). */
+  ops?: LineOps };
+type LineOps = { printed: ComputationOperand | null; total: ComputationOperand | null; annual: ComputationOperand | null; cashAnnual: ComputationOperand | null; medisaveAnnual: ComputationOperand | null };
+
+/** Gate R17: the period a premium record's frequency states (the same reading as annualisePremium; none stated is yearly). */
+function periodOf(frequency: string | null | undefined): FigurePeriod {
+  const f = (frequency ?? "").toLowerCase();
+  return /month/.test(f) ? "month" : /quarter/.test(f) ? "quarter" : /semi|half.?year|6 month/.test(f) ? "half_year" : /week/.test(f) ? "week" : "year";
+}
+/** Gate R17: a binding for `value` on the printed row of `pageText` that prints it beside `currency` -- the row `want`
+ * names first, then a premium row. Null when the page prints no such row. */
+function rowBinding(a: { policyId: string | null; subjectId: string; documentHash: string | null; page: number | null; pageText: string | null | undefined; value: number; currency: string; want?: RegExp; benefit?: string }): FigureBinding | null {
+  if (!a.policyId || !a.page || !a.pageText || !(a.value > 0)) return null;
+  const rows = a.pageText.split(/\n/).map((l) => l.trim()).filter((l) => l && amountAppears(a.value, l) && amountPrintedWith(a.value, a.currency, l) !== "other");
+  const pick = (a.want ? rows.find((l) => a.want!.test(l)) : undefined) ?? rows.find((l) => /\bpremiums?\b/i.test(l)) ?? rows[0];
+  if (!pick) return null;
+  const r = printedRowFor(pick, a.value, a.pageText);
+  if (!r) return null;
+  let benefit = a.benefit ?? rowBenefit(r);
+  // A part of a premium printed on its own row under the premium's heading ("Premium payable" / "Cash payable
+  // S$362.00"): the row is named with the heading it is printed under.
+  if (!a.benefit && !/\bpremiums?\b/i.test(r.line + " " + benefit)) {
+    const all = a.pageText.split(/\n/).map((l) => l.trim());
+    const at = all.indexOf(r.line);
+    const heading = at > 0 ? all.slice(Math.max(0, at - 6), at).reverse().find((l) => /\bpremiums?\b/i.test(l)) : undefined;
+    if (heading) benefit = heading.replace(/(?:S\$|SGD|US\$|USD)?\s?\d[\d,]*(?:\.\d+)?/g, " ").replace(/[\t|:]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) + " — " + benefit;
+  }
+  return { policyId: a.policyId, subjectId: a.subjectId, benefit, documentHash: a.documentHash, pageStart: a.page, pageEnd: a.page, passage: r.line, column: r.column };
+}
+/** Gate R17: the operands of one premium line -- the printed amount, the whole premium, its yearly figure and its
+ * MediSave / cash split -- each bound to the row that prints it, or an explicit sum, difference or per-period record. */
+function lineOps(l: Line, subjectId: string, documentHash: string | null): LineOps {
+  const i = l.item, period = periodOf(i.frequency);
+  const bound = (value: number | null, want?: RegExp) => { if (value == null) return null; const b = rowBinding({ policyId: l.docId, subjectId, documentHash, page: l.page, pageText: l.pageText, value, currency: i.currency, want }); return b ? boundOperand(value, i.currency, period, "premium", b) : null; };
+  const printed = bound(i.amount);
+  const medisave = i.medisave != null ? bound(i.medisave, /medisave/i) : null;
+  const total = Math.abs(i.total - i.amount) < 0.005 ? printed : bound(i.total, /\btotal\b|\bpremium\b/i) ?? sumOperands([printed, medisave]);
+  const cash = i.cash == null ? null : Math.abs(i.cash - i.amount) < 0.005 ? printed : bound(i.cash, /\bcash\b/i) ?? differenceOperands(total, medisave);
+  return { printed, total, annual: perPeriodOperand(total, "year"), cashAnnual: perPeriodOperand(cash, "year"), medisaveAnnual: perPeriodOperand(medisave, "year") };
+}
 /** Every money figure of `text` is printed on `page` beside its currency (a yearly figure worked out from a monthly premium is not). */
 function allPrintedOn(text: string, page: string | null | undefined) {
   if (!page) return false;
@@ -130,7 +170,16 @@ function namesPlan(question: string, product: string | null, type: string | null
 }
 
 export async function premiumAnswer(args: { accountId: string; people: ClaimPerson[]; question: string }) {
+  // Gate R17: every figure the answer states is attached to its sentences -- a printed row's binding, or the explicit
+  // record of the sum, split or per-period restatement that produced it (lib/chat/answer-verification.ts).
+  const ops: (ComputationOperand | null)[] = [];
+  const res = await premiumAnswerInner(args, ops);
+  for (const t of [res.summary, ...res.details]) for (const o of ops) attachOperand(null, t, o);
+  return res;
+}
+async function premiumAnswerInner(args: { accountId: string; people: ClaimPerson[]; question: string }, ops: (ComputationOperand | null)[]) {
   const notCounted: string[] = [];
+  const oneOffs: { docId: string; page: number; subjectId: string; amount: number; currency: string; pageText: string | null }[] = [];
   const memo = newDocMemo();
   // The pages that say why a premium is not counted are cited like any other.
   const uncounted: { docId: string; page: number; name: string; insurer: string | null; id: string }[] = [];
@@ -158,6 +207,7 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
         for (const page of new Set([amountPage, printedPeriodEnd(docPages)?.page ?? null]))
           if (docId && page) uncounted.push({ docId, page, name: byId.get(item.id)?.product_name ?? item.product_name ?? "Policy document", insurer: byId.get(item.id)?.insurer ?? null, id: item.id });
         notCounted.push((item.product_name ?? "A policy") + " — a one-off premium of " + (item.currencyStated ? money(item.amount, item.currency) : formatMoney(item.amount, null)) + (span ? " for " + span : "") + ", not a yearly one");
+        if (docId && amountPage && item.currencyStated) oneOffs.push({ docId, page: amountPage, subjectId: person.id, amount: item.amount, currency: item.currency, pageText: docPages.find((p) => p.page === amountPage)?.text ?? null });
         continue;
       }
       const src = byId.get(item.id)!;
@@ -213,6 +263,17 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
   // One policy covering two people is paid once: it is counted under the first of them.
   const seenItems = new Set<string>();
   for (const p of perPerson) { p.lines = p.lines.filter((l) => !seenItems.has(l.item.id) && !!seenItems.add(l.item.id)); p.annual = r2(p.lines.reduce((n, l) => n + l.item.annual, 0)); }
+  // Gate R17: each counted line's figures, bound to the rows of the version on file that print them.
+  const hashes = await documentHashes(args.accountId, [...perPerson.flatMap((p) => p.lines.map((l) => l.docId)), ...oneOffs.map((o) => o.docId)]);
+  for (const p of perPerson) for (const l of p.lines) { l.ops = lineOps(l, p.person.id, l.docId ? hashes.get(l.docId) ?? null : null); ops.push(l.ops.printed, l.ops.total, l.ops.annual, l.ops.cashAnnual, l.ops.medisaveAnnual); }
+  for (const o of oneOffs) { const b = rowBinding({ policyId: o.docId, subjectId: o.subjectId, documentHash: hashes.get(o.docId) ?? null, page: o.page, pageText: o.pageText, value: o.amount, currency: o.currency }); if (b) ops.push(boundOperand(o.amount, o.currency, null, "premium", b)); }
+  /** The explicit sum of lines' yearly premiums (per currency), and its monthly restatement. */
+  const sumLines = (lines: Line[], pick: (o: LineOps) => ComputationOperand | null = (o) => o.annual, scope: "person" | "household" = "person") => {
+    for (const currency of new Set(lines.map((l) => l.item.currency))) {
+      const sum = sumOperands(lines.filter((l) => l.item.currency === currency).map((l) => l.ops ? pick(l.ops) : null), scope);
+      ops.push(sum, perPeriodOperand(sum, "month"));
+    }
+  };
   // Round 7: "What premium do we pay for Jia Hui's ILP?", "LifeShield premium
   // now", "careshield premium how much" ask about ONE plan. Answer that plan
   // -- or say plainly that no premium is printed for it -- instead of the
@@ -272,7 +333,7 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const from = i.period_start && i.period_start.slice(0, 10) > new Date().toISOString().slice(0, 10) ? ", from " + new Date(i.period_start.slice(0, 10) + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : "";
     const monthly = /month/i.test(i.frequency ?? "") ? money(i.total, i.currency) + " a month (" + money(i.annual, i.currency) + " a year)" : money(i.annual, i.currency) + " a year";
     // (The page is cited either way; "(page N)" is written only beside figures that page prints.)
-    return name + ": " + monthly + split + from + (allPrintedOn(monthly + split, l.pageText) ? where : "") + ".";
+    return name + (/\bpremium\b/i.test(name) ? "" : " premium") + ": " + monthly + split + from + (allPrintedOn(monthly + split, l.pageText) ? where : "") + ".";
   };
   const isSelf = (p: ClaimPerson) => /^self$/i.test(p.relationship ?? "");
   const family = args.people.length > 1;
@@ -318,6 +379,9 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const future = starts.length === 1 && starts[0] > today ? new Date(starts[0] + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : null;
     const amounts = p.lines.map((l) => ({ amount: l.item.annual, currency: l.item.currency }));
     const mixed = byCurrency(amounts).length > 1;
+    sumLines(p.lines);
+    const sgdLines = p.lines.filter((l) => l.item.currency === "SGD");
+    ops.push(sumOperands(sgdLines.map((l) => l.ops ? l.ops.cashAnnual ?? l.ops.annual : null)), sumOperands(sgdLines.filter((l) => l.item.medisaveAnnual != null).map((l) => l.ops?.medisaveAnnual ?? null)));
     summary = (future ? "From " + future + ", " : "") + (isSelf(p.person) ? (future ? "you pay" : "You pay") : personName(p.person) + " pays") + " " + moneyList(amounts) + " a year in premiums" +
 " — about " + moneyList(amounts, 12) + " a month" + (mixed ? " (each currency as printed; they are not added together)" : "") + "." +
       (p.cash != null && p.medisave != null ? (mixed ? " Of the Singapore-dollar premiums, " : " Of that, ") + money(p.cash, "SGD") + " is paid in cash and " + money(p.medisave, "SGD") + " from MediSave." : "");
@@ -329,10 +393,13 @@ export async function premiumAnswer(args: { accountId: string; people: ClaimPers
     const holders = new Map<string, number>();
     for (const p of withPremiums) for (const l of p.lines) holders.set(l.item.id, (holders.get(l.item.id) ?? 0) + 1);
     for (const p of withPremiums) {
-      details.push(personName(p.person) + ": " + moneyList(p.lines.map((l) => ({ amount: l.item.annual, currency: l.item.currency }))) + " a year (" + p.lines.map((l) => (l.item.product_name ?? l.docName ?? "a policy") + " " + money(l.item.annual, l.item.currency) + ((holders.get(l.item.id) ?? 0) > 1 ? ", one joint premium" : "")).join(", ") + ").");
+      sumLines(p.lines);
+      details.push(personName(p.person) + ": " + moneyList(p.lines.map((l) => ({ amount: l.item.annual, currency: l.item.currency }))) + " a year in premiums (" + p.lines.map((l) => (l.item.product_name ?? l.docName ?? "a policy") + " " + money(l.item.annual, l.item.currency) + ((holders.get(l.item.id) ?? 0) > 1 ? ", one joint premium" : "")).join(", ") + ").");
       for (const l of p.lines) cite(l);
     }
     if ([...holders.values()].some((n) => n > 1)) details.push("A joint policy’s premium is counted once in the household total.");
+    // The household total: the explicit sum of each person's lines (a joint premium once), per currency.
+    { const once = new Set<string>(); const lines = withPremiums.flatMap((p) => p.lines).filter((l) => !once.has(l.item.id) && !!once.add(l.item.id)); sumLines(lines, (o) => o.annual, "household"); }
     summary = "Your household pays " + moneyList(amounts) + " a year in premiums — about " + moneyList(amounts, 12) + " a month — from the premiums printed in the documents on file" + (byCurrency(amounts).length > 1 ? " (each currency as printed; they are not added together)" : "") + ".";
   }
   const counted = new Set(withPremiums.flatMap((p) => p.lines.map((l) => l.item.product_name ?? l.docName ?? "")));
@@ -364,34 +431,56 @@ export async function dependantPremiumAnswer(args: { accountId: string; question
         if (m) rates.push({ who: /spouse/i.test(m[1]) ? "spouse" : "child", amount: Number(m[2].replace(/,/g, "")), text: l });
       }
       if (!rates.length) continue;
-      const members = (await query<{ display_name: string; preferred_name: string | null; relationship: string | null }>(
-        `SELECT f.display_name,f.preferred_name,f.relationship FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND pm.policy_id::text=$2`,
+      const members = (await query<{ id: string; display_name: string; preferred_name: string | null; relationship: string | null }>(
+        `SELECT f.id::text AS id,f.display_name,f.preferred_name,f.relationship FROM policy_members pm JOIN family_members f ON f.id=pm.family_member_id AND ${activePredicate("f")} WHERE pm.account_id=$1 AND pm.policy_id::text=$2`,
         [args.accountId, doc.id])).rows;
       const kindOf = (r: string | null) => /^(?:spouse|wife|husband)$/i.test(r ?? "") ? "spouse" : /^(?:child|son|daughter)$/i.test(r ?? "") ? "child" : null;
       const onlySpouse = /\b(?:spouse|wife|husband)\b/i.test(args.question) && !/\b(?:kids?|children|child|dependants?|dependents?)\b/i.test(args.question);
       const onlyChildren = /\b(?:kids?|children|child)\b/i.test(args.question) && !/\b(?:spouse|wife|husband|dependants?|dependents?)\b/i.test(args.question);
-      const parts: { label: string; count: number; amount: number; names: string[] }[] = [];
+      const parts: { label: string; count: number; amount: number; names: string[]; ids: string[] }[] = [];
       for (const rate of rates) {
         if ((onlySpouse && rate.who !== "spouse") || (onlyChildren && rate.who !== "child")) continue;
         const names = members.filter((m) => kindOf(m.relationship) === rate.who).map((m) => m.preferred_name?.trim() || m.display_name);
-        if (names.length) parts.push({ label: rate.who === "spouse" ? "spouse" : "child", count: rate.who === "spouse" ? Math.min(1, names.length) : names.length, amount: rate.amount, names });
+        const ids = members.filter((m) => kindOf(m.relationship) === rate.who).map((m) => m.id);
+        if (names.length) parts.push({ label: rate.who === "spouse" ? "spouse" : "child", count: rate.who === "spouse" ? Math.min(1, names.length) : names.length, amount: rate.amount, names, ids });
       }
       const name = doc.product_name ?? "Group policy document";
       const shown = (v: number) => formatMoney(v, "SGD").replace(/\.00$/, "");
       const printed = rates.map((r) => "“" + r.text + "”").join(" and ");
       const citations: ChatCitation[] = [{ chunkId: "premium:dependants:" + doc.id + ":" + page.page, policyId: doc.id, policyName: name, insurer: doc.insurer ?? undefined, pageStart: page.page, pageEnd: page.page, evidenceLabel: "Your policy document" }];
-      if (!parts.length) return { summary: name + " prints the yearly dependant premium as " + printed + " (page " + page.page + "), but no dependant of that kind is named in it, so DearPolicy can’t add it up.", details: [] as string[], citations };
+      if (!parts.length) {
+        const summary = name + " prints the yearly dependant premium as " + printed + " (page " + page.page + "), but no dependant of that kind is named in it, so DearPolicy can’t add it up.";
+        // Gate R17: the printed rates are read from their own rows of that page (resolved there at save time).
+        citeLine(null, summary, { policyId: doc.id, pageStart: page.page, benefit: "Dependant premium" });
+        return { summary, details: [] as string[], citations };
+      }
       const total = parts.reduce((t, p) => t + p.count * p.amount, 0);
       const listNames = (n: string[]) => n.length <= 1 ? n.join("") : n.slice(0, -1).join(", ") + " and " + n.at(-1);
       const sum = parts.map((p) => (p.count > 1 ? p.count + " × " : "") + formatMoney(p.amount, "SGD")).join(" + ");
       const deducted = /deducted from salary/i.test(lines[at]) ? ", deducted from salary" : "";
-      return {
-        summary: "For the dependants on " + name + " you pay " + shown(total) + " a year" + deducted + ": " + sum + ", from the dependant premiums it prints for "
+      const out = {
+        summary: "For the dependants on " + name + " your family pays " + shown(total) + " a year" + deducted + ": " + sum + ", from the dependant premiums it prints for "
           + listNames(parts.flatMap((p) => p.names)) + ".",
         details: [name + " — " + printed + " (page " + page.page + ").",
           "That is the printed rate for each dependant named in the document, added up; the employer’s HR or the insurer can confirm what is actually deducted."],
         citations,
       };
+      // Gate R17: each printed rate is bound to its own row (for a person of that row's kind), and the total is the
+      // explicit record of the sum of each rate times the number of dependants of that kind the document names.
+      const hash = (await documentHashes(args.accountId, [doc.id])).get(doc.id) ?? null;
+      const owner = (await query<{ owner: string }>(`SELECT p.family_member_id::text AS owner FROM policies p WHERE p.account_id=$1 AND p.id::text=$2 AND ${activePredicate("p")}`, [args.accountId, doc.id]).catch(() => ({ rows: [] }))).rows[0]?.owner ?? null;
+      const rateOperand = (who: "spouse" | "child", amount: number, subjectId: string | null | undefined) => {
+        const b = subjectId ? rowBinding({ policyId: doc.id, subjectId, documentHash: hash, page: page.page, pageText: page.text, value: amount, currency: "SGD", want: who === "spouse" ? /\bspouse\b/i : /\bchild/i, benefit: who === "spouse" ? "Spouse premium" : "Child premium" }) : null;
+        return b ? boundOperand(amount, "SGD", "year", "premium", b) : null;
+      };
+      // Every printed rate the answer quotes, for a dependant of that kind the document names (or its owner).
+      for (const rate of rates) {
+        const o = rateOperand(rate.who, rate.amount, members.find((m) => kindOf(m.relationship) === rate.who)?.id ?? owner);
+        for (const t of [out.summary, ...out.details]) attachOperand(null, t, o);
+      }
+      const operands = parts.map((p) => productOperand(rateOperand(p.label === "spouse" ? "spouse" : "child", p.amount, p.ids[0]), p.count));
+      attachOperand(null, out.summary, sumOperands(operands, "household"));
+      return out;
     }
   }
   return null;

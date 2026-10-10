@@ -1,0 +1,58 @@
+[
+  {
+    "file": "hx-text.pdf",
+    "policyId": "ac7e9001-35d1-4ebd-8478-bbf56f999ebb",
+    "product": "SafeStay Family Hospital Cash & Personal Accident Plan",
+    "linked": [
+      "Felix Oran Hartwell",
+      "Isla Maren Hartwell",
+      "Leonie Brigitte Hartwell",
+      "Simon Alastair Hartwell"
+    ],
+    "detected": [
+      {
+        "name": "Felix Oran Hartwell",
+        "matched": "Felix Oran Hartwell"
+      },
+      {
+        "name": "Isla Maren Hartwell",
+        "matched": "Isla Maren Hartwell"
+      },
+      {
+        "name": "Leonie Brigitte Hartwell",
+        "matched": "Leonie Brigitte Hartwell"
+      },
+      {
+        "name": "Simon Alastair Hartwell",
+        "matched": "Simon Alastair Hartwell"
+      }
+    ],
+    "needsReview": true,
+    "reviewReason": "4 extracted coverage items could not be source-verified"
+  },
+  {
+    "file": "hx-scanned.pdf",
+    "policyId": "601a52c9-9dae-4a4f-9c5e-b1a44d53b2bc",
+    "product": "JuniorShield Child Hospital Income Plan",
+    "linked": [
+      "Isla Maren Hartwell"
+    ],
+    "detected": [
+      {
+        "name": "Isla Maren Hartwell",
+        "matched": "Isla Maren Hartwell"
+      }
+    ],
+    "needsReview": false,
+    "reviewReason": null
+  },
+  {
+    "file": "hx-endorsement.pdf",
+    "policyId": "69fd8ec9-465c-4310-bdd5-e831789123d7",
+    "product": "SafeStay Family Hospital Cash & Personal Accident Plan",
+    "linked": [],
+    "detected": [],
+    "needsReview": false,
+    "reviewReason": null
+  }
+]

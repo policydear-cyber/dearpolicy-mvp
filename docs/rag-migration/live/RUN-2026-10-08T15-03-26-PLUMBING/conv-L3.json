@@ -1,0 +1,1374 @@
+{
+  "scenario": "L3",
+  "title": "Broken arm: cause decides cover; side question about the speaker; back to the pending question",
+  "conversationId": "3ce38557-e34a-4b74-b184-dad4ab22ed2a",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Kai broke his arm yesterday. Can we claim for it?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+      "timings": {
+        "acceptedMs": 11,
+        "firstAssistantPersistedMs": 882,
+        "answerSeenMs": 1060,
+        "modelMs": 57,
+        "upstreamMs": 12,
+        "relayMs": 13
+      },
+      "calls": [
+        {
+          "seq": 8,
+          "at": "2026-10-08T15:03:33.031Z",
+          "estInputTokens": 8184,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018184000000000002,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "chargedUsd": 0.0005576,
+          "ok": true,
+          "usage": {
+            "input": 5376,
+            "output": 40
+          },
+          "latencyMs": 5,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        },
+        {
+          "seq": 9,
+          "at": "2026-10-08T15:03:33.042Z",
+          "estInputTokens": 10133,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020133,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "chargedUsd": 0.0006803000000000001,
+          "ok": true,
+          "usage": {
+            "input": 6603,
+            "output": 40
+          },
+          "latencyMs": 52,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5426,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000563,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:31.966Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6898,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.00071,
+          "latency_ms": 54,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:32.027Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5376,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000558,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:33.037Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6603,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.00068,
+          "latency_ms": 52,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:33.096Z"
+        }
+      ],
+      "relay": [
+        {
+          "at": "2026-10-08T15:03:31Z",
+          "t": 1791471811.963,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-6",
+          "usage": {
+            "prompt_tokens": 5426,
+            "completion_tokens": 40,
+            "total_tokens": 5466,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:31Z",
+          "t": 1791471811.979,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 6,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-7",
+          "usage": {
+            "prompt_tokens": 6898,
+            "completion_tokens": 40,
+            "total_tokens": 6938,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 3
+        },
+        {
+          "at": "2026-10-08T15:03:33Z",
+          "t": 1791471813.033,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-8",
+          "usage": {
+            "prompt_tokens": 5376,
+            "completion_tokens": 40,
+            "total_tokens": 5416,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:33Z",
+          "t": 1791471813.045,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 6,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-9",
+          "usage": {
+            "prompt_tokens": 6603,
+            "completion_tokens": 40,
+            "total_tokens": 6643,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 6
+        }
+      ],
+      "tokens": {
+        "input": 11979,
+        "output": 80
+      },
+      "costUsd": {
+        "charged": 0.0012379000000000001,
+        "ledger": 0.002511
+      }
+    },
+    {
+      "turn": 2,
+      "user": "Before that, quick question: what is my deductible on my KestrelShield plan?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+      "timings": {
+        "acceptedMs": 12,
+        "firstAssistantPersistedMs": 883,
+        "answerSeenMs": 1066,
+        "modelMs": 63,
+        "upstreamMs": 25,
+        "relayMs": 25
+      },
+      "calls": [
+        {
+          "seq": 10,
+          "at": "2026-10-08T15:03:34.089Z",
+          "estInputTokens": 8270,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.001827,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "chargedUsd": 0.0005632,
+          "ok": true,
+          "usage": {
+            "input": 5432,
+            "output": 40
+          },
+          "latencyMs": 5,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-08T15:03:34.100Z",
+          "estInputTokens": 10421,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020421000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "chargedUsd": 0.0006984000000000001,
+          "ok": true,
+          "usage": {
+            "input": 6784,
+            "output": 40
+          },
+          "latencyMs": 58,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5376,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000558,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:33.037Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6603,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.00068,
+          "latency_ms": 52,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:33.096Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5432,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000563,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.095Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6784,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000698,
+          "latency_ms": 59,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.160Z"
+        }
+      ],
+      "relay": [
+        {
+          "at": "2026-10-08T15:03:33Z",
+          "t": 1791471813.033,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-8",
+          "usage": {
+            "prompt_tokens": 5376,
+            "completion_tokens": 40,
+            "total_tokens": 5416,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:33Z",
+          "t": 1791471813.045,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 6,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-9",
+          "usage": {
+            "prompt_tokens": 6603,
+            "completion_tokens": 40,
+            "total_tokens": 6643,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 6
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.091,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-10",
+          "usage": {
+            "prompt_tokens": 5432,
+            "completion_tokens": 40,
+            "total_tokens": 5472,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.101,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 6,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 15,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-11",
+          "usage": {
+            "prompt_tokens": 6784,
+            "completion_tokens": 40,
+            "total_tokens": 6824,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 15
+        }
+      ],
+      "tokens": {
+        "input": 12216,
+        "output": 80
+      },
+      "costUsd": {
+        "charged": 0.0012616,
+        "ledger": 0.0024990000000000004
+      }
+    },
+    {
+      "turn": 3,
+      "user": "He fell off his bicycle at the park.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+      "timings": {
+        "acceptedMs": 20,
+        "firstAssistantPersistedMs": 375,
+        "answerSeenMs": 554,
+        "modelMs": 51,
+        "upstreamMs": 22,
+        "relayMs": 23
+      },
+      "calls": [
+        {
+          "seq": 12,
+          "at": "2026-10-08T15:03:34.658Z",
+          "estInputTokens": 8341,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018341,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "chargedUsd": 0.0005678,
+          "ok": true,
+          "usage": {
+            "input": 5478,
+            "output": 40
+          },
+          "latencyMs": 4,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        },
+        {
+          "seq": 13,
+          "at": "2026-10-08T15:03:34.671Z",
+          "estInputTokens": 8564,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018564,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "chargedUsd": 0.0005826000000000001,
+          "ok": true,
+          "usage": {
+            "input": 5626,
+            "output": 40
+          },
+          "latencyMs": 47,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5432,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000563,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.095Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6784,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000698,
+          "latency_ms": 59,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.160Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5478,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000568,
+          "latency_ms": 4,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.663Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5626,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000583,
+          "latency_ms": 47,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.719Z"
+        }
+      ],
+      "relay": [
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.091,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-10",
+          "usage": {
+            "prompt_tokens": 5432,
+            "completion_tokens": 40,
+            "total_tokens": 5472,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.101,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 6,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 15,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-11",
+          "usage": {
+            "prompt_tokens": 6784,
+            "completion_tokens": 40,
+            "total_tokens": 6824,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 15
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.66,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 6,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-12",
+          "usage": {
+            "prompt_tokens": 5478,
+            "completion_tokens": 40,
+            "total_tokens": 5518,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.673,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 8,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 3,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-13",
+          "usage": {
+            "prompt_tokens": 5626,
+            "completion_tokens": 40,
+            "total_tokens": 5666,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 4
+        }
+      ],
+      "tokens": {
+        "input": 11104,
+        "output": 80
+      },
+      "costUsd": {
+        "charged": 0.0011504000000000002,
+        "ledger": 0.002412
+      }
+    }
+  ],
+  "totalMs": 2696,
+  "firstUsefulResponseMs": 882,
+  "tokens": {
+    "input": 35299,
+    "output": 240
+  },
+  "costUsd": 0.0036499,
+  "calls": 6,
+  "verdict": {
+    "scenario": "L3",
+    "verdict": "FAIL",
+    "failureStage": "retrieval",
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page SUNHAVEN p2 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 2,
+        "name": "stored page KESTREL p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 3,
+        "name": "stored page SUNHAVEN p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no money figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "asks how the arm was broken (accident or not)",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "no question asked"
+      },
+      {
+        "turn": 1,
+        "name": "about kai",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "subject after the turn: none"
+      },
+      {
+        "turn": 1,
+        "name": "cites SUNHAVEN p2 \"This policy covers Bodily Injury caused \"",
+        "ok": false,
+        "stage": "retrieval",
+        "detail": "never retrieved"
+      },
+      {
+        "turn": 1,
+        "name": "never records cause=accident",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "not recorded"
+      },
+      {
+        "turn": 2,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "shows S$3,500",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "missing; visible figures: none"
+      },
+      {
+        "turn": 2,
+        "name": "never states S$750",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "absent"
+      },
+      {
+        "turn": 2,
+        "name": "never states S$1,200",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "absent"
+      },
+      {
+        "turn": 2,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 2,
+        "name": "about kai",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "subject after the turn: none"
+      },
+      {
+        "turn": 2,
+        "name": "cites KESTREL p1 \"Deductible (per policy year, private hos\"",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "retrieved but not cited"
+      },
+      {
+        "turn": 2,
+        "name": "puts the pending question back",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "not re-asked"
+      },
+      {
+        "turn": 3,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 3,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 3,
+        "name": "shows S$750",
+        "ok": false,
+        "stage": "retrieval",
+        "detail": "missing; visible figures: none"
+      },
+      {
+        "turn": 3,
+        "name": "never states S$1,200",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 3,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 3,
+        "name": "does not re-ask re-asking how it happened",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "no re-ask"
+      },
+      {
+        "turn": 3,
+        "name": "about kai",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "subject after the turn: none"
+      },
+      {
+        "turn": 3,
+        "name": "figure bound to kai / SUNHAVEN / Child",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "bindings: none"
+      },
+      {
+        "turn": 3,
+        "name": "cites SUNHAVEN p1 \"Fracture benefit (per fracture)\"",
+        "ok": false,
+        "stage": "retrieval",
+        "detail": "never retrieved"
+      },
+      {
+        "turn": 3,
+        "name": "records how|cause|happen in their words",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "facts: none"
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:plumbing-fake-not-a-model",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 11979,
+          "output": 80
+        },
+        "latencyMs": 67,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "query": "Kai broke his arm yesterday. Can we claim for it?"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":4}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 2,
+        "modelId": "openai:plumbing-fake-not-a-model",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 12216,
+          "output": 80
+        },
+        "latencyMs": 73,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "query": "Before that, quick question: what is my deductible on my KestrelShield plan?"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":5}",
+            "evidenceIds": [
+              "e5",
+              "e1",
+              "e2",
+              "e6",
+              "e7"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 3,
+        "modelId": "openai:plumbing-fake-not-a-model",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 11104,
+          "output": 80
+        },
+        "latencyMs": 64,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "query": "He fell off his bicycle at the park."
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":0}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 165,
+            "role": "table_header",
+            "text": "Benefit\tBefore\tAfter",
+            "start": 145,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 208,
+          "text": "Benefit\tBefore\tAfter\nAnnual claim limit\tS$1,000,000\tS$1,500,000",
+          "start": 145,
+          "onPage": 1
+        },
+        "support": {
+          "end": 208,
+          "text": "Annual claim limit\tS$1,000,000\tS$1,500,000",
+          "start": 166,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000104",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel-endt1"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 187,
+            "role": "table_header",
+            "text": "Benefit\tLimit",
+            "start": 174,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Benefit\tLimit\nDeductible (per policy year, private hospital)\tS$3,500\nCo-insurance\t10%\nAnnual claim limit\tS$1,000,000",
+          "start": 174,
+          "onPage": 1
+        },
+        "support": {
+          "end": 290,
+          "text": "Annual claim limit\tS$1,000,000",
+          "start": 260,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 589,
+          "text": "Insured persons\nName                          Category      Date of birth\nDaniel Lim Wen Jie            Adult         11 Mar 1980\nGrace Ong Pei Shan            Adult         22 Aug 1983\nKai Lim Jun Hao               Child         06 May 2014\nMei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 292,
+          "onPage": 1
+        },
+        "support": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 614,
+          "text": "Insured members\nName                          Cover type        Date of birth\nDaniel Lim Wen Jie            Insured Adult     11 Mar 1980\nGrace Ong Pei Shan            Insured Adult     22 Aug 1983\nKai Lim Jun Hao               Insured Child     06 May 2014\nMei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 297,
+          "onPage": 1
+        },
+        "support": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 172,
+          "text": "Kestrel Health Insurance\nKestrelShield Integrated Plan - Policy Schedule\nPolicy number: KH-IS-338861\nLife assured: Daniel Lim Wen Jie\nPolicy year 01 Apr 2026 to 31 Mar 2027",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 72,
+          "text": "KestrelShield Integrated Plan - Policy Schedule",
+          "start": 25,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 145,
+          "text": "Meridian Mutual Assurance                                               Policy MM-HC-205518\nCareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 145,
+          "text": "CareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 301,
+          "text": "Conditions\nHospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 173,
+          "text": "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission.",
+          "start": 11,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 2,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 3,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}

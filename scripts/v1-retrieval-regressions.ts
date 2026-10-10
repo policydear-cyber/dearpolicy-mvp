@@ -9,7 +9,9 @@
  *      support an answer;
  *   R3 another household's data is never visible, even with the same member name;
  *   R4 different currencies are never added, and no currency is defaulted;
- *   R5 no amount appears from a household assertion alone.
+ *   R5 no amount appears from a household assertion alone;
+ *   R6 the catalogue's order is total (rules that share a name come back by page, then id) and the ledger holds one
+ *      row per fact of an active policy, however many times the rule was read (the Round 9 flake).
  *
  * Every check runs; failures are collected and reported together, and the
  * process exits non-zero if any failed. Assertions state the requirement,
@@ -277,6 +279,38 @@ async function main() {
       assert.ok(usd.length > 0 && usd.every((r) => r.currency === "USD"), "stated-currency rule seeded as USD: " + JSON.stringify(usd));
       const rows = (await db.query<{ currency: string; amount: string | null }>("SELECT currency,amount::text FROM coverage_rules WHERE policy_id=$1", [NULLP])).rows;
       assert.deepEqual(rows.filter((r) => r.currency === "SGD"), [], "a rule with no stated currency labelled SGD: " + JSON.stringify(rows));
+    });
+
+    // ------------------------------------------------ R6: the same rule read twice is one ledger row, chosen the same way every time
+    await check("R6 loadBenefitCatalog orders equal-named rules by page then id, and seedLedger keeps one row per fact (active policies only)", async () => {
+      const R6 = id(108);
+      await db.query(`INSERT INTO policies(id,account_id,family_member_id,insurer,product_name,policy_number,policy_type,document_role,personal_coverage_confirmed,document_authority,processing_status,original_filename,storage_key,effective_date,quarantine_status,lifecycle_state,benefits_indexed_at,conditions_indexed_at,ledger_read_at,updated_at)
+        VALUES($1,$2,$3,'Example Insurer','R6 Accident Plan','R6-1','Personal Accident','certificate',true,90,'ready','r6.pdf','r6.pdf','2022-01-01','scan_clean','active',now(),now(),now(),'2024-01-01T00:00:00Z')`, [R6, A, pa.id]);
+      await db.query("INSERT INTO policy_members(policy_id,family_member_id,account_id) VALUES($1,$2,$3)", [R6, pa.id, A]);
+      const quote = "R6MARKER Accidental death: we pay S$50,000.";
+      for (let page = 1; page <= 7; page++) await db.query("INSERT INTO policy_pages(account_id,policy_id,page_number,text) VALUES($1,$2,$3,$4)", [A, R6, page, page === 3 || page === 6 ? quote : "R6MARKER page " + page + ". Currency of cover: SGD."]);
+      await db.query(`INSERT INTO policy_coverages(account_id,policy_id,family_member_id,category,amount,currency,product_name,source_page,evidence_text,evidence_verified,confirmed)
+        VALUES($1,$2,$3,'Accidental Death',50000,'SGD','R6 Accident Plan',2,'R6 Accident Plan sum insured SGD 50,000',true,true)`, [A, R6, pa.id]);
+      // The same rule read three times: twice under one name (page 6 stored FIRST, so a scan returns it first, and
+      // with the larger id) and once under a longer name. Postgres returns rows that tie on the sort key in no set order.
+      const rule = (rowId: string, name: string, page: number) => db.query(`INSERT INTO policy_benefits(id,account_id,policy_id,product_name,benefit_name,traits,formula_kind,formula_value,currency,offset_days,maximum_days,source_page,quote,conditions,requirements,needs_review)
+        VALUES($1,$2,$3,'R6 Accident Plan',$4,ARRAY['accident','death']::text[],'fixed',50000,'SGD',null,null,$5,$6,'[]'::jsonb,'[]'::jsonb,false)`, [rowId, A, R6, name, page, quote]);
+      await rule("30000000-0000-4000-8000-0000000000f6", "R6 Accidental Death", 6);
+      await rule("30000000-0000-4000-8000-000000000003", "R6 Accidental Death", 3);
+      await rule("30000000-0000-4000-8000-0000000000a3", "R6 Accidental Death Benefit", 3);
+      // A row of a deleted policy stating the same fact holds nothing for the live document.
+      await db.query(`INSERT INTO coverage_rules(account_id,family_member_id,policy_id,plan_name,insurer,event_type,cause,pays_kind,amount,currency,source_page,quote,origin,status,seed_key)
+        VALUES($1,$2,$3,'R6 Accident Plan','Example Insurer','accidental_death','accident','lump_sum',50000,'SGD',3,$4,'wording','confirmed','r6-deleted-copy')`, [A, pa.id, DEL, quote]);
+      const pages = (await loadBenefitCatalog(A, [R6])).filter((b) => b.benefitName === "R6 Accidental Death").map((b) => b.sourcePage);
+      assert.deepEqual(pages, [3, 6], "equal-named rules in catalogue order (page, then id): " + JSON.stringify(pages));
+      for (let pass = 0; pass < 2; pass++) await seedLedger(A, [pa]);
+      const rows = (await db.query<{ source_page: number | null; note: string | null; amount: string }>("SELECT source_page,note,amount::text FROM coverage_rules WHERE policy_id=$1 AND origin='wording' AND event_type='accidental_death' ORDER BY source_page,note", [R6])).rows;
+      const all = (await db.query("SELECT event_type,pays_kind,amount::text,currency,source_page,note,origin,seed_key FROM coverage_rules WHERE policy_id=$1", [R6])).rows;
+      const read = (await loadBenefitCatalog(A, [R6])).map((b) => [b.benefitName, b.formulaKind, b.formulaValue, b.currency, b.sourcePage]);
+      assert.equal(rows.length, 1, "one ledger row for the one fact (S$50,000 on accidental death), not one per reading: " + JSON.stringify(rows) + "\n     all rows: " + JSON.stringify(all) + "\n     catalogue: " + JSON.stringify(read));
+      assert.deepEqual([rows[0].source_page, rows[0].note, Number(rows[0].amount)], [3, "R6 Accidental Death", 50000], "the row seeded is the first in catalogue order (page 3): " + JSON.stringify(rows));
+      await db.query("DELETE FROM coverage_rules WHERE policy_id=$1 OR seed_key='r6-deleted-copy'", [R6]);
+      await db.query("UPDATE policies SET lifecycle_state='soft_deleted' WHERE id=$1", [R6]);
     });
 
     // ------------------------------------------------ R5 + R1/R2 end to end through the chat route

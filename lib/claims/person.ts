@@ -1,3 +1,4 @@
+import { isCalendarDate } from "./day-count";
 export type ClaimPerson = { id: string; display_name: string; preferred_name: string | null; relationship: string };
 export type ClaimPersonResolution =
   | { status: "resolved"; person: ClaimPerson; explicit: boolean }
@@ -312,3 +313,289 @@ export function outsideHouseholdSubject(text: string, family: ClaimPerson[]): { 
   const name = m[2] && /^(?:ah\s+)?\p{Lu}/u.test(m[2]) && !/^(?:was|is|has|had|died|passed|fell|got|broke|just|also|who|said|says|told|already|recently)$/i.test(m[2].split(/\s+/)[0]) ? m[2].replace(/\s+(?:was|is|has|had|died|passed|fell|got|broke)\b.*$/i, "").trim() : null;
   return { relation: m[1].toLowerCase(), name };
 }
+
+
+// ---------------------------------------------------------------------------------------------------------------
+// Agent G: a member's recorded relation (relationship plus notes), shared with the conversational path's people module.
+// ---------------------------------------------------------------------------------------------------------------
+export type MemberRelation = "self" | "spouse" | "child" | "step_child" | "child_in_law" | "parent" | "step_parent" | "parent_in_law" | "sibling" | "sibling_in_law" | "grandparent" | "grandchild" | "helper" | "dependant" | "other";
+export type MemberGender = "f" | "m" | null;
+const FEMALE_WORD = /\b(?:mother|mum|mom|wife|daughter|sister|grandmother|grandma|aunt|niece|female|girl|woman)\b/i;
+const MALE_WORD = /\b(?:father|dad|husband|son|brother|grandfather|grandpa|uncle|nephew|male|boy|man)\b/i;
+/** The fine relation of a stored member: relationship plus what their notes say ("mother-in-law", "stepson", "helper"). */
+export function memberRelation(relationship: string | null | undefined, notesIn: string | null | undefined): { relation: MemberRelation; gender: MemberGender } {
+  const rel = (relationship ?? "").toLowerCase().trim(), notes = (notesIn ?? "").toLowerCase();
+  const both = rel + " " + notes;
+  // Gender from the relation words, reading "stepson" / "step-daughter" as son / daughter.
+  const plain = both.replace(/\bstep[- ]?/g, "");
+  const g: MemberGender = FEMALE_WORD.test(plain) && !MALE_WORD.test(plain) ? "f" : MALE_WORD.test(plain) && !FEMALE_WORD.test(plain) ? "m" : null;
+  if (rel === "helper" || /\bhelper\b|\bmaid\b|\bdomestic\b|\bnanny\b|\bcaregiver\b/.test(both)) return { relation: "helper", gender: g };
+  if (/in[- ]law/.test(both)) {
+    if (/\b(?:mother|father|parent)s?[- ]in[- ]law\b/.test(both) || rel === "parent") return { relation: "parent_in_law", gender: g };
+    if (/\b(?:son|daughter)[- ]in[- ]law\b/.test(both) || rel === "child") return { relation: "child_in_law", gender: g };
+    return { relation: "sibling_in_law", gender: g };
+  }
+  if (/\bstep[- ]?/.test(both)) {
+    if (rel === "parent" || /\bstep[- ]?(?:mother|father|mum|dad|parent)/.test(both)) return { relation: "step_parent", gender: g };
+    return { relation: "step_child", gender: g };
+  }
+  const map: Record<string, MemberRelation> = { self: "self", spouse: "spouse", wife: "spouse", husband: "spouse", partner: "spouse", child: "child", son: "child", daughter: "child", parent: "parent", mother: "parent", father: "parent", sibling: "sibling", brother: "sibling", sister: "sibling", grandparent: "grandparent", dependant: "dependant", dependent: "dependant" };
+  return { relation: map[rel] ?? "other", gender: g };
+}
+const MEMBER_RELATION_NOUN: Record<MemberRelation, string> = { self: "you", spouse: "spouse", child: "child", step_child: "stepchild", child_in_law: "child-in-law", parent: "parent", step_parent: "step-parent", parent_in_law: "parent-in-law", sibling: "sibling", sibling_in_law: "sibling-in-law", grandparent: "grandparent", grandchild: "grandchild", helper: "helper", dependant: "dependant", other: "household member" };
+
+// ---------------------------------------------------------------------------------------------------------------
+// Agent G: applicability classes -- who a table column is printed for, and which class a person is in.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** The class a person is in for an Adult / Child column: established from the policy's own insured-persons category
+ * when one is recorded, else the date of birth, else the relationship -- and "unknown" when none of them establishes
+ * it (a sibling or "other" member with no date of birth, a son aged 18 to 25 whose policy may still count him as a
+ * child). Unknown never passes against a class-specific column. */
+export type ApplicabilityClass = "adult" | "child" | "unknown";
+export type PersonApplicability = { cls: ApplicabilityClass; relation: MemberRelation; age: number | null; basis: "category" | "date_of_birth" | "relationship" | "none"; detail: string };
+/** Who a column's values are printed for. "none": the column names no class of person (one value for everyone, a plan,
+ * tier, ward or version); "ambiguous": it names more than one class; "unrecognised": it names people in words that
+ * map to no known class ("Insured persons", "Junior", "Family"). */
+export type ColumnClass = "adult" | "child" | "spouse" | "owner" | "parent" | "dependant";
+export type ColumnApplicability = { kind: "none" } | { kind: "class"; cls: ColumnClass } | { kind: "ambiguous"; classes: ColumnClass[] } | { kind: "unrecognised"; words: string };
+
+const COL_CLASS: [ColumnClass, RegExp][] = [
+  ["child", /\b(?:child(?:ren)?|kids?|juveniles?|minors?|infants?|sons?|daughters?)\b/i],
+  ["adult", /\badults?\b|\bgrown-?ups?\b/i],
+  ["spouse", /\b(?:spouses?|wife|wives|husbands?|partners?)\b/i],
+  ["parent", /\b(?:parents?|fathers?|mothers?)\b/i],
+  ["owner", /\b(?:policy ?holders?|policy ?owners?|life (?:assured|insured)|main insured|principal(?: insured)?|employees?|staff|self|proposer|(?<!family )members?(?! of))\b/i],
+  ["dependant", /\bdependa?n[ct]s?\b/i],
+];
+/** Words that name people without naming a class this code knows. ("Sum insured" / "amount insured" are amounts.) */
+const PERSONISH = /\b(?:insured|assured|covered|persons?|people|individuals?|famil(?:y|ies)|category|categories|relationship|juniors?|youths?|teen\w*|seniors?|elderly|students?|retirees?|beneficiar\w*|nominees?|helpers?|domestic|named)\b/i;
+const AMOUNT_PHRASE = /\b(?:sum|amount|value)s? (?:insured|assured|covered)\b|\b(?:insured|assured|covered) (?:sum|amount|value)s?\b/gi;
+
+const FAMILY_AGGREGATE = /\bfamily (?:maximum|max|limit|aggregate|total|plan|cover|sum insured)\b|\b(?:per|whole|entire) family\b/i;
+
+export function columnApplicability(header: string | null | undefined): ColumnApplicability {
+  const h = String(header ?? "").replace(AMOUNT_PHRASE, " ").replace(/\s+/g, " ").trim();
+  if (!h) return { kind: "none" };
+  // Integration (round 3): a whole-family aggregate or plan column ("Family maximum", "Family plan", "per family") is
+  // one limit for the family, not a class of person -- like a tier, it names nobody (r6: the family maximum for trip
+  // cancellation). "Family members" still names people without a known class.
+  if (FAMILY_AGGREGATE.test(h) && !COL_CLASS.some(([, re]) => re.test(h.replace(new RegExp(FAMILY_AGGREGATE.source, "gi"), " ")))) return { kind: "none" };
+  let classes = COL_CLASS.filter(([, re]) => re.test(h)).map(([c]) => c);
+  if (/\bfamily members?\b/i.test(h)) classes = classes.filter((c) => c !== "owner");
+  // A dependant child is a child; a dependant spouse is a spouse.
+  if (classes.length > 1 && classes.includes("dependant")) classes = classes.filter((c) => c !== "dependant");
+  const uniq = [...new Set(classes)];
+  if (uniq.length === 1) return { kind: "class", cls: uniq[0] };
+  if (uniq.length > 1) return { kind: "ambiguous", classes: uniq };
+  const p = h.match(PERSONISH);
+  return p ? { kind: "unrecognised", words: h } : { kind: "none" };
+}
+
+const CHILD_RELATIONS: MemberRelation[] = ["child", "step_child", "grandchild"];
+const ADULT_RELATIONS: MemberRelation[] = ["self", "spouse", "parent", "parent_in_law", "step_parent", "grandparent", "sibling_in_law", "child_in_law", "helper"];
+const ageAt = (dob: string, asOf: string) => { const [y, m, d] = dob.slice(0, 10).split("-").map(Number), [Y, M, D] = asOf.slice(0, 10).split("-").map(Number); return Y - y - (M < m || (M === m && D < d) ? 1 : 0); };
+
+/** The person's class for Adult / Child columns (see ApplicabilityClass). `category` is a policy insured-persons
+ * category recorded for them (a benefit tier, the category the document lists them under). */
+export function personApplicability(m: { relationship: string | null; notes?: string | null; dateOfBirth?: string | null }, opts: { asOf?: string | null; category?: string | null } = {}): PersonApplicability {
+  const { relation } = memberRelation(m.relationship, m.notes);
+  const asOf = (opts.asOf ?? new Date().toISOString()).slice(0, 10);
+  const cat = opts.category ? columnApplicability(opts.category) : null;
+  // Round 8e: a date of birth on file that is not a calendar date, or is after the date asked about, establishes no
+  // age -- and the class is then not guessed from the relationship instead (the explicit data is wrong, not absent).
+  const dob = m.dateOfBirth ? String(m.dateOfBirth).slice(0, 10) : null;
+  const dobProblem = !dob ? null : !isCalendarDate(dob) ? `the date of birth on file (${dob}) is not a calendar date`
+    : !isCalendarDate(asOf) ? `the date asked about (${asOf}) is not a calendar date` : dob > asOf ? `the date of birth on file (${dob}) is after ${asOf}` : null;
+  const age = dob && !dobProblem ? ageAt(dob, asOf) : null;
+  // A category the policy itself lists them under is the policy's own definition (it does not rest on the age).
+  if (cat?.kind === "class" && (cat.cls === "child" || cat.cls === "adult")) return { cls: cat.cls, relation, age, basis: "category", detail: `listed by the policy as ${opts.category}` };
+  if (dobProblem) return { cls: "unknown", relation, age: null, basis: "none", detail: `${dobProblem}, so whether they are an adult or a child is not established` };
+  if (age != null) {
+    if (age < 18) return { cls: "child", relation, age, basis: "date_of_birth", detail: `aged ${age}` };
+    if (age >= 26 || !CHILD_RELATIONS.includes(relation)) return { cls: "adult", relation, age, basis: "date_of_birth", detail: `aged ${age}` };
+    return { cls: "unknown", relation, age, basis: "none", detail: `aged ${age}: an adult by age, but the policy's own definition decides whether a ${MEMBER_RELATION_NOUN[relation]} of that age is still covered as a child` };
+  }
+  if (CHILD_RELATIONS.includes(relation)) return { cls: "child", relation, age, basis: "relationship", detail: `recorded as ${MEMBER_RELATION_NOUN[relation]}` };
+  if (ADULT_RELATIONS.includes(relation)) return { cls: "adult", relation, age, basis: "relationship", detail: `recorded as ${relation === "self" ? "you" : MEMBER_RELATION_NOUN[relation]}` };
+  return { cls: "unknown", relation, age, basis: "none", detail: "no date of birth or relationship on file says whether they are an adult or a child" };
+}
+
+/** Why a value printed in a column of class `col` cannot be used for this person (null when it can). `isOwner`: the
+ * person is the document's policyholder / main insured (null when not known). */
+export function columnFitProblem(col: ColumnApplicability, p: PersonApplicability, ctx: { isOwner: boolean | null; header?: string | null }): string | null {
+  const where = ctx.header ? `the “${ctx.header}” column` : "the column";
+  if (col.kind === "none") return null;
+  if (col.kind === "ambiguous") return `${where} is printed for more than one class of person (${col.classes.join(" / ")}), so it does not say it applies to this person`;
+  if (col.kind === "unrecognised") return `${where} does not say which class of person it applies to`;
+  switch (col.cls) {
+    case "adult": case "child":
+      if (p.cls === "unknown") return `${where} is printed for ${col.cls === "adult" ? "adults" : "children"}, and whether this person is an adult or a child is not established (${p.detail})`;
+      return p.cls === col.cls ? null : `${where} is printed for ${col.cls === "adult" ? "adults" : "children"}, not for this person (${p.detail})`;
+    case "spouse":
+      return p.relation === "spouse" && p.cls !== "child" ? null : `${where} is printed for a spouse, and this person is not recorded as the spouse`;
+    case "owner":
+      return ctx.isOwner === true ? null : `${where} is printed for the policyholder / main insured, and this person is not the document's policyholder`;
+    case "parent":
+      return ["parent", "parent_in_law", "step_parent"].includes(p.relation) ? null : `${where} is printed for parents, and this person is not recorded as a parent`;
+    case "dependant":
+      return ctx.isOwner === false && p.relation !== "other" ? null : `${where} is printed for dependants, and this person is not established as a dependant on this document`;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Table dimensions: what a value column is printed FOR. A column can carry more than one dimension at once
+// ("Adult / After", "Gold – Revised"): the person or category it is for, the plan / tier / ward, the version of the
+// schedule (before / after an endorsement or alteration), the benefit stage (early / advanced, first / subsequent),
+// and words that name none of these. A figure is usable only when EVERY dimension its column carries is resolved for
+// the person and the date it is stated for. A version column is never read as a person.
+// ---------------------------------------------------------------------------------------------------------------
+
+export type VersionSide = "before" | "after";
+export type ColumnDimensions = {
+  /** The person / category dimension (kind "none" when the column names no person). */
+  person: ColumnApplicability;
+  /** Plan, tier, ward class or option the column is printed for ("Plan B", "Gold", "Ward class A"). */
+  plan: string | null;
+  /** The schedule version (only meaningful when the table prints both sides -- see versionPairOf). */
+  version: { side: VersionSide; words: string; effective: string | null } | null;
+  /** The benefit stage / occurrence the column is printed for ("Early stage", "Subsequent claim"). */
+  stage: string | null;
+};
+
+const MONTH_NO: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+/** Every calendar date a text prints, as ISO dates ("01 Jul 2026", "1 July 2026", "2026-07-01", "July 1, 2026";
+ * a month and year alone -- "June 2026" -- is its first day). */
+export function datesIn(text: string): string[] {
+  const out: string[] = [];
+  const t = String(text ?? "");
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ok = (y: number, m: number, d: number) => m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2200;
+  const taken: [number, number][] = [];
+  const push = (y: number, m: number, d: number, at: number, len: number) => { if (ok(y, m, d) && !taken.some(([a, b]) => at < b && at + len > a)) { out.push(`${y}-${pad(m)}-${pad(d)}`); taken.push([at, at + len]); } };
+  for (const m of t.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) push(+m[1], +m[2], +m[3], m.index!, m[0].length);
+  for (const m of t.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3})[a-z]*\.?,?\s+(\d{4})\b/g)) { const mo = MONTH_NO[m[2].toLowerCase()]; if (mo) push(+m[3], mo, +m[1], m.index!, m[0].length); }
+  for (const m of t.matchAll(/\b([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/g)) { const mo = MONTH_NO[m[1].toLowerCase()]; if (mo) push(+m[3], mo, +m[2], m.index!, m[0].length); }
+  for (const m of t.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g)) push(+m[3], +m[2], +m[1], m.index!, m[0].length);
+  for (const m of t.matchAll(/\b([A-Za-z]{3,9})\.?\s+(\d{4})\b/g)) { const w = m[1].toLowerCase(); const mo = MONTH_NO[w.slice(0, 3)]; if (mo && (w.length === 3 || /^(?:january|february|march|april|may|june|july|august|september|sept|october|november|december)$/.test(w))) push(+m[2], mo, 1, m.index!, m[0].length); }
+  return out;
+}
+
+const VERSION_BEFORE = /^(?:before|previous(?:ly)?|prior|old|original|existing|current|from|was|pre[- ]?(?:endorsement|alteration|amendment|change))\b|\b(?:before|prior to) (?:the )?(?:endorsement|alteration|amendment|change)\b|\b(?:previous|old|original|existing|former) (?:limit|benefit|amount|value|schedule|terms?|cover)\b/i;
+const VERSION_AFTER = /^(?:after|revised|new|amended|now|to|updated|changed|replacement|post[- ]?(?:endorsement|alteration|amendment|change))\b|\b(?:after|following) (?:the )?(?:endorsement|alteration|amendment|change)\b|\b(?:revised|amended|new|updated) (?:limit|benefit|amount|value|schedule|terms?|cover)\b|\b(?:with effect from|w\.?e\.?f\.?|effective (?:from|on)?)\b/i;
+const STAGE = /\b(?:early|intermediate|advanced|late|severe|mild|moderate|critical)(?:[ -]stage)?\b|\bstage\s*(?:[0-9]+|[ivx]+)\b|\b(?:first|subsequent|second|third|initial|further|additional|repeat)\s+(?:claims?|diagnos[ie]s|occurrences?|events?|payouts?|admissions?|surger(?:y|ies)|treatments?|episodes?)\b|^(?:first|subsequent|initial|repeat)$/i;
+const PLAN = /\bplan\s*[a-z0-9]{1,4}\b|\b(?:gold|silver|bronze|platinum|diamond|basic|standard|premier|deluxe|essential|enhanced|classic|prestige|elite)\b|\bward\b|\bclass [a-c]\d?\b|\bprivate hospital\b|\brestructured\b|\b(?:tier|option|grade|level|band)\s*[a-z0-9]/i;
+
+/** Splits a combined header ("Adult – Before", "Adult / After", "Gold (Revised)") into its parts. */
+const headerParts = (h: string) => h.split(/\s+[\/–—|-]\s+|\s*[()]\s*|\s*:\s+/).map((p) => p.trim()).filter(Boolean);
+
+/** The dimensions of one column header (heading and leaf joined, e.g. "Insured Adult / Before"). */
+export function columnDimensions(header: string | null | undefined): ColumnDimensions {
+  const h = String(header ?? "").replace(/\s+/g, " ").trim();
+  const parts = headerParts(h);
+  let version: ColumnDimensions["version"] = null;
+  const rest: string[] = [];
+  for (const p of parts.length ? parts : [h]) {
+    const after = VERSION_AFTER.test(p), before = VERSION_BEFORE.test(p);
+    if (!version && (after || before) && !(after && before)) {
+      // "Revised with effect from 01 Jul 2026": the column's own effective date.
+      const d = datesIn(p);
+      version = { side: after ? "after" : "before", words: p, effective: after && d.length === 1 ? d[0] : null };
+      // The rest of the part (if any) still counts: "Revised Adult limit".
+      const left = p.replace(after ? VERSION_AFTER : VERSION_BEFORE, " ").replace(/\b(?:with effect from|effective|from|on)\b|\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4}|\d{4}-\d{2}-\d{2}/gi, " ").trim();
+      if (left && /[a-z]{3}/i.test(left)) rest.push(left);
+      continue;
+    }
+    rest.push(p);
+  }
+  const remainder = rest.join(" / ");
+  const stage = rest.map((p) => p.match(STAGE)?.[0] ?? null).find(Boolean) ?? null;
+  const plan = rest.map((p) => (PLAN.test(p) ? p : null)).find(Boolean) ?? null;
+  return { person: columnApplicability(remainder), plan, version, stage };
+}
+
+/** Whether a table's headers print a before / after PAIR (a version dimension is real only then: a lone "Current" or
+ * "New" heading is not a version). */
+export function versionPairOf(headers: (string | null | undefined)[]): boolean {
+  const sides = new Set(headers.map((h) => columnDimensions(h).version?.side).filter(Boolean));
+  return sides.has("before") && sides.has("after");
+}
+
+/** Which version applies on `asOf` given the date the change takes effect (and, for the amended version, the date it
+ * ends). Null with a reason when it cannot be told. */
+export function versionInForce(asOf: string, effective: string | null, ends: string | null = null): { side: VersionSide; reason: string } | { side: null; reason: string } {
+  if (!effective) return { side: null, reason: "the table prints a before and an after value, and the date the change takes effect is not printed or recorded" };
+  if (asOf < effective) return { side: "before", reason: `the change takes effect on ${effective}, after ${asOf}` };
+  if (ends && asOf > ends) return { side: null, reason: `the amended terms (effective ${effective}) ended on ${ends}, before ${asOf}` };
+  return { side: "after", reason: `the change took effect on ${effective}` };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Row codes and row-level categories: a schedule's first column is often an item code ("A", "B", "1", "2a") with the
+// benefit's name in the next column, and some tables print WHO a row is for in a cell of its own ("Category: Child
+// (each)") rather than in the column headings. The code is never the benefit's name; the category cell is a person
+// dimension of that row.
+// ---------------------------------------------------------------------------------------------------------------
+/** An item code printed in a table's first column ("A", "B2", "1", "2a", "(iii)", "4."). */
+export function isRowCode(text: string | null | undefined): boolean {
+  const t = String(text ?? "").trim();
+  return /^\(?(?:[A-Z]{1,2}\d{0,2}|\d{1,3}[a-z]?|[ivx]{1,5})[.)]?$/.test(t);
+}
+/** A heading for an item-code column. */
+export const CODE_HEADER = /^(?:no\.?|item(?:\s*no\.?)?|#|s\/?n|ref\.?|code|clause)$/i;
+/** A heading for a column that says, per row, who the row is printed for. */
+export const CATEGORY_HEADER = /^(?:category|insured(?: person)?|class(?: of insured)?|cover type|person(?: covered)?|relationship|member(?: type)?|applies to|for)$/i;
+/** The benefit's own name in a table row's cells: the first cell that is neither an item code nor a figure. */
+export function rowLabelOf(cells: string[]): string {
+  const i = cells.findIndex((c) => !isRowCode(c) && !/^(?:S\$|SGD|US\$|\$)?\s?\d[\d,]*(?:\.\d+)?\b/.test(c.trim()));
+  return i >= 0 ? cells[i] : cells[0] ?? "";
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Removed amendment documents. Deleting an uploaded endorsement does not mean the insurer reversed it: the policy's
+// current terms are then unknown from the library. Decided from document METADATA only (role, policy number,
+// lifecycle state, dates, the supersedes link) -- a removed document's text is never read -- plus, for an explicit
+// reversal, the text of the policy's REMAINING (active) documents.
+// ---------------------------------------------------------------------------------------------------------------
+/** A document row's metadata (no text). */
+export type DocMeta = { id: string; role: string | null; policyNumber: string | null; groupPolicyNumber?: string | null; active: boolean; superseded: boolean;
+  supersededById?: string | null; removedOn?: string | null; effectiveDate?: string | null; documentDate?: string | null; createdAt?: string | null };
+/** What a removed amendment means for the policy: (a) the current terms may differ; (d) a remaining document says the
+ * change was reversed / cancelled. (b) an unrelated document and (c) one replaced by a newer valid amendment yield no
+ * entry at all. */
+export type AmendmentRemoval =
+  | { kind: "amendment_removed"; documentId: string; documentRole: string; policyNumber: string | null; removal: "deleted" | "superseded"; removedOn: string | null; effectiveDate: string | null; note: string }
+  | { kind: "amendment_reversed"; documentId: string; documentRole: string; policyNumber: string | null; reversedBy: string; reversalText: string; note: string };
+export const isAmendmentRole = (role: string | null | undefined) => /endorse|alteration|amendment|rider|addendum/i.test(role ?? "");
+const polKey = (s: string | null | undefined) => (s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const REVERSAL = /\b(?:endorsement|amendment|alteration)\b[^.\n]{0,120}?\b(?:is|are|has been|have been|was|were|hereby)\s+(?:cancel+ed|revoked|reversed|rescinded|withdrawn|voided|annulled)\b|\b(?:cancel+ation|reversal|revocation|withdrawal|rescission) of (?:the |our )?(?:endorsement|amendment|alteration)\b/i;
+/** The removed amendments of `base`'s policy (same policy / group number) and what they mean on `asOf`.
+ * `docs`: every document row of the household (active or not, metadata only); `activeTexts`: page text of ACTIVE
+ * documents only (for an explicit reversal). */
+export function amendmentRemovalsFor(base: DocMeta, docs: DocMeta[], activeTexts: Map<string, string> = new Map()): AmendmentRemoval[] {
+  if (isAmendmentRole(base.role)) return [];
+  const keys = [polKey(base.policyNumber), polKey(base.groupPolicyNumber)].filter((k) => k.length >= 4);
+  if (!keys.length) return [];
+  const same = (d: DocMeta) => d.id !== base.id && [polKey(d.policyNumber), polKey(d.groupPolicyNumber)].some((k) => k.length >= 4 && keys.includes(k));
+  const family = docs.filter(same);
+  const liveAmendments = family.filter((d) => d.active && !d.superseded && isAmendmentRole(d.role));
+  const out: AmendmentRemoval[] = [];
+  for (const r of family.filter((d) => isAmendmentRole(d.role) && (!d.active || d.superseded))) {
+    // (c) replaced: a live document supersedes it, or a live amendment of the same policy takes effect on or after it.
+    if (r.supersededById && docs.some((d) => d.id === r.supersededById && d.active && !d.superseded)) continue;
+    const rEff = r.effectiveDate ?? r.documentDate ?? null;
+    if (liveAmendments.some((a) => { const aEff = a.effectiveDate ?? a.documentDate ?? null; return !!aEff && (!rEff || aEff >= rEff) && (a.createdAt ?? "") >= (r.createdAt ?? ""); })) continue;
+    const role = r.role ?? "amendment";
+    // (d) explicit reversal printed by a remaining document of the policy.
+    const rev = [base, ...family.filter((d) => d.active && !d.superseded)].map((d) => { const t = activeTexts.get(d.id) ?? ""; const m = t.match(REVERSAL); return m ? { id: d.id, text: (t.split("\n").find((l) => REVERSAL.test(l)) ?? m[0]).trim() } : null; }).find(Boolean);
+    if (rev) { out.push({ kind: "amendment_reversed", documentId: r.id, documentRole: role, policyNumber: r.policyNumber, reversedBy: rev.id, reversalText: rev.text, note: `A remaining document of this policy says the change was reversed: “${rev.text}”.` }); continue; }
+    const removal = !r.active ? "deleted" as const : "superseded" as const;
+    out.push({ kind: "amendment_removed", documentId: r.id, documentRole: role, policyNumber: r.policyNumber, removal, removedOn: r.removedOn ? r.removedOn.slice(0, 10) : null, effectiveDate: rEff ? rEff.slice(0, 10) : null,
+      note: `An amendment document (${role}) for policy ${r.policyNumber ?? "this policy"} was ${removal === "deleted" ? "removed from the library" : "replaced"}${r.removedOn ? ` on ${r.removedOn.slice(0, 10)}` : ""}${rEff ? `; it took effect on ${rEff.slice(0, 10)}` : ""}. The remaining schedule shows the terms as issued; the current amounts may differ. Do not say the policy has no amendments, and do not present a schedule amount as confirmed current cover without saying this.` });
+  }
+  return out;
+}
+/** Words that state the limitation: an amendment document was removed, or the current amount may differ. */
+export const STATES_REMOVAL_LIMITATION = /\b(?:amend\w*|endorse\w*|alteration|change (?:letter|document))\b[^.;]{0,120}?\b(?:removed|deleted|no longer (?:in|available|on file))\b|\b(?:removed|deleted)\b[^.;]{0,120}?\b(?:amend\w*|endorse\w*|alteration)\b|\b(?:may|might|could)\s+(?:now\s+|since\s+)?(?:differ|be different|have changed|not (?:be|reflect) (?:the |your )?current)\b|\bmay not reflect\b|\bnot (?:confirmed|able to confirm) (?:as )?(?:the )?current\b/i;
+/** A sentence that says the policy has not been amended (what a removed amendment does NOT establish). */
+export const SAYS_NOT_AMENDED = /\bno (?:recorded |other |current )?(?:amendments?|endorsements?|alterations?|changes)\b|\b(?:has|have|was|were) not been (?:amended|endorsed|altered|changed)\b|\b(?:did|does|has) not change(?:d)? anything\b/i;

@@ -1,0 +1,35 @@
+{
+  "preflight": false,
+  "startedAt": "2026-10-09T21:23:28.198Z",
+  "steps": [
+    {
+      "name": "household members added",
+      "at": "2026-10-09T21:23:29.860Z",
+      "members": 4
+    },
+    {
+      "name": "uploads finished",
+      "at": "2026-10-09T21:24:57.494Z",
+      "ready": 3,
+      "of": 3
+    },
+    {
+      "name": "conversations asked",
+      "at": "2026-10-09T21:26:27.515Z",
+      "conversations": 8,
+      "turns": 9
+    },
+    {
+      "name": "reopened and followed up",
+      "at": "2026-10-09T21:26:43.517Z",
+      "opened": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids n\nWhole family · 9 Oct 2026"
+    },
+    {
+      "name": "deleted a source and asked again",
+      "at": "2026-10-09T21:26:53.304Z",
+      "file": "hx-endorsement.pdf"
+    }
+  ],
+  "finishedAt": "2026-10-09T21:26:53.305Z",
+  "failures": []
+}

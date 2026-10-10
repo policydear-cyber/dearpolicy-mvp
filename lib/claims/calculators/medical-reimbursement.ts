@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { applyDeductionCore, percentToPpm } from "./deductions";
 
 /**
  * Pure, deterministic medical-reimbursement benefit calculator: surgical,
@@ -126,11 +127,11 @@ function isNonNegativeInteger(v: unknown): v is number { return typeof v === "nu
  * the point it is applied (never the original eligible expense), which is
  * exactly why step order changes the result. */
 function applyDeduction(amountMinor: number, step: DeductionStep): number {
-  if (step.kind === "deductible") return Math.max(0, amountMinor - step.amountMinor);
-  if (step.kind === "co_pay") return Math.max(0, amountMinor - step.amountMinor);
   // co_insurance: `percent` is the POLICYHOLDER's share (what is deducted
-  // from the benefit), e.g. 20 means the insurer pays 80%.
-  return Math.max(0, Math.round(amountMinor * (1 - step.percent / 100)));
+  // from the benefit), e.g. 20 means the insurer pays 80%. The arithmetic is
+  // the shared integer core (./deductions.ts), also used by the conversation calculation tool.
+  if (step.kind === "co_insurance") return applyDeductionCore(amountMinor, { kind: "co_insurance", ppm: percentToPpm(step.percent) }).afterMinor;
+  return applyDeductionCore(amountMinor, { kind: step.kind, amountMinor: step.amountMinor }).afterMinor;
 }
 
 export function calculateMedicalReimbursement(input: MedicalReimbursementInput): MedicalReimbursementResult {

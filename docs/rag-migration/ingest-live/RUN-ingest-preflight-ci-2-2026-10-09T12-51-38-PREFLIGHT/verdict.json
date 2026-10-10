@@ -1,0 +1,272 @@
+{
+  "verdict": "PREFLIGHT (not graded)",
+  "placeholder": false,
+  "passed": 21,
+  "failed": 23,
+  "checks": [
+    {
+      "scope": "hx-text.pdf",
+      "check": "uploaded and processed",
+      "ok": false,
+      "detail": "not_scanned_prototype/queued"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1842 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$150,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$40,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$120\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$80\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$600\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$1,500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 text extracted",
+      "ok": true,
+      "detail": "native, 3002 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 contains \"24 consecutive hours\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 contains \"Accident-only cover\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "linked automatically to the right people",
+      "ok": false,
+      "detail": "linked: nobody; expected: Simon Alastair Hartwell, Leonie Brigitte Hartwell, Felix Oran Hartwell, Isla Maren Hartwell"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "uploaded and processed",
+      "ok": false,
+      "detail": "not_scanned_prototype/queued"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1250 chars"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"ME-26-0412\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"S$110\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"01 July 2026\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "uploaded and processed",
+      "ok": false,
+      "detail": "not_scanned_prototype/queued"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 text extracted",
+      "ok": false,
+      "detail": "no stored page"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"KBJ-26-00391\"",
+      "ok": false,
+      "detail": "no stored page"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"S$150\"",
+      "ok": false,
+      "detail": "no stored page"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"S$500\"",
+      "ok": false,
+      "detail": "no stored page"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "linked automatically to the right people",
+      "ok": false,
+      "detail": "linked: nobody; expected: Isla Maren Hartwell"
+    },
+    {
+      "scope": "Q1 (conversation) \"What's the policy number on our Meridian Harbour plan, and w\"",
+      "check": "useful reply",
+      "ok": false,
+      "detail": "185 chars"
+    },
+    {
+      "scope": "Q1",
+      "check": "states \"MHA-HC-2025-0748213\"",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "states one of [\"31 January 2027\",\"31 Jan 2027\",\"31/01/2027\",\"2027-01-31\",\"31 Jan. 2027\"]",
+      "ok": false,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"MHA-HC-2025-0748218\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"01 Feb 2027\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"1 February 2027\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "never states \"14 March 2027\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q1",
+      "check": "cites hx-text.pdf page 1",
+      "ok": false,
+      "detail": "cited: nothing"
+    },
+    {
+      "scope": "Q1",
+      "check": "answers without an unnecessary follow-up",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q3",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q4",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q5",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q6",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q7",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q8",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "Q9",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "R1",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    },
+    {
+      "scope": "D1",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    }
+  ]
+}

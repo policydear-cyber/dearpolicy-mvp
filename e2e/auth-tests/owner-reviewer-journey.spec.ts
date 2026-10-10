@@ -259,7 +259,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     // Link the ready policy to the child through the UI.
     await owner.reload();
     await card(owner, clean).getByRole("button", { name: child, exact: true }).click();
-    await expect(owner.locator(".upload-panel .upload-status")).toContainText("Saved");
+    await expect(owner.getByTestId("library-notice")).toContainText("Saved");
     const linked = (await policies(owner)).find((p) => p.id === clean.id)!;
     expect(linked.linked_people.map((l) => l.id)).toContain(ids[child]);
     expect(linked.linked_people.map((l) => l.id)).not.toContain(ids[self]);
@@ -535,7 +535,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     const c = card(owner, flagged);
     await c.getByRole("button", { name: "Delete" }).click();
     await c.getByRole("button", { name: "Confirm delete" }).click();
-    await expect(owner.locator(".upload-panel .upload-status")).toContainText("was deleted");
+    await expect(owner.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     expect((await policies(owner)).map((p) => p.id)).not.toContain(ids.flagged);
   });
 
@@ -551,7 +551,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
     const clean = (await policies(owner)).find((p) => p.id === ids.clean)!;
     await card(owner, clean).getByRole("button", { name: "Delete" }).click();
     await card(owner, clean).getByRole("button", { name: "Confirm delete" }).click();
-    await expect(owner.locator(".upload-panel .upload-status")).toContainText("was deleted");
+    await expect(owner.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/);
     await owner.goto("/family");
     await childCard().getByRole("button", { name: `Delete ${child}` }).click();
     await childCard().getByRole("button", { name: `Confirm delete ${child}` }).click();
@@ -569,7 +569,7 @@ test.describe.serial("owner and reviewer journey with real sessions", () => {
       expect(hhName.toLowerCase(), "only ever delete a synthetic household").toContain(PREFIX.toLowerCase());
       await page.getByLabel("Household name").fill(hhName);
       await page.getByRole("button", { name: "Permanently delete household" }).click();
-      await page.waitForURL((u) => u.pathname === "/", { timeout: 60_000 });
+      await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }); // its own confirmation page
       expect((await api(page, "/api/policies")).status).toBe(404);
     }
     for (const id of [ids.factualConversation]) expect([401, 403, 404]).toContain((await api(owner, `/api/chat/history/${id}`)).status);

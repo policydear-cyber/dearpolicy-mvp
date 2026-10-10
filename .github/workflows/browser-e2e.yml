@@ -97,3 +97,209 @@ jobs:
           name: e2e-failure-screenshots
           path: e2e-results/**/*.png
           retention-days: 7
+
+  # V1.1 sign-up / sign-in specs (e2e/tests/v11-*.spec.ts): real sessions on the owner/reviewer stack -- the app WITHOUT
+  # the development identity, and the TEST-ONLY Supabase Auth/Admin stand-in (e2e/support/fake-auth.mjs), which refuses
+  # to start in production and which a production server refuses to start with (lib/launch/guards.ts). Synthetic keys
+  # only; no real Supabase project, credential or secret is used.
+  v11-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dearpolicy
+          POSTGRES_PASSWORD: dearpolicy
+          POSTGRES_DB: dearpolicy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      DATABASE_SSL: "off"
+      E2E_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.e2e-storage
+      MALWARE_SCANNER_PROVIDER: virustotal
+      VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
+      VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      VIRUSTOTAL_POLL_BUDGET_MS: "3000"
+      VIRUSTOTAL_POLL_INTERVAL_MS: "500"
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
+      NEXT_TELEMETRY_DISABLED: "1"
+      DEARPOLICY_TEST_AUTH_ADAPTER: fake-gotrue
+      SUPABASE_URL: http://127.0.0.1:4020
+      SUPABASE_ANON_KEY: synthetic-e2e-anon-key
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:4020
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-e2e-anon-key
+      E2E_AUTH_BASE_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Apply the repository schema to the local CI database
+        run: node --import tsx e2e/support/apply-schema.ts
+      - name: Start the fake VirusTotal API, the test-only Auth stand-in, the job worker and the app (no development identity)
+        run: |
+          mkdir -p "$LOCAL_STORAGE_DIR" logs
+          nohup node e2e/support/fake-services.mjs > logs/fake.log 2>&1 &
+          nohup node e2e/support/fake-auth.mjs > logs/fake-auth.log 2>&1 &
+          DEARPOLICY_WORKER_POLL_INTERVAL_MS=500 nohup npm run jobs:worker > logs/worker.log 2>&1 &
+          nohup npx next dev -p 3100 > logs/app.log 2>&1 &
+          for url in http://127.0.0.1:4010/__health http://127.0.0.1:4020/__health http://localhost:3100/api/health; do
+            for i in $(seq 1 120); do curl -sf -o /dev/null "$url" && break; sleep 2; done
+            curl -sf -o /dev/null "$url" || { echo "not ready: $url"; exit 1; }
+          done
+          for p in /login /signup / /family /policies /household /claims /chat /reviewer /records /api/family /api/policies /api/household /api/household/members /api/household/invitations /api/household/export /api/claims /api/chat/history /api/reviewer/assignments; do
+            curl -s -o /dev/null --max-time 300 "http://localhost:3100$p" || true
+          done
+      - name: Run the V1.1 sign-up / sign-in specs
+        timeout-minutes: 110
+        run: npx playwright test -c e2e/playwright.v11.config.ts
+      - name: Service logs on failure (synthetic data only; no secrets exist in this job)
+        if: failure()
+        run: for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done
+      - name: Failure screenshots (synthetic pages only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-v11-failure-screenshots
+          path: e2e-results/**/*.png
+          retention-days: 7
+
+  # The conversational loop through the real chat page and /api/chat (e2e/tests/rag2-conversation.spec.ts) on its own
+  # test server (e2e/support/rag2-loop-server.ts: DEARPOLICY_RAG_LOOP=1, the adversarial suite's SCRIPTED model,
+  # household Tan seeded by e2e/support/seed-rag2-conversation.ts). It serves the `next build` output with NODE_ENV=test.
+  rag2-conversation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dearpolicy
+          POSTGRES_PASSWORD: dearpolicy
+          POSTGRES_DB: dearpolicy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      DATABASE_SSL: "off"
+      E2E_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.e2e-storage
+      MALWARE_SCANNER_PROVIDER: virustotal
+      VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
+      VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      VIRUSTOTAL_POLL_BUDGET_MS: "3000"
+      VIRUSTOTAL_POLL_INTERVAL_MS: "500"
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
+      NEXT_TELEMETRY_DISABLED: "1"
+      DEARPOLICY_RAG_LOOP: "1"
+      E2E_RAG2_NEXT: start
+      E2E_RAG2_BASE_URL: http://localhost:3300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Apply the repository schema to the local CI database
+        run: node --import tsx e2e/support/apply-schema.ts
+      - name: Build the app
+        # next build runs as production, which refuses DATABASE_SSL=off (lib/db); the server below runs with NODE_ENV=test.
+        run: env -u DATABASE_SSL npx next build
+      - name: Seed the synthetic households and start the loop test server
+        run: |
+          mkdir -p logs
+          node --import tsx e2e/support/seed-rag2-conversation.ts
+          PORT=3300 NODE_ENV=test nohup node --import tsx e2e/support/rag2-loop-server.ts > logs/rag2-server.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://localhost:3300/api/health && break; sleep 2; done
+          curl -sf -o /dev/null http://localhost:3300/api/health || { echo "not ready"; exit 1; }
+      - name: Run the conversational loop browser spec
+        timeout-minutes: 25
+        run: npm run e2e:rag2-conversation
+      - name: Service logs on failure (synthetic data only; no secrets exist in this job)
+        if: failure()
+        run: for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done
+
+  # V1 core-loop certification (e2e/tests/v1-core-loop.spec.ts), in its two phases on a fresh database: household B on
+  # its own server as user B first, then household A (which also checks nothing of B's is visible to A).
+  v1-core-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: dearpolicy
+          POSTGRES_PASSWORD: dearpolicy
+          POSTGRES_DB: dearpolicy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dearpolicy"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://dearpolicy:dearpolicy@localhost:5432/dearpolicy
+      DATABASE_SSL: "off"
+      E2E_RUN_ID: ${{ github.run_id }}${{ github.run_attempt }}
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: ${{ github.workspace }}/.e2e-storage
+      MALWARE_SCANNER_PROVIDER: virustotal
+      VIRUSTOTAL_API_KEY: synthetic-e2e-virustotal-key
+      VIRUSTOTAL_API_BASE_URL: http://127.0.0.1:4010/vt
+      VIRUSTOTAL_POLL_BUDGET_MS: "3000"
+      VIRUSTOTAL_POLL_INTERVAL_MS: "500"
+      DEARPOLICY_DETERMINISTIC_MODEL: synthetic-e2e
+      NEXT_TELEMETRY_DISABLED: "1"
+      DEV_AUTH_ENABLED: "true"
+      E2E_USER_A: 7e2e0000-0000-4000-8000-00000000000a
+      E2E_USER_B: 7e2e0000-0000-4000-8000-00000000000b
+      E2E_BASE_URL_A: http://localhost:3000
+      E2E_BASE_URL_B: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Apply the repository schema to the local CI database
+        run: node --import tsx e2e/support/apply-schema.ts
+      - name: Provision two synthetic households (sign-up's own ensureDefaultHousehold)
+        run: node --import tsx e2e/support/provision.ts
+      - name: Start the fake VirusTotal API, the job worker and the app as user B
+        run: |
+          mkdir -p "$LOCAL_STORAGE_DIR" logs
+          nohup node e2e/support/fake-services.mjs > logs/fake.log 2>&1 &
+          DEARPOLICY_WORKER_POLL_INTERVAL_MS=500 nohup npm run jobs:worker > logs/worker.log 2>&1 &
+          DEV_ACCOUNT_ID=$E2E_USER_B nohup npx next dev -p 3001 > logs/app-b.log 2>&1 &
+          echo $! > logs/app-b.pid
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://localhost:3001/api/health && break; sleep 2; done
+          for p in / /chat /family /policies /api/family /api/policies /api/household /api/chat/history; do curl -s -o /dev/null --max-time 180 "http://localhost:3001$p" || true; done
+      - name: "Phase B: household B"
+        timeout-minutes: 80
+        run: E2E_V1_PHASE=b npx playwright test -c e2e/playwright.v1.config.ts
+      - name: Stop user B's server; start the app as user A
+        run: |
+          kill "$(cat logs/app-b.pid)" 2>/dev/null || true; pkill -f "next dev -p 3001" || true; sleep 3
+          DEV_ACCOUNT_ID=$E2E_USER_A nohup npx next dev -p 3000 > logs/app-a.log 2>&1 &
+          for i in $(seq 1 120); do curl -sf -o /dev/null http://localhost:3000/api/health && break; sleep 2; done
+          for p in / /chat /family /policies /api/family /api/policies /api/household /api/chat/history; do curl -s -o /dev/null --max-time 180 "http://localhost:3000$p" || true; done
+      - name: "Phase A: household A"
+        timeout-minutes: 80
+        run: npx playwright test -c e2e/playwright.v1.config.ts
+      - name: Service logs on failure (synthetic data only; no secrets exist in this job)
+        if: failure()
+        run: for f in logs/*.log; do echo "===== $f"; tail -n 150 "$f"; done

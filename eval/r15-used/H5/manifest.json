@@ -1,0 +1,1923 @@
+{
+  "household_id": "H5",
+  "as_of": "2026-10-06",
+  "timezone": "Asia/Singapore",
+  "label": "H5 - elderly couple",
+  "description": "Teo Boon Huat (73) and Lau Siew Lan (69), retirees. Daughter Teo Mei Ling (not insured; nominee on the funeral plan) often asks on their behalf ('Dad', 'Mum'). One document is in Chinese with English headings.",
+  "members": [
+    {
+      "id": "teo",
+      "name": "Teo Boon Huat",
+      "aliases": [
+        "Dad",
+        "husband"
+      ],
+      "relation": "husband",
+      "dob": "1953-06-11"
+    },
+    {
+      "id": "lau",
+      "name": "Lau Siew Lan",
+      "aliases": [
+        "Mum",
+        "wife",
+        "刘秀兰"
+      ],
+      "relation": "wife",
+      "dob": "1956-12-03"
+    },
+    {
+      "id": "meiling",
+      "name": "Teo Mei Ling",
+      "aliases": [
+        "张美玲",
+        "daughter"
+      ],
+      "relation": "daughter (not insured on any uploaded policy)",
+      "dob": null
+    }
+  ],
+  "documents": [
+    {
+      "file": "docs/lumina_shield_planA_teo.pdf",
+      "pages": 2,
+      "title": "Lumina Shield Plan A (Integrated Shield) - Teo Boon Huat",
+      "insurer": "Lumina Health Assurance Ltd",
+      "product": "Lumina Shield Plan A",
+      "policy_no": "LH-IS-2047719",
+      "policyholder": "Teo Boon Huat",
+      "insured": [
+        "Teo Boon Huat"
+      ],
+      "type": "Integrated Shield Plan (private hospital)",
+      "status": "in force"
+    },
+    {
+      "file": "docs/lumina_shield_planB_lau.pdf",
+      "pages": 2,
+      "title": "Lumina Shield Plan B (Integrated Shield) - Lau Siew Lan",
+      "insurer": "Lumina Health Assurance Ltd",
+      "product": "Lumina Shield Plan B",
+      "policy_no": "LH-IS-2047720",
+      "policyholder": "Lau Siew Lan",
+      "insured": [
+        "Lau Siew Lan"
+      ],
+      "type": "Integrated Shield Plan (restructured Class A)",
+      "status": "in force"
+    },
+    {
+      "file": "docs/medisave_withdrawal_limits_reference.pdf",
+      "pages": 1,
+      "title": "MediSave withdrawal limits - quick reference sheet",
+      "insurer": "Lumina Health Assurance Ltd",
+      "product": "(reference sheet, not a policy)",
+      "policy_no": null,
+      "policyholder": null,
+      "insured": [],
+      "type": "reference table",
+      "status": "reference only"
+    },
+    {
+      "file": "docs/lumina_longterm_care_supplements.pdf",
+      "pages": 1,
+      "title": "ElderShield / CareShield Life and Lumina supplements - both",
+      "insurer": "Lumina Health Assurance Ltd",
+      "product": "ElderShield 400, CareShield Life, Lumina EverCare Supplement, Lumina CareBoost",
+      "policy_no": "LH-ES-0331207 / LH-EV-0331208 / CSL-LAU / LH-CB-0517760",
+      "policyholder": "Teo Boon Huat; Lau Siew Lan",
+      "insured": [
+        "Teo Boon Huat",
+        "Lau Siew Lan"
+      ],
+      "type": "long-term care (severe disability)",
+      "status": "in force"
+    },
+    {
+      "file": "docs/banyan_heritage_wholelife_teo.pdf",
+      "pages": 4,
+      "title": "Heritage Whole Life annual statement (Aug 2026) - Teo",
+      "insurer": "Banyan Mutual Life Assurance",
+      "product": "Heritage Whole Life (Participating)",
+      "policy_no": "BM-WL-0938812",
+      "policyholder": "Teo Boon Huat",
+      "insured": [
+        "Teo Boon Huat"
+      ],
+      "type": "whole life (participating)",
+      "status": "fully paid; assigned to Straits Harbour Bank Ltd"
+    },
+    {
+      "file": "docs/banyan_assignment_notice_teo.pdf",
+      "pages": 1,
+      "title": "Assignment of Heritage Whole Life to Straits Harbour Bank",
+      "insurer": "Banyan Mutual Life Assurance",
+      "product": "Heritage Whole Life (Participating)",
+      "policy_no": "BM-WL-0938812",
+      "policyholder": "Teo Boon Huat",
+      "insured": [
+        "Teo Boon Huat"
+      ],
+      "type": "assignment notice",
+      "status": "assignment in force"
+    },
+    {
+      "file": "docs/banyan_final_farewell_lau_zh.pdf",
+      "pages": 1,
+      "title": "Final Farewell Plan (Chinese, English headings) - Lau",
+      "insurer": "Banyan Mutual Life Assurance",
+      "product": "Final Farewell Plan 身后事保障计划",
+      "policy_no": "BM-FF-5521046",
+      "policyholder": "Lau Siew Lan",
+      "insured": [
+        "Lau Siew Lan"
+      ],
+      "type": "funeral / final expense whole life",
+      "status": "in force",
+      "language": "zh (English headings)"
+    }
+  ],
+  "not_uploaded": [
+    "MediShield Life certificates / CPF statements / MediSave account balances",
+    "Straits Harbour Bank loan statement (outstanding amount owed)",
+    "Any funeral, whole-life or endowment policy for Lau other than the Final Farewell Plan",
+    "Any funeral plan for Teo",
+    "Any policy for the daughter Teo Mei Ling",
+    "Home / fire insurance, travel insurance, hospital cash plans"
+  ],
+  "facts": [
+    {
+      "id": "m_teo_dob",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "1953-06-11",
+      "evidence": [
+        "Life insured Teo Boon Huat",
+        "Date of birth 11 Jun 1953"
+      ],
+      "person": "Teo Boon Huat",
+      "topic": "member",
+      "aliases": [
+        "Teo Boon Huat"
+      ]
+    },
+    {
+      "id": "m_lau_dob",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "1956-12-03",
+      "evidence": [
+        "Life insured Lau Siew Lan",
+        "Date of birth 03 Dec 1956"
+      ],
+      "person": "Lau Siew Lan",
+      "topic": "member",
+      "aliases": [
+        "Lau Siew Lan"
+      ]
+    },
+    {
+      "id": "ipa_policy",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "LH-IS-2047719",
+      "evidence": "Policy number LH-IS-2047719",
+      "person": "Teo Boon Huat",
+      "topic": "ip",
+      "aliases": [
+        "Lumina Shield",
+        "Plan A"
+      ]
+    },
+    {
+      "id": "ipa_plan",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "Lumina Shield Plan A",
+      "evidence": "Plan Lumina Shield Plan A",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ward",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "Private hospital",
+      "evidence": "Ward entitlement Private hospital",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_year",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "2027-02-14",
+      "evidence": "Policy year 15 Feb 2026 to 14 Feb 2027",
+      "person": "Teo Boon Huat",
+      "topic": "ip",
+      "aliases": [
+        "15 Feb"
+      ]
+    },
+    {
+      "id": "ipa_mshl",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "1,264.00",
+      "evidence": "MediShield Life premium S$1,264.00",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_add",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "3,946.00",
+      "evidence": "Additional private insurance coverage S$3,946.00",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_total",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "5,210.00",
+      "evidence": "Total annual premium S$5,210.00",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_awl",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "900.00",
+      "evidence": "Payable by MediSave (additional coverage, AWL) S$900.00",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_cash",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 1,
+      "value": "3,046.00",
+      "evidence": "Payable in cash (additional coverage) S$3,046.00",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ascharged",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "As charged",
+      "evidence": "Basis of payment As charged, subject to the annual claim limit",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_limit",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "1,500,000",
+      "evidence": "Annual claim limit S$1,500,000 per policy year",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_lifetime",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "No limit",
+      "evidence": "Lifetime claim limit No limit",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_noproration",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "No pro-ration",
+      "evidence": "No pro-ration applies for any ward class or hospital",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_coins",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "10%",
+      "evidence": "Co-insurance 10% of the claimable amount after deductible",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_pre",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "180 days",
+      "evidence": "Pre-hospital treatment Up to 180 days before admission",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_post",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "365 days",
+      "evidence": "Post-hospital treatment Up to 365 days after discharge",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ded_A",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "3,500",
+      "evidence": "Class A / private hospital S$3,500 S$5,250",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ded_B1",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "2,500",
+      "evidence": "Class B1 S$2,500 S$3,750",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ded_B2",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "2,000",
+      "evidence": "Class B2 / B2+ S$2,000 S$3,000",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ded_C",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "1,500",
+      "evidence": "Class C S$1,500 S$2,250",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ipa_ded_A_81",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "5,250",
+      "evidence": "Class A / private hospital S$3,500 S$5,250",
+      "person": "Teo Boon Huat",
+      "topic": "ip"
+    },
+    {
+      "id": "ip_age_rule",
+      "doc": "lumina_shield_planA_teo.pdf",
+      "page": 2,
+      "value": "age next birthday",
+      "evidence": "Age refers to the insured's age next birthday at the start of the policy year",
+      "person": null,
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_policy",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "LH-IS-2047720",
+      "evidence": "Policy number LH-IS-2047720",
+      "person": "Lau Siew Lan",
+      "topic": "ip",
+      "aliases": [
+        "Lumina Shield",
+        "Plan B"
+      ]
+    },
+    {
+      "id": "ipb_plan",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "Lumina Shield Plan B",
+      "evidence": "Plan Lumina Shield Plan B",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_ward",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "Restructured hospital Class A",
+      "evidence": "Ward entitlement Restructured hospital Class A",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_year",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "2027-03-31",
+      "evidence": "Policy year 01 Apr 2026 to 31 Mar 2027",
+      "person": "Lau Siew Lan",
+      "topic": "ip",
+      "aliases": [
+        "01 Apr",
+        "1 Apr"
+      ]
+    },
+    {
+      "id": "ipb_mshl",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "1,042.00",
+      "evidence": "MediShield Life premium S$1,042.00",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_add",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "1,388.00",
+      "evidence": "Additional private insurance coverage S$1,388.00",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_total",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "2,430.00",
+      "evidence": "Total annual premium S$2,430.00",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_awl",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "600.00",
+      "evidence": "Payable by MediSave (additional coverage, AWL) S$600.00",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_cash",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 1,
+      "value": "788.00",
+      "evidence": "Payable in cash (additional coverage) S$788.00",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_ascharged",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "As charged within entitlement",
+      "evidence": "Basis of payment As charged within entitlement (restructured Class A and below)",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_limit",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "600,000",
+      "evidence": "Annual claim limit S$600,000 per policy year",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_coins",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "10%",
+      "evidence": "Co-insurance 10% of the claimable amount after deductible",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_pre",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "90 days",
+      "evidence": "Pre-hospital treatment Up to 90 days before admission",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_post",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "180 days",
+      "evidence": "Post-hospital treatment Up to 180 days after discharge",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_pr_restructured",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "100%",
+      "evidence": "Restructured hospital, Class A / B1 / B2 / C 100% (no pro-ration)",
+      "person": "Lau Siew Lan",
+      "topic": "ip",
+      "aliases": [
+        "no pro-ration"
+      ]
+    },
+    {
+      "id": "ipb_pr_community",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "100%",
+      "evidence": "Community hospital, any ward 100% (no pro-ration)",
+      "person": "Lau Siew Lan",
+      "topic": "ip",
+      "aliases": [
+        "no pro-ration"
+      ]
+    },
+    {
+      "id": "ipb_pr_private",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "55%",
+      "evidence": "Private hospital - inpatient 55%",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_pr_ds",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "65%",
+      "evidence": "Private hospital - day surgery 65%",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_pr_rule",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "before the deductible and co-insurance",
+      "evidence": "Pro-ration is applied to the eligible bill before the deductible and co-insurance",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_ded_A",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "3,500",
+      "evidence": "Class A / private hospital S$3,500 S$5,250",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_ded_B1",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "2,500",
+      "evidence": "Class B1 S$2,500 S$3,750",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ipb_ded_C",
+      "doc": "lumina_shield_planB_lau.pdf",
+      "page": 2,
+      "value": "1,500",
+      "evidence": "Class C S$1,500 S$2,250",
+      "person": "Lau Siew Lan",
+      "topic": "ip"
+    },
+    {
+      "id": "ms_disclaimer",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "does not show any member's MediSave balance",
+      "evidence": "This sheet does not show any member's MediSave balance",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_daily",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "450",
+      "evidence": "Inpatient daily ward and treatment charges S$450 per day",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_doctor",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "50",
+      "evidence": "of which doctor's daily attendance fees up to S$50 per day",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_community",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "250",
+      "evidence": "Community hospital S$250 per day",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_ds",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "Day surgery S$300 per day",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_surgical",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "7,550",
+      "evidence": "Surgical operations (Table 1A to 7C) S$350 to S$7,550 per operation",
+      "person": null,
+      "topic": "medisave",
+      "aliases": [
+        "350"
+      ]
+    },
+    {
+      "id": "ms_psych",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "5,000",
+      "evidence": "Psychiatric treatment S$150 per day, up to S$5,000 per year",
+      "person": null,
+      "topic": "medisave",
+      "aliases": [
+        "150"
+      ]
+    },
+    {
+      "id": "ms_hospice",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "250",
+      "evidence": "Inpatient hospice S$250 per day",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_500700",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "700",
+      "evidence": "MediSave500 / MediSave700 (outpatient chronic) S$500 / S$700 per account per year",
+      "person": null,
+      "topic": "medisave",
+      "aliases": [
+        "500"
+      ]
+    },
+    {
+      "id": "ms_flexi",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "Flexi-MediSave (patients aged 60 and above) S$300 per patient per year",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_scans",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "Outpatient scans S$300 per patient per year",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_awl_40",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "300",
+      "evidence": "40 and below S$300",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_awl_41_70",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "600",
+      "evidence": "41 to 70 S$600",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_awl_71",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "900",
+      "evidence": "71 and above S$900",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "ms_awl_rule",
+      "doc": "medisave_withdrawal_limits_reference.pdf",
+      "page": 1,
+      "value": "age next birthday at policy renewal",
+      "evidence": "Age next birthday at policy renewal AWL per insured per policy year",
+      "person": null,
+      "topic": "medisave"
+    },
+    {
+      "id": "adl_list",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "washing, dressing, feeding, toileting, walking or moving around, and transferring",
+      "evidence": "washing, dressing, feeding, toileting, walking or moving around, and transferring",
+      "person": null,
+      "topic": "ltc"
+    },
+    {
+      "id": "es_payout",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "400",
+      "evidence": "Monthly payout S$400 S$1,200",
+      "person": "Teo Boon Huat",
+      "topic": "ltc",
+      "aliases": [
+        "ElderShield"
+      ]
+    },
+    {
+      "id": "es_months",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "72 months",
+      "evidence": "Maximum payout period 72 months 120 months",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "es_trigger",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "3 of 6",
+      "evidence": "Claim trigger Unable to do 3 of 6 ADLs Unable to do 2 of 6 ADLs",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "es_defer",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "90 days",
+      "evidence": "Deferment period 90 days 90 days",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "ev_payout",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "1,200",
+      "evidence": "Monthly payout S$400 S$1,200",
+      "person": "Teo Boon Huat",
+      "topic": "ltc",
+      "aliases": [
+        "EverCare"
+      ]
+    },
+    {
+      "id": "ev_months",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "120 months",
+      "evidence": "Maximum payout period 72 months 120 months",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "ev_trigger",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "2 of 6",
+      "evidence": "Claim trigger Unable to do 3 of 6 ADLs Unable to do 2 of 6 ADLs",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "ev_initial",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "3,000",
+      "evidence": "Initial lump sum None S$3,000 on first claim",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "ev_premium",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "1,148.00",
+      "evidence": "Annual premium Fully paid (age 65) S$1,148.00",
+      "person": "Teo Boon Huat",
+      "topic": "ltc"
+    },
+    {
+      "id": "cs_payout",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "690",
+      "evidence": "Monthly payout S$690 (2026 level) S$800",
+      "person": "Lau Siew Lan",
+      "topic": "ltc",
+      "aliases": [
+        "CareShield Life"
+      ]
+    },
+    {
+      "id": "cs_lifetime",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "For life",
+      "evidence": "Maximum payout period For life For life",
+      "person": "Lau Siew Lan",
+      "topic": "ltc"
+    },
+    {
+      "id": "cs_trigger",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "3 of 6",
+      "evidence": "Claim trigger Unable to do 3 of 6 ADLs Unable to do 2 of 6 ADLs",
+      "person": "Lau Siew Lan",
+      "topic": "ltc"
+    },
+    {
+      "id": "cb_payout",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "800",
+      "evidence": "Monthly payout S$690 (2026 level) S$800",
+      "person": "Lau Siew Lan",
+      "topic": "ltc",
+      "aliases": [
+        "CareBoost"
+      ]
+    },
+    {
+      "id": "cb_trigger",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "2 of 6",
+      "evidence": "Claim trigger Unable to do 3 of 6 ADLs Unable to do 2 of 6 ADLs",
+      "person": "Lau Siew Lan",
+      "topic": "ltc"
+    },
+    {
+      "id": "cb_premium",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "936.00",
+      "evidence": "Annual premium Fully paid S$936.00",
+      "person": "Lau Siew Lan",
+      "topic": "ltc"
+    },
+    {
+      "id": "cs_joined",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "2021-10-01",
+      "evidence": "Joined 01 Oct 2021",
+      "person": "Lau Siew Lan",
+      "topic": "ltc"
+    },
+    {
+      "id": "supp_medisave",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "600",
+      "evidence": "Supplement premiums may be paid from MediSave up to S$600 per insured per calendar year",
+      "person": null,
+      "topic": "ltc"
+    },
+    {
+      "id": "supp_additional",
+      "doc": "lumina_longterm_care_supplements.pdf",
+      "page": 1,
+      "value": "in addition",
+      "evidence": "A supplement pays in addition to the basic scheme whenever the supplement's own trigger is met",
+      "person": null,
+      "topic": "ltc"
+    },
+    {
+      "id": "wl_policy",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "BM-WL-0938812",
+      "evidence": "Policy number BM-WL-0938812",
+      "person": "Teo Boon Huat",
+      "topic": "wl",
+      "aliases": [
+        "Heritage Whole Life",
+        "Banyan"
+      ]
+    },
+    {
+      "id": "wl_start",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "1998-08-01",
+      "evidence": "Commencement date 01 Aug 1998",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sa",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "80,000",
+      "evidence": "Basic sum assured S$80,000",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_premium",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "2,140.00",
+      "evidence": "Annual premium S$2,140.00",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_term",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "20 years",
+      "evidence": "Premium term 20 years",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_last_premium",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "2017-08-01",
+      "evidence": "Last premium paid 01 Aug 2017",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_paid_up",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "Fully paid",
+      "evidence": "Premium status Fully paid - no further premiums due",
+      "person": "Teo Boon Huat",
+      "topic": "wl",
+      "aliases": [
+        "no further premiums"
+      ]
+    },
+    {
+      "id": "wl_assigned",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "Straits Harbour Bank Ltd",
+      "evidence": "Assigned to Straits Harbour Bank Ltd (Notice of Assignment dated 20 May 2019)",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_pua_prev",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "39,610",
+      "evidence": "Paid-up additions as at 01 Aug 2025 S$39,610",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_bonus_2026",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "1,640",
+      "evidence": "Reversionary bonus declared, added 01 Aug 2026 S$1,640",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_pua",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "41,250",
+      "evidence": "Paid-up additions as at 01 Aug 2026 S$41,250",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_pua_guaranteed",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 1,
+      "value": "guaranteed",
+      "evidence": "Once added, reversionary bonuses (paid-up additions) are guaranteed",
+      "person": null,
+      "topic": "wl"
+    },
+    {
+      "id": "wl_gdb",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 2,
+      "value": "121,250",
+      "evidence": "Guaranteed death benefit S$121,250",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_tb",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 2,
+      "value": "18,400",
+      "evidence": "Terminal bonus on death (non-guaranteed) S$18,400",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_db",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 2,
+      "value": "139,650",
+      "evidence": "Total death benefit (current) S$139,650",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_now",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 2,
+      "value": "76,320",
+      "evidence": "Current surrender value (end of policy year 28) S$76,320",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_no_funeral",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 2,
+      "value": "does not include a separate funeral benefit",
+      "evidence": "this policy does not include a separate funeral benefit",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_consent",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 2,
+      "value": "written consent of the assignee",
+      "evidence": "Surrender requires the written consent of the assignee while the assignment is in force",
+      "person": "Teo Boon Huat",
+      "topic": "wl",
+      "aliases": [
+        "consent"
+      ]
+    },
+    {
+      "id": "wl_sv_y28",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 3,
+      "value": "76,320",
+      "evidence": "28 31 Jul 2026 73 S$46,720 S$29,600 S$76,320",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_y29",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "78,810",
+      "evidence": "29 31 Jul 2027 74 S$47,760 S$31,050 S$78,810",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_gsv_y29",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "47,760",
+      "evidence": "29 31 Jul 2027 74 S$47,760 S$31,050 S$78,810",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_y30",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "81,300",
+      "evidence": "30 31 Jul 2028 75 S$48,800 S$32,500 S$81,300",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_y33",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "88,770",
+      "evidence": "33 31 Jul 2031 78 S$51,920 S$36,850 S$88,770",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_y35",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "93,750",
+      "evidence": "35 31 Jul 2033 80 S$54,000 S$39,750 S$93,750",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_y40",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "106,200",
+      "evidence": "40 31 Jul 2038 85 S$59,200 S$47,000 S$106,200",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_y25",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 3,
+      "value": "68,850",
+      "evidence": "25 31 Jul 2023 70 S$43,600 S$25,250 S$68,850",
+      "person": "Teo Boon Huat",
+      "topic": "wl"
+    },
+    {
+      "id": "wl_sv_between",
+      "doc": "banyan_heritage_wholelife_teo.pdf",
+      "page": 4,
+      "value": "end of the preceding policy year",
+      "evidence": "Surrender values at a date between policy anniversaries are based on the value at the end of the preceding policy year",
+      "person": null,
+      "topic": "wl"
+    },
+    {
+      "id": "as_bank",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "Straits Harbour Bank Ltd",
+      "evidence": "Assignee Straits Harbour Bank Ltd",
+      "person": "Teo Boon Huat",
+      "topic": "assignment"
+    },
+    {
+      "id": "as_type",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "Absolute assignment",
+      "evidence": "Type Absolute assignment as security for credit facilities",
+      "person": "Teo Boon Huat",
+      "topic": "assignment"
+    },
+    {
+      "id": "as_date",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "2019-05-20",
+      "evidence": "Date of assignment 20 May 2019",
+      "person": "Teo Boon Huat",
+      "topic": "assignment"
+    },
+    {
+      "id": "as_ack",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "2019-06-03",
+      "evidence": "Acknowledged by Banyan 03 Jun 2019",
+      "person": "Teo Boon Huat",
+      "topic": "assignment"
+    },
+    {
+      "id": "as_payable",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "payable to the assignee",
+      "evidence": "All policy monies, including death benefits and surrender values, are payable to the assignee",
+      "person": "Teo Boon Huat",
+      "topic": "assignment",
+      "aliases": [
+        "Straits Harbour Bank",
+        "bank"
+      ]
+    },
+    {
+      "id": "as_nom_revoked",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "REVOKED",
+      "evidence": "Revocable nomination in favour of Lau Siew Lan (100%) dated 12 Sep 2004 - REVOKED by this assignment",
+      "person": "Teo Boon Huat",
+      "topic": "assignment",
+      "aliases": [
+        "revoked"
+      ]
+    },
+    {
+      "id": "as_consent",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "written consent",
+      "evidence": "may not surrender the policy, take a policy loan or change ownership without the assignee's written consent",
+      "person": "Teo Boon Huat",
+      "topic": "assignment",
+      "aliases": [
+        "consent"
+      ]
+    },
+    {
+      "id": "as_reassign",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "re-assign",
+      "evidence": "the assignee will re-assign the policy to the assignor. A new nomination may then be made",
+      "person": "Teo Boon Huat",
+      "topic": "assignment",
+      "aliases": [
+        "new nomination"
+      ]
+    },
+    {
+      "id": "as_no_amount",
+      "doc": "banyan_assignment_notice_teo.pdf",
+      "page": 1,
+      "value": "not stated",
+      "evidence": "The amount owed under the credit facilities is not stated in this notice",
+      "person": "Teo Boon Huat",
+      "topic": "assignment"
+    },
+    {
+      "id": "ff_policy",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "BM-FF-5521046",
+      "evidence": "Policy Number BM-FF-5521046",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "Final Farewell",
+        "身后事保障计划"
+      ]
+    },
+    {
+      "id": "ff_insured",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "刘秀兰 (LAU SIEW LAN)",
+      "evidence": "Life Insured 刘秀兰 (LAU SIEW LAN)",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "Lau Siew Lan"
+      ]
+    },
+    {
+      "id": "ff_start",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "2021-03-15",
+      "evidence": "Commencement Date 2021年3月15日",
+      "person": "Lau Siew Lan",
+      "topic": "funeral"
+    },
+    {
+      "id": "ff_sa",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "15,000",
+      "evidence": "Sum Assured 新币15,000元",
+      "person": "Lau Siew Lan",
+      "topic": "funeral"
+    },
+    {
+      "id": "ff_premium",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "468",
+      "evidence": "每年新币468元，缴费至85岁",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "85"
+      ]
+    },
+    {
+      "id": "ff_nominee",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "TEO MEI LING",
+      "evidence": "可撤销指定受益人：张美玲 (TEO MEI LING) 100%",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "Mei Ling",
+        "张美玲"
+      ]
+    },
+    {
+      "id": "ff_db",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "15,000",
+      "evidence": "受保人身故时，本公司赔付保额新币15,000元",
+      "person": "Lau Siew Lan",
+      "topic": "funeral"
+    },
+    {
+      "id": "ff_advance",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "5,000",
+      "evidence": "先行支付新币5,000元作为丧葬费用",
+      "person": "Lau Siew Lan",
+      "topic": "funeral"
+    },
+    {
+      "id": "ff_advance_days",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "3",
+      "evidence": "收到死亡证明后3个工作日内",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "3 working days",
+        "three working days"
+      ]
+    },
+    {
+      "id": "ff_advance_deducted",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "从身故赔偿中扣除",
+      "evidence": "此预付款将从身故赔偿中扣除，并非额外赔偿",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "deducted",
+        "not additional",
+        "not extra"
+      ]
+    },
+    {
+      "id": "ff_adb",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "100%",
+      "evidence": "若受保人因意外身故，额外赔付保额的100%，即新币15,000元",
+      "person": "Lau Siew Lan",
+      "topic": "funeral"
+    },
+    {
+      "id": "ff_waiting",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "24",
+      "evidence": "非意外身故的等候期为保单生效日起24个月",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "24 months",
+        "2 years",
+        "two years"
+      ]
+    },
+    {
+      "id": "ff_waiting_refund",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "只退还已缴保费",
+      "evidence": "等候期内非意外身故，只退还已缴保费",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "premiums paid",
+        "refund"
+      ]
+    },
+    {
+      "id": "ff_war",
+      "doc": "banyan_final_farewell_lau_zh.pdf",
+      "page": 1,
+      "value": "战争",
+      "evidence": "战争、暴乱及恐怖活动所致的身故，不予赔付",
+      "person": "Lau Siew Lan",
+      "topic": "funeral",
+      "aliases": [
+        "war"
+      ]
+    }
+  ],
+  "derived_facts": [
+    {
+      "id": "dv_lau_private_20k",
+      "value": 6750,
+      "from": [
+        "ipb_pr_private",
+        "ipb_ded_A",
+        "ipb_coins",
+        "ipb_pr_rule"
+      ],
+      "explain": "20,000 x 55% = 11,000; -3,500 = 7,500; less 10% = 6,750",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_private_20k_oop",
+      "value": 13250,
+      "from": [
+        "dv_lau_private_20k"
+      ],
+      "explain": "20,000 - 6,750",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_ds_8k",
+      "value": 1530,
+      "from": [
+        "ipb_pr_ds",
+        "ipb_ded_A",
+        "ipb_coins"
+      ],
+      "explain": "8,000 x 65% = 5,200; -3,500 = 1,700; less 10% = 1,530",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_b1_9k",
+      "value": 5850,
+      "from": [
+        "ipb_pr_restructured",
+        "ipb_ded_B1",
+        "ipb_coins"
+      ],
+      "explain": "9,000 - 2,500 = 6,500; less 10% = 5,850",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_classA_20k",
+      "value": 14850,
+      "from": [
+        "ipb_ascharged",
+        "ipb_ded_A",
+        "ipb_coins"
+      ],
+      "explain": "20,000 - 3,500 = 16,500; less 10%",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_classA_20k_oop",
+      "value": 5150,
+      "from": [
+        "dv_lau_classA_20k"
+      ],
+      "explain": "20,000 - 14,850",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_8k",
+      "value": 4050,
+      "from": [
+        "ipa_ded_A",
+        "ipa_coins",
+        "ipa_noproration"
+      ],
+      "explain": "8,000 - 3,500 = 4,500; less 10% = 4,050",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_private_20k",
+      "value": 14850,
+      "from": [
+        "ipa_noproration",
+        "ipa_ded_A",
+        "ipa_coins"
+      ],
+      "explain": "20,000 - 3,500 = 16,500; less 10%",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_C_6k",
+      "value": 4050,
+      "from": [
+        "ipa_ded_C",
+        "ipa_coins"
+      ],
+      "explain": "6,000 - 1,500 = 4,500; less 10% = 4,050",
+      "aliases": []
+    },
+    {
+      "id": "dv_ip_total_premium",
+      "value": 7640,
+      "from": [
+        "ipa_total",
+        "ipb_total"
+      ],
+      "explain": "5,210 + 2,430",
+      "aliases": []
+    },
+    {
+      "id": "dv_ip_cash_total",
+      "value": 3834,
+      "from": [
+        "ipa_cash",
+        "ipb_cash"
+      ],
+      "explain": "3,046 + 788",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_anb_2026",
+      "value": 73,
+      "from": [
+        "m_teo_dob",
+        "ipa_year"
+      ],
+      "explain": "age next birthday at 15 Feb 2026",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_anb_2026",
+      "value": 70,
+      "from": [
+        "m_lau_dob",
+        "ipb_year"
+      ],
+      "explain": "age next birthday at 01 Apr 2026",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_anb_2027",
+      "value": 71,
+      "from": [
+        "m_lau_dob",
+        "ipb_year"
+      ],
+      "explain": "age next birthday at 01 Apr 2027",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_awl_2027",
+      "value": 900,
+      "from": [
+        "dv_lau_anb_2027",
+        "ms_awl_71"
+      ],
+      "explain": "ANB 71 at 01 Apr 2027 renewal -> S$900",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_cash_2027_if_same",
+      "value": 488,
+      "from": [
+        "ipb_add",
+        "dv_lau_awl_2027"
+      ],
+      "explain": "if the additional premium stayed S$1,388: 1,388 - 900",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_age",
+      "value": 73,
+      "from": [
+        "m_teo_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_age",
+      "value": 69,
+      "from": [
+        "m_lau_dob"
+      ],
+      "explain": "age on 2026-10-06",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_81_date",
+      "value": "2034-06-11",
+      "from": [
+        "m_teo_dob",
+        "ip_age_rule"
+      ],
+      "explain": "Teo turns 81 on 11 Jun 2034",
+      "aliases": []
+    },
+    {
+      "id": "dv_ms_4days",
+      "value": 1800,
+      "from": [
+        "ms_daily"
+      ],
+      "explain": "4 x S$450",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_3adl",
+      "value": 1600,
+      "from": [
+        "es_payout",
+        "ev_payout"
+      ],
+      "explain": "400 + 1,200",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_2adl",
+      "value": 1200,
+      "from": [
+        "ev_payout",
+        "ev_trigger",
+        "es_trigger"
+      ],
+      "explain": "only EverCare triggers at 2 ADLs",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_3adl",
+      "value": 1490,
+      "from": [
+        "cs_payout",
+        "cb_payout"
+      ],
+      "explain": "690 + 800",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_2adl",
+      "value": 800,
+      "from": [
+        "cb_payout",
+        "cb_trigger"
+      ],
+      "explain": "only CareBoost triggers at 2 ADLs",
+      "aliases": []
+    },
+    {
+      "id": "dv_couple_3adl",
+      "value": 3090,
+      "from": [
+        "dv_teo_3adl",
+        "dv_lau_3adl"
+      ],
+      "explain": "1,600 + 1,490",
+      "aliases": []
+    },
+    {
+      "id": "dv_es_max_total",
+      "value": 28800,
+      "from": [
+        "es_payout",
+        "es_months"
+      ],
+      "explain": "400 x 72",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_ev_cash",
+      "value": 548,
+      "from": [
+        "ev_premium",
+        "supp_medisave"
+      ],
+      "explain": "1,148 - 600",
+      "aliases": []
+    },
+    {
+      "id": "dv_lau_cb_cash",
+      "value": 336,
+      "from": [
+        "cb_premium",
+        "supp_medisave"
+      ],
+      "explain": "936 - 600",
+      "aliases": []
+    },
+    {
+      "id": "dv_teo_first_month_3adl",
+      "value": 4600,
+      "from": [
+        "dv_teo_3adl",
+        "ev_initial"
+      ],
+      "explain": "1,600 + 3,000 initial lump sum",
+      "aliases": []
+    },
+    {
+      "id": "dv_wl_bonus_check",
+      "value": 1640,
+      "from": [
+        "wl_pua",
+        "wl_pua_prev"
+      ],
+      "explain": "41,250 - 39,610",
+      "aliases": []
+    },
+    {
+      "id": "dv_wl_gdb_check",
+      "value": 121250,
+      "from": [
+        "wl_sa",
+        "wl_pua"
+      ],
+      "explain": "80,000 + 41,250",
+      "aliases": []
+    },
+    {
+      "id": "dv_wl_sv_increase_y29",
+      "value": 2490,
+      "from": [
+        "wl_sv_y29",
+        "wl_sv_y28"
+      ],
+      "explain": "78,810 - 76,320",
+      "aliases": []
+    },
+    {
+      "id": "dv_wl_db_minus_sv",
+      "value": 63330,
+      "from": [
+        "wl_db",
+        "wl_sv_now"
+      ],
+      "explain": "139,650 - 76,320",
+      "aliases": []
+    },
+    {
+      "id": "dv_wl_total_premiums",
+      "value": 42800,
+      "from": [
+        "wl_premium",
+        "wl_term"
+      ],
+      "explain": "2,140 x 20",
+      "aliases": []
+    },
+    {
+      "id": "dv_wl_policy_year_now",
+      "value": 29,
+      "from": [
+        "wl_start"
+      ],
+      "explain": "year 29 runs 01 Aug 2026 - 31 Jul 2027",
+      "aliases": []
+    },
+    {
+      "id": "dv_ff_accidental_total",
+      "value": 30000,
+      "from": [
+        "ff_sa",
+        "ff_adb"
+      ],
+      "explain": "15,000 + 100% extra",
+      "aliases": []
+    },
+    {
+      "id": "dv_ff_balance_after_advance",
+      "value": 10000,
+      "from": [
+        "ff_db",
+        "ff_advance"
+      ],
+      "explain": "15,000 - 5,000",
+      "aliases": []
+    },
+    {
+      "id": "dv_ff_acc_balance_after_advance",
+      "value": 25000,
+      "from": [
+        "dv_ff_accidental_total",
+        "ff_advance"
+      ],
+      "explain": "30,000 - 5,000",
+      "aliases": []
+    },
+    {
+      "id": "dv_ff_wait_end",
+      "value": "2023-03-15",
+      "from": [
+        "ff_start",
+        "ff_waiting"
+      ],
+      "explain": "15 Mar 2021 + 24 months",
+      "aliases": []
+    },
+    {
+      "id": "dv_ff_pay_until",
+      "value": "2041-12-03",
+      "from": [
+        "ff_premium",
+        "m_lau_dob"
+      ],
+      "explain": "Lau turns 85 on 03 Dec 2041",
+      "aliases": [
+        "2041"
+      ]
+    }
+  ],
+  "traps": [
+    {
+      "id": "T1",
+      "trap": "Plan A (Teo) is as-charged at private hospitals with no pro-ration; Plan B (Lau) pro-rates private inpatient bills to 55% and private day surgery to 65%.",
+      "facts": [
+        "ipa_noproration",
+        "ipb_pr_private",
+        "ipb_pr_ds"
+      ]
+    },
+    {
+      "id": "T2",
+      "trap": "Deductible depends on ward class stayed (C 1,500 / B2 2,000 / B1 2,500 / A-private 3,500), not the plan.",
+      "facts": [
+        "ipa_ded_C",
+        "ipb_ded_B1",
+        "ipb_ded_A"
+      ]
+    },
+    {
+      "id": "T3",
+      "trap": "Surrender value table spans pages 3-4; the end-of-current-policy-year (year 29, 31 Jul 2027) row is on page 4. Current SV is year 28 (S$76,320).",
+      "facts": [
+        "wl_sv_now",
+        "wl_sv_y29"
+      ]
+    },
+    {
+      "id": "T4",
+      "trap": "Whole life is absolutely assigned to Straits Harbour Bank: monies go to the bank, Lau's 2004 nomination is REVOKED, surrender needs bank consent. Loan balance is not in any document.",
+      "facts": [
+        "as_payable",
+        "as_nom_revoked",
+        "as_consent",
+        "as_no_amount"
+      ]
+    },
+    {
+      "id": "T5",
+      "trap": "Supplements trigger at 2 ADLs while ElderShield/CareShield need 3 ADLs: at 2 ADLs only the supplement pays.",
+      "facts": [
+        "dv_teo_2adl",
+        "dv_lau_2adl"
+      ]
+    },
+    {
+      "id": "T6",
+      "trap": "Funeral advance S$5,000 is deducted from the S$15,000 death benefit, not extra (Chinese text).",
+      "facts": [
+        "ff_advance_deducted",
+        "dv_ff_balance_after_advance"
+      ]
+    },
+    {
+      "id": "T7",
+      "trap": "Lau's AWL is S$600 this policy year (ANB 70) but becomes S$900 from the 01 Apr 2027 renewal (ANB 71).",
+      "facts": [
+        "ipb_awl",
+        "dv_lau_awl_2027"
+      ]
+    },
+    {
+      "id": "T8",
+      "trap": "The MediSave sheet is a reference table, not a balance statement; balances are not uploaded.",
+      "facts": [
+        "ms_disclaimer"
+      ]
+    },
+    {
+      "id": "T9",
+      "trap": "Teo's whole life has no funeral benefit; the funeral plan belongs to Lau only.",
+      "facts": [
+        "wl_no_funeral",
+        "ff_insured"
+      ]
+    },
+    {
+      "id": "T10",
+      "trap": "Funeral plan nominee is daughter Teo Mei Ling; whole-life nominee (Lau) was revoked.",
+      "facts": [
+        "ff_nominee",
+        "as_nom_revoked"
+      ]
+    }
+  ]
+}

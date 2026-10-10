@@ -12,6 +12,7 @@
 import { cleanScannedLine, looksScanned } from "./scanned-text";
 import type { ChatCitation } from "@/types";
 import { narrowToColumn, piecesOf } from "./printed-lines";
+import { citeLine } from "./answer-verification";
 
 /** The words documents print for what people say. */
 /** [what people say, what documents print, whether it is the same thing (true) or only related (false)] */
@@ -114,5 +115,8 @@ export function printedRuleLines(question: string, answerText: string, pagesByDo
   }
   const best = out.sort((a, b) => b.score - a.score);
   const top = best.length ? best[0].score : 0;
-  return best.filter((x) => x.score >= Math.max(1.75, top - 1)).slice(0, opts.limit ?? 2);
+  const picked = best.filter((x) => x.score >= Math.max(1.75, top - 1)).slice(0, opts.limit ?? 2);
+  // Gate R17: a quoted line's figures are read from its own page (resolved on that page at save time).
+  for (const r of picked) citeLine(null, r.text, { policyId: r.citation.policyId, pageStart: r.citation.pageStart! });
+  return picked;
 }

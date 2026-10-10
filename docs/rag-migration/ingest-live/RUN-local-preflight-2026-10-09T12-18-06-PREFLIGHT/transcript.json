@@ -1,0 +1,17 @@
+[
+  {
+    "id": "Q1",
+    "phase": "conversation",
+    "user": "What's the policy number on our Meridian Harbour plan, and when does it run out?",
+    "via": "composer",
+    "answer": "DearPolicy\n\nI couldn’t finish: the assistant model returned an error, so I stopped before answering rather than guess. Nothing was saved from this attempt; please try again in a moment.",
+    "error": null,
+    "stuck": false,
+    "citationsShown": [],
+    "pendingQuestion": null,
+    "ms": 1883,
+    "at": "2026-10-09T12:22:58.718Z",
+    "screenshot": "screenshots/12-chat-Q1-1.png",
+    "conversation": "C1"
+  }
+]

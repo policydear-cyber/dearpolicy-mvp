@@ -556,3 +556,67 @@ export function rephrasingIsFaithful(text: string, kept: Assertion[]) {
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Gate R17: scope binding helpers for the save-time answer gate (lib/chat/answer-verification.ts).
+// ---------------------------------------------------------------------------
+
+/** The cells of one table row ("Label<TAB>cell<TAB>cell", cells split by tabs, " | " or 3+ spaces). */
+export function rowCells(row: string): string[] {
+  return row.split(/\t+|\s+\|\s+|\s{3,}/).map((c) => c.trim()).filter(Boolean);
+}
+/** The rows of a passage (lines, or ";"-separated rows). */
+export function passageRows(passage: string): string[] { return rowsOf(passage); }
+/** The content words of a benefit label (generic words like "benefit", "amount", "sum insured" left out; "death" and
+ * "life" kept -- they name a benefit). */
+export function benefitWords(label: string): Set<string> {
+  const out = contentWords(label, GENERIC_LABEL);
+  for (const w of ["death", "life"]) if (new RegExp("\\b" + w + "\\b", "i").test(label)) out.add(w);
+  return out;
+}
+/** The 3-letter words of a label that are not generic ("GST", "TPD", "ICU"). */
+function shortWords(label: string): string[] {
+  return (label.toLowerCase().match(/\b[a-z]{3}\b/g) ?? []).filter((w) => !/^(?:the|and|for|per|any|day|one|all|not|its|our|you|was|are|has|had|but|off|out|may|can|age|year|sum|pay)$/.test(w));
+}
+function sentenceWords(text: string): Set<string> {
+  const out = contentWords(text);
+  for (const w of ["death", "life"]) if (new RegExp("\\b" + w + "\\b", "i").test(text)) out.add(w);
+  return out;
+}
+/** Does `sentence` name the benefit `benefit` (one of its distinctive words; a label of generic words only -- "Sum
+ * assured" -- is named by itself or by "cover")? */
+export function namesBenefit(sentence: string, benefit: string): boolean {
+  const label = benefitWords(benefit);
+  if (!label.size) {
+    if (/\bsum (?:assured|insured)\b|\bcover\b/i.test(benefit)) return /\bsum (?:assured|insured)\b|\bcover(?:ed|age)?\b/i.test(sentence);
+    const short = shortWords(benefit);
+    if (short.length) return short.some((w) => new RegExp("\\b" + w + "\\b", "i").test(sentence));
+    return normalPassage(benefit).length >= 3 && normalPassage(sentence).includes(normalPassage(benefit));
+  }
+  return overlap(label, sentenceWords(sentence)) > 0;
+}
+/** Is `amount` printed on the row of `passage` that names `benefit` best? Null when it is; otherwise the reason. */
+export function benefitRowProblem(amount: number, benefit: string, passage: string): string | null {
+  // (A table row -- cells split by tabs -- is one row even where a cell has a ";" in it.)
+  const rows = unwrap(passage).split(/\n+/).map((l) => l.trim()).filter(Boolean).flatMap((l) => rowCells(l).length >= 3 ? [l] : l.split(/;\s+/).map((x) => x.trim()).filter(Boolean));
+  const withAmount = rows.filter((r) => amountAppears(amount, r));
+  if (!withAmount.length) return "the amount is not printed in the cited passage";
+  const label = benefitWords(benefit);
+  if (!label.size && shortWords(benefit).length) {
+    // A short label ("GST", "TPD"): the row printing the amount names it.
+    const short = shortWords(benefit);
+    return withAmount.some((r) => short.some((w) => new RegExp("\\b" + w + "\\b", "i").test(r))) ? null : "the cited passage does not print the amount on the row of the benefit it is stated for";
+  }
+  if (!label.size) {
+    const b = normalPassage(benefit);
+    return b.length >= 3 && withAmount.some((r) => normalPassage(r).includes(b)) ? null : "the cited passage does not print the amount on the row of the benefit it is stated for";
+  }
+  const scored = rows.map((r) => ({ r, n: overlap(label, sentenceWords(r)), has: amountAppears(amount, r) }));
+  const best = Math.max(0, ...scored.map((x) => x.n));
+  if (best === 0) return "the cited passage does not name the benefit the figure is stated for";
+  return scored.some((x) => x.n === best && x.has) ? null : "the amount belongs to a different row of the passage than the benefit it is stated for";
+}
+/** The periods `text` prints beside `amount` in `currency` (null for none). */
+export function printedPeriodsOf(amount: number, currency: string, text: string): (string | null)[] {
+  return occurrences(text).filter((o) => same(o.value, amount) && (o.currency === currency || o.currency == null)).map((o) => o.period);
+}

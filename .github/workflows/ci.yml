@@ -167,7 +167,7 @@ jobs:
       - name: Round 6 chat quality (250+ messages, no garbled, leaky, repetitive or ungrounded text; output guard never needed)
         run: npm run r6:chat-quality-test
 
-      - name: Round 7 answers (second household: 300+ messages, 10 long conversations, bilingual and lapsed documents)
+      - name: "Round 7 answers (second household: 300+ messages, 10 long conversations, bilingual and lapsed documents)"
         run: npm run r7:answers-test
       - name: Round 7 claim conversations (51 full interviews and 7 what-ifs, one question per turn, "not sure" accepted and never asked again, fitting benefits only, employer group cover shown separately)
         run: npm run r7:claims-test
@@ -189,6 +189,67 @@ jobs:
         run: npm run r7:chat-robustness-test
       - name: Answer verification (a reversal, an exclusion heading, a dropped condition, a swapped unit or period, a neighbouring row's amount, a swapped or missing currency, a missing hash, a superseded document or the wrong person never passes; true statements in many phrasings still do; totals add only verified figures in one currency; every answer path's figures checked at save)
         run: npm run verify:assertions-test
+      - name: Save-time answer gate (a household's own number never grounds cover, a limit or a total and is echoed only as theirs; every figure is grounded only by its own sentence's binding -- policy, person, benefit row, version, page range, column; totals, monthly restatements and multiples only with an explicit computation record the gate recomputes)
+        run: npm run verify:gate-test
+      - name: Conversational RAG retrieval tools behind DEARPOLICY_RAG_TOOLS (default off; household-scoped, active/released/current documents only; the subject's table column before the value; every value with its evidence -- page, row, column, passage offsets; integer-cent calculations labelled printed limit vs indicative estimate; bindings and records accepted by the save-time gate)
+        run: npm run rag2:tools-test
+      - name: Conversational RAG loop behind DEARPOLICY_RAG_LOOP (default off; one model-driven loop through the real chat route with a scripted test model -- the person resolved first and asked once, one policy-relevant question at a time, never a known fact again, an interruption answered then the pending question re-asked, a correction updating facts and withdrawing what was derived, every visible sentence tied to evidence and checked by the save-time gate, indicative estimates labelled and never totalled)
+        run: npm run rag2:loop-test
+      - name: Conversational RAG conversation state, fact provenance, evidence precision and usage accounting (integration, two synthetic households, scripted test model and a fake-fetch hosted adapter -- facts only from the household's words, no inferred classifications or payable days; speaker vs active subject in a shared login; stepchildren offered and labelled; supporting sentence / row with header, continuation and footnote; every loop model call counted, recorded and stopped by per-turn, household, run, time and cancellation limits with an honest reply)
+        run: npm run rag2:conv-test
+
+      - name: Benefit calculation contract (the claim calculators behind the calculate tool -- the policy's own day-count rule from admission and discharge, never nights for days; deductibles, co-insurance and caps on the household's bill; mixed currencies refused; a missing condition gives the printed figure plus the specific requirement, never an estimate; every calculation record re-run by the save-time gate; claim records only in a claim scenario)
+        run: npm run rag2:calc-test
+      - name: Conversational RAG adversarial-review fixes (instruction text in a document is never evidence and passage figures bind only to the passage's own label; payout and claim-decision wording refused in every sentence, estimate and next step; sums of limits never a claimable total; household figures never policy operands; remembered evidence re-validated every turn; figure-free statements checked against their evidence; a corrected person withdraws and names the estimate; compound and re-asked questions refused; the day-count rule end to end through calculate; spend cap and metering before every loop model call)
+        run: npm run rag2:fix-test
+      - name: Conversational RAG adversarial suite (two synthetic households; the reviewer's required behaviour for evidence, people, facts, calculations, limits and lifecycle -- must pass in full)
+        run: npm run rag2:adversarial-test
+      - name: Conversational RAG remaining gaps (applicability classes for people and columns at selection and at the gate; stepchild rows from the document's own definition; the claimed amount persisted with provenance; corrections update the persisted claim; a deleted or superseded source invalidates only what it alone supported)
+        run: npm run rag2:gaps-test
+      - name: Conversational RAG presentation (what the household sees -- no duplicated question, names as the household uses them, no internal commentary after a failed verification, an unknown person said plainly, facts in the message never asked again, unestablished conditions said as conditional)
+        run: npm run rag2:presentation-test
+      - name: Conversational RAG unit terms (a value's rate unit, payable-duration rule and each cap with its own reset period, read with source spans; caps applied; earlier use of a cap that resets over a year settled or stated as an assumption; cached tokens counted once)
+        run: npm run rag2:units-test
+      - name: Table dimensions (a figure bound to every dimension of its row -- the person's class, the plan / tier, the schedule version in force on the date, the benefit stage -- at table selection and at the save-time gate)
+        run: npm run rag2:dimensions-test
+      - name: Conversational RAG conversation round 6 (a question shown once, by its card; statements before a question composed and gated like an answer; no inline evidence ids; the live L3 / L4 conversations replayed with the scripted test model)
+        run: npm run rag2:conv2-test
+      - name: "rag2 conv3: real-model defects (printed figure never masked, material conditions, negation-aware decision check, person questions only when needed, rule passages cited)"
+        run: npm run rag2:conv3-test
+      - name: "rag2 facts: a recorded fact is something the household said (never a not-stated placeholder)"
+        run: npm run rag2:facts-test
+      - name: "rag2 conv4: a supplied fact moves the conversation forward (benefit restated with its citation, remaining condition, next step)"
+        run: npm run rag2:conv4-test
+      - name: Conversational RAG round 7 (the live ingestion run's loop defects replayed on its own stored rows -- a preface explaining why a fact is needed is shown; a passage already shown is not repeated; a turn out of budget gives a useful partial answer; row-context figure checks)
+        run: npm run rag2:conv5-test
+      - name: "rag2 conv6: verified repair of rejected sentences, a supplied answer resolves the pending question, duration what-ifs only when validated"
+        run: npm run rag2:conv6-test
+      - name: "rag2 conv7: the model's inline citation markers are citations, never shown; a negated payout word keeps the estimate; a wording-only drop is repaired once"
+        run: npm run rag2:conv7-test
+      - name: "rag2 deletion semantics: a deleted amendment leaves current terms unknown; unrelated deletions, newer amendments and stated reversals handled"
+        run: npm run rag2:deletion-semantics-test
+      - name: "Scanned-page reprocessing: the read-only detection query finds pages stored empty before the OCR fix"
+        run: npm run ingest:scanned-detect-test
+      - name: Calculate on ingested documents (the live run's stored rows -- a product, insurer or policy number resolves to the schedule; an endorsement's in-force rate for the stay's dates; the schedule's own complete-24-hours-plus-remainder rule; the save-time gate re-checks the remainder hours and the endorsement link)
+        run: npm run rag2:calc-ingested-test
+      - name: Gate and table reading for ingested documents (item-code columns, long compound labels, a single amount column, a row's own category cell as a person check, whole-row evidence)
+        run: npm run rag2:ingested-gate-test
+      - name: "OCR: scanned pages are read by the configured OpenAI reading model (file part, bounded output, provenance, unread pages marked)"
+        run: npm run ocr:openai-test
+      - name: "Live-run accounting: each turn counts its own model_executions rows once"
+        run: npm run rag2:live-attribution-test
+      - name: "Live fetch guard: PDF requests reserved for their page images; Pinecone and unbounded requests refused"
+        run: npm run rag2:live-fetch-guard-pdf-test
+      - name: "Ingest-live checker regressions (grades uploads, extraction, citations, usefulness and deletion)"
+        run: npm run ingest:live-checker-test
+      - name: Catalogue routing (a request for the documents on file or the policies held is answered as one, in a fresh chat and mid-claim; a claim statement or question is never read as one)
+        run: npm run routing:test
+      - name: "Hands-on trial guard: Codespace only, local database, OpenAI only, persisted cap within the exercise allowance, own forwarded origin only"
+        run: npm run trial:guard-test
+      - name: "Trial start-up: a remote database, foreign storage or a broken trial budget is refused before any setup runs"
+        run: npm run trial:start-isolation-test
+      - name: "Day-count boundaries (hand-specified): midnight and zero-length stays, inclusive / exclusive times, impossible dates, repeated / conflicting / amended day exceptions, invalid birth dates -- module, full calculate path and saved records"
+        run: npm run rag2:calc-boundary-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

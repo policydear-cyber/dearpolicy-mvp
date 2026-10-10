@@ -1,0 +1,2935 @@
+{
+  "scenario": "L3",
+  "title": "Broken arm: cause decides cover; side question about the speaker; back to the pending question",
+  "conversationId": "92fcbaf7-960c-4547-b5cf-e5faa2bad201",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Kai broke his arm yesterday. Can we claim for it?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "I couldn’t finish: this question reached the limit set for model use on a single question, so I stopped before answering. Please ask about one policy or one person at a time.",
+      "timings": {
+        "acceptedMs": 360,
+        "firstAssistantPersistedMs": 16556,
+        "answerSeenMs": 16605,
+        "modelMs": 15922,
+        "upstreamMs": 15901,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 1,
+          "at": "2026-10-09T09:58:23.981Z",
+          "estInputTokens": 9798,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0019798000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4659,
+            "output": 17,
+            "cached": 0
+          },
+          "latencyMs": 2016,
+          "upstreamMs": 2016,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-09T09:58:26.014Z",
+          "estInputTokens": 10021,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020020999999999997,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4770,
+            "output": 82,
+            "cached": 4533
+          },
+          "latencyMs": 1635,
+          "upstreamMs": 1635,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 3,
+          "at": "2026-10-09T09:58:27.658Z",
+          "estInputTokens": 10435,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020435,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 5002,
+            "output": 50,
+            "cached": 4644
+          },
+          "latencyMs": 1632,
+          "upstreamMs": 1632,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 4,
+          "at": "2026-10-09T09:58:29.315Z",
+          "estInputTokens": 11873,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0021873,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 5988,
+            "output": 125,
+            "cached": 4876
+          },
+          "latencyMs": 2140,
+          "upstreamMs": 2140,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 5,
+          "at": "2026-10-09T09:58:31.471Z",
+          "estInputTokens": 18406,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028406000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10365,
+            "output": 76,
+            "cached": 5862
+          },
+          "latencyMs": 1315,
+          "upstreamMs": 1315,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 6,
+          "at": "2026-10-09T09:58:32.834Z",
+          "estInputTokens": 18975,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028975,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 13,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10718,
+            "output": 205,
+            "cached": 10239
+          },
+          "latencyMs": 3091,
+          "upstreamMs": 3091,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 7,
+          "at": "2026-10-09T09:58:35.949Z",
+          "estInputTokens": 19408,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0029408000000000004,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 15,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10966,
+            "output": 213,
+            "cached": 10592
+          },
+          "latencyMs": 2402,
+          "upstreamMs": 2402,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 8,
+          "at": "2026-10-09T09:58:38.356Z",
+          "estInputTokens": 19892,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0029892,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 17,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 11244,
+            "output": 61,
+            "cached": 10840
+          },
+          "latencyMs": 1691,
+          "upstreamMs": 1691,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 1,
+          "at": "2026-10-09T09:58:23.983Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 9989,
+          "reservedUsd": 0.0019989,
+          "chargedUsd": 0.00047440000000000004,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2010,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4659,
+            "output": 17,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 2,
+          "at": "2026-10-09T09:58:26.015Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10218,
+          "reservedUsd": 0.0020218000000000002,
+          "chargedUsd": 0.00011003,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1634,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4770,
+            "output": 82,
+            "cached": 4533,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 3,
+          "at": "2026-10-09T09:58:27.658Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10650,
+          "reservedUsd": 0.002065,
+          "chargedUsd": 0.00010724000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1630,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 5002,
+            "output": 50,
+            "cached": 4644,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 4,
+          "at": "2026-10-09T09:58:29.316Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 12097,
+          "reservedUsd": 0.0022096999999999998,
+          "chargedUsd": 0.00022246,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2139,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 5988,
+            "output": 125,
+            "cached": 4876,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 5,
+          "at": "2026-10-09T09:58:31.472Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18646,
+          "reservedUsd": 0.0028646000000000006,
+          "chargedUsd": 0.0005469200000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1313,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 10365,
+            "output": 76,
+            "cached": 5862,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 6,
+          "at": "2026-10-09T09:58:32.835Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 19226,
+          "reservedUsd": 0.0029226000000000005,
+          "chargedUsd": 0.00025279,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 3088,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 10718,
+            "output": 205,
+            "cached": 10239,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 7,
+          "at": "2026-10-09T09:58:35.950Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 19687,
+          "reservedUsd": 0.0029687,
+          "chargedUsd": 0.00024982,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2398,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 10966,
+            "output": 213,
+            "cached": 10592,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        },
+        {
+          "seq": 8,
+          "at": "2026-10-09T09:58:38.357Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 20198,
+          "reservedUsd": 0.0030198,
+          "chargedUsd": 0.00017930000000000002,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1689,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 11244,
+            "output": 61,
+            "cached": 10840,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 1
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4659,
+          "output_tokens": 17,
+          "cached_tokens": 0,
+          "cost_usd": 0.000474,
+          "latency_ms": 2018,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:26.003Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4770,
+          "output_tokens": 82,
+          "cached_tokens": 4533,
+          "cost_usd": 0.00011,
+          "latency_ms": 1636,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:27.652Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 5002,
+          "output_tokens": 50,
+          "cached_tokens": 4644,
+          "cost_usd": 0.000107,
+          "latency_ms": 1633,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:29.291Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 5988,
+          "output_tokens": 125,
+          "cached_tokens": 4876,
+          "cost_usd": 0.000222,
+          "latency_ms": 2141,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:31.458Z"
+        },
+        {
+          "attempt_index": 4,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 10365,
+          "output_tokens": 76,
+          "cached_tokens": 5862,
+          "cost_usd": 0.000547,
+          "latency_ms": 1315,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:32.787Z"
+        },
+        {
+          "attempt_index": 5,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 10718,
+          "output_tokens": 205,
+          "cached_tokens": 10239,
+          "cost_usd": 0.000253,
+          "latency_ms": 3091,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:35.927Z"
+        },
+        {
+          "attempt_index": 6,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 10966,
+          "output_tokens": 213,
+          "cached_tokens": 10592,
+          "cost_usd": 0.00025,
+          "latency_ms": 2402,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:38.352Z"
+        },
+        {
+          "attempt_index": 7,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 11244,
+          "output_tokens": 61,
+          "cached_tokens": 10840,
+          "cost_usd": 0.000179,
+          "latency_ms": 1692,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:40.049Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 63712,
+        "output": 829
+      },
+      "costUsd": {
+        "charged": 0.00214296,
+        "reserved": 0.0200711,
+        "ledger": 0.002142
+      }
+    },
+    {
+      "turn": 2,
+      "user": "Before that, quick question: what is my deductible on my KestrelShield plan?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Daniel, your KestrelShield Integrated Plan lists a deductible of S$3,500 per policy year for a private hospital (page 1).",
+      "timings": {
+        "acceptedMs": 15,
+        "firstAssistantPersistedMs": 7033,
+        "answerSeenMs": 7292,
+        "modelMs": 5896,
+        "upstreamMs": 5883,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 9,
+          "at": "2026-10-09T09:58:41.187Z",
+          "estInputTokens": 10085,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020085,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4844,
+            "output": 17,
+            "cached": 0
+          },
+          "latencyMs": 1024,
+          "upstreamMs": 1024,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 10,
+          "at": "2026-10-09T09:58:42.220Z",
+          "estInputTokens": 10308,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020308,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4955,
+            "output": 41,
+            "cached": 4718
+          },
+          "latencyMs": 1664,
+          "upstreamMs": 1664,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-09T09:58:43.898Z",
+          "estInputTokens": 12877,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0022876999999999997,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 6729,
+            "output": 144,
+            "cached": 4829
+          },
+          "latencyMs": 1726,
+          "upstreamMs": 1726,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 12,
+          "at": "2026-10-09T09:58:45.633Z",
+          "estInputTokens": 14558,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024558,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 8012,
+            "output": 95,
+            "cached": 6603
+          },
+          "latencyMs": 1482,
+          "upstreamMs": 1482,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 9,
+          "at": "2026-10-09T09:58:41.189Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10276,
+          "reservedUsd": 0.0020276,
+          "chargedUsd": 0.0004929,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1016,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4844,
+            "output": 17,
+            "cached": 0,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 2
+        },
+        {
+          "seq": 10,
+          "at": "2026-10-09T09:58:42.221Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10505,
+          "reservedUsd": 0.0020505,
+          "chargedUsd": 0.00009138,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1662,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4955,
+            "output": 41,
+            "cached": 4718,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 2
+        },
+        {
+          "seq": 11,
+          "at": "2026-10-09T09:58:43.899Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 13083,
+          "reservedUsd": 0.0023083,
+          "chargedUsd": 0.00031028999999999996,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1724,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 6729,
+            "output": 144,
+            "cached": 4829,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 2
+        },
+        {
+          "seq": 12,
+          "at": "2026-10-09T09:58:45.633Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 14784,
+          "reservedUsd": 0.0024784,
+          "chargedUsd": 0.00025443,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1481,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 8012,
+            "output": 95,
+            "cached": 6603,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 2
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 7,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 11244,
+          "output_tokens": 61,
+          "cached_tokens": 10840,
+          "cost_usd": 0.000179,
+          "latency_ms": 1692,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:40.049Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4844,
+          "output_tokens": 17,
+          "cached_tokens": 0,
+          "cost_usd": 0.000493,
+          "latency_ms": 1025,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:42.214Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4955,
+          "output_tokens": 41,
+          "cached_tokens": 4718,
+          "cost_usd": 0.000091,
+          "latency_ms": 1664,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:43.885Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 6729,
+          "output_tokens": 144,
+          "cached_tokens": 4829,
+          "cost_usd": 0.00031,
+          "latency_ms": 1726,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:45.625Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8012,
+          "output_tokens": 95,
+          "cached_tokens": 6603,
+          "cost_usd": 0.000254,
+          "latency_ms": 1483,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:47.117Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 24540,
+        "output": 297
+      },
+      "costUsd": {
+        "charged": 0.0011489999999999998,
+        "reserved": 0.008864799999999999,
+        "ledger": 0.001327
+      }
+    },
+    {
+      "turn": 3,
+      "user": "He fell off his bicycle at the park.",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "Updated: how it happened is now fell off his bicycle at the park (you said not stated at first). Thanks for explaining how it happened. Kai is covered under the SunHaven Family Accident Guard, which covers bodily injury caused solely and directly by an accident; a fracture caused by sickness, disease, or a gradual or degenerative condition is not covered. The policy lists a Fracture benefit (per fracture) of S$750 for Kai’s Child tier, payable once per fracture if confirmed by X-ray and certified by a registered medical practitioner.\nWas Kai’s broken arm confirmed by X-ray and certified by a registered medical practitioner?",
+      "timings": {
+        "acceptedMs": 11,
+        "firstAssistantPersistedMs": 8932,
+        "answerSeenMs": 9061,
+        "modelMs": 7798,
+        "upstreamMs": 7792,
+        "relayMs": 0
+      },
+      "calls": [
+        {
+          "seq": 13,
+          "at": "2026-10-09T09:58:48.477Z",
+          "estInputTokens": 10173,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020173,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 6,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 4893,
+            "output": 69,
+            "cached": 4718
+          },
+          "latencyMs": 1525,
+          "upstreamMs": 1525,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 14,
+          "at": "2026-10-09T09:58:50.007Z",
+          "estInputTokens": 10598,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0020598,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 8,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 5135,
+            "output": 109,
+            "cached": 4767
+          },
+          "latencyMs": 1572,
+          "upstreamMs": 1572,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 15,
+          "at": "2026-10-09T09:58:51.595Z",
+          "estInputTokens": 14651,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0024651000000000005,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 11,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 7993,
+            "output": 239,
+            "cached": 5009
+          },
+          "latencyMs": 2338,
+          "upstreamMs": 2338,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        },
+        {
+          "seq": 16,
+          "at": "2026-10-09T09:58:53.960Z",
+          "estInputTokens": 18557,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0028556999999999996,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 15,
+          "systemPromptSha256": "906cc3f798d5a301efcb6a38ebffc329a5563772d34e6f8d4f19afaf4c8784bb",
+          "toolsSha256": "d85a1e5e943e8bd4568873426727eb899e7a7b60e62e68daac53f6d59d6c9b15",
+          "chargedUsd": null,
+          "ok": true,
+          "usage": {
+            "input": 10614,
+            "output": 255,
+            "cached": 7867
+          },
+          "latencyMs": 2363,
+          "upstreamMs": 2363,
+          "resolvedModel": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          }
+        }
+      ],
+      "httpCalls": [
+        {
+          "seq": 13,
+          "at": "2026-10-09T09:58:48.478Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10364,
+          "reservedUsd": 0.0020364000000000003,
+          "chargedUsd": 0.00009918000000000001,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1523,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 4893,
+            "output": 69,
+            "cached": 4718,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 3
+        },
+        {
+          "seq": 14,
+          "at": "2026-10-09T09:58:50.008Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 10802,
+          "reservedUsd": 0.0020802,
+          "chargedUsd": 0.00013897,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 1570,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 5135,
+            "output": 109,
+            "cached": 4767,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 3
+        },
+        {
+          "seq": 15,
+          "at": "2026-10-09T09:58:51.595Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 14872,
+          "reservedUsd": 0.0024871999999999997,
+          "chargedUsd": 0.00046799,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2337,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 7993,
+            "output": 239,
+            "cached": 5009,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 3
+        },
+        {
+          "seq": 16,
+          "at": "2026-10-09T09:58:53.960Z",
+          "host": "api.openai.com",
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "model": "gpt-6-luna",
+          "maxOutputTokens": 2000,
+          "estInputTokens": 18810,
+          "reservedUsd": 0.002881,
+          "chargedUsd": 0.00048087,
+          "ok": true,
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true,
+            "reasoning_effort": "none"
+          },
+          "upstreamMs": 2362,
+          "status": 200,
+          "providerModel": "gpt-6-luna",
+          "usage": {
+            "input": 10614,
+            "output": 255,
+            "cached": 7867,
+            "reasoning": 0
+          },
+          "scenario": "L3",
+          "turn": 3
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 8012,
+          "output_tokens": 95,
+          "cached_tokens": 6603,
+          "cost_usd": 0.000254,
+          "latency_ms": 1483,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:47.117Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 4893,
+          "output_tokens": 69,
+          "cached_tokens": 4718,
+          "cost_usd": 0.000099,
+          "latency_ms": 1526,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:50.004Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 5135,
+          "output_tokens": 109,
+          "cached_tokens": 4767,
+          "cost_usd": 0.000139,
+          "latency_ms": 1572,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:51.580Z"
+        },
+        {
+          "attempt_index": 2,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 7993,
+          "output_tokens": 239,
+          "cached_tokens": 5009,
+          "cost_usd": 0.000468,
+          "latency_ms": 2338,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:53.934Z"
+        },
+        {
+          "attempt_index": 3,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "gpt-6-luna",
+          "input_tokens": 10614,
+          "output_tokens": 255,
+          "cached_tokens": 7867,
+          "cost_usd": 0.000481,
+          "latency_ms": 2364,
+          "prompt_version": "rag2-loop-v6",
+          "created_at": "2026-10-09T09:58:56.325Z"
+        }
+      ],
+      "relay": [],
+      "tokens": {
+        "input": 28635,
+        "output": 672
+      },
+      "costUsd": {
+        "charged": 0.00118701,
+        "reserved": 0.0094848,
+        "ledger": 0.001441
+      }
+    }
+  ],
+  "totalMs": 32976,
+  "firstUsefulResponseMs": 16556,
+  "tokens": {
+    "input": 116887,
+    "output": 1798
+  },
+  "costUsd": 0.0044789700000000005,
+  "calls": 16,
+  "verdict": {
+    "scenario": "L3",
+    "verdict": "INCOMPLETE",
+    "failureStage": null,
+    "incomplete": "turn 1 stopped: turn_tokens 64541 tokens used this turn; the next call (about 16478) would pass the limit of 80000",
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page SUNHAVEN p2 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 2,
+        "name": "stored page KESTREL p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 3,
+        "name": "stored page SUNHAVEN p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 3,
+        "name": "stored page SUNHAVEN p2 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$1,200",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "S$750 only with the accident-only cover condition",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "not shown"
+      },
+      {
+        "turn": 1,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 1,
+        "name": "asks how the arm was broken (accident or not)",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "no question asked"
+      },
+      {
+        "turn": 1,
+        "name": "about kai",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: kai"
+      },
+      {
+        "turn": 1,
+        "name": "cites SUNHAVEN p2 \"This policy covers Bodily Injury caused \"",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "retrieved but not cited"
+      },
+      {
+        "turn": 1,
+        "name": "never records cause=accident",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "not recorded"
+      },
+      {
+        "turn": 2,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "none"
+      },
+      {
+        "turn": 2,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 2,
+        "name": "shows S$3,500",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "present"
+      },
+      {
+        "turn": 2,
+        "name": "never states S$750",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "absent"
+      },
+      {
+        "turn": 2,
+        "name": "never states S$1,200",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "absent"
+      },
+      {
+        "turn": 2,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 2,
+        "name": "about kai",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: kai"
+      },
+      {
+        "turn": 2,
+        "name": "cites KESTREL p1 \"Deductible (per policy year, private hos\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 2,
+        "name": "puts the pending question back",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "not re-asked"
+      },
+      {
+        "turn": 3,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 3,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 3,
+        "name": "no withheld-amount wording",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 3,
+        "name": "never states approval, payment or entitlement",
+        "ok": true,
+        "stage": "verification",
+        "detail": "none"
+      },
+      {
+        "turn": 3,
+        "name": "at most one question",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "Was Kai’s broken arm confirmed by X-ray and certified by a registered medical practitioner?"
+      },
+      {
+        "turn": 3,
+        "name": "each question shown once",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "once"
+      },
+      {
+        "turn": 3,
+        "name": "shows S$750",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "present"
+      },
+      {
+        "turn": 3,
+        "name": "never states S$1,200",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 3,
+        "name": "S$750 stated with its X-ray / certification condition",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "conditional"
+      },
+      {
+        "turn": 3,
+        "name": "no invented figure",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "every figure is printed or calculated"
+      },
+      {
+        "turn": 3,
+        "name": "does not re-ask re-asking how it happened",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "no re-ask"
+      },
+      {
+        "turn": 3,
+        "name": "about kai",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "subject after the turn: kai"
+      },
+      {
+        "turn": 3,
+        "name": "figure bound to kai / SUNHAVEN / Child",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "bound"
+      },
+      {
+        "turn": 3,
+        "name": "cites SUNHAVEN p1 \"Fracture benefit (per fracture)\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 3,
+        "name": "cites SUNHAVEN p2 \"Fracture benefit is payable once per fra\"",
+        "ok": true,
+        "stage": "retrieval",
+        "detail": "cited"
+      },
+      {
+        "turn": 3,
+        "name": "records how|cause|happen in their words",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "how_it_happened=\"He fell off his bicycle at the park.\""
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": "74000000-0000-4000-8000-000000000003",
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": {
+      "why": "“Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.” (page 2)",
+      "kind": "fact",
+      "turn": 3,
+      "factKey": "fracture_xray_certification",
+      "question": "Was Kai’s broken arm confirmed by X-ray and certified by a registered medical practitioner?",
+      "subjectId": "74000000-0000-4000-8000-000000000003"
+    },
+    "claim": {
+      "facts": {
+        "injury": {
+          "turn": 1,
+          "basis": "stated",
+          "value": "broke his arm",
+          "words": "Kai broke his arm yesterday.",
+          "source": "user_reported"
+        },
+        "how_it_happened": {
+          "turn": 3,
+          "basis": "stated",
+          "value": "fell off his bicycle at the park",
+          "words": "He fell off his bicycle at the park.",
+          "source": "user_reported",
+          "previous": [
+            {
+              "turn": 1,
+              "basis": "paraphrased",
+              "value": "not stated",
+              "words": "Kai broke his arm yesterday.",
+              "source": "user_reported"
+            }
+          ]
+        }
+      },
+      "derived": [],
+      "subjectId": "74000000-0000-4000-8000-000000000003"
+    },
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "limit_reached",
+        "steps": 8,
+        "usage": {
+          "input": 63712,
+          "output": 829
+        },
+        "latencyMs": 16101,
+        "limit": {
+          "kind": "turn_tokens",
+          "detail": "64541 tokens used this turn; the next call (about 16478) would pass the limit of 80000"
+        },
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "Kai"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "injury",
+                  "value": "broke his arm",
+                  "words": "Kai broke his arm yesterday."
+                },
+                {
+                  "key": "how_it_happened",
+                  "value": "not stated",
+                  "words": "Kai broke his arm yesterday."
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "fracture, broken arm, accident medical expenses, personal accident",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "fracture broken bone arm benefit fracture confirmation X-ray registered medical practitioner accident cause exclusions claim",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":8}",
+            "evidenceIds": [
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10",
+              "e11",
+              "e12"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "accidental medical expenses fracture treatment reimbursement limits exclusions accident definition",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":7}",
+            "evidenceIds": [
+              "e6",
+              "e11",
+              "e5",
+              "e7",
+              "e9",
+              "e10",
+              "e12"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "tier": "Child",
+              "want": "amount",
+              "benefit": "Fracture benefit (per fracture)",
+              "policy_id": "74000000-0000-4000-8000-000000000101",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v1\",\"value\":750,\"column\":\"Child\",\"row\":\"Fracture benefit (per fracture)\"}",
+            "evidenceIds": [
+              "e13"
+            ]
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "options": [],
+              "preface": "I’m sorry Kai hurt his arm.",
+              "fact_key": "how_it_happened",
+              "question": "How did Kai break his arm?",
+              "statements": [
+                {
+                  "text": "Kai’s SunHaven Family Accident Guard lists a Fracture benefit of S$750 per fracture, payable once per fracture if confirmed by X-ray and certified by a registered medical practitioner; the policy covers bodily injury caused solely and directly by an accident and excludes fractures caused by sickness, disease, or a gradual or degenerative condition.",
+                  "benefit": "Fracture benefit (per fracture)",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000003",
+                  "evidence_ids": [
+                    "e5",
+                    "e7"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003",
+              "because_evidence_ids": [
+                "e7"
+              ]
+            },
+            "name": "ask_user",
+            "error": "how_it_happened is already recorded (not stated, \"Kai broke his arm yesterday.\"); do not ask again",
+            "evidenceIds": []
+          },
+          {
+            "ok": false,
+            "args": {
+              "kind": "fact",
+              "preface": "I’m sorry Kai hurt his arm.",
+              "fact_key": "fracture_confirmation",
+              "question": "Was Kai’s arm fracture confirmed by X-ray and certified by a registered medical practitioner?",
+              "statements": [
+                {
+                  "text": "Kai’s SunHaven Family Accident Guard lists a Fracture benefit of S$750 per fracture, payable once per fracture if confirmed by X-ray and certified by a registered medical practitioner; it covers bodily injury caused solely and directly by an accident and excludes fractures caused by sickness, disease, or a gradual or degenerative condition.",
+                  "benefit": "Fracture benefit (per fracture)",
+                  "value_ids": [
+                    "v1"
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000003",
+                  "evidence_ids": [
+                    "e5",
+                    "e7"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003",
+              "because_evidence_ids": [
+                "e5",
+                "e7"
+              ]
+            },
+            "name": "ask_user",
+            "error": "how it happened is not known, and the documents' wording depends on the cause (accident or otherwise): ask how it happened first (fact_key how_it_happened, citing e6, e7, e9)",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "how_it_happened",
+                  "value": "not stated",
+                  "words": "Kai broke his arm yesterday."
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 2,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "final_answer",
+        "steps": 4,
+        "usage": {
+          "input": 24540,
+          "output": 297
+        },
+        "latencyMs": 5937,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "mention": "my"
+            },
+            "name": "resolve_person",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "deductible",
+              "subject_id": "74000000-0000-4000-8000-000000000001"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e14",
+              "e15",
+              "e1",
+              "e16",
+              "e17",
+              "e18",
+              "e3",
+              "e19"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "KestrelShield Integrated Plan deductible excess hospital deductible amount",
+              "policy_ids": [
+                "74000000-0000-4000-8000-000000000103",
+                "74000000-0000-4000-8000-000000000104"
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000001"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":2}",
+            "evidenceIds": [
+              "e20",
+              "e21"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "page": 1,
+              "policy_id": "74000000-0000-4000-8000-000000000103"
+            },
+            "name": "read_page",
+            "summary": "{\"status\":\"ok\"}",
+            "evidenceIds": [
+              "e22"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "Daniel, your KestrelShield Integrated Plan lists a deductible of S$3,500 per policy year for a private hospital (page 1).",
+                  "benefit": "Deductible (per policy year, private hospital)",
+                  "evidence_ids": [
+                    "e21"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000001"
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e21"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      },
+      {
+        "turn": 3,
+        "modelId": "openai:gpt-6-luna",
+        "outcome": "ask_user",
+        "steps": 4,
+        "usage": {
+          "input": 28635,
+          "output": 672
+        },
+        "latencyMs": 7857,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "facts": [
+                {
+                  "key": "how_it_happened",
+                  "value": "fell off his bicycle at the park",
+                  "words": "He fell off his bicycle at the park."
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "note_facts",
+            "evidenceIds": []
+          },
+          {
+            "ok": true,
+            "args": {
+              "topic": "accident",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "policies_for",
+            "summary": "{}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "accidental fracture broken arm fracture benefit X-ray confirmation registered medical practitioner claim",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":5}",
+            "evidenceIds": [
+              "e5",
+              "e6",
+              "e11",
+              "e8",
+              "e7"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "tier": "Child",
+              "want": "amount",
+              "benefit": "Fracture benefit (per fracture)",
+              "policy_id": "74000000-0000-4000-8000-000000000101",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v2\",\"value\":750,\"column\":\"Child\",\"row\":\"Fracture benefit (per fracture)\"}",
+            "evidenceIds": [
+              "e13"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "tier": "Child",
+              "want": "amount",
+              "benefit": "Accident medical expenses (per accident)",
+              "policy_id": "74000000-0000-4000-8000-000000000101",
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "select_table_value",
+            "summary": "{\"status\":\"ok\",\"valueId\":\"v3\",\"value\":1500,\"column\":\"Child\",\"row\":\"Accident medical expenses (per accident)\"}",
+            "evidenceIds": [
+              "e23"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "k": 10,
+              "query": "Accident definition sudden unforeseen external event fracture benefit claim medical expenses exclusions",
+              "policy_ids": [
+                "74000000-0000-4000-8000-000000000101"
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":6}",
+            "evidenceIds": [
+              "e6",
+              "e5",
+              "e7",
+              "e10",
+              "e11",
+              "e12"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "kind": "fact",
+              "preface": "Thanks for explaining how it happened.",
+              "fact_key": "fracture_xray_certification",
+              "question": "Was Kai’s broken arm confirmed by X-ray and certified by a registered medical practitioner?",
+              "statements": [
+                {
+                  "text": "Kai is covered under the SunHaven Family Accident Guard, which covers bodily injury caused solely and directly by an accident; a fracture caused by sickness, disease, or a gradual or degenerative condition is not covered.",
+                  "subject_id": "74000000-0000-4000-8000-000000000003",
+                  "evidence_ids": [
+                    "e7"
+                  ]
+                },
+                {
+                  "text": "The policy lists a Fracture benefit (per fracture) of S$750 for Kai’s Child tier, payable once per fracture if confirmed by X-ray and certified by a registered medical practitioner.",
+                  "benefit": "Fracture benefit (per fracture)",
+                  "value_ids": [
+                    "v2"
+                  ],
+                  "subject_id": "74000000-0000-4000-8000-000000000003",
+                  "evidence_ids": [
+                    "e5"
+                  ]
+                }
+              ],
+              "subject_id": "74000000-0000-4000-8000-000000000003",
+              "because_evidence_ids": [
+                "e5"
+              ]
+            },
+            "name": "ask_user",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [
+          "e5",
+          "e7",
+          "e13"
+        ],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": [
+          {
+            "to": "fell off his bicycle at the park",
+            "key": "how_it_happened",
+            "from": "not stated"
+          }
+        ]
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 238,
+            "role": "table_header",
+            "text": "Policy owner                  Daniel Lim Wen Jie",
+            "start": 190,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "support": {
+          "end": 295,
+          "text": "Period of cover               01 Feb 2026 to 31 Jan 2027",
+          "start": 239,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "support": {
+          "end": 554,
+          "text": "Kai Lim Jun Hao               Insured Child     06 May 2014",
+          "start": 495,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 233,
+            "role": "table_header",
+            "text": "Policyholder                  Daniel Lim Wen Jie",
+            "start": 185,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "support": {
+          "end": 290,
+          "text": "Period of insurance           01 Apr 2026 to 31 Mar 2027",
+          "start": 234,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "support": {
+          "end": 533,
+          "text": "Kai Lim Jun Hao               Child         06 May 2014",
+          "start": 478,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "support": {
+          "end": 355,
+          "text": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+          "start": 239,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 996,
+          "text": "Schedule of benefits\nBenefit                                                 Adult         Child\nAccident medical expenses (per accident)                S$3,000       S$1,500\nFracture benefit (per fracture)                         S$1,200       S$750\nAccidental dental treatment (per accident)              S$800         S$400\nAccidental death                                        S$100,000     S$20,000",
+          "start": 591,
+          "onPage": 1
+        },
+        "support": {
+          "end": 765,
+          "text": "Accident medical expenses (per accident)                S$3,000       S$1,500",
+          "start": 688,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 237,
+          "text": "Section 2 - What is covered\nThis policy covers Bodily Injury caused solely and directly by an Accident. A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 237,
+          "text": "A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+          "start": 104,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 888,
+          "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 616,
+          "onPage": 1
+        },
+        "support": {
+          "end": 629,
+          "text": "Benefit table",
+          "start": 616,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e9": {
+        "id": "e9",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 478,
+          "text": "Illness and accident are both covered.",
+          "start": 440,
+          "onPage": 2
+        },
+        "support": {
+          "end": 478,
+          "text": "Illness and accident are both covered.",
+          "start": 440,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-careday"
+      },
+      "e10": {
+        "id": "e10",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 597,
+          "text": "Section 4 - Where you are covered\nThis policy covers Accidents anywhere in the world.",
+          "start": 512,
+          "onPage": 2
+        },
+        "support": {
+          "end": 597,
+          "text": "This policy covers Accidents anywhere in the world.",
+          "start": 546,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e11": {
+        "id": "e11",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "support": {
+          "end": 510,
+          "text": "Accidental dental treatment pays the cost of treatment to sound natural teeth damaged by an Accident, up to the limit per accident shown in the Schedule.",
+          "start": 357,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e12": {
+        "id": "e12",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 140,
+          "text": "Harbourline General Insurance                                           Policy HG-PA-771204\nSunHaven Family Accident Guard - Policy Schedule",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 140,
+          "text": "SunHaven Family Accident Guard - Policy Schedule",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e13": {
+        "id": "e13",
+        "via": "select_table_value",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "cell": {
+            "end": 841,
+            "text": "S$750",
+            "start": 836
+          },
+          "tableId": "74000000-0000-4000-8000-000000000101:p1:t3",
+          "rowLabel": "Fracture benefit (per fracture)",
+          "appliesTo": {
+            "kind": "person_class",
+            "value": "Child",
+            "personClass": "child"
+          },
+          "columnLeaf": "Child",
+          "columnHeader": "Child"
+        },
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 841,
+          "text": "Fracture benefit (per fracture)                         S$1,200       S$750",
+          "start": 766,
+          "onPage": 1
+        },
+        "support": {
+          "end": 841,
+          "text": "Fracture benefit (per fracture)                         S$1,200       S$750",
+          "start": 766,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e14": {
+        "id": "e14",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "passage": {
+          "end": 93,
+          "text": "Effective date: 01 Jul 2026",
+          "start": 66,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000104",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel-endt1"
+      },
+      "e15": {
+        "id": "e15",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 133,
+          "text": "Life assured: Daniel Lim Wen Jie",
+          "start": 101,
+          "onPage": 1
+        },
+        "support": {
+          "end": 133,
+          "text": "Life assured: Daniel Lim Wen Jie",
+          "start": 101,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e16": {
+        "id": "e16",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 434,
+          "text": "Daniel Lim Wen Jie            Insured Adult     11 Mar 1980",
+          "start": 375,
+          "onPage": 1
+        },
+        "support": {
+          "end": 434,
+          "text": "Daniel Lim Wen Jie            Insured Adult     11 Mar 1980",
+          "start": 375,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-careday"
+      },
+      "e17": {
+        "id": "e17",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 289,
+            "role": "table_header",
+            "text": "Insured child                 Mei Lim Xin Hui",
+            "start": 244,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "support": {
+          "end": 346,
+          "text": "Period of cover               01 Jun 2026 to 31 May 2027",
+          "start": 290,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": null,
+        "documentHash": "sha256:live-playwell"
+      },
+      "e18": {
+        "id": "e18",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 243,
+          "text": "Parent or guardian            Daniel Lim Wen Jie",
+          "start": 195,
+          "onPage": 1
+        },
+        "support": {
+          "end": 243,
+          "text": "Parent or guardian            Daniel Lim Wen Jie",
+          "start": 195,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000105",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-playwell"
+      },
+      "e19": {
+        "id": "e19",
+        "via": "policies_for",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 421,
+          "text": "Daniel Lim Wen Jie            Adult         11 Mar 1980",
+          "start": 366,
+          "onPage": 1
+        },
+        "support": {
+          "end": 421,
+          "text": "Daniel Lim Wen Jie            Adult         11 Mar 1980",
+          "start": 366,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e20": {
+        "id": "e20",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 172,
+          "text": "Kestrel Health Insurance\nKestrelShield Integrated Plan - Policy Schedule\nPolicy number: KH-IS-338861\nLife assured: Daniel Lim Wen Jie\nPolicy year 01 Apr 2026 to 31 Mar 2027",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 72,
+          "text": "KestrelShield Integrated Plan - Policy Schedule",
+          "start": 25,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e21": {
+        "id": "e21",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 187,
+            "role": "table_header",
+            "text": "Benefit\tLimit",
+            "start": 174,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Benefit\tLimit\nDeductible (per policy year, private hospital)\tS$3,500\nCo-insurance\t10%\nAnnual claim limit\tS$1,000,000",
+          "start": 174,
+          "onPage": 1
+        },
+        "support": {
+          "end": 242,
+          "text": "Deductible (per policy year, private hospital)\tS$3,500",
+          "start": 188,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": "74000000-0000-4000-8000-000000000001",
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e22": {
+        "id": "e22",
+        "via": "read_page",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "passage": {
+          "end": 290,
+          "text": "Kestrel Health Insurance\nKestrelShield Integrated Plan - Policy Schedule\nPolicy number: KH-IS-338861\nLife assured: Daniel Lim Wen Jie\nPolicy year 01 Apr 2026 to 31 Mar 2027\n\nBenefit\tLimit\nDeductible (per policy year, private hospital)\tS$3,500\nCo-insurance\t10%\nAnnual claim limit\tS$1,000,000",
+          "start": 0,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e23": {
+        "id": "e23",
+        "via": "select_table_value",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": {
+          "cell": {
+            "end": 765,
+            "text": "S$1,500",
+            "start": 758
+          },
+          "tableId": "74000000-0000-4000-8000-000000000101:p1:t3",
+          "rowLabel": "Accident medical expenses (per accident)",
+          "appliesTo": {
+            "kind": "person_class",
+            "value": "Child",
+            "personClass": "child"
+          },
+          "columnLeaf": "Child",
+          "columnHeader": "Child"
+        },
+        "context": [
+          {
+            "end": 687,
+            "role": "table_header",
+            "text": "Benefit                                                 Adult         Child",
+            "start": 612,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 765,
+          "text": "Accident medical expenses (per accident)                S$3,000       S$1,500",
+          "start": 688,
+          "onPage": 1
+        },
+        "support": {
+          "end": 765,
+          "text": "Accident medical expenses (per accident)                S$3,000       S$1,500",
+          "start": 688,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": "74000000-0000-4000-8000-000000000003",
+        "documentHash": "sha256:live-sunhaven"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000003",
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 2,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000003",
+        "citations": [
+          {
+            "chunkId": "rag2:e21",
+            "excerpt": "Benefit\tLimit\nDeductible (per policy year, private hospital)\tS$3,500",
+            "insurer": "Kestrel Health Insurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000103",
+            "pageStart": 1,
+            "policyName": "KestrelShield Integrated Plan",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "value": 3500,
+            "column": null,
+            "benefit": "Deductible (per policy year, private hospital)",
+            "pageEnd": 1,
+            "passage": "Benefit\tLimit\nDeductible (per policy year, private hospital)\tS$3,500\nCo-insurance\t10%\nAnnual claim limit\tS$1,000,000",
+            "currency": "SGD",
+            "policyId": "74000000-0000-4000-8000-000000000103",
+            "sentence": "Daniel, your KestrelShield Integrated Plan lists a deductible of S$3,500 per policy year for a private hospital (page 1).",
+            "pageStart": 1,
+            "subjectId": "74000000-0000-4000-8000-000000000001",
+            "documentHash": "sha256:live-kestrel"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      },
+      {
+        "turn": 3,
+        "resolvedFamilyMemberId": "74000000-0000-4000-8000-000000000003",
+        "citations": [
+          {
+            "chunkId": "rag2:e7",
+            "excerpt": "A fracture caused by sickness, disease or a gradual or degenerative condition (such as osteoporosis or a bone tumour) is not covered.",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 2,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e5",
+            "excerpt": "Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 2,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 2,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          },
+          {
+            "chunkId": "rag2:e13",
+            "excerpt": "Benefit                                                 Adult         Child\nFracture benefit (per fracture)                         S$1,200       S$750",
+            "insurer": "Harbourline General Insurance",
+            "pageEnd": 1,
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "pageStart": 1,
+            "policyName": "SunHaven Family Accident Guard",
+            "documentRole": "schedule"
+          }
+        ],
+        "figureBindings": [
+          {
+            "value": 750,
+            "column": "Child",
+            "benefit": "Fracture benefit (per fracture)",
+            "pageEnd": 1,
+            "passage": "Fracture benefit (per fracture)                         S$1,200       S$750",
+            "currency": "SGD",
+            "policyId": "74000000-0000-4000-8000-000000000101",
+            "sentence": "The policy lists a Fracture benefit (per fracture) of S$750 for Kai’s Child tier, payable once per fracture if confirmed by X-ray and certified by a registered medical practitioner.",
+            "pageStart": 1,
+            "subjectId": "74000000-0000-4000-8000-000000000003",
+            "documentHash": "sha256:live-sunhaven"
+          }
+        ],
+        "calculations": [],
+        "computations": [],
+        "questions": [
+          {
+            "id": "rag_fact_fracture_xray_certification",
+            "why": "This changes what your policy pays under: “Fracture benefit is payable once per fracture confirmed by X-ray and certified by a registered medical practitioner.” (page 2)",
+            "text": "Was Kai’s broken arm confirmed by X-ray and certified by a registered medical practitioner?",
+            "type": "text"
+          }
+        ]
+      }
+    ]
+  }
+}

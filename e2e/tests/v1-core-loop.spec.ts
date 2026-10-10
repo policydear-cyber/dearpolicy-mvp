@@ -415,7 +415,7 @@ test.describe.serial("V1 core loop (phase A)", () => {
       const c = page.locator(".document-card").filter({ hasText: deletedName }).first();
       await c.getByRole("button", { name: "Delete" }).click();
       await c.getByRole("button", { name: "Confirm delete" }).click();
-      soft(await expect(page.locator(".upload-panel .upload-status")).toContainText("was deleted", { timeout: 60_000 }).then(() => true, () => false), `delete of "${deletedName}": no "was deleted" confirmation`);
+      soft(await expect(page.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/, { timeout: 60_000 }).then(() => true, () => false), `delete of "${deletedName}": no deletion confirmation`);
       soft(!(await policies(page)).some((p) => p.id === target.id), `deleted policy still listed by /api/policies`);
       await page.screenshot({ path: path.join(OUT, "after-delete-policies.png"), fullPage: true });
       // Any other household-A policy that carries the same fracture wording stays; record which.

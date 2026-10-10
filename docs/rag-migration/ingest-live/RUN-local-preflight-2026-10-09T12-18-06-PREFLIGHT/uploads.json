@@ -1,0 +1,103 @@
+[
+  {
+    "file": "hx-text.pdf",
+    "uploadedAt": "2026-10-09T12:18:18.160Z",
+    "screenshots": [
+      "screenshots/02-upload-1-received.png",
+      "screenshots/03-upload-1-processing.png",
+      "screenshots/04-upload-1-final.png"
+    ],
+    "states": [
+      {
+        "at": 1102,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 7726,
+        "state": "not_scanned_prototype/extracting:reading_pdf",
+        "message": "Reading pages and extracting text…"
+      },
+      {
+        "at": 10264,
+        "state": "not_scanned_prototype/queued:retrying",
+        "message": "DearPolicy is still reading this document and will finish automatically."
+      }
+    ],
+    "policyId": "66c5a09f-6da0-4ef8-a42d-de7984f4a478",
+    "productName": null,
+    "finalStatus": "not_scanned_prototype/queued",
+    "msToFinal": 92744,
+    "ready": false,
+    "error": null,
+    "message": "DearPolicy is still reading this document and will finish automatically.",
+    "needsReview": false,
+    "reviewReason": null,
+    "linked": [],
+    "detected": []
+  },
+  {
+    "file": "hx-endorsement.pdf",
+    "uploadedAt": "2026-10-09T12:19:51.207Z",
+    "screenshots": [
+      "screenshots/05-upload-2-received.png",
+      "screenshots/06-upload-2-processing.png",
+      "screenshots/07-upload-2-final.png"
+    ],
+    "states": [
+      {
+        "at": 638,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 4636,
+        "state": "not_scanned_prototype/queued:retrying",
+        "message": "DearPolicy is still reading this document and will finish automatically."
+      }
+    ],
+    "policyId": "fcd99dbd-b5cd-428c-8cda-d2e5535077b5",
+    "productName": null,
+    "finalStatus": "not_scanned_prototype/queued",
+    "msToFinal": 91644,
+    "ready": false,
+    "error": null,
+    "message": "DearPolicy is still reading this document and will finish automatically.",
+    "needsReview": false,
+    "reviewReason": null,
+    "linked": [],
+    "detected": []
+  },
+  {
+    "file": "hx-scanned.pdf",
+    "uploadedAt": "2026-10-09T12:21:23.066Z",
+    "screenshots": [
+      "screenshots/08-upload-3-received.png",
+      "screenshots/09-upload-3-processing.png",
+      "screenshots/10-upload-3-final.png"
+    ],
+    "states": [
+      {
+        "at": 677,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 4676,
+        "state": "not_scanned_prototype/queued:retrying",
+        "message": "DearPolicy is still reading this document and will finish automatically."
+      }
+    ],
+    "policyId": "6cd4bb34-5037-4158-83b7-c3c6ba161676",
+    "productName": null,
+    "finalStatus": "not_scanned_prototype/queued",
+    "msToFinal": 91906,
+    "ready": false,
+    "error": null,
+    "message": "DearPolicy is still reading this document and will finish automatically.",
+    "needsReview": false,
+    "reviewReason": null,
+    "linked": [],
+    "detected": []
+  }
+]

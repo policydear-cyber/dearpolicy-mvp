@@ -31,6 +31,7 @@ import { INCOMPLETE_PDF_MESSAGE, PDF_PASSWORD_INCORRECT_MESSAGE, PDF_PASSWORD_RE
 import { householdPersonFromWords } from "./person-words";
 import { replacedFigures } from "@/lib/policies/amendments";
 import { askedCoverage, bestLines, columnsFor, narrowToColumn, piecesOf, quoted, wordsOf } from "./printed-lines";
+import { citeAnswerLines } from "./answer-verification";
 
 export type DocumentAnswer = { summary: string; details: string[]; nextSteps: string[]; citations: ChatCitation[]; personId: string | null; patch: Partial<ConversationState> };
 type Doc = { id: string; file: string; role: string | null; status: string; error: string | null; message: string | null; product: string | null; insurer: string | null;
@@ -117,7 +118,13 @@ const ROLE_ASK: [CorrespondenceRole, RegExp][] = [
   ["personal_notes", /\b(?:my|our|the) (?:own )?notes\b|\b(?:typed|wrote|written|made|jotted) (?:up |down )?(?:some |the |my |our )?notes\b|\bnotes? (?:i|we) (?:wrote|typed|made)\b|\bword (?:file|document|doc)\b|\.docx\b/i],
 ];
 
-export async function documentQuestionAnswer(args: { accountId: string; question: string; family: ClaimPerson[]; current: ClaimPerson | null; state: ConversationState; subjects?: ClaimPerson[] }): Promise<DocumentAnswer | null> {
+// Gate R17: each line's figures are read from the page it cites (resolved on that page at save time).
+export async function documentQuestionAnswer(args: Parameters<typeof documentQuestionAnswerInner>[0]): Promise<DocumentAnswer | null> {
+  const r = await documentQuestionAnswerInner(args);
+  if (r) citeAnswerLines(null, [r.summary, ...r.details, ...r.nextSteps], r.citations);
+  return r;
+}
+async function documentQuestionAnswerInner(args: { accountId: string; question: string; family: ClaimPerson[]; current: ClaimPerson | null; state: ConversationState; subjects?: ClaimPerson[] }): Promise<DocumentAnswer | null> {
   const text = args.question.trim();
   if (!text || text.split(/\s+/).length > 60) return null;
   // (A question about the policies as a set -- lib/chat/registry-answers.ts -- is not an upload to follow up on.)
@@ -547,7 +554,13 @@ export function earlierYearAsked(text: string, today = new Date()) {
   return /\blast year\b|\bprevious (?:year|schedule|policy year|period)\b|\bearlier schedule\b|\bold(?:er)? schedule\b/i.test(text)
     || [...text.matchAll(/\b(20\d\d)\b/g)].some((m) => Number(m[1]) < year && !/\b(?:since|from|until|till|to)\s+(?:\d{1,2}\s+\w+\s+)?20\d\d\b/i.test(text));
 }
-export async function printedLinesAnswer(args: { accountId: string; question: string; people: ClaimPerson[]; family: ClaimPerson[]; attribute?: boolean; topic?: string | null; min?: number; strict?: boolean }): Promise<{ summary: string; details: string[]; citations: ChatCitation[]; personId: string | null } | null> {
+// Gate R17: each line's figures are read from the page it cites (resolved on that page at save time).
+export async function printedLinesAnswer(args: Parameters<typeof printedLinesAnswerInner>[0]) {
+  const r = await printedLinesAnswerInner(args);
+  if (r) citeAnswerLines(null, [r.summary, ...r.details], r.citations);
+  return r;
+}
+async function printedLinesAnswerInner(args: { accountId: string; question: string; people: ClaimPerson[]; family: ClaimPerson[]; attribute?: boolean; topic?: string | null; min?: number; strict?: boolean }): Promise<{ summary: string; details: string[]; citations: ChatCitation[]; personId: string | null } | null> {
   const question = args.question.trim();
   if (!question || question.split(/\s+/).length > 30) return null;
   // Advice is not a line of a document.

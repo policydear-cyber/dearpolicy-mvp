@@ -445,7 +445,7 @@ test.describe.serial("V1.1 release journey", () => {
       const card = owner.locator(".document-card").filter({ hasText: p?.product_name ?? `${PREFIX}-AccidentGuard-M` }).first();
       await card.getByRole("button", { name: "Delete" }).click();
       await card.getByRole("button", { name: "Confirm delete" }).click();
-      await expect(owner.locator(".upload-panel .upload-status")).toContainText("was deleted", { timeout: 60_000 });
+      await expect(owner.getByTestId("library-notice")).toContainText(/Deleted .*no longer used in answers/, { timeout: 60_000 });
     });
     await newChat(owner);
     for (const q of V11_QUESTIONS.filter((x) => x.household === "A" && x.phase === "post")) await chatTurn(owner, "A", docs, "after deletion", q.id, q.text, composer(owner, q.text));
@@ -527,7 +527,8 @@ test.describe.serial("V1.1 release journey", () => {
       if (!hhName.toLowerCase().includes(PREFIX.toLowerCase())) { soft(false, `refusing to delete a non-synthetic household "${hhName}"`); continue; }
       await page.getByLabel("Household name").fill(hhName);
       await page.getByRole("button", { name: "Permanently delete household" }).click();
-      await page.waitForURL((u) => u.pathname === "/", { timeout: 60_000 }).catch(() => soft(false, `household ${hhName} deletion did not return home (${email})`));
+      // "Permanently delete household" lands on its own confirmation page (app/household/deleted).
+      await page.waitForURL((u) => u.pathname === "/household/deleted", { timeout: 60_000 }).catch(() => soft(false, `household ${hhName} deletion did not reach its confirmation page (${email})`));
       void password;
     }
     await writeFile(path.join(OUT, "journey.json"), JSON.stringify({ ...journey, ids: { householdA: ids.household, householdB: ids.householdB }, failures }, null, 2));

@@ -58,6 +58,10 @@ async function resolveTargetPolicyId(accountId: string, sourcePolicyId: string, 
   return result.rows[0]?.id ?? sourcePolicyId;
 }
 
+/** Two documents' policy numbers are the same number (letters and digits only, case-insensitive; at least 5). */
+const SAME_POLICY_NUMBER = (a: string, b: string) =>
+  `(length(regexp_replace(coalesce(${a}.policy_number,''),'[^A-Za-z0-9]','','g'))>=5 AND upper(regexp_replace(${a}.policy_number,'[^A-Za-z0-9]','','g'))=upper(regexp_replace(coalesce(${b}.policy_number,''),'[^A-Za-z0-9]','','g')))`;
+
 export async function linkRelatedReferenceDocuments(accountId: string, policyId: string, groupPolicyNumber?: string | null) {
   // Match reference material conservatively: same group-policy number is strongest; exact insurer + product name is the fallback.
   await query(
@@ -73,7 +77,10 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
         AND (
           (current.group_policy_number IS NOT NULL AND current.group_policy_number=ref.group_policy_number) OR
           (current.insurer IS NOT NULL AND ref.insurer IS NOT NULL AND lower(current.insurer)=lower(ref.insurer)
-           AND current.product_name IS NOT NULL AND ref.product_name IS NOT NULL AND lower(current.product_name)=lower(ref.product_name))
+           AND current.product_name IS NOT NULL AND ref.product_name IS NOT NULL AND lower(current.product_name)=lower(ref.product_name)) OR
+          -- Round 8b: the same policy number (letters and digits only) and product -- an endorsement names the policy it
+          -- amends, while the insurer's name is read differently from page to page ("... Pte. Ltd." or not).
+          (${SAME_POLICY_NUMBER("current", "ref")} AND current.product_name IS NOT NULL AND ref.product_name IS NOT NULL AND lower(current.product_name)=lower(ref.product_name))
         )
       -- Round 10: one row per (document, person) even when several documents match
       -- (a schedule and its photo, last year's schedule); Postgres refuses a second.
@@ -92,7 +99,8 @@ export async function linkRelatedReferenceDocuments(accountId: string, policyId:
         AND (
           (current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number) OR
           (current.insurer IS NOT NULL AND personal.insurer IS NOT NULL AND lower(current.insurer)=lower(personal.insurer)
-           AND current.product_name IS NOT NULL AND personal.product_name IS NOT NULL AND lower(current.product_name)=lower(personal.product_name))
+           AND current.product_name IS NOT NULL AND personal.product_name IS NOT NULL AND lower(current.product_name)=lower(personal.product_name)) OR
+          (${SAME_POLICY_NUMBER("current", "personal")} AND current.product_name IS NOT NULL AND personal.product_name IS NOT NULL AND lower(current.product_name)=lower(personal.product_name))
         )
       ORDER BY pm.family_member_id,(current.group_policy_number IS NOT NULL AND current.group_policy_number=personal.group_policy_number) DESC
      ON CONFLICT(policy_id,family_member_id) DO UPDATE SET source='scheme_reference_match',confidence=EXCLUDED.confidence`,

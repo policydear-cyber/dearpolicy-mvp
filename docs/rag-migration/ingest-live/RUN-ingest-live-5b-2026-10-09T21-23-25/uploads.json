@@ -1,0 +1,187 @@
+[
+  {
+    "file": "hx-text.pdf",
+    "uploadedAt": "2026-10-09T21:23:29.970Z",
+    "screenshots": [
+      "screenshots/02-upload-1-received.png",
+      "screenshots/03-upload-1-processing.png",
+      "screenshots/04-upload-1-final.png"
+    ],
+    "states": [
+      {
+        "at": 555,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 7189,
+        "state": "not_scanned_prototype/extracting:reading_pdf",
+        "message": "Reading page 1 of 2…"
+      },
+      {
+        "at": 9711,
+        "state": "not_scanned_prototype/extracting:ai_extraction",
+        "message": "Reading a compact evidence sample from this document…"
+      },
+      {
+        "at": 22304,
+        "state": "not_scanned_prototype/indexing:benefits",
+        "message": "Reading the benefit rules — page 2 of 2…"
+      },
+      {
+        "at": 24822,
+        "state": "not_scanned_prototype/indexing:conditions",
+        "message": "Reading the exclusions and waiting periods — page 2 of 2…"
+      },
+      {
+        "at": 29856,
+        "state": "not_scanned_prototype/ready:complete",
+        "message": "Ready."
+      }
+    ],
+    "policyId": "dcba5528-5e6a-4b02-8393-acdce94dc585",
+    "productName": "SafeStay Family Hospital Cash & Personal Accident Plan",
+    "finalStatus": "not_scanned_prototype/ready",
+    "msToFinal": 30919,
+    "ready": true,
+    "error": null,
+    "message": "Ready.",
+    "needsReview": false,
+    "reviewReason": null,
+    "linked": [
+      "Felix Oran Hartwell",
+      "Isla Maren Hartwell",
+      "Leonie Brigitte Hartwell",
+      "Simon Alastair Hartwell"
+    ],
+    "detected": [
+      {
+        "name": "Felix Oran Hartwell",
+        "matchedFamilyMemberId": "87138247-165a-4e2b-902c-cf74dbdbf17f"
+      },
+      {
+        "name": "Isla Maren Hartwell",
+        "matchedFamilyMemberId": "6ebf3b32-02c6-4f55-9161-1b543ea01a55"
+      },
+      {
+        "name": "Leonie Brigitte Hartwell",
+        "matchedFamilyMemberId": "7ac01a87-1fa1-4de5-86bd-fb768461befa"
+      },
+      {
+        "name": "Simon Alastair Hartwell",
+        "matchedFamilyMemberId": "85e0b5c0-7048-4226-bbe1-ecc59f24e658"
+      }
+    ]
+  },
+  {
+    "file": "hx-endorsement.pdf",
+    "uploadedAt": "2026-10-09T21:24:01.025Z",
+    "screenshots": [
+      "screenshots/05-upload-2-received.png",
+      "screenshots/06-upload-2-processing.png",
+      "screenshots/07-upload-2-final.png"
+    ],
+    "states": [
+      {
+        "at": 327,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 26614,
+        "state": "not_scanned_prototype/extracting:ai_extraction",
+        "message": "Reading a compact evidence sample from this document…"
+      },
+      {
+        "at": 29130,
+        "state": "not_scanned_prototype/indexing:benefits",
+        "message": "Reading the benefit rules — page 1 of 1…"
+      },
+      {
+        "at": 31646,
+        "state": "not_scanned_prototype/indexing:conditions",
+        "message": "Reading the exclusions and waiting periods — page 1 of 1…"
+      },
+      {
+        "at": 34161,
+        "state": "not_scanned_prototype/ready:complete",
+        "message": "Ready."
+      }
+    ],
+    "policyId": "73d48e11-a158-4005-9ee9-6c55e5826b90",
+    "productName": "SafeStay Family Hospital Cash & Personal Accident Plan",
+    "finalStatus": "not_scanned_prototype/ready",
+    "msToFinal": 35249,
+    "ready": true,
+    "error": null,
+    "message": "Ready.",
+    "needsReview": false,
+    "reviewReason": null,
+    "linked": [
+      "Felix Oran Hartwell",
+      "Isla Maren Hartwell",
+      "Leonie Brigitte Hartwell",
+      "Simon Alastair Hartwell"
+    ],
+    "detected": []
+  },
+  {
+    "file": "hx-scanned.pdf",
+    "uploadedAt": "2026-10-09T21:24:36.630Z",
+    "screenshots": [
+      "screenshots/08-upload-3-received.png",
+      "screenshots/09-upload-3-processing.png",
+      "screenshots/10-upload-3-final.png"
+    ],
+    "states": [
+      {
+        "at": 1066,
+        "state": "uploaded/queued:queued",
+        "message": "Document received — reading and extracting information."
+      },
+      {
+        "at": 4681,
+        "state": "not_scanned_prototype/extracting:ocr",
+        "message": "Reading 1 scanned page…"
+      },
+      {
+        "at": 9715,
+        "state": "not_scanned_prototype/extracting:ai_extraction",
+        "message": "Reading a compact evidence sample from this document…"
+      },
+      {
+        "at": 14748,
+        "state": "not_scanned_prototype/indexing:benefits",
+        "message": "Reading the benefit rules — page 1 of 1…"
+      },
+      {
+        "at": 17262,
+        "state": "not_scanned_prototype/indexing:conditions",
+        "message": "Reading the exclusions and waiting periods — page 1 of 1…"
+      },
+      {
+        "at": 19778,
+        "state": "not_scanned_prototype/ready:complete",
+        "message": "Ready."
+      }
+    ],
+    "policyId": "553c4e71-f37b-4828-83ca-da9def0da3b1",
+    "productName": "JuniorShield Child Hospital Income Plan",
+    "finalStatus": "not_scanned_prototype/ready",
+    "msToFinal": 20864,
+    "ready": true,
+    "error": null,
+    "message": "Ready.",
+    "needsReview": false,
+    "reviewReason": null,
+    "linked": [
+      "Isla Maren Hartwell"
+    ],
+    "detected": [
+      {
+        "name": "Isla Maren Hartwell",
+        "matchedFamilyMemberId": "6ebf3b32-02c6-4f55-9161-1b543ea01a55"
+      }
+    ]
+  }
+]

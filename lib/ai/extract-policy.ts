@@ -47,6 +47,8 @@ export const PolicyExtractionSchema = z.object({
 });
 
 export type PolicyExtraction = z.infer<typeof PolicyExtractionSchema>;
+/** The policy-extraction reply's output bound (it had none: an unbounded request). Room for a multi-person schedule. */
+export const POLICY_EXTRACTION_MAX_OUTPUT_TOKENS = 6000;
 
 const REFERENCE_ROLE_PATTERNS: Array<{ role: NonNullable<PolicyExtraction["documentRole"]>; test: (text: string) => boolean }> = [
   { role: "product_summary", test: (text) => /product summar(?:y|ies)/i.test(text) && /refer to (?:your )?certificate of insurance/i.test(text) },
@@ -273,6 +275,8 @@ export async function extractPolicyStructure(pages: PdfPage[], owner?: { account
       user: `Extract only facts supported by these selected pages. The complete document will be indexed separately.\n\n${delimitDocument(primarySample)}`,
       schema: PolicyExtractionSchema,
       temperature: 0,
+      // Bounded: a request with no max output is unbounded spend (and the live run's guard refuses it).
+      maxOutputTokens: POLICY_EXTRACTION_MAX_OUTPUT_TOKENS,
       timeoutMs: 240_000,
       attempts: 1,
       }));
@@ -291,6 +295,7 @@ export async function extractPolicyStructure(pages: PdfPage[], owner?: { account
       user: `Retry with a minimal evidence sample. Extract only clearly visible facts; use null/[] for everything else.\n\n${delimitDocument(fallbackSample)}`,
       schema: PolicyExtractionSchema,
       temperature: 0,
+      maxOutputTokens: POLICY_EXTRACTION_MAX_OUTPUT_TOKENS,
       timeoutMs: 180_000,
       attempts: 1,
       }));

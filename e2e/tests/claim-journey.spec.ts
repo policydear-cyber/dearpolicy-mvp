@@ -43,6 +43,15 @@ async function api<T = unknown>(page: Page, url: string, init?: { method?: strin
   }, { url, init });
 }
 
+/** While a fact is still needed the open question is the turn and the full assessment sits behind "Show full
+ * assessment" (app/chat/page.tsx): the question must be shown, then the assessment is opened to read it. */
+async function openAssessment(answer: import("@playwright/test").Locator) {
+  const collapsed = answer.getByTestId("assessment-details");
+  if (!(await collapsed.count())) return;
+  await expect(answer.locator(".fact-question").first()).toBeVisible();
+  await collapsed.locator("summary").click();
+}
+
 /** Sends one message through the chat UI and returns the new answer bubble. */
 async function ask(page: Page, text: string) {
   const answers = page.locator(".message.assistant:not(:has(.thinking))");
@@ -92,16 +101,27 @@ test.describe.serial("synthetic claim journey", () => {
     await page.goto("/chat");
     await page.getByLabel("Message to DearPolicy").fill(`${PREFIX}-Claimant here. I was diagnosed with stage 2 breast cancer. How much can I claim?`);
     await page.getByRole("button", { name: /send/i }).click();
-    const answer = page.locator(".preliminary-assessment, .fact-finding").first();
+    // While a fact is still needed, the open question is the turn: it is shown first, and the full assessment
+    // (fact-finding plan, preliminary notice) sits behind "Show full assessment" (app/chat/page.tsx).
+    const answer = page.locator(".fact-question, .preliminary-assessment, .fact-finding").first();
     await expect(answer).toBeVisible({ timeout: 180_000 });
-    await expect(page.getByTestId("preliminary-assessment")).toBeVisible();
+    const collapsed = page.getByTestId("assessment-details").last();
+    if (await collapsed.count()) {
+      await expect(page.locator(".fact-question").last()).toBeVisible();
+      await collapsed.locator("summary").click();
+    }
+    // The claim interview asks its facts one at a time first (here: the diagnosis date). A preliminary assessment --
+    // and its notice -- appears only once there are claim cards; a card never appears without the notice.
+    const cards = await page.locator(".claim-result").count();
+    if (cards) await expect(page.getByTestId("preliminary-assessment")).toBeVisible();
+    else await expect(page.locator(".fact-question").last()).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toContainText(/Critical illness/i);
     await expect(page.getByTestId("fact-finding")).toContainText(/Specialist's diagnosis report/i);
     const body = await page.locator("main").innerText();
     expect(body).not.toMatch(FORBIDDEN);
     // No claim card and no total carries a figure before reviewed evidence.
-    for (const text of await page.locator(".claim-item, .claim-card").allInnerTexts()) expect(text).not.toMatch(/S\$\s?\d|SGD\s?\d/);
+    for (const text of await page.locator(".claim-item, .claim-card, .claim-result").allInnerTexts()) expect(text).not.toMatch(/S\$\s?\d|SGD\s?\d/);
     expect(await page.locator(".potential-totals, [data-testid=potential-totals]").count()).toBe(0);
     const limits = page.getByTestId("policy-stated-limits");
     if (await limits.count()) {
@@ -143,10 +163,17 @@ test.describe.serial("synthetic claim journey", () => {
     await page.getByRole("button", { name: "New chat" }).click();
     const answer = await ask(page, `${patientName}: what is the waiting period for critical illness on the Living Care plan?`);
     await expect(answer).toContainText("90 days");
-    // Before review no policy amount is shown, with or without a stated currency.
+    // A factual answer may state a printed figure (V1.1: with its page and whether it is confirmed current), never an
+    // estimate. Each money figure must sit on a line that cites its page, in the currency its document writes:
+    // S$200,000 (SGD schedule) and US$100,000 (USD schedule) only; the schedule that writes no currency ("50,000") is
+    // never shown as an amount, and nothing is totalled.
     const text1 = await answer.innerText();
-    expect(text1).not.toMatch(MONEY);
-    expect(text1).not.toMatch(/\b(?:50|100|200),000\b/);
+    for (const l of text1.split("\n").filter((x) => MONEY.test(x))) {
+      expect(l, "a money figure cites its page").toMatch(/\(page \d+/);
+      expect(l, "only the amounts the documents print with their currency").toMatch(/S\$200,000|US\$100,000/);
+    }
+    expect(text1).not.toMatch(/(?<![$\d,])50,000\b/);
+    expect(text1).not.toMatch(/\b(?:300|250|150),000\b|total/i);
     const citations = answer.locator("details.citations");
     await expect(citations).toContainText("Living Care");
     await expect(citations).toContainText("Page 5");
@@ -161,25 +188,30 @@ test.describe.serial("synthetic claim journey", () => {
     // Each is a separate event, so each starts its own chat (a follow-up in the
     // same chat is, correctly, treated as more facts about the same event).
     const cases: [string, RegExp[]][] = [
-      [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, [/Hospital cash/i, /Medical reimbursement/i]],
+      // The claimant's only cover is the critical-illness plan: no hospital-cash plan is opened for a benefit they do
+      // not have (lib/chat/fact-finding-chat.ts), so that is checked too (below).
+      [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, [/Medical reimbursement/i]],
       [`${claimant}'s flight was delayed 9 hours on the trip. Can we claim?`, [/Travel/i]],
       [`${claimant} is unable to work since 2026-07-01 after an injury. What can be claimed?`, [/Disability/i]],
-      [`${PREFIX}-Relative died in a road accident on 2026-09-01. What can we claim?`, [/Accidental death/i]],
+      // The death plan is labelled "Death" (any cause; the accidental-death definition is a reviewer check).
+      [`${PREFIX}-Relative died in a road accident on 2026-09-01. What can we claim?`, [/· Death\b/, /Death certificate/]],
       [`${claimant} was diagnosed with stage 2 breast cancer on 2026-06-01. How much can I claim?`, [/Critical illness/i]],
     ];
     for (const [message, categories] of cases) {
       await page.goto("/chat");
       await page.getByRole("button", { name: "New chat" }).click();
       const answer = await ask(page, message);
+      await openAssessment(answer);
       const plan = answer.getByTestId("fact-finding");
       // On failure, show what the assistant actually said (synthetic data only).
       await expect(plan, `${message}\n--- answer ---\n${(await answer.innerText()).slice(0, 1500)}`).toBeVisible();
       for (const category of categories) await expect(plan, message).toContainText(category);
+      if (/admitted to hospital/.test(message)) await expect(plan, message).not.toContainText(/Hospital cash/i);
       await expect(plan).toContainText(/Information needed|Evidence needed|Reviewer assessment needed/);
       const text = await answer.innerText();
       expect(text, message).not.toMatch(FORBIDDEN);
       expect(text, message).not.toMatch(/\b(?:figures?|amounts?)\b[^.]{0,20}\bestimate\b/i);
-      for (const card of await answer.locator(".claim-item, .claim-card").allInnerTexts()) expect(card).not.toMatch(MONEY);
+      for (const card of await answer.locator(".claim-item, .claim-card, .claim-result").allInnerTexts()) expect(card).not.toMatch(MONEY);
       expect(await answer.getByTestId("indicative-estimate").count()).toBe(0);
     }
   });

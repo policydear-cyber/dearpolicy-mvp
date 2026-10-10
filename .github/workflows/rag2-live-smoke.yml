@@ -1,0 +1,193 @@
+name: rag2 live smoke (synthetic household; real model only on request)
+
+# Runs the live-model smoke (scripts/rag2-live, docs/rag-migration/live/README.md) on a hosted runner.
+# Requested ONLY by a push to claude/conversational-rag-v1-1 whose commit changes ONLY
+# scripts/rag2-live/run-request.json, made by policydear-cyber. The code tested is that commit's parent.
+# The OPENAI_TEST_API_KEY repository secret reaches exactly ONE step ("Model test"): it checks the key is present, makes
+# the free availability check, runs the harness (run.ts starts the app server, and the SERVER process makes the model
+# calls), then scans the output for the key. Without the secret the run is forced to preflight (no model call, US$0).
+# The whole exercise is capped at US$0.50 across runs by docs/rag-migration/live/LEDGER.json.
+# Never set -x; never print the environment.
+on:
+  push:
+    branches: [claude/conversational-rag-v1-1]
+    paths: [scripts/rag2-live/run-request.json]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rag2-live-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dearpolicy_live
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dearpolicy_live"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dearpolicy_live
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Gate: requested by policydear-cyber, in a commit that changes only run-request.json"
+        id: gate
+        env:
+          ACTOR: ${{ github.actor }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$ACTOR" != "policydear-cyber" ]; then echo "::error::refused: runs are requested only by policydear-cyber (actor: $ACTOR)"; exit 1; fi
+          parent=$(git rev-parse "$SHA^1" 2>/dev/null) || { echo "::error::refused: the request commit has no parent"; exit 1; }
+          if git rev-parse -q --verify "$SHA^2" > /dev/null; then echo "::error::refused: the request commit is a merge"; exit 1; fi
+          files=$(git diff --name-only "$parent" "$SHA")
+          if [ "$files" != "scripts/rag2-live/run-request.json" ]; then echo "::error::refused: the request commit must change ONLY scripts/rag2-live/run-request.json (it changes: $(echo $files))"; exit 1; fi
+          if [ "$BEFORE" != "$parent" ]; then echo "::error::refused: push the code first, then the request commit on its own (the push must contain only the request commit)"; exit 1; fi
+          echo "tested=$parent" >> "$GITHUB_OUTPUT"
+          echo "request=$SHA" >> "$GITHUB_OUTPUT"
+          echo "tested code: $parent; request commit: $SHA"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: "Plan: run request against the cumulative ledger (cap = min(request, 0.50 - spent so far))"
+        id: req
+        run: node --import tsx scripts/rag2-live/ledger.ts plan --ledger docs/rag-migration/live/LEDGER.json --request scripts/rag2-live/run-request.json
+
+      - name: next build
+        run: npx next build
+
+      - name: "Database: extensions, schema, synthetic household Lim"
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d dearpolicy_live -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+          npm run db:setup
+          npm run rag2:live-seed
+
+      - name: "Model test (the only step with the secret): presence, free availability check, harness, leak scan"
+        id: test
+        timeout-minutes: 25
+        env:
+          OPENAI_TEST_API_KEY: ${{ secrets.OPENAI_TEST_API_KEY }}
+          NODE_ENV: test
+          NODE_OPTIONS: --max-old-space-size=4096
+          E2E_RAG2_NEXT: start
+          RAG2_LIVE_MODE: direct
+          CHAT_MODEL: openai:gpt-6-luna
+          JUDGEMENT_MODEL: openai:gpt-6-luna
+          NARRATION_MODEL: openai:gpt-6-luna
+          READING_MODEL: openai:gpt-6-luna
+          RAG2_LIVE_EXPECT_MODEL: openai:gpt-6-luna
+          RAG2_LIVE_RUN_CAP_USD: ${{ steps.req.outputs.cap }}
+          DEARPOLICY_RAG_LOOP_RUN_MAX_USD: ${{ steps.req.outputs.cap }}
+          DEARPOLICY_RAG_LOOP_REQUIRE_PRICE: "1"
+          RAG2_LIVE_TESTED_SHA: ${{ steps.gate.outputs.tested }}
+          RAG2_LIVE_REQUEST_SHA: ${{ steps.gate.outputs.request }}
+          REQ_PREFLIGHT: ${{ steps.req.outputs.preflight }}
+          RUN_ID: ${{ steps.req.outputs.run_id }}
+          SCENARIOS: ${{ steps.req.outputs.scenarios }}
+        run: |
+          set +e
+          key="$OPENAI_TEST_API_KEY"
+          unset OPENAI_TEST_API_KEY
+          present=false
+          if [ -n "$key" ]; then present=true; fi
+          preflight="$REQ_PREFLIGHT"
+          if [ "$present" != "true" ]; then preflight=true; echo "::notice::OPENAI_TEST_API_KEY not set: this run is forced to preflight (no model call)"; fi
+          avail_status=""; avail_id=""
+          if [ "$preflight" != "true" ]; then
+            # Free check (no tokens): is the model available to this key? Only the status and the returned id are kept.
+            avail_status=$(printf 'header = "Authorization: Bearer %s"\n' "$key" | curl -sS -K - -o "$RUNNER_TEMP/avail.json" -w '%{http_code}' --max-time 30 https://api.openai.com/v1/models/gpt-6-luna 2>/dev/null)
+            if [ -z "$avail_status" ]; then avail_status=000; fi
+            avail_id=$(node -e 'try{const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.id??"").replace(/[^A-Za-z0-9._:-]/g,"").slice(0,80))}catch{}' "$RUNNER_TEMP/avail.json")
+            rm -f "$RUNNER_TEMP/avail.json"
+            echo "model availability: HTTP $avail_status ${avail_id}"
+          fi
+          flag="--live"; runkey="$key"
+          if [ "$preflight" = "true" ]; then flag="--preflight"; runkey="preflight-no-key-set"; fi
+          extra=()
+          if [ -n "$avail_status" ]; then extra=(--availability-status "$avail_status" --availability-id "$avail_id"); fi
+          OPENAI_API_KEY="$runkey" RAG2_LIVE_KEY_PRESENT="$present" node --import tsx scripts/rag2-live/run.ts "$flag" --run-id "$RUN_ID" --scenarios "$SCENARIOS" --port 3310 --out docs/rag-migration/live "${extra[@]}"
+          rc=$?
+          runkey=""
+          d=$(ls -d docs/rag-migration/live/RUN-"$RUN_ID"-* 2>/dev/null | tail -n 1)
+          leak=false
+          if [ -n "$key" ] && grep -rqF -e "$key" docs/rag-migration/live; then leak=true; fi
+          key=""
+          {
+            echo "rc=$rc"; echo "dir=$d"; echo "leak=$leak"; echo "preflight=$preflight"; echo "present=$present"; echo "avail=$avail_status"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$leak" = "true" ]; then echo "::error::the key value appears in the run output (run folder or server.log): nothing is committed or uploaded"; fi
+          echo "harness exit code: $rc"
+          exit 0
+
+      - name: Append this run to the cumulative ledger
+        id: ledger
+        if: always() && steps.test.outcome != 'skipped' && steps.test.outputs.leak != 'true'
+        env:
+          RUN_ID: ${{ steps.req.outputs.run_id }}
+          CAP: ${{ steps.req.outputs.cap }}
+          TESTED: ${{ steps.gate.outputs.tested }}
+          REQUEST: ${{ steps.gate.outputs.request }}
+          PREFLIGHT: ${{ steps.test.outputs.preflight || 'false' }}
+        run: |
+          d=$(ls -d docs/rag-migration/live/RUN-"$RUN_ID"-* 2>/dev/null | tail -n 1)
+          args=(--ledger docs/rag-migration/live/LEDGER.json --run-id "$RUN_ID" --tested-sha "$TESTED" --request-sha "$REQUEST" --cap "$CAP" --preflight "$PREFLIGHT")
+          if [ -n "$d" ]; then args+=(--run-dir "$d"); fi
+          node --import tsx scripts/rag2-live/ledger.ts append "${args[@]}"
+          echo "dir=$d" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the results and the ledger back to the branch (github-actions[bot])
+        id: push
+        if: always() && steps.ledger.outcome == 'success'
+        env:
+          D: ${{ steps.ledger.outputs.dir }}
+          RUN_ID: ${{ steps.req.outputs.run_id }}
+          PREFLIGHT: ${{ steps.test.outputs.preflight }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898099+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$D" ]; then git add "$D"; fi
+          git add docs/rag-migration/live/LEDGER.json
+          kind="live"; if [ "$PREFLIGHT" = "true" ]; then kind="preflight"; fi
+          git commit -q -m "rag2-live: CI run $RUN_ID ($kind) -- results and LEDGER.json"
+          for i in 1 2 3; do
+            if git pull -q --rebase --autostash origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME"; then echo "pushed"; exit 0; fi
+            sleep $((i * 5))
+          done
+          msg="LEDGER NOT PERSISTED: the results and LEDGER.json commit could not be pushed after 3 attempts. Add this run's spend to docs/rag-migration/live/LEDGER.json by hand before any further run."
+          if [ -n "$D" ] && [ -f "$D/report.md" ]; then printf '\n\n> **%s**\n' "$msg" >> "$D/report.md"; fi
+          echo "## $msg" >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::$msg"
+          exit 1
+
+      - name: Upload the run folder (includes server.log) and the ledger
+        if: always() && steps.ledger.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag2-live-${{ steps.req.outputs.run_id }}
+          path: |
+            ${{ steps.ledger.outputs.dir }}
+            docs/rag-migration/live/LEDGER.json
+          retention-days: 30
+
+      - name: Fail the job if the harness failed or the key leaked
+        if: always() && (steps.test.outputs.rc != '0' || steps.test.outputs.leak == 'true')
+        run: |
+          echo "::error::harness exit code ${{ steps.test.outputs.rc }}; key found in output: ${{ steps.test.outputs.leak }}"
+          exit 1

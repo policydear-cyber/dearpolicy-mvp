@@ -63,6 +63,8 @@ export function unwrapJsonDocument(text: string): unknown {
   return undefined;
 }
 
+/** The output bound of a structured call whose caller names none. */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 /** Round 10: a model call is not started with less than this left of the turn's budget. */
 const MIN_MODEL_CALL_MS = 3_000;
 /** Round 10: test-only per-call meter (scripts/r10/meter.ts sets it; never set in production). */
@@ -119,7 +121,9 @@ export async function structuredCompletion<T>(args: {
   const telemetryCorrelationId = args.correlationId ?? resolveCorrelationId(undefined);
   try {
     const jsonSchema = z.toJSONSchema(args.schema);
-    const budget = args.maxOutputTokens;
+    // Every request carries an output bound: a caller that names none gets DEFAULT_MAX_OUTPUT_TOKENS (an unbounded
+    // request is unbounded spend, and the live run's process-wide guard refuses it).
+    const budget = args.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 
     const role: ModelRole = args.role ?? "chat";
     const operation: KnownOperation = args.operation ?? "chat_reply";

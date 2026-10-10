@@ -1,0 +1,37 @@
+{
+  "family": "Hartwell",
+  "address": "Blk 418 Serangoon Central #09-112, Singapore 550418 (fictional)",
+  "members": [
+    {
+      "id": "P1",
+      "full_name": "Simon Alastair Hartwell",
+      "dob": "1984-03-17",
+      "relationship": "Self (policy owner / speaker)",
+      "category": "Adult"
+    },
+    {
+      "id": "P2",
+      "full_name": "Leonie Brigitte Hartwell",
+      "dob": "1986-11-02",
+      "relationship": "Spouse of Simon",
+      "category": "Adult"
+    },
+    {
+      "id": "P3",
+      "full_name": "Felix Oran Hartwell",
+      "dob": "2017-06-21",
+      "relationship": "Son",
+      "category": "Child",
+      "age_on_2026-10-09": 9
+    },
+    {
+      "id": "P4",
+      "full_name": "Isla Maren Hartwell",
+      "dob": "2020-01-09",
+      "relationship": "Daughter",
+      "category": "Child",
+      "age_on_2026-10-09": 6
+    }
+  ],
+  "note": "Entirely fictional household and insurers created for an ingestion test."
+}

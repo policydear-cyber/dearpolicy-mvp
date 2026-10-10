@@ -102,6 +102,8 @@ const saveTurn=async(args:Parameters<typeof storeTurn>[0])=>{
   if(hypothetical)args.state.hypothetical=hypothetical;else if(args.state.plannedEvent&&args.state.intent!=="claim")args.state.hypothetical="planned "+args.state.plannedEvent;
   else if(args.state.hypothetical==="rejected claim"&&args.answer.mode==="answer"&&args.state.intent!=="claim"){/* still on the turned-down claim */}else delete args.state.hypothetical;
   // Round 16: every answer path's figures and cover statements are checked against the cited pages (lib/chat/answer-verification.ts).
+  // Gate R17: the bindings and computation records this turn's producers attached (lib/chat/answer-verification.ts).
+  await attachProvenance(args.answer,args.conversation.account_id);
   const figureProblems=await verifyAnswerFigures(args.answer,{accountId:args.conversation.account_id,userText:args.message});
   if(figureProblems.length)((globalThis as {__dpVerifyDebug?:boolean}).__dpVerifyDebug?(m:string)=>process.stderr.write(m+"\n"):console.warn)("[figure-gate] "+JSON.stringify({problems:figureProblems.map(p=>({where:p.where,reason:p.reason}))}));
   return storeTurn(args);
@@ -121,6 +123,7 @@ import { registryAnswer, otherPoliciesOnFile } from "./registry-answers";
 import { amendmentAnswer } from "./amendment-answers";
 import { correctTypos } from "./typos";
 import { documentQuestionAnswer, printedLinesAnswer, printedRepair, provenanceAnswer } from "./document-questions";
+import { catalogueRequest } from "./intent-catalogue";
 import { WHO_IS_COVERED,whoIsCovered,whoIsCoveredCitations,documentsByPerson,hasPhrase,isGroupGuide,noPoliciesSentence,personName as householdName,unusableDocumentLines,type PersonDocument } from "./household-status";
 import { questionTopics,COMMON_PRODUCT_WORD,GENERAL as GENERAL_POLICY_QUESTION,PLAN_KINDS,TOPICS as POLICY_TOPICS } from "./policy-answer";
 import { alikeProductOwner,householdPersonFromWords,productOwner } from "./person-words";
@@ -128,7 +131,10 @@ import { inactiveDocuments,inactiveList } from "./policy-status";
 import { chatTurnModelBudgetMs,runWithModelHousehold } from "@/lib/ai/usage";
 import { adminKind,billQuestion,checksADate,longDateOf,printedDates,typedDate,type PersonPage,cleanInsurer,documentLines,documentsIfItHappens,explainedTerm,householdWords,insurersNotOnFile,productsNotOnFile,judgementAsked,damageEvent,matchPolicyNumber,pagesFor,policyNumberAsked,type DocLine } from "./plain-questions";
 import { turnDisplay } from "./store";
-import { verifyAnswerFigures } from "./answer-verification";
+import { attachProvenance,citeLine,verifyAnswerFigures,withProvenanceScope } from "./answer-verification";
+// Conversational RAG (Prompt 2): DEARPOLICY_RAG_LOOP (default off) hands the turn to the model-driven loop; the loop
+// module is loaded only when the flag is on (lib/rag2/loop/hook.ts).
+import { ragLoopEnabled } from "@/lib/rag2/loop/flag";
 
 
 export type ChatRequest={
@@ -296,6 +302,7 @@ function settleOverlaps(answer:{claimItems:ClaimItem[];details:string[];payoutQu
 }
 
 export async function prepareChat(request:ChatRequest):Promise<ChatContext>{
+  if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).prepareLoopChat(request);
   const family=(await query<ClaimPerson>(`SELECT id,display_name,preferred_name,relationship FROM family_members WHERE account_id=$1 AND ${activePredicate()} ORDER BY created_at`,[request.accountId])).rows;
   if(!family.length)throw new ChatConflict("Add a family member first. On the Household page, add yourself (and anyone else your policies cover), then ask again.");
   if(request.familyMemberId&&!family.some(p=>p.id===request.familyMemberId))throw new Error("Family profile not found.");
@@ -1565,6 +1572,7 @@ function asksSideQuestion(text:string,state:ConversationState,holdings:string[])
   return true;
 }
 async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(progress:Progress)=>Promise<void>;check?:()=>Promise<void>;jobId?:string;side?:boolean}):Promise<ChatResult>{
+  if(ragLoopEnabled())return (await import("@/lib/rag2/loop/hook")).runLoopChat(context,{save:saveTurn,check:options?.check,jobId:options?.jobId});
   const {conversation}=context;let {request}=context;
   if(context.request.languageReading)LANGUAGE_READING.set(conversation,context.request.languageReading);
   const report=options?.report??(async()=>undefined);
@@ -1657,18 +1665,24 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
   // Round 10: a question about the uploads themselves (what couldn't be read and why, copies, a
   // bundle, pages out of order), or about a letter, claim decision, bill, app screenshot or the
   // family's own notes: answered from that paper, said for what it is (lib/chat/document-questions.ts).
+  // A request for the catalogue itself ("list my docs", "show me my files", "which policies do you have for us") is
+  // answered as one, mid-claim too -- never read as the claim's next message (lib/chat/intent-catalogue.ts).
+  const catalogue=whatIfReply||request.personChoiceId?null:catalogueRequest(request.submittedQuestion??request.question,context.family.flatMap(p=>[p.display_name,p.preferred_name??""]).filter(Boolean));
+  // The documents on file are listed from the uploads; the policies held, mid-claim, the same way (the portfolio
+  // answer below is for a chat not in a claim, and a question it already reads as one keeps going there).
+  const catalogueOfUploads=!!catalogue&&(catalogue.noun==="documents"||(conversation.state.intent==="claim"||!!conversation.state.pending)&&!COVERAGE_OVERVIEW.test(request.submittedQuestion??request.question));
   if(!whatIfReply&&!context.outside&&!request.personChoiceId){
     if(!state.documents&&context.carriedDocuments)state={...state,documents:context.carriedDocuments};
     const current=context.family.find(p=>p.id===(request.familyMemberId??conversation.family_member_id))??null;
     // Round 10: "is that from the policy?": which document and page the last answer came from, not that answer again.
     // (While the claim waits on its question, a message is its answer; a question of its own is answered on the side, above.)
     // (While the claim waits on its question, a message is its answer -- unless it disputes a figure a policy change replaced.)
-    const registry=state.pending&&/:\s/.test(request.question)?null:(await amendmentAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,topic:state.activeQuery??state.sideQuery??null}).catch(()=>null)??(state.pending?null:await registryAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,family:context.family,people:context.people,
+    const registry=catalogueOfUploads||state.pending&&/:\s/.test(request.question)?null:(await amendmentAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,topic:state.activeQuery??state.sideQuery??null}).catch(()=>null)??(state.pending?null:await registryAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,family:context.family,people:context.people,
       previous:state.documents?.kind==="registry"?state.documents.asked??null:null,ambiguous:!!context.ambiguity&&context.ambiguity.status!=="resolved"}).catch(()=>null)));
     const paper=await provenanceAnswer({accountId:request.accountId,conversationId:conversation.id,question:request.submittedQuestion??request.question}).catch(()=>null)
       ??(registry?{summary:registry.summary,details:registry.details,nextSteps:[],citations:registry.citations,personId:registry.personId,
         patch:{intent:"policy_question" as const,documents:{kind:"registry" as const,ids:[],asked:registry.asked},activeQuery:registry.keepTopic&&state.activeQuery?state.activeQuery:registry.topic?(request.submittedQuestion??request.question).replace(/[?.!\s]+$/,"")+" on the "+registry.topic+"?":request.submittedQuestion??request.question}}:null)
-      ??await documentQuestionAnswer({accountId:request.accountId,question:request.submittedQuestion??request.question,family:context.family,current,state,subjects:context.people}).catch(()=>null);
+      ??await documentQuestionAnswer({accountId:request.accountId,question:catalogueOfUploads?catalogue!.canonical.replace(/ policies$/," documents"):request.submittedQuestion??request.question,family:context.family,current,state,subjects:context.people}).catch(()=>null);
     if(paper){
       state={...state,...paper.patch};
       answer.mode="answer";answer.summary=paper.summary;answer.details=paper.details;answer.nextSteps=paper.nextSteps;answer.citations=paper.citations;answer.confidence=null;
@@ -1998,7 +2012,7 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(scope&&!otherKind){state.intent="policy_question";state.activeQuery=sentNow.replace(/[?.!\s]+$/,"")+" on the "+scope+"?";carriedQuestion=state.activeQuery;}
         }
         // "What is Kai Ting covered for?", "list all our policies": the policies on file, per person.
-        if(!pendingBefore&&!reportsSomething&&COVERAGE_OVERVIEW.test(sentNow)&&!topicsNow.length&&!coverageTopics(sentNow).length){state.intent="portfolio";state.activeQuery=sentNow;}
+        if(!pendingBefore&&!reportsSomething&&(COVERAGE_OVERVIEW.test(sentNow)||catalogue?.noun==="policies")&&!topicsNow.length&&!coverageTopics(sentNow).length){state.intent="portfolio";state.activeQuery=sentNow;}
         // Round 12: "show me the full list" after a short answer: the same question, every line.
         if(!pendingBefore&&!reportsSomething&&before.activeQuery&&before.intent&&before.intent!=="claim"&&FULL_LIST_FOLLOW_UP.test(sentNow)&&!COVERAGE_OVERVIEW.test(sentNow)&&sentNow.split(/\s+/).length<=8&&!explicitPeople(sentNow,context.family).length){
           state.intent="policy_question";state.activeQuery=before.activeQuery;carriedQuestion=before.activeQuery;wantsFullList=true;
@@ -3051,7 +3065,9 @@ async function runChatWorkflowInternal(context:ChatContext,options?:{report?:(pr
           if(!merged.benefits.length&&!merged.observations.length&&reviews.find(r=>r.id===contract.id)!.status==="searched")reviews.find(r=>r.id===contract.id)!.status="no_matching_section";
           for(const observation of dedupeNegativeRestatements(merged.observations)){
             const text=readableObservation(observation.text);
-            if(text)observations.push(contract.ownerName+" · "+contract.name+": "+text);
+            if(text){const line=contract.ownerName+" · "+contract.name+": "+text;observations.push(line);
+              // Gate R17: the figures of an observation are read from the passage its evidence quotes (resolved on those pages at save time).
+              for(const q of observation.evidence)for(const p of analysisPassages.filter(x=>x.id===q.sourceId))citeLine(null,line,{policyId:p.policyId,pageStart:p.pageStart,pageEnd:p.pageEnd,subjectId:contract.ownerId});}
             addCitations(answer.citations,observation.evidence.flatMap(q=>analysisPassages.filter(p=>p.id===q.sourceId).map(p=>p.citation)));
           }
           for(const step of merged.nextSteps)answer.nextSteps.push(step.text);
@@ -3265,7 +3281,7 @@ export async function runChatWorkflow(context:ChatContext,options?:{report?:(pro
     // Every model call in this turn is booked to this household (usage,
     // per-household limit) -- see lib/ai/usage.ts.
     // Round 10: and shares one model time budget (lib/ai/usage.ts chatTurnModelBudgetMs).
-    const result = await runWithModelHousehold(context.request.accountId, () => turnDisplay.run({message:context.request.displayQuestion}, () => runChatWorkflowInternal(context, options)), { budgetMs: chatTurnModelBudgetMs() });
+    const result = await runWithModelHousehold(context.request.accountId, () => turnDisplay.run({message:context.request.displayQuestion}, () => withProvenanceScope(() => runChatWorkflowInternal(context, options))), { budgetMs: chatTurnModelBudgetMs() });
     void recordEvent({
       name: "chat.turn.completed",
       correlationId,

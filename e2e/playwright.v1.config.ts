@@ -6,6 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  testMatch: /tests\/v1-core-loop\.spec\.ts$/,
   fullyParallel: false,
   workers: 1,
   retries: 0,

@@ -1,0 +1,64 @@
+Orchidia Insurance Ltd                                                                              Policy OR-CM-7781350
+CI MultiProtect - Policy Schedule and Benefit Table
+
+
+CI MultiProtect - Policy Schedule
+Policy number                           OR-CM-7781350
+Life assured                            Marcus Lim Wei Jie
+Policy owner                            Marcus Lim Wei Jie
+Date of birth                           14 Mar 1979
+Commencement date                       01 Apr 2023
+Sum assured                             S$200,000
+Cover ends                              01 Apr 2054 (policy anniversary after age 75)
+Annual premium                          S$2,976.00
+Nomination                              Revocable nomination - Priya Varghese (100%)
+Multi-pay benefit table
+Stage of condition                     % of sum assured      Amount payable         Limit
+Early stage                            25%                   S$50,000               1 claim per condition group
+Intermediate stage                     50%                   S$100,000              1 claim per condition group
+Severe stage                           100%                  S$200,000              per condition group
+Angioplasty (special benefit)          10%                   S$20,000               capped at S$25,000; 1 claim
+
+Overall limit: total payouts under this policy are capped at 300% of the sum assured, i.e. S$600,000. The policy continues
+after a claim until this cap is reached.
+
+
+
+
+Orchidia Insurance Ltd                                                                                            Page 1 of 3
+Orchidia Insurance Ltd                                                                                Policy OR-CM-7781350
+CI MultiProtect - Policy Schedule and Benefit Table
+
+
+Claim rules
+R1. A severe-stage claim for a condition will be paid less any early-stage or intermediate-stage amount already paid for
+the same condition.
+R2. Waiting period: no benefit is payable for Major Cancer, Heart Attack of Specified Severity, Coronary Artery By-pass
+Surgery or Angioplasty if signs, symptoms or diagnosis occur within 90 days of the commencement date or reinstatement
+date.
+R3. Survival period: the life assured must survive 7 days after diagnosis.
+R4. Between claims for unrelated conditions there must be at least 12 months between the dates of diagnosis. A
+recurrence of the same cancer can be claimed only if 24 months have passed since the last cancer claim.
+R5. Only conditions listed in the Condition Table (page 3) are covered. Any illness not listed, including infectious diseases
+such as dengue fever, is not covered under this policy.
+
+
+
+
+Orchidia Insurance Ltd                                                                                             Page 2 of 3
+Orchidia Insurance Ltd                                                                          Policy OR-CM-7781350
+CI MultiProtect - Policy Schedule and Benefit Table
+
+
+Condition Table (extract)
+Group                    Early stage           Intermediate stage            Severe stage
+1 Cancer                 Carcinoma in situ     Early organ cancer            Major Cancer
+2 Heart                  Pacemaker insertion   Moderate cardiomyopathy       Heart Attack of Specified Severity
+3 Brain                  Minor brain surgery   Stroke, partial deficit       Stroke with permanent deficit
+4 Kidney                 Kidney removal        Chronic kidney disease st.4   End Stage Kidney Failure
+
+
+
+
+Orchidia Insurance Ltd                                                                                        Page 3 of 3
+

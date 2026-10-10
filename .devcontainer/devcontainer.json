@@ -1,0 +1,32 @@
+{
+  "name": "DearPolicy trial",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb"
+  },
+  "forwardPorts": [
+    3000
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "DearPolicy trial",
+      "onAutoForward": "openBrowser",
+      "visibility": "private"
+    }
+  },
+  "postCreateCommand": "bash scripts/trial/post-create.sh",
+  "postStartCommand": "bash scripts/trial/start.sh",
+  "secrets": {
+    "OPENAI_TEST_API_KEY": {
+      "description": "A spend-limited OpenAI TEST key for the DearPolicy trial (never the production key). Without it the trial starts in preflight: uploads work, model calls are refused."
+    }
+  },
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "docs/trial/TRIAL.md"
+      ]
+    }
+  }
+}

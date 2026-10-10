@@ -1,3 +1,5 @@
+import type { UnitTerms } from "@/lib/claims/unit-terms";
+
 export type FamilyMember = { id:string; displayName:string; relationship:string; policyCount?:number };
 export type Policy = { id:string; familyMemberId:string; insurer:string|null; productName:string|null; policyNumber:string|null; policyType:string|null; status:string; processingStatus:string; originalFilename:string; pageCount:number|null; createdAt:string };
 export type RetrievedChunk = {
@@ -29,6 +31,8 @@ export type PolicyStatedLimit = {
   /** Verbatim clause text the amount and currency were read from. */
   quote:string;
   citation:ChatCitation;
+  /** Gate R17: the card's own binding (person, benefit, version, page range, passage). A card without one is dropped. */
+  binding?:FigureBinding;
 };
 /** Where a claim-related benefit stands before any claim evidence has been
  * reviewed (a preliminary claim assessment never carries an event amount). */
@@ -188,6 +192,129 @@ export type FactFindingPlanView = {
   readyForEvidenceGatedEstimate:boolean;blockedReasons:string[];
 };
 
+
+/** Gate R17 (lib/chat/answer-verification.ts): where ONE figure of an answer comes from -- the policy, the
+ * person the sentence is about, the benefit (row / label), the document version (file hash), the page range
+ * and the verbatim passage, and the table column where a table prints one column per person or tier. A figure
+ * is grounded only by its own binding, checked against that passage of that version. */
+export type FigureBinding = {
+  policyId:string;
+  /** The family member the sentence (or card) is about. */
+  subjectId:string;
+  /** The benefit's row / label, as the document prints it ("Death benefit", "Annual premium"). */
+  benefit:string;
+  /** The cited version's file hash (policies.file_hash). */
+  documentHash:string|null;
+  pageStart:number; pageEnd:number;
+  /** Verbatim from the cited page(s). */
+  passage:string;
+  /** The column header of the person's / tier's column, where the row prints one column per person or tier. */
+  column?:string|null;
+  /** The wording presents a superseded version as superseded. */
+  presentedAsSuperseded?:boolean;
+};
+/** A figure stated in one sentence of the answer, bound to its source. `sentence` is the exact sentence. */
+export type BoundFigure = FigureBinding & { sentence:string; value:number; currency:string };
+export type FigurePeriod = "day"|"week"|"month"|"quarter"|"half_year"|"year"|"event"|"lifetime";
+/** One operand of a computation: a figure grounded by its own binding, an explicitly attributed figure from the
+ * household's own message (never a policy figure), or (explicitly) another computation record. */
+export type ComputationOperand = {
+  value:number; currency:string; period:FigurePeriod|null;
+  /** What the figure is: a premium, a benefit / sum insured / limit, or the household's own figure. */
+  role:"premium"|"benefit"|"user";
+  binding?:FigureBinding;
+  user?:boolean;
+  computation?:ComputationRecord;
+};
+/** An explicit record of how a computed figure (total, monthly restatement, multiple, difference) was worked out.
+ * The gate recomputes it; words like "total" or "about" prove nothing. */
+export type ComputationRecord = {
+  /** The exact sentence that states the result (empty for a nested operand record). */
+  sentence:string;
+  result:{ value:number; currency:string };
+  operation:"sum"|"product"|"difference"|"divide"|"per_period";
+  operands:ComputationOperand[];
+  /** product: the count; divide: the divisor; per_period: the conversion factor (12 for year <-> month). */
+  factor?:number;
+  fromPeriod?:FigurePeriod; toPeriod?:FigurePeriod;
+  /** The period every operand is stated per (they must all share it). */
+  period:FigurePeriod|null;
+  currency:string;
+  rounding:{ mode:"half_up"|"half_even"|"down"|"up"|"none"; precision:number };
+  /** "household": operands for different people, stated as a household total. */
+  scope?:"person"|"household";
+};
+
+/** Agent K (calculation contract): a benefit calculation the save-time gate re-runs step by step
+ * (lib/chat/answer-verification.ts). Produced only by the conversation calculation tool through the deterministic claim calculators. */
+export type CalcResultKind = "printed_limit"|"conditional_illustration"|"indicative_estimate"|"unresolved";
+/** One input of a calculation. Document figures carry their own binding (row + column + person + version); the
+ * household's own figures carry their words, verbatim, and are never presented as document facts. */
+export type CalcOperand =
+  | { id:string; source:"document"; role:"rate"|"limit"|"cap"|"day_cap"|"deductible"|"co_insurance"|"co_insurance_cap"|"sum_insured"|"percent";
+      label:string; unit:"money"|"percent"|"count"; value:number; currency:string|null; period:string|null;
+      row:string; column:string|null; binding:FigureBinding }
+  | { id:string; source:"household"; role:"bill"|"admission"|"discharge"|"days"|"amount"|"count"|"other";
+      label:string; unit:"money"|"count"|"datetime"|"date"; value:number|string; currency:string|null;
+      /** The household's own words, quoted verbatim from their messages. */
+      attribution:string }
+  | { id:string; source:"assumption"; role:"admission"|"discharge"|"days"|"bill"|"amount"|"count"|"other";
+      label:string; unit:"money"|"count"|"datetime"|"date"; value:number|string; currency:string|null;
+      /** A what-if the household asked about, in their words ("if he stays 5 nights"). */
+      attribution:string };
+/** One eligibility condition of the benefit, with what settles it. */
+export type CalcCondition = {
+  id:string; kind:"day_count_rule"|"waiting_period"|"minimum_stay"|"day_cap"|"exclusion"|"definition"|"eligibility"|"deduction_order"|"currency";
+  text:string; status:"established"|"unresolved"|"not_applicable";
+  /** How it is settled: "document" (a passage of the version used), "household" (their words), "derived" (worked out
+   * from the operands, e.g. a stay's length), "absent" (the stored document prints no such condition). */
+  basis:"document"|"household"|"derived"|"absent"|"assumption"|"none";
+  passage?:{ policyId:string; pageStart:number; pageEnd:number; text:string }|null;
+  householdWords?:string|null;
+  /** What would settle it, in the household's terms ("Jun Hao's admission and discharge dates and times"). */
+  needs?:string|null;
+};
+/** One recomputable step. Inputs name operand ids or earlier step ids; values are integer minor units for money,
+ * whole numbers for counts, ppm for percentages. */
+export type CalcStep =
+  | { id:string; op:"day_count"; rule:"first_full_day"|"completed_24h"|"completed_24h_remainder"|"per_night"|"calendar_day_inclusive"; inputs:[string,string]; out:number;
+      /** completed_24h_remainder: the remaining hours that count as one more day, as the wording states them. */
+      remainderHours?:number;
+      /** Exceptions the wording states for the admission / discharge day ("counts as a full day if before 12:00 noon"). */
+      /** Round 8e: "before" / "after" exclude the stated time; "on_or_before" / "on_or_after" include it. */
+      edges?:{ edge:"admission"|"discharge"; when:"before"|"on_or_before"|"after"|"on_or_after"; minutes:number }[] }
+  | { id:string; op:"days_after_waiting"; inputs:[string]; waitingDays:number; out:number }
+  | { id:string; op:"min_count"; inputs:string[]; out:number }
+  | { id:string; op:"multiply"; inputs:[string,string]; out:number }
+  | { id:string; op:"min"; inputs:string[]; out:number }
+  | { id:string; op:"deductible"; inputs:[string,string]; out:number }
+  | { id:string; op:"co_insurance"; inputs:[string,string]|[string,string,string]; out:number }
+  | { id:string; op:"percent_of"; inputs:[string,string]; out:number };
+export type CalculationRecord = {
+  /** The exact sentence that states the result. */
+  sentence:string;
+  id:string;
+  calculator:"hospital_cash"|"bill_reimbursement"|"lump_sum";
+  kind:"conditional_illustration"|"indicative_estimate";
+  subjectId:string; policyId:string; benefit:string; documentHash:string|null;
+  operands:CalcOperand[]; steps:CalcStep[];
+  result:{ value:number; currency:string };
+  currency:string;
+  rounding:{ mode:"half_up"|"half_even"|"down"|"up"; precision:number; source:"policy"|"default" };
+  conditions:CalcCondition[];
+  /** Evidence the existing claim workflow will still need (reviewed bill, discharge summary...): kept, never waived. */
+  evidenceRequirements:string[];
+  /** conditional_illustration: the what-if, in the household's words. indicative_estimate (integration r6): the stated
+   * assumption that earlier use of a capped allowance leaves what this stay needs available -- the sentence must say it. */
+  assumption?:string|null;
+  /** Shown instead of the sentence if the record fails verification: the specific unresolved requirement (no figures). */
+  unresolvedText:string;
+  /** A1 (r6): the rate's unit terms (unit, duration rule, caps with reset periods and how earlier use is settled), each
+   * with its source span; re-checked by the save-time gate (lib/claims/unit-terms.ts checkUnitTerms). Absent on
+   * records made before r6. */
+  unitTerms?:UnitTerms;
+};
+
 export type ChatAnswer = {
   mode:"answer"|"fact_finding"|"claim_assessment";
   summary:string;
@@ -240,4 +367,10 @@ export type ChatAnswer = {
    * (never present unless lib/claims/composition/engine.ts actually ran).
    * See ClaimCompositionView's own doc comment. */
   composition?:ClaimCompositionView|null;
+  /** Gate R17: per-sentence binding of every figure the answer's text states (lib/chat/answer-verification.ts). */
+  figureBindings?:BoundFigure[];
+  /** Gate R17: explicit records of every computed figure the answer's text states. */
+  computations?:ComputationRecord[];
+  /** Agent K: verified benefit calculations (illustrations / indicative estimates), one per stated result. */
+  calculations?:CalculationRecord[];
 };

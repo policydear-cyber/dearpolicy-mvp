@@ -202,6 +202,7 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     "SELECT policy_id,family_member_id,to_jsonb(pm)->>'benefit_tier' AS tier FROM policy_members pm WHERE account_id=$1",[accountId]).catch(()=>({rows:[]}))).rows
     .map(r=>[r.policy_id+"|"+r.family_member_id,r.tier] as const));
   const seeds:Seed[]=[];
+  const contractOf=new Map<Seed,string>();
   for(const contract of contracts){
     const mine=new Set([...contract.documents,...contract.references].map(d=>d.id));
     const known=new Set<EventType>(existing.rows.filter(r=>r.policy_id&&mine.has(r.policy_id)&&r.pays_kind!=="stated"&&r.amount!=null).map(r=>r.event_type as EventType));
@@ -211,7 +212,9 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     const wording=wordingSeeds(contract,preferStatedRules(selectTierRows(catalog.filter(b=>mine.has(b.policyId)),
       policyId=>tiers.get(policyId+"|"+contract.ownerId)))).filter(w=>!known.has(w.eventType));
     for(const w of wording)if(w.paysKind!=="stated")known.add(w.eventType);
-    seeds.push(...wording,...scheduleSeeds(contract,known));
+    const mineSeeds=[...wording,...scheduleSeeds(contract,known)];
+    for(const seed of mineSeeds)contractOf.set(seed,contract.id+"|"+contract.ownerId);
+    seeds.push(...mineSeeds);
   }
   // A rule read from the wording ("100% of the Sum Insured") and the sum on
   // the certificate live in different documents of the same contract. Join
@@ -236,7 +239,36 @@ export async function seedLedger(accountId:string,people?:ClaimPerson[]):Promise
     "SELECT seed_key,family_member_id::text FROM coverage_rules WHERE account_id=$1 AND seed_key=ANY($2::text[])",[accountId,keys])).rows:[];
   const existingKeys=new Set(present.map(r=>r.seed_key));
   const legacyHeld=new Set(present.map(r=>r.family_member_id+"|"+r.seed_key));
-  const fresh=seeds.filter(s=>{
+  // Round 9: one ledger row per fact. The same rule can be read twice -- two
+  // rows of one table, the wording and the certificate of one contract, a
+  // re-read whose rows got new ids while a person's edit kept the old row --
+  // and each read has its own seed key. A fact (person, contract, event,
+  // cause, what it pays, amount, currency, basis, days) already held by a row
+  // of an ACTIVE policy of the same contract (any status: a rejection
+  // stands), or by an earlier seed of this pass (the catalogue's total order
+  // makes that the same one every time), is not added again. A row of a
+  // deleted or superseded policy holds nothing: the fact is seeded afresh
+  // for the live document.
+  const n=(v:string|number|null|undefined)=>v==null||v===""?"":String(Number(v));
+  const factKey=(contract:string,r:{eventType:string;detail:string|null;cause:string|null;paysKind:string;amount:string|number|null;currency:string;sumBasis:string|number|null;offsetDays:number|null;maximumDays:number|null})=>
+    [contract,r.eventType,(r.detail??"").toLowerCase(),r.cause??"",r.paysKind,n(r.amount),r.currency,n(r.sumBasis),n(r.offsetDays),n(r.maximumDays)].join("|");
+  const heldRows=(await query<{policy_id:string;family_member_id:string;seed_key:string|null;event_type:string;detail:string|null;cause:string|null;pays_kind:string;amount:string|null;currency:string;sum_basis:string|null;offset_days:number|null;maximum_days:number|null}>(
+    "SELECT policy_id::text,family_member_id::text,seed_key,event_type,detail,cause,pays_kind,amount::text,currency,sum_basis::text,offset_days,maximum_days FROM coverage_rules WHERE account_id=$1 AND policy_id IS NOT NULL AND "+ACTIVE_POLICY_GUARD,[accountId]).catch(()=>({rows:[]}))).rows;
+  const heldFacts=new Map<string,Set<string|null>>();
+  for(const r of heldRows)for(const contract of contracts){
+    if(contract.ownerId!==r.family_member_id||![...contract.documents,...contract.references].some(d=>d.id===r.policy_id))continue;
+    const k=factKey(contract.id+"|"+contract.ownerId,{eventType:r.event_type,detail:r.detail,cause:r.cause,paysKind:r.pays_kind,amount:r.amount,currency:r.currency,sumBasis:r.sum_basis,offsetDays:r.offset_days,maximumDays:r.maximum_days});
+    (heldFacts.get(k)??heldFacts.set(k,new Set()).get(k)!).add(r.seed_key);
+  }
+  const seededFacts=new Set<string>();
+  const oneRowPerFact=(s:Seed)=>{
+    const k=factKey(contractOf.get(s)??s.policyId+"|"+s.familyMemberId,s);
+    const held=heldFacts.get(k);
+    if(held&&![...held].every(key=>key===s.seedKey||key===legacyOf(s)))return false;
+    if(seededFacts.has(k))return false;
+    seededFacts.add(k);return true;
+  };
+  const fresh=seeds.filter(oneRowPerFact).filter(s=>{
     // Two insured people under one certificate ("Insured persons: Mei Ling;
     // Wei Jie") read the same row: each gets their own ledger row. A row
     // seeded under the older person-less key is that person's already.

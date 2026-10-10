@@ -1,0 +1,28 @@
+{
+  "source": "round 8d focused run: agent T's Q2 (QUESTIONS.json, unchanged) and one paraphrase written by the coordinator",
+  "upload_order": [
+    "hx-text.pdf",
+    "hx-endorsement.pdf",
+    "hx-scanned.pdf"
+  ],
+  "conversations": [
+    {
+      "id": "C2",
+      "turns": [
+        {
+          "q": "Q2",
+          "user": "If something happened to Isla in an accident, how much is the accidental death payout for her? Is it the same as mine?"
+        }
+      ]
+    },
+    {
+      "id": "C2P",
+      "turns": [
+        {
+          "q": "Q2P",
+          "user": "Under the Meridian plan, compare the accident death cover for me and for my daughter Isla -- are the two amounts different?"
+        }
+      ]
+    }
+  ]
+}

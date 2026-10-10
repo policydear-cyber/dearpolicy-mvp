@@ -7,6 +7,7 @@ import { POLICY_STATED_LIMIT_LABEL,POLICY_STATED_LIMIT_NOTICE,PRELIMINARY_ASSESS
 import { formatMoney } from "@/lib/format/currency";
 import { customerAnswerText,customerError,customerMessage } from "@/components/customer-text";
 import { answerText,codeWords } from "@/components/answer-text";
+import { hasAssessment,withQuestionsOnce } from "@/components/assistant-message";
 import { readableDates,sgDate } from "@/components/format-date";
 
 /* V1.1: an answer shows a direct answer, its sources (collapsed), any real
@@ -296,14 +297,16 @@ function ChatContent(){
         <div className="prompt-grid">{examplePrompts(family).map(text=><button key={text} onClick={()=>setQuestion(text)}>{text}</button>)}</div>
       </div>:null}
       {messageCursor?<button className="mini-button" disabled={busy} onClick={()=>void olderMessages()}>Load older messages</button>:null}
-      {messages.map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
-        <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body"><p>{message.role==="assistant"?readableDates(customerAnswerText(message.content)):message.content}</p>
+      {withQuestionsOnce(messages).map((message,index)=><div className={"message "+message.role} key={message.id??index} ref={index===messages.length-1?latest:undefined}>
+        <div className="message-label">{message.role==="user"?"You":"DearPolicy"}</div><div className="message-body">{/* Round 6: a question is presented once, by its card below; the body never repeats it. */}
+          {message.role==="assistant"?(message.content?<p>{readableDates(customerAnswerText(message.content))}</p>:null):<p>{message.content}</p>}
+          {message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?message.answer.details.map((detail,i)=><p key={"d"+i}>{shown(detail)}</p>):null}
           {message.answer?.invalidated?<div className="alert" role="note" data-testid="answer-invalidated"><strong>Out of date.</strong> A policy document this answer relied on has been deleted, so it no longer describes your cover.</div>:null}
           {message.answer?.questions.map(q=><div className="fact-question" key={q.id}><div className="question-label">A fact that changes this assessment</div><strong>{shown(q.text)}</strong><small>{shown(q.why)}</small>
-            <div className="quick-replies">{q.id==="claim_person"?message.answer?.personCandidates?.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
+            <div className="quick-replies">{(q.id==="claim_person"||q.id==="rag_person")&&message.answer?.personCandidates?.length?message.answer.personCandidates.map(p=><button key={p.id} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(p.label,p.id)}>{p.label}</button>):q.options?.map(option=><button key={option} disabled={busy||index!==messages.length-1} onClick={()=>void sendText(option)}>{option}</button>)}</div>
             {/* A date or a free-text fact is answered in place: the reply
                 restates the question so the fact it answers is unambiguous. */}
-            {q.id!=="claim_person"&&(q.type==="date"||q.type==="text")?<InlineAnswer kind={q.type==="date"?"date":"text"} disabled={busy||index!==messages.length-1} onSubmit={value=>void sendText(q.text.replace(/\?\s*$/,"")+": "+value)} />:null}
+            {q.id!=="claim_person"&&q.id!=="rag_person"&&(q.type==="date"||q.type==="text")?<InlineAnswer kind={q.type==="date"?"date":"text"} disabled={busy||index!==messages.length-1} onSubmit={value=>void sendText(q.text.replace(/\?\s*$/,"")+": "+value)} />:null}
           </div>)}
           {/* One question at a time, always answerable: when the turn asks
               nothing directly but the fact-finding plan still needs facts,
@@ -372,7 +375,7 @@ function ChatContent(){
           {/* Round 13: on a claim answer, what applies to every card is said once, under its own heading. */}
           {message.answer?.mode==="claim_assessment"&&message.answer.details.length&&message.answer.claimItems.some(item=>item.status!=="not_applicable")
             ?<div className="claim-before" data-testid="claim-before"><strong>Before you claim</strong>{message.answer.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}</div>
-            :message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
+            :message.answer&&!hasAssessment(message.answer)&&message.answer.questions.length?null:message.answer?.details.map((detail,i)=><p key={i}>{shown(detail)}</p>)}
           {message.answer?.reviewCoverage&&!message.answer.reviewCoverage.complete?<div className="review-coverage partial" data-testid="answer-uncertainty"><p>DearPolicy could not check every part of your documents for this, so this is not a finding that it is missing.</p></div>:null}
           {message.answer?.nextSteps.length&&!message.answer.questions.length&&!(message.answer.factFinding??[]).some(plan=>plan.nextQuestions.length)?<div className="next-steps" data-testid="next-step"><strong>Next step</strong><p>{shown(message.answer.nextSteps[0])}</p></div>:null}
           {message.answer?.citations.length?<details className="citations"><summary>Sources</summary>{message.answer.citations.map(c=><div className="citation" key={c.chunkId}><span>{c.insurer?c.insurer+" · ":""}{c.policyName}<small>{c.evidenceLabel??"Your uploaded document"}</small></span><b>{c.pageStart==null?"Page not recorded":<>Page {c.pageStart}{c.pageEnd!=null&&c.pageEnd!==c.pageStart?"–"+c.pageEnd:""}</>}</b></div>)}</details>:null}

@@ -1,0 +1,784 @@
+{
+  "scenario": "L4",
+  "title": "Hospital cash: admission and discharge dates and times in one message",
+  "conversationId": "48f6f9cd-54be-4326-a9bd-a6be22ec4707",
+  "turns": [
+    {
+      "turn": 1,
+      "user": "Mei was admitted to hospital on 3 Sep 2026 at 10:15 pm and discharged on 6 Sep 2026 at 9:30 am. How much hospital cash can we claim from CareDay?",
+      "jobStatus": "complete",
+      "jobError": null,
+      "visible": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model.",
+      "timings": {
+        "acceptedMs": 12,
+        "firstAssistantPersistedMs": 352,
+        "answerSeenMs": 541,
+        "modelMs": 19,
+        "upstreamMs": 31,
+        "relayMs": 34
+      },
+      "calls": [
+        {
+          "seq": 14,
+          "at": "2026-10-08T15:03:35.207Z",
+          "estInputTokens": 8222,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0018222,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 2,
+          "chargedUsd": 0.00056,
+          "ok": true,
+          "usage": {
+            "input": 5400,
+            "output": 40
+          },
+          "latencyMs": 5,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        },
+        {
+          "seq": 15,
+          "at": "2026-10-08T15:03:35.249Z",
+          "estInputTokens": 12029,
+          "maxOutputTokens": 2000,
+          "reservedUsd": 0.0022029000000000003,
+          "requestedModel": "openai:gpt-6-luna",
+          "tools": 10,
+          "messages": 4,
+          "chargedUsd": 0.0007987000000000001,
+          "ok": true,
+          "usage": {
+            "input": 7787,
+            "output": 40
+          },
+          "latencyMs": 14,
+          "resolvedModel": "plumbing-fake-not-a-model"
+        }
+      ],
+      "modelExecutions": [
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5432,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000563,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.095Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 6784,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000698,
+          "latency_ms": 59,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.160Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5478,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000568,
+          "latency_ms": 4,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.663Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5626,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000583,
+          "latency_ms": 47,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:34.719Z"
+        },
+        {
+          "attempt_index": 0,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 5400,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.00056,
+          "latency_ms": 5,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:35.213Z"
+        },
+        {
+          "attempt_index": 1,
+          "status": "succeeded",
+          "error_category": null,
+          "requested_model": "gpt-6-luna",
+          "resolved_model": "plumbing-fake-not-a-model",
+          "input_tokens": 7787,
+          "output_tokens": 40,
+          "cached_tokens": 0,
+          "cost_usd": 0.000799,
+          "latency_ms": 14,
+          "prompt_version": "rag2-loop-v3",
+          "created_at": "2026-10-08T15:03:35.264Z"
+        }
+      ],
+      "relay": [
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.091,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-10",
+          "usage": {
+            "prompt_tokens": 5432,
+            "completion_tokens": 40,
+            "total_tokens": 5472,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.101,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 6,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 15,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-11",
+          "usage": {
+            "prompt_tokens": 6784,
+            "completion_tokens": 40,
+            "total_tokens": 6824,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 15
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.66,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 6,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-12",
+          "usage": {
+            "prompt_tokens": 5478,
+            "completion_tokens": 40,
+            "total_tokens": 5518,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:34Z",
+          "t": 1791471814.673,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 8,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 3,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-13",
+          "usage": {
+            "prompt_tokens": 5626,
+            "completion_tokens": 40,
+            "total_tokens": 5666,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 4
+        },
+        {
+          "at": "2026-10-08T15:03:35Z",
+          "t": 1791471815.209,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 2,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 2,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-14",
+          "usage": {
+            "prompt_tokens": 5400,
+            "completion_tokens": 40,
+            "total_tokens": 5440,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "search_passages"
+          ],
+          "status": 200,
+          "relay_ms": 2
+        },
+        {
+          "at": "2026-10-08T15:03:35Z",
+          "t": 1791471815.252,
+          "mode": "PLUMBING TEST",
+          "method": "POST",
+          "endpoint": "/v1/chat/completions",
+          "requested_model": "gpt-6-luna",
+          "settings": {
+            "temperature": 0,
+            "max_completion_tokens": 2000,
+            "tool_choice": "required",
+            "parallel_tool_calls": true
+          },
+          "messages": 4,
+          "tools": 10,
+          "tools_sha256": "e19e62af861c93cb9b09a68db0689f2dc59277f53bc97b28ac60fb802b4e93df",
+          "system_prompt_sha256": "46d3514521bc42907226a8288fddd46483f76be635adf30ab3d81c81fd4c37b2",
+          "upstream_ms": 7,
+          "provider_model": "plumbing-fake-not-a-model",
+          "provider_request_id": "fake-15",
+          "usage": {
+            "prompt_tokens": 7787,
+            "completion_tokens": 40,
+            "total_tokens": 7827,
+            "cached_tokens": null,
+            "reasoning_tokens": null
+          },
+          "finish_reason": "tool_calls",
+          "tool_calls": [
+            "final_answer"
+          ],
+          "status": 200,
+          "relay_ms": 9
+        }
+      ],
+      "tokens": {
+        "input": 13187,
+        "output": 80
+      },
+      "costUsd": {
+        "charged": 0.0013587,
+        "ledger": 0.003771
+      }
+    }
+  ],
+  "totalMs": 545,
+  "firstUsefulResponseMs": 352,
+  "tokens": {
+    "input": 13187,
+    "output": 80
+  },
+  "costUsd": 0.0013587,
+  "calls": 2,
+  "verdict": {
+    "scenario": "L4",
+    "verdict": "FAIL",
+    "failureStage": "model reasoning-tool selection",
+    "incomplete": null,
+    "checks": [
+      {
+        "turn": 1,
+        "name": "stored page CAREDAY p1 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "stored page CAREDAY p2 holds the passage",
+        "ok": true,
+        "stage": "document extraction",
+        "detail": "present"
+      },
+      {
+        "turn": 1,
+        "name": "no internal ids visible",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "estimate never called a payout",
+        "ok": true,
+        "stage": "presentation",
+        "detail": "none"
+      },
+      {
+        "turn": 1,
+        "name": "shows S$120",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "missing; visible figures: none"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$180",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$240",
+        "ok": true,
+        "stage": "calculation",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$200",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "never states S$300",
+        "ok": true,
+        "stage": "person-version resolution",
+        "detail": "absent"
+      },
+      {
+        "turn": 1,
+        "name": "does not re-ask the admission / discharge dates and times already given",
+        "ok": true,
+        "stage": "model reasoning-tool selection",
+        "detail": "no re-ask"
+      },
+      {
+        "turn": 1,
+        "name": "about mei",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "subject after the turn: none"
+      },
+      {
+        "turn": 1,
+        "name": "cites CAREDAY p1 \"Hospital cash (each complete 24 hours, m\"",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "retrieved but not cited"
+      },
+      {
+        "turn": 1,
+        "name": "cites CAREDAY p2 \"Hospital cash is payable for each comple\"",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "retrieved but not cited"
+      },
+      {
+        "turn": 1,
+        "name": "saved hospital_cash calculation",
+        "ok": false,
+        "stage": "model reasoning-tool selection",
+        "detail": "no CalculationRecord saved (calculate called: 0x)"
+      }
+    ]
+  },
+  "saved": {
+    "subjectId": null,
+    "speakerId": "74000000-0000-4000-8000-000000000001",
+    "pending": null,
+    "claim": null,
+    "traces": [
+      {
+        "turn": 1,
+        "modelId": "openai:plumbing-fake-not-a-model",
+        "outcome": "final_answer",
+        "steps": 2,
+        "usage": {
+          "input": 13187,
+          "output": 80
+        },
+        "latencyMs": 60,
+        "limit": null,
+        "toolCalls": [
+          {
+            "ok": true,
+            "args": {
+              "query": "Mei was admitted to hospital on 3 Sep 2026 at 10:15 pm and discharged on 6 Sep 2026 at 9:30 am. How much hospital cash can we claim from CareDay?"
+            },
+            "name": "search_passages",
+            "summary": "{\"hits\":8}",
+            "evidenceIds": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8"
+            ]
+          },
+          {
+            "ok": true,
+            "args": {
+              "sentences": [
+                {
+                  "text": "PLUMBING TEST: this reply comes from a local fake endpoint, not from a model."
+                }
+              ]
+            },
+            "name": "final_answer",
+            "evidenceIds": []
+          }
+        ],
+        "evidenceChosen": [],
+        "dropped": [],
+        "gate": [],
+        "reasked": null,
+        "corrections": null
+      }
+    ],
+    "evidence": {
+      "e1": {
+        "id": "e1",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 187,
+            "role": "table_header",
+            "text": "Benefit\tLimit",
+            "start": 174,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 290,
+          "text": "Benefit\tLimit\nDeductible (per policy year, private hospital)\tS$3,500\nCo-insurance\t10%\nAnnual claim limit\tS$1,000,000",
+          "start": 174,
+          "onPage": 1
+        },
+        "support": {
+          "end": 259,
+          "text": "Co-insurance\t10%",
+          "start": 243,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000103",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel"
+      },
+      "e2": {
+        "id": "e2",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 145,
+          "text": "Meridian Mutual Assurance                                               Policy MM-HC-205518\nCareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 0,
+          "onPage": 1
+        },
+        "support": {
+          "end": 145,
+          "text": "CareDay Hospital Cash Plan - Certificate of Insurance",
+          "start": 92,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e3": {
+        "id": "e3",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 721,
+            "role": "table_header",
+            "text": "Benefit                                                       Insured Adult   Insured Child",
+            "start": 630,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 888,
+          "text": "Benefit table\nBenefit                                                       Insured Adult   Insured Child\nHospital cash (each complete 24 hours, max 90 per year)       S$100           S$60\nICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 616,
+          "onPage": 1
+        },
+        "support": {
+          "end": 888,
+          "text": "ICU cash (each complete 24 hours, max 30 per year)            S$200           S$120",
+          "start": 805,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e4": {
+        "id": "e4",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 438,
+          "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+          "start": 303,
+          "onPage": 2
+        },
+        "support": {
+          "end": 438,
+          "text": "ICU cash is payable in the same way for each complete period of 24 hours spent in an intensive care unit, in addition to hospital cash.",
+          "start": 303,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e5": {
+        "id": "e5",
+        "via": "search_passages",
+        "page": {
+          "end": 2,
+          "start": 2
+        },
+        "table": null,
+        "context": null,
+        "passage": {
+          "end": 301,
+          "text": "Conditions\nHospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission. Any period shorter than 24 hours is not counted. Admission and discharge times are taken from the hospital's discharge summary.",
+          "start": 0,
+          "onPage": 2
+        },
+        "support": {
+          "end": 173,
+          "text": "Hospital cash is payable for each complete period of 24 hours that the Insured Person is confined in hospital as an inpatient, counted from the time of admission.",
+          "start": 11,
+          "onPage": 2
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      },
+      "e6": {
+        "id": "e6",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 365,
+            "role": "table_header",
+            "text": "Name                          Category      Date of birth",
+            "start": 308,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 589,
+          "text": "Insured persons\nName                          Category      Date of birth\nDaniel Lim Wen Jie            Adult         11 Mar 1980\nGrace Ong Pei Shan            Adult         22 Aug 1983\nKai Lim Jun Hao               Child         06 May 2014\nMei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 292,
+          "onPage": 1
+        },
+        "support": {
+          "end": 589,
+          "text": "Mei Lim Xin Hui               Child         30 Nov 2018",
+          "start": 534,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000101",
+        "subjectId": null,
+        "documentHash": "sha256:live-sunhaven"
+      },
+      "e7": {
+        "id": "e7",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 165,
+            "role": "table_header",
+            "text": "Benefit\tBefore\tAfter",
+            "start": 145,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 208,
+          "text": "Benefit\tBefore\tAfter\nAnnual claim limit\tS$1,000,000\tS$1,500,000",
+          "start": 145,
+          "onPage": 1
+        },
+        "support": {
+          "end": 208,
+          "text": "Annual claim limit\tS$1,000,000\tS$1,500,000",
+          "start": 166,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000104",
+        "subjectId": null,
+        "documentHash": "sha256:live-kestrel-endt1"
+      },
+      "e8": {
+        "id": "e8",
+        "via": "search_passages",
+        "page": {
+          "end": 1,
+          "start": 1
+        },
+        "table": null,
+        "context": [
+          {
+            "end": 374,
+            "role": "table_header",
+            "text": "Name                          Cover type        Date of birth",
+            "start": 313,
+            "onPage": 1
+          }
+        ],
+        "passage": {
+          "end": 614,
+          "text": "Insured members\nName                          Cover type        Date of birth\nDaniel Lim Wen Jie            Insured Adult     11 Mar 1980\nGrace Ong Pei Shan            Insured Adult     22 Aug 1983\nKai Lim Jun Hao               Insured Child     06 May 2014\nMei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 297,
+          "onPage": 1
+        },
+        "support": {
+          "end": 614,
+          "text": "Mei Lim Xin Hui               Insured Child     30 Nov 2018",
+          "start": 555,
+          "onPage": 1
+        },
+        "policyId": "74000000-0000-4000-8000-000000000102",
+        "subjectId": null,
+        "documentHash": "sha256:live-careday"
+      }
+    },
+    "answers": [
+      {
+        "turn": 1,
+        "resolvedFamilyMemberId": null,
+        "citations": [],
+        "figureBindings": [],
+        "calculations": [],
+        "computations": [],
+        "questions": []
+      }
+    ]
+  }
+}
