@@ -101,23 +101,18 @@ test.describe.serial("synthetic claim journey", () => {
       await expect(page.locator(".fact-question").last()).toBeVisible();
       await collapsed.locator("summary").click();
     }
-    if (!(await page.getByTestId("preliminary-assessment").count())) {
-      // Diagnostics (synthetic data only): what the saved answer carries when the preliminary notice is absent.
-      const h = await api<{ conversations: { id: string }[] }>(page, "/api/chat/history?scope=all");
-      const id = h.body.conversations?.[0]?.id;
-      const m = id ? await api<{ messages: { role: string; answer_json?: Record<string, unknown> | null }[] }>(page, `/api/chat/history/${id}`) : null;
-      const a = (m?.body.messages ?? []).filter((x) => x.role === "assistant").at(-1)?.answer_json as Record<string, any> | undefined;
-      const ans = (a?.answer ?? a) as Record<string, any> | undefined;
-      console.log("claim-journey diagnostics:", JSON.stringify({ mode: ans?.mode, assessmentKind: ans?.assessmentKind, summary: String(ans?.summary ?? "").slice(0, 300), questions: (ans?.questions ?? []).map((q: any) => [q.id, q.text]), claimItems: (ans?.claimItems ?? []).map((i: any) => [i.title, i.status]), factFinding: (ans?.factFinding ?? []).map((f: any) => [f.label, f.status, (f.nextQuestions ?? []).length]) }));
-    }
-    await expect(page.getByTestId("preliminary-assessment")).toBeVisible();
+    // The claim interview asks its facts one at a time first (here: the diagnosis date). A preliminary assessment --
+    // and its notice -- appears only once there are claim cards; a card never appears without the notice.
+    const cards = await page.locator(".claim-result").count();
+    if (cards) await expect(page.getByTestId("preliminary-assessment")).toBeVisible();
+    else await expect(page.locator(".fact-question").last()).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toBeVisible();
     await expect(page.getByTestId("fact-finding")).toContainText(/Critical illness/i);
     await expect(page.getByTestId("fact-finding")).toContainText(/Specialist's diagnosis report/i);
     const body = await page.locator("main").innerText();
     expect(body).not.toMatch(FORBIDDEN);
     // No claim card and no total carries a figure before reviewed evidence.
-    for (const text of await page.locator(".claim-item, .claim-card").allInnerTexts()) expect(text).not.toMatch(/S\$\s?\d|SGD\s?\d/);
+    for (const text of await page.locator(".claim-item, .claim-card, .claim-result").allInnerTexts()) expect(text).not.toMatch(/S\$\s?\d|SGD\s?\d/);
     expect(await page.locator(".potential-totals, [data-testid=potential-totals]").count()).toBe(0);
     const limits = page.getByTestId("policy-stated-limits");
     if (await limits.count()) {

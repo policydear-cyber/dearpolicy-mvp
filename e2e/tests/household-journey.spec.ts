@@ -222,7 +222,9 @@ test.describe.serial("synthetic household journey", () => {
     const householdName = String((await api(page, "/api/household")).body.activeHouseholdName);
     await page.getByPlaceholder(householdName, { exact: true }).fill(householdName);
     await page.getByRole("button", { name: "Permanently delete household" }).click();
-    await page.waitForURL((u) => u.pathname === "/");
+    // "Permanently delete household" lands on its own confirmation page (app/household/deleted).
+    await page.waitForURL((u) => u.pathname === "/household/deleted");
+    await expect(page.getByTestId("household-deleted")).toContainText("Your household has been deleted.");
     const after = await api(page, "/api/policies");
     expect(after.status).toBe(404);
     const fam = await api(page, "/api/family");
