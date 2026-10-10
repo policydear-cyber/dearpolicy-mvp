@@ -172,6 +172,19 @@
       "refused": 0,
       "failed": 0,
       "note": "Fixed allowance for ONE hands-on trial Codespace (docs/trial/TRIAL.md, Budget). Reserved here so the automated live runs cannot spend it. Before that Codespace is deleted or a new one is created: record its /__trial/usage spentUsd here as spent_usd, set reserved_unsettled_usd to 0 and status to closed; a new Codespace needs a new allocation (trial-codespace-2)."
+    },
+    {
+      "run_id": "ingest-live-6",
+      "tested_code_sha": "fa531705d544a9531d044552d42c554d09608375",
+      "request_sha": "6605ad02c64047778c5c8780fca039d06199077d",
+      "at": "2026-10-10T09:29:18.981Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.011667,
+      "reserved_unsettled_usd": 0,
+      "calls": 26,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }

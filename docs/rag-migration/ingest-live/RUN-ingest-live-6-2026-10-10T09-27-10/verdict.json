@@ -1,0 +1,278 @@
+{
+  "verdict": "FAIL",
+  "placeholder": false,
+  "passed": 43,
+  "failed": 2,
+  "checks": [
+    {
+      "scope": "hx-text.pdf",
+      "check": "uploaded and processed",
+      "ok": true,
+      "detail": "not_scanned_prototype/ready"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1842 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$150,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$40,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$120\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$80\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$600\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 1 contains \"S$1,500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 text extracted",
+      "ok": true,
+      "detail": "native, 3002 chars"
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 contains \"24 consecutive hours\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "page 2 contains \"Accident-only cover\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-text.pdf",
+      "check": "linked automatically to the right people",
+      "ok": true,
+      "detail": "linked: Felix Oran Hartwell, Isla Maren Hartwell, Leonie Brigitte Hartwell, Simon Alastair Hartwell; expected: Simon Alastair Hartwell, Leonie Brigitte Hartwell, Felix Oran Hartwell, Isla Maren Hartwell"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "uploaded and processed",
+      "ok": true,
+      "detail": "not_scanned_prototype/ready"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "native, 1250 chars"
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"ME-26-0412\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"MHA-HC-2025-0748213\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"S$110\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-endorsement.pdf",
+      "check": "page 1 contains \"01 July 2026\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "uploaded and processed",
+      "ok": true,
+      "detail": "not_scanned_prototype/ready"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 text extracted",
+      "ok": true,
+      "detail": "ocr, 1243 chars"
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"KBJ-26-00391\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"S$150\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "page 1 contains \"S$500\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "hx-scanned.pdf",
+      "check": "linked automatically to the right people",
+      "ok": true,
+      "detail": "linked: Isla Maren Hartwell; expected: Isla Maren Hartwell"
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": true,
+      "detail": "a cited statement"
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2 (conversation) \"If something happened to Isla in an accident, how much is th\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "C2T1 (conversation) \"Under the Meridian plan, compare the accident death cover fo\"",
+      "check": "useful reply (a cited figure or condition, one material question, or what the documents do not say)",
+      "ok": false,
+      "detail": "nothing cited: \"An amendment document for this policy was removed from the library, so the current amounts may differ from these schedule figures.\""
+    },
+    {
+      "scope": "C2T1 (conversation) \"Under the Meridian plan, compare the accident death cover fo\"",
+      "check": "every figure stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "C2T1 (conversation) \"Under the Meridian plan, compare the accident death cover fo\"",
+      "check": "every date stated is one the expected facts give",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "C2T1 (conversation) \"Under the Meridian plan, compare the accident death cover fo\"",
+      "check": "no placeholder where the documents give a figure",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "C2T1 (conversation) \"Under the Meridian plan, compare the accident death cover fo\"",
+      "check": "no uncertainty the expected facts contradict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "C2T1 (conversation) \"Under the Meridian plan, compare the accident death cover fo\"",
+      "check": "no superseded figure presented as current",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "states \"S$40,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "states \"S$150,000\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "cites hx-text.pdf page 1",
+      "ok": true,
+      "detail": "cited: hx-text.pdf p1, hx-scanned.pdf p1"
+    },
+    {
+      "scope": "Q2",
+      "check": "never: the JuniorShield child accidental death benefit presented as the Meridian figure without naming the other policy (source Q2 forbidden 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "never: the Adult amount stated as Isla's (source Q2 forbidden 1: S$150,000 stated for Isla)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "never: the Child amount stated as the adult's (source Q2 forbidden 2: S$40,000 stated for Simon)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2",
+      "check": "answers without an unnecessary follow-up",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "scope": "Q2P",
+      "check": "asked",
+      "ok": false,
+      "detail": "this question was never asked (run stopped earlier?)"
+    }
+  ]
+}
