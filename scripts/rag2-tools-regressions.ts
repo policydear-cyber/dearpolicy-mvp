@@ -218,6 +218,12 @@ async function main() {
     const foreign = await person("Okafor Bright Chidi");
     assert.equal(foreign.status, "unknown", "another household's member is never resolved");
   });
+  await check("P2b a mistyped name (one slip: a swapped, missing or wrong letter) resolves to the one member it fits; short or foreign words never do", async () => {
+    const r = await person("Melisa fractured a toe"); assert.equal(r.status, "ok", JSON.stringify(r).slice(0, 200)); assert.equal((r as { person: { id: string } }).person.id, M.melissa.id); assert.equal((r as { via: string }).via, "name_spelling");
+    await okp("Rosalnid", M.rosalind.id); await okp("Darrem", M.darren.id);
+    assert.equal((await person("Okafor Bright Chidi")).status, "unknown"); assert.equal((await person("Uncle Bernard")).status, "unknown");
+    assert.notEqual((await person("Ryn")).status, "ok", "a three-letter word is never guessed");
+  });
   await check("P3 pronouns come from the conversation; a mismatch or no context asks", async () => {
     await okp("she", M.yixuan.id, { lastSubjectId: M.yixuan.id });
     await okp("him", M.junhao.id, { lastSubjectId: M.junhao.id });
