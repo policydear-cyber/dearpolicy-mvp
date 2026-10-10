@@ -37,7 +37,7 @@ function sandbox(opts: { runs?: object[]; local?: string | null } = {}) {
 function run(box: { root: string; marks: string }, env: Record<string, string>) {
   const r = spawnSync("bash", [path.join(box.root, "scripts/trial/start.sh")], {
     encoding: "utf8", timeout: 30000,
-    env: { PATH: `${path.join(box.root, "stub-bin")}:${path.dirname(process.execPath)}:/usr/bin:/bin`, HOME: box.root, CODESPACES: "true", CODESPACE_NAME: "silver-train-x7", ...env },
+    env: { PATH: `${path.join(box.root, "stub-bin")}:${path.dirname(process.execPath)}:/usr/bin:/bin`, HOME: box.root, CODESPACES: "true", CODESPACE_NAME: "silver-train-x7", ...env } as unknown as NodeJS.ProcessEnv,
   });
   return { code: r.status, err: r.stderr, out: r.stdout, ran: fs.readdirSync(box.marks) };
 }
