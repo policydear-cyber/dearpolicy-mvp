@@ -190,9 +190,12 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
   const tables: Table[] = [];
   let open: Open | null = null;
   let n = 0;
+  // A section heading printed above a table's first row (no table open yet): it is that first section's heading.
+  let pendingSection: string | null = null;
   const finish = () => { if (open && open.t.rows.length) { finalizeKinds(open.t); relabelCodeColumn(open.t); tables.push(open.t); } open = null; };
   const start = (l: Line, header: Line | null, columns: Column[], implicit: boolean) => {
-    open = { t: { tableId: `${policyId}:p${l.page}:t${++n}`, policyId, pageStart: l.page, pageEnd: l.page, headerPage: header ? l.page : null, headerLine: header ? header.text : null, columns, rows: [], headed: !!header, continued: false }, header, tabbed: l.tabbed, implicit, section: null, suspended: false };
+    open = { t: { tableId: `${policyId}:p${l.page}:t${++n}`, policyId, pageStart: l.page, pageEnd: l.page, headerPage: header ? l.page : null, headerLine: header ? header.text : null, columns, rows: [], headed: !!header, continued: false }, header, tabbed: l.tabbed, implicit, section: pendingSection, suspended: false };
+    pendingSection = null;
   };
   for (const pg of [...pages].sort((a, b) => a.page - b.page)) {
     const lines = linesOf(pg.page, pg.text);
@@ -202,6 +205,7 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
       const cur = open as Open | null;
       const nextNonBlank = lines.slice(i + 1).filter((x) => x.text.trim());
       if (!l.text.trim()) {
+        pendingSection = null;
         if (cur && !cur.suspended) {
           const next = nextNonBlank[0];
           const fits = next && (isDataRow(next) || (cur.header && flat(next.text) === flat(cur.header.text)));
@@ -210,6 +214,8 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
         continue;
       }
       intoPage++;
+      const heldSection: string | null = pendingSection;
+      pendingSection = null;
       if (cur && isPageChrome(l)) { cur.suspended = true; continue; }
       if (cur && cur.header && flat(l.text) === flat(cur.header.text)) { if (l.page !== cur.t.headerPage) cur.t.continued = true; cur.suspended = false; continue; }
       if (headerLike(l) && nextNonBlank.slice(0, 3).some(isDataRow)) {
@@ -222,6 +228,7 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
         continue;
       }
       if (isDataRow(l)) {
+        pendingSection = heldSection;
         let o = open as Open | null;
         if (o && o.suspended && l.page !== o.t.pageEnd) {
           const count = o.tabbed && l.tabbed ? l.raw.length : l.cells.length;
@@ -245,6 +252,7 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
         continue;
       }
       if (cur && !cur.suspended && l.cells.length === 1 && l.text.trim().length <= 60 && !MONEY.test(l.text) && nextNonBlank[0] && isDataRow(nextNonBlank[0])) { cur.section = l.cells[0].text; continue; }
+      if (!cur && l.cells.length === 1 && l.text.trim().length <= 60 && !MONEY.test(l.text) && lines[i + 1] && isDataRow(lines[i + 1])) { pendingSection = l.cells[0].text; continue; }
       if (cur && cur.suspended && l.page !== cur.t.pageEnd && intoPage <= 8) continue; // running page header above a continuation
       if (cur) finish();
     }
@@ -316,23 +324,28 @@ export type TableSelection =
 
 const GENERIC = new Set(["benefit", "limit", "amount", "cover", "sum", "payable", "max", "maximum", "plan", "per", "of", "which", "the", "value", "much", "how"]);
 const tokMatch = (a: string, b: string) => a === b || (a.length >= 5 && b.length >= 5 && (a.startsWith(b.slice(0, 5)) && b.startsWith(a.slice(0, 5))) && (a.startsWith(b) || b.startsWith(a)));
-function benefitScore(benefit: string, t: Table, r: Row): number {
-  const want = tokens(benefit).filter((w) => !GENERIC.has(w));
+/** Words that only say "the amount it is insured for": a roster row (one insured person per row, under the
+ * product's heading -- "GROUP PERSONAL ACCIDENT" / "Tan Yi Chuen   S$600,000") prints exactly that amount. */
+const SUM_WORDS = new Set(["insured", "assured", "cover", "covered", "coverage", "benefit", "amount", "sum"]);
+function benefitScore(benefit: string, t: Table, r: Row, roster = false): number {
+  const want = tokens(benefit).filter((w) => !GENERIC.has(w) && !(roster && SUM_WORDS.has(w)));
   if (!want.length) return 0;
   const condCols = t.columns.filter((c) => c.kind === "condition").map((c) => r.cells[c.index]?.text ?? "");
-  const own = [...tokens(r.label), ...tokens(condCols.join(" "))].filter((w) => !GENERIC.has(w));
+  // A roster row's own label is its product heading (the row itself prints an ID and a name).
+  const product = roster ? tokens((r.section ?? "").replace(/\([^)]*\)/g, " ")).filter((w) => !GENERIC.has(w) && w !== "group") : [];
+  const own = [...tokens(r.label), ...tokens(condCols.join(" ")), ...product].filter((w) => !GENERIC.has(w));
   const ctx = [...tokens(r.parent ?? ""), ...tokens(r.section ?? "")];
   let rec = 0;
   for (const w of want) { if (own.some((o) => tokMatch(o, w))) rec += 1; else if (ctx.some((o) => tokMatch(o, w))) rec += 0.8; }
-  const ownLabel = tokens(r.label).filter((w) => !GENERIC.has(w));
+  const ownLabel = roster ? product : tokens(r.label).filter((w) => !GENERIC.has(w));
   const prec = ownLabel.length ? ownLabel.filter((o) => want.some((w) => tokMatch(o, w))).length / ownLabel.length : 0;
   return rec / want.length + 0.3 * prec;
 }
 
 /** Candidate rows for a benefit across tables, best first (score >= 0.6 recall). */
-export function rowsForBenefit(tables: Table[], benefit: string): { table: Table; row: Row; score: number }[] {
+export function rowsForBenefit(tables: Table[], benefit: string, rosterRow?: (t: Table, r: Row) => boolean): { table: Table; row: Row; score: number }[] {
   const out: { table: Table; row: Row; score: number }[] = [];
-  for (const t of tables) for (const r of t.rows) { const s = benefitScore(benefit, t, r); if (s >= 0.6) out.push({ table: t, row: r, score: s }); }
+  for (const t of tables) for (const r of t.rows) { const s = benefitScore(benefit, t, r, !!rosterRow?.(t, r)); if (s >= 0.6) out.push({ table: t, row: r, score: s }); }
   return out.sort((a, b) => b.score - a.score);
 }
 
@@ -360,6 +373,8 @@ export type SubjectColumnHints = {
   childDefinition?: ChildDefinition | null;
   /** The document's name, for reasons. */
   docName?: string | null;
+  /** Every active household member's names (the subject included), to tell whose row a roster row is. */
+  household?: { id: string; names: string[] }[] | null;
   /** The date the question is about (ISO): decides which version of a before / after table is in force. */
   asOf?: string | null;
   /** The date the document's change takes effect (its printed effective date, else the recorded one), and the date the
@@ -581,6 +596,7 @@ export async function selectTableValue(args: { accountId: string; policyId: stri
     memberId: subject.id, name: subject.displayName, names, relation, tier: args.subject.tier ?? null, recordedTier: link?.tier ?? null,
     isDocOwner: doc.ownerId === subject.id, ownerIsSelf: !!self && doc.ownerId === self.id, age: ageOn(subject.dateOfBirth, asOf), namedLines,
     applicability, childDefinition, docName: doc.productName ?? null,
+    household: members.map((m) => ({ id: m.id, names: [m.displayName, m.preferredName].filter((n): n is string => !!n && n.trim().length >= 3) })),
     asOf, versionEffective: changeDate(base, doc), versionEnds: isEndorsement(doc, base) ? doc.expiryDate : null,
   };
   const picked = pickValue(base, args.benefit, want, hints, subject.id);
@@ -641,8 +657,46 @@ function amendmentOf(d: DocRow, L: Loaded, docs: DocRow[], v: SelectedValue, hin
 }
 const fmt = (v: SelectedValue) => v.valueKind === "money" ? `${v.currency} ${v.value.toLocaleString("en-SG", { minimumFractionDigits: v.cents! % 100 ? 2 : 0 })}` : v.valueKind === "percent" ? `${v.value}%` : `${v.value} ${v.unit ?? ""}`.trim();
 
+// ---------------------------------------------------------------------------------------------------------------
+// Roster tables: one insured person per row (a group certificate's "Particulars of Insured Person(s) and Sum Assured"
+// -- ID | name | amount -- under each product's heading). The person is the ROW, not a column: the subject's row is
+// the one whose name cell names them; the other people's rows are never the subject's.
+// ---------------------------------------------------------------------------------------------------------------
+const nameWords = (s: string) => (s.toLowerCase().normalize("NFKC").match(/\p{L}+/gu) ?? []).filter((w) => w.length >= 2);
+/** The household member a cell names (all words of one of their names in the cell; the fullest match wins), or null. */
+function memberNamedIn(text: string, household: { id: string; names: string[] }[]): string | null {
+  const cell = new Set(nameWords(text));
+  let best: { id: string; n: number } | null = null, tie = false;
+  for (const m of household) for (const name of m.names) {
+    const w = nameWords(name);
+    if (!w.length || !w.every((x) => cell.has(x))) continue;
+    if (!best || w.length > best.n) { best = { id: m.id, n: w.length }; tie = false; } else if (w.length === best.n && best.id !== m.id) tie = true;
+  }
+  return best && !tie ? best.id : null;
+}
+type Roster = { mine: Set<Row>; others: Set<Row>; nameCell: Map<Row, Cell> };
+/** Rows of `t` that are the subject's own roster rows (a cell naming them and an amount), and other people's rows (a
+ * name in the same column naming someone else). Null when no row of the table names the subject with an amount. */
+export function rosterOf(t: Table, subjectId: string, household: { id: string; names: string[] }[]): Roster | null {
+  const mine = new Set<Row>(), others = new Set<Row>(), nameCell = new Map<Row, Cell>(), nameCols = new Set<number>();
+  const hasMoney = (r: Row) => r.cells.some((c) => !!c && MONEY.test(c.text));
+  for (const r of t.rows) {
+    if (!hasMoney(r)) continue;
+    r.cells.forEach((c, k) => { if (c && !isMoneyOrNumber(c.text) && !mine.has(r) && memberNamedIn(c.text, household) === subjectId) { mine.add(r); nameCell.set(r, c); nameCols.add(k); } });
+  }
+  if (!mine.size) return null;
+  for (const r of t.rows) {
+    if (mine.has(r) || !hasMoney(r)) continue;
+    for (const k of nameCols) { const c = r.cells[k]; if (c && !isMoneyOrNumber(c.text) && nameWords(c.text).length >= 2 && !TEXT_VALUE.test(c.text.trim())) { others.add(r); break; } }
+  }
+  return { mine, others, nameCell };
+}
+
 function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnHints, subjectId: string): TableSelection {
-  const cands = rowsForBenefit(L.tables, benefit);
+  const household = hints.household?.length ? hints.household : [{ id: subjectId, names: hints.names }];
+  const rosters = new Map<Table, Roster>();
+  for (const t of L.tables) { const ro = rosterOf(t, subjectId, household); if (ro) rosters.set(t, ro); }
+  const cands = rowsForBenefit(L.tables, benefit, (t, r) => !!rosters.get(t)?.mine.has(r)).filter((c) => !rosters.get(c.table)?.others.has(c.row));
   if (!cands.length) return { status: "missing", reason: `no table row of ${L.doc.productName ?? "this document"} names “${benefit}”` };
   const top = cands[0].score;
   const tied = cands.filter((c) => c.score >= top - 0.05);
@@ -655,7 +709,7 @@ function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnH
   const results: SelectedValue[] = [];
   const problems: TableSelection[] = [];
   for (const c of tied) {
-    const r = pickCell(L, c.table, c.row, benefit, want, hints, ev);
+    const r = pickCell(L, c.table, c.row, benefit, want, hints, ev, rosters.get(c.table) ?? null);
     if (r.status === "ok") results.push(r); else problems.push(r);
   }
   const distinct = new Map<string, SelectedValue>();
@@ -672,7 +726,29 @@ function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnH
   return problems[0];
 }
 
-function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hints: SubjectColumnHints, ev: (t: Table, r: Row, col: Column | null, cell: Cell | null) => EvidenceRef): TableSelection {
+function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hints: SubjectColumnHints, ev: (t: Table, r: Row, col: Column | null, cell: Cell | null) => EvidenceRef, roster?: Roster | null): TableSelection {
+  // A roster row naming the subject: the row is theirs, and its one printed amount is their sum insured / assured.
+  if (roster?.mine.has(r) && (want === "any" || want === "amount")) {
+    const money = t.columns.filter((c) => r.cells[c.index] && MONEY.test(r.cells[c.index]!.text) && parseCell(r.cells[c.index]!.text, c.currency).kind === "money");
+    if (money.length === 1) {
+      const col = money[0], cell = r.cells[col.index]!;
+      const v = parseCell(cell.text, col.currency, [r.section ?? "", r.label].join(" "));
+      if (v.kind === "money") {
+        const named = roster.nameCell.get(r)!;
+        const evidence = ev(t, r, col, cell);
+        const conditions: string[] = r.section ? [`under “${r.section}”`] : [];
+        const rest = t.columns.filter((c) => c.index > col.index && r.cells[c.index]).map((c) => r.cells[c.index]!.text);
+        if (rest.length) conditions.push(rest.join(" "));
+        return {
+          status: "ok", value: v.amount, valueKind: "money", cents: v.cents, ppm: null, currency: v.currency, unit: v.unit, period: v.period,
+          conditions,
+          benefit, rowLabel: r.section ? `${r.section} — ${named.text}` : `${r.label} ${named.text}`.trim(), columnHeader: col.header,
+          columnBasis: { basis: "document", detail: `the document prints ${hints.name}'s own row (“${named.text}”)${r.section ? ` under “${r.section}”` : ""}`, evidence },
+          version: null, evidence, notes: [],
+        };
+      }
+    }
+  }
   const cols = valueColumns(t, want, r).filter((c) => t.headed || r.cells[c.index]);
   if (!t.headed) {
     const filled = cols.filter((c) => r.cells[c.index]);
