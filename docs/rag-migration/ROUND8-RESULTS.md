@@ -144,6 +144,65 @@ runs.**
 paraphrase failed on a self-computed difference. Expect further phrasing-dependent misses. The gate makes them safe
 (a figure left out, never a wrong figure shown), not absent.
 
+## Round 8e: day-count boundary defects (independently reproduced against `20ee59e`)
+
+Focused correctness fix. No platform change, no model calls (US$0 spent; the trial allocation is untouched).
+Suite: `npm run rag2:calc-boundary-test` (`scripts/rag2-calc-boundary-regressions.ts`). Every expected value in it was
+written by hand from the wording and the calendar, not produced by the code under test.
+
+### What was wrong, and how far it reached
+
+"Full path" means stored synthetic wording → `readBenefitTerms` → the `calculate` tool → the saved calculation record
+→ its recompute → `verifyAnswerFigures` (the save-time gate) on an indicative-estimate sentence. That sentence is
+scripted; no model wrote it. Each case was run against `20ee59e` (before the fix) and against the fix.
+
+| Defect | Module (before) | Full path before the fix | After |
+|---|---|---|---|
+| A. first full day, 00:00 → 01:00 the same day | 1 day | **confirmed**: S$100 estimate, kept by the gate | 0 days, not payable |
+| B. zero-length stay at 00:00Z | 1 day | **confirmed**: S$100 estimate, kept | 0 days, not payable |
+| C. “by 12 noon” / “on or before 12 noon”, admitted 12:00 | parsed as strict *before*: 1 day | **confirmed**: S$100 instead of S$200, kept | inclusive: 2 days, S$200 |
+| D. 2026-02-30 | accepted (rolled over to 2 March) | **confirmed** (complete-24-hour wording): S$100 estimate, kept | `INVALID_DATE`; the household is asked again ("2026-02-30 is not a calendar date") |
+| Same clause printed twice | 2 extra days at module level | **blocked upstream**: `terms.ts` kept one per day | counted once, at every level |
+| Two different clauses for one day | first one picked | **confirmed**: S$200 estimate from the first clause | estimate withheld; both passages named |
+| Future date of birth (2027 for a 2026 stay) | "aged -1", child | **confirmed** to the tool result: the Child column (S$80) was read for her | class unknown; no relationship guess; the Child column is refused |
+| Malformed saved records (exception applied twice, 30 Feb, 00:00 → 01:00 saved as 1 day) | — | **kept by the gate**: the recompute shared the flawed function | rejected |
+
+### Fixes (root causes)
+
+- **First full day** now counts the local calendar days lying wholly inside the stay. 00:00 → 01:00 is 0; 00:00 to
+  00:00 the next day is 1. Complete-day controls are unchanged, for example 1 Mar 00:00 → 4 Mar 11:00 is 3 days.
+- **Dates:** a calendar date, time of day and UTC offset are validated before any arithmetic, in `day-count.ts`, the
+  calculator inputs and saved-record operands. 2028-02-29 and 2000-02-29 pass. 2026-02-29, 2100-02-29, 2026-04-31,
+  month 13, 24:00, 23:60, +15:00 and +08:60 are refused.
+- **Comparisons:** `before` / `on_or_before` / `after` / `on_or_after` are kept from the wording, through the
+  calculation record and its verification, and compared to the second. "By", "on or before", "at or before" and "not
+  later than" are inclusive.
+- **Repeated vs conflicting clauses:**
+  - An equivalent repeat counts once.
+  - The benefit's own wording takes precedence over plan-level wording on the same day.
+  - An endorsement of the same policy supersedes the clause only from its stated effective date (latest in force wins).
+  - Anything else is a named conflict, and the estimate is withheld. Neither the first nor the last clause is picked.
+- **Birth dates:** an invalid date of birth, or one after the date asked about, gives class *unknown*. It is not
+  replaced by a relationship guess. A category the policy itself lists the person under still decides. Write-time
+  validation (future and invalid dates refused in `app/api/family`) was already in place.
+
+### Preserved
+
+- The complete-24-hour sweep from 0 to 96 hours equals floor(h / 24).
+- Each rule's existing day counts are unchanged: first full day, each night, day or part of a day, complete 24 hours,
+  and the 12-hour remainder.
+- `rag2:calc-test` passes 39/39.
+
+### Limitations
+
+- A zero-length stay under "each day or part of a day" still counts 1 day. It is left as that rule's own convention;
+  no universal rule was imposed.
+- Admission and discharge recorded at different UTC offsets are each read at their own local date.
+- "Midnight" in an exception is read as 00:00.
+- Amendment precedence uses the document's stored effective date only. An endorsement whose effective date was not
+  extracted leaves the day as a conflict.
+- These are synthetic, deterministic cases. They show these boundaries are handled, not general reliability.
+
 ## Remaining limitations (not fixed)
 
 - **Two-person comparisons from tier tables can lose their figures.** In run 5b Q2 the gate refused S$40,000 (the
