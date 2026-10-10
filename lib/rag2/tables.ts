@@ -214,7 +214,7 @@ export function parseTables(policyId: string, pages: { page: number; text: strin
         continue;
       }
       intoPage++;
-      const heldSection = pendingSection;
+      const heldSection: string | null = pendingSection;
       pendingSection = null;
       if (cur && isPageChrome(l)) { cur.suspended = true; continue; }
       if (cur && cur.header && flat(l.text) === flat(cur.header.text)) { if (l.page !== cur.t.headerPage) cur.t.continued = true; cur.suspended = false; continue; }
