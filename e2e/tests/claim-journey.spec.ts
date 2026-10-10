@@ -188,7 +188,9 @@ test.describe.serial("synthetic claim journey", () => {
     // Each is a separate event, so each starts its own chat (a follow-up in the
     // same chat is, correctly, treated as more facts about the same event).
     const cases: [string, RegExp[]][] = [
-      [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, [/Hospital cash/i, /Medical reimbursement/i]],
+      // The claimant's only cover is the critical-illness plan: no hospital-cash plan is opened for a benefit they do
+      // not have (lib/chat/fact-finding-chat.ts), so that is checked too (below).
+      [`${claimant} was admitted to hospital on 2026-08-02. What can be claimed?`, [/Medical reimbursement/i]],
       [`${claimant}'s flight was delayed 9 hours on the trip. Can we claim?`, [/Travel/i]],
       [`${claimant} is unable to work since 2026-07-01 after an injury. What can be claimed?`, [/Disability/i]],
       [`${PREFIX}-Relative died in a road accident on 2026-09-01. What can we claim?`, [/Accidental death/i]],
@@ -203,6 +205,7 @@ test.describe.serial("synthetic claim journey", () => {
       // On failure, show what the assistant actually said (synthetic data only).
       await expect(plan, `${message}\n--- answer ---\n${(await answer.innerText()).slice(0, 1500)}`).toBeVisible();
       for (const category of categories) await expect(plan, message).toContainText(category);
+      if (/admitted to hospital/.test(message)) await expect(plan, message).not.toContainText(/Hospital cash/i);
       await expect(plan).toContainText(/Information needed|Evidence needed|Reviewer assessment needed/);
       const text = await answer.innerText();
       expect(text, message).not.toMatch(FORBIDDEN);
