@@ -281,7 +281,8 @@ export type CalcStep =
       /** completed_24h_remainder: the remaining hours that count as one more day, as the wording states them. */
       remainderHours?:number;
       /** Exceptions the wording states for the admission / discharge day ("counts as a full day if before 12:00 noon"). */
-      edges?:{ edge:"admission"|"discharge"; when:"before"|"after"; minutes:number }[] }
+      /** Round 8e: "before" / "after" exclude the stated time; "on_or_before" / "on_or_after" include it. */
+      edges?:{ edge:"admission"|"discharge"; when:"before"|"on_or_before"|"after"|"on_or_after"; minutes:number }[] }
   | { id:string; op:"days_after_waiting"; inputs:[string]; waitingDays:number; out:number }
   | { id:string; op:"min_count"; inputs:string[]; out:number }
   | { id:string; op:"multiply"; inputs:[string,string]; out:number }
