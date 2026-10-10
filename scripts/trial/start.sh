@@ -54,7 +54,8 @@ log "3/4 server"
 if [ -f .trial/server.pid ] && kill -0 "$(cat .trial/server.pid)" 2>/dev/null; then kill "$(cat .trial/server.pid)" 2>/dev/null || true; sleep 2; fi
 if [ -n "${OPENAI_TEST_API_KEY:-}" ]; then runkey="$OPENAI_TEST_API_KEY"; mode="LIVE (the real model, gpt-6-luna)"; else runkey="preflight-no-key-set"; mode="PREFLIGHT: no OPENAI_TEST_API_KEY Codespaces secret -- uploads and reading of text work, every model call is refused"; fi
 # The key reaches the server process only (its own environment); this shell drops it at once.
-nohup env -u OPENAI_TEST_API_KEY OPENAI_API_KEY="$runkey" PORT=3000 node --max-old-space-size=2048 --import tsx e2e/support/trial-server.ts > .trial/server.log 2>&1 &
+# setsid: its own session, so it outlives postStartCommand (Codespaces ends that command's session when it returns).
+setsid nohup env -u OPENAI_TEST_API_KEY OPENAI_API_KEY="$runkey" PORT=3000 node --max-old-space-size=2048 --import tsx e2e/support/trial-server.ts > .trial/server.log 2>&1 &
 echo $! > .trial/server.pid
 runkey=""
 for _ in $(seq 1 180); do grep -q "trial server on" .trial/server.log 2>/dev/null && break; if ! kill -0 "$(cat .trial/server.pid)" 2>/dev/null; then tail -20 .trial/server.log; echo "[trial] the server stopped (.trial/server.log)" >&2; exit 1; fi; sleep 1; done
