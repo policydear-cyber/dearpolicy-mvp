@@ -250,6 +250,8 @@ jobs:
         run: npm run trial:start-isolation-test
       - name: "Day-count boundaries (hand-specified): midnight and zero-length stays, inclusive / exclusive times, impossible dates, repeated / conflicting / amended day exceptions, invalid birth dates -- module, full calculate path and saved records"
         run: npm run rag2:calc-boundary-test
+      - name: "Roster certificates: one insured person per row under each product heading -- the subject's own row (any name order), never another person's; the first heading kept; lump sum from the certificate's sum assured"
+        run: npm run rag2:roster-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test
