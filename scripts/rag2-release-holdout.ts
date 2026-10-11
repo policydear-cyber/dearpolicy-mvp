@@ -37,7 +37,7 @@ async function main() {
     const turns: { text: string; answer: ChatAnswer; trace: any; loop: any }[] = [];
     try { for (const m of messages) { const a = await h.send(m, conv); conv = { id: a.conversationId, rev: a.conversationRevision }; const s = await h.savedAnswer(conv.id!); turns.push({ text: visible(s.answer), answer: s.answer, loop: s.state.ragLoop, trace: s.state.ragLoop?.turns.at(-1) }); } }
     finally { installLoopModel(null); }
-    out.push([`### ${label}`, ...turns.flatMap((t, i) => [`USER: ${messages[i]}`, `APP:  ${t.text.replace(/\n/g, "\n      ")}`, `      (gate=${JSON.stringify(t.trace?.gate ?? [])})`])].join("\n"));
+    out.push([`### ${label}`, ...turns.flatMap((t, i) => [`USER: ${messages[i]}`, `APP:  ${t.text.replace(/\n/g, "\n      ")}`, `      (gate=${JSON.stringify(t.trace?.gate ?? [])} tools=${(t.trace?.toolCalls ?? []).map((c: any) => c.name + (c.ok ? "" : "!")).join(",")})`, ...(process.env.HOLDOUT_DEBUG ? (t.trace?.toolCalls ?? []).filter((c: any) => !c.ok).map((c: any) => `      ! ${c.name}: ${String(c.error ?? "").slice(0, 400)}`) : [])])].join("\n"));
     return turns;
   };
 

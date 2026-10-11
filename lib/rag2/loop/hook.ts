@@ -87,7 +87,9 @@ function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: Ra
   const lostWhatIfs = (composed?.calculations ?? []).filter((r) => r.kind === "conditional_illustration" && gone(r.sentence));
   const whatIfLines = [...new Set(lostWhatIfs.map((r) => {
     const doc = answer.citations.find((c) => c.policyId === r.policyId)?.policyName ?? state.docNames?.[r.policyId] ?? "your policy document";
-    return `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t check its assumed stay against what you told me.`;
+    return r.calculator === "hospital_cash"
+      ? `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t check its assumed stay against what you told me.`
+      : `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t confirm the figures it uses against your documents.`;
   }))];
   const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
   const requirements = (composed?.sentences ?? []).filter((x) => x.kind === "requirement" && !said.includes(x.text)).map((x) => x.text);

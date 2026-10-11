@@ -324,7 +324,7 @@ export function periodFactor(from: FigurePeriod, to: FigurePeriod): number | nul
 // ---------------------------------------------------------------------------------------------------------
 
 type Doc = { id: string; owner: string; members: Set<string>; fileHash: string | null; superseded: boolean; usable: boolean; pages: Map<number, string>;
-  product: string | null; policyNumber: string | null; role: string | null; effective: string | null; expiry: string | null };
+  product: string | null; policyNumber: string | null; groupPolicyNumber?: string | null; role: string | null; effective: string | null; expiry: string | null };
 /** Every active document of the household (light: no pages), for an endorsement's link to the policy it amends. */
 type HouseDoc = { id: string; owner: string; members: Set<string>; product: string | null; policyNumber: string | null; role: string | null };
 type Person = { id: string; names: string[]; relationship: string; notes?: string | null; dateOfBirth?: string | null };
@@ -371,16 +371,16 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
   // as the cited documents, so the metadata read below costs nothing for the many households that have none.
   let anyRemovedAmendment = false;
   if (ids.length) {
-    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; role: string | null; effective: string | null; expiry: string | null; removed_amendment: boolean }>(
+    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; group_policy_number: string | null; role: string | null; effective: string | null; expiry: string | null; removed_amendment: boolean }>(
       `SELECT p.id::text AS id, p.family_member_id::text AS owner, p.file_hash, (p.superseded_at IS NOT NULL) AS superseded,
               (coalesce(p.quarantine_status,'') IN ('scan_clean','not_scanned_prototype')) AS usable,
-              to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'document_role' AS role,
+              to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'group_policy_number' AS group_policy_number, to_jsonb(p)->>'document_role' AS role,
               left(to_jsonb(p)->>'effective_date', 10) AS effective, left(to_jsonb(p)->>'renewal_or_expiry_date', 10) AS expiry,
               EXISTS (SELECT 1 FROM policies q WHERE q.account_id=p.account_id AND (q.lifecycle_state<>'active' OR q.superseded_at IS NOT NULL)
                         AND coalesce(to_jsonb(q)->>'document_role','') ~* 'endorse|alteration|amendment|rider|addendum') AS removed_amendment
          FROM policies p WHERE p.account_id=$1 AND p.id::text=ANY($2::text[]) AND ${activePredicate("p")}`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
     anyRemovedAmendment = rows.some((r) => !!r.removed_amendment);
-    for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map(), product: r.product ?? null, policyNumber: r.policy_number ?? null, role: r.role ?? null, effective: r.effective ?? null, expiry: r.expiry ?? null });
+    for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map(), product: r.product ?? null, policyNumber: r.policy_number ?? null, groupPolicyNumber: r.group_policy_number ?? null, role: r.role ?? null, effective: r.effective ?? null, expiry: r.expiry ?? null });
     if (docs.size) {
       const members = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, [...docs.keys()]]).catch(() => ({ rows: [] }))).rows;
       for (const m of members) docs.get(m.policy_id)?.members.add(m.member);
@@ -988,15 +988,29 @@ function endorsesPolicy(endorsementId: string, r: CalculationRecord, ctx: Ctx): 
   if (!key || normNo(base.policyNumber) !== key) return false;
   return !amendmentProblem(e, r.subjectId, null, ctx);
 }
+/** Round 9: two documents of the same policy -- a group certificate and its policy wording -- share a policy or group
+ * policy number (the calculator's own family rule, lib/rag2/store.ts policyFamily). */
+function samePolicyFamily(a: string, b: string, ctx: Ctx): boolean {
+  const x = ctx.docs.get(a), y = ctx.docs.get(b);
+  if (!x || !y) return false;
+  const keys = (d: Doc) => [normNo(d.policyNumber), normNo(d.groupPolicyNumber)].filter((k) => k.length >= 4);
+  const kx = keys(x);
+  return kx.length > 0 && keys(y).some((k) => kx.includes(k));
+}
 function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: CalculationRecord, ctx: Ctx): string | null {
   const b = o.binding;
   if (!b) return `${o.label}: a document figure without its own binding`;
   // Integration (r7): an endorsement's in-force figure may serve a calculation on the policy it amends (the same policy
   // number, the endorsement linked to this household's policy for the person); any other document is refused.
   const viaEndorsement = b.policyId !== r.policyId && endorsesPolicy(b.policyId, r, ctx);
-  if (b.policyId !== r.policyId && !viaEndorsement) return `${o.label}: bound to another document than the calculation’s`;
+  // Round 9: a figure from another document of the same policy (the wording's percentage for the certificate's sum
+  // assured) serves the calculation as that document's own figure: its version is that document's, and it must speak
+  // for the person.
+  const viaFamily = b.policyId !== r.policyId && !viaEndorsement && samePolicyFamily(b.policyId, r.policyId, ctx) && !!ctx.docs.get(b.policyId)?.members.has(r.subjectId);
+  if (b.policyId !== r.policyId && !viaEndorsement && !viaFamily) return `${o.label}: bound to another document than the calculation’s`;
   if (b.subjectId !== r.subjectId) return `${o.label}: bound to another person than the calculation’s`;
-  if (viaEndorsement) { const e = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== e.fileHash) return `${o.label}: bound to another version of the endorsement than the one on file`; }
+  if (viaFamily) { const d = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== d.fileHash) return `${o.label}: bound to another version of that document than the one on file`; }
+  else if (viaEndorsement) { const e = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== e.fileHash) return `${o.label}: bound to another version of the endorsement than the one on file`; }
   else if ((b.documentHash ?? null) !== (r.documentHash ?? null)) return `${o.label}: bound to another version than the calculation’s`;
   if ((o.column ?? null) !== (b.column ?? null)) return `${o.label}: the stated column is not the binding’s`;
   if (o.row && !squash(b.passage).includes(squash(o.row).slice(0, 40))) return `${o.label}: the stated row is not the bound passage`;

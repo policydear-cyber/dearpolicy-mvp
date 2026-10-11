@@ -40,12 +40,16 @@ const VOCAB: Record<string, string[]> = {
 
 /** True when the cited passage(s) are about the fact the question asks for. `names` are household names (never a
  * shared subject on their own). */
+const TIME_LIMIT = /\bwithin\s+\d+\s*(?:calendar\s+)?(?:days?|weeks?|months?|years?|hours?)\b|\b\d+\s*(?:days?|months?|years?)\s+(?:of|from|after|before)\b|\bcover\s+(?:for\s+[^.]{0,40}\s+)?(?:ends|starts|begins|ceases)\b|\bperiod of (?:insurance|cover)\b|\bin force\b/i;
 export function relevantEvidence(question: string, factKey: string, evidenceTexts: string[], names: string[] = []): boolean {
   const text = evidenceTexts.join("\n").toLowerCase();
   if (!text.trim()) return false;
   const c = factConcept(factKey);
   const vocab = VOCAB[c.concept];
   if (vocab && vocab.some((w) => text.includes(w))) return true;
+  // Round 9: the date of an event matters to a clause that counts time from it or limits cover in time ("within 365
+  // days of the Accident", "cover ends on the date ...").
+  if ((c.grain === "date" || c.grain === "time" || /(?:^|_)(?:date|datetime|when)(?:_|$)/.test(factKey)) && TIME_LIMIT.test(text)) return true;
   const nameWords = new Set(names.flatMap((n) => contentWords(n)));
   const useful = (ws: string[]) => ws.filter((w) => !GENERIC.has(w) && !nameWords.has(w));
   const asked = useful(contentWords(question));
