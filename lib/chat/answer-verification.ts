@@ -531,9 +531,42 @@ function tableHeadFor(lines: string[], at: number, cells: number): TableHead | n
  * class (an employee is not the spouse column), the version in force on the date the sentence is about (an amended
  * value from its effective date until it ends; the earlier value only before it, or where the sentence presents it as
  * the earlier value), and the stage the sentence names. A version column is never a person. */
-function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null; doc?: Doc | null; sentence?: string | null; userText?: string } = {}): string | null {
+/** The household member a cell names (every word of one of their names in the cell, any order; the fullest match
+ * wins, a tie is nobody). */
+function memberNamedInCell(cell: string, people: Person[]): string | null {
+  const words = (x: string) => (x.toLowerCase().normalize("NFKC").match(/\p{L}+/gu) ?? []).filter((w) => w.length >= 2);
+  const have = new Set(words(cell));
+  let best: { id: string; n: number } | null = null, tie = false;
+  for (const p of people) for (const n of p.names) {
+    const w = words(n);
+    if (!w.length || !w.every((x) => have.has(x))) continue;
+    if (!best || w.length > best.n) { best = { id: p.id, n: w.length }; tie = false; } else if (w.length === best.n && best.id !== p.id) tie = true;
+  }
+  return best && !tie ? best.id : null;
+}
+/** A roster row (a group certificate's "ID | name | sum assured | date": one insured person per row): the person is
+ * the row. The figure stands only on the row that names the person it is stated for, as that row's one amount; on a
+ * row naming someone else it is refused. Undefined when the rows are not roster rows. */
+function rosterRowProblem(rows: string[], value: number, currency: string, subject: Person | undefined, people: Person[]): string | null | undefined {
+  if (!subject) return undefined;
+  const pool = people.some((p) => p.id === subject.id) ? people : [...people, subject];
+  let verdict: string | null | undefined = undefined;
+  for (const row of rows) {
+    const cells = rowCells(row);
+    const money = cells.filter((c) => MONEY_CELL.test(c));
+    const named = cells.filter((c) => !MONEY_CELL.test(c)).map((c) => memberNamedInCell(c, pool)).filter((x): x is string => !!x);
+    if (money.length !== 1 || !named.length) return undefined;
+    if (!named.includes(subject.id)) return "the figure is printed on another insured person’s row, not the one it is stated for";
+    if (amountPrintedWith(value, currency, money[0]) === "other") return "the currency printed in the row is not the figure’s";
+    verdict = null;
+  }
+  return verdict;
+}
+
+function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null; doc?: Doc | null; sentence?: string | null; userText?: string; people?: Person[] } = {}): string | null {
   const rows = passageRows(b.passage).filter((r) => amountAppears(value, r));
   if (!rows.length) return "the amount is not printed in the cited passage";
+  if (!opts.count) { const roster = rosterRowProblem(rows, value, currency, subject, opts.people ?? []); if (roster !== undefined) return roster; }
   // A row with one value prints one figure for everyone it covers -- an item code ("A", "1") and the benefit's name are
   // not value columns ("No. | Benefit | Amount payable" is one amount column, not one column per person or tier). A
   // row that says in a cell of its own who it is for ("Category: Child (each)") is still checked for that person.
@@ -724,7 +757,7 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   if (sentence != null && !namesBenefit(sentence, benefit) && !(BENEFIT_BACK_REFERENCE.test(sentence) && opts.previous != null && namesBenefit(opts.previous, benefit))) return "the sentence does not name the benefit the figure is printed for";
   if (sentence != null) { const other = otherRowProblem(sentence, value, shown, rangeText, benefit); if (other) return other; }
   const row = benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
-  const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner, doc, sentence, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, sentence, ctx);
+  const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner, doc, sentence, userText: ctx.userText, people: ctx.people }) ?? amendmentProblem(doc, b.subjectId, sentence, ctx);
   if (row) {
     // A table whose rows are not benefits (a value table: one row per policy year, one column per value): the figure's
     // benefit is its own column (checked above), and the sentence names its row (the row's first cell).

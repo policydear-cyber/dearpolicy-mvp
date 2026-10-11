@@ -120,6 +120,23 @@ async function main() {
     assert.ok(!bad.ok, "Alex's sum assured is refused for Bea");
   });
 
+  await check("R9 the save-time gate keeps Alex's S$600,000 bound to his own certificate row (and rejects it for Bea)", async () => {
+    const { toFigureBinding } = await import("@/lib/rag2/evidence");
+    const { verifyAnswerFigures } = await import("@/lib/chat/answer-verification");
+    type Ans = import("@/types").ChatAnswer; type Bound = import("@/types").BoundFigure;
+    const answer = (sentence: string, figureBindings: Bound[]): Ans => ({ mode: "answer", summary: sentence, details: [], claimItems: [], nextSteps: [], confidence: null, citations: figureBindings.map((b) => ({ chunkId: "c", policyId: b.policyId, policyName: "x", pageStart: b.pageStart, pageEnd: b.pageEnd })), disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], figureBindings, accountHint: ACCOUNT } as unknown as Ans);
+    const T2 = await import("@/lib/rag2/tables");
+    const r = await T2.selectTableValue({ accountId: ACCOUNT, policyId: cert.id, benefit: "Group Personal Accident sum insured", subject: { memberId: M.alex.id }, asOf: "2026-10-11" });
+    assert.equal(r.status, "ok"); if (r.status !== "ok") return;
+    const b = toFigureBinding(r.evidence, r.rowLabel, r.value, "SGD"); assert.ok(b, "a binding");
+    const s = "Alex's Group Personal Accident sum assured on the certificate is S$600,000.";
+    const problems = await verifyAnswerFigures(answer(s, [{ ...b!, sentence: s, value: 600000, currency: "SGD" } as Bound]), { accountId: ACCOUNT, userText: "alex died in a motorbike accident" });
+    assert.deepEqual(problems.map((p) => p.reason), []);
+    const s2 = "Bea's Group Personal Accident sum assured on the certificate is S$600,000.";
+    const bad = await verifyAnswerFigures(answer(s2, [{ ...b!, subjectId: M.bea.id, sentence: s2, value: 600000, currency: "SGD" } as Bound]), { accountId: ACCOUNT, userText: "bea died in a motorbike accident" });
+    assert.ok(bad.length >= 1, "Alex's row is never Bea's figure");
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nroster regressions ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);
