@@ -686,9 +686,11 @@ const nameWords = (s: string) => (s.toLowerCase().normalize("NFKC").match(/\p{L}
 function memberNamedIn(text: string, household: { id: string; names: string[] }[]): string | null {
   const cell = new Set(nameWords(text));
   let best: { id: string; n: number } | null = null, tie = false;
+  const cellWords = nameWords(text);
   for (const m of household) for (const name of m.names) {
     const w = nameWords(name);
     if (!w.length || !w.every((x) => cell.has(x))) continue;
+    if (w.length === 1 && !(cellWords.length === 1 && cellWords[0] === w[0])) continue; // "Grace period" is not Grace
     if (!best || w.length > best.n) { best = { id: m.id, n: w.length }; tie = false; } else if (w.length === best.n && best.id !== m.id) tie = true;
   }
   return best && !tie ? best.id : null;

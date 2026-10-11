@@ -137,6 +137,14 @@ async function main() {
     assert.ok(bad.length >= 1, "Alex's row is never Bea's figure");
   });
 
+  await check("R10 a one-word name names a row only when it is the whole cell: 'Grace period' is never the member Grace", () => {
+    const text = ["Benefit   Amount", "Grace period   S$100", "Grace   S$250"].join("\n");
+    const t = T.parseTables("g", [{ page: 1, text }])[0];
+    const ro = T.rosterOf(t, "grace-id", [{ id: "grace-id", names: ["Grace"] }]);
+    assert.equal(ro?.mine.size ?? 0, 1, "only the row whose cell is exactly 'Grace'");
+    assert.ok([...(ro?.mine ?? [])].every((r) => !/period/.test(r.line)));
+  });
+
   const failed = results.filter((r) => !r.ok);
   console.log(`\nroster regressions ${results.length - failed.length}/${results.length} passed`);
   process.exit(failed.length ? 1 : 0);

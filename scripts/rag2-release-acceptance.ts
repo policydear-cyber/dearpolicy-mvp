@@ -50,7 +50,7 @@ async function main() {
         turns.push({ user: m, answer: saved.answer, text: visible(saved.answer), loop: saved.state.ragLoop, trace: saved.state.ragLoop?.turns.at(-1) });
       }
     } finally { installLoopModel(null); }
-    const t = [`### ${label}`, ...turns.flatMap((x) => [`USER: ${x.user}`, `APP:  ${x.text.replace(/\n/g, "\n      ")}`, `      (steps=${x.trace?.steps} gate=${JSON.stringify(x.trace?.gate ?? [])} tools=${(x.trace?.toolCalls ?? []).map((c: any) => c.name + (c.ok ? "" : "!")).join(",")})`, ...(process.env.RELEASE_TRANSCRIPT === "2" ? (x.trace?.dropped ?? []).map((d: any) => `      - dropped: ${d.sentence} -- ${d.reason}`) : []), ...(process.env.RELEASE_TRANSCRIPT === "2" ? (x.trace?.toolCalls ?? []).filter((c: any) => !c.ok).map((c: any) => `      ! ${c.name}: ${String(c.error ?? c.summary ?? "").slice(0, 600)}`) : [])])].join("\n");
+    const t = [`### ${label}`, ...turns.flatMap((x) => [`USER: ${x.user}`, `APP:  ${x.text.replace(/\n/g, "\n      ")}`, `      (steps=${x.trace?.steps} loop_ms=${x.trace?.latencyMs} gate=${JSON.stringify(x.trace?.gate ?? [])} tools=${(x.trace?.toolCalls ?? []).map((c: any) => c.name + (c.ok ? "" : "!")).join(",")})`, ...(process.env.RELEASE_TRANSCRIPT === "2" ? (x.trace?.dropped ?? []).map((d: any) => `      - dropped: ${d.sentence} -- ${d.reason}`) : []), ...(process.env.RELEASE_TRANSCRIPT === "2" ? (x.trace?.toolCalls ?? []).filter((c: any) => !c.ok).map((c: any) => `      ! ${c.name}: ${String(c.error ?? c.summary ?? "").slice(0, 600)}`) : [])])].join("\n");
     transcripts.push(t);
     if (process.env.RELEASE_TRANSCRIPT) console.log(t);
     return turns;
@@ -327,6 +327,7 @@ async function main() {
     assert.ok(now.some((r) => /as of 2024-04-01/.test(r)), now.join("; "));
     assert.ok((await gate("Alex's Group Personal Accident sum assured is S$600,000.", b, 600000)).length >= 1);
     assert.ok((await gate("Alex will receive S$600,000 from Group Personal Accident.", b, 600000)).length >= 1);
+    assert.deepEqual(await gate("Alex's certificate lists his Group Personal Accident sum assured as S$600,000 as of 1 April 2024; the insurer can confirm whether it still applies.", b, 600000), [], "a hedge about whether it still applies is not a claim of current cover");
   });
   await check("C4 wrong currency, wrong benefit (another product's row), wrong document version, another household's document all fail", async () => {
     const b = bind(alexGpa);

@@ -537,16 +537,20 @@ function memberNamedInCell(cell: string, people: Person[]): string | null {
   const words = (x: string) => (x.toLowerCase().normalize("NFKC").match(/\p{L}+/gu) ?? []).filter((w) => w.length >= 2);
   const have = new Set(words(cell));
   let best: { id: string; n: number } | null = null, tie = false;
+  // (A one-word name -- a preferred name such as "Grace" or "May" -- names a cell only when it is the whole cell, so
+  // "Grace period" or "May 2026" is never a person.)
+  const cellWords = words(cell);
   for (const p of people) for (const n of p.names) {
     const w = words(n);
     if (!w.length || !w.every((x) => have.has(x))) continue;
+    if (w.length === 1 && !(cellWords.length === 1 && cellWords[0] === w[0])) continue;
     if (!best || w.length > best.n) { best = { id: p.id, n: w.length }; tie = false; } else if (w.length === best.n && best.id !== p.id) tie = true;
   }
   return best && !tie ? best.id : null;
 }
 /** Words that present a figure as cover in force now, or as money that will be paid -- not what a dated document
  * printed on its date. */
-const PRESENT_COVER = /\b(?:currently|now|today|still)\b|\bis (?:covered|insured) for\b|\bwill (?:be )?(?:receive|get|paid|pay|payable)\b|\b(?:entitled|eligible) to\b|\bpayable to\b|\byou(?:'ll| will) get\b/i;
+const PRESENT_COVER = /\b(?:currently|now|today|still)\s+(?:covered|insured|has|have|holds?|gets?)\b|\bis (?:currently |now )?(?:covered|insured) for\b|\bwill (?:be )?(?:receive|get|paid|pay|payable)\b|\b(?:entitled|eligible) to\b|\bpayable to\b|\byou(?:'ll| will) get\b/i;
 /** Words that attribute a figure to the document ("the certificate lists ...", "as of 1 April 2024"). */
 const ATTRIBUTED = /\b(?:certificate|schedule|document|policy (?:schedule|document)|lists?|listed|shows?|shown|prints?|printed|states?|stated|records?|recorded|as (?:of|at)|dated|effective)\b/i;
 const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
@@ -989,7 +993,7 @@ function endorsesPolicy(endorsementId: string, r: CalculationRecord, ctx: Ctx): 
   return !amendmentProblem(e, r.subjectId, null, ctx);
 }
 /** Round 9: two documents of the same policy -- a group certificate and its policy wording -- share a policy or group
- * policy number (the calculator's own family rule, lib/rag2/store.ts policyFamily). */
+ * policy number (the calculator's own family rule: policyFamily in the conversation tools' store). */
 function samePolicyFamily(a: string, b: string, ctx: Ctx): boolean {
   const x = ctx.docs.get(a), y = ctx.docs.get(b);
   if (!x || !y) return false;
