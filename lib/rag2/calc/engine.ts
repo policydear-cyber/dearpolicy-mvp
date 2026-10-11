@@ -131,8 +131,9 @@ export function hospitalCash(a: {
   // V1.1: a what-if the household asked ("if she's warded 5 days") on wording that does not say how days are counted
   // is illustrated on a stated assumption -- each complete 24 hours counts as one day -- never as their actual stay.
   let dayAssumption: string | null = null;
+  const illustrating = a.whatIf || [a.admission, a.discharge].some((h) => h?.kind === "assumption");
   if (t.dayRule) conds.push({ id: "c_day_rule", kind: "day_count_rule", text: `Days are counted as the wording states: “${t.dayRule.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(t.dayRule.evidence) });
-  else if (a.whatIf && !t.dayRuleConflict.length) {
+  else if (illustrating && !t.dayRuleConflict.length) {
     dayAssumption = `assuming each complete 24 hours in hospital counts as one day (the stored ${product} wording does not say how hospital days are counted; only the insurer can confirm it)`;
     conds.push({ id: "c_day_rule", kind: "day_count_rule", text: dayAssumption, status: "established", basis: "assumption" as CalcCondition["basis"] });
   } else {
@@ -342,7 +343,7 @@ export function hospitalCash(a: {
     cents = out;
   }
   const kind = ops.some((o) => o.source === "assumption") || assumed.length ? "conditional_illustration" : "indicative_estimate";
-  if (kind === "conditional_illustration" && !a.whatIf) return { refused: "an assumed figure is used only for a what-if the household asked (purpose what_if)" };
+  if (kind === "conditional_illustration" && !illustrating) return { refused: "an assumed figure is used only for a what-if the household asked (purpose what_if)" };
   if (kind === "indicative_estimate" && !settledStatus(conds)) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
   const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : available.length ? available.join(" and ") : null;
   const record: RecordWithUnitTerms = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption, unresolvedText: "", unitTerms };

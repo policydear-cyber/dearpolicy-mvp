@@ -312,6 +312,153 @@ const SCRIPTS: Record<string, ScriptTurn[]> = {
       ] })],
     ] },
   ],
+  // ----- sealed set (scripted at freeze, from acceptance-sealed.json) -----
+  S1: [
+    { steps: [
+      () => [call("resolve_person", { mention: "me" }), call("resolve_person", { mention: "my wife" })],
+      () => [call("policies_for", { subject_id: A }), call("policies_for", { subject_id: B })],
+      (v) => [call("final_answer", { sentences: [
+        S("You and Bea are both insured on the Harbourline Civil Service Group Scheme certificate (policy HL7700123), which lists Group Term Life, Group Personal Accident and Group Living Care.", { evidence_ids: cover(v, "CERT") }),
+        S("You are both on the Harbourline Group Hospital Cash plan (policy HL9900456).", { evidence_ids: cover(v, "HC") }),
+        S("You are the employee and Bea the spouse on the Orchid Benefits Employee Group Outpatient Plan (policy OB-OP-7781).", { evidence_ids: cover(v, "EMP") }),
+        S("Bea is also insured on the Kestrel General FamilyShield Accident Plan (policy KG-FS-4410), with Cai.", { evidence_ids: cover(v, "FAMILY"), subject_id: B }),
+        S("Your Harbourline term policy (HL-TL-3302) covers only you.", { evidence_ids: cover(v, "SCAN"), subject_id: A }),
+      ] })],
+    ] },
+    { steps: [
+      () => [call("resolve_person", { mention: "her" })],
+      () => [sel("CERT", "Group Personal Accident sum insured", B), sel("FAMILY", "Accidental death", B), sel("ENDT", "Fracture (per fracture)", B)],
+      (v) => [call("final_answer", { subject_id: B, sentences: [
+        S("Bea's certificate lists her Group Personal Accident sum assured as S$400,000, as of 1 April 2024.", { value_ids: [val(v, "CERT")], subject_id: B }),
+        S("Her FamilyShield Accident Plan lists accidental death at S$200,000 in the Adult column.", { value_ids: [val(v, "FAMILY")], subject_id: B }),
+        S("Under Endorsement No. 2 her FamilyShield fracture benefit is S$1,000 per fracture from 1 July 2026 (previously S$800).", { value_ids: [val(v, "ENDT"), other(v, "ENDT")], subject_id: B }),
+      ] })],
+    ] },
+  ],
+  S2: [
+    { steps: [
+      () => [call("resolve_person", { mention: "bea" })],
+      () => [call("note_facts", { subject_id: B, facts: [{ key: "injury", value: "fractured toe", words: "bea fractured her toe yesterday" }, { key: "event_date", value: "2026-10-10", words: "bea fractured her toe yesterday" }] })],
+      () => [sel("CERT", "Group Personal Accident sum insured", B), sel("PA_WORD", "Fracture of toe", B, "percent"), sel("ENDT", "Fracture (per fracture)", B, "amount", "2026-10-10"), srch("accident means", B)],
+      (v) => [call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: B, policy_id: doc("CERT").id, benefit: "Fracture of toe", sum_insured_value_id: val(v, "CERT"), percent_value_id: val(v, "PA_WORD"), condition: "fractured toe", assumption_words: "bea fractured her toe yesterday" })],
+      (v) => [call("ask_user", { kind: "fact", subject_id: B, fact_key: "how_it_happened", question: "How did Bea fracture her toe?", because_evidence_ids: [hit(v, /Accident means/)], statements: [
+        S("You told me Bea fractured her toe yesterday."),
+        S("Her Group Personal Accident cover lists Fracture of toe at 2% of the Sum Insured, and her certificate lists a sum assured of S$400,000 as of 1 April 2024.", { value_ids: [val(v, "PA_WORD"), val(v, "CERT")], subject_id: B }),
+        S("If the fracture was caused by an Accident as the wording defines it, an indicative illustration is S$8,000.", { result_id: calcId(v, /toe/), subject_id: B }),
+        S("Her FamilyShield fracture benefit is S$1,000 per fracture from 1 July 2026, under Endorsement No. 2.", { value_ids: [val(v, "ENDT")], subject_id: B }),
+      ] })],
+    ] },
+    { steps: [
+      () => [call("read_page", { policy_id: doc("FAMILY").id, page: 1 })],
+      (v) => [call("final_answer", { sentences: [
+        S("The FamilyShield Accident Plan is with Kestrel General (policy KG-FS-4410).", { evidence_ids: [pick(v, "read_page").evidence.evidence_id] }),
+      ] })],
+    ] },
+    { steps: [
+      () => [call("note_facts", { subject_id: B, facts: [{ key: "how_it_happened", value: "tripped on the stairs at home", words: "she tripped on the stairs at home" }] })],
+      () => [sel("CERT", "Group Personal Accident sum insured", B), sel("PA_WORD", "Fracture of toe", B, "percent"), sel("ENDT", "Fracture (per fracture)", B, "amount", "2026-10-10"), srch("accident means", B)],
+      (v) => [call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: B, policy_id: doc("CERT").id, benefit: "Fracture of toe", sum_insured_value_id: val(v, "CERT"), percent_value_id: val(v, "PA_WORD"), condition: "fractured toe from a fall", assumption_words: "she tripped on the stairs at home" })],
+      (v) => [call("final_answer", { subject_id: B, sentences: [
+        S("You told me she tripped on the stairs at home."),
+        S("The wording defines an Accident as a sudden, unforeseen and involuntary event caused by external, violent and visible means.", { evidence_ids: [hit(v, /Accident means/)], subject_id: B }),
+        S("If the insurer accepts it as an Accident, an indicative illustration for Fracture of toe is S$8,000.", { result_id: calcId(v, /toe/), subject_id: B }),
+        S("Her FamilyShield fracture benefit is S$1,000 per fracture from 1 July 2026, under Endorsement No. 2.", { value_ids: [val(v, "ENDT")], subject_id: B }),
+      ], next_steps: ["Contact Harbourline Life and Kestrel General for their claim forms; each insurer decides what it pays."] })],
+    ] },
+  ],
+  S3: [
+    { steps: [
+      () => [call("resolve_person", { mention: "alex" })],
+      () => [call("note_facts", { subject_id: A, facts: [{ key: "how_it_happened", value: "killed racing his motorbike at a track event", words: "alex was killed racing his motorbike at a track event" }] })],
+      () => [sel("CERT", "Group Personal Accident sum insured", A), sel("PA_WORD", "Death due to Accident", A, "percent"), sel("CERT", "Group Term Life sum assured", A), sel("SCAN", "Death", A), srch("exclusions competitive racing", A)],
+      (v) => [call("ask_user", { kind: "fact", subject_id: A, fact_key: "race_sanctioned", question: "Was the track event a race sanctioned by the Authority?", because_evidence_ids: [hit(v, /competitive racing/)], preface: "I'm very sorry for your loss.", statements: [
+        S("You told me Alex was killed racing his motorbike at a track event."),
+        S("The Group Personal Accident wording does not pay for death caused by competitive racing on wheels, except racing sanctioned by the Authority.", { evidence_ids: [hit(v, /competitive racing/)], subject_id: A }),
+        S("His certificate lists a Group Personal Accident sum assured of S$600,000 as of 1 April 2024, and the wording pays Death due to Accident at 100% of the Sum Insured.", { value_ids: [val(v, "CERT", /Personal Accident/), val(v, "PA_WORD")], subject_id: A }),
+        S("His certificate also lists a Group Term Life sum assured of S$1,000,000 as of 1 April 2024, and his Harbourline term schedule lists a Death sum assured of S$250,000.", { value_ids: [val(v, "CERT", /Term Life/), val(v, "SCAN")], subject_id: A }),
+      ] })],
+    ] },
+    { steps: [
+      () => [call("note_facts", { subject_id: A, facts: [{ key: "race_sanctioned", value: "yes", words: "it was an officially sanctioned race" }] })],
+      () => [sel("CERT", "Group Personal Accident sum insured", A), sel("PA_WORD", "Death due to Accident", A, "percent"), srch("death due to accident within days", A), srch("exclusions competitive racing", A)],
+      (v) => [call("calculate", { calculator: "lump_sum", purpose: "claim", subject_id: A, policy_id: doc("CERT").id, benefit: "Death due to Accident", sum_insured_value_id: val(v, "CERT"), percent_value_id: val(v, "PA_WORD"), condition: "death in a sanctioned motorbike race", assumption_words: "it was an officially sanctioned race" })],
+      (v) => [call("final_answer", { subject_id: A, sentences: [
+        S("You told me it was an officially sanctioned race."),
+        S("The racing exclusion does not apply to racing sanctioned by the Authority, and the wording pays Death due to Accident at 100% of the Sum Insured if death results from the Accident within 365 days.", { evidence_ids: [hit(v, /competitive racing/), hit(v, /Death due to Accident: if/)], value_ids: [val(v, "PA_WORD")], subject_id: A }),
+        S("If the insurer accepts that, an indicative illustration of the Death due to Accident benefit is S$600,000.", { result_id: calcId(v, /Death/), subject_id: A }),
+      ], next_steps: ["Contact Harbourline Life to start the claim; the insurer decides what it pays."] })],
+    ] },
+  ],
+  S4: [
+    { steps: [
+      () => [call("resolve_person", { mention: "bea" })],
+      () => [call("note_facts", { subject_id: B, facts: [{ key: "days_in_hospital", value: 3, words: "bea was in hospital for 3 days last month" }] })],
+      () => [sel("HC", "hospital cash daily benefit", B), sel("HC", "hospital cash annual limit", B)],
+      (v) => [call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: B, policy_id: doc("HC").id, benefit: "Daily benefit", rate_value_id: val(v, "HC", /daily/), admission: { at: "2026-09-10T10:00:00+08:00", words: "bea was in hospital for 3 days last month", assumed: true }, discharge: { at: "2026-09-13T10:00:00+08:00", words: "bea was in hospital for 3 days last month", assumed: true } })],
+      (v) => { const c = v.find("calculate"); const ok = c?.ok && c.result?.data?.amount != null; return [call("final_answer", { subject_id: B, sentences: [
+        S("Bea's Harbourline Group Hospital Cash schedule lists a daily benefit of S$100 and an annual limit of S$10,000.", { value_ids: [val(v, "HC", /daily/), val(v, "HC", /annual/)], subject_id: B }),
+        ...(ok ? [S("If all 3 days count, an indicative illustration is S$300.", { result_id: c!.result.data.calc_id, subject_id: B })] : []),
+      ] })]; },
+    ] },
+    { steps: [
+      () => [call("resolve_person", { mention: "me, alex" })],
+      () => [call("note_facts", { subject_id: A, facts: [{ key: "days_in_hospital", value: 4, words: "wait no it was me, alex, and it was 4 days" }] })],
+      () => [sel("HC", "hospital cash daily benefit", A), sel("HC", "hospital cash annual limit", A)],
+      (v) => [call("calculate", { calculator: "hospital_cash", purpose: "claim", subject_id: A, policy_id: doc("HC").id, benefit: "Daily benefit", rate_value_id: val(v, "HC", /daily/), admission: { at: "2026-09-10T10:00:00+08:00", words: "it was 4 days", assumed: true }, discharge: { at: "2026-09-14T10:00:00+08:00", words: "it was 4 days", assumed: true } })],
+      (v) => { const c = v.find("calculate"); const ok = c?.ok && c.result?.data?.amount != null; return [call("final_answer", { subject_id: A, sentences: [
+        S("Alex's Harbourline Group Hospital Cash schedule lists a daily benefit of S$150 and an annual limit of S$15,000.", { value_ids: [val(v, "HC", /daily/), val(v, "HC", /annual/)], subject_id: A }),
+        ...(ok ? [S("If all 4 days count, an indicative illustration is S$600.", { result_id: c!.result.data.calc_id, subject_id: A })] : []),
+      ] })]; },
+    ] },
+    { steps: [
+      () => [call("read_page", { policy_id: doc("HC").id, page: 1 })],
+      () => [call("final_answer", { subject_id: A, sentences: [
+        S("The Harbourline Group Hospital Cash schedule lists a fixed daily benefit and an annual limit; it does not state that it pays the hospital bill itself."),
+      ], next_steps: ["A hospitalisation or medical plan, if you have one, would be the document to check for the bill."] })],
+    ] },
+  ],
+  S5: [
+    { steps: [
+      () => [call("resolve_person", { mention: "alex" })],
+      () => [srch("illness or disease exclusion", A), sel("CERT", "Group Term Life sum assured", A), sel("SCAN", "Death", A)],
+      (v) => [call("final_answer", { subject_id: A, sentences: [
+        S("Death caused by illness or disease is excluded under the Group Personal Accident wording, so it would not pay its accidental death benefit for a heart attack.", { evidence_ids: [hit(v, /illness or disease/)], subject_id: A }),
+        S("Alex's certificate lists a Group Term Life sum assured of S$1,000,000 as of 1 April 2024; its policy wording is not among your uploaded documents.", { value_ids: [val(v, "CERT")], subject_id: A }),
+        S("His Harbourline term schedule lists a Death sum assured of S$250,000.", { value_ids: [val(v, "SCAN")], subject_id: A }),
+      ] })],
+    ] },
+    { steps: [
+      () => [call("final_answer", { sentences: [
+        S("I can only use your own household's documents, so I can't check another household's certificate."),
+      ] })],
+    ] },
+  ],
+  S6: [
+    { steps: [
+      () => [call("resolve_person", { mention: "each of us" })],
+      () => [sel("HC", "hospital cash daily benefit", A), sel("HC", "hospital cash annual limit", A), sel("HC", "hospital cash daily benefit", B), sel("HC", "hospital cash annual limit", B)],
+      (v) => [call("final_answer", { sentences: [
+        S("Alex's Harbourline Group Hospital Cash schedule lists a daily benefit of S$150 and an annual limit of S$15,000.", { value_ids: [val(v, "HC", /daily/, A), val(v, "HC", /annual/, A)], subject_id: A }),
+        S("Bea's Harbourline Group Hospital Cash schedule lists a daily benefit of S$100 and an annual limit of S$10,000.", { value_ids: [val(v, "HC", /daily/, B), val(v, "HC", /annual/, B)], subject_id: B }),
+        S("Cai is not named on the Harbourline Group Hospital Cash schedule."),
+      ] })],
+    ] },
+    { steps: [
+      () => [sel("CERT", "Group Living Care", A), sel("CERT", "Group Living Care", B)],
+      (v) => [call("final_answer", { sentences: [
+        S("Alex's certificate lists a Group Living Care sum assured of S$350,000 as of 1 April 2024.", { value_ids: [val(v, "CERT", /Living/, A)], subject_id: A }),
+        S("Bea's certificate lists a Group Living Care sum assured of S$250,000 as of 1 April 2024.", { value_ids: [val(v, "CERT", /Living/, B)], subject_id: B }),
+        S("Cai is not named on the Harbourline Civil Service Group Scheme certificate."),
+      ] })],
+    ] },
+    { steps: [
+      () => [sel("CERT", "Group Living Care", A)],
+      (v) => [call("final_answer", { subject_id: A, sentences: [
+        S("Your certificate lists a Group Living Care sum assured of S$350,000 as of 1 April 2024; that is the document's amount on that date, not a confirmed payment.", { value_ids: [val(v, "CERT")], subject_id: A }),
+        S("The Group Living Care policy wording is not among your uploaded documents, so what it pays for and when is not stated."),
+      ], next_steps: ["Ask your employer or Harbourline Life for the Group Living Care policy wording, which sets out what it pays for."] })],
+    ] },
+  ],
 };
 
 // ------------------------------------------------------------------ grading

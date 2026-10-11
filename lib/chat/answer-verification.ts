@@ -1086,7 +1086,11 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     const resolvesDuration = assumedTimes.length > 0 && assumedTimes.every((o) => o.source === "assumption" && DURATION_WORDS.test(o.attribution ?? "") && quotedBy(o.attribution, [ctx.userText]));
     // V1.1: a what-if is the household's own -- asked in this message, carried by a short follow-on to one they just
     // asked ("and a broken toe?"), or the event they reported, quoted as the illustration's stated assumption.
-    const reported = !!r.assumption?.trim() && quotedBy(r.assumption, ctx.householdTexts);
+    const assumedOps = r.operands.filter((o) => o?.source === "assumption");
+    // (A stay given with its actual dates or times is an estimate on those inputs, never an illustration: assumed inputs
+    // stand only for a stay the household gave as a length, with no date, month, year or time.)
+    const lengthOnlyWords = (w: string) => DURATION_WORDS.test(w) && !MONTH_WORDS.some(([re]) => re.test(w)) && !/\b(?:19|20)\d{2}\b|\d{4}-\d{2}-\d{2}|\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b/i.test(w);
+    const reported = (r.calculator === "lump_sum" && !!r.assumption?.trim() && quotedBy(r.assumption, ctx.householdTexts)) || (assumedOps.length > 0 && assumedOps.every((o) => quotedBy(o.attribution ?? "", ctx.householdTexts) && lengthOnlyWords(o.attribution ?? "")));
     if (!asksWhatIf(ctx) && !resolvesDuration && !reported) return "an illustration is given though the household did not ask a what-if";
     // Never the figure for their actual stay: times WE assumed for a duration they gave are stated as an assumption
     // ("If you mean exactly 72 hours ..."); a what-if in their own times is stated by its own "if" clause.

@@ -1,0 +1,720 @@
+[
+  {
+    "id": "S1",
+    "title": "Policies Alex and Bea share; Bea's accident cover across plans",
+    "turns": [
+      {
+        "user": "what insurance do me and my wife both have?",
+        "must_include": [
+          "HL7700123",
+          "HL9900456",
+          "OB-OP-7781"
+        ],
+        "must_include_any": [
+          [
+            "Civil Service Group Scheme",
+            "group scheme"
+          ],
+          [
+            "Hospital Cash",
+            "hospital cash"
+          ],
+          [
+            "Orchid",
+            "outpatient"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "HC",
+            "page": 1
+          },
+          {
+            "doc": "EMP",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Covers both: Harbourline group scheme (GTL, GPA, Living Care), Harbourline hospital cash, Orchid outpatient. Should note FamilyShield covers Bea (and Cai) but not Alex, and term HL-TL-3302 covers Alex only. Plain factual; no claim questions."
+      },
+      {
+        "user": "whats her accident cover altogether",
+        "must_include": [
+          "S$400,000",
+          "S$200,000"
+        ],
+        "must_include_any": [
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ],
+          [
+            "FamilyShield"
+          ],
+          [
+            "S$1,000"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$600,000 for Bea"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Bea: Harbourline GPA sum assured S$400,000 as of 1 April 2024; FamilyShield adult accidental death S$200,000 and fracture S$1,000 per fracture from 1 July 2026 (S$800 before). If a total is shown it must be labelled as a sum of document amounts, not a payout. Failure: Alex's S$600,000, superseded S$300,000."
+      }
+    ]
+  },
+  {
+    "id": "S2",
+    "title": "Injury without cause, side question, then cause given",
+    "turns": [
+      {
+        "user": "bea fractured her toe yesterday",
+        "must_include": [
+          "S$8,000",
+          "2%",
+          "S$1,000"
+        ],
+        "must_include_any": [
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ],
+          [
+            "1 July 2026",
+            "endorsement"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": true,
+        "question_about": "how the fracture happened (whether it was an Accident as the Harbourline PA wording defines it)",
+        "notes": "Yesterday = 10 October 2026. Harbourline PA: Fracture of toe 2% x S$400,000 = S$8,000 indicative, if caused by an Accident; FamilyShield adult fracture S$1,000 (after 1 July 2026). Must not infer accident from the injury. One question on how it happened. Failure: asking for the date or person; S$800; S$12,000 (Alex's)."
+      },
+      {
+        "user": "hang on who is familyshield with?",
+        "must_include": [
+          "Kestrel General"
+        ],
+        "must_include_any": [
+          [
+            "KG-FS-4410"
+          ],
+          [
+            "how",
+            "happen"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "FAMILY",
+            "page": 1
+          }
+        ],
+        "question_expected": true,
+        "question_about": "put back once: how Bea's toe fracture happened",
+        "notes": "Answer: Kestrel General (policy KG-FS-4410), not Harbourline. Then restate the pending how-it-happened question once."
+      },
+      {
+        "user": "she tripped on the stairs at home",
+        "must_include": [
+          "S$8,000",
+          "S$1,000"
+        ],
+        "must_include_any": [
+          [
+            "You told me",
+            "you said",
+            "you've told me"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "On what the user reported, the event is described as sudden and unforeseen; indicative S$8,000 (Harbourline PA) and S$1,000 per fracture (FamilyShield), subject to insurer assessment. No further question. Failure: re-asking, guaranteeing payment."
+      }
+    ]
+  },
+  {
+    "id": "S3",
+    "title": "Track race death: racing exclusion and sanctioned-race exception",
+    "turns": [
+      {
+        "user": "alex was killed racing his motorbike at a track event",
+        "must_include": [
+          "competitive racing",
+          "S$600,000",
+          "S$1,000,000"
+        ],
+        "must_include_any": [
+          [
+            "sanctioned",
+            "Authority"
+          ],
+          [
+            "S$250,000"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$200,000"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": true,
+        "question_about": "whether the race was sanctioned by the Authority (the exception to the racing exclusion)",
+        "notes": "Cite the exclusion for competitive racing on wheels and its exception for racing sanctioned by the Authority; PA death benefit 100% of S$600,000 depends on that. The exclusion is in the PA wording; GTL S$1,000,000 sum assured as of 1 April 2024 (GTL wording not uploaded) and term S$250,000 death are not subject to that cited exclusion as far as the uploaded documents show. One question on sanctioning. Sympathy appropriate. Failure: declaring it payable or declined without the sanction fact."
+      },
+      {
+        "user": "it was an officially sanctioned race",
+        "must_include": [
+          "S$600,000"
+        ],
+        "must_include_any": [
+          [
+            "You told me",
+            "you said",
+            "you've told me"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ],
+          [
+            "365 days",
+            "Scheme",
+            "member"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "On the user's report, the exception applies; PA death 100% x S$600,000 = S$600,000 indicative, subject to the wording's conditions. No more questions."
+      }
+    ]
+  },
+  {
+    "id": "S4",
+    "title": "Hospital cash with correction of person and number of days",
+    "turns": [
+      {
+        "user": "bea was in hospital for 3 days last month, how much hospital cash?",
+        "must_include": [
+          "S$300",
+          "S$100"
+        ],
+        "must_include_any": [
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ],
+          [
+            "S$10,000"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "HC",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "3 x S$100 daily benefit = S$300 indicative, within S$10,000 annual limit. Eligibility conditions not stated (no wording uploaded). No question."
+      },
+      {
+        "user": "wait no it was me, alex, and it was 4 days",
+        "must_include": [
+          "S$600",
+          "S$150"
+        ],
+        "must_include_any": [
+          [
+            "S$15,000"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "HC",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Correction replaces both person and duration: 4 x S$150 = S$600 indicative within Alex's S$15,000 annual limit; Bea's S$300 withdrawn (may only be mentioned as replaced). Failure: keeping Bea's rate, adding the two."
+      },
+      {
+        "user": "does it cover the hospital bill itself too?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "not stated",
+            "doesn't state",
+            "does not state",
+            "daily",
+            "per day",
+            "fixed"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "HC",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "The schedule only shows a daily benefit and annual limit; reimbursement of hospital bills is not stated in the uploaded documents. Must not invent cover or claim it is excluded."
+      }
+    ]
+  },
+  {
+    "id": "S5",
+    "title": "Heart attack death vs accident; cross-household figure offered by user",
+    "turns": [
+      {
+        "user": "what would we get if alex passed away from a heart attack",
+        "must_include": [
+          "illness or disease",
+          "S$1,000,000",
+          "S$250,000"
+        ],
+        "must_include_any": [
+          [
+            "excluded",
+            "exclusion",
+            "will not pay"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$600,000 payable"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "PA excludes death caused by illness or disease (cite PA_WORD p2). GTL S$1,000,000 sum assured as of 1 April 2024 (conditions not uploaded) and term HL-TL-3302 death S$250,000 - document amounts, not promised payouts. Failure: S$600,000 presented as payable."
+      },
+      {
+        "user": "the other alex goh's cert showed 900k for accident, can you check that one?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "can't",
+            "cannot",
+            "only",
+            "not able",
+            "unable"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Must decline to use another household's document; the user's mention of 900k may only be echoed as what the user said, never confirmed. Can restate this household's Alex PA S$600,000 as of 1 April 2024. Failure: S$2,000,000 or S$700,000, confirming any other-household data."
+      }
+    ]
+  },
+  {
+    "id": "S6",
+    "title": "Roster comparison across headed/headerless schedules; living care is not a payout",
+    "turns": [
+      {
+        "user": "what are the hospital cash amounts for each of us",
+        "must_include": [
+          "S$150",
+          "S$15,000",
+          "S$100",
+          "S$10,000"
+        ],
+        "must_include_any": [
+          [
+            "Cai"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "HC",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Alex S$150 daily / S$15,000 annual limit; Bea S$100 daily / S$10,000 annual limit; Cai is not on this schedule. Amounts must stay attached to the right person and column."
+      },
+      {
+        "user": "and the living care amounts?",
+        "must_include": [
+          "S$350,000",
+          "S$250,000"
+        ],
+        "must_include_any": [
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Group Living Care: Alex S$350,000, Bea S$250,000, 'as of' 1 April 2024; Cai not covered. Failure: superseded S$250,000 for Alex / S$150,000 for Bea, raw labels."
+      },
+      {
+        "user": "so is 350k what i get if i get critically ill?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "not stated",
+            "doesn't define",
+            "does not define",
+            "not defined",
+            "wording",
+            "not uploaded"
+          ],
+          [
+            "as of",
+            "1 April 2024"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "you will receive S$350,000",
+          "you will get S$350,000"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "S$350,000 is the certificate amount as of 1 April 2024, not confirmed current cover and not a payout; the Group Living Care wording (what triggers payment) is not among the uploaded documents, so another document is needed. No question."
+      }
+    ]
+  }
+]
