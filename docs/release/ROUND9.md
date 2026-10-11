@@ -80,11 +80,11 @@ gate: []
   candidate `1a41760`** — H1 (a date question refused because the 365-day clause has no word "date") and H2 (the
   save-time gate refused a certificate × wording lump sum; the rejected what-if was explained as an "assumed stay")
   were real defects, fixed in `5916bd3`; 4/4 after the fix (no longer unseen).
-- **Existing suites** (the 119 REQUIRED_CI_SUITES run as scripts): 104 pass on the candidate, including every rag2-*
+- **Existing suites** (the 119 REQUIRED_CI_SUITES run as scripts): 105 pass on the candidate, including every rag2-*
   suite, verify-gate, verify-assertions, the ingest-live checker, env-contract and the security / lifecycle / claim /
-  injury / v1 / v11 suites. **Not verified here (15):** killed for memory in this 1 GB sandbox before any check ran —
+  injury / v1 / v11 suites. **Not verified here (14):** killed for memory in this 1 GB sandbox before any check ran —
   r5-answer, r6-chat-quality, r7-answers, r7-claims, r7-chat-robustness, r10-messy-docs, r10-perf, r11-blind-test,
-  routing, full-household-e2e, rag2-conv5 (9/9 on an earlier candidate of this branch, before the last gate fixes);
+  routing, rag2-conv5 (9/9 on an earlier candidate of this branch, before the last gate fixes);
   r8-chaos (timed out), r9-redteam (its battery could not send its messages), r9-ingest-chaos (pdf.js on Node 20);
   evidence-download fails identically on main. These cover the legacy chat path through the same save-time gate:
   **CI must run them before merging.**
