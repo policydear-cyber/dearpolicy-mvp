@@ -231,7 +231,8 @@ const SCRIPTS: Record<string, ScriptTurn[]> = {
       () => [sel("FAMILY", "Fracture (per fracture)", C, "amount", "2026-06-15"), call("policies_for", { subject_id: C })],
       (v) => [call("final_answer", { subject_id: C, sentences: [
         S("Thanks, this is about Cai, not Bea; the figures I gave for Bea no longer apply."),
-        S("Cai is not insured on the Harbourline group scheme; he is the insured child on the FamilyShield Accident Plan.", { evidence_ids: cover(v, "FAMILY"), subject_id: C }),
+        S("Cai is not named on the Harbourline Civil Service Group Scheme certificate."),
+        S("He is the insured child on the FamilyShield Accident Plan.", { evidence_ids: cover(v, "FAMILY"), subject_id: C }),
         S("For a fracture on 15 June 2026, Cai's FamilyShield fracture benefit is S$400 per fracture in the Child column, before Endorsement No. 2 took effect on 1 July 2026.", { value_ids: [val(v, "FAMILY", /Fracture/)], subject_id: C }),
       ] })],
     ] },

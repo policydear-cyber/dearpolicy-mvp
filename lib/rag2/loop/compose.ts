@@ -108,17 +108,25 @@ const ABSENCE = /\b(?:do(?:es)?n['’]t|do(?:es)? not)\s+(?:say|state|show|menti
 const amountDigits = (t: string) => /\d/.test(t.replace(/\b(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[A-Za-z0-9][\w-]*\b/g, " ").replace(/\b(?:19|20)\d\d\b/g, " ").replace(/\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\b/gi, " "));
 const SAYS_NOT_LISTED = /\b(?:is|are|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:listed|named|insured|included|shown)\b|\bnot (?:listed|named|insured|included)\b|\bonly (?:names|lists)\b/i;
 /** Why an uncited absence sentence is contradicted by, or not grounded in, what was read (null when it stands). */
-function absenceProblem(text: string, ctx: Ctx): string | null {
-  if (!SAYS_NOT_LISTED.test(text)) return null;
+/** The documents an absence sentence names (by product name, or enough of its distinctive words). */
+function namedDocs(text: string, ctx: Ctx): string[] {
+  const lowerText = text.toLowerCase();
+  return [...(ctx.policyNames ?? new Map<string, string>())].filter(([, n]) => { const words = contentWords(n).filter((w) => w.length >= 4 && !/^(?:polic|plan|schedul|certificat|document|wording|scanned)/.test(w)); const hits = words.filter((w) => lowerText.includes(w)); return words.length > 0 && hits.length >= Math.min(2, words.length); }).map(([id]) => id);
+}
+/** Why an uncited absence sentence is contradicted by, or not grounded in, what was read (null when it stands), and
+ * the read evidence of the documents it names (cited with it, so the household sees which document was checked). */
+function absenceCheck(text: string, ctx: Ctx): { problem: string | null; evidenceIds: string[] } {
+  const docs = namedDocs(text, ctx);
+  const read = Object.values(ctx.state.evidence).filter((e) => docs.includes(e.policyId) && !ctx.stale?.has(e.id));
+  const evidenceIds = docs.flatMap((d) => { const r = read.filter((e) => e.policyId === d); return r.length ? [r[r.length - 1].id] : []; });
+  if (!SAYS_NOT_LISTED.test(text)) return { problem: null, evidenceIds };
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const named = (ctx.people ?? []).filter((p) => p.names.some((n) => n && n.length >= 3 && new RegExp("\\b" + esc(n) + "\\b", "i").test(text)));
-  const docs = [...(ctx.policyNames ?? new Map<string, string>())].filter(([, n]) => { const k = n.replace(/\s*-\s*(?:policy schedule|schedule|certificate|policy wording)\b.*$/i, "").trim(); return k.length >= 4 && text.toLowerCase().includes(k.toLowerCase()); }).map(([id]) => id);
-  if (!docs.length) return "says someone is not listed without naming the document that was read";
-  const read = Object.values(ctx.state.evidence).filter((e) => docs.includes(e.policyId));
-  if (!read.length) return "says someone is not listed on a document that was not read";
+  if (!docs.length) return { problem: "says someone is not listed without naming the document that was read", evidenceIds };
+  if (!read.length) return { problem: "says someone is not listed on a document that was not read", evidenceIds };
   const negated = named.filter((p) => { const at = text.search(new RegExp("\\b" + esc(p.names[0]) + "\\b", "i")); const after = text.slice(at).split(/[;,.]|\b(?:and|but|so)\b/i)[0]; return SAYS_NOT_LISTED.test(after) && !/\bonly (?:names|lists)\b/i.test(after); });
-  for (const p of negated) if (read.some((e) => p.names.some((n) => n.length >= 3 && new RegExp("\\b" + esc(n) + "\\b", "i").test(e.passage.text)))) return `says ${p.names[0]} is not listed, but the document names them`;
-  return null;
+  for (const p of negated) if (read.some((e) => p.names.some((n) => n.length >= 3 && new RegExp("\\b" + esc(n) + "\\b", "i").test(e.passage.text)))) return { problem: `says ${p.names[0]} is not listed, but the document names them`, evidenceIds };
+  return { problem: null, evidenceIds };
 }
 /** A verdict on cover (never allowed without its clause). */
 const COVER_VERDICT = /\b(?:is|are|was|were|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:covered|excluded|payable|insured)\b|\bexclud\w*\b|\bnot covered\b|\bwill (?:not )?(?:pay|be paid)\b/i;
@@ -158,6 +166,8 @@ type Ctx = {
   /** Agent F (D7): household members (id + the names a sentence may use) and readable documents (id -> product). */
   people?: { id: string; names: string[] }[];
   policyNames?: Map<string, string>;
+  /** V1.1: what each readable document states on its face (product, insurer, numbers, amendment role). */
+  docFacts?: Map<string, string>;
 };
 
 const sq = (t: string) => t.toLowerCase().normalize("NFKC").replace(/[‘’`´]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, " ").trim().replace(/^["']+|["'.,!?;:]+$/g, "").trim();
@@ -180,9 +190,11 @@ function saidBackOnly(text: string, ctx: Ctx): boolean {
   const saidNums = new Set(numbersIn(said));
   if (!numbersIn(rest).every((n) => saidNums.has(n))) return false;
   if (moneyFiguresIn(rest).some((f) => !moneyFiguresIn(said).some((u) => same(u.value, f.value) && u.currency === f.currency))) return false;
-  const saidWords = new Set(contentWords(said));
+  // V1.1: one stem for a word and its inflections ("fracture" said back for "fractured").
+  const stem = (w: string) => w.replace(/(?:ing|ed|es|e|s)$/, "");
+  const saidWords = new Set(contentWords(said).map(stem));
   const nameWords = new Set((ctx.names ?? []).flatMap((n) => contentWords(n)));
-  return contentWords(rest).every((w) => saidWords.has(w) || nameWords.has(w) || RELATION_WORDS.has(w));
+  return contentWords(rest).every((w) => saidWords.has(stem(w)) || nameWords.has(w) || RELATION_WORDS.has(w));
 }
 
 /** Round 7 (A3): words that claim cover, a payment or an amount the policy sets (these always need evidence). */
@@ -348,6 +360,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     if (injected.length) { drop(text, "cites text inside a document that is an instruction, not policy wording", INSTRUCTION_NOTE); continue; }
     const values = valIds.map((id) => ctx.tools.values.get(id));
     if (values.some((v) => !v)) { drop(text, "cites a table value that was not read in this turn"); continue; }
+    // V1.1 (evidence contract): a value's amendment relationship (the schedule row an endorsement amends, an
+    // endorsement not yet in force on the date) is cited with it.
+    evIds = [...new Set([...evIds, ...values.flatMap((v) => (v!.selected.related ?? []).map((e) => evidenceIdOf(ctx.state, e)))])];
     // Round 8 (F1): a sentence saying a date is not stated / confirmed, when the evidence it cites prints a date, says
     // something its evidence contradicts.
     const absentDate = dateAbsenceClaim(text) ? printedDateIn([...evIds.map((id) => ctx.state.evidence[id]?.passage.text ?? ""), ...values.map((v) => JSON.stringify(v))].join("\n")) : null;
@@ -367,9 +382,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // ever stated with the clause that says so.
       if (NOT_STATED.test(text) && !figures.length && !/\d/.test(text) && !COVER_VERDICT.test(text.replace(/\b(?:whether|if)\b[^.]*/i, " "))) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
       if (ABSENCE.test(text) && !figures.length && !amountDigits(text) && !COVER_VERDICT.test(text.replace(/\b(?:whether|if)\b[^.]*/i, " "))) {
-        const why = absenceProblem(text, ctx);
-        if (why) { drop(text, why); continue; }
-        out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue;
+        const chk = absenceCheck(text, ctx);
+        if (chk.problem) { drop(text, chk.problem); continue; }
+        out.evidenceIds.push(...chk.evidenceIds.filter((x) => !out.evidenceIds.includes(x)));
+        out.sentences.push({ text, evidenceIds: chk.evidenceIds, estimate: false, factKeys: [] }); continue;
       }
       if (figures.length || /\d/.test(text) || COVERISH.test(text)) { drop(text, "states cover or a figure without citing evidence"); continue; }
       out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] });
@@ -378,7 +394,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
     // Agent F (D7): a cited sentence without a figure must say what its evidence says (polarity, policy, person,
     // benefit); "medically confirmed" / "approved" were refused above.
     if (!figures.length && !result && evIds.length && COVERISH.test(text)) {
-      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), subjectId });
+      const why = checkCitedStatement(text, evIds.map((id) => ({ policyId: ctx.state.evidence[id].policyId, subjectId: ctx.state.evidence[id].subjectId ?? null, text: [ctx.state.evidence[id].table?.rowLabel ?? "", ctx.state.evidence[id].label ?? "", evidenceTextOf(ctx.state.evidence[id])].filter(Boolean).join("\n") })), { people: ctx.people ?? [], policyNames: ctx.policyNames ?? new Map(), docFacts: ctx.docFacts, subjectId });
       if (why) { drop(text, "not supported by its evidence: " + why, UNSUPPORTED_NOTE); continue; }
     }
     // Agent F (D3): a sum of printed limits is only ever said as the limits added together -- never as a total

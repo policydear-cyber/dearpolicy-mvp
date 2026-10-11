@@ -70,6 +70,8 @@ export type StatementCtx = {
   people: { id: string; names: string[] }[];
   /** Readable documents: id -> product name. */
   policyNames: Map<string, string>;
+  /** V1.1: what each document states on its face (product, insurer, numbers, amendment role). */
+  docFacts?: Map<string, string>;
   /** Who the sentence is about (resolved), when known. */
   subjectId: string | null;
 };
@@ -111,8 +113,9 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   const productWords = new Set([...ctx.policyNames.values()].flatMap((n) => contentWords(n)));
   const specific = contentWords(text).filter((w) => !GENERIC.has(w) && !nameWords.has(w) && !productWords.has(w));
   if (specific.length) {
-    const have = new Set(contentWords(all));
-    const hit = specific.filter((w) => have.has(w) || lower.includes(w));
+    const face = [...new Set(cited.map((c) => c.policyId))].map((id) => ctx.docFacts?.get(id) ?? "").join(" ");
+    const have = new Set([...contentWords(all), ...contentWords(face)]);
+    const hit = specific.filter((w) => have.has(w) || lower.includes(w) || face.toLowerCase().includes(w));
     if (!hit.length) return `its evidence does not mention what it is about (${specific.slice(0, 4).join(", ")})`;
   }
   return null;

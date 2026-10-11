@@ -105,6 +105,12 @@ export const RAG_TOOLS: ToolDef[] = [
       const r = await pick(asOf);
       if (r.status !== "ok") return ok(r, r.status === "ambiguous" ? r.options.flatMap((o) => (o.evidence ? [o.evidence] : [])) : r.evidence ? [r.evidence] : []);
       const issue = (s: SelectedValue) => { const id = "v" + ++ctx.seq; ctx.values.set(id, { selected: s, subjectId: String(a.subject_id), operand: { kind: "table_value", benefit: s.rowLabel || s.benefit, valueKind: s.valueKind, cents: s.cents, ppm: s.ppm, count: s.valueKind === "count" ? s.value : null, currency: s.currency, period: s.period, evidence: s.evidence } }); return id; };
+      // An endorsement row read directly: the schedule row it amends travels with it (the amendment relationship).
+      if (r.amends?.policyId && r.amends.policyId !== String(a.policy_id) && !r.related?.length) {
+        const b = await selectTableValue({ accountId: ctx.accountId, policyId: r.amends.policyId, benefit: String(a.benefit), subject: { memberId: String(a.subject_id), tier: (a.tier as string) ?? null }, want: ((a.want as Want) ?? "any"), asOf }).catch(() => null);
+        const baseEv = b?.status === "ok" ? (b.evidence.policyId === r.amends.policyId ? b.evidence : b.amendedFrom?.evidence.policyId === r.amends.policyId ? b.amendedFrom.evidence : null) : null;
+        if (baseEv) r.related = [baseEv];
+      }
       const valueId = issue(r);
       // V1.1 (evidence contract): a row printed in two versions (an endorsement's before / after) also returns the
       // other version, as its own value id with the date it applies from or until -- so "previously S$800" is cited.
@@ -115,7 +121,7 @@ export const RAG_TOOLS: ToolDef[] = [
         const o = await pick(r.version === "after" ? d.toISOString().slice(0, 10) : eff);
         if (o.status === "ok" && o.version && o.version !== r.version) otherVersion = { valueId: issue(o), version: o.version, value: o.value, currency: o.currency, columnHeader: o.columnHeader, applies: o.version === "before" ? `before ${eff}` : `from ${eff}` };
       }
-      return ok({ ...r, valueId, asOf, ...(otherVersion ? { otherVersion } : {}) }, [r.evidence, ...(r.columnBasis.evidence ? [r.columnBasis.evidence] : []), ...(r.amendedFrom ? [r.amendedFrom.evidence] : [])]);
+      return ok({ ...r, valueId, asOf, ...(otherVersion ? { otherVersion } : {}) }, [r.evidence, ...(r.columnBasis.evidence ? [r.columnBasis.evidence] : []), ...(r.amendedFrom ? [r.amendedFrom.evidence] : []), ...(r.related ?? [])]);
     },
   },
   {

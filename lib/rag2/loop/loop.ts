@@ -160,7 +160,7 @@ function rowLabelOf(benefit: string, passage: string, cell: string): string {
   return worded[0] ?? benefit.trim();
 }
 /** Round 6c: a mention that means anyone in the household (a quantifier or the household as a whole), not one person. */
-export const ANYONE = /^(?:(?:one|any|either|each|all|both|neither|none|some|whichever)(?: one)? of (?:us|you|them|the family|the kids|the children|my family|our family|our kids|our children)|anyone|anybody|someone|somebody|everyone|everybody|whoever|we|us|our|ours|the family|family|the household|any family member|a family member|family members|any of the kids|any of the children)$/i;
+export const ANYONE = /^(?:(?:one|any|either|each|all|both|neither|none|some|whichever)(?: one)? of (?:us|you|them|the family|the kids|the children|my family|our family|our kids|our children)|anyone|anybody|someone|somebody|everyone|everybody|whoever|we|us|our|ours|the family|family|(?:my|our|the)(?: whole| entire)? (?:family|household)|(?:everyone|everybody|all of us) in (?:the|my|our) (?:family|household)|the household|any family member|a family member|family members|any of the kids|any of the children)$/i;
 /** Lookups that read a policy's passages / rows. */
 const LOOKUPS = new Set(["search_passages", "select_table_value", "read_page"]);
 /** A table column whose values apply to a kind of person, a tier or a plan (the answer can differ by person). */
@@ -185,7 +185,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   const computeCalls = new Map<string, ComputeCall>();
   // Agent F (D6): evidence remembered from earlier turns is re-checked every turn: a document deleted, replaced by a
   // newer version, or not this household's supplies nothing any more (the composer refuses sentences citing it).
-  const { stale, policyNames } = await revalidateEvidence(input.accountId, state);
+  const { stale, policyNames, docFacts } = await revalidateEvidence(input.accountId, state);
   // Round 7: table values issued in earlier turns stay citable (value ids are unique across the conversation) while
   // their document is still current; a benefit already stated, cited and bound stays available to explain again.
   for (const [id, v] of Object.entries(state.values ?? {})) {
@@ -286,8 +286,12 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Agent F (D9): a fact about the speaker ("I'm on the private hospital plan") never displaces another member's
     // open claim -- it is kept beside it.
     const speakerAside = subject === state.speakerId && !!state.claim?.subjectId && state.claim.subjectId !== subject && Object.keys(state.claim.facts).length > 0 && !PERSON_CORRECTION.test(input.message);
-    const hold = speakerAside || (state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject);
+    // V1.1: the household correcting WHO it is about ("it was Cai, not Bea") moves the claim, and the question asked
+    // about the first person is withdrawn with it (it was asked because of that person's documents).
+    const correcting = PERSON_CORRECTION.test(input.message);
+    const hold = speakerAside || (!correcting && state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject);
     if (hold) { (state.otherClaims ??= {})[subject] = parked; return parked; }
+    if (correcting && state.pending?.kind === "fact" && state.pending.subjectId && state.pending.subjectId !== subject) state.pending = null;
     if (state.claim?.subjectId) { personCorrection(subject); (state.otherClaims ??= {})[state.claim.subjectId] = state.claim; }
     if (state.otherClaims) delete state.otherClaims[subject];
     state.claim = parked;
@@ -343,7 +347,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Round 7 (A3): tool calls already made this turn (name + arguments): an identical repeat is not run again. */
   const madeCalls = new Set<string>();
   /** What the composer checks a sentence against (final_answer, and what ask_user says before its question). */
-  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
+  const composeCtx = () => ({ state, tools: ctx, computeCalls, householdIds, userText: input.message, userTexts, names: input.people.map((p) => p.name), stale, policyNames, docFacts, people: input.people.map((p) => ({ id: p.id, names: personNames(p.name) })) });
   /** Round 6 (A3): ask_user's statements were refused once this turn (a second attempt shows what can be kept). */
   let askRefused = false;
   /** The evidence the asked question cites (why it matters). */
@@ -825,6 +829,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (state.claim?.subjectId) for (const k of c.calcs) if (k.subjectId === state.claim.subjectId) (state.claim.calcs ??= {})[k.calcId] = calcRef(k, state.claim, (k.evidence ?? []).map((e) => evidenceIdOf(state, e, "calculate")), state.turn);
     // An interruption: the claim question still open is put back to the household after the side answer.
     if (state.pending?.kind === "person") state.pending = null;
+    // V1.1: a correction of who the claim is about withdraws the question asked about the first person.
+    if (state.pending?.kind === "fact" && state.pending.subjectId && corrections.some((k) => k.key === "person") && state.claim?.subjectId && state.pending.subjectId !== state.claim.subjectId) state.pending = null;
+    if (state.parkedPending?.kind === "fact" && state.parkedPending.subjectId && corrections.some((k) => k.key === "person") && state.claim?.subjectId && state.parkedPending.subjectId !== state.claim.subjectId) state.parkedPending = null;
     if (!state.pending && state.parkedPending) { state.pending = state.parkedPending; state.parkedPending = null; }
     // Round 9: no question open, and the calculation this answer ran still needs a household fact: the answer ends by
     // asking for it (one question), instead of leaving the household at "I still need ...".
@@ -941,13 +948,16 @@ export function personNames(label: string): string[] {
  * document was deleted, replaced by a newer version (or its file changed since it was read), or is not one of this
  * household's readable documents. Also returns the readable documents' product names (for statement checks).
  */
-export async function revalidateEvidence(accountId: string, state: RagLoopState): Promise<{ stale: Map<string, string>; policyNames: Map<string, string> }> {
+export async function revalidateEvidence(accountId: string, state: RagLoopState): Promise<{ stale: Map<string, string>; policyNames: Map<string, string>; docFacts: Map<string, string> }> {
   const stale = new Map<string, string>();
   const docs = await loadDocs(accountId).catch(() => null);
   const policyNames = new Map((docs ?? []).map((d) => [d.id, d.productName ?? d.insurer ?? "Policy document"]));
+  // V1.1 (evidence contract): what a document states on its face -- product, insurer, policy and group numbers, and
+  // that an endorsement amends its policy -- is part of what a sentence citing it may say.
+  const docFacts = new Map((docs ?? []).map((d) => [d.id, [d.productName, d.insurer, d.policyNumber, d.groupPolicyNumber, d.documentRole === "endorsement" ? "endorsement amends amended amendment" : null].filter(Boolean).join(" ")]));
   const entries = Object.values(state.evidence);
-  if (!entries.length) return { stale, policyNames };
-  if (!docs) { for (const e of entries) stale.set(e.id, "I couldn’t confirm that the documents an earlier answer relied on are still current, so I can’t rely on what they said."); return { stale, policyNames }; }
+  if (!entries.length) return { stale, policyNames, docFacts };
+  if (!docs) { for (const e of entries) stale.set(e.id, "I couldn’t confirm that the documents an earlier answer relied on are still current, so I can’t rely on what they said."); return { stale, policyNames, docFacts }; }
   const live = new Map(docs.map((d) => [d.id, d]));
   // The names of documents read earlier are remembered from when they were readable (never re-read once deleted).
   const names = (state.docNames ??= {});
@@ -957,5 +967,5 @@ export async function revalidateEvidence(accountId: string, state: RagLoopState)
     if (!d) { const n = names[e.policyId]; stale.set(e.id, `${n ? `The ${n} document` : "A document"} an earlier answer relied on has since been deleted or replaced by a newer version, so I can no longer use what it said.`); continue; }
     if (e.documentHash && d.fileHash && e.documentHash !== d.fileHash) stale.set(e.id, `The ${d.productName ?? "policy"} document has changed since I read it, so I can no longer use what the earlier version said.`);
   }
-  return { stale, policyNames };
+  return { stale, policyNames, docFacts };
 }

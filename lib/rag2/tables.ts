@@ -329,6 +329,9 @@ export type SelectedValue = {
   /** Round 8: the policy's amendment documents that were deleted or superseded (metadata only), when the value is read
    * from the remaining schedule: the current amount may differ. */
   removedAmendments?: AmendmentRemoval[] | null;
+  /** V1.1 (evidence contract): the amendment relationship's other document -- the schedule row an endorsement value
+   * amends, or an endorsement row not (or no longer) in force on the date -- cited with the value. */
+  related?: EvidenceRef[] | null;
   notes: string[];
 };
 export type TableSelection =
@@ -635,11 +638,11 @@ export async function selectTableValue(args: { accountId: string; policyId: stri
     if (!eff || (baseDate && eff <= baseDate)) continue;
     const amended = pickValue(L, args.benefit, want, { ...hints, versionForce: "after", versionEffective: eff, versionEnds: d.expiryDate }, subject.id);
     if (amended.status !== "ok" || amended.version !== "after") continue;
-    if (eff > asOf) { picked.notes.push(`An endorsement effective ${eff} changes this to ${fmt(amended)} (not yet in force on ${asOf}).`); continue; }
-    if (d.expiryDate && d.expiryDate < asOf) { picked.notes.push(`An endorsement effective ${eff} changed this to ${fmt(amended)} until ${d.expiryDate} (no longer in force on ${asOf}).`); continue; }
+    if (eff > asOf) { picked.notes.push(`An endorsement effective ${eff} changes this to ${fmt(amended)} (not yet in force on ${asOf}).`); picked.related = [...(picked.related ?? []), amended.evidence]; continue; }
+    if (d.expiryDate && d.expiryDate < asOf) { picked.notes.push(`An endorsement effective ${eff} changed this to ${fmt(amended)} until ${d.expiryDate} (no longer in force on ${asOf}).`); picked.related = [...(picked.related ?? []), amended.evidence]; continue; }
     const amends = amendmentOf(d, L, [doc], amended, { ...hints, versionEffective: eff });
     amended.evidence.amends = amends;
-    return { ...amended, amends, amendedFrom: { value: picked.value, currency: picked.currency, evidence: picked.evidence, note: `amended by the endorsement effective ${eff}` }, notes: [...amended.notes, `Amended by the endorsement effective ${eff} to policy ${doc.policyNumber ?? doc.productName ?? ""}`.trimEnd() + `; the schedule printed ${fmt(picked)}.`] };
+    return { ...amended, amends, related: [picked.evidence], amendedFrom: { value: picked.value, currency: picked.currency, evidence: picked.evidence, note: `amended by the endorsement effective ${eff}` }, notes: [...amended.notes, `Amended by the endorsement effective ${eff} to policy ${doc.policyNumber ?? doc.productName ?? ""}`.trimEnd() + `; the schedule printed ${fmt(picked)}.`] };
   }
   // Round 8: an amendment document of this policy was deleted / superseded (and not replaced or reversed): the value
   // is the schedule as issued, which may no longer be the current amount on the question's date.
