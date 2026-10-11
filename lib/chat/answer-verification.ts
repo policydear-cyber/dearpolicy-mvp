@@ -1060,7 +1060,9 @@ export function assumedDateProblem(words: string, isoDay: string): string | null
   const exact = datesIn(words).filter((d) => !d.endsWith("-01") || /\b0?1(?:st)?\s+[A-Za-z]{3}|[A-Za-z]{3,}\.?\s+0?1(?:st)?\b|\d{4}-\d{2}-01\b|\b0?1\/\d{1,2}\/\d{4}/.test(words));
   if (exact.length) return exact.includes(isoDay) ? null : "the assumed date is not the date in the household’s words";
   const months = MONTH_WORDS.filter(([re]) => re.test(words)).map(([, n]) => n);
-  if (!months.length) return "the assumed date is not inside a period the household named";
+  // V1.1: words that give only a length of stay ("if she's warded 5 days") name no period: the assumed dates only
+  // place that length (the sentence must say it is assumed, checked by the caller).
+  if (!months.length) return DURATION_WORDS.test(words) && !/\b(?:19|20)\d{2}\b|\b(?:yesterday|today|last|this|next)\b/i.test(words) ? null : "the assumed date is not inside a period the household named";
   const [y, mo] = isoDay.split("-").map(Number);
   const years = (words.match(/\b(?:19|20)\d{2}\b/g) ?? []).map(Number);
   if (!months.includes(mo) || (years.length && !years.includes(y))) return "the assumed date is outside the period the household named";
@@ -1144,13 +1146,20 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
       if (!(span >= hours)) return `the minimum stay is not met: ${c.text}`;
     } else if (c.basis === "assumption") {
       // Integration (r6): only earlier use of a capped allowance, only in an estimate that states the assumption.
-      if (r.kind !== "indicative_estimate" || !/_prior_use$/.test(c.id) || !r.assumption?.trim()) return `a condition is settled by an assumption the estimate does not state: ${c.text}`;
+      // V1.1: or, in a what-if illustration, the day-count rule the wording does not state -- assumed and said in the
+      // sentence itself.
+      const statedDayRule = r.kind === "conditional_illustration" && c.kind === "day_count_rule" && norm(sentence).includes(norm(c.text));
+      if (!statedDayRule && (r.kind !== "indicative_estimate" || !/_prior_use$/.test(c.id) || !r.assumption?.trim())) return `a condition is settled by an assumption the estimate does not state: ${c.text}`;
     } else if (c.basis === "absent") {
       if (c.status !== "not_applicable") return `a condition the document does not print is marked established: ${c.text}`;
     } else return `a condition has no basis: ${c.text}`;
   }
   for (const st of r.steps) {
     if (st.op === "day_count") {
+      // V1.1: a what-if on wording that states no rule may assume complete 24-hour days -- stated in the sentence (checked
+      // with the conditions above), never anything else, and never with day exceptions.
+      const assumedRule = !!ruleCond && r.kind === "conditional_illustration" && ruleCond.status === "established" && (ruleCond.basis as string) === "assumption" && st.rule === "completed_24h" && !(st.edges ?? []).length && norm(sentence).includes(norm(ruleCond.text));
+      if (assumedRule) continue;
       if (!ruleCond || ruleCond.status !== "established" || ruleCond.basis !== "document" || !ruleCond.passage) return "the day count uses a rule the cited wording does not establish";
       const said = dayRuleFromWording(ruleCond.passage.text);
       if (!said || said.rule !== st.rule) return "the day count uses another rule than the cited wording states";

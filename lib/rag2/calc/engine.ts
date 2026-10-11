@@ -128,8 +128,14 @@ export function hospitalCash(a: {
   const conds: CalcCondition[] = [];
   const reqs: string[] = [];
   // Day-count rule: from the wording only.
+  // V1.1: a what-if the household asked ("if she's warded 5 days") on wording that does not say how days are counted
+  // is illustrated on a stated assumption -- each complete 24 hours counts as one day -- never as their actual stay.
+  let dayAssumption: string | null = null;
   if (t.dayRule) conds.push({ id: "c_day_rule", kind: "day_count_rule", text: `Days are counted as the wording states: “${t.dayRule.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(t.dayRule.evidence) });
-  else {
+  else if (a.whatIf && !t.dayRuleConflict.length) {
+    dayAssumption = `assuming each complete 24 hours in hospital counts as one day (the stored ${product} wording does not say how hospital days are counted; only the insurer can confirm it)`;
+    conds.push({ id: "c_day_rule", kind: "day_count_rule", text: dayAssumption, status: "established", basis: "assumption" as CalcCondition["basis"] });
+  } else {
     const why = t.dayRuleConflict.length ? `the document states two different ways of counting hospital days (pages ${[...new Set(t.dayRuleConflict.map((e) => e.passage.onPage))].join(", ")})` : `the stored ${product} wording does not say how hospital days are counted`;
     conds.push({ id: "c_day_rule", kind: "day_count_rule", text: why, status: "unresolved", basis: "none", needs: `how ${product} counts hospital days (${why}; only the insurer can confirm it)` });
     reqs.push(`how ${product} counts hospital days, which the stored wording does not state (only the insurer can confirm it)`);
@@ -226,7 +232,7 @@ export function hospitalCash(a: {
   const PRIOR_IDS = ["c_cap_prior_use", "c_money_cap_prior_use"];
 
   // Inputs the rule needs.
-  const rule = t.dayRule?.value ?? null;
+  const rule = t.dayRule?.value ?? (dayAssumption ? "completed_24h" : null);
   const needTimes = (rule ? dayRuleNeedsTimes(rule) : false) || !!t.minimumStayHours;
   // Round 8e: a date or time that does not exist (2026-02-30, 24:00) is not an input -- it is never rolled over.
   const realValue = (v: string) => (ISO_DT.test(v) ? !isoInstantProblem(v) : ISO_D.test(v) && isCalendarDate(v));
@@ -283,7 +289,7 @@ export function hospitalCash(a: {
   let cents = Math.round(hc.potentialAmount * 100);
   steps.push({ id: "s_amount", op: "multiply", inputs: ["rate", last], out: cents });
   let lastMoney = "s_amount";
-  const capLines: string[] = [], assumed: string[] = [], available: string[] = [];
+  const capLines: string[] = [], assumed: string[] = dayAssumption ? [dayAssumption] : [], available: string[] = [];
   /** Integration (r6): earlier use not known (and not a what-if): the estimate assumes what this stay needs is still
    * available, says so, and the prior-use condition is settled by that stated assumption. */
   const assumeAvailable = (cond: CalcCondition, text: string) => { available.push(text); cond.status = "established"; cond.basis = "assumption"; cond.needs = null; cond.householdWords = null; };
@@ -340,7 +346,7 @@ export function hospitalCash(a: {
   if (kind === "indicative_estimate" && !settledStatus(conds)) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
   const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : available.length ? available.join(" and ") : null;
   const record: RecordWithUnitTerms = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption, unresolvedText: "", unitTerms };
-  const lines = [`payable days under “${t.dayRule!.words}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
+  const lines = [`payable days under “${t.dayRule?.words ?? "each complete 24 hours (assumed)"}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
   return finish({ ...base, kind, conditions: conds, requirements: [], amount: cents / 100, currency: r.currency, record, steps: lines });
 }
 
