@@ -1060,9 +1060,7 @@ export function assumedDateProblem(words: string, isoDay: string): string | null
   const exact = datesIn(words).filter((d) => !d.endsWith("-01") || /\b0?1(?:st)?\s+[A-Za-z]{3}|[A-Za-z]{3,}\.?\s+0?1(?:st)?\b|\d{4}-\d{2}-01\b|\b0?1\/\d{1,2}\/\d{4}/.test(words));
   if (exact.length) return exact.includes(isoDay) ? null : "the assumed date is not the date in the household’s words";
   const months = MONTH_WORDS.filter(([re]) => re.test(words)).map(([, n]) => n);
-  // V1.1: words that give only a length of stay ("if she's warded 5 days") name no period: the assumed dates only
-  // place that length (the sentence must say it is assumed, checked by the caller).
-  if (!months.length) return DURATION_WORDS.test(words) && !/\b(?:19|20)\d{2}\b|\b(?:yesterday|today|last|this|next)\b/i.test(words) ? null : "the assumed date is not inside a period the household named";
+  if (!months.length) return "the assumed date is not inside a period the household named";
   const [y, mo] = isoDay.split("-").map(Number);
   const years = (words.match(/\b(?:19|20)\d{2}\b/g) ?? []).map(Number);
   if (!months.includes(mo) || (years.length && !years.includes(y))) return "the assumed date is outside the period the household named";
@@ -1110,7 +1108,18 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     } else {
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.value));
       if (!m) return `${o.label}: the date is not the one in the household’s words`;
-      if (o.source === "assumption") { const p = assumedDateProblem(o.attribution, m[0]); if (p) return `${o.label}: ${p}`; }
+      if (o.source === "assumption") {
+        // V1.1: a what-if that gives only a length of stay ("if she's warded 5 days"), illustrated under the stated
+        // complete-24-hours assumption, depends on that length only: the assumed dates just place it -- accepted when
+        // they span exactly that many days and the words name no date, month or year.
+        const len = (o.attribution.match(DURATION_WORDS)?.[0] ?? "");
+        const n = numsOf(len)[0];
+        const adm = r.operands.find((x) => x.role === "admission"), dis = r.operands.find((x) => x.role === "discharge");
+        const span = adm && dis ? (Date.parse(String(dis.value)) - Date.parse(String(adm.value))) / 3_600_000 : NaN;
+        const lengthOnly = r.conditions.some((c) => c.kind === "day_count_rule" && (c.basis as string) === "assumption") && /\bdays?\b/i.test(len) && n > 0 && span === n * 24
+          && !MONTH_WORDS.some(([re]) => re.test(o.attribution)) && !/\b(?:19|20)\d{2}\b|\d{4}-\d{2}-\d{2}/.test(o.attribution);
+        const p = lengthOnly ? null : assumedDateProblem(o.attribution, m[0]); if (p) return `${o.label}: ${p}`;
+      }
       else if (!numsOf(o.attribution).some((n) => n === Number(m[3]))) return `${o.label}: the date is not the one in the household’s words`;
     }
   }

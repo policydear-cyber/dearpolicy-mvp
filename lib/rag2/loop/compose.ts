@@ -103,10 +103,10 @@ const NOT_STATED = /^(?:(?:the|your)\s+)?(?:uploaded\s+)?(?:policy\s+)?documents
  * not state how many visits", "none of your documents mentions dental", "Cai is not listed", "the 2022 certificate
  * was replaced". Kept without a citation only when it states no amount and no cover verdict, and (for a person said
  * not to be listed) only when the document it names was read and does not name them. */
-const ABSENCE = /\b(?:do(?:es)?n['’]t|do(?:es)? not)\s+(?:say|state|show|mention|list|name|specify|include|set out|print)\b|\b(?:is|are|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:stated|mentioned|listed|named|shown|specified|printed)\b|\bnone of (?:your|the|our)\b[^.]*\bmentions?\b|\b(?:has been|have been|was|were)\s+(?:replaced|superseded)\b|\bnot (?:stated|listed|named|shown|mentioned) (?:in|on|anywhere)\b/i;
+const ABSENCE = /\b(?:do(?:es)?n['’]t|do(?:es)? not)\s+(?:say|state|show|mention|list|name|specify|include|set out|print)\b|\b(?:is|are)\s+not\s+(?:stated|mentioned|listed|named|shown|specified|printed)\b|\b(?:isn['’]t|aren['’]t)\s+(?:stated|mentioned|listed|named|shown|specified|printed)\b|\bnone of (?:your|the|our)\b[^.]*\bmentions?\b|\b(?:has been|have been|was|were)\s+(?:replaced|superseded)\b|\bnot (?:stated|listed|named|shown|mentioned) (?:in|on|anywhere)\b/i;
 /** Digits that are an amount, count or rate -- not a year, a date or a policy number ("HL-TL-3302", "2022"). */
 const amountDigits = (t: string) => /\d/.test(t.replace(/\b(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[A-Za-z0-9][\w-]*\b/g, " ").replace(/\b(?:19|20)\d\d\b/g, " ").replace(/\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\b/gi, " "));
-const SAYS_NOT_LISTED = /\b(?:is|are|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:listed|named|insured|included|shown)\b|\bnot (?:listed|named|insured|included)\b|\bonly (?:names|lists)\b/i;
+const SAYS_NOT_LISTED = /\b(?:is|are)\s+not\s+(?:listed|named|insured|included|shown)\b|\b(?:isn['’]t|aren['’]t)\s+(?:listed|named|insured|included|shown)\b|\bnot (?:listed|named|insured|included)\b|\bonly (?:names|lists)\b/i;
 /** Why an uncited absence sentence is contradicted by, or not grounded in, what was read (null when it stands). */
 /** The documents an absence sentence names (by product name, or enough of its distinctive words). */
 function namedDocs(text: string, ctx: Ctx): string[] {
