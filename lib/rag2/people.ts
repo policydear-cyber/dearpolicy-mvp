@@ -30,7 +30,7 @@ export type ConversationContext = {
   recentSubjectIds?: string[] | null;
 };
 export type PersonResolution =
-  | { status: "ok"; person: Person; via: "self" | "pronoun" | "name" | "relation" | "name+relation" | "ordinal" }
+  | { status: "ok"; person: Person; via: "self" | "pronoun" | "name" | "relation" | "name+relation" | "ordinal" | "name_spelling" }
   | { status: "ambiguous"; options: Person[]; question: string; reason: string }
   | { status: "unknown"; reason: string; question: string };
 
@@ -108,6 +108,17 @@ const listRel = (ps: Person[]) => ps.length <= 1 ? ps.map(relLabel).join("") : p
 const listOf = (ps: Person[]) => ps.length <= 1 ? ps.map(label).join("") : ps.slice(0, -1).map(label).join(", ") + " or " + label(ps[ps.length - 1]);
 const RELATION_NOUN: Record<RelationClass, string> = { self: "you", spouse: "spouse", child: "child", step_child: "stepchild", child_in_law: "child-in-law", parent: "parent", step_parent: "step-parent", parent_in_law: "parent-in-law", sibling: "sibling", sibling_in_law: "sibling-in-law", grandparent: "grandparent", grandchild: "grandchild", helper: "helper", dependant: "dependant", other: "household member" };
 const nameWords = (s: string) => (s.toLowerCase().normalize("NFKC").match(/[\p{L}]+/gu) ?? []).filter((w) => w.length >= 2);
+/** Edit distance with adjacent transpositions ("charmiane" -> "charmaine" is 1). */
+function typoDistance(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+/** A mistyped name word: same first letter, one slip in a word of 5+ letters (two in 9+). */
+const misspelt = (typed: string, name: string) => typed !== name && typed[0] === name[0] && Math.min(typed.length, name.length) >= 5 && typoDistance(typed, name) <= (Math.min(typed.length, name.length) >= 9 ? 2 : 1);
 const COMMON = new Set("my the a an and of for is are was who whom about our your his her their do does did has have can how what which with to in on at mr mrs ms miss dr eldest oldest elder older youngest younger middle first second third little baby".split(" "));
 
 /** Who `mention` means in this household. */
@@ -202,6 +213,13 @@ export function resolvePersonAmong(peopleIn: Person[], mentionRaw: string, ctx: 
     return { status: "unknown", reason: `no household member is recorded as your ${rel.word}`, question: `I don't have your ${rel.word} in the household. Who do you mean?` };
   }
   if (byName.length === 1) return { status: "ok", person: byName[0], via: "name" };
+  // No exact name: one household member whose name the mention misspells ("Charmiane" for Charmaine) is that member;
+  // a slip that fits more than one member is asked about.
+  if (!byName.length && words.length) {
+    const spelt = people.filter((p) => { const own = [...nameWords(p.name), ...nameWords(p.preferredName ?? "")]; return words.some((w) => own.some((n) => misspelt(w, n))); });
+    if (spelt.length === 1) return { status: "ok", person: spelt[0], via: "name_spelling" };
+    if (spelt.length > 1) return { status: "ambiguous", options: spelt, question: `Which do you mean — ${listOf(spelt)}?`, reason: `“${mention}” is close to more than one household member's name` };
+  }
   if (byName.length > 1) return { status: "ambiguous", options: byName, question: `Which do you mean — ${listOf(byName)}?`, reason: "more than one household member has that name" };
   return { status: "unknown", reason: `nobody in the household is called “${mention}”`, question: `I can't find “${mention}” in your household. Who do you mean?` };
 }
