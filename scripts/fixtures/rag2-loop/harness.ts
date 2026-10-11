@@ -7,14 +7,19 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { ChatAnswer } from "@/types";
-import { ACCOUNT, DOCS, M, OTHER_ACCOUNT } from "./household";
+import * as LOOP_HOUSEHOLD from "./household";
+import type { FxDoc, FxMember } from "../rag2/household";
+
+/** The household a harness seeds: the loop suites' own by default; another suite may pass its own synthetic one. */
+export type HarnessHousehold = { ACCOUNT: string; OTHER_ACCOUNT: string; DOCS: FxDoc[]; M: Record<string, FxMember> };
+const DEFAULT_HOUSEHOLD = LOOP_HOUSEHOLD as unknown as HarnessHousehold;
 
 export const SQL = ["schema.sql", "chat-upgrade.sql", "benefit-catalog.sql", "model-usage.sql", "model-provenance.sql", "coverage-ledger.sql", "cover-conditions.sql", "background-jobs.sql", "household-rls.sql", "lifecycle.sql", "v11-ingestion-evidence.sql"];
 
-export function setEnv() {
+export function setEnv(household: HarnessHousehold = DEFAULT_HOUSEHOLD) {
   process.env.DEARPOLICY_DETERMINISTIC_MODEL = "synthetic-e2e";
   process.env.DEV_AUTH_ENABLED = "1";
-  process.env.DEV_ACCOUNT_ID = ACCOUNT;
+  process.env.DEV_ACCOUNT_ID = household.ACCOUNT;
   process.env.E2E_RUN_ID = "rag2loop";
   process.env.MODEL_PRESET = process.env.MODEL_PRESET || "openai";
   process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || "sk-test-not-used";
@@ -24,7 +29,8 @@ export function setEnv() {
 
 export type Harness = { db: any; networkCalls: string[]; send: (question: string, conv?: { id?: string; rev?: number }, member?: string | null) => Promise<ChatAnswer>; savedAnswer: (conversationId: string) => Promise<{ summary: string; answer: ChatAnswer; state: any }> };
 
-export async function startHarness(): Promise<Harness> {
+export async function startHarness(household: HarnessHousehold = DEFAULT_HOUSEHOLD): Promise<Harness> {
+  const { ACCOUNT, OTHER_ACCOUNT, DOCS, M } = household;
   const { PGlite } = await import("@electric-sql/pglite");
   const { vector } = await import("@electric-sql/pglite/vector");
   const { pgcrypto } = await import("@electric-sql/pglite/contrib/pgcrypto");

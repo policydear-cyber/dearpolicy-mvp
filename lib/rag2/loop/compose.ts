@@ -97,6 +97,10 @@ function passageLabel(passage: string, value: number, wanted: string): string {
 }
 
 /** Statements that need evidence even without a figure. */
+/** A sentence that says the household's documents are silent on something (round 9). */
+const NOT_STATED = /^(?:(?:the|your)\s+)?(?:uploaded\s+)?(?:policy\s+)?documents?\s+(?:you(?:['’]ve| have) uploaded\s+)?(?:do(?:es)?(?:n['’]t| not))\s+(?:say|state|mention|cover the question of|address)\b|^(?:i\s+)?(?:couldn['’]t|could not|can['’]t|cannot)\s+find\s+anything\s+(?:in|about)\b|\bis\s+not\s+(?:stated|mentioned)\s+(?:anywhere\s+)?in\s+(?:the|your)\s+(?:uploaded\s+)?documents\b/i;
+/** A verdict on cover (never allowed without its clause). */
+const COVER_VERDICT = /\b(?:is|are|was|were|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:covered|excluded|payable|insured)\b|\bexclud\w*\b|\bnot covered\b|\bwill (?:not )?(?:pay|be paid)\b/i;
 const COVERISH = /\b(?:cover\w*|insur\w*|pays?|payable|benefits?|limits?|capped|maximum|excluded|exclusions?|not covered|eligib\w*|claim\w*|deductible|co-?insurance|sum assured|premiums?|waiting period|days?|nights?)\b/i;
 /** Agent F (D2): the full payout wording (statements.ts) -- will reimburse, gets back, can claim, owes you, ... */
 const PAYOUT = PAYOUT_WORDS;
@@ -337,6 +341,10 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // Round 7 (A3): a sentence that only refers to the household's own stated facts, or explains why a fact is
       // still needed, makes no cover or amount claim and needs no document citation.
       if (explainsNeedOnly(text, ctx)) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
+      // Round 9: "the uploaded documents don't say whether X is covered" is an absence of evidence, not a cover claim --
+      // kept when it says exactly that (no figure, no "is / isn't covered", no exclusion claim). An exclusion is only
+      // ever stated with the clause that says so.
+      if (NOT_STATED.test(text) && !figures.length && !/\d/.test(text) && !COVER_VERDICT.test(text.replace(/\b(?:whether|if)\b[^.]*/i, " "))) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
       if (figures.length || /\d/.test(text) || COVERISH.test(text)) { drop(text, "states cover or a figure without citing evidence"); continue; }
       out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] });
       continue;

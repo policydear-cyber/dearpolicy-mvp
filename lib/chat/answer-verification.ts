@@ -45,8 +45,8 @@ import { CATEGORY_HEADER, isRowCode, rowLabelOf, amendmentRemovalsFor, isAmendme
 const cleanScannedText = (t: string) => t.split(/\n/).map((l) => (looksScanned(l) ? cleanScannedLine(l) ?? "" : "")).filter(Boolean).join("\n");
 const gateDebug = () => !!(process.env.DP_GATE_DEBUG || (globalThis as { __dpVerifyDebug?: boolean }).__dpVerifyDebug);
 
-export const FIGURE_LEFT_OUT_NOTE = "I couldn’t confirm one of the figures against the cited page of your documents.";
-export const CLAIM_LEFT_OUT_NOTE = "I couldn’t confirm one of the statements against the cited page of your documents.";
+export const FIGURE_LEFT_OUT_NOTE = "I’ve left out an amount I couldn’t match to your documents.";
+export const CLAIM_LEFT_OUT_NOTE = "I’ve left out a statement your documents don’t support.";
 
 const FIGURE = /(?:\b(SGD|USD|MYR|HKD|AUD|EUR|GBP|JPY|PHP|CNY|IDR|THB|INR|KRW|NZD|CHF)\s?|\b(S|SG|US|HK|A|AU|NZ)\$\s?|(RM)\s?|([€£¥₱])\s?)(\d[\d,]*(?:\.\d+)?)(?:\s?(k|m|mil|million|thousand|bn|billion)\b)?|(\d[\d,]*(?:\.\d+)?)\s?(SGD|USD|MYR|HKD|AUD|EUR|GBP)\b/g;
 const SYMBOL: Record<string, string> = { S: "SGD", SG: "SGD", US: "USD", HK: "HKD", A: "AUD", AU: "AUD", NZ: "NZD", RM: "MYR", "€": "EUR", "£": "GBP", "¥": "JPY", "₱": "PHP" };
@@ -324,7 +324,7 @@ export function periodFactor(from: FigurePeriod, to: FigurePeriod): number | nul
 // ---------------------------------------------------------------------------------------------------------
 
 type Doc = { id: string; owner: string; members: Set<string>; fileHash: string | null; superseded: boolean; usable: boolean; pages: Map<number, string>;
-  product: string | null; policyNumber: string | null; role: string | null; effective: string | null; expiry: string | null };
+  product: string | null; policyNumber: string | null; groupPolicyNumber?: string | null; role: string | null; effective: string | null; expiry: string | null };
 /** Every active document of the household (light: no pages), for an endorsement's link to the policy it amends. */
 type HouseDoc = { id: string; owner: string; members: Set<string>; product: string | null; policyNumber: string | null; role: string | null };
 type Person = { id: string; names: string[]; relationship: string; notes?: string | null; dateOfBirth?: string | null };
@@ -371,16 +371,16 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
   // as the cited documents, so the metadata read below costs nothing for the many households that have none.
   let anyRemovedAmendment = false;
   if (ids.length) {
-    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; role: string | null; effective: string | null; expiry: string | null; removed_amendment: boolean }>(
+    const rows = (await query<{ id: string; owner: string; file_hash: string | null; superseded: boolean; usable: boolean; product: string | null; policy_number: string | null; group_policy_number: string | null; role: string | null; effective: string | null; expiry: string | null; removed_amendment: boolean }>(
       `SELECT p.id::text AS id, p.family_member_id::text AS owner, p.file_hash, (p.superseded_at IS NOT NULL) AS superseded,
               (coalesce(p.quarantine_status,'') IN ('scan_clean','not_scanned_prototype')) AS usable,
-              to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'document_role' AS role,
+              to_jsonb(p)->>'product_name' AS product, to_jsonb(p)->>'policy_number' AS policy_number, to_jsonb(p)->>'group_policy_number' AS group_policy_number, to_jsonb(p)->>'document_role' AS role,
               left(to_jsonb(p)->>'effective_date', 10) AS effective, left(to_jsonb(p)->>'renewal_or_expiry_date', 10) AS expiry,
               EXISTS (SELECT 1 FROM policies q WHERE q.account_id=p.account_id AND (q.lifecycle_state<>'active' OR q.superseded_at IS NOT NULL)
                         AND coalesce(to_jsonb(q)->>'document_role','') ~* 'endorse|alteration|amendment|rider|addendum') AS removed_amendment
          FROM policies p WHERE p.account_id=$1 AND p.id::text=ANY($2::text[]) AND ${activePredicate("p")}`, [accountId, ids]).catch(() => ({ rows: [] }))).rows;
     anyRemovedAmendment = rows.some((r) => !!r.removed_amendment);
-    for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map(), product: r.product ?? null, policyNumber: r.policy_number ?? null, role: r.role ?? null, effective: r.effective ?? null, expiry: r.expiry ?? null });
+    for (const r of rows) docs.set(r.id, { id: r.id, owner: r.owner, members: new Set([r.owner]), fileHash: r.file_hash, superseded: !!r.superseded, usable: !!r.usable, pages: new Map(), product: r.product ?? null, policyNumber: r.policy_number ?? null, groupPolicyNumber: r.group_policy_number ?? null, role: r.role ?? null, effective: r.effective ?? null, expiry: r.expiry ?? null });
     if (docs.size) {
       const members = (await query<{ policy_id: string; member: string }>(`SELECT policy_id::text AS policy_id, family_member_id::text AS member FROM policy_members WHERE account_id=$1 AND policy_id::text=ANY($2::text[])`, [accountId, [...docs.keys()]]).catch(() => ({ rows: [] }))).rows;
       for (const m of members) docs.get(m.policy_id)?.members.add(m.member);
@@ -537,36 +537,102 @@ function memberNamedInCell(cell: string, people: Person[]): string | null {
   const words = (x: string) => (x.toLowerCase().normalize("NFKC").match(/\p{L}+/gu) ?? []).filter((w) => w.length >= 2);
   const have = new Set(words(cell));
   let best: { id: string; n: number } | null = null, tie = false;
+  // (A one-word name -- a preferred name such as "Grace" or "May" -- names a cell only when it is the whole cell, so
+  // "Grace period" or "May 2026" is never a person.)
+  const cellWords = words(cell);
   for (const p of people) for (const n of p.names) {
     const w = words(n);
     if (!w.length || !w.every((x) => have.has(x))) continue;
+    if (w.length === 1 && !(cellWords.length === 1 && cellWords[0] === w[0])) continue;
     if (!best || w.length > best.n) { best = { id: p.id, n: w.length }; tie = false; } else if (w.length === best.n && best.id !== p.id) tie = true;
   }
   return best && !tie ? best.id : null;
 }
-/** A roster row (a group certificate's "ID | name | sum assured | date": one insured person per row): the person is
- * the row. The figure stands only on the row that names the person it is stated for, as that row's one amount; on a
- * row naming someone else it is refused. Undefined when the rows are not roster rows. */
-function rosterRowProblem(rows: string[], value: number, currency: string, subject: Person | undefined, people: Person[]): string | null | undefined {
-  if (!subject) return undefined;
+/** Words that present a figure as cover in force now, or as money that will be paid -- not what a dated document
+ * printed on its date. */
+const PRESENT_COVER = /\b(?:currently|now|today|still)\s+(?:covered|insured|has|have|holds?|gets?)\b|\bis (?:currently |now )?(?:covered|insured) for\b|\bwill (?:be )?(?:receive|get|paid|pay|payable)\b|\b(?:entitled|eligible) to\b|\bpayable to\b|\byou(?:'ll| will) get\b/i;
+/** Words that attribute a figure to the document ("the certificate lists ...", "as of 1 April 2024"). */
+const ATTRIBUTED = /\b(?:certificate|schedule|document|policy (?:schedule|document)|lists?|listed|shows?|shown|prints?|printed|states?|stated|records?|recorded|as (?:of|at)|dated|effective)\b/i;
+const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+/** Whether a sentence names the ISO date `iso` ("1 April 2024", "01/04/2024", "2024-04-01", "April 2024"). */
+function namesDate(sentence: string, iso: string): boolean {
+  const [y, m, d] = iso.split("-").map(Number);
+  const s = sentence.toLowerCase();
+  if (s.includes(iso)) return true;
+  if (new RegExp(`\\b0?${d}[/.-]0?${m}[/.-]${y}\\b`).test(s)) return true;
+  const month = MONTH_NAMES[m - 1];
+  return new RegExp(`\\b${month.slice(0, 3)}[a-z]*\\.?\\s+${y}\\b`).test(s);
+}
+/** The shared evidence contract, layout person_row (a group certificate's roster: one insured person per ROW, the
+ * product as the heading above the rows). Checked against the stored page, never trusted: the bound row is printed in
+ * the cited passage with the figure; its name cell names the person the figure is stated for (household names, any
+ * order) and no one else; the heading above it is the benefit the sentence states; the figure is the row's one amount
+ * (or, where the row prints several, the one under the bound column's heading); its currency; and -- for a row printed
+ * "as of" a date -- the sentence presents it as the document's amount on that date, not as current cover or money
+ * that will be paid. */
+function personRowProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, people: Person[], sentence: string | null): string | null {
+  if (!subject) return "the figure is not bound to a household member";
   const pool = people.some((p) => p.id === subject.id) ? people : [...people, subject];
-  let verdict: string | null | undefined = undefined;
-  for (const row of rows) {
-    const cells = rowCells(row);
-    const money = cells.filter((c) => MONEY_CELL.test(c));
-    const named = cells.filter((c) => !MONEY_CELL.test(c)).map((c) => memberNamedInCell(c, pool)).filter((x): x is string => !!x);
-    if (money.length !== 1 || !named.length) return undefined;
-    if (!named.includes(subject.id)) return "the figure is printed on another insured person’s row, not the one it is stated for";
-    if (amountPrintedWith(value, currency, money[0]) === "other") return "the currency printed in the row is not the figure’s";
-    verdict = null;
+  const name = (b.rowPerson ?? "").trim();
+  if (!name) return "the figure is not bound to a person's row";
+  const row = passageRows(b.passage).find((r) => amountAppears(value, r) && norm(r).includes(norm(name)));
+  if (!row) return "the bound person's row does not print the figure in the cited passage";
+  const who = memberNamedInCell(name, pool);
+  if (!who) return `the row's name (“${name}”) does not identify ${subject.names[0] ?? "the person"} unambiguously`;
+  if (who !== subject.id) return "the figure is printed on another insured person’s row, not the one it is stated for";
+  const cells = rowCells(row);
+  for (const c of cells) { const other = !MONEY_CELL.test(c) && c !== name ? memberNamedInCell(c, pool) : null; if (other && other !== subject.id) return "the row also names another household member"; }
+  const money = cells.filter((c) => MONEY_CELL.test(c));
+  const holding = money.filter((c) => amountAppears(value, c));
+  if (holding.length !== 1) return "the figure is not one of the row's printed amounts";
+  if (money.length > 1) {
+    const lines = rangeText.split(/\n/);
+    const at = lines.findIndex((l) => norm(l).includes(norm(row).slice(0, 60)));
+    const t = at >= 0 ? tableHeadFor(lines, at, cells.length) : null;
+    const j = cells.indexOf(holding[0]);
+    const off = t ? cells.length - Math.min(t.head.length, cells.length) : 0;
+    if (!t || !b.column || norm(t.full[j - off] ?? t.head[j - off] ?? "") !== norm(b.column)) return "the row prints more than one amount, and the figure is not bound to the column it is printed in";
   }
-  return verdict;
+  if (amountPrintedWith(value, currency, holding[0]) === "other") return "the currency printed in the row is not the figure’s";
+  // The product heading the row sits under (the nearest heading line above it) must be the benefit the binding states.
+  const lines = rangeText.split(/\n/);
+  const at = lines.findIndex((l) => norm(l).includes(norm(row).slice(0, 60)));
+  let heading: string | null = null;
+  for (let i = at - 1; i >= 0 && i >= at - 40; i--) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    const c = rowCells(lines[i]);
+    if (c.length === 1 && !MONEY_CELL.test(l) && l.length <= 80 && !/[.:]$/.test(l)) { heading = l; break; }
+    if (c.length >= 2 && !MONEY_CELL.test(l) && !/\d/.test(l)) break; // a header row: a table with no product headings
+  }
+  // (Compared on the heading's own words -- "Group", "Policy No." and numbers carry no product meaning -- so "Group
+  // Term Life" is never "Group Personal Accident".)
+  const productWords = (s: string) => (s.toLowerCase().replace(/\([^)]*\)/g, " ").match(/[a-z]{3,}/g) ?? []).filter((w) => !["group", "policy", "the", "and", "for", "sum", "assured", "insured", "benefit", "amount", "cover"].includes(w));
+  const hw = heading ? productWords(heading) : [], bw = productWords(b.benefit);
+  const sameProduct = hw.length > 0 && bw.length > 0 && (hw.every((w) => bw.includes(w)) || bw.every((w) => hw.includes(w)));
+  if (heading && hw.length && !sameProduct) return `the row is printed under “${heading}”, not under the benefit the figure is stated for`;
+  if (b.asOf && sentence != null) {
+    if (PRESENT_COVER.test(sentence)) return `the document prints this amount as of ${b.asOf}: state it as the document's amount on that date, not as cover in force now or money that will be paid`;
+    if (!ATTRIBUTED.test(sentence) && !namesDate(sentence, b.asOf)) return `the document prints this amount as of ${b.asOf}: say it is what the document lists (and as of when), not current cover`;
+  }
+  return null;
 }
 
 function columnProblem(b: FigureBinding, value: number, currency: string, rangeText: string, subject: Person | undefined, opts: { count?: boolean; ownerId?: string | null; doc?: Doc | null; sentence?: string | null; userText?: string; people?: Person[] } = {}): string | null {
   const rows = passageRows(b.passage).filter((r) => amountAppears(value, r));
   if (!rows.length) return "the amount is not printed in the cited passage";
-  if (!opts.count) { const roster = rosterRowProblem(rows, value, currency, subject, opts.people ?? []); if (roster !== undefined) return roster; }
+  // The table layout comes from retrieval (the shared evidence contract) and is checked against the page -- never
+  // inferred here from the number of cells. A person's own ROW (a certificate roster):
+  if (b.layout === "unresolved") return "who the table's value is for is not established";
+  if (b.layout === "person_row") return opts.count ? null : personRowProblem(b, value, currency, rangeText, subject, opts.people ?? [], opts.sentence ?? null);
+  // Whatever the layout: a figure on a row that names another household member (and not this person) is theirs.
+  if (subject && !opts.count) {
+    const pool = (opts.people ?? []).some((p) => p.id === subject.id) ? opts.people ?? [] : [...(opts.people ?? []), subject];
+    for (const r of rows) {
+      const named = rowCells(r).filter((c) => !MONEY_CELL.test(c)).map((c) => memberNamedInCell(c, pool)).filter((x): x is string => !!x);
+      if (named.length && !named.includes(subject.id)) return "the figure is printed on another insured person’s row, not the one it is stated for";
+    }
+  }
   // A row with one value prints one figure for everyone it covers -- an item code ("A", "1") and the benefit's name are
   // not value columns ("No. | Benefit | Amount payable" is one amount column, not one column per person or tier). A
   // row that says in a cell of its own who it is for ("Category: Child (each)") is still checked for that person.
@@ -756,7 +822,8 @@ function groundProblem(b: FigureBinding | undefined, value: number, currency: st
   // (A sentence that refers back to "the same benefit" names it when the sentence just before it names that benefit.)
   if (sentence != null && !namesBenefit(sentence, benefit) && !(BENEFIT_BACK_REFERENCE.test(sentence) && opts.previous != null && namesBenefit(opts.previous, benefit))) return "the sentence does not name the benefit the figure is printed for";
   if (sentence != null) { const other = otherRowProblem(sentence, value, shown, rangeText, benefit); if (other) return other; }
-  const row = benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
+  // (A person's own row names the person, not the benefit: its product heading is checked with the row, below.)
+  const row = b.layout === "person_row" ? null : benefitRowProblem(value, benefit, b.passage) && benefitRowProblem(value, benefit, shown);
   const column = columnProblem(b, value, currency, rangeText, subject, { ownerId: doc.owner, doc, sentence, userText: ctx.userText, people: ctx.people }) ?? amendmentProblem(doc, b.subjectId, sentence, ctx);
   if (row) {
     // A table whose rows are not benefits (a value table: one row per policy year, one column per value): the figure's
@@ -925,15 +992,29 @@ function endorsesPolicy(endorsementId: string, r: CalculationRecord, ctx: Ctx): 
   if (!key || normNo(base.policyNumber) !== key) return false;
   return !amendmentProblem(e, r.subjectId, null, ctx);
 }
+/** Round 9: two documents of the same policy -- a group certificate and its policy wording -- share a policy or group
+ * policy number (the calculator's own family rule: policyFamily in the conversation tools' store). */
+function samePolicyFamily(a: string, b: string, ctx: Ctx): boolean {
+  const x = ctx.docs.get(a), y = ctx.docs.get(b);
+  if (!x || !y) return false;
+  const keys = (d: Doc) => [normNo(d.policyNumber), normNo(d.groupPolicyNumber)].filter((k) => k.length >= 4);
+  const kx = keys(x);
+  return kx.length > 0 && keys(y).some((k) => kx.includes(k));
+}
 function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: CalculationRecord, ctx: Ctx): string | null {
   const b = o.binding;
   if (!b) return `${o.label}: a document figure without its own binding`;
   // Integration (r7): an endorsement's in-force figure may serve a calculation on the policy it amends (the same policy
   // number, the endorsement linked to this household's policy for the person); any other document is refused.
   const viaEndorsement = b.policyId !== r.policyId && endorsesPolicy(b.policyId, r, ctx);
-  if (b.policyId !== r.policyId && !viaEndorsement) return `${o.label}: bound to another document than the calculation’s`;
+  // Round 9: a figure from another document of the same policy (the wording's percentage for the certificate's sum
+  // assured) serves the calculation as that document's own figure: its version is that document's, and it must speak
+  // for the person.
+  const viaFamily = b.policyId !== r.policyId && !viaEndorsement && samePolicyFamily(b.policyId, r.policyId, ctx) && !!ctx.docs.get(b.policyId)?.members.has(r.subjectId);
+  if (b.policyId !== r.policyId && !viaEndorsement && !viaFamily) return `${o.label}: bound to another document than the calculation’s`;
   if (b.subjectId !== r.subjectId) return `${o.label}: bound to another person than the calculation’s`;
-  if (viaEndorsement) { const e = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== e.fileHash) return `${o.label}: bound to another version of the endorsement than the one on file`; }
+  if (viaFamily) { const d = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== d.fileHash) return `${o.label}: bound to another version of that document than the one on file`; }
+  else if (viaEndorsement) { const e = ctx.docs.get(b.policyId)!; if (!b.documentHash || b.documentHash !== e.fileHash) return `${o.label}: bound to another version of the endorsement than the one on file`; }
   else if ((b.documentHash ?? null) !== (r.documentHash ?? null)) return `${o.label}: bound to another version than the calculation’s`;
   if ((o.column ?? null) !== (b.column ?? null)) return `${o.label}: the stated column is not the binding’s`;
   if (o.row && !squash(b.passage).includes(squash(o.row).slice(0, 40))) return `${o.label}: the stated row is not the bound passage`;

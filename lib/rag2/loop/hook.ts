@@ -47,7 +47,23 @@ const sameSentence = (a: string, b: string) => { const x = squashT(a), y = squas
  * evidence does not say) -- and the household is told precisely what was left out: the benefit and the document (and
  * page) whose figure could not be confirmed. Independent sentences stay as they are.
  */
-function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: RagLoopState, composed: Composed | null): void {
+/** Round 9: the gate's reason, said to the household in plain words (the reason itself stays in the turn's trace). */
+function plainReason(reason: string, who: string | null): string {
+  const r = reason.toLowerCase();
+  if (/as of \d{4}-\d{2}-\d{2}/.test(r)) return "that document gives it as of an earlier date, and I couldn’t state it that way";
+  if (/another (?:insured )?person|someone the cited figure|not for the person|row'?s name|not bound to a (?:household member|person)|column|tier|class/.test(r)) return `I couldn’t match it to ${who ? who + "’s" : "the person’s"} own entry in that document`;
+  if (/currency/.test(r)) return "the currency didn’t match what the document prints";
+  if (/version|superseded|amend|endorsement|in force|effective/.test(r)) return "I couldn’t tell which version of the document applies on the date you’re asking about";
+  if (/not printed|not on the cited|is not one of|not stored|absent|passage/.test(r)) return "I couldn’t find that amount printed in the document";
+  return "I couldn’t confirm it against the document";
+}
+/** A benefit label as the household reads it (a certificate's "GROUP PERSONAL ACCIDENT(POLICY NO. 1)" -> "Group
+ * Personal Accident"); no internal row text. */
+function plainBenefit(label: string): string {
+  const s = label.split(" — ")[0].replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim();
+  return s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()) : s;
+}
+function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: RagLoopState, composed: Composed | null, whoOf: (id: string | null | undefined) => string | null = () => null): void {
   const rejected = (s: string) => problems.some((p) => { const a = squashT(s), b = squashT(p.sentence); return (b && (a.includes(b) || b.includes(a))) || (!!p.figure && s.includes(p.figure)); });
   const lostSentences: string[] = [];
   const keep = (field: string): string => sentencesOf(field).filter((s) => { if (!rejected(s)) return true; lostSentences.push(s); return false; }).join(" ");
@@ -58,22 +74,27 @@ function rescueRejected(answer: ChatAnswer, problems: FigureProblem[], state: Ra
   answer.figureBindings = (answer.figureBindings ?? []).filter((b) => !gone(b.sentence));
   answer.computations = (answer.computations ?? []).filter((r) => !gone(r.sentence));
   if (answer.calculations) answer.calculations = answer.calculations.filter((r) => !gone(r.sentence));
+  // Round 9: what was left out is said plainly and specifically -- the benefit, the document and why, in the household's
+  // terms -- never the gate's own wording, row text or internal labels (those stay in the turn's trace).
   const lines: string[] = [];
   for (const b of lostBindings) {
     const doc = answer.citations.find((c) => c.policyId === b.policyId)?.policyName ?? state.docNames?.[b.policyId] ?? "your policy document";
-    const line = `The figure I left out is for “${benefitLabelOf(b)}” in ${doc} (page ${b.pageStart}).`;
+    const p = problems.find((x) => sameSentence(x.sentence, b.sentence) || (!!x.figure && b.sentence.includes(x.figure.replace(/[.,]$/, ""))));
+    const line = `I haven’t stated the amount for ${plainBenefit(benefitLabelOf(b))} in ${doc} (page ${b.pageStart}), because ${plainReason(p?.reason ?? "", whoOf(b.subjectId))}.`;
     if (!lines.includes(line)) lines.push(line);
   }
   // Round 8 (F1): a what-if left out is said as such (it was not a figure "against the cited page").
   const lostWhatIfs = (composed?.calculations ?? []).filter((r) => r.kind === "conditional_illustration" && gone(r.sentence));
   const whatIfLines = [...new Set(lostWhatIfs.map((r) => {
     const doc = answer.citations.find((c) => c.policyId === r.policyId)?.policyName ?? state.docNames?.[r.policyId] ?? "your policy document";
-    return `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t check its assumed stay against what you told me.`;
+    return r.calculator === "hospital_cash"
+      ? `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t check its assumed stay against what you told me.`
+      : `I haven’t given a what-if amount for “${r.benefit}” in ${doc}, because I couldn’t confirm the figures it uses against your documents.`;
   }))];
   const said = [answer.summary, ...answer.details].filter((x) => x.trim() && x !== RESUME_NOTE);
   const requirements = (composed?.sentences ?? []).filter((x) => x.kind === "requirement" && !said.includes(x.text)).map((x) => x.text);
   const figuresLost = lines.length || problems.some((p) => !lostWhatIfs.some((r) => sameSentence(r.sentence, p.sentence) || (!!p.figure && r.sentence.includes(p.figure))));
-  const limitation = [...(figuresLost ? [FIGURE_LEFT_OUT_NOTE, ...lines] : []), ...whatIfLines, ...(said.length ? [] : requirements)];
+  const limitation = [...(lines.length ? lines : figuresLost ? [FIGURE_LEFT_OUT_NOTE] : []), ...whatIfLines, ...(said.length ? [] : requirements)];
   if (!answer.summary.trim()) { const body = [...answer.details, ...limitation]; answer.summary = body[0]; answer.details = body.slice(1); }
   else answer.details = [...answer.details, ...limitation.filter((l) => !answer.details.includes(l))];
 }
@@ -219,7 +240,7 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
     if (c.calcs.length) { const rec = await syncCalcClaimRecord({ accountId: request.accountId, conversationId: conversation.id, state, calcs: c.calcs, existingId: (prior as { claimSessionId?: string | null }).claimSessionId ?? null }); if (rec) answer.claimSessionId = rec.id; }
     answer.citations = await citationsFor(request.accountId, state, c.evidenceIds);
     if (out.reasked?.kind === "fact") {
-      answer.details.push(RESUME_NOTE);
+      if (!out.followUp) answer.details.push(RESUME_NOTE);
       answer.questions = [{ id: "rag_fact_" + out.reasked.factKey, text: out.reasked.question, type: out.reasked.options?.length ? "choice" : "text", ...(out.reasked.options?.length ? { options: out.reasked.options } : {}), why: "This changes what your policy pays under: " + out.reasked.why }];
     }
   } else {
@@ -237,7 +258,8 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   if (shownComposed) trace.composed = shownComposed.sentences.map((s) => s.text);
   const problems = await verifyAnswerFigures(structuredClone(answer), { accountId: request.accountId, userText: message, report: true });
   trace.gate = problems.map((p) => ({ where: p.where, figure: p.figure, reason: p.reason }));
-  if (problems.length) rescueRejected(answer, problems, state, reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null);
+  const whoOf = (id: string | null | undefined) => { const p = context.family.find((f) => f.id === id); return p ? (p.preferred_name || p.display_name) : null; };
+  if (problems.length) rescueRejected(answer, problems, state, reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null, whoOf);
   await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message });
   const visible = [answer.summary, ...answer.details, ...answer.questions.map((q) => q.text)].join(" ");
   state.history = [...state.history, { user: message, assistant: visible }].slice(-8);

@@ -134,4 +134,6 @@ export const REQUIRED_CI_SUITES: readonly string[] = [
   "trial:start-isolation-test",
   "rag2:calc-boundary-test",
   "rag2:roster-test",
+  "rag2:release-test",
+  "rag2:release-holdout",
 ];
