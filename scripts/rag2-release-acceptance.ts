@@ -385,12 +385,12 @@ async function main() {
     const CT = await import("@/lib/rag2/calc/tool");
     const ON = { DEARPOLICY_RAG_TOOLS: "1", NODE_ENV: "development" } as unknown as NodeJS.ProcessEnv;
     const ctx = R2.createToolContext({ accountId: HH.ACCOUNT, asOf: ASOF });
-    const sv = (await R2.runTool(ctx, "select_table_value", { policy_id: doc("CERT").id, benefit: "Group Personal Accident sum insured", subject_id: M.alex.id, want: "amount" }, ON)).data as any;
-    const pv = (await R2.runTool(ctx, "select_table_value", { policy_id: doc("PA_WORD").id, benefit: "Fracture of arm", subject_id: M.alex.id, want: "percent" }, ON)).data as any;
+    const sv = ((await R2.runTool(ctx, "select_table_value", { policy_id: doc("CERT").id, benefit: "Group Personal Accident sum insured", subject_id: M.alex.id, want: "amount" }, ON)) as any).data;
+    const pv = ((await R2.runTool(ctx, "select_table_value", { policy_id: doc("PA_WORD").id, benefit: "Fracture of arm", subject_id: M.alex.id, want: "percent" }, ON)) as any).data;
     assert.equal(pv.value, 20);
     const r = await R2.runTool(ctx, "calculate", { calculator: "lump_sum", purpose: "what_if", subject_id: M.alex.id, policy_id: doc("CERT").id, benefit: "Fracture of arm", sum_insured_value_id: sv.valueId, percent_value_id: pv.valueId, condition: "fractured arm", assumption_words: "if he fractured his arm" }, ON);
     assert.ok(r.ok, JSON.stringify(r).slice(0, 300));
-    const out = CT.calcOutcomes(ctx).get((r.data as any).calc_id)!;
+    const out = CT.calcOutcomes(ctx).get((r as any).data.calc_id)!;
     assert.equal(out.amount, 120000);
     const sentence = "If Alex fractured his arm in an accident, an indicative illustration is S$120,000.";
     const a = { ...answerOf(sentence, []), calculations: out.record ? [{ ...out.record, sentence }] : [] } as unknown as ChatAnswer;
