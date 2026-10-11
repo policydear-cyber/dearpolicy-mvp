@@ -98,16 +98,24 @@ function forModel(value: unknown, state: RagLoopState, via: string, ids: string[
   if (value && typeof value === "object") {
     const o: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) o[k] = forModel(v, state, via, ids, shown);
+    // Round 9 (tokens): a hit's own `text` is not sent again beside its evidence excerpt when it is the same passage.
+    const ex = (o.evidence as { excerpt?: unknown } | undefined)?.excerpt;
+    // (When the excerpt was cut short, the full text stays and the excerpt points to it instead.)
+    if (typeof o.text === "string" && typeof ex === "string" && ex !== "(shown above)" && sameStart(o.text, ex)) {
+      if (/…$/.test(ex) && o.text.length > ex.length - 1) (o.evidence as { excerpt: string }).excerpt = "(the text above)"; else delete o.text;
+    }
     return o;
   }
   return value;
 }
+const sameStart = (a: string, b: string) => { const x = a.replace(/\s+/g, " ").trim(), y = b.replace(/…$/, "").replace(/\s+/g, " ").trim(); return x.slice(0, 160) === y.slice(0, 160); };
 /** Round 7 (A3): a tool result as the model sees it -- its data, then only the evidence its data did not already
  * list (never the same passage twice in one result), each passage in full only the first time this turn. */
 function resultForModel(res: { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state: RagLoopState, via: string, ids: string[], shown: Set<string>): Record<string, unknown> {
   const data = res.ok ? forModel(res.data, state, via, ids, shown) : undefined;
-  // The evidence list repeats what the data already showed only as references (id, page, row), never in full.
-  const evidence = forModel(Array.isArray(res.evidence) ? res.evidence : [], state, via, ids, shown) as unknown[];
+  const inData = new Set(ids);
+  // The evidence list carries only what the data did not already reference (round 9: never the same id twice).
+  const evidence = (forModel(Array.isArray(res.evidence) ? res.evidence : [], state, via, ids, shown) as { evidence_id?: string }[]).filter((e) => !e?.evidence_id || !inData.has(e.evidence_id));
   return res.ok ? { ok: true, data, evidence } : { ok: false, error: res.error, evidence };
 }
 

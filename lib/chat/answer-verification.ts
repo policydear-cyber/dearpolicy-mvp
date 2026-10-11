@@ -601,7 +601,12 @@ function personRowProblem(b: FigureBinding, value: number, currency: string, ran
     if (c.length === 1 && !MONEY_CELL.test(l) && l.length <= 80 && !/[.:]$/.test(l)) { heading = l; break; }
     if (c.length >= 2 && !MONEY_CELL.test(l) && !/\d/.test(l)) break; // a header row: a table with no product headings
   }
-  if (heading && !namesBenefit(heading, b.benefit) && !namesBenefit(b.benefit, heading.replace(/\([^)]*\)/g, " "))) return `the row is printed under “${heading}”, not under the benefit the figure is stated for`;
+  // (Compared on the heading's own words -- "Group", "Policy No." and numbers carry no product meaning -- so "Group
+  // Term Life" is never "Group Personal Accident".)
+  const productWords = (s: string) => (s.toLowerCase().replace(/\([^)]*\)/g, " ").match(/[a-z]{3,}/g) ?? []).filter((w) => !["group", "policy", "the", "and", "for", "sum", "assured", "insured", "benefit", "amount", "cover"].includes(w));
+  const hw = heading ? productWords(heading) : [], bw = productWords(b.benefit);
+  const sameProduct = hw.length > 0 && bw.length > 0 && (hw.every((w) => bw.includes(w)) || bw.every((w) => hw.includes(w)));
+  if (heading && hw.length && !sameProduct) return `the row is printed under “${heading}”, not under the benefit the figure is stated for`;
   if (b.asOf && sentence != null) {
     if (PRESENT_COVER.test(sentence)) return `the document prints this amount as of ${b.asOf}: state it as the document's amount on that date, not as cover in force now or money that will be paid`;
     if (!ATTRIBUTED.test(sentence) && !namesDate(sentence, b.asOf)) return `the document prints this amount as of ${b.asOf}: say it is what the document lists (and as of when), not current cover`;
@@ -614,6 +619,7 @@ function columnProblem(b: FigureBinding, value: number, currency: string, rangeT
   if (!rows.length) return "the amount is not printed in the cited passage";
   // The table layout comes from retrieval (the shared evidence contract) and is checked against the page -- never
   // inferred here from the number of cells. A person's own ROW (a certificate roster):
+  if (b.layout === "unresolved") return "who the table's value is for is not established";
   if (b.layout === "person_row") return opts.count ? null : personRowProblem(b, value, currency, rangeText, subject, opts.people ?? [], opts.sentence ?? null);
   // Whatever the layout: a figure on a row that names another household member (and not this person) is theirs.
   if (subject && !opts.count) {

@@ -774,7 +774,13 @@ const rowAsOf = (t: Table, r: Row): string | null => {
 function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hints: SubjectColumnHints, ev: EvFn, roster?: Roster | null): TableSelection {
   // A roster row naming the subject: the row is theirs, and its one printed amount is their sum insured / assured.
   if (roster?.mine.has(r) && (want === "any" || want === "amount")) {
-    const money = t.columns.filter((c) => r.cells[c.index] && MONEY.test(r.cells[c.index]!.text) && parseCell(r.cells[c.index]!.text, c.currency).kind === "money");
+    let money = t.columns.filter((c) => r.cells[c.index] && MONEY.test(r.cells[c.index]!.text) && parseCell(r.cells[c.index]!.text, c.currency).kind === "money");
+    // A row printing several amounts ("Daily benefit | Annual limit"): the amount column the benefit names, else none.
+    if (money.length > 1 && t.headed) {
+      const want = tokens(benefit).filter((w) => !GENERIC.has(w) && !SUM_WORDS.has(w));
+      const named = money.filter((c) => { const h = tokens(c.header).filter((w) => !GENERIC.has(w)); return h.length > 0 && h.some((x) => want.some((w) => tokMatch(x, w))); });
+      money = named.length === 1 ? named : money;
+    }
     if (money.length === 1) {
       const col = money[0], cell = r.cells[col.index]!;
       const v = parseCell(cell.text, col.currency, [r.section ?? "", r.label].join(" "));

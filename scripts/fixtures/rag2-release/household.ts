@@ -8,7 +8,8 @@
  *            (masked ID | name | sum assured | "As of" | date), the first heading directly under the caption.
  *  PA_WORD   the same scheme's personal accident wording: a schedule of compensation (% of sum insured), the death
  *            clause with its 365-day condition, an explicit racing exclusion, and nothing at all about dental care.
- *  HC        a group hospital-cash roster WITH a header row (Insured person | ID | Daily benefit | Effective date).
+ *  HC        a group hospital-cash roster WITH a header row and TWO amounts per person (Insured person | ID | Daily
+ *            benefit | Annual limit | Effective date).
  *  FAMILY    adult / child columns (Bea adult, Cai child).
  *  EMP       employee / spouse columns (Alex employee, Bea spouse).
  *  ENDT      a before / after endorsement of FAMILY (fracture benefit raised from a stated date).
@@ -71,9 +72,9 @@ const HC_P1 = [
   "Harbourline Life - Group Hospital Cash (Policy No. HL9900456)",
   "Particulars of insured persons",
   "",
-  row(["Insured person", "ID", "Daily benefit", "Effective date"], [26, 12, 16]),
-  row(["Goh Wei Ming, Alex", "T****771K", "S$150", "01/04/2024"], [26, 12, 16]),
-  row(["Tan Hui Min Bea", "T****302B", "S$100", "01/04/2024"], [26, 12, 16]),
+  row(["Insured person", "ID", "Daily benefit", "Annual limit", "Effective date"], [26, 12, 16, 16]),
+  row(["Goh Wei Ming, Alex", "T****771K", "S$150", "S$15,000", "01/04/2024"], [26, 12, 16, 16]),
+  row(["Tan Hui Min Bea", "T****302B", "S$100", "S$10,000", "01/04/2024"], [26, 12, 16, 16]),
 ].join("\n");
 
 const WF = [44, 16, 16];

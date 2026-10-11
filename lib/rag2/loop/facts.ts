@@ -69,8 +69,12 @@ export function checkFact(f: { key: string; value: string; words: string }, user
   const nightsSaid = /\bnights?\b|\bovernight\b/i.test(said), daysSaid = /\bdays?\b/i.test(said);
   if (/(?:^|_)days?(?:_|$)/.test(key) && nightsSaid && !daysSaid) return { ok: false, error: `the household said nights, not days: record it as nights (e.g. nights_in_hospital) -- how nights translate into payable days is for the policy wording` };
   if (/(?:^|_)nights?(?:_|$)/.test(key) && daysSaid && !nightsSaid) return { ok: false, error: `the household said days, not nights: record it as days (e.g. days_in_hospital)` };
+  // Round 9: the DATE of an event the household named ("the accident was on 1 March" -> accident_date) is a date, not a
+  // classification -- recorded when their own words use that term; otherwise the event's date goes under event_date.
+  const datedEvent = /^(?:accident|illness|sickness|disease|diagnosis|injury|incident|event)_(?:date|datetime|time|on|at|day)$/.test(key);
+  if (datedEvent) { const term = key.split("_")[0], re = new RegExp("\\b" + term.slice(0, 5), "i"); if (!re.test(said) && !(source === "user_reported" && userTexts.some((t) => re.test(t)))) return { ok: false, error: `${key}: the ${source === "document" ? "passage" : "household"} did not call it ${term} in those terms; record the date under event_date with their words` }; }
   // A policy-defined classification: only in the household's own terms.
-  if (POLICY_KEY.test(key) || POLICY_TERM.test(value)) {
+  if ((POLICY_KEY.test(key) && !datedEvent) || POLICY_TERM.test(value)) {
     const term = value.match(POLICY_TERM)?.[0];
     const saidTerm = term ? new RegExp("\\b" + stem(term.toLowerCase()).replace(/[^a-z ]/g, "") + "\\w*", "i").test(said) : false;
     if (!saidTerm) return { ok: false, error: `${key}=${value} is a policy-defined classification the ${source === "document" ? "passage" : "household"} did not state; record how it happened in their words (key how_it_happened) and, if the cause changes which benefit applies, ask how it happened` };
