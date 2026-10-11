@@ -100,9 +100,10 @@ function forModel(value: unknown, state: RagLoopState, via: string, ids: string[
     for (const [k, v] of Object.entries(value)) o[k] = forModel(v, state, via, ids, shown);
     // Round 9 (tokens): a hit's own `text` is not sent again beside its evidence excerpt when it is the same passage.
     const ex = (o.evidence as { excerpt?: unknown } | undefined)?.excerpt;
-    // (When the excerpt was cut short, the full text stays and the excerpt points to it instead.)
+    // (When the excerpt was cut short, the excerpt carries the hit's full text instead -- said once, nothing lost.)
     if (typeof o.text === "string" && typeof ex === "string" && ex !== "(shown above)" && sameStart(o.text, ex)) {
-      if (/…$/.test(ex) && o.text.length > ex.length - 1) (o.evidence as { excerpt: string }).excerpt = "(the text above)"; else delete o.text;
+      if (/…$/.test(ex) && o.text.length > ex.length - 1) (o.evidence as { excerpt: string }).excerpt = o.text;
+      delete o.text;
     }
     return o;
   }
@@ -113,9 +114,8 @@ const sameStart = (a: string, b: string) => { const x = a.replace(/\s+/g, " ").t
  * list (never the same passage twice in one result), each passage in full only the first time this turn. */
 function resultForModel(res: { ok: boolean; data?: unknown; error?: string; evidence: unknown }, state: RagLoopState, via: string, ids: string[], shown: Set<string>): Record<string, unknown> {
   const data = res.ok ? forModel(res.data, state, via, ids, shown) : undefined;
-  const inData = new Set(ids);
-  // The evidence list carries only what the data did not already reference (round 9: never the same id twice).
-  const evidence = (forModel(Array.isArray(res.evidence) ? res.evidence : [], state, via, ids, shown) as { evidence_id?: string }[]).filter((e) => !e?.evidence_id || !inData.has(e.evidence_id));
+  // The evidence list repeats what the data already showed only as references (id, page, row), never in full.
+  const evidence = forModel(Array.isArray(res.evidence) ? res.evidence : [], state, via, ids, shown) as unknown[];
   return res.ok ? { ok: true, data, evidence } : { ok: false, error: res.error, evidence };
 }
 

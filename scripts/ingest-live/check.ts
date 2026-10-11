@@ -33,6 +33,8 @@ const has = (text: string, needle: string) => norm(text).includes(norm(needle));
  * documents." with citations attached -- is not useful. */
 export const GENERIC_SENTENCES: RegExp[] = [
   new RegExp("^" + FIGURE_LEFT_OUT_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/’/g, "['’]") + "$", "i"),
+  // (The same note as worded before round 9, as recorded runs printed it.)
+  /^I couldn['’]t confirm one of the (?:figures|statements) against the cited page of your documents\.$/i,
   /^I couldn['’]t finish\b/i, /^Nothing was saved from this attempt\b/i, /^Please (?:try again|ask about one policy)/i,
   /something went wrong|try again (?:later|in a)|the assistant model returned an error/i,
 ];
