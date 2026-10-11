@@ -15,7 +15,8 @@
  * row, the column or the person's class cannot be told apart it says so (ambiguous, with options and one question)
  * or reports what is missing -- it never guesses.
  */
-import { evidenceAt, type AppliesTo, type EvidenceAmendment, type EvidenceRef } from "./evidence";
+import { evidenceAt, type AppliesTo, type EvidenceAmendment, type EvidenceRef, type EvidenceTableRef } from "./evidence";
+import type { TableLayout } from "@/types";
 import { tokens } from "./search";
 import { amendmentRemovals, loadDocs, loadLinks, loadMembers, loadPages, type DocRow } from "./store";
 import type { AmendmentRemoval } from "@/lib/claims/person";
@@ -50,6 +51,19 @@ const CLASS_RES: [string, RegExp][] = [
   ["adult", /\badults?\b|\bgrown-?ups?\b/i], ["dependant", /\bdependants?\b/i], ["self", /\bself\b|\bpolicy ?holder\b|\bpolicy ?owner\b|\blife (?:assured|insured)\b|\bmain insured\b|\bproposer\b/i],
 ];
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const DATE_CELL = /^(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4})$/;
+/** A date printed in a cell, as ISO (day-first for d/m/y, as Singapore documents print it); null when none. */
+export function cellDate(text: string): string | null {
+  const t = text.trim();
+  const dmy = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (dmy) { const d = Number(dmy[1]), m = Number(dmy[2]); return d >= 1 && d <= 31 && m >= 1 && m <= 12 ? `${dmy[3]}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null; }
+  return DATE_CELL.test(t) ? isoDate(t) : null;
+}
+/** A product heading as a household reads it: "GROUP PERSONAL ACCIDENT(POLICY NO. 123)" -> "Group Personal Accident". */
+export function headingLabel(section: string): string {
+  const s = section.replace(/\(\s*(?:group\s+)?policy\s*no\.?[^)]*\)/gi, " ").replace(/\s+/g, " ").trim();
+  return s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase()) : s;
+}
 const flat = (s: string) => s.replace(/\s+/g, " ").trim();
 const isMoneyOrNumber = (t: string) => MONEY.test(t) || /^\d[\d,]*(?:\.\d+)?\s?%?$/.test(t.trim());
 
@@ -99,6 +113,8 @@ function kindOf(header: string, values: string[], index: number): ColumnKind {
   if (/^(?:notes?|remarks?|comments?|footnotes?)$/.test(h)) return "notes";
   if (/^(?:unit|basis|per|frequency|period|payable per)$/.test(h)) return "unit";
   if (/%|percent|proportion|share of/.test(h) || (filled.length && share(/^\d+(?:\.\d+)?\s?%$/) >= 0.6)) return "percent";
+  // A column of dates ("As of 01/04/2024", "Effective date") is a condition of the row, never a value column.
+  if (filled.length && share(DATE_CELL) >= 0.8) return "condition";
   if (/\bcondition|illness|disease|definition|criteria|eligib|requirement|what is covered|covered events?|description|group\b/.test(h) && share(MONEY) < 0.5) return "condition";
   if (index === 0) return share(MONEY) >= 0.6 ? "amount" : "label";
   if (/\b(?:days?|visits?|weeks?|times|no\.? of|number of|sessions?)\b/.test(h) && !/\bper (?:day|visit)\b/.test(h) && share(MONEY) < 0.5) return "count";
@@ -327,12 +343,15 @@ const tokMatch = (a: string, b: string) => a === b || (a.length >= 5 && b.length
 /** Words that only say "the amount it is insured for": a roster row (one insured person per row, under the
  * product's heading -- "GROUP PERSONAL ACCIDENT" / "Tan Yi Chuen   S$600,000") prints exactly that amount. */
 const SUM_WORDS = new Set(["insured", "assured", "cover", "covered", "coverage", "benefit", "amount", "sum"]);
-function benefitScore(benefit: string, t: Table, r: Row, roster = false): number {
+function benefitScore(benefit: string, t: Table, r: Row, rosterContext: string | null = null): number {
+  const roster = rosterContext != null;
   const want = tokens(benefit).filter((w) => !GENERIC.has(w) && !(roster && SUM_WORDS.has(w)));
   if (!want.length) return 0;
   const condCols = t.columns.filter((c) => c.kind === "condition").map((c) => r.cells[c.index]?.text ?? "");
   // A roster row's own label is its product heading (the row itself prints an ID and a name).
-  const product = roster ? tokens((r.section ?? "").replace(/\([^)]*\)/g, " ")).filter((w) => !GENERIC.has(w) && w !== "group") : [];
+  // (A roster with no product headings -- one table of people under the document's title and a header row: the
+  // document's product name and the amount column's header.)
+  const product = roster ? tokens((r.section ?? rosterContext ?? "").replace(/\([^)]*\)/g, " ")).filter((w) => !GENERIC.has(w) && w !== "group") : [];
   const own = [...tokens(r.label), ...tokens(condCols.join(" ")), ...product].filter((w) => !GENERIC.has(w));
   const ctx = [...tokens(r.parent ?? ""), ...tokens(r.section ?? "")];
   let rec = 0;
@@ -343,9 +362,9 @@ function benefitScore(benefit: string, t: Table, r: Row, roster = false): number
 }
 
 /** Candidate rows for a benefit across tables, best first (score >= 0.6 recall). */
-export function rowsForBenefit(tables: Table[], benefit: string, rosterRow?: (t: Table, r: Row) => boolean): { table: Table; row: Row; score: number }[] {
+export function rowsForBenefit(tables: Table[], benefit: string, rosterRow?: (t: Table, r: Row) => string | null): { table: Table; row: Row; score: number }[] {
   const out: { table: Table; row: Row; score: number }[] = [];
-  for (const t of tables) for (const r of t.rows) { const s = benefitScore(benefit, t, r, !!rosterRow?.(t, r)); if (s >= 0.6) out.push({ table: t, row: r, score: s }); }
+  for (const t of tables) for (const r of t.rows) { const s = benefitScore(benefit, t, r, rosterRow?.(t, r) ?? null); if (s >= 0.6) out.push({ table: t, row: r, score: s }); }
   return out.sort((a, b) => b.score - a.score);
 }
 
@@ -696,14 +715,20 @@ function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnH
   const household = hints.household?.length ? hints.household : [{ id: subjectId, names: hints.names }];
   const rosters = new Map<Table, Roster>();
   for (const t of L.tables) { const ro = rosterOf(t, subjectId, household); if (ro) rosters.set(t, ro); }
-  const cands = rowsForBenefit(L.tables, benefit, (t, r) => !!rosters.get(t)?.mine.has(r)).filter((c) => !rosters.get(c.table)?.others.has(c.row));
+  const rosterContext = (t: Table, r: Row): string | null => {
+    if (!rosters.get(t)?.mine.has(r)) return null;
+    if (r.section) return r.section;
+    const amountHeads = t.columns.filter((c) => r.cells[c.index] && MONEY.test(r.cells[c.index]!.text)).map((c) => c.header);
+    return [L.doc.productName ?? "", ...amountHeads].join(" ");
+  };
+  const cands = rowsForBenefit(L.tables, benefit, rosterContext).filter((c) => !rosters.get(c.table)?.others.has(c.row));
   if (!cands.length) return { status: "missing", reason: `no table row of ${L.doc.productName ?? "this document"} names “${benefit}”` };
   const top = cands[0].score;
   const tied = cands.filter((c) => c.score >= top - 0.05);
-  const ev = (t: Table, r: Row, col: Column | null, cell: Cell | null): EvidenceRef => {
+  const ev = (t: Table, r: Row, col: Column | null, cell: Cell | null, contract: Pick<EvidenceTableRef, "layout" | "rowPerson" | "asOf"> = {}): EvidenceRef => {
     const text = L.pages.get(r.page) ?? "";
     return evidenceAt({ policyId: L.doc.id, documentHash: L.doc.fileHash, page: r.page, pageText: text, start: r.lineStart, end: r.lineEnd, pageStart: t.headerPage ?? r.page, subjectId,
-      table: { tableId: t.tableId, rowLabel: r.label, columnHeader: col?.header ?? "", columnLeaf: col?.leaf ?? null, appliesTo: col?.appliesTo ?? (col ? { kind: "everyone", value: "everyone" } : null), cell: cell ? { text: cell.text, start: cell.start, end: cell.end } : null,
+      table: { ...contract, tableId: t.tableId, rowLabel: r.label, columnHeader: col?.header ?? "", columnLeaf: col?.leaf ?? null, appliesTo: col?.appliesTo ?? (col ? { kind: "everyone", value: "everyone" } : null), cell: cell ? { text: cell.text, start: cell.start, end: cell.end } : null,
         row: { cells: t.columns.flatMap((c) => { const x = r.cells[c.index]; return x ? [{ header: c.header, text: x.text, start: x.start, end: x.end }] : []; }) } } });
   };
   const results: SelectedValue[] = [];
@@ -726,7 +751,27 @@ function pickValue(L: Loaded, benefit: string, want: Want, hints: SubjectColumnH
   return problems[0];
 }
 
-function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hints: SubjectColumnHints, ev: (t: Table, r: Row, col: Column | null, cell: Cell | null) => EvidenceRef, roster?: Roster | null): TableSelection {
+type EvFn = (t: Table, r: Row, col: Column | null, cell: Cell | null, contract?: Pick<EvidenceTableRef, "layout" | "rowPerson" | "asOf">) => EvidenceRef;
+/** The table layout a column choice establishes (the shared evidence contract). */
+function layoutOf(choice: Extract<ColumnChoice, { ok: Column }>): TableLayout {
+  const b = choice.basis.basis;
+  if (b === "only_column") return "single_value";
+  if (b === "version_after" || b === "version_before") return choice.ok.appliesTo && choice.ok.appliesTo.kind !== "version" ? "person_column" : "version_column";
+  const k = choice.ok.appliesTo?.kind;
+  if (k === "stage") return "stage_column";
+  if (k === "tier" || k === "plan" || k === "ward") return "tier_column";
+  return "person_column";
+}
+/** The "as of" / effective date printed on a row: a date cell the row or its column heading marks as such ("As of
+ * 01/04/2024", an "Effective date" column) -- never another date on the row (a date of birth). */
+const AS_OF_WORDS = /\b(?:as\s+(?:of|at)|effective|w\.?e\.?f\.?|cover(?:ed)?\s+from|commencement|start\s+date)\b/i;
+const rowAsOf = (t: Table, r: Row): string | null => {
+  const rowSays = AS_OF_WORDS.test(r.line);
+  for (const c of t.columns) { const x = r.cells[c.index]; const d = x ? cellDate(x.text) : null; if (d && (rowSays || AS_OF_WORDS.test(c.header))) return d; }
+  return null;
+};
+
+function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hints: SubjectColumnHints, ev: EvFn, roster?: Roster | null): TableSelection {
   // A roster row naming the subject: the row is theirs, and its one printed amount is their sum insured / assured.
   if (roster?.mine.has(r) && (want === "any" || want === "amount")) {
     const money = t.columns.filter((c) => r.cells[c.index] && MONEY.test(r.cells[c.index]!.text) && parseCell(r.cells[c.index]!.text, c.currency).kind === "money");
@@ -735,14 +780,14 @@ function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hint
       const v = parseCell(cell.text, col.currency, [r.section ?? "", r.label].join(" "));
       if (v.kind === "money") {
         const named = roster.nameCell.get(r)!;
-        const evidence = ev(t, r, col, cell);
-        const conditions: string[] = r.section ? [`under “${r.section}”`] : [];
-        const rest = t.columns.filter((c) => c.index > col.index && r.cells[c.index]).map((c) => r.cells[c.index]!.text);
-        if (rest.length) conditions.push(rest.join(" "));
+        const asOf = rowAsOf(t, r);
+        const evidence = ev(t, r, col, cell, { layout: "person_row", rowPerson: { memberId: hints.memberId, text: named.text, start: named.start, end: named.end }, asOf });
+        const conditions: string[] = r.section ? [`under “${headingLabel(r.section)}”`] : [];
+        if (asOf) conditions.push(`printed as of ${asOf}: the document's amount on that date, not confirmation of cover on a later date`);
         return {
           status: "ok", value: v.amount, valueKind: "money", cents: v.cents, ppm: null, currency: v.currency, unit: v.unit, period: v.period,
           conditions,
-          benefit, rowLabel: r.section ? `${r.section} — ${named.text}` : `${r.label} ${named.text}`.trim(), columnHeader: col.header,
+          benefit, rowLabel: r.section ? headingLabel(r.section) : (L.doc.productName ?? benefit), columnHeader: col.header,
           columnBasis: { basis: "document", detail: `the document prints ${hints.name}'s own row (“${named.text}”)${r.section ? ` under “${r.section}”` : ""}`, evidence },
           version: null, evidence, notes: [],
         };
@@ -797,7 +842,7 @@ function pickCell(L: Loaded, t: Table, r: Row, benefit: string, want: Want, hint
   if (r.parent) conditions.push(`sub-limit within “${r.parent}”`);
   if (r.section) conditions.push(`under “${r.section}”`);
   for (const c of t.columns) if (c.kind === "percent" && c.index !== col.index && r.cells[c.index] && v.kind === "money") conditions.push(`${c.header}: ${r.cells[c.index]!.text}`);
-  const evidence = ev(t, r, col, cell);
+  const evidence = ev(t, r, col, cell, { layout: layoutOf(choice) });
   return {
     status: "ok", value: v.kind === "money" ? v.amount : v.kind === "percent" ? v.percent : v.count, valueKind: v.kind, cents: v.kind === "money" ? v.cents : null, ppm: v.kind === "percent" ? v.ppm : null,
     currency: v.kind === "money" ? v.currency : null, unit: v.kind === "count" ? v.unit : v.kind === "percent" ? "%" : v.unit, period: v.period, conditions,

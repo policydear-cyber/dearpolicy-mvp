@@ -207,7 +207,10 @@ async function main() {
     assert.doesNotMatch(v, /S\$200|S\$160|S\$360|payout/i); assert.equal(a.disclaimer, ESTIMATE_NOTICE);
     assert.deepEqual(f1.trace.gate, []); assert.equal((a.calculations ?? []).length, 1);
     assert.ok((a.calculations ?? []).every((c) => c.calculator === "bill_reimbursement" && c.subjectId === M.junhao.id && c.kind === "indicative_estimate"));
-    assert.equal(f1.loop.pending, null); assert.equal(f1.loop.claim.derived.length, 1);
+    // Expectation changed (round 9): an answer whose calculation still needs a household fact ends with that ONE
+    // question (here the admission date and time hospital cash needs), instead of stopping at "I still need ...".
+    assert.equal(f1.loop.pending?.factKey, "admission_datetime"); assert.equal(a.questions?.length, 1); assert.match(a.questions![0].text, /^Can you tell me those dates and times\?$/, "points back to the stated requirement, never repeats it");
+    assert.ok(!a.details.includes(RESUME_NOTE), "a new follow-up question, not a question put back"); assert.equal(f1.loop.claim.derived.length, 1);
     assert.ok(a.claimSessionId, "a claim scenario: the claim record is written through the existing workflow");
   });
   // Agent K (expectation change): no estimate was ever worked out from the number of nights, so the correction updates
@@ -272,7 +275,9 @@ async function main() {
     assert.deepEqual(t.trace.dropped, [], "the composer binds it (the passage prints 1,500); only the gate can tell the column is not Melissa's");
     assert.doesNotMatch(v, /1,500/);
     assert.ok(t.trace.gate.length >= 1, "the gate reported the wrong-column figure");
-    assert.ok(v.includes(FIGURE_LEFT_OUT_NOTE));
+    // Expectation changed (round 9): what was left out is said plainly and specifically -- never the gate's wording.
+    assert.match(v, /I haven’t stated the amount for Accidental medical expenses[^.]* in FamilyGuard[^.]*, because I couldn’t match it to Melissa’s own entry in that document\./);
+    assert.doesNotMatch(v, /cited page|column per person|figure is not bound|left out is for/);
   });
   // Expectation changed (agent C, then agent K): facts are recorded only from the household's verbatim words; household
   // nights are never multiplied by a rate, so the corrected figure is the household's bill and the calculate tool is used.

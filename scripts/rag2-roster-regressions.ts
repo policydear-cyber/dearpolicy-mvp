@@ -70,7 +70,7 @@ async function main() {
   await check("R2 Alex's Group Personal Accident sum assured is his own row (S$600,000), read as the document's own row for him", async () => {
     const v = await sel(ctxFor(), "CERT", M.alex.id, "Group Personal Accident sum insured");
     assert.equal(v.status, "ok", JSON.stringify(v)); assert.equal(v.value, 600000); assert.equal(v.currency, "SGD");
-    assert.match(v.rowLabel ?? "", /PERSONAL ACCIDENT/); assert.equal(v.columnBasis?.basis, "document");
+    assert.equal(v.rowLabel, "Group Personal Accident", "the product heading, as the household reads it"); assert.equal(v.columnBasis?.basis, "document");
   });
   await check("R3 other wordings of the same benefit, and the other products, read Alex's row of the product asked for", async () => {
     assert.equal(await value(M.alex.id, "personal accident"), 600000);

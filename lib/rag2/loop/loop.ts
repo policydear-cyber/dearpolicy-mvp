@@ -55,6 +55,8 @@ export type LoopCorrection = { key: string; from: unknown; to: unknown; withdraw
 const CLOCK_TIME = /\b\d{1,2}(?:[.:]\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}[:.]\d{2}\b|\bnoon\b|\bmidnight\b/i;
 export type SourceInvalidation = { kind: "fact" | "estimate" | "calculation"; subjectId: string | null; key?: string; sentence?: string; calcId?: string; reason: string };
 export type LoopOutput = { state: RagLoopState; reply: LoopReply; trace: TraceTurn; tools: ToolContext; corrections: LoopCorrection[]; reasked: LoopPending | null;
+  /** Round 9: `reasked` is a NEW follow-up question this answer ends with (not a question put back after a side answer). */
+  followUp?: boolean;
   /** Agent G: conclusions withdrawn this turn because the only source supporting them was deleted or superseded. */
   invalidated?: SourceInvalidation[] };
 
@@ -394,6 +396,43 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   /** Composer drop reasons that are about wording only (the figure itself was not refused). */
   const FORM_DROP = /^shows an internal id|^calls (?:a calculated benefit|an amount) a payout/;
   const UNPRINTED_DROP = /is printed in none of the evidence the sentence cites$/;
+  /** Round 9: a final answer that leaves the household at a dead end -- it says the answer depends on something not known
+   * yet, or the calculation it ran still needs a household fact -- without asking for it. Deterministic (no extra model
+   * call); folded into the turn's ONE bounded repair, so the model may restate it as ask_user with the same statements. */
+  const DEPENDS = /\b(?:depends? on|depending on|need(?:s|ed)? to know|would need|will need|still need|can(?:no|'|’)t (?:say|tell|confirm|work (?:it|this|that) out) (?:yet|until|without)|once (?:you|i) (?:know|have)|if you can tell me|not (?:yet )?known)\b/i;
+  const stillMissing = (subject: string | null | undefined) => {
+    if (!subject) return [];
+    const claim = state.claim?.subjectId === subject ? state.claim : state.otherClaims?.[subject];
+    return (calcMissing.get(subject) ?? []).filter((m) => !(claim && knownFactFor(m.key, claim.facts)));
+  };
+  const usefulnessLines = (c: Composed): string[] => {
+    const subject = c.subjectId ?? state.subjectId;
+    const need = stillMissing(subject);
+    if (need.length) return [`calculate still needs ${need[0].key} from the household (${need[0].why}), and the answer does not ask for it: end the turn with ask_user kind=fact for exactly that (fact_key ${need[0].key}${need[0].evidenceIds.length ? `, citing ${[...new Set(need[0].evidenceIds)].slice(0, 3).join(", ")}` : ""}), giving what is already established as statements.`];
+    const open = [...c.sentences.map((s) => s.text), ...c.dropped.map((d) => d.sentence)].find((t) => DEPENDS.test(t));
+    if (open) return [`"${open}" -- the answer says it depends on something not known yet, but asks nothing. If the household can tell you, end the turn with ask_user kind=fact: the supported sentences as statements, then that ONE question, citing the clause that makes it matter. If only the insurer can confirm it, say so plainly in a sentence that cites that clause.`];
+    return [];
+  };
+  /** After the one repair (or when the model did not answer it): a final answer whose calculation still needs a
+   * household fact ends with that ONE question, worded from the calculation's own requirement -- the answer itself
+   * (and its claim record) unchanged. */
+  const followUpFor = (c: Composed): Extract<LoopPending, { kind: "fact" }> | null => {
+    const subject = c.subjectId ?? state.subjectId ?? null;
+    const need = stillMissing(subject)[0];
+    if (!need) return null;
+    const why = need.why.replace(/[.\s]+$/, "");
+    const label = input.people.find((p) => p.id === subject)?.name ?? "";
+    const who = /\(([^)]+)\)\s*$/.exec(label)?.[1] ?? label.split(/\s+/)[0] ?? "they";
+    // The calculator's own input keys have a plain question; any other requirement is asked in its own words.
+    const KEYED: Record<string, string> = { admission_datetime: `When was ${who} admitted to hospital (date and time)?`, discharge_datetime: `When was ${who} discharged from hospital (date and time)?`, bill_amount: "How much was the bill, and in which currency?" };
+    // When the answer already states the requirement ("I still need ... admission and discharge dates and times"), the
+    // question points back to it instead of repeating it.
+    const concept = factConcept(need.key).concept;
+    const stated = c.sentences.some((s) => s.kind === "requirement" && (s.asks ?? []).includes(concept));
+    const back = concept === "admission" || concept === "discharge" ? "Can you tell me those dates and times?" : concept === "bill" ? "Can you tell me the bill amount and its currency?" : "Can you tell me that?";
+    return { kind: "fact", question: stated ? back : KEYED[need.key] ?? `To work this out I still need ${why.charAt(0).toLowerCase() + why.slice(1)}. Can you tell me?`, factKey: need.key, subjectId: subject, why, evidenceIds: need.evidenceIds.filter((id) => state.evidence[id]), turn: state.turn };
+  };
+  let followUp = false;
   /** Round 8 (F1): the one bounded repair of a final_answer the save-time gate would reject a figure sentence of. */
   let gateRepaired = false;
   /** The answer as first composed: kept if the model does not answer the repair (error, limit) -- the hook's gate then
@@ -415,7 +454,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // Round 8d: a figure sentence left out because a figure is printed in none of its cited evidence (e.g. a difference
     // the model worked out itself) is part of the same one repair -- printed figures only, or a compute result.
     const unprinted = c.dropped.filter((d) => UNPRINTED_DROP.test(d.reason) && /\d/.test(d.sentence));
-    if (!dateDrops && !formDrops.length && !unprinted.length && !texts.length) return null;
+    const useful = usefulnessLines(c);
+    if (!dateDrops && !formDrops.length && !unprinted.length && !texts.length && !useful.length) return null;
     const draft = { mode: "answer", summary: texts[0] ?? "", details: texts.slice(1), claimItems: [], nextSteps: c.nextSteps, confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], figureBindings: c.figureBindings, computations: c.computations, ...(c.calculations.length ? { calculations: c.calculations } : {}) } as unknown as ChatAnswer;
     let problems: Awaited<ReturnType<typeof verifyAnswerFigures>> = [];
     if (texts.length) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true }); } catch { return null; }
@@ -431,8 +471,8 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     for (const d of c.dropped) if (d.reason.startsWith(DATE_ABSENCE_REASON)) lines.push(`"${d.sentence}" -- ${d.reason}`);
     for (const d of unprinted) lines.push(`"${d.sentence}" -- left out: ${d.reason}; state only figures the cited evidence prints (a difference or total only as a cited compute result, else leave it out)`);
     for (const d of formDrops) lines.push(`"${d.sentence}" -- left out: ${d.reason}; restate it without ids in the text (put them in evidence_ids / value_ids / result_id) and without calling an amount paid, owed or a payout`);
-    if (!lines.length) return null;
-    return `the save-time check would not show ${lines.length > 1 ? "these sentences" : "this sentence"}: ${[...new Set(lines)].join("; ")}. Call final_answer again with the same sentences, rewriting only ${lines.length > 1 ? "these" : "this one"} so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. "previously X, and Y from <date>"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.`;
+    if (!lines.length) return useful.length ? `${useful.join(" ")} Keep every supported sentence as it was and add no claim the evidence does not print.` : null;
+    return `${useful.length ? useful.join(" ") + " Also: " : ""}the save-time check would not show ${lines.length > 1 ? "these sentences" : "this sentence"}: ${[...new Set(lines)].join("; ")}. Call final_answer again with the same sentences, rewriting only ${lines.length > 1 ? "these" : "this one"} so that what the check says is missing or wrong is fixed: if it names a limitation that is not stated, keep the figure and state exactly that limitation in the same sentence (never a limitation the check did not name); state each figure exactly as its cited evidence prints it, and an earlier value only as the earlier value (e.g. "previously X, and Y from <date>"); or leave the sentence out. Keep every other sentence as it was and add no claim the evidence does not print.`;
   };
   /** Round 8 (F1): after the one repair, a sentence still left out for claiming a printed date is absent is named
    * precisely -- the benefit and the document -- instead of the generic note. */
@@ -668,7 +708,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         let r = action(call);
         if (r.terminal?.kind === "final" && !gateRepaired) {
           const repair = await gateRepair(r.terminal.composed);
-          if (repair) { gateRepaired = true; beforeRepair = r.terminal; r = { result: { ok: false, error: repair } }; }
+          if (repair) { gateRepaired = true; beforeRepair = r.terminal; meter.grantRepairCall(); r = { result: { ok: false, error: repair } }; }
         } else if (r.terminal?.kind === "final" && gateRepaired) limitDateDrops(r.terminal.composed, call);
         record(call.name, call.arguments, r.result.ok !== false, [], r.result.ok === false ? String(r.result.error) : undefined);
         messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(r.result) });
@@ -778,6 +818,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     // An interruption: the claim question still open is put back to the household after the side answer.
     if (state.pending?.kind === "person") state.pending = null;
     if (!state.pending && state.parkedPending) { state.pending = state.parkedPending; state.parkedPending = null; }
+    // Round 9: no question open, and the calculation this answer ran still needs a household fact: the answer ends by
+    // asking for it (one question), instead of leaving the household at "I still need ...".
+    if (!state.pending) { const f = followUpFor(c); if (f) { state.pending = f; followUp = true; } }
     if (state.pending?.kind === "fact") { reasked = state.pending; trace.reasked = state.pending.question; }
   } else final = done;
   // The passage a question cites (why it matters): narrowed to the sentence that makes the fact matter -- for how an
@@ -794,7 +837,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   // Agent G: a correction or a withdrawn source reaches the PERSISTED claim too (only a record this conversation already
   // has; never creates one).
   if (state.claimRecord && (corrections.length || invalidated.length)) await syncLoopClaimState({ accountId: input.accountId, state }).catch(() => null);
-  return { state, reply: final, trace, tools: ctx, corrections, reasked, invalidated };
+  return { state, reply: final, trace, tools: ctx, corrections, reasked, followUp, invalidated };
 }
 
 const squashText = (t: string) => t.toLowerCase().normalize("NFKC").replace(/\s+/g, " ").trim();

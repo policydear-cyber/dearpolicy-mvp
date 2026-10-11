@@ -135,6 +135,10 @@ export class LoopUsageMeter {
   usd = 0;
   private readonly attemptGroupId = randomUUID();
   private householdUsd: number | null = null;
+  /** Round 9: one model call granted beyond the turn's call limit for the turn's single bounded repair (the token,
+   * time and spend limits still apply). */
+  private repairCall = 0;
+  grantRepairCall() { this.repairCall = 1; }
   constructor(private readonly o: { model: LoopModel; accountId: string; limits: LoopLimits; startedAt: number; promptVersion: string; signal?: AbortSignal | null; now?: () => number }) {}
   private now() { return this.o.now ? this.o.now() : Date.now(); }
   private get hosted() { return this.o.model.kind === "hosted"; }
@@ -150,7 +154,7 @@ export class LoopUsageMeter {
   private async refusal(input: ModelTurnInput, reservationUsd = 0): Promise<MeterStop | null> {
     const L = this.o.limits;
     if (this.o.signal?.aborted) return { kind: "cancelled", detail: "the turn was cancelled" };
-    if (this.calls.length >= L.maxCallsPerTurn) return { kind: "turn_calls", detail: `${this.calls.length} of ${L.maxCallsPerTurn} model calls for this turn used` };
+    if (this.calls.length >= L.maxCallsPerTurn + this.repairCall) return { kind: "turn_calls", detail: `${this.calls.length} of ${L.maxCallsPerTurn} model calls for this turn used` };
     const used = this.usage.input + this.usage.output, next = estimateTokens(input) + input.maxOutputTokens;
     // Agent F (D23): a budget already spent (a call reported more than was left) is "used up"; a call that would pass
     // what is left is refused before it is made. Either way no further call is made.

@@ -6,7 +6,7 @@
  * gate's FigureBinding (types/index.ts) so an answer built from these tools passes lib/chat/answer-verification.ts.
  * Pure: no database access here.
  */
-import type { FigureBinding } from "@/types";
+import type { FigureBinding, TableLayout } from "@/types";
 
 export type AppliesToKind = "person_class" | "tier" | "plan" | "ward" | "version" | "stage" | "everyone";
 /** Who a table column's values apply to ("Child" -> person_class child; "Plan B" -> plan; "After" -> version). */
@@ -25,6 +25,14 @@ export type EvidenceTableRef = {
    * row's other values -- the earlier value of an amended row, another person's column -- can be cited as what they
    * are (rowCellBinding). */
   row?: { cells: { header: string; text: string; start: number; end: number }[] } | null;
+  /** The shared evidence contract (round 9): how the table says who the value is for -- the person's own row, their
+   * column, a tier / version / stage column, one value for everyone, or unresolved -- as decided by retrieval
+   * (tables.ts), carried unchanged to calculations and to the save-time gate, which checks it against the page. */
+  layout?: TableLayout | null;
+  /** layout=person_row: the household member the row names and its name cell (verbatim, with offsets). */
+  rowPerson?: { memberId: string; text: string; start: number; end: number } | null;
+  /** The date printed on the value's row as its "as of" / effective date (ISO), when it prints one. */
+  asOf?: string | null;
 };
 
 export type EvidencePassage = {
@@ -132,6 +140,9 @@ export function toFigureBinding(ref: EvidenceRef, benefit: string, value: number
     pageEnd: ref.page.end,
     passage: ref.passage.text,
     column: ref.table ? (ref.table.columnLeaf || ref.table.columnHeader || null) : null,
+    ...(ref.table?.layout ? { layout: ref.table.layout } : {}),
+    ...(ref.table?.rowPerson ? { rowPerson: ref.table.rowPerson.text } : {}),
+    ...(ref.table?.asOf ? { asOf: ref.table.asOf } : {}),
   };
 }
 

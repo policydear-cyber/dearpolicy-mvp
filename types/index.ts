@@ -212,7 +212,17 @@ export type FigureBinding = {
   column?:string|null;
   /** The wording presents a superseded version as superseded. */
   presentedAsSuperseded?:boolean;
+  /** How the table the figure is read from says who a value is for (lib/rag2/tables.ts): the person's own ROW (a
+   * group certificate's roster), the person's / tier's / version's / stage's COLUMN, one value for everyone, or not
+   * established. Absent for producers that do not read tables; the gate never infers it from the cell count. */
+  layout?:TableLayout|null;
+  /** layout=person_row: the row's name cell, verbatim (the gate checks it names the person, and no one else). */
+  rowPerson?:string|null;
+  /** The date the row prints the value as of (ISO; a certificate's "As of" / effective date): a dated document
+   * fact, never current or confirmed cover by itself. */
+  asOf?:string|null;
 };
+export type TableLayout = "person_row"|"person_column"|"tier_column"|"version_column"|"stage_column"|"single_value"|"unresolved";
 /** A figure stated in one sentence of the answer, bound to its source. `sentence` is the exact sentence. */
 export type BoundFigure = FigureBinding & { sentence:string; value:number; currency:string };
 export type FigurePeriod = "day"|"week"|"month"|"quarter"|"half_year"|"year"|"event"|"lifetime";
