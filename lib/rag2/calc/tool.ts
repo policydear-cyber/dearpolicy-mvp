@@ -43,7 +43,7 @@ export const CALCULATE_TOOL: ToolDef = {
     deductible_value_id: str("A printed deductible (value id)."), co_insurance_value_id: str("A printed co-insurance percentage (value id)."), co_insurance_cap_value_id: str("A printed cap on the co-insurance share (value id)."),
     sum_insured_value_id: str("lump_sum: the sum insured (value id)."), percent_value_id: str("lump_sum: the printed percentage payable (value id)."), cap_value_id: str("lump_sum: a printed cap (value id)."),
     condition: str("lump_sum: the illness / disability / event the household asked about."),
-    assumption_words: str("lump_sum what_if: the household's what-if, quoted."),
+    assumption_words: str("lump_sum: the household's own words for the what-if or the event they reported, quoted; the result is always a conditional illustration, stated with its condition (\"If ...\")."),
     settled: { type: "array", items: { type: "object", properties: { condition_id: str("A condition id from an earlier calculate result."), status: { type: "string", enum: ["established", "not_applicable"] }, words: str("The household's own words that settle it, quoted.") }, required: ["condition_id", "status", "words"], additionalProperties: false } },
   }, required: ["calculator", "purpose", "subject_id", "policy_id", "benefit"], additionalProperties: false },
   handler: async (ctx, a) => runCalculate(ctx, a),

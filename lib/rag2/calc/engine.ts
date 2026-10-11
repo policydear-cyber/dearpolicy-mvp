@@ -482,7 +482,9 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
   const conds: CalcCondition[] = [{ id: "c_definition", kind: "definition", text: `${a.condition} must meet ${product}’s own definition, confirmed by a reviewed medical decision.`, status: "unresolved", basis: "none", needs: `a reviewed decision that ${a.who}’s diagnosis meets ${product}’s definition of ${a.condition} (the insurer’s medical assessment)` }];
   const evidenceRequirements = ["the specialist’s diagnosis report", "the insurer’s claim form and medical assessment"];
   const base = { calculator: "lump_sum" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence: printed.map((p) => p.evidence), evidenceRequirements, who: a.who, product };
-  if (!a.whatIf || !a.percent || !a.assumptionWords?.trim()) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [conds[0].needs!], amount: null, currency: s.currency, record: null, steps: [] });
+  // V1.1: a lump sum is only ever a conditional illustration (the definition is the insurer's to confirm) -- for a
+  // what-if, or for an event the household reported, with their own words as the stated assumption.
+  if (!a.percent || !a.assumptionWords?.trim()) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [conds[0].needs!], amount: null, currency: s.currency, record: null, steps: [] });
   const ops: CalcOperand[] = [];
   const sum = docOperand("sum_insured", "sum_insured", a.sumInsured, a.subjectId), pct = docOperand("percent", "percent", a.percent, a.subjectId);
   if (typeof sum === "string") return { refused: sum }; if (typeof pct === "string") return { refused: pct };

@@ -256,11 +256,12 @@ export async function runLoopChat(context: ChatContext, opts: { save: Save; chec
   // could not be confirmed, never only the generic note. saveTurn runs the gate again on what remains.
   const shownComposed = reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null;
   if (shownComposed) trace.composed = shownComposed.sentences.map((s) => s.text);
-  const problems = await verifyAnswerFigures(structuredClone(answer), { accountId: request.accountId, userText: message, report: true });
+  const priorUserTexts = state.history.map((h) => h.user);
+  const problems = await verifyAnswerFigures(structuredClone(answer), { accountId: request.accountId, userText: message, report: true, priorUserTexts });
   trace.gate = problems.map((p) => ({ where: p.where, figure: p.figure, reason: p.reason }));
   const whoOf = (id: string | null | undefined) => { const p = context.family.find((f) => f.id === id); return p ? (p.preferred_name || p.display_name) : null; };
   if (problems.length) rescueRejected(answer, problems, state, reply.kind === "final" || reply.kind === "ask" ? reply.composed ?? null : null, whoOf);
-  await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message });
+  await verifyAnswerFigures(answer, { accountId: request.accountId, userText: message, priorUserTexts });
   const visible = [answer.summary, ...answer.details, ...answer.questions.map((q) => q.text)].join(" ");
   state.history = [...state.history, { user: message, assistant: visible }].slice(-8);
   state.turns = [...state.turns, trace].slice(-12) as TraceTurn[];

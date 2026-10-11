@@ -99,6 +99,27 @@ function passageLabel(passage: string, value: number, wanted: string): string {
 /** Statements that need evidence even without a figure. */
 /** A sentence that says the household's documents are silent on something (round 9). */
 const NOT_STATED = /^(?:(?:the|your)\s+)?(?:uploaded\s+)?(?:policy\s+)?documents?\s+(?:you(?:['’]ve| have) uploaded\s+)?(?:do(?:es)?(?:n['’]t| not))\s+(?:say|state|mention|cover the question of|address)\b|^(?:i\s+)?(?:couldn['’]t|could not|can['’]t|cannot)\s+find\s+anything\s+(?:in|about)\b|\bis\s+not\s+(?:stated|mentioned)\s+(?:anywhere\s+)?in\s+(?:the|your)\s+(?:uploaded\s+)?documents\b/i;
+/** V1.1: the wider ways a reply says a document is silent, or that a version is no longer read -- "the schedule does
+ * not state how many visits", "none of your documents mentions dental", "Cai is not listed", "the 2022 certificate
+ * was replaced". Kept without a citation only when it states no amount and no cover verdict, and (for a person said
+ * not to be listed) only when the document it names was read and does not name them. */
+const ABSENCE = /\b(?:do(?:es)?n['’]t|do(?:es)? not)\s+(?:say|state|show|mention|list|name|specify|include|set out|print)\b|\b(?:is|are|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:stated|mentioned|listed|named|shown|specified|printed)\b|\bnone of (?:your|the|our)\b[^.]*\bmentions?\b|\b(?:has been|have been|was|were)\s+(?:replaced|superseded)\b|\bnot (?:stated|listed|named|shown|mentioned) (?:in|on|anywhere)\b/i;
+/** Digits that are an amount, count or rate -- not a year, a date or a policy number ("HL-TL-3302", "2022"). */
+const amountDigits = (t: string) => /\d/.test(t.replace(/\b(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[A-Za-z0-9][\w-]*\b/g, " ").replace(/\b(?:19|20)\d\d\b/g, " ").replace(/\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\b/gi, " "));
+const SAYS_NOT_LISTED = /\b(?:is|are|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:listed|named|insured|included|shown)\b|\bnot (?:listed|named|insured|included)\b|\bonly (?:names|lists)\b/i;
+/** Why an uncited absence sentence is contradicted by, or not grounded in, what was read (null when it stands). */
+function absenceProblem(text: string, ctx: Ctx): string | null {
+  if (!SAYS_NOT_LISTED.test(text)) return null;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = (ctx.people ?? []).filter((p) => p.names.some((n) => n && n.length >= 3 && new RegExp("\\b" + esc(n) + "\\b", "i").test(text)));
+  const docs = [...(ctx.policyNames ?? new Map<string, string>())].filter(([, n]) => { const k = n.replace(/\s*-\s*(?:policy schedule|schedule|certificate|policy wording)\b.*$/i, "").trim(); return k.length >= 4 && text.toLowerCase().includes(k.toLowerCase()); }).map(([id]) => id);
+  if (!docs.length) return "says someone is not listed without naming the document that was read";
+  const read = Object.values(ctx.state.evidence).filter((e) => docs.includes(e.policyId));
+  if (!read.length) return "says someone is not listed on a document that was not read";
+  const negated = named.filter((p) => { const at = text.search(new RegExp("\\b" + esc(p.names[0]) + "\\b", "i")); const after = text.slice(at).split(/[;,.]|\b(?:and|but|so)\b/i)[0]; return SAYS_NOT_LISTED.test(after) && !/\bonly (?:names|lists)\b/i.test(after); });
+  for (const p of negated) if (read.some((e) => p.names.some((n) => n.length >= 3 && new RegExp("\\b" + esc(n) + "\\b", "i").test(e.passage.text)))) return `says ${p.names[0]} is not listed, but the document names them`;
+  return null;
+}
 /** A verdict on cover (never allowed without its clause). */
 const COVER_VERDICT = /\b(?:is|are|was|were|isn['’]t|aren['’]t)\s+(?:not\s+)?(?:covered|excluded|payable|insured)\b|\bexclud\w*\b|\bnot covered\b|\bwill (?:not )?(?:pay|be paid)\b/i;
 const COVERISH = /\b(?:cover\w*|insur\w*|pays?|payable|benefits?|limits?|capped|maximum|excluded|exclusions?|not covered|eligib\w*|claim\w*|deductible|co-?insurance|sum assured|premiums?|waiting period|days?|nights?)\b/i;
@@ -345,6 +366,11 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       // kept when it says exactly that (no figure, no "is / isn't covered", no exclusion claim). An exclusion is only
       // ever stated with the clause that says so.
       if (NOT_STATED.test(text) && !figures.length && !/\d/.test(text) && !COVER_VERDICT.test(text.replace(/\b(?:whether|if)\b[^.]*/i, " "))) { out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue; }
+      if (ABSENCE.test(text) && !figures.length && !amountDigits(text) && !COVER_VERDICT.test(text.replace(/\b(?:whether|if)\b[^.]*/i, " "))) {
+        const why = absenceProblem(text, ctx);
+        if (why) { drop(text, why); continue; }
+        out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] }); continue;
+      }
       if (figures.length || /\d/.test(text) || COVERISH.test(text)) { drop(text, "states cover or a figure without citing evidence"); continue; }
       out.sentences.push({ text, evidenceIds: [], estimate: false, factKeys: [] });
       continue;

@@ -94,7 +94,9 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   // Person: a member named in the sentence whose evidence was all read for another member.
   const named = ctx.people.filter((p) => p.names.some((n) => n && new RegExp("\\b" + n.replace(/[^A-Za-z' -]/g, "") + "\\b", "i").test(text)));
   const readFor = new Set(cited.map((c) => c.subjectId).filter(Boolean) as string[]);
-  for (const p of named) if (readFor.size && !readFor.has(p.id) && ![...readFor].some((r) => named.some((q) => q.id === r))) return `it is about ${p.names[0]} but its evidence was read for someone else`;
+  // V1.1: evidence read once for one member and reused for another is still theirs when the passage itself names them.
+  const inPassage = (p: { names: string[] }) => p.names.some((n) => n && n.length >= 3 && new RegExp("\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(all));
+  for (const p of named) if (readFor.size && !readFor.has(p.id) && !inPassage(p) && ![...readFor].some((r) => named.some((q) => q.id === r))) return `it is about ${p.names[0]} but its evidence was read for someone else`;
   // Polarity.
   if (NEGATIVE_SENTENCE.test(text)) {
     const membership = MEMBERSHIP.test(text);

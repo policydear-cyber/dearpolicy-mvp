@@ -402,7 +402,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     return { composed: out, repair: null };
   };
   /** Composer drop reasons that are about wording only (the figure itself was not refused). */
-  const FORM_DROP = /^shows an internal id|^calls (?:a calculated benefit|an amount) a payout/;
+  const FORM_DROP = /^shows an internal id|^calls (?:a calculated benefit|an amount) a payout|^an illustration must state its what-if/;
   const UNPRINTED_DROP = /is printed in none of the evidence the sentence cites$/;
   /** Round 9: a final answer that leaves the household at a dead end -- it says the answer depends on something not known
    * yet, or the calculation it ran still needs a household fact -- without asking for it. Deterministic (no extra model
@@ -466,7 +466,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     if (!dateDrops && !formDrops.length && !unprinted.length && !texts.length && !useful.length) return null;
     const draft = { mode: "answer", summary: texts[0] ?? "", details: texts.slice(1), claimItems: [], nextSteps: c.nextSteps, confidence: null, citations: [], disclaimer: "", claimSessionId: null, questions: [], knownFacts: [], missingFacts: [], figureBindings: c.figureBindings, computations: c.computations, ...(c.calculations.length ? { calculations: c.calculations } : {}) } as unknown as ChatAnswer;
     let problems: Awaited<ReturnType<typeof verifyAnswerFigures>> = [];
-    if (texts.length) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true }); } catch { return null; }
+    if (texts.length) try { problems = await verifyAnswerFigures(draft, { accountId: input.accountId, userText: input.message, report: true, priorUserTexts: state.history.map((h) => h.user) }); } catch { return null; }
     const squash = (x: string) => x.replace(/\s+/g, " ").trim().toLowerCase();
     const lines = problems.flatMap((p) => {
       const b = squash(p.sentence);

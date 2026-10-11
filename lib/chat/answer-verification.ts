@@ -362,7 +362,7 @@ function bindingsOf(answer: ChatAnswer): FigureBinding[] {
 
 /** The documents the answer's bindings and citations name (this household's, active -- the lifecycle predicate --
  * with their release state, version and pages), the household's people, and the household's own figures. */
-async function loadContext(accountId: string, answer: ChatAnswer, userText: string): Promise<Ctx> {
+async function loadContext(accountId: string, answer: ChatAnswer, userText: string, priorUserTexts: string[] = []): Promise<Ctx> {
   const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.calculations ?? []).map((k) => k?.policyId),
     // Round 8e: a condition may quote an amendment document of the calculation's policy (an admission-day exception it restates).
     ...(answer.calculations ?? []).flatMap((k) => (k?.conditions ?? []).map((c) => c?.passage?.policyId)), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
@@ -392,7 +392,7 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
     .map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => n.trim()), relationship: p.relationship ?? "", notes: p.notes ?? null, dateOfBirth: p.date_of_birth ?? null }));
   // The household's own messages in this conversation (only read when the answer carries a benefit calculation whose
   // household inputs must be quoted from them).
-  const householdTexts = [userText];
+  const householdTexts = [userText, ...priorUserTexts.filter((t) => t && t !== userText)];
   if (answer.calculations?.length && answer.conversationId) {
     const rows = (await query<{ content: string }>(`SELECT content FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role='user' ORDER BY created_at`, [accountId, answer.conversationId]).catch(() => ({ rows: [] as { content: string }[] }))).rows;
     householdTexts.push(...rows.map((r) => r.content ?? ""));
@@ -978,6 +978,14 @@ const CALC_TOTAL = /\b(?:totals?|totall?ing|altogether|combined|in all|add(?:s|e
 const CALC_ATTRIBUTED = /\byour (?:own )?(?:figures?|bill|amount|dates?|times?|words)\b|\b(?:as )?you (?:gave|told|said|mentioned|quoted|wrote)\b|\bthe (?:bill|amount|dates?|times?) you\b/i;
 const WHAT_IF = /\bwhat if\b|\bif\b|\bsuppose\b|\bsupposing\b|\bhypothetical\w*\b|\bwere to\b|\bsay (?:he|she|they|i|we)\b/i;
 const squash = (t: string) => normalPassage(t ?? "").replace(/\s+/g, " ").trim();
+/** A short follow-on ("and a broken toe?", "what about Cai?") continues the household's previous message. */
+const FOLLOW_ON = /^\s*(?:and|or|also|then|what about|how about)\b|^\s*[^.?!]{1,40}\?\s*$/i;
+function asksWhatIf(ctx: { userText: string; householdTexts: string[] }): boolean {
+  if (WHAT_IF.test(ctx.userText)) return true;
+  const prior = ctx.householdTexts.filter((t) => t && squash(t) !== squash(ctx.userText));
+  const last = prior[prior.length - 1];
+  return !!last && WHAT_IF.test(last) && FOLLOW_ON.test(ctx.userText);
+}
 const numsOf = (t: string) => (t.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
 function quotedBy(words: string, texts: string[]): boolean {
   const w = squash(words);
@@ -1076,7 +1084,10 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     // ("exactly 3 days in August"): accepted when their words with that duration are quoted from this message.
     const assumedTimes = r.operands.filter((o) => o?.source === "assumption" && (o.unit === "date" || o.unit === "datetime"));
     const resolvesDuration = assumedTimes.length > 0 && assumedTimes.every((o) => o.source === "assumption" && DURATION_WORDS.test(o.attribution ?? "") && quotedBy(o.attribution, [ctx.userText]));
-    if (!WHAT_IF.test(ctx.userText) && !resolvesDuration) return "an illustration is given though the household did not ask a what-if";
+    // V1.1: a what-if is the household's own -- asked in this message, carried by a short follow-on to one they just
+    // asked ("and a broken toe?"), or the event they reported, quoted as the illustration's stated assumption.
+    const reported = !!r.assumption?.trim() && quotedBy(r.assumption, ctx.householdTexts);
+    if (!asksWhatIf(ctx) && !resolvesDuration && !reported) return "an illustration is given though the household did not ask a what-if";
     // Never the figure for their actual stay: times WE assumed for a duration they gave are stated as an assumption
     // ("If you mean exactly 72 hours ..."); a what-if in their own times is stated by its own "if" clause.
     if (resolvesDuration && !STATES_ASSUMPTION.test(sentence)) return "an illustration does not state the times it assumes";
@@ -1177,7 +1188,7 @@ type Page = { policyId: string; page: number; text: string; current: boolean };
 export type FigureProblem = { where: string; figure: string; sentence: string; reason: string };
 
 /** Checks (and, unless `report`, repairs in place) every money figure and cover statement of an answer. */
-export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId: string; userText?: string; report?: boolean }): Promise<FigureProblem[]> {
+export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId: string; userText?: string; report?: boolean; priorUserTexts?: string[] }): Promise<FigureProblem[]> {
   if (!answer || typeof answer !== "object") return [];
   const fields: { where: string; get: () => string; set: (v: string) => void }[] = [
     { where: "summary", get: () => answer.summary ?? "", set: (v) => { answer.summary = v; } },
@@ -1189,7 +1200,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const anyFigure = all.some((x) => x.figures.length);
   const anyCover = all.some((x) => COVER_CLAIM.test(x.sentence.trim()));
   if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length && !all.some((x) => SAYS_NOT_AMENDED.test(x.sentence) || CLAIMS_REMOVAL.test(x.sentence))) return [];
-  const ctx = await loadContext(opts.accountId, answer, opts.userText ?? "");
+  const ctx = await loadContext(opts.accountId, answer, opts.userText ?? "", opts.priorUserTexts ?? []);
   const problems: FigureProblem[] = [];
   const debug = gateDebug();
   // A policy-stated limit card stands only with its own binding, grounded for its benefit.

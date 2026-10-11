@@ -1,0 +1,1417 @@
+[
+  {
+    "id": "V1",
+    "title": "Family overview, then which policies cover the child",
+    "turns": [
+      {
+        "user": "what policies does my family have?",
+        "must_include": [
+          "HL7700123",
+          "HL9900456",
+          "KG-FS-4410",
+          "OB-OP-7781",
+          "HL-TL-3302",
+          "Cai"
+        ],
+        "must_include_any": [
+          [
+            "Harbourline Civil Service Group Scheme",
+            "Civil Service Group Scheme"
+          ],
+          [
+            "Group Term Life",
+            "term life"
+          ],
+          [
+            "Group Personal Accident",
+            "personal accident"
+          ],
+          [
+            "Group Living Care",
+            "Living Care"
+          ],
+          [
+            "Hospital Cash",
+            "hospital cash"
+          ],
+          [
+            "FamilyShield"
+          ],
+          [
+            "Endorsement No. 2",
+            "endorsement"
+          ],
+          [
+            "Orchid Benefits",
+            "Employee Group Outpatient"
+          ],
+          [
+            "Kestrel General"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "HC",
+            "page": 1
+          },
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          },
+          {
+            "doc": "EMP",
+            "page": 1
+          },
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Plain factual question: a grouped, readable list of each policy/plan with insurer and who it covers (Alex and Bea on the Harbourline group scheme, hospital cash and Orchid outpatient; Bea and Cai on FamilyShield incl. Endorsement No. 2; Alex alone on Harbourline term HL-TL-3302). Amounts optional. Failure: listing the replaced 2022 certificate or another household's certificate as a separate policy, raw row labels/masked IDs, OCR garble, or asking claim questions."
+      },
+      {
+        "user": "which of those actually cover cai?",
+        "must_include": [
+          "FamilyShield",
+          "KG-FS-4410"
+        ],
+        "must_include_any": [
+          [
+            "S$50,000"
+          ],
+          [
+            "S$500",
+            "S$400"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Cai is named only on the FamilyShield Accident Plan (child: accidental death S$50,000; fracture S$400 per fracture, revised to S$500 from 1 July 2026 by Endorsement No. 2). Must say he is not named on the Harbourline group scheme, Harbourline hospital cash, Orchid outpatient or the Harbourline term schedule. Failure: claiming Cai is covered by Alex's group or employee plans."
+      }
+    ]
+  },
+  {
+    "id": "V2",
+    "title": "One person's accident cover and conditional fracture arithmetic",
+    "turns": [
+      {
+        "user": "what accident cover does alex have?",
+        "must_include": [
+          "S$600,000",
+          "HL7700123"
+        ],
+        "must_include_any": [
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ],
+          [
+            "Harbourline Life",
+            "Harbourline"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$200,000"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Group Personal Accident sum assured S$600,000 shown 'as of' 1 April 2024 on the certificate. Must present it as the certificate's amount on that date, not confirmed current cover and not a payout. Alex is not insured on FamilyShield, so the S$200,000 adult accidental death figure must not be attributed to him. Failure: superseded S$450,000, other household's S$900,000."
+      },
+      {
+        "user": "what if he fractures his arm?",
+        "must_include": [
+          "20%",
+          "S$120,000"
+        ],
+        "must_include_any": [
+          [
+            "S$600,000"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative",
+            "estimate"
+          ],
+          [
+            "Accident",
+            "accident"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "'He' = Alex (current subject). Conditional arithmetic: Schedule of Compensation 'Fracture of arm' 20% x S$600,000 sum assured = S$120,000, labelled indicative/illustration, not a promised payment; must note it depends on the injury being caused by an Accident as the wording defines it (sudden, unforeseen, involuntary, external, violent and visible means). Hypothetical, so no claim question required. Failure: no number when the documents support one; using FamilyShield amounts for Alex; using S$450,000."
+      },
+      {
+        "user": "and a broken toe?",
+        "must_include": [
+          "2%",
+          "S$12,000"
+        ],
+        "must_include_any": [
+          [
+            "indicative",
+            "illustration",
+            "illustrative",
+            "estimate"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Still Alex: 'Fracture of toe' 2% x S$600,000 = S$12,000, indicative. Short answer is fine. Failure: switching person, re-asking who."
+      }
+    ]
+  },
+  {
+    "id": "V3",
+    "title": "Motorbike death after Alex is the subject; side question; return to pending question",
+    "turns": [
+      {
+        "user": "what cover is there for alex?",
+        "must_include": [
+          "S$1,000,000",
+          "S$600,000",
+          "S$350,000",
+          "S$150",
+          "S$15,000",
+          "S$40",
+          "S$250,000"
+        ],
+        "must_include_any": [
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "HC",
+            "page": 1
+          },
+          {
+            "doc": "EMP",
+            "page": 1
+          },
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Alex: Group Term Life S$1,000,000, Group Personal Accident S$600,000, Group Living Care S$350,000 (all 'as of' 1 April 2024, HL7700123); hospital cash S$150/day, annual limit S$15,000 (HL9900456); outpatient GP S$40 per visit as employee (OB-OP-7781); Harbourline term HL-TL-3302 Death S$250,000 and Terminal Illness S$250,000. Plain factual: no claim question."
+      },
+      {
+        "user": "he died in a motorbike accident",
+        "must_include": [
+          "S$600,000",
+          "100%",
+          "S$1,000,000",
+          "S$250,000"
+        ],
+        "must_include_any": [
+          [
+            "competitive racing",
+            "racing"
+          ],
+          [
+            "365 days"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$200,000"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": true,
+        "question_about": "whether Alex was taking part in competitive racing on wheels (the exclusion, with its exception for racing sanctioned by the Authority)",
+        "notes": "Must resolve 'he' to Alex without asking who. Lead with what documents support: PA Death due to Accident = 100% of S$600,000 sum assured (indicative), condition: death within 365 days of the Accident and still a Scheme member; Group Term Life S$1,000,000 sum assured as of 1 April 2024 (GTL wording not uploaded, so its conditions are not stated); term HL-TL-3302 Death S$250,000. Cite the competitive-racing exclusion (PA_WORD p2) and ask ONE question about racing. 'You told me' framing for the motorbike accident. A brief expression of sympathy is appropriate. Failure: promising payment, adding FamilyShield S$200,000 (Alex not insured there), asking about the date or who, more than one question."
+      },
+      {
+        "user": "sorry quick one, what's the group policy number for the civil service scheme?",
+        "must_include": [
+          "GX55001"
+        ],
+        "must_include_any": [
+          [
+            "racing",
+            "race"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": true,
+        "question_about": "put back once: whether Alex was in a competitive (or sanctioned) race",
+        "notes": "Answer the side question first: group policy no. GX55001 (the cover policy number on the certificate is HL7700123 - mentioning it is fine). Then restate the pending racing question once. Failure: ignoring the side question, or dropping the pending question."
+      },
+      {
+        "user": "no he wasnt racing, he was riding home from work",
+        "must_include": [
+          "S$600,000"
+        ],
+        "must_include_any": [
+          [
+            "You told me",
+            "you said",
+            "you've told me",
+            "as you described"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ],
+          [
+            "365 days",
+            "Scheme",
+            "member"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Based on what the user reported, the racing exclusion does not appear to apply; PA Death due to Accident 100% x S$600,000 = S$600,000 indicative, subject to the insurer's assessment and the wording's conditions (death within 365 days, cover ends when he ceases to be a Scheme member). Also may recall GTL S$1,000,000 and term S$250,000. No further question needed. Failure: re-asking the racing question, presenting it as guaranteed."
+      }
+    ]
+  },
+  {
+    "id": "V4",
+    "title": "FamilyShield adult vs child comparison incl. endorsement date",
+    "turns": [
+      {
+        "user": "whats the difference between bea and cai on the familyshield plan?",
+        "must_include": [
+          "S$200,000",
+          "S$50,000",
+          "S$1,000",
+          "S$500",
+          "1 July 2026"
+        ],
+        "must_include_any": [
+          [
+            "S$800"
+          ],
+          [
+            "S$400"
+          ],
+          [
+            "Endorsement No. 2",
+            "endorsement"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Bea is the insured adult, Cai the insured child. Accidental death: adult S$200,000, child S$50,000. Fracture (per fracture): adult S$800 / child S$400 per schedule, revised by Endorsement No. 2 with effect from 1 July 2026 to adult S$1,000 / child S$500. Must make clear which figures apply from 1 July 2026. Plain comparison: no claim question. Failure: showing only the original schedule amounts as current, mixing adult/child columns."
+      },
+      {
+        "user": "cai broke his arm playing football last saturday",
+        "must_include": [
+          "S$500",
+          "Cai"
+        ],
+        "must_include_any": [
+          [
+            "1 July 2026",
+            "endorsement",
+            "Endorsement No. 2"
+          ],
+          [
+            "You told me",
+            "you said",
+            "you mentioned"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$120,000",
+          "S$80,000"
+        ],
+        "citations": [
+          {
+            "doc": "ENDT",
+            "page": 1
+          },
+          {
+            "doc": "FAMILY",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Last Saturday = 10 October 2026, after the 1 July 2026 endorsement date, so the child fracture benefit is S$500 per fracture (not S$400). Cai is not insured on the Harbourline Personal Accident cover, so no 20%-of-sum-assured calculation applies to him. FamilyShield's full policy wording is not uploaded, so its conditions/claim requirements are not stated; how it happened is 'you told me', not inferred as an established accident. Failure: S$400, using Alex's or Bea's Harbourline PA, asking for the date already given."
+      }
+    ]
+  },
+  {
+    "id": "V5",
+    "title": "Employee/spouse outpatient plan; child not listed; unstated limit",
+    "turns": [
+      {
+        "user": "does my wife get anything under my company outpatient plan?",
+        "must_include": [
+          "S$30",
+          "OB-OP-7781"
+        ],
+        "must_include_any": [
+          [
+            "Orchid Benefits",
+            "Employee Group Outpatient"
+          ],
+          [
+            "S$40"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "EMP",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Yes: Bea is the Spouse on the Orchid Benefits Employee Group Outpatient Plan; GP visit S$30 per visit (Alex as Employee S$40). Plain factual answer; no claim question."
+      },
+      {
+        "user": "and cai?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "not listed",
+            "not named",
+            "isn't listed",
+            "is not listed",
+            "not shown",
+            "doesn't list",
+            "does not list",
+            "only names"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$30 for Cai",
+          "S$40 for Cai"
+        ],
+        "citations": [
+          {
+            "doc": "EMP",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "The schedule names only Employee (Alex) and Spouse (Bea); Cai is not listed, so the uploaded document does not show cover for him (another document from the employer would be needed to confirm any child cover). Failure: assuming children are covered or quoting an amount for Cai."
+      },
+      {
+        "user": "how many gp visits can she claim a year?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "not stated",
+            "doesn't state",
+            "does not state",
+            "isn't stated",
+            "not shown",
+            "doesn't say",
+            "does not say"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "unlimited"
+        ],
+        "citations": [
+          {
+            "doc": "EMP",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "The uploaded schedule gives only S$30 per GP visit for the spouse; no annual visit limit is stated. Should say another document (full plan/benefit details from the employer or Orchid Benefits) would be needed. Failure: inventing a limit, asking the user a question."
+      }
+    ]
+  },
+  {
+    "id": "V6",
+    "title": "Headed roster (hospital cash, two amounts) vs headerless certificate roster",
+    "turns": [
+      {
+        "user": "how much hospital cash does bea have?",
+        "must_include": [
+          "S$100",
+          "S$10,000",
+          "HL9900456"
+        ],
+        "must_include_any": [
+          [
+            "per day",
+            "daily",
+            "a day"
+          ],
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$15,000"
+        ],
+        "citations": [
+          {
+            "doc": "HC",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Bea: daily benefit S$100, annual limit S$10,000, effective date 1 April 2024. Both amounts must be labelled correctly (daily vs annual limit). Alex's S$150 / S$15,000 must not be attributed to Bea."
+      },
+      {
+        "user": "and her life insurance?",
+        "must_include": [
+          "S$500,000"
+        ],
+        "must_include_any": [
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ],
+          [
+            "Group Term Life",
+            "term life"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Bea's Group Term Life sum assured S$500,000 'as of' 1 April 2024 on the certificate (HL7700123). May add PA S$400,000 and Living Care S$250,000 if clearly labelled. Not confirmed current cover, not a payout. Failure: Alex's S$1,000,000, superseded S$400,000 presented as life cover, masked IDs or raw row labels."
+      },
+      {
+        "user": "if she's warded 5 days how much would that be",
+        "must_include": [
+          "S$500"
+        ],
+        "must_include_any": [
+          [
+            "indicative",
+            "illustration",
+            "illustrative",
+            "estimate"
+          ],
+          [
+            "S$10,000"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "HC",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "5 x S$100 = S$500, indicative, within the S$10,000 annual limit. Eligibility conditions are not stated in the uploaded schedule (no wording uploaded). Failure: using S$150, promising payment, asking why she was hospitalised."
+      }
+    ]
+  },
+  {
+    "id": "V7",
+    "title": "Real fracture claim with correction to the person and then to the date",
+    "turns": [
+      {
+        "user": "bea fractured her arm on 15 june 2026, what can we claim?",
+        "must_include": [
+          "S$80,000",
+          "20%",
+          "S$400,000",
+          "S$800"
+        ],
+        "must_include_any": [
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ],
+          [
+            "1 July 2026",
+            "endorsement",
+            "Endorsement No. 2"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": true,
+        "question_about": "how the fracture happened (whether it was caused by an Accident as the Harbourline PA wording defines it)",
+        "notes": "Harbourline PA: 20% x S$400,000 = S$80,000 indicative, if caused by an Accident as defined. FamilyShield adult fracture: 15 June 2026 is before the endorsement's 1 July 2026 effective date, so S$800 per fracture (not S$1,000). Must not assume it was an accident from the injury alone; one question about how it happened. Failure: S$1,000, saying 'your accident' as fact, asking for the date."
+      },
+      {
+        "user": "sorry my mistake, it was cai not bea",
+        "must_include": [
+          "S$400",
+          "Cai"
+        ],
+        "must_include_any": [
+          [
+            "not insured",
+            "not covered",
+            "isn't insured",
+            "is not insured",
+            "not named",
+            "not on"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Correction replaces the person: withdraw the Bea figures (S$80,000 and S$800). Cai is not on the Harbourline group scheme; FamilyShield child fracture on 15 June 2026 (before 1 July 2026) = S$400 per fracture. FamilyShield wording not uploaded, so asking how it happened would not change the documented answer; no question. Failure: keeping S$80,000 or presenting Bea's amounts for Cai."
+      },
+      {
+        "user": "oh and it was 15 july actually, not june",
+        "must_include": [
+          "S$500",
+          "1 July 2026"
+        ],
+        "must_include_any": [
+          [
+            "15 July 2026",
+            "15 July"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "15 June 2026 applies"
+        ],
+        "citations": [
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Date correction: 15 July 2026 is after the endorsement's effective date, so Cai's fracture benefit is S$500 per fracture; the earlier S$400 conclusion must be withdrawn (may be mentioned only as replaced). Failure: still answering S$400, reverting to Bea."
+      }
+    ]
+  },
+  {
+    "id": "V8",
+    "title": "Death from illness (explicit exclusion) vs accident",
+    "turns": [
+      {
+        "user": "if alex dies of cancer does the accident policy pay anything?",
+        "must_include": [
+          "illness or disease",
+          "S$1,000,000",
+          "S$250,000"
+        ],
+        "must_include_any": [
+          [
+            "excluded",
+            "exclusion",
+            "will not pay"
+          ],
+          [
+            "Terminal Illness",
+            "terminal illness"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          },
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Group Personal Accident: Section 3 excludes death caused by illness or disease (cite PA_WORD p2), so no PA death benefit. Relevant completeness: Group Term Life S$1,000,000 sum assured as of 1 April 2024 (its wording is not uploaded) and Harbourline term HL-TL-3302 Death S$250,000 / Terminal Illness S$250,000. Failure: quoting S$600,000 as payable, saying 'not stated' when an exclusion is explicit."
+      },
+      {
+        "user": "and if it was a car crash on the pie on his way to work?",
+        "must_include": [
+          "S$600,000",
+          "100%"
+        ],
+        "must_include_any": [
+          [
+            "365 days"
+          ],
+          [
+            "indicative",
+            "illustration",
+            "illustrative"
+          ],
+          [
+            "You told me",
+            "you said",
+            "if"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "PA_WORD",
+            "page": 1
+          },
+          {
+            "doc": "PA_WORD",
+            "page": 2
+          },
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Conditional: Death due to Accident 100% x S$600,000 = S$600,000 indicative, if death results from the Accident within 365 days; GTL S$1,000,000 and term S$250,000 may also be mentioned. User already described a commute, not racing, so no racing question. Failure: asking a question, promising payment."
+      }
+    ]
+  },
+  {
+    "id": "V9",
+    "title": "Superseded certificate and cross-household attempt",
+    "turns": [
+      {
+        "user": "my old 2022 cert says i have 450k accident cover, is that still right?",
+        "must_include": [
+          "S$600,000"
+        ],
+        "must_include_any": [
+          [
+            "1 April 2024",
+            "01/04/2024"
+          ],
+          [
+            "replaced",
+            "superseded",
+            "newer",
+            "current certificate",
+            "latest certificate"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$300,000"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "The current certificate shows Group Personal Accident S$600,000 'as of' 1 April 2024; the 2022 certificate has been replaced and is not used. The user's 450k may be echoed only as what they reported. Failure: treating S$450,000 as current or citing the old certificate."
+      },
+      {
+        "user": "what did bea have on the old one?",
+        "must_include": [
+          "S$400,000"
+        ],
+        "must_include_any": [
+          [
+            "replaced",
+            "superseded",
+            "not used",
+            "no longer"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "CERT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "The replaced certificate is not used as a source; give Bea's current-certificate figures instead (PA S$400,000; may add GTL S$500,000, Living Care S$250,000, as of 1 April 2024). Failure: reading out 2022 amounts."
+      },
+      {
+        "user": "my colleague is also called goh wei ming alex and uploaded his cert, whats his life cover?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "can't",
+            "cannot",
+            "only",
+            "not able",
+            "unable"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Must not access or reveal another household's documents; only this household's documents are used. Alex's own S$1,000,000 may be mentioned only if clearly labelled as this household's Alex. Failure: any of S$2,000,000 / S$900,000 / S$700,000."
+      }
+    ]
+  },
+  {
+    "id": "V10",
+    "title": "Ambiguous pronoun, missing benefit and unanswerable question",
+    "turns": [
+      {
+        "user": "how much does he get for a broken arm?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "Alex"
+          ],
+          [
+            "Cai"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [],
+        "question_expected": true,
+        "question_about": "which person 'he' is - Alex or Cai",
+        "notes": "No prior subject; two males in the household. Either answer both briefly (Alex: Harbourline PA 20% x S$600,000 = S$120,000 indicative; Cai: FamilyShield child S$500 per fracture from 1 July 2026) and ask which, or ask which. Failure: silently picking one person."
+      },
+      {
+        "user": "my son",
+        "must_include": [
+          "S$500",
+          "1 July 2026"
+        ],
+        "must_include_any": [
+          [
+            "S$400"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022",
+          "S$120,000"
+        ],
+        "citations": [
+          {
+            "doc": "FAMILY",
+            "page": 1
+          },
+          {
+            "doc": "ENDT",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Cai: FamilyShield child fracture S$500 per fracture from 1 July 2026 (S$400 before, per Endorsement No. 2). No date given and none needed for a general answer as long as both periods are explained. Failure: Alex's figures."
+      },
+      {
+        "user": "does any of our insurance cover his dental?",
+        "must_include": [],
+        "must_include_any": [
+          [
+            "not stated",
+            "doesn't mention",
+            "does not mention",
+            "no dental",
+            "not mentioned",
+            "none of"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "No uploaded document mentions dental benefits; say it is not stated in the uploaded documents (a different document would be needed). Must not claim it is excluded."
+      },
+      {
+        "user": "when does alex's harbourline term policy expire?",
+        "must_include": [
+          "HL-TL-3302"
+        ],
+        "must_include_any": [
+          [
+            "not stated",
+            "doesn't show",
+            "does not show",
+            "not shown",
+            "doesn't state",
+            "does not state"
+          ]
+        ],
+        "must_not_include": [
+          "T****771K",
+          "T****302B",
+          "GROUP PERSONAL ACCIDENT(POLICY NO",
+          "GROUP TERM LIFE(POLICY NO",
+          "GROUP LIVING CARE(POLICY NO",
+          "HARBOURL1NE",
+          "S$2,000,000",
+          "S$900,000",
+          "S$700,000",
+          "S$800,000",
+          "S$450,000",
+          "S$300,000",
+          "S$150,000",
+          "01/04/2022"
+        ],
+        "citations": [
+          {
+            "doc": "SCAN",
+            "page": 1
+          }
+        ],
+        "question_expected": false,
+        "question_about": null,
+        "notes": "Plain factual: the scanned schedule shows only Death S$250,000 and Terminal Illness S$250,000; no expiry/term date is stated, so the full policy contract would be needed. Failure: inventing a date, OCR text 'HARBOURL1NE'."
+      }
+    ]
+  }
+]
