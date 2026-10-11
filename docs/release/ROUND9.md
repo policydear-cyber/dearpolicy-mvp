@@ -1,6 +1,7 @@
 # Round 9 — one evidence contract, useful answers (release handoff)
 
-Branch `claude/evidence-contract` (from main `41ea5c3`). Tested candidate: see the PR. Main and production unchanged.
+Branch `claude/evidence-contract` (from main `41ea5c3`, main `93f742b` merged in). Candidate `99c9374`.
+Main and production unchanged.
 
 ## 1. The live failure, reproduced
 Synthetic household `scripts/fixtures/rag2-release` (same layouts as the live documents; every name, ID and amount
@@ -79,10 +80,14 @@ gate: []
   candidate `1a41760`** — H1 (a date question refused because the 365-day clause has no word "date") and H2 (the
   save-time gate refused a certificate × wording lump sum; the rejected what-if was explained as an "assumed stay")
   were real defects, fixed in `5916bd3`; 4/4 after the fix (no longer unseen).
-- **Existing suites** (REQUIRED_CI_SUITES that run here): all rag2-*, verify-gate, verify-assertions, ingest-live
-  checker and the security / lifecycle / claim / chat suites pass. Not runnable here (killed for memory or needing
-  Node 22's pdf.js or a Postgres service, identical on main): r5-answer, r6-chat-quality, r7-answers, r7-claims,
-  r8-chaos, r9-ingest-chaos, full-household-e2e, evidence-download (fails on main too).
+- **Existing suites** (the 119 REQUIRED_CI_SUITES run as scripts): 104 pass on the candidate, including every rag2-*
+  suite, verify-gate, verify-assertions, the ingest-live checker, env-contract and the security / lifecycle / claim /
+  injury / v1 / v11 suites. **Not verified here (15):** killed for memory in this 1 GB sandbox before any check ran —
+  r5-answer, r6-chat-quality, r7-answers, r7-claims, r7-chat-robustness, r10-messy-docs, r10-perf, r11-blind-test,
+  routing, full-household-e2e, rag2-conv5 (9/9 on an earlier candidate of this branch, before the last gate fixes);
+  r8-chaos (timed out), r9-redteam (its battery could not send its messages), r9-ingest-chaos (pdf.js on Node 20);
+  evidence-download fails identically on main. These cover the legacy chat path through the same save-time gate:
+  **CI must run them before merging.**
 - Expectation changes (documented inline): rag2-loop N2 (the plain line replaces the generic note), D-f1 (the answer
   ends with the hospital-cash date question), roster R2 (readable label), conv F1 (prompt version).
 - Vercel preview build (type-check + build) passes on the candidate.
