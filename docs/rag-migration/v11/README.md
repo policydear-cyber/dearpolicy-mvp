@@ -11,3 +11,5 @@ evidence of the real model's tool choice or wording; no real-model sample has be
 
 Transcripts: `baseline-09acbbe-scripted.txt` (before), `visible-final-scripted.txt`, `sealed-first-run-frozen-a4b7e57.txt`,
 `sealed-final-scripted.txt` (after).
+
+Executed checks for the tested source `5f5314f` (memory diagnosis, full suite list, typecheck, build, browser journey, baseline failures, what was not run): `CHECKS-5f5314f.md`.

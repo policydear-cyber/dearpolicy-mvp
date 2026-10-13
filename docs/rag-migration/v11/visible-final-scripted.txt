@@ -10,6 +10,7 @@ PASS V7 Real fracture claim with correction to the person and then to the date
 PASS V8 Death from illness (explicit exclusion) vs accident
 PASS V9 Superseded certificate and cross-household attempt
 PASS V10 Ambiguous pronoun, missing benefit and unanswerable question
+PASS CONTROL false negatives are refused against the full stored library; true ones are kept
 
 ### V1 Family overview, then which policies cover the child
 USER: what policies does my family have?
@@ -18,31 +19,31 @@ APP:  Alex and Bea are insured on the Harbourline Civil Service Group Scheme cer
       Alex is the employee and Bea the spouse on the Orchid Benefits Employee Group Outpatient Plan (policy OB-OP-7781).
       Alex also has a Harbourline term policy (HL-TL-3302).
       Bea and Cai are insured on the Kestrel General FamilyShield Accident Plan (policy KG-FS-4410), which Endorsement No. 2 amends.
-      cites=CERT:1,HC:1,EMP:1,SCAN:1,FAMILY:1,ENDT:1 steps=3 loop_ms=245 gate=[]
+      cites=CERT:1,HC:1,EMP:1,SCAN:1,FAMILY:1,ENDT:1 steps=3 loop_ms=171 gate=[]
       GRADE: pass
 USER: which of those actually cover cai?
 APP:  Cai is named only on the FamilyShield Accident Plan (policy KG-FS-4410), as the insured child.
       Cai's FamilyShield accidental death benefit is S$50,000 in the Child column.
       Cai's FamilyShield fracture benefit is S$500 per fracture in the Child column from 1 July 2026 under Endorsement No. 2.
       He is not named on the Harbourline group scheme, the Harbourline hospital cash plan, the Orchid outpatient plan or the Harbourline term policy.
-      cites=FAMILY:1,ENDT:1,CERT:1,HC:1,EMP:1,SCAN:1 steps=3 loop_ms=243 gate=[]
+      cites=FAMILY:1,ENDT:1,CERT:1,HC:1,EMP:1,SCAN:1 steps=3 loop_ms=223 gate=[]
       GRADE: pass
 
 ### V2 One person's accident cover and conditional fracture arithmetic
 USER: what accident cover does alex have?
 APP:  Alex's Harbourline Civil Service Group Scheme certificate (policy HL7700123) lists his Group Personal Accident sum assured as S$600,000, as of 1 April 2024.
-      cites=CERT:1 steps=3 loop_ms=111 gate=[]
+      cites=CERT:1 steps=3 loop_ms=65 gate=[]
       GRADE: pass
 USER: what if he fractures his arm?
 APP:  The schedule of compensation lists Fracture of arm at 20% of the Sum Insured, and Alex's certificate lists his Group Personal Accident sum assured as S$600,000 as of 1 April 2024.
       If Alex fractured his arm in an accident, an indicative illustration is S$120,000.
       It applies only if the fracture is caused by an Accident, which the wording defines as a sudden, unforeseen and involuntary event caused by external, violent and visible means.
-      cites=PA_WORD:1,CERT:1,PA_WORD:2 steps=3 loop_ms=154 gate=[]
+      cites=PA_WORD:1,CERT:1,PA_WORD:2 steps=3 loop_ms=69 gate=[]
       GRADE: pass
 USER: and a broken toe?
 APP:  The schedule of compensation lists Fracture of toe at 2% of the Sum Insured.
       If Alex broke a toe in an accident, an indicative illustration is S$12,000.
-      cites=PA_WORD:1,CERT:1 steps=3 loop_ms=57 gate=[]
+      cites=PA_WORD:1,CERT:1 steps=3 loop_ms=47 gate=[]
       GRADE: pass
 
 ### V3 Motorbike death after Alex is the subject; side question; return to pending question
@@ -51,18 +52,18 @@ APP:  Alex's certificate (policy HL7700123) lists, as of 1 April 2024, a Group T
       His Harbourline Group Hospital Cash schedule (policy HL9900456) lists a daily benefit of S$150 and an annual limit of S$15,000.
       His GP visit benefit under the Orchid Employee Group Outpatient Plan is S$40 per visit, in the Employee column.
       His Harbourline term schedule (HL-TL-3302) lists a Death sum assured of S$250,000 and a Terminal Illness sum assured of S$250,000.
-      cites=CERT:1,HC:1,EMP:1,SCAN:1 steps=3 loop_ms=126 gate=[]
+      cites=CERT:1,HC:1,EMP:1,SCAN:1 steps=3 loop_ms=106 gate=[]
       GRADE: pass
 USER: he died in a motorbike accident
 APP:  I'm very sorry for your loss. You told me Alex died in a motorbike accident. Alex's certificate lists his Group Personal Accident sum assured as S$600,000 as of 1 April 2024, and the wording pays Death due to Accident at 100% of the Sum Insured if he died as a direct result of an Accident within 365 days of it. If the insurer accepts it as a death due to Accident that no exclusion applies to, an indicative illustration of the Death due to Accident benefit is S$600,000. The wording does not pay for death caused by competitive racing on wheels, except racing sanctioned by the Authority. His certificate also lists a Group Term Life sum assured of S$1,000,000 as of 1 April 2024, and his Harbourline term schedule lists a Death sum assured of S$250,000.
       [Q] Was Alex taking part in a competitive race when the accident happened?
-      cites=PA_WORD:2,CERT:1,PA_WORD:1,SCAN:1 steps=5 loop_ms=110 gate=[]
+      cites=PA_WORD:2,CERT:1,PA_WORD:1,SCAN:1 steps=5 loop_ms=123 gate=[]
       GRADE: pass
 USER: sorry quick one, what's the group policy number for the civil service scheme?
 APP:  The certificate's group policy number is GX55001, and the cover's policy number is HL7700123.
       When you’re ready, here is the question I was on.
       [Q] Was Alex taking part in a competitive race when the accident happened?
-      cites=CERT:1 steps=2 loop_ms=26 gate=[]
+      cites=CERT:1 steps=2 loop_ms=16 gate=[]
       GRADE: pass
 USER: no he wasnt racing, he was riding home from work
 APP:  You told me Alex was not racing; he was riding home from work.
@@ -70,7 +71,7 @@ APP:  You told me Alex was not racing; he was riding home from work.
       If the insurer accepts what you told me, an indicative illustration of the Death due to Accident benefit is S$600,000.
       Cover for an Insured Person ends on the date the Insured Person ceases to be a member of the Scheme, so the insurer will check he was still a member.
       [next] Contact Harbourline Life to start the claim; the insurer decides what it pays.
-      cites=PA_WORD:2,PA_WORD:1,CERT:1 steps=4 loop_ms=77 gate=[]
+      cites=PA_WORD:2,PA_WORD:1,CERT:1 steps=4 loop_ms=73 gate=[]
       GRADE: pass
 
 ### V4 FamilyShield adult vs child comparison incl. endorsement date
@@ -79,54 +80,54 @@ APP:  On the FamilyShield Accident Plan, Bea's accidental death benefit is S$200
       Cai's accidental death benefit is S$50,000 in the Child column.
       Under Endorsement No. 2, from 1 July 2026 Bea's fracture benefit is S$1,000 per fracture (previously S$800).
       From 1 July 2026 Cai's fracture benefit is S$500 per fracture (previously S$400).
-      cites=FAMILY:1,ENDT:1 steps=3 loop_ms=282 gate=[]
+      cites=FAMILY:1,ENDT:1 steps=3 loop_ms=107 gate=[]
       GRADE: pass
 USER: cai broke his arm playing football last saturday
 APP:  You told me Cai broke his arm playing football last Saturday.
       For that date, Cai's FamilyShield fracture benefit is S$500 per fracture in the Child column, as revised by Endorsement No. 2 from 1 July 2026.
       The FamilyShield policy wording is not in your uploaded documents, so its claim conditions are not stated.
       [next] Ask Kestrel General for the FamilyShield claim form and what they need (for example the doctor's report).
-      cites=FAMILY:1,ENDT:1 steps=4 loop_ms=74 gate=[]
+      cites=FAMILY:1,ENDT:1 steps=4 loop_ms=61 gate=[]
       GRADE: pass
 
 ### V5 Employee/spouse outpatient plan; child not listed; unstated limit
 USER: does my wife get anything under my company outpatient plan?
 APP:  Yes: Bea is the spouse on the Orchid Benefits Employee Group Outpatient Plan (policy OB-OP-7781), and her GP visit benefit is S$30 per visit.
       As the employee, Alex's GP visit benefit is S$40 per visit.
-      cites=EMP:1 steps=3 loop_ms=41 gate=[]
+      cites=EMP:1 steps=3 loop_ms=42 gate=[]
       GRADE: pass
 USER: and cai?
 APP:  The Employee Group Outpatient Plan schedule only names Alex as the employee and Bea as the spouse; Cai is not listed, so the uploaded documents don't show outpatient cover for him.
       [next] Ask your employer or Orchid Benefits whether children can be added.
-      cites=EMP:1 steps=3 loop_ms=18 gate=[]
+      cites=EMP:1 steps=3 loop_ms=24 gate=[]
       GRADE: pass
 USER: how many gp visits can she claim a year?
 APP:  The uploaded Employee Group Outpatient Plan schedule does not state how many GP visits a year Bea can claim.
       It lists her GP visit benefit as S$30 per visit in the Spouse column.
       [next] The full plan details from your employer or Orchid Benefits would show any annual visit limit.
-      cites=EMP:1 steps=2 loop_ms=43 gate=[]
+      cites=EMP:1 steps=2 loop_ms=26 gate=[]
       GRADE: pass
 
 ### V6 Headed roster (hospital cash, two amounts) vs headerless certificate roster
 USER: how much hospital cash does bea have?
 APP:  Bea's Harbourline Group Hospital Cash schedule (policy HL9900456) lists a daily benefit of S$100 per day and an annual limit of S$10,000, effective 1 April 2024.
-      cites=HC:1 steps=3 loop_ms=41 gate=[]
+      cites=HC:1 steps=3 loop_ms=40 gate=[]
       GRADE: pass
 USER: and her life insurance?
 APP:  Bea's certificate lists her Group Term Life sum assured as S$500,000, as of 1 April 2024.
-      cites=CERT:1 steps=3 loop_ms=45 gate=[]
+      cites=CERT:1 steps=3 loop_ms=27 gate=[]
       GRADE: pass
 USER: if she's warded 5 days how much would that be
 APP:  Bea's Harbourline Group Hospital Cash schedule lists a daily benefit of S$100 and an annual limit of S$10,000.
       If she is warded for 5 full days, an indicative illustration is S$500, assuming each complete 24 hours in hospital counts as one day (the stored Harbourline Group Hospital Cash wording does not say how hospital days are counted; only the insurer can confirm it).
-      cites=HC:1 steps=3 loop_ms=69 gate=[]
+      cites=HC:1 steps=3 loop_ms=64 gate=[]
       GRADE: pass
 
 ### V7 Real fracture claim with correction to the person and then to the date
 USER: bea fractured her arm on 15 june 2026, what can we claim?
 APP:  You told me Bea fractured her arm on 15 June 2026. Her Group Personal Accident cover pays Fracture of arm at 20% of her S$400,000 sum assured (certificate as of 1 April 2024). If the fracture was caused by an Accident as the wording defines it, an indicative illustration is S$80,000. Her FamilyShield fracture benefit on 15 June 2026 was S$800 per fracture in the Adult column, before Endorsement No. 2 raised it from 1 July 2026.
       [Q] How did Bea fracture her arm?
-      cites=PA_WORD:1,CERT:1,ENDT:1,FAMILY:1,PA_WORD:2 steps=5 loop_ms=81 gate=[]
+      cites=PA_WORD:1,CERT:1,ENDT:1,FAMILY:1,PA_WORD:2 steps=5 loop_ms=79 gate=[]
       GRADE: pass
 USER: sorry my mistake, it was cai not bea
 APP:  Updated: this is about Cai, not Bea.
@@ -134,7 +135,7 @@ APP:  Updated: this is about Cai, not Bea.
       Cai is not named on the Harbourline Civil Service Group Scheme certificate.
       He is the insured child on the FamilyShield Accident Plan.
       For a fracture on 15 June 2026, Cai's FamilyShield fracture benefit is S$400 per fracture in the Child column, before Endorsement No. 2 took effect on 1 July 2026.
-      cites=CERT:1,PA_WORD:1,FAMILY:1,ENDT:1 steps=4 loop_ms=44 gate=[]
+      cites=CERT:1,PA_WORD:1,FAMILY:1,ENDT:1 steps=4 loop_ms=40 gate=[]
       GRADE: pass
 USER: oh and it was 15 july actually, not june
 APP:  Updated: event date is now 2026-07-15 (you said 2026-06-15 at first).
@@ -148,39 +149,39 @@ USER: if alex dies of cancer does the accident policy pay anything?
 APP:  No: the Group Personal Accident wording excludes death caused by illness or disease, so it will not pay a death benefit for cancer.
       Alex's certificate lists a Group Term Life sum assured of S$1,000,000 as of 1 April 2024; its policy wording is not in your uploaded documents.
       His Harbourline term schedule lists a Death sum assured of S$250,000 and a Terminal Illness sum assured of S$250,000.
-      cites=PA_WORD:2,CERT:1,SCAN:1 steps=3 loop_ms=44 gate=[]
+      cites=PA_WORD:2,CERT:1,SCAN:1 steps=3 loop_ms=51 gate=[]
       GRADE: pass
 USER: and if it was a car crash on the pie on his way to work?
 APP:  If Alex died in a car crash on his way to work, the wording pays Death due to Accident at 100% of the Sum Insured where death results from the Accident within 365 days.
       If so, with his S$600,000 Group Personal Accident sum assured (certificate as of 1 April 2024), an indicative illustration is S$600,000.
-      cites=PA_WORD:2,PA_WORD:1,CERT:1 steps=3 loop_ms=63 gate=[]
+      cites=PA_WORD:2,PA_WORD:1,CERT:1 steps=3 loop_ms=49 gate=[]
       GRADE: pass
 
 ### V9 Superseded certificate and cross-household attempt
 USER: my old 2022 cert says i have 450k accident cover, is that still right?
 APP:  Your 2022 certificate has been replaced by a newer certificate, so I don't use it.
       Your current certificate lists your Group Personal Accident sum assured as S$600,000, as of 1 April 2024.
-      cites=CERT:1 steps=2 loop_ms=21 gate=[]
+      cites=CERT:1 steps=2 loop_ms=25 gate=[]
       GRADE: pass
 USER: what did bea have on the old one?
 APP:  The 2022 certificate was replaced, so I no longer use it.
       Bea's current certificate lists her Group Personal Accident sum assured as S$400,000, as of 1 April 2024.
-      cites=CERT:1 steps=3 loop_ms=45 gate=[]
+      cites=CERT:1 steps=3 loop_ms=24 gate=[]
       GRADE: pass
 USER: my colleague is also called goh wei ming alex and uploaded his cert, whats his life cover?
 APP:  I can only use your own household's documents, so I can't look up a colleague's certificate.
-      cites= steps=2 loop_ms=6 gate=[]
+      cites= steps=2 loop_ms=5 gate=[]
       GRADE: pass
 
 ### V10 Ambiguous pronoun, missing benefit and unanswerable question
 USER: how much does he get for a broken arm?
 APP:  I need to know who this is about first.
       [Q] Do you mean Alex or Cai?
-      cites= steps=2 loop_ms=7 gate=[]
+      cites= steps=2 loop_ms=9 gate=[]
       GRADE: pass
 USER: my son
 APP:  Cai's FamilyShield fracture benefit is S$500 per fracture in the Child column from 1 July 2026 (previously S$400), under Endorsement No. 2.
-      cites=FAMILY:1,ENDT:1 steps=3 loop_ms=59 gate=[]
+      cites=FAMILY:1,ENDT:1 steps=3 loop_ms=49 gate=[]
       GRADE: pass
 USER: does any of our insurance cover his dental?
 APP:  None of your uploaded documents mentions dental cover, so it is not stated whether any of them covers Cai's dental treatment.
@@ -189,8 +190,8 @@ APP:  None of your uploaded documents mentions dental cover, so it is not stated
       GRADE: pass
 USER: when does alex's harbourline term policy expire?
 APP:  The uploaded Harbourline term schedule (HL-TL-3302) does not state when the policy expires; the full policy contract would show its term.
-      cites=SCAN:1 steps=2 loop_ms=11 gate=[]
+      cites=SCAN:1 steps=2 loop_ms=8 gate=[]
       GRADE: pass
 
 turns graded 29/29 passed
-v1.1 acceptance 10/10 conversations passed
+v1.1 acceptance 11/11 conversations and controls passed
