@@ -128,8 +128,17 @@ export function hospitalCash(a: {
   const conds: CalcCondition[] = [];
   const reqs: string[] = [];
   // Day-count rule: from the wording only.
+  // V1.1: a what-if the household asked ("if she's warded 5 days") on wording that does not say how days are counted
+  // is illustrated on a stated assumption -- each complete 24 hours counts as one day -- never as their actual stay.
+  let dayAssumption: string | null = null;
+  const illustrating = a.whatIf || [a.admission, a.discharge].some((h) => h?.kind === "assumption");
   if (t.dayRule) conds.push({ id: "c_day_rule", kind: "day_count_rule", text: `Days are counted as the wording states: “${t.dayRule.evidence.passage.text}”`, status: "established", basis: "document", passage: passageOf(t.dayRule.evidence) });
-  else {
+  else if (illustrating && !t.dayRuleConflict.length) {
+    // The policy's day-count rule stays UNRESOLVED on the record (never an established term of the policy): the
+    // illustration's own stated assumption carries the convention, and the requirement names who can settle it.
+    dayAssumption = `assuming each complete 24 hours in hospital counts as one day (the stored ${product} wording does not say how hospital days are counted; only the insurer can confirm it)`;
+    conds.push({ id: "c_day_rule", kind: "day_count_rule", text: `the stored ${product} wording does not say how hospital days are counted`, status: "unresolved", basis: "none", needs: `how ${product} counts hospital days (the stored wording does not say; only the insurer can confirm it)` });
+  } else {
     const why = t.dayRuleConflict.length ? `the document states two different ways of counting hospital days (pages ${[...new Set(t.dayRuleConflict.map((e) => e.passage.onPage))].join(", ")})` : `the stored ${product} wording does not say how hospital days are counted`;
     conds.push({ id: "c_day_rule", kind: "day_count_rule", text: why, status: "unresolved", basis: "none", needs: `how ${product} counts hospital days (${why}; only the insurer can confirm it)` });
     reqs.push(`how ${product} counts hospital days, which the stored wording does not state (only the insurer can confirm it)`);
@@ -226,7 +235,7 @@ export function hospitalCash(a: {
   const PRIOR_IDS = ["c_cap_prior_use", "c_money_cap_prior_use"];
 
   // Inputs the rule needs.
-  const rule = t.dayRule?.value ?? null;
+  const rule = t.dayRule?.value ?? (dayAssumption ? "completed_24h" : null);
   const needTimes = (rule ? dayRuleNeedsTimes(rule) : false) || !!t.minimumStayHours;
   // Round 8e: a date or time that does not exist (2026-02-30, 24:00) is not an input -- it is never rolled over.
   const realValue = (v: string) => (ISO_DT.test(v) ? !isoInstantProblem(v) : ISO_D.test(v) && isCalendarDate(v));
@@ -260,7 +269,7 @@ export function hospitalCash(a: {
   const evidence = [r.evidence, ...(t.dayRule ? [t.dayRule.evidence] : []), ...(t.dayRule?.value === "first_full_day" ? t.dayEdges.map((d) => d.evidence) : []), ...(t.waitingDays ? [t.waitingDays.evidence] : []), ...(a.dayCap ? [a.dayCap.operand.evidence] : !rowCap && t.dayCap ? [t.dayCap.evidence] : [])];
   const evidenceRequirements = [`the hospital’s discharge summary or bill showing ${a.who}’s admission and discharge dates and times`, `the ${product} claim form`];
   const base = { calculator: "hospital_cash" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence, evidenceRequirements, who: a.who, product };
-  const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds.filter((c) => !PRIOR_IDS.includes(c.id))));
+  const unresolvedNow = reqs.length > 0 || !rule || (!a.whatIf && !settledStatus(conds.filter((c) => !PRIOR_IDS.includes(c.id) && !(dayAssumption && c.id === "c_day_rule"))));
   if (unresolvedNow) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
 
   // Payable days under the wording's rule, then the hospital-cash calculator.
@@ -283,7 +292,7 @@ export function hospitalCash(a: {
   let cents = Math.round(hc.potentialAmount * 100);
   steps.push({ id: "s_amount", op: "multiply", inputs: ["rate", last], out: cents });
   let lastMoney = "s_amount";
-  const capLines: string[] = [], assumed: string[] = [], available: string[] = [];
+  const capLines: string[] = [], assumed: string[] = dayAssumption ? [dayAssumption] : [], available: string[] = [];
   /** Integration (r6): earlier use not known (and not a what-if): the estimate assumes what this stay needs is still
    * available, says so, and the prior-use condition is settled by that stated assumption. */
   const assumeAvailable = (cond: CalcCondition, text: string) => { available.push(text); cond.status = "established"; cond.basis = "assumption"; cond.needs = null; cond.householdWords = null; };
@@ -336,12 +345,12 @@ export function hospitalCash(a: {
     cents = out;
   }
   const kind = ops.some((o) => o.source === "assumption") || assumed.length ? "conditional_illustration" : "indicative_estimate";
-  if (kind === "conditional_illustration" && !a.whatIf) return { refused: "an assumed figure is used only for a what-if the household asked (purpose what_if)" };
+  if (kind === "conditional_illustration" && !illustrating) return { refused: "an assumed figure is used only for a what-if the household asked (purpose what_if)" };
   if (kind === "indicative_estimate" && !settledStatus(conds)) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [...new Set(reqs)], amount: null, currency: r.currency, record: null, steps: [] });
   const assumption = kind === "conditional_illustration" ? [...[a.admission!, a.discharge!].filter((h) => h.kind === "assumption").map((h) => h.words.trim()), ...assumed].join("; ") : available.length ? available.join(" and ") : null;
   const record: RecordWithUnitTerms = { id: "", calculator: "hospital_cash", kind, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, operands: ops, steps, result: { value: cents / 100, currency: r.currency }, currency: r.currency, rounding: { mode: "half_up", precision: 2, source: "default" }, conditions: conds, evidenceRequirements, assumption, unresolvedText: "", unitTerms };
-  const lines = [`payable days under “${t.dayRule!.words}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
-  return finish({ ...base, kind, conditions: conds, requirements: [], amount: cents / 100, currency: r.currency, record, steps: lines });
+  const lines = [`payable days under “${t.dayRule?.words ?? "each complete 24 hours (assumed)"}”: ${days.grossNights}`, ...(waiting ? [`after the first ${waiting} day(s): ${Math.max(0, days.grossNights - waiting)}`] : []), ...(capOp ? [`capped at ${capOp.value} days: ${hc.payableDays}`] : []), `${money(r.cents, r.currency)} × ${hc.payableDays} = ${money(Math.round(hc.potentialAmount * 100), r.currency)}`, ...capLines, ...assumed.map((x) => x.replace(/^assuming/, "Assuming"))];
+  return finish({ ...base, kind, conditions: conds, requirements: dayAssumption ? [conds.find((c) => c.id === "c_day_rule")!.needs!] : [], amount: cents / 100, currency: r.currency, record, steps: lines });
 }
 
 /** An item-code cell of a table row ("B", "12", "4.2", "(a)", "iii."): never the benefit's label. */
@@ -482,7 +491,9 @@ export function lumpSum(a: { subjectId: string; who: string; benefit: string; te
   const conds: CalcCondition[] = [{ id: "c_definition", kind: "definition", text: `${a.condition} must meet ${product}’s own definition, confirmed by a reviewed medical decision.`, status: "unresolved", basis: "none", needs: `a reviewed decision that ${a.who}’s diagnosis meets ${product}’s definition of ${a.condition} (the insurer’s medical assessment)` }];
   const evidenceRequirements = ["the specialist’s diagnosis report", "the insurer’s claim form and medical assessment"];
   const base = { calculator: "lump_sum" as const, subjectId: a.subjectId, policyId: t.policyId, benefit: a.benefit, documentHash: t.documentHash, printed, evidence: printed.map((p) => p.evidence), evidenceRequirements, who: a.who, product };
-  if (!a.whatIf || !a.percent || !a.assumptionWords?.trim()) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [conds[0].needs!], amount: null, currency: s.currency, record: null, steps: [] });
+  // V1.1: a lump sum is only ever a conditional illustration (the definition is the insurer's to confirm) -- for a
+  // what-if, or for an event the household reported, with their own words as the stated assumption.
+  if (!a.percent || !a.assumptionWords?.trim()) return finish({ ...base, kind: "unresolved", conditions: conds, requirements: [conds[0].needs!], amount: null, currency: s.currency, record: null, steps: [] });
   const ops: CalcOperand[] = [];
   const sum = docOperand("sum_insured", "sum_insured", a.sumInsured, a.subjectId), pct = docOperand("percent", "percent", a.percent, a.subjectId);
   if (typeof sum === "string") return { refused: sum }; if (typeof pct === "string") return { refused: pct };

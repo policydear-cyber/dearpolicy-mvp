@@ -97,13 +97,31 @@ export const RAG_TOOLS: ToolDef[] = [
   {
     name: "select_table_value",
     description: "Read the value a document's benefit table prints for one benefit in the member's own column (their person class / tier / plan). Returns ok with a value_id usable in compute, ambiguous (options and one question) or missing (why).",
-    parameters: { type: "object", properties: { policy_id: str("The document."), benefit: str("The benefit row, as the document words it if known."), subject_id: str("The household member."), tier: str("The member's column if the household has told you (e.g. 'Plan B', 'Child')."), want: { type: "string", enum: ["amount", "percent", "count", "any"] } }, required: ["policy_id", "benefit", "subject_id"], additionalProperties: false },
+    parameters: { type: "object", properties: { policy_id: str("The document."), benefit: str("The benefit row, as the document words it if known."), subject_id: str("The household member."), tier: str("The member's column if the household has told you (e.g. 'Plan B', 'Child')."), want: { type: "string", enum: ["amount", "percent", "count", "any"] }, as_of: str("The date the value is needed for, YYYY-MM-DD (the event's date when the household gave one; default today). Decides which version of an amended row applies.") }, required: ["policy_id", "benefit", "subject_id"], additionalProperties: false },
     handler: async (ctx, a) => {
-      const r = await selectTableValue({ accountId: ctx.accountId, policyId: String(a.policy_id), benefit: String(a.benefit), subject: { memberId: String(a.subject_id), tier: (a.tier as string) ?? null }, want: ((a.want as Want) ?? "any"), asOf: ctx.asOf });
+      const asOf = typeof a.as_of === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.as_of) ? a.as_of : ctx.asOf;
+      if (typeof a.as_of === "string" && asOf !== a.as_of) return fail("as_of must be a date written YYYY-MM-DD");
+      const pick = (on: string) => selectTableValue({ accountId: ctx.accountId, policyId: String(a.policy_id), benefit: String(a.benefit), subject: { memberId: String(a.subject_id), tier: (a.tier as string) ?? null }, want: ((a.want as Want) ?? "any"), asOf: on });
+      const r = await pick(asOf);
       if (r.status !== "ok") return ok(r, r.status === "ambiguous" ? r.options.flatMap((o) => (o.evidence ? [o.evidence] : [])) : r.evidence ? [r.evidence] : []);
-      const valueId = "v" + ++ctx.seq;
-      ctx.values.set(valueId, { selected: r, subjectId: String(a.subject_id), operand: { kind: "table_value", benefit: r.rowLabel || r.benefit, valueKind: r.valueKind, cents: r.cents, ppm: r.ppm, count: r.valueKind === "count" ? r.value : null, currency: r.currency, period: r.period, evidence: r.evidence } });
-      return ok({ ...r, valueId }, [r.evidence, ...(r.columnBasis.evidence ? [r.columnBasis.evidence] : []), ...(r.amendedFrom ? [r.amendedFrom.evidence] : [])]);
+      const issue = (s: SelectedValue) => { const id = "v" + ++ctx.seq; ctx.values.set(id, { selected: s, subjectId: String(a.subject_id), operand: { kind: "table_value", benefit: s.rowLabel || s.benefit, valueKind: s.valueKind, cents: s.cents, ppm: s.ppm, count: s.valueKind === "count" ? s.value : null, currency: s.currency, period: s.period, evidence: s.evidence } }); return id; };
+      // An endorsement row read directly: the schedule row it amends travels with it (the amendment relationship).
+      if (r.amends?.policyId && r.amends.policyId !== String(a.policy_id) && !r.related?.length) {
+        const b = await selectTableValue({ accountId: ctx.accountId, policyId: r.amends.policyId, benefit: String(a.benefit), subject: { memberId: String(a.subject_id), tier: (a.tier as string) ?? null }, want: ((a.want as Want) ?? "any"), asOf }).catch(() => null);
+        const baseEv = b?.status === "ok" ? (b.evidence.policyId === r.amends.policyId ? b.evidence : b.amendedFrom?.evidence.policyId === r.amends.policyId ? b.amendedFrom.evidence : null) : null;
+        if (baseEv) r.related = [baseEv];
+      }
+      const valueId = issue(r);
+      // V1.1 (evidence contract): a row printed in two versions (an endorsement's before / after) also returns the
+      // other version, as its own value id with the date it applies from or until -- so "previously S$800" is cited.
+      let otherVersion: Record<string, unknown> | null = null;
+      const eff = r.amends?.effectiveDate ?? r.columnBasis.detail.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
+      if ((r.version === "after" || r.version === "before") && eff) {
+        const d = new Date(eff + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 1);
+        const o = await pick(r.version === "after" ? d.toISOString().slice(0, 10) : eff);
+        if (o.status === "ok" && o.version && o.version !== r.version) otherVersion = { valueId: issue(o), version: o.version, value: o.value, currency: o.currency, columnHeader: o.columnHeader, applies: o.version === "before" ? `before ${eff}` : `from ${eff}` };
+      }
+      return ok({ ...r, valueId, asOf, ...(otherVersion ? { otherVersion } : {}) }, [r.evidence, ...(r.columnBasis.evidence ? [r.columnBasis.evidence] : []), ...(r.amendedFrom ? [r.amendedFrom.evidence] : []), ...(r.related ?? [])]);
     },
   },
   {

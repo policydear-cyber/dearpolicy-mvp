@@ -256,6 +256,8 @@ jobs:
         run: npm run rag2:release-test
       - name: "Release holdout (round 9): paraphrased scenarios written before the freeze"
         run: npm run rag2:release-holdout
+      - name: "V1.1 acceptance: independently written conversations graded for facts, completeness, person/version, citations, follow-up and presentation"
+        run: npm run rag2:v11-test
 
       - name: Deterministic model stand-in cannot run in production
         run: npm run security:deterministic-model-guard-test

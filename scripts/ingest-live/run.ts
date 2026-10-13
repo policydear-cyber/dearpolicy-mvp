@@ -5,7 +5,7 @@
  * the rag2 live guard (reserve, settle, refuse; one run ledger, cap <= US$0.50) and is listed per call in run.json.
  *
  *   node --import tsx scripts/ingest-live/run.ts --preflight   # no key, no model call (every request refused, US$0)
- *   node --import tsx scripts/ingest-live/run.ts --live        # CI only (RAG2_LIVE_MODE=direct + the test key)
+ *   node --import tsx scripts/ingest-live/run.ts --live        # CI (RAG2_LIVE_MODE=direct + the test key) or the workbench relay
  *   options: --run-id <id> --fixture scripts/ingest-live/fixture --expected <sealed EXPECTED.json> --port 3320
  *            --out docs/rag-migration/ingest-live --availability-status <code> [--availability-id <id>]
  * Steps: safety checks -> provision a fresh synthetic account the way sign-up does (accounts + owner membership; NO
@@ -38,7 +38,17 @@ async function main() {
   const runId = arg("run-id", preflight ? "preflight" : undefined);
   if (!runId || !/^[A-Za-z0-9._-]{1,40}$/.test(runId)) throw new Error("--run-id: 1-40 characters of A-Z a-z 0-9 . _ -");
   const safety = liveSafetyChecks(process.env);
-  if (live && safety.mode !== "direct") throw new Error("--live runs only in CI direct mode (RAG2_LIVE_MODE=direct)");
+  // --live: CI direct mode, or the loopback relay in the workbench kernel (scripts/rag2-live/relay.py), which forwards
+  // through the Composio "openai" connection holding the dedicated, spend-limited test key server-side (the key never
+  // enters this sandbox). The same live guard, run cap and shared ledger apply either way.
+  if (live && safety.mode !== "direct") {
+    const relayUrl = arg("relay", "http://127.0.0.1:8787")!;
+    if (new URL(relayUrl).hostname !== "127.0.0.1") throw new Error("the relay must be on 127.0.0.1");
+    const health = await fetch(relayUrl + "/__relay/health").then((r) => r.json()).catch(() => null) as { mode: string; allowed_models: string[] } | null;
+    if (!health) throw new Error(`--live in relay mode, but the relay is not running at ${relayUrl}`);
+    if (health.mode !== "live") throw new Error(`--live, but the relay is in "${health.mode}" mode`);
+    if (!health.allowed_models.includes(safety.choice.model)) throw new Error(`the relay does not allow ${safety.choice.model}`);
+  }
   const fixture = path.resolve(arg("fixture", "scripts/ingest-live/fixture")!);
   // A focused run: another questions file of the same fixture (QUESTIONS-<name>.json), graded with its own sealed
   // EXPECTED-<name>.json (passed with --expected).

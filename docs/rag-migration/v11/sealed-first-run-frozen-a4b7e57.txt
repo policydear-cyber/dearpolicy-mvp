@@ -1,0 +1,139 @@
+DATABASE_URL is not configured. Database-backed routes will fail until .env.local is set.
+⚠️  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715
+PASS S1 Policies Alex and Bea share; Bea's accident cover across plans
+PASS S2 Injury without cause, side question, then cause given
+PASS S3 Track race death: racing exclusion and sanctioned-race exception
+FAIL S4 Hospital cash with correction of person and number of days
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+     + [
+     +   'turn 1 (“bea was in hospital for 3 days last month, how much hospital cash?”): missing “S$300”; missing one of ["indicative","illustration","illustrative"]',
+     +   'turn 2 (“wait no it was me, alex, and it was 4 days”): missing “S$600”; missing one of ["indicative","illustration","illustrative"]'
+     + ]
+     - []
+FAIL S5 Heart attack death vs accident; cross-household figure offered by user
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+     + [
+     +   'turn 1 (“what would we get if alex passed away from a heart attack”): missing one of ["excluded","exclusion","will not pay"]'
+     + ]
+     - []
+FAIL S6 Roster comparison across headed/headerless schedules; living care is not a payout
+     Expected values to be strictly deep-equal:
+     + actual - expected
+     
+     + [
+     +   'turn 1 (“what are the hospital cash amounts for each of us”): missing “S$100”; missing “S$10,000”',
+     +   'turn 2 (“and the living care amounts?”): missing “S$250,000”'
+     + ]
+     - []
+
+### S1 Policies Alex and Bea share; Bea's accident cover across plans
+USER: what insurance do me and my wife both have?
+APP:  You and Bea are both insured on the Harbourline Civil Service Group Scheme certificate (policy HL7700123), which lists Group Term Life, Group Personal Accident and Group Living Care.
+      You are both on the Harbourline Group Hospital Cash plan (policy HL9900456).
+      You are the employee and Bea the spouse on the Orchid Benefits Employee Group Outpatient Plan (policy OB-OP-7781).
+      Bea is also insured on the Kestrel General FamilyShield Accident Plan (policy KG-FS-4410), with Cai.
+      cites=CERT:1,HC:1,EMP:1,FAMILY:1 steps=3 loop_ms=206 gate=[]
+      - dropped: Your Harbourline term policy (HL-TL-3302) covers only you. -- not supported by its evidence: it states cover, but its evidence is not about cover
+      GRADE: pass
+USER: whats her accident cover altogether
+APP:  Bea's certificate lists her Group Personal Accident sum assured as S$400,000, as of 1 April 2024.
+      Her FamilyShield Accident Plan lists accidental death at S$200,000 in the Adult column.
+      Under Endorsement No. 2 her FamilyShield fracture benefit is S$1,000 per fracture from 1 July 2026 (previously S$800).
+      cites=CERT:1,FAMILY:1,ENDT:1 steps=3 loop_ms=334 gate=[]
+      GRADE: pass
+
+### S2 Injury without cause, side question, then cause given
+USER: bea fractured her toe yesterday
+APP:  You told me Bea fractured her toe yesterday. Her Group Personal Accident cover lists Fracture of toe at 2% of the Sum Insured, and her certificate lists a sum assured of S$400,000 as of 1 April 2024. If the fracture was caused by an Accident as the wording defines it, an indicative illustration is S$8,000. Her FamilyShield fracture benefit is S$1,000 per fracture from 1 July 2026, under Endorsement No. 2.
+      [Q] How did Bea fracture her toe?
+      cites=PA_WORD:1,CERT:1,FAMILY:1,ENDT:1,PA_WORD:2 steps=5 loop_ms=171 gate=[]
+      GRADE: pass
+USER: hang on who is familyshield with?
+APP:  The FamilyShield Accident Plan is with Kestrel General (policy KG-FS-4410).
+      When you’re ready, here is the question I was on.
+      [Q] How did Bea fracture her toe?
+      cites=FAMILY:1 steps=2 loop_ms=16 gate=[]
+      GRADE: pass
+USER: she tripped on the stairs at home
+APP:  You told me she tripped on the stairs at home.
+      The wording defines an Accident as a sudden, unforeseen and involuntary event caused by external, violent and visible means.
+      If the insurer accepts it as an Accident, an indicative illustration for Fracture of toe is S$8,000.
+      Her FamilyShield fracture benefit is S$1,000 per fracture from 1 July 2026, under Endorsement No. 2.
+      [next] Contact Harbourline Life and Kestrel General for their claim forms; each insurer decides what it pays.
+      cites=PA_WORD:2,CERT:1,PA_WORD:1,FAMILY:1,ENDT:1 steps=4 loop_ms=110 gate=[]
+      GRADE: pass
+
+### S3 Track race death: racing exclusion and sanctioned-race exception
+USER: alex was killed racing his motorbike at a track event
+APP:  I'm very sorry for your loss. You told me Alex was killed racing his motorbike at a track event. The Group Personal Accident wording does not pay for death caused by competitive racing on wheels, except racing sanctioned by the Authority. His certificate lists a Group Personal Accident sum assured of S$600,000 as of 1 April 2024, and the wording pays Death due to Accident at 100% of the Sum Insured. His certificate also lists a Group Term Life sum assured of S$1,000,000 as of 1 April 2024, and his Harbourline term schedule lists a Death sum assured of S$250,000.
+      [Q] Was the track event a race sanctioned by the Authority?
+      cites=PA_WORD:2,CERT:1,PA_WORD:1,SCAN:1 steps=4 loop_ms=107 gate=[]
+      GRADE: pass
+USER: it was an officially sanctioned race
+APP:  You told me it was an officially sanctioned race.
+      The racing exclusion does not apply to racing sanctioned by the Authority, and the wording pays Death due to Accident at 100% of the Sum Insured if death results from the Accident within 365 days.
+      If the insurer accepts that, an indicative illustration of the Death due to Accident benefit is S$600,000.
+      [next] Contact Harbourline Life to start the claim; the insurer decides what it pays.
+      cites=PA_WORD:2,PA_WORD:1,CERT:1 steps=4 loop_ms=117 gate=[]
+      GRADE: pass
+
+### S4 Hospital cash with correction of person and number of days
+USER: bea was in hospital for 3 days last month, how much hospital cash?
+APP:  Bea's Harbourline Group Hospital Cash schedule lists a daily benefit of S$100 and an annual limit of S$10,000.
+      cites=HC:1 steps=5 loop_ms=72 gate=[]
+      ! calculate: admission: an assumed input is allowed only for purpose what_if
+      GRADE: FAIL -- missing “S$300”; missing one of ["indicative","illustration","illustrative"]
+USER: wait no it was me, alex, and it was 4 days
+APP:  Alex's Harbourline Group Hospital Cash schedule lists a daily benefit of S$150 and an annual limit of S$15,000.
+      cites=HC:1 steps=5 loop_ms=51 gate=[]
+      ! calculate: admission: an assumed input is allowed only for purpose what_if
+      GRADE: FAIL -- missing “S$600”; missing one of ["indicative","illustration","illustrative"]
+USER: does it cover the hospital bill itself too?
+APP:  The Harbourline Group Hospital Cash schedule lists a fixed daily benefit and an annual limit; it does not state that it pays the hospital bill itself.
+      [next] A hospitalisation or medical plan, if you have one, would be the document to check for the bill.
+      cites=HC:1 steps=2 loop_ms=19 gate=[]
+      GRADE: pass
+
+### S5 Heart attack death vs accident; cross-household figure offered by user
+USER: what would we get if alex passed away from a heart attack
+APP:  The Group Personal Accident wording excludes death caused by illness or disease, so it would not pay its accidental death benefit for a heart attack.
+      Alex's certificate lists a Group Term Life sum assured of S$1,000,000 as of 1 April 2024; its policy wording is not among your uploaded documents.
+      His Harbourline term schedule lists a Death sum assured of S$250,000.
+      cites=PA_WORD:2,CERT:1,SCAN:1 steps=3 loop_ms=57 gate=[]
+      GRADE: FAIL -- missing one of ["excluded","exclusion","will not pay"]
+USER: the other alex goh's cert showed 900k for accident, can you check that one?
+APP:  I can only use your own household's documents, so I can't check another household's certificate.
+      cites= steps=1 loop_ms=4 gate=[]
+      GRADE: pass
+
+### S6 Roster comparison across headed/headerless schedules; living care is not a payout
+USER: what are the hospital cash amounts for each of us
+APP:  Alex's Harbourline Group Hospital Cash schedule lists a daily benefit of S$150 and an annual limit of S$15,000.
+      Cai is not named on the Harbourline Group Hospital Cash schedule.
+      I haven’t stated the amount for Harbourline Group Hospital Cash in Harbourline Group Hospital Cash (page 1), because I couldn’t confirm it against the document.
+      cites=HC:1 steps=3 loop_ms=69 gate=[{"where":"details[0]","figure":"S$100","reason":"the sentence does not name the benefit the figure is printed for"}]
+      ! final_answer: the save-time check would not show this sentence: "Bea's lists a daily benefit of S$100 and an annual limit of S$10,000." -- S$100: the sentence does not name the benefit the figure is printed for (it cites e3, e4, value v3, value v4). Call final_answer again with the same sentences, rewriting only 
+      ! model: script turn 1 has no step 4
+      GRADE: FAIL -- missing “S$100”; missing “S$10,000”
+USER: and the living care amounts?
+APP:  Alex's certificate lists a Group Living Care sum assured of S$350,000 as of 1 April 2024.
+      Cai is not named on the Harbourline Civil Service Group Scheme certificate.
+      I haven’t stated the amount for Group Living Care in Harbourline Civil Service Group Scheme - Certificate (page 1), because I couldn’t confirm it against the document.
+      cites=CERT:1,HC:1 steps=2 loop_ms=39 gate=[{"where":"details[0]","figure":"S$250,000","reason":"the sentence does not name the benefit the figure is printed for"}]
+      ! final_answer: the save-time check would not show this sentence: "Bea's lists S$250,000 as of 1 April 2024." -- S$250,000: the sentence does not name the benefit the figure is printed for (it cites e6, value v6). Call final_answer again with the same sentences, rewriting only this one so that what the check says i
+      ! model: script turn 2 has no step 3
+      GRADE: FAIL -- missing “S$250,000”
+USER: so is 350k what i get if i get critically ill?
+APP:  Your certificate lists a Group Living Care sum assured of S$350,000 as of 1 April 2024; that is the document's amount on that date, not a confirmed payment.
+      The Group Living Care policy wording is not among your uploaded documents, so what it pays for and when is not stated.
+      [next] Ask your employer or Harbourline Life for the Group Living Care policy wording, which sets out what it pays for.
+      cites=CERT:1 steps=2 loop_ms=26 gate=[]
+      GRADE: pass
+
+turns graded 10/15 passed
+v1.1 acceptance 3/6 conversations passed
+exit=1

@@ -43,7 +43,7 @@ export const CALCULATE_TOOL: ToolDef = {
     deductible_value_id: str("A printed deductible (value id)."), co_insurance_value_id: str("A printed co-insurance percentage (value id)."), co_insurance_cap_value_id: str("A printed cap on the co-insurance share (value id)."),
     sum_insured_value_id: str("lump_sum: the sum insured (value id)."), percent_value_id: str("lump_sum: the printed percentage payable (value id)."), cap_value_id: str("lump_sum: a printed cap (value id)."),
     condition: str("lump_sum: the illness / disability / event the household asked about."),
-    assumption_words: str("lump_sum what_if: the household's what-if, quoted."),
+    assumption_words: str("lump_sum: the household's own words for the what-if or the event they reported, quoted; the result is always a conditional illustration, stated with its condition (\"If ...\")."),
     settled: { type: "array", items: { type: "object", properties: { condition_id: str("A condition id from an earlier calculate result."), status: { type: "string", enum: ["established", "not_applicable"] }, words: str("The household's own words that settle it, quoted.") }, required: ["condition_id", "status", "words"], additionalProperties: false } },
   }, required: ["calculator", "purpose", "subject_id", "policy_id", "benefit"], additionalProperties: false },
   handler: async (ctx, a) => runCalculate(ctx, a),
@@ -84,7 +84,9 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     const h = a[key] as Record<string, unknown> | undefined; if (!h) return null;
     const words = String(h.words ?? "").trim(); if (!words) return `${key}: the household's own words are required`;
     const assumed = h.assumed === true;
-    if (assumed && !whatIf) return `${key}: an assumed input is allowed only for purpose what_if`;
+    // V1.1: a stay the household reported only as a length ("in hospital for 3 days last month") may be placed on
+    // assumed dates too -- the result is then a conditional illustration that states it.
+    if (assumed && !whatIf && !(unit === "at" && /\b\d{1,3}\s+(?:full\s+|whole\s+)?days?\b/i.test(words))) return `${key}: an assumed input is allowed only for purpose what_if, or for a stay the household gave only as a number of days`;
     if (unit === "at") return { value: String(h.at ?? ""), words, kind: assumed ? "assumption" : "household" };
     if (typeof h.amount !== "number" || !Number.isFinite(h.amount) || h.amount < 0) return `${key}: the amount is not a number`;
     return { value: h.amount, currency: typeof h.currency === "string" ? h.currency.toUpperCase() : null, words, kind: assumed ? "assumption" : "household" };

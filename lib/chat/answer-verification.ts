@@ -362,7 +362,7 @@ function bindingsOf(answer: ChatAnswer): FigureBinding[] {
 
 /** The documents the answer's bindings and citations name (this household's, active -- the lifecycle predicate --
  * with their release state, version and pages), the household's people, and the household's own figures. */
-async function loadContext(accountId: string, answer: ChatAnswer, userText: string): Promise<Ctx> {
+async function loadContext(accountId: string, answer: ChatAnswer, userText: string, priorUserTexts: string[] = []): Promise<Ctx> {
   const ids = [...new Set([...bindingsOf(answer).map((b) => b?.policyId), ...(answer.calculations ?? []).map((k) => k?.policyId),
     // Round 8e: a condition may quote an amendment document of the calculation's policy (an admission-day exception it restates).
     ...(answer.calculations ?? []).flatMap((k) => (k?.conditions ?? []).map((c) => c?.passage?.policyId)), ...(answer.citations ?? []).map((c) => c?.policyId), ...(answer.policyStatedLimits ?? []).map((l) => l?.citation?.policyId)].filter((x): x is string => typeof x === "string" && !!x))];
@@ -392,7 +392,7 @@ async function loadContext(accountId: string, answer: ChatAnswer, userText: stri
     .map((p) => ({ id: p.id, names: [p.display_name, p.preferred_name].filter((n): n is string => !!n && n.trim().length >= 3).map((n) => n.trim()), relationship: p.relationship ?? "", notes: p.notes ?? null, dateOfBirth: p.date_of_birth ?? null }));
   // The household's own messages in this conversation (only read when the answer carries a benefit calculation whose
   // household inputs must be quoted from them).
-  const householdTexts = [userText];
+  const householdTexts = [userText, ...priorUserTexts.filter((t) => t && t !== userText)];
   if (answer.calculations?.length && answer.conversationId) {
     const rows = (await query<{ content: string }>(`SELECT content FROM chat_messages WHERE account_id=$1 AND conversation_id=$2 AND role='user' ORDER BY created_at`, [accountId, answer.conversationId]).catch(() => ({ rows: [] as { content: string }[] }))).rows;
     householdTexts.push(...rows.map((r) => r.content ?? ""));
@@ -978,6 +978,14 @@ const CALC_TOTAL = /\b(?:totals?|totall?ing|altogether|combined|in all|add(?:s|e
 const CALC_ATTRIBUTED = /\byour (?:own )?(?:figures?|bill|amount|dates?|times?|words)\b|\b(?:as )?you (?:gave|told|said|mentioned|quoted|wrote)\b|\bthe (?:bill|amount|dates?|times?) you\b/i;
 const WHAT_IF = /\bwhat if\b|\bif\b|\bsuppose\b|\bsupposing\b|\bhypothetical\w*\b|\bwere to\b|\bsay (?:he|she|they|i|we)\b/i;
 const squash = (t: string) => normalPassage(t ?? "").replace(/\s+/g, " ").trim();
+/** A short follow-on ("and a broken toe?", "what about Cai?") continues the household's previous message. */
+const FOLLOW_ON = /^\s*(?:and|or|also|then|what about|how about)\b|^\s*[^.?!]{1,40}\?\s*$/i;
+function asksWhatIf(ctx: { userText: string; householdTexts: string[] }): boolean {
+  if (WHAT_IF.test(ctx.userText)) return true;
+  const prior = ctx.householdTexts.filter((t) => t && squash(t) !== squash(ctx.userText));
+  const last = prior[prior.length - 1];
+  return !!last && WHAT_IF.test(last) && FOLLOW_ON.test(ctx.userText);
+}
 const numsOf = (t: string) => (t.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
 function quotedBy(words: string, texts: string[]): boolean {
   const w = squash(words);
@@ -1042,6 +1050,9 @@ function docOperandProblem(o: Extract<CalcOperand, { source: "document" }>, r: C
   const col = columnProblem(b, o.value as number, "", range.join("\n"), ctx.people.find((p) => p.id === b.subjectId), { count: true, ownerId: doc.owner, doc, userText: ctx.userText }) ?? amendmentProblem(doc, b.subjectId, null, ctx);
   return col ? `${o.label}: ${col}` : null;
 }
+/** V1.1: the one day-count convention an illustration may assume when the wording states none -- always as its stated
+ * assumption, never as a term of the policy. */
+const DAY_ASSUMED_24H = "assuming each complete 24 hours in hospital counts as one day";
 const DURATION_WORDS = /\b(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|a couple of|a few)\s+(?:full\s+|whole\s+)?(?:days?|nights?|weeks?|hours?)\b/i;
 const STATES_ASSUMPTION = /\bif you mean\b|\bassum(?:e|es|ed|ing|ption)\b|\bsuppos(?:e|ing)\b|\bhypothetical\w*\b|\bfor (?:that|this|such an?) (?:assumed|hypothetical)\b/i;
 const MONTH_WORDS: [RegExp, number][] = ["jan(?:uary)?", "feb(?:ruary)?", "mar(?:ch)?", "apr(?:il)?", "may", "june?", "july?", "aug(?:ust)?", "sep(?:t(?:ember)?)?", "oct(?:ober)?", "nov(?:ember)?", "dec(?:ember)?"].map((w, i) => [new RegExp("\\b" + w + "\\b", "i"), i + 1]);
@@ -1076,7 +1087,14 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     // ("exactly 3 days in August"): accepted when their words with that duration are quoted from this message.
     const assumedTimes = r.operands.filter((o) => o?.source === "assumption" && (o.unit === "date" || o.unit === "datetime"));
     const resolvesDuration = assumedTimes.length > 0 && assumedTimes.every((o) => o.source === "assumption" && DURATION_WORDS.test(o.attribution ?? "") && quotedBy(o.attribution, [ctx.userText]));
-    if (!WHAT_IF.test(ctx.userText) && !resolvesDuration) return "an illustration is given though the household did not ask a what-if";
+    // V1.1: a what-if is the household's own -- asked in this message, carried by a short follow-on to one they just
+    // asked ("and a broken toe?"), or the event they reported, quoted as the illustration's stated assumption.
+    const assumedOps = r.operands.filter((o) => o?.source === "assumption");
+    // (A stay given with its actual dates or times is an estimate on those inputs, never an illustration: assumed inputs
+    // stand only for a stay the household gave as a length, with no date, month, year or time.)
+    const lengthOnlyWords = (w: string) => DURATION_WORDS.test(w) && !MONTH_WORDS.some(([re]) => re.test(w)) && !/\b(?:19|20)\d{2}\b|\d{4}-\d{2}-\d{2}|\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b/i.test(w);
+    const reported = (r.calculator === "lump_sum" && !!r.assumption?.trim() && quotedBy(r.assumption, ctx.householdTexts)) || (assumedOps.length > 0 && assumedOps.every((o) => quotedBy(o.attribution ?? "", ctx.householdTexts) && lengthOnlyWords(o.attribution ?? "")));
+    if (!asksWhatIf(ctx) && !resolvesDuration && !reported) return "an illustration is given though the household did not ask a what-if";
     // Never the figure for their actual stay: times WE assumed for a duration they gave are stated as an assumption
     // ("If you mean exactly 72 hours ..."); a what-if in their own times is stated by its own "if" clause.
     if (resolvesDuration && !STATES_ASSUMPTION.test(sentence)) return "an illustration does not state the times it assumes";
@@ -1097,7 +1115,18 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
     } else {
       const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(o.value));
       if (!m) return `${o.label}: the date is not the one in the household’s words`;
-      if (o.source === "assumption") { const p = assumedDateProblem(o.attribution, m[0]); if (p) return `${o.label}: ${p}`; }
+      if (o.source === "assumption") {
+        // V1.1: a what-if that gives only a length of stay ("if she's warded 5 days"), illustrated under the stated
+        // complete-24-hours assumption, depends on that length only: the assumed dates just place it -- accepted when
+        // they span exactly that many days and the words name no date, month or year.
+        const len = (o.attribution.match(DURATION_WORDS)?.[0] ?? "");
+        const n = numsOf(len)[0];
+        const adm = r.operands.find((x) => x.role === "admission"), dis = r.operands.find((x) => x.role === "discharge");
+        const span = adm && dis ? (Date.parse(String(dis.value)) - Date.parse(String(adm.value))) / 3_600_000 : NaN;
+        const lengthOnly = r.conditions.some((c) => c.kind === "day_count_rule" && c.status === "unresolved" && !c.passage) && norm(r.assumption ?? "").includes(norm(DAY_ASSUMED_24H)) && /\bdays?\b/i.test(len) && n > 0 && span === n * 24
+          && !MONTH_WORDS.some(([re]) => re.test(o.attribution)) && !/\b(?:19|20)\d{2}\b|\d{4}-\d{2}-\d{2}/.test(o.attribution);
+        const p = lengthOnly ? null : assumedDateProblem(o.attribution, m[0]); if (p) return `${o.label}: ${p}`;
+      }
       else if (!numsOf(o.attribution).some((n) => n === Number(m[3]))) return `${o.label}: the date is not the one in the household’s words`;
     }
   }
@@ -1140,6 +1169,12 @@ export function calculationProblem(r: CalculationRecord, sentence: string, ctx: 
   }
   for (const st of r.steps) {
     if (st.op === "day_count") {
+      // V1.1: a what-if on wording that states no rule may assume complete 24-hour days -- stated in the sentence (checked
+      // with the conditions above), never anything else, and never with day exceptions.
+      // V1.1: wording that states no rule leaves the rule UNRESOLVED on the record; an illustration may still count
+      // complete 24-hour days when its stated assumption (in the record and in the sentence itself) says so.
+      const assumedRule = !!ruleCond && r.kind === "conditional_illustration" && ruleCond.status === "unresolved" && !ruleCond.passage && st.rule === "completed_24h" && !(st.edges ?? []).length && norm(r.assumption ?? "").includes(norm(DAY_ASSUMED_24H)) && norm(sentence).includes(norm(DAY_ASSUMED_24H));
+      if (assumedRule) continue;
       if (!ruleCond || ruleCond.status !== "established" || ruleCond.basis !== "document" || !ruleCond.passage) return "the day count uses a rule the cited wording does not establish";
       const said = dayRuleFromWording(ruleCond.passage.text);
       if (!said || said.rule !== st.rule) return "the day count uses another rule than the cited wording states";
@@ -1177,7 +1212,7 @@ type Page = { policyId: string; page: number; text: string; current: boolean };
 export type FigureProblem = { where: string; figure: string; sentence: string; reason: string };
 
 /** Checks (and, unless `report`, repairs in place) every money figure and cover statement of an answer. */
-export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId: string; userText?: string; report?: boolean }): Promise<FigureProblem[]> {
+export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId: string; userText?: string; report?: boolean; priorUserTexts?: string[] }): Promise<FigureProblem[]> {
   if (!answer || typeof answer !== "object") return [];
   const fields: { where: string; get: () => string; set: (v: string) => void }[] = [
     { where: "summary", get: () => answer.summary ?? "", set: (v) => { answer.summary = v; } },
@@ -1189,7 +1224,7 @@ export async function verifyAnswerFigures(answer: ChatAnswer, opts: { accountId:
   const anyFigure = all.some((x) => x.figures.length);
   const anyCover = all.some((x) => COVER_CLAIM.test(x.sentence.trim()));
   if (!anyFigure && !anyCover && !answer.policyStatedLimits?.length && !all.some((x) => SAYS_NOT_AMENDED.test(x.sentence) || CLAIMS_REMOVAL.test(x.sentence))) return [];
-  const ctx = await loadContext(opts.accountId, answer, opts.userText ?? "");
+  const ctx = await loadContext(opts.accountId, answer, opts.userText ?? "", opts.priorUserTexts ?? []);
   const problems: FigureProblem[] = [];
   const debug = gateDebug();
   // A policy-stated limit card stands only with its own binding, grounded for its benefit.

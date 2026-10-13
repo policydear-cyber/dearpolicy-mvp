@@ -47,7 +47,7 @@ function insuredKind(d: DocRow, text: string): InsuredKind {
   return "person";
 }
 
-type Named = { page: number; line: string; context: string; ref: EvidenceRef };
+type Named = { page: number; line: string; context: string; ref: EvidenceRef; heading?: EvidenceRef | null };
 function namedLinesOf(d: DocRow, pages: Map<number, string>, names: string[], subjectId: string): Named[] {
   const out: Named[] = [];
   if (!names.length) return out;
@@ -55,10 +55,16 @@ function namedLinesOf(d: DocRow, pages: Map<number, string>, names: string[], su
   for (const [page, text] of pages) {
     const lines = text.split("\n");
     let at = 0;
+    const starts: number[] = [];
     lines.forEach((line, i) => {
+      starts.push(at);
       if (re.test(line)) {
         const prev = lines.slice(Math.max(0, i - 6), i).filter((x) => x.trim());
-        out.push({ page, line, context: [...prev.slice(-4), line].join("\n"), ref: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page, pageText: text, start: at, end: at + line.length, subjectId }) });
+        // V1.1 (evidence contract): a roster row names the person; the heading above it that says the rows are the
+        // insured persons is what makes the row a statement of cover -- it travels with the row as its own evidence.
+        let heading: EvidenceRef | null = null;
+        for (let j = i - 1; j >= Math.max(0, i - 6); j--) if (INSURED.test(lines[j]) && !re.test(lines[j])) { heading = evidenceAt({ policyId: d.id, documentHash: d.fileHash, page, pageText: text, start: starts[j], end: starts[j] + lines[j].length, subjectId }); break; }
+        out.push({ page, line, context: [...prev.slice(-4), line].join("\n"), ref: evidenceAt({ policyId: d.id, documentHash: d.fileHash, page, pageText: text, start: at, end: at + line.length, subjectId }), heading });
       }
       at += line.length + 1;
     });
@@ -73,7 +79,7 @@ function roleFrom(named: Named[], names: string[]): { role: CoverRole; ev: Evide
   const tableRow = (l: string) => /\t|\S {2,}\S/.test(l.trim());
   const other = (l: string) => OWNER.test(l) || NOMINEE.test(l) || ASSIGNEE.test(l) || BENEFICIARY.test(l);
   const ins = named.filter((n) => INSURED.test(strip(n.line)) || (tableRow(n.line) && INSURED.test(n.context.split("\n").slice(0, -1).join("\n")) && !other(strip(n.line))));
-  if (ins.length) return { role: "insured", ev: ins.map((n) => n.ref) };
+  if (ins.length) return { role: "insured", ev: ins.flatMap((n) => (n.heading && !INSURED.test(strip(n.line)) ? [n.heading, n.ref] : [n.ref])).filter((e, k, a) => a.findIndex((x) => x.passage.start === e.passage.start && x.passage.onPage === e.passage.onPage) === k) };
   const by = (re: RegExp) => named.filter((n) => re.test(strip(n.line)));
   if (by(NOMINEE).length) return { role: "nominee", ev: by(NOMINEE).map((n) => n.ref) };
   if (by(ASSIGNEE).length) return { role: "assignee", ev: by(ASSIGNEE).map((n) => n.ref) };

@@ -55,14 +55,14 @@ export function withoutInstructions(text: string): string {
   return text.split("\n").filter((l) => !INSTRUCTION.test(l)).join("\n");
 }
 
-const GENERIC = new Set(["cover", "covered", "coverage", "covers", "insur", "insured", "insurance", "policy", "plan", "benefit", "under", "is", "are", "also", "will", "would", "can", "your", "this", "that", "there", "which", "who", "what", "when", "only", "any", "all", "each", "every", "one", "per", "for", "the", "has", "have", "been", "because", "so", "but", "if", "than", "then", "also", "listed", "named", "among", "show", "shown", "includ", "document", "schedule", "certificate", "page", "state", "says", "say", "wording", "here", "what", "next", "would", "should", "need", "needs", "must", "may"].map((w) => w.replace(/'s$/, "").replace(/(?:ing|ed|es|s)$/, "")));
+const GENERIC = new Set(["you", "cover", "covered", "coverage", "covers", "insur", "insured", "insurance", "policy", "plan", "benefit", "under", "is", "are", "also", "will", "would", "can", "your", "this", "that", "there", "which", "who", "what", "when", "only", "any", "all", "each", "every", "one", "per", "for", "the", "has", "have", "been", "because", "so", "but", "if", "than", "then", "also", "listed", "named", "among", "show", "shown", "includ", "document", "schedule", "certificate", "page", "state", "says", "say", "wording", "here", "what", "next", "would", "should", "need", "needs", "must", "may"].map((w) => w.replace(/'s$/, "").replace(/(?:ing|ed|es|s)$/, "")));
 const NEGATIVE_SENTENCE = /\b(?:not|never|no longer|isn['’]t|aren['’]t|wasn['’]t|doesn['’]t|don['’]t|won['’]t|cannot|can['’]t)\b[^.]{0,40}\b(?:cover\w*|insured|payable|pa(?:y|id)|eligib\w*|named|listed|included|shown)\b|\bexclu\w+\b|\bno cover\b/i;
 const NEGATIVE_PASSAGE = /\bnot\b|\bexclu\w+\b|\bno (?:benefit|cover)\b|\bshall not\b|\bdoes not\b|\bunless\b|\bonly if\b/i;
 const MEMBERSHIP = /\b(?:named|listed|included|shown|among|on the (?:list|schedule|certificate))\b/i;
 /** A list of the people a document insures. */
 const INSURED_LIST = /\b(?:insured (?:persons|members|children|lives)|lives? assured|persons? insured|insured child(?:ren)?:|covered persons)\b/i;
 const POSITIVE_COVER = /\b(?:is|are|was|were)\s+(?:\w+\s+)?(?:covered|insured|eligible)\b|\bcovers\b|\bis payable\b/i;
-const COVER_PASSAGE = /\bcover\w*|\binsured\b|\bpay\w*|\bbenefits?\b|\bentitle\w*/i;
+const COVER_PASSAGE = /\bcover\w*|\binsured\b|\bassured\b|\bpay\w*|\bbenefits?\b|\bentitle\w*/i;
 
 export type CitedEvidence = { policyId: string; subjectId?: string | null; text: string };
 export type StatementCtx = {
@@ -70,6 +70,8 @@ export type StatementCtx = {
   people: { id: string; names: string[] }[];
   /** Readable documents: id -> product name. */
   policyNames: Map<string, string>;
+  /** V1.1: what each document states on its face (product, insurer, numbers, amendment role). */
+  docFacts?: Map<string, string>;
   /** Who the sentence is about (resolved), when known. */
   subjectId: string | null;
 };
@@ -94,7 +96,9 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   // Person: a member named in the sentence whose evidence was all read for another member.
   const named = ctx.people.filter((p) => p.names.some((n) => n && new RegExp("\\b" + n.replace(/[^A-Za-z' -]/g, "") + "\\b", "i").test(text)));
   const readFor = new Set(cited.map((c) => c.subjectId).filter(Boolean) as string[]);
-  for (const p of named) if (readFor.size && !readFor.has(p.id) && ![...readFor].some((r) => named.some((q) => q.id === r))) return `it is about ${p.names[0]} but its evidence was read for someone else`;
+  // V1.1: evidence read once for one member and reused for another is still theirs when the passage itself names them.
+  const inPassage = (p: { names: string[] }) => p.names.some((n) => n && n.length >= 3 && new RegExp("\\b" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(all));
+  for (const p of named) if (readFor.size && !readFor.has(p.id) && !inPassage(p) && ![...readFor].some((r) => named.some((q) => q.id === r))) return `it is about ${p.names[0]} but its evidence was read for someone else`;
   // Polarity.
   if (NEGATIVE_SENTENCE.test(text)) {
     const membership = MEMBERSHIP.test(text);
@@ -109,8 +113,9 @@ export function checkCitedStatement(text: string, cited: CitedEvidence[], ctx: S
   const productWords = new Set([...ctx.policyNames.values()].flatMap((n) => contentWords(n)));
   const specific = contentWords(text).filter((w) => !GENERIC.has(w) && !nameWords.has(w) && !productWords.has(w));
   if (specific.length) {
-    const have = new Set(contentWords(all));
-    const hit = specific.filter((w) => have.has(w) || lower.includes(w));
+    const face = [...new Set(cited.map((c) => c.policyId))].map((id) => ctx.docFacts?.get(id) ?? "").join(" ");
+    const have = new Set([...contentWords(all), ...contentWords(face)]);
+    const hit = specific.filter((w) => have.has(w) || lower.includes(w) || face.toLowerCase().includes(w));
     if (!hit.length) return `its evidence does not mention what it is about (${specific.slice(0, 4).join(", ")})`;
   }
   return null;

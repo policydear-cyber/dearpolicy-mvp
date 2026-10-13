@@ -71,7 +71,8 @@ export function checkFact(f: { key: string; value: string; words: string }, user
   if (/(?:^|_)nights?(?:_|$)/.test(key) && daysSaid && !nightsSaid) return { ok: false, error: `the household said days, not nights: record it as days (e.g. days_in_hospital)` };
   // Round 9: the DATE of an event the household named ("the accident was on 1 March" -> accident_date) is a date, not a
   // classification -- recorded when their own words use that term; otherwise the event's date goes under event_date.
-  const datedEvent = /^(?:accident|illness|sickness|disease|diagnosis|injury|incident|event)_(?:date|datetime|time|on|at|day)$/.test(key);
+  // (event_date is the neutral key the date goes under -- never refused for the word "event".)
+  const datedEvent = /^(?:accident|illness|sickness|disease|diagnosis|injury|incident)_(?:date|datetime|time|on|at|day)$/.test(key);
   if (datedEvent) { const term = key.split("_")[0], re = new RegExp("\\b" + term.slice(0, 5), "i"); if (!re.test(said) && !(source === "user_reported" && userTexts.some((t) => re.test(t)))) return { ok: false, error: `${key}: the ${source === "document" ? "passage" : "household"} did not call it ${term} in those terms; record the date under event_date with their words` }; }
   // A policy-defined classification: only in the household's own terms.
   if ((POLICY_KEY.test(key) && !datedEvent) || POLICY_TERM.test(value)) {

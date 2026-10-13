@@ -1,0 +1,66 @@
+{
+  "source": "V1.1 small live sample (PR #46): conversations copied unchanged from QUESTIONS-q2.json (C2P) and QUESTIONS.json (C3, C5, C7) -- a person-column comparison, a scenario with a follow-up, an endorsement, and the scanned JuniorShield schedule. Nothing new authored.",
+  "upload_order": [
+    "hx-text.pdf",
+    "hx-endorsement.pdf",
+    "hx-scanned.pdf"
+  ],
+  "reopen": [
+    {
+      "id": "R1",
+      "conversation": "C5",
+      "text": "So if Isla was in hospital for exactly 3 days in August after falling at the playground, how much would Meridian pay?"
+    }
+  ],
+  "delete_source": "hx-endorsement.pdf",
+  "after_delete": [
+    {
+      "id": "D1",
+      "text": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?"
+    }
+  ],
+  "conversations": [
+    {
+      "id": "C2P",
+      "turns": [
+        {
+          "q": "Q2P",
+          "user": "Under the Meridian plan, compare the accident death cover for me and for my daughter Isla -- are the two amounts different?"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "two_turn_follow_up": true,
+      "turns": [
+        {
+          "q": "Q3",
+          "user": "Felix fell off the monkey bars at school yesterday and broke his wrist. How much can we claim from the Meridian policy?",
+          "expected_behaviour": "ask whether the fracture is simple/closed or compound/open (bone through skin), as certified by doctor with X-ray"
+        },
+        {
+          "q": "Q4",
+          "user": "The doctor said it's a closed fracture, the X-ray confirmed it, and the bone didn't come through the skin."
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "turns": [
+        {
+          "q": "Q6",
+          "user": "Did that endorsement letter change anything? How much is the daily hospital allowance for the kids now?"
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "turns": [
+        {
+          "q": "Q8",
+          "user": "Isla might need to stay in hospital two nights next week. Will her JuniorShield plan pay the $150 a day?"
+        }
+      ]
+    }
+  ]
+}
