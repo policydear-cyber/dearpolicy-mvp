@@ -144,9 +144,11 @@ function absenceCheck(text: string, ctx: Ctx): { problem: string | null; evidenc
     return { problem: present ? "says a document is missing, but the library holds it" : null, evidenceIds: [] };
   }
   if (!ctx.libraryText) return { problem: "says something is absent, but the library was not checked", evidenceIds };
-  const whole = /\bnone of (?:your|the|our)\b/i.test(text);
+  // "none of your documents ..." / "the uploaded documents don't ..." are about the whole library.
+  const whole = /\bnone of (?:your|the|our)\b|^(?:the|your)\s+(?:uploaded\s+)?(?:policy\s+)?documents?\b|\b(?:your|the)\s+uploaded\s+documents\s+(?:do(?:es)?n['’]t|do(?:es)? not)\b/i.test(text);
   if (!whole && !docs.length) return { problem: "says something is absent without naming the document it was checked against", evidenceIds };
-  const scope = (whole ? [...ctx.libraryText.keys()] : docs).map((id) => libraryDoc(ctx, id) ?? "");
+  // The documents it names when it names any; otherwise ("none of your documents") the whole library.
+  const scope = (docs.length ? docs : [...ctx.libraryText.keys()]).map((id) => libraryDoc(ctx, id) ?? "");
   if (scope.some((t) => !t.trim())) return { problem: "says something is absent from a document whose text is not stored", evidenceIds };
   const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const mentions = (t: string, n: string) => n.length >= 3 && new RegExp("\\b" + esc(n) + "\\b", "i").test(t);
