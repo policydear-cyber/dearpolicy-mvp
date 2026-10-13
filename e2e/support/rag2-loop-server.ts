@@ -48,7 +48,8 @@ const runLedger = live ? new RunCostLedger(live.capUsd) : null;
 if (runLedger) installSharedRunLedger(runLedger);
 const fetchGuard = live && runLedger ? installFetchGuard({ ledger: runLedger, preflightRefusal: live.preflight ? PREFLIGHT_REFUSAL : null }) : null;
 process.env.DEV_AUTH_ENABLED = "1";
-process.env.DEV_ACCOUNT_ID = LIVE ? ACCOUNT_L : ACCOUNT_T;
+// PR #47 reproduction: RAG2_LIVE_HOUSEHOLD=scenario signs in as the scenario-completion suite's synthetic household.
+process.env.DEV_ACCOUNT_ID = LIVE ? (process.env.RAG2_LIVE_HOUSEHOLD === "scenario" ? "00000000-0000-0000-0000-00000000c301" : ACCOUNT_L) : ACCOUNT_T;
 if (!LIVE) process.env.DEARPOLICY_DETERMINISTIC_MODEL = process.env.DEARPOLICY_DETERMINISTIC_MODEL || "synthetic-e2e";
 const port = Number(process.env.PORT ?? 3300);
 
