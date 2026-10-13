@@ -1,0 +1,149 @@
+PASS R1 reported conversation, capable model
+PASS R2 reported conversation, minimal (live-shape) model
+PASS R3 reported conversation, minimal model that follows the repair
+PASS P1 paraphrase: shin bone, closed fracture, stay with times
+PASS P2 other person: Grace (her own certificate row; a flat any-bone policy)
+PASS P3 other person: Kai (no leg row, so Other fracture; calendar-day hospital cash)
+PASS CONTROL facts: an added detail is not a correction; a stated correction (or a changed count) still is
+PASS CONTROL calculator: the wording's simple-fracture share is applied only from a quote printing it on that policy
+PASS CONTROL certificate link: the sum insured is the person's own row under the wording's product, on the current certificate
+PASS CONTROL hospital days: two nights under a complete-24-hours rule is not two payable days
+PASS CONTROL repair: the minimal model's one repair names every new fact and the certificate link
+PASS CONTROL category: a detail the schedule does not use is not mapped to its catch-all row
+
+### R1 reported conversation, capable model
+USER: Desmond broke his leg.
+APP:  Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person. The Group Personal Accident Schedule of Compensation lists the thigh bone (femur) at 10%, the lower leg (tibia or fibula) at 6%, the kneecap (patella) at 4% of the Sum Insured, payable for a fracture confirmed by X-ray.
+      [Q] How did Desmond break his leg?
+      cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke his leg
+      GRADE: pass
+USER: He fell down the stairs.
+APP:  I need one more detail first.
+      [Q] Was the fracture confirmed by an X-ray?
+      cites=PA_WORD:1 steps=2 gate=[]
+      facts: injury=broke his leg; how_it_happened=fell down the stairs
+      GRADE: pass
+USER: Yes, confirmed with an X-ray. He was also warded for two nights.
+APP:  Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person. The Group Personal Accident Schedule of Compensation lists the thigh bone (femur) at 10%, the lower leg (tibia or fibula) at 6%, the kneecap (patella) at 4% of the Sum Insured, payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture. If it is a compound (open) fracture of the thigh bone (femur), an indicative illustration is S$30,000, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”). If it is a simple (closed) fracture of the thigh bone (femur), an indicative illustration is S$15,000. If it is a compound (open) fracture of the lower leg (tibia or fibula), an indicative illustration is S$18,000. If it is a simple (closed) fracture of the lower leg (tibia or fibula), an indicative illustration is S$9,000. If it is a compound (open) fracture of the kneecap (patella), an indicative illustration is S$12,000. If it is a simple (closed) fracture of the kneecap (patella), an indicative illustration is S$6,000. The wording's Accident Hospital Income pays S$100 for each complete period of 24 hours of continuous confinement in hospital as an in-patient, up to 90 days per Accident. You told me he was warded for two nights; how many complete 24-hour periods that is depends on the admission and discharge times, so it is not yet known whether that is one or two periods. These are illustrations from the printed schedule, not approved amounts; what is still open is which bone was broken, whether the fracture is simple (closed) or compound (open), and the admission and discharge times.
+      [Q] Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?
+      cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke his leg; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
+      calc: Fracture of thigh bone (femur) conditional_illustration 30000 SGD
+      calc: Fracture of thigh bone (femur) conditional_illustration 15000 SGD
+      calc: Fracture of lower leg (tibia or fibula) conditional_illustration 18000 SGD
+      calc: Fracture of lower leg (tibia or fibula) conditional_illustration 9000 SGD
+      calc: Fracture of kneecap (patella) conditional_illustration 12000 SGD
+      calc: Fracture of kneecap (patella) conditional_illustration 6000 SGD
+      GRADE: pass
+USER: Transverse fracture.
+APP:  You told me it is a transverse fracture. The Schedule of Compensation sets the percentage by the bone that is broken, and the payable share by whether the fracture is simple (closed) or compound (open); a transverse fracture, which describes the line of the break, is neither of those, so it does not decide the row.
+      [Q] Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?
+      cites=PA_WORD:1 steps=2 gate=[]
+      facts: injury=broke his leg; injury_detail=transverse fracture; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
+      GRADE: pass
+
+### R2 reported conversation, minimal (live-shape) model
+USER: Desmond broke his leg.
+APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] How did Desmond break his leg?
+      cites=PA_WORD:1,PA_WORD:2 steps=3 gate=[]
+      facts: injury=broke his leg
+      GRADE: pass
+USER: He fell down the stairs.
+APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] Was the fracture confirmed by an X-ray?
+      cites=PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke his leg; how_it_happened=fell down the stairs
+      ! ask_user: before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.
+      GRADE: pass
+USER: Yes, confirmed with an X-ray. He was also warded for two nights.
+APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] Was it a simple (closed) fracture, where the skin was not broken?
+      cites=PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke his leg; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
+      ! ask_user: before asking: the household also told you "He was also warded for two nights" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say 
+      GRADE: pass
+USER: Transverse fracture.
+APP:  You told me it is a transverse fracture.
+      cites= steps=3 gate=[]
+      facts: injury=broke his leg; fracture_type=transverse; injury_detail=transverse fracture; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
+      ! final_answer: The household also told you "He was also warded for two nights" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days). The benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is 
+      GRADE: pass
+
+### R3 reported conversation, minimal model that follows the repair
+USER: Desmond broke his leg.
+APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] How did Desmond break his leg?
+      cites=PA_WORD:1,PA_WORD:2 steps=3 gate=[]
+      facts: injury=broke his leg
+      GRADE: pass
+USER: He fell down the stairs.
+APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] Was the fracture confirmed by an X-ray?
+      cites=PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke his leg; how_it_happened=fell down the stairs
+      ! ask_user: before asking: the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover. Then call ask_user again: those statements first, then the one question that most changes the result.
+      GRADE: pass
+USER: Yes, confirmed with an X-ray. He was also warded for two nights.
+APP:  For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] Was it a simple (closed) fracture, where the skin was not broken?
+      cites=PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke his leg; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
+      ! ask_user: before asking: the household also told you "He was also warded for two nights" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days); the benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say 
+      GRADE: pass
+USER: Transverse fracture.
+APP:  You told me it is a transverse fracture. Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person. The Group Personal Accident Schedule of Compensation lists the thigh bone (femur) at 10%, the lower leg (tibia or fibula) at 6%, the kneecap (patella) at 4% of the Sum Insured, payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture. If it is a compound (open) fracture of the thigh bone (femur), an indicative illustration is S$30,000, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”). If it is a simple (closed) fracture of the thigh bone (femur), an indicative illustration is S$15,000. If it is a compound (open) fracture of the lower leg (tibia or fibula), an indicative illustration is S$18,000. If it is a simple (closed) fracture of the lower leg (tibia or fibula), an indicative illustration is S$9,000. If it is a compound (open) fracture of the kneecap (patella), an indicative illustration is S$12,000. If it is a simple (closed) fracture of the kneecap (patella), an indicative illustration is S$6,000. The wording's Accident Hospital Income pays S$100 for each complete period of 24 hours of continuous confinement in hospital as an in-patient, up to 90 days per Accident. You told me he was warded for two nights; how many complete 24-hour periods that is depends on the admission and discharge times, so it is not yet known whether that is one or two periods.
+      [Q] Which bone in Desmond's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?
+      cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=5 gate=[]
+      facts: injury=broke his leg; fracture_type=transverse; injury_detail=transverse fracture; xray_confirmed=yes; how_it_happened=fell down the stairs; nights_in_hospital=2
+      calc: Fracture of thigh bone (femur) conditional_illustration 30000 SGD
+      calc: Fracture of thigh bone (femur) conditional_illustration 15000 SGD
+      calc: Fracture of lower leg (tibia or fibula) conditional_illustration 18000 SGD
+      calc: Fracture of lower leg (tibia or fibula) conditional_illustration 9000 SGD
+      calc: Fracture of kneecap (patella) conditional_illustration 12000 SGD
+      calc: Fracture of kneecap (patella) conditional_illustration 6000 SGD
+      ! final_answer: The household also told you "He was also warded for two nights" (nights_in_hospital) and the reply does not address it: look up the benefit it bears on (search_passages, e.g. hospital income / hospital cash) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (e.g. the admission and discharge dates and times; nights are not payable days). The benefit is a percentage of the Sum Insured but no amount is given: read Desmond Lim Wei Jie (Desmond)'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is 
+      GRADE: pass
+
+### P1 paraphrase: shin bone, closed fracture, stay with times
+USER: My husband Desmond fractured his shin bone, he slipped on the stairs at home.
+APP:  Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person. The Group Personal Accident Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured, payable for a fracture confirmed by X-ray.
+      [Q] Was the fracture confirmed by an X-ray?
+      cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
+      facts: injury=fractured his shin bone; how_it_happened=slipped on the stairs at home
+      GRADE: pass
+USER: Yes, the X-ray showed it, it's a closed fracture, and he stayed two nights in the ward.
+APP:  Desmond's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person. The Group Personal Accident Schedule of Compensation lists the lower leg (tibia or fibula) at 6% of the Sum Insured, payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture. If it is a simple (closed) fracture of the lower leg (tibia or fibula), an indicative illustration is S$9,000, and only for an injury the insurer accepts as caused by an accident (the policy says “Accident means a sudden, unforeseen and involuntary event caused by external, violent and visible means”). The wording's Accident Hospital Income pays S$100 for each complete period of 24 hours of continuous confinement in hospital as an in-patient, up to 90 days per Accident. You told me he was warded for two nights; how many complete 24-hour periods that is depends on the admission and discharge times, so it is not yet known whether that is one or two periods.
+      [Q] When was Desmond admitted to hospital (date and time)?
+      cites=PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
+      facts: injury=fractured his shin bone; fracture_type=closed; xray_confirmed=yes; how_it_happened=slipped on the stairs at home; nights_in_hospital=2
+      calc: Fracture of lower leg (tibia or fibula) conditional_illustration 9000 SGD
+      GRADE: pass
+USER: He was admitted at 9pm on 3 October and discharged at 11am on 5 October.
+APP:  You told me Desmond was admitted at 9pm on 3 October and discharged at 11am on 5 October.
+      On those times the stay counts as 1 complete period of 24 hours, so the Accident Hospital Income indicative estimate is S$100, not an approved amount, assuming at least 1 of the 90 days is still available this accident.
+      What you’ve told me is your own account, not a reviewed medical record: the insurer will check it against the documents it asks for (such as the doctor’s report and the test or scan results) and decides the claim after reviewing them.
+      [next] When you make the claim, include the doctor’s report and the test or scan results that show the policy’s condition is met, with the insurer’s claim form.
+      cites=PA_WORD:2 steps=3 gate=[]
+      facts: injury=fractured his shin bone; fracture_type=closed; xray_confirmed=yes; how_it_happened=slipped on the stairs at home; admission_datetime=2026-10-03T21:00+08:00; discharge_datetime=2026-10-05T11:00+08:00; nights_in_hospital=2
+      calc: Accident Hospital Income indicative_estimate 100 SGD
+      GRADE: pass
+
+### P2 other person: Grace (her own certificate row; a flat any-bone policy)
+USER: My wife Grace broke her leg, she fell off a ladder.
+APP:  Grace's FamilyShield Accident Plan lists S$800 per fracture, any bone, in its Adult column. Grace's Certificate of Group Insurance lists a Group Personal Accident sum insured of S$200,000 as of 1 July 2025; the wording says the Sum Insured is the amount the certificate shows for the insured person. The Group Personal Accident Schedule of Compensation lists the thigh bone (femur) at 10%, the lower leg (tibia or fibula) at 6%, the kneecap (patella) at 4% of the Sum Insured, payable for a fracture confirmed by X-ray. For a simple (closed) fracture 50% of the percentage shown is payable, and the full percentage for a compound (open) fracture.
+      [Q] Which bone in Grace's leg was broken: the thigh bone (femur), a lower-leg bone (tibia or fibula), or the kneecap (patella)?
+      cites=FAMILY:1,PA_WORD:2,CERT:1,PA_WORD:1 steps=3 gate=[]
+      facts: injury=broke her leg; how_it_happened=fell off a ladder
+      GRADE: pass
+
+### P3 other person: Kai (no leg row, so Other fracture; calendar-day hospital cash)
+USER: Kai fell at the playground and broke his leg; he was in hospital for two nights.
+APP:  Kai's JuniorCare Accident Plan has no row for a leg fracture; its Other fracture row lists S$300. Kai's FamilyShield Accident Plan lists S$400 per fracture, any bone, in its Child column. JuniorCare's hospital cash is S$50 per day, counting each day or part of a day in hospital including the day of admission and the day of discharge, up to 30 days per Accident.
+      [Q] On which dates was Kai admitted and discharged?
+      cites=JUNIOR:1,FAMILY:1 steps=4 gate=[]
+      facts: injury=broke his leg; how_it_happened=fell at the playground; nights_in_hospital=2
+      GRADE: pass
+
+scenario completion 12/12 conversations and controls passed

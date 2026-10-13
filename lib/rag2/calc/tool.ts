@@ -28,7 +28,7 @@ const PASSAGE_FIGURE: JsonSchema = { type: "object", description: "A limit print
 
 export const CALCULATE_TOOL: ToolDef = {
   name: "calculate",
-  description: "Work out a benefit for one household member from one document with DearPolicy's claim calculators. calculator: hospital_cash (a daily rate; the policy's own day-count rule, waiting days, minimum stay and day cap are read from the document -- pass admission/discharge as dates or date-times, NEVER a number of nights), bill_reimbursement (the household's bill against printed sub-limits / limits, deductible, co-insurance and co-insurance cap), lump_sum (sum insured x printed percentage, capped; only ever an illustration for a what-if). purpose: question, what_if (only when the household asked 'what if'; inputs marked assumed), claim (the household is pursuing a claim for an event). Returns kind = indicative_estimate (every condition established), conditional_illustration (a what-if), unresolved (the printed figures to cite plus the specific missing information -- ask for it or state it; never estimate) or not_payable (with the wording's reason), with a calc_id to cite as result_id in final_answer.",
+  description: "Work out a benefit for one household member from one document with DearPolicy's claim calculators. calculator: hospital_cash (a daily rate; the policy's own day-count rule, waiting days, minimum stay and day cap are read from the document -- pass admission/discharge as dates or date-times, NEVER a number of nights), bill_reimbursement (the household's bill against printed sub-limits / limits, deductible, co-insurance and co-insurance cap), lump_sum (sum insured x printed percentage [x a printed share for a stated case, via proportion], capped; only ever a conditional illustration -- for a what-if or a reported event; the sum insured must be the one printed for this document's product). purpose: question, what_if (only when the household asked 'what if'; inputs marked assumed), claim (the household is pursuing a claim for an event). Returns kind = indicative_estimate (every condition established), conditional_illustration (a what-if), unresolved (the printed figures to cite plus the specific missing information -- ask for it or state it; never estimate) or not_payable (with the wording's reason), with a calc_id to cite as result_id in final_answer.",
   parameters: { type: "object", properties: {
     calculator: { type: "string", enum: ["hospital_cash", "bill_reimbursement", "lump_sum"] },
     purpose: { type: "string", enum: ["question", "what_if", "claim"] },
@@ -42,6 +42,8 @@ export const CALCULATE_TOOL: ToolDef = {
     passage_limits: { type: "array", items: PASSAGE_FIGURE },
     deductible_value_id: str("A printed deductible (value id)."), co_insurance_value_id: str("A printed co-insurance percentage (value id)."), co_insurance_cap_value_id: str("A printed cap on the co-insurance share (value id)."),
     sum_insured_value_id: str("lump_sum: the sum insured (value id)."), percent_value_id: str("lump_sum: the printed percentage payable (value id)."), cap_value_id: str("lump_sum: a printed cap (value id)."),
+    proportion: { type: "object", description: "lump_sum: a share of the printed percentage that the policy's wording pays in a stated case (e.g. \"For a simple (closed) fracture 50% of the percentage shown is payable\"): the page and the verbatim quote of the calculation's document that prints it, the share, and the case. The result is an illustration for that case only; state the case in the sentence.", properties: { page: { type: "integer", minimum: 1 }, quote: str("Verbatim from the page; it must print the share."), percent: { type: "number", minimum: 0, maximum: 100 }, applies_when: str("The case the wording names, in its words (\"a simple (closed) fracture\").") }, required: ["page", "quote", "percent", "applies_when"], additionalProperties: false },
+    rate_passage: { type: "object", description: "hospital_cash: a daily (or per-period) rate printed in a sentence of the wording rather than a table (\"Accident Hospital Income: S$100 for each complete period of 24 hours ...\"): the page and verbatim quote printing it, the amount and currency. Use instead of rate_value_id.", properties: { page: { type: "integer", minimum: 1 }, quote: str("Verbatim from the page; it must print the amount."), amount: { type: "number", minimum: 0 }, currency: str("ISO code.") }, required: ["page", "quote", "amount", "currency"], additionalProperties: false },
     condition: str("lump_sum: the illness / disability / event the household asked about."),
     assumption_words: str("lump_sum: the household's own words for the what-if or the event they reported, quoted; the result is always a conditional illustration, stated with its condition (\"If ...\")."),
     settled: { type: "array", items: { type: "object", properties: { condition_id: str("A condition id from an earlier calculate result."), status: { type: "string", enum: ["established", "not_applicable"] }, words: str("The household's own words that settle it, quoted.") }, required: ["condition_id", "status", "words"], additionalProperties: false } },
@@ -97,7 +99,9 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
 
   let out: CalcOutcome | Refusal;
   if (a.calculator === "hospital_cash") {
-    const given = value("rate_value_id", "money"); if (typeof given === "string") return fail(given); if (!given) return fail("hospital_cash needs rate_value_id (read the daily rate with select_table_value first)");
+    let given = value("rate_value_id", "money"); if (typeof given === "string") return fail(given);
+    if (!given && a.rate_passage) { const rp = await passageFigure(ctx, policyId, subjectId, { ...(a.rate_passage as Record<string, unknown>), label: benefit, applies: "limit" }); if (typeof rp === "string") return fail(rp.replace(/^passage_limits/, "rate_passage")); given = rp; }
+    if (!given) return fail("hospital_cash needs rate_value_id (read the daily rate with select_table_value first), or rate_passage for a rate printed in a sentence");
     let cap = value("day_cap_value_id", "count"); if (typeof cap === "string") return fail(cap);
     if (!cap) cap = await autoDayCap(ctx, policyId, subjectId, benefit);
     const adm = household("admission", "at"), dis = household("discharge", "at");
@@ -129,9 +133,16 @@ export async function runCalculate(ctx: ToolContext, a: Record<string, unknown>)
     out = billReimbursement({ subjectId, who, benefit, terms, bill, subLimits: subs, limits: lims, deductible: ded as DocValue | null, coInsurance: co as DocValue | null, coInsuranceCap: coCap as DocValue | null, settled, whatIf });
   } else if (a.calculator === "lump_sum") {
     const sum = value("sum_insured_value_id", "money"); if (typeof sum === "string") return fail(sum); if (!sum) return fail("lump_sum needs sum_insured_value_id");
+    // V1.2: a sum insured read from another document of the policy (a group certificate listing several products) must
+    // be the one printed for THIS document's product -- the Group Term Life row is not the Group Personal Accident sum
+    // insured. The product it is printed under must share a distinctive word with the calculation document's product.
+    const linkProblem = sumInsuredLink(sum, doc, ctx.values.get(String(a.sum_insured_value_id))?.selected?.benefit ?? null);
+    if (linkProblem) return fail(linkProblem);
     const pct = value("percent_value_id", "percent"), cap = value("cap_value_id", "money");
     if (typeof pct === "string") return fail(pct); if (typeof cap === "string") return fail(cap);
-    out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null });
+    let share: DocValue | null = null;
+    if (a.proportion) { const v = await passagePercent(ctx, policyId, subjectId, a.proportion as Record<string, unknown>); if (typeof v === "string") return fail(v); share = v; }
+    out = lumpSum({ subjectId, who, benefit, terms, sumInsured: sum, percent: pct, cap, condition: String(a.condition ?? benefit), whatIf, assumptionWords: typeof a.assumption_words === "string" ? a.assumption_words : null, proportion: share, proportionWhen: share ? String((a.proportion as Record<string, unknown>).applies_when ?? "") : null });
   } else return fail(`unknown calculator ${String(a.calculator)}`);
   if ("refused" in out) return fail(out.refused);
   calcOutcomes(ctx).set(out.calcId, { ...out, purpose } as CalcOutcome & { purpose: string });
@@ -201,6 +212,34 @@ async function passageFigure(ctx: ToolContext, policyId: string, subjectId: stri
   const nums = (ev.passage.text.replace(/(\d),(?=\d{3}\b)/g, "$1").match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
   if (!nums.some((n) => Math.abs(n - amount) < 1e-9)) return "passage_limits: the amount is not printed in the quote";
   return { operand: { kind: "table_value", benefit: String(p.label ?? "limit"), valueKind: "money", cents: Math.round(amount * 100), currency, evidence: ev } };
+}
+
+const GENERIC_PRODUCT_WORDS = new Set(["group", "plan", "policy", "policies", "scheme", "cover", "coverage", "insurance", "insured", "benefit", "benefits", "sum", "assured", "amount", "schedule", "certificate", "wording", "the", "and", "for", "with", "public", "service", "employee", "basic", "plus", "per"]);
+const productWords = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !GENERIC_PRODUCT_WORDS.has(w));
+function sumInsuredLink(sum: DocValue, doc: DocRow, printedUnder: string | null): string | null {
+  if (sum.operand.evidence.policyId === doc.id || !printedUnder) return null;
+  const under = productWords(printedUnder);
+  if (!under.length) return null;
+  const own = new Set(productWords(`${doc.productName ?? ""} ${doc.policyType ?? ""}`));
+  if (under.some((w) => own.has(w) || own.has(w.replace(/s$/, "")))) return null;
+  return `sum_insured_value_id: that amount is printed under “${printedUnder}”, not under this document's product (${doc.productName ?? "the calculation's document"}): read the sum insured printed for this product (select_table_value with the product's name as the benefit)`;
+}
+
+/** V1.2: a share printed in a sentence of the calculation's document (lump_sum proportion): located verbatim on its
+ * stored page, the percentage printed in the quote. */
+async function passagePercent(ctx: ToolContext, policyId: string, subjectId: string, p: Record<string, unknown>): Promise<DocValue | string> {
+  const pages = await pageMap(ctx.accountId, policyId);
+  const page = Number(p.page), text = pages.get(page);
+  if (!text) return `proportion: page ${page} is not a stored page of that document`;
+  const doc = (await loadDocs(ctx.accountId, [policyId]))[0];
+  const ev = evidenceFor({ policyId, documentHash: doc?.fileHash ?? null, page, pageText: text, passage: String(p.quote ?? ""), subjectId });
+  if (!ev) return "proportion: the quote is not on that page";
+  const pct = Number(p.percent);
+  const printed = (ev.passage.text.match(/(\d+(?:\.\d+)?)\s*%/g) ?? []).map((m) => Number(m.replace(/[%\s]/g, "")));
+  if (!printed.some((n) => Math.abs(n - pct) < 1e-9)) return "proportion: that percentage is not printed in the quote";
+  const when = String(p.applies_when ?? "").trim();
+  if (!when) return "proportion: applies_when (the case the wording names) is required";
+  return { operand: { kind: "table_value", benefit: when, valueKind: "percent", cents: null, ppm: Math.round(pct * 10_000), count: null, currency: null, period: null, evidence: ev } as TableValueOperand };
 }
 
 /** A printed "Maximum days ..." row of the same document for this person's column, when the table prints one that

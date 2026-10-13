@@ -23,7 +23,7 @@ import { compoundQuestion, relevantEvidence, statedInMessage } from "./questions
 import { internalIdsIn } from "./statements";
 import { LoopUsageMeter, type MeterStop } from "./usage-meter";
 import { ASK_USER, FINAL_ANSWER, LOOP_ACTIONS, NOTE_FACTS, TERMINAL } from "./actions";
-import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, reportedFactFollowUp, sayBack, type ComputeCall, type Composed } from "./compose";
+import { composeFinal, DATE_ABSENCE_REASON, DROPPED_NOTE, keepLimitationWithFigure, evidenceIdOf, reportedFactFollowUp, REPORTED_MEDICAL_NOTE, REPORTED_NOTE, sayBack, type ComputeCall, type Composed } from "./compose";
 import { loopToolEnv } from "./flag";
 import { LOOP_PROMPT_VERSION, stateNote, SYSTEM_PROMPT } from "./prompt";
 import type { EstablishedStatement, EvidenceEntry, LoopClaim, LoopMessage, LoopModel, LoopPending, LoopToolSpec, RagLoopState, ToolCall, TraceToolCall, TraceTurn } from "./types";
@@ -78,6 +78,15 @@ export const LIMIT_TEXT: Record<MeterStop["kind"], string> = {
 };
 /** Agent F: the household says the person was wrong ("sorry, it was Chloe, not Ethan", "I mixed them up"). */
 const PERSON_CORRECTION = { test: (m: string) => /\b(?:mixed (?:them|it|those|the two) up|mix-?up|i meant|i mean\b|meant to say|not (?:him|her)\b|wrong (?:child|person|kid|son|daughter)|correction|actually it was|it was (?:\w+ ){0,3}not\b|rather than)\b/i.test(m) || /\bnot [A-Z][a-z]+\b/.test(m) };
+
+/** V1.2: the household corrects a recorded fact -- they say so, or a count / amount / date / yes-no changes. A further
+ * free-text detail with no such cue ("Transverse fracture." after "broke his leg") is an added detail. */
+const CORRECTION_CUE = /\b(?:actually|sorry|apologies|i meant|i mean\b|meant to say|correction|correct that|my mistake|mistaken|mistake|wrong|instead|rather than|not (?:his|her|their|the|a|an|my|our|that|this|it|in|on)\b|it (?:was|is)n['’]t|wasn['’]t|isn['’]t)|^\s*no\b[,.!]?/i;
+const SCALAR_FACT = (v: string) => /^-?\d+(?:[.,]\d+)?(?:\s+[A-Z]{3})?$/.test(v.trim()) || /^(?:yes|no|true|false|y|n)$/i.test(v.trim()) || /^\d{4}-\d{2}-\d{2}/.test(v.trim());
+export function isCorrection(oldValue: string, newValue: string, message: string, words: string): boolean {
+  if (CORRECTION_CUE.test(message) || CORRECTION_CUE.test(words)) return true;
+  return SCALAR_FACT(oldValue) || SCALAR_FACT(newValue);
+}
 
 export function loopToolSpecs(): LoopToolSpec[] {
   return [...RAG_TOOLS.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })), ...LOOP_ACTIONS];
@@ -362,6 +371,36 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   if (inline) { const subject = inline.pending.subjectId ?? state.claim?.subjectId ?? state.subjectId; if (subject) recordedNow.push({ key: inline.pending.factKey, words: inline.answer, subject }); }
   /** Round 7: the one bounded repair of a final_answer that left the household's answer with nothing citable. */
   let finalRepaired = false;
+  /** V1.2: the turn's one completion nudge (a new fact left unaddressed) has been given. */
+  let completionNudged = false;
+  /** V1.2: what a claim turn's reply leaves out of what the household just told it -- a hospital stay or a bill they
+   * reported that no sentence addresses, and a percentage of the sum insured stated (or just asked about) without the
+   * person's own sum insured. Lines for the turn's one repair; empty when nothing is missing. */
+  const completionLines = (texts: string[], question: string | null, subject: string | null | undefined, extraEvidence: string[] = []): string[] => {
+    if (!subject) return [];
+    const now = recordedNow.filter((r) => r.subject === subject);
+    if (!now.length) return [];
+    const said = [...texts.filter((t) => !/^\s*you (?:told me|said|mentioned)\b/i.test(t)), question ?? ""].join(" ");
+    const lines: string[] = [];
+    const ADDRESSES = { stay: /\b(?:hospital\w*|warded|ward|in-?patient|confine\w*|admi\w*|discharg\w*|nights?|stay)\b/i, bill: /\b(?:bill\w*|expenses?|reimburs\w*|costs?|charges?|invoice)\b/i };
+    // With this turn's facts, the ones reported earlier in this claim that no reply has addressed yet.
+    const claimFacts = state.claim?.subjectId === subject ? state.claim.facts : state.otherClaims?.[subject]?.facts ?? {};
+    const earlier = Object.entries(claimFacts).filter(([k]) => !now.some((r) => r.key === k)).map(([key, f]) => ({ key, words: f.words, subject }))
+      .filter((f) => { const c = factConcept(f.key).concept; const re = c === "bill" ? ADDRESSES.bill : ADDRESSES.stay; return (c === "bill" || c === "stay_length" || c === "admission" || c === "discharge" || c === "hospital") && !state.history.some((h) => re.test(h.assistant.replace(/You told me[^.]*\./g, ""))); });
+    const facts = [...now, ...earlier];
+    for (const f of facts) {
+      const c = factConcept(f.key).concept;
+      const kind = c === "stay_length" || c === "admission" || c === "discharge" || c === "hospital" ? "stay" : c === "bill" ? "bill" : null;
+      if (!kind || ADDRESSES[kind].test(said)) continue;
+      lines.push(`the household also told you \"${f.words}\" (${f.key}) and the reply does not address it: look up the benefit it bears on (search_passages${kind === "stay" ? ", e.g. hospital income / hospital cash" : ", e.g. medical expenses"}) and state its printed rate or limit and its rule, cited, or say plainly what is still needed (${kind === "stay" ? "e.g. the admission and discharge dates and times; nights are not payable days" : "e.g. the bill amount"})`);
+    }
+    const ctxText = [said, ...extraEvidence.map((id) => state.evidence[id]?.passage.text ?? "")].join(" ");
+    if (/%\s*of (?:the )?sum (?:insured|assured)|percentage shown|\bof the sum (?:insured|assured)\b/i.test(ctxText) && !moneyFiguresIn(said).length) {
+      const who = input.people.find((p) => p.id === subject)?.name ?? "the person";
+      lines.push(`the benefit is a percentage of the Sum Insured but no amount is given: read ${who}'s own sum insured from their certificate or schedule (policies_for, then select_table_value; say the date it is printed as of) and give calculate lump_sum illustrations for the rows that could apply (with proportion for a share the wording prints), each with its condition -- never approved, never current cover`);
+    }
+    return lines;
+  };
   /** Round 7: the household answered the claim question pending from the last turn (facts recorded for its subject). */
   const answeredRequest = (): { pending: Extract<LoopPending, { kind: "fact" }>; facts: { key: string; words: string }[]; subject: string } | null => {
     if (pendingBefore?.kind !== "fact") return null;
@@ -375,7 +414,11 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
     const usable = (state.established ?? []).filter((e) => (e.subjectId ?? subject) === subject && e.evidenceIds.every((id) => state.evidence[id] && !stale.has(id)) && e.valueIds.every((id) => ctx.values.has(id)));
     const because = new Set(pending.evidenceIds ?? []);
     const related = usable.filter((e) => e.evidenceIds.some((id) => because.has(id)));
-    return (related.length ? related : usable.filter((e) => e.turn === pending.turn)).slice(-2);
+    // V1.2: with them, the subject's other printed figures already stated (e.g. the certificate's sum insured that a
+    // schedule percentage is of), so a re-explanation connects the clause to its amount instead of repeating it.
+    const figures = usable.filter((e) => e.valueIds.length && !related.includes(e));
+    const chosen = related.length ? [...figures.slice(-2), ...related.slice(-2)] : usable.filter((e) => e.turn === pending.turn).slice(-3);
+    return chosen.slice(-4);
   };
   const cited = (c: Composed) => c.sentences.some((s) => s.evidenceIds.length > 0);
   /** Round 7: the turn a requested fact was given in moves the claim forward: their words said back as theirs, the
@@ -391,7 +434,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!finalRepaired) {
         finalRepaired = true;
         const why = composed.dropped.length ? ` (not shown: ${composed.dropped.map((d) => `"${d.sentence.slice(0, 80)}" -- ${d.reason}`).join("; ")})` : "";
-        return { composed, repair: `the household answered your question ("${ans.pending.question}")${why}. Do not only say back what they told you. Answer with final_answer: (1) what they told you, as "You told me ..." -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: ${est.map((e) => `"${e.text}" evidence_ids=[${e.evidenceIds.join(", ")}] value_ids=[${e.valueIds.join(", ")}]${e.benefit ? ` benefit="${e.benefit}"` : ""}`).join("; ")}; (3) what still remains (the insurer checks the documents it asks for and decides the claim); (4) the next step.` };
+        const more = completionLines(composed.sentences.map((x) => x.text), null, ans.subject, ans.pending.evidenceIds ?? []);
+        if (more.length) completionNudged = true;
+        return { composed, repair: `the household answered your question (\"${ans.pending.question}\")${why}. Do not only say back what they told you. Answer with final_answer (or ask_user, when one detail the household can give still changes the result): (1) what they told you, as \"You told me ...\" -- their report, never reviewed medical evidence, an approval or a payment; (2) the benefit explained again with its citation, as established earlier in this conversation: ${est.map((e) => `\"${e.text}\" evidence_ids=[${e.evidenceIds.join(", ")}] value_ids=[${e.valueIds.join(", ")}]${e.benefit ? ` benefit=\"${e.benefit}\"` : ""}`).join("; ")}; (3) what their answer changes and what is still open${more.length ? `; also: ${more.join("; ")}` : ""}. Keep any remark about the insurer's review or claim paperwork to one short line, and only if it was not said earlier.` };
       }
       // The model repeated it: the answer is composed from what the conversation already established (and checked by
       // the same composer and save-time gate as any sentence the model writes).
@@ -401,7 +446,9 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const again = composeFinal({ sentences: [...echoes, ...sentencesIn], nextSteps, subjectId }, composeCtx());
       if (cited(again)) out = again;
     }
-    if (cited(out)) {
+    // V1.2: the note that their report is not reviewed evidence, and the paperwork step, are said once per conversation.
+    const toldBefore = (t: string) => state.history.some((h) => h.assistant.includes(t));
+    if (cited(out) && !toldBefore(REPORTED_NOTE) && !toldBefore(REPORTED_MEDICAL_NOTE)) {
       const f = reportedFactFollowUp([...out.sentences.flatMap((s) => s.evidenceIds), ...(ans.pending.evidenceIds ?? [])].map((id) => state.evidence[id]?.passage.text ?? "").concat(ans.pending.why));
       if (![...out.sentences.map((s) => s.text), ...out.notes].some((t) => /\binsurer\b/i.test(t))) out.notes = [...out.notes, f.note];
       if (!out.nextSteps.length) out.nextSteps = [f.step];
@@ -410,7 +457,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   /** Composer drop reasons that are about wording only (the figure itself was not refused). */
   const FORM_DROP = /^shows an internal id|^calls (?:a calculated benefit|an amount) a payout|^an illustration must state its what-if/;
-  const UNPRINTED_DROP = /is printed in none of the evidence the sentence cites$/;
+  const UNPRINTED_DROP = /is printed in none of the evidence the sentence cites$|does not name the benefit as the line printing it words it/;
   /** Round 9: a final answer that leaves the household at a dead end -- it says the answer depends on something not known
    * yet, or the calculation it ran still needs a household fact -- without asking for it. Deterministic (no extra model
    * call); folded into the turn's ONE bounded repair, so the model may restate it as ask_user with the same statements. */
@@ -422,6 +469,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
   };
   const usefulnessLines = (c: Composed): string[] => {
     const subject = c.subjectId ?? state.subjectId;
+    if (!completionNudged) { const more = completionLines([...c.sentences.map((s) => s.text), ...c.dropped.map((d) => d.sentence)], null, subject, pendingBefore?.kind === "fact" ? pendingBefore.evidenceIds ?? [] : []); if (more.length) { completionNudged = true; return more.map((m) => m.charAt(0).toUpperCase() + m.slice(1) + "."); } }
     const need = stillMissing(subject);
     if (need.length) return [`calculate still needs ${need[0].key} from the household (${need[0].why}), and the answer does not ask for it: end the turn with ask_user kind=fact for exactly that (fact_key ${need[0].key}${need[0].evidenceIds.length ? `, citing ${[...new Set(need[0].evidenceIds)].slice(0, 3).join(", ")}` : ""}), giving what is already established as statements.`];
     const open = [...c.sentences.map((s) => s.text), ...c.dropped.map((d) => d.sentence)].find((t) => DEPENDS.test(t));
@@ -516,7 +564,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       if (!subject || !householdIds.has(subject)) return { result: { ok: false, error: "subject_id must be a household member (resolve the person first)" } };
       if (unsettled.has(subject)) return { result: { ok: false, error: "who is meant is not settled yet: ask which person the household means before recording facts about one of them" } };
       const claim = claimFor(subject);
-      const recorded: string[] = [], refused: { key: string; error: string }[] = [], unconfirmed: string[] = [], corrected: { key: string; from: unknown; to: unknown; withdrawn: string[] }[] = [], asSaid: string[] = [];
+      const recorded: string[] = [], refused: { key: string; error: string }[] = [], unconfirmed: string[] = [], corrected: { key: string; from: unknown; to: unknown; withdrawn: string[] }[] = [], asSaid: string[] = [], added: { key: string; detail_of: string }[] = [];
       for (const f of a.facts as { key: string; value: string; words?: string; currency?: string; evidence_ids?: string[] }[]) {
         const key = normalizeKey(f.key);
         if (!key || f.value == null) continue;
@@ -546,6 +594,22 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
         // claim_amount / amount_claimed) with another value is a correction of it, not a second fact.
         const oldKey = claim.facts[key] ? key : sameFactKey(claim, key, value);
         const old = oldKey ? claim.facts[oldKey] : undefined;
+        // V1.2: a further detail about something already recorded ("transverse fracture" after "broke his leg") is
+        // new information, not a correction: it is kept beside the first report under its own key, and nothing worked
+        // out from that report is withdrawn. A value is corrected only when the household says so ("actually",
+        // "sorry", "not ...", "I meant") or when a count, amount, date or yes/no changes.
+        if (old && String(old.value) !== value && !isCorrection(String(old.value), value, input.message, String(f.words ?? ""))) {
+          let detailKey = `${key}_detail`;
+          for (let n = 2; claim.facts[detailKey] && String(claim.facts[detailKey].value) !== value; n++) detailKey = `${key}_detail_${n}`;
+          if (!claim.facts[detailKey]) claim.facts[detailKey] = entry;
+          recorded.push(detailKey); added.push({ key: detailKey, detail_of: oldKey ?? key });
+          recordedNow.push({ key: detailKey, words: entry.words, subject });
+          if (chk.basis === "paraphrased") unconfirmed.push(detailKey);
+          const answersDetail = (p: LoopPending | null | undefined) => p?.kind === "fact" && (p.subjectId ?? subject) === subject && (p.factKey === key || p.factKey === detailKey);
+          if (answersDetail(state.pending)) state.pending = null;
+          if (answersDetail(state.parkedPending)) state.parkedPending = null;
+          continue;
+        }
         if (old && String(old.value) !== value) {
           const hit = (ks: string[]) => ks.includes(key) || (!!oldKey && ks.includes(oldKey));
           const withdrawn = claim.derived.filter((d) => hit(d.factKeys)).map((d) => d.sentence);
@@ -567,7 +631,7 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       }
       corrections.push(...corrected);
       if (!recorded.length && refused.length) return { result: { ok: false, error: refused.map((r) => `${r.key}: ${r.error}`).join("; "), refused } };
-      return { result: { ok: true, recorded, ...(unconfirmed.length ? { unconfirmed, note: "unconfirmed facts are the household's report in your words, not confirmed values: they cannot be used in a calculation; ask to confirm if one matters" } : {}), ...(refused.length ? { refused } : {}), ...(asSaid.length ? { recorded_as_said: asSaid } : {}), corrected, facts: claim.facts } };
+      return { result: { ok: true, recorded, ...(unconfirmed.length ? { unconfirmed, note: "unconfirmed facts are the household's report in your words, not confirmed values: they cannot be used in a calculation; ask to confirm if one matters" } : {}), ...(refused.length ? { refused } : {}), ...(asSaid.length ? { recorded_as_said: asSaid } : {}), ...(added.length ? { added_details: added, note_added: "each added detail is new information kept beside the earlier report (not a correction): say what it changes, if anything" } : {}), corrected, facts: claim.facts } };
     }
     if (call.name === "ask_user") {
       const question = String(a.question ?? "").trim();
@@ -637,6 +701,10 @@ export async function runLoop(input: LoopInput): Promise<LoopOutput> {
       const why = because.map((id) => `${whyLine(state.evidence[id], question + " " + key + (CAUSE_KEYS.has(key) ? " accident accidental" : ""))} (page ${state.evidence[id].passage.onPage})`).join("; ");
       trace.evidenceChosen.push(...because.filter((id) => !trace.evidenceChosen.includes(id)));
       askBecause = because;
+      if (!completionNudged && !CAUSE_KEYS.has(key)) {
+        const more = completionLines((composed?.sentences ?? []).map((x) => x.text), question, subject);
+        if (more.length) { completionNudged = true; return { result: { ok: false, error: `before asking: ${more.join("; ")}. Then call ask_user again: those statements first, then the one question that most changes the result.` } }; }
+      }
       const pending: LoopPending = { kind: "fact", question, factKey: key, subjectId: subject ?? null, why, evidenceIds: because, ...(Array.isArray(a.options) && a.options.length ? { options: (a.options as string[]).map(String) } : {}), turn: state.turn };
       return { result: { ok: true }, terminal: { kind: "ask", pending, preface: null, composed } };
     }

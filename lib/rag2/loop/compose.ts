@@ -89,10 +89,21 @@ export const MISSING_FACT_NOTE = "missing_fact";
 /** True when two texts share a content word (stemmed). */
 const sharesWords = (a: string, b: string) => { const x = new Set(contentWords(a)); return contentWords(b).some((w) => x.has(w)); };
 /** A clause's own label for a figure: the model's label only when the line that prints the figure carries it. */
-function passageLabel(passage: string, value: number, wanted: string): string {
+function passageLabel(passage: string, value: number, wanted: string, sentence = ""): string {
   const want = contentWords(wanted);
-  if (!want.length) return "";
   const lines = withoutInstructions(passage).split(/\n+/).filter((l) => numbersIn(l).some((n) => same(n, value)));
+  // V1.2: a clause that prints its benefit's name before the figure ("Accident Hospital Income: S$100 for each ...")
+  // names the figure itself: when the sentence names that benefit, the line's own label is the benefit -- never the
+  // model's -- and a sentence that names another benefit is not bound.
+  if (!want.length) {
+    const said = new Set(contentWords(sentence));
+    for (const l of lines) {
+      const label = /^\s*([A-Za-z][A-Za-z ()'’/-]{2,60}?)\s*:\s/.exec(l)?.[1]?.trim() ?? "";
+      const words = contentWords(label);
+      if (words.length && words.length <= 8 && words.every((w) => said.has(w))) return label;
+    }
+    return "";
+  }
   return lines.some((l) => { const have = new Set(contentWords(l)); return want.every((w) => have.has(w)); }) ? wanted.trim() : "";
 }
 
@@ -500,7 +511,7 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // Agent F (D1): the benefit a passage figure is bound to is the passage's OWN label -- its table row, the
         // label a tool gave it, or (for a clause) the model's label only when the line printing the figure says it.
         // A line that is an instruction inside the document is never evidence for a figure.
-        const benefit = (ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "");
+        const benefit = (ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "", text);
         const policyText = withoutInstructions(evidenceTextOf(ref));
         const inCell = !!ref.table?.cell && numbersIn(ref.table.cell.text).some((n) => same(n, f.value));
         // A figure printed elsewhere in the row than the selected cell is bound to the row, not to that cell's column.
@@ -514,7 +525,9 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
       if (b) { bindings.push({ ...b, sentence, value: f.value, currency: f.currency }); return; }
       // The household's own figure, said back to them: the gate decides (attribution, never as cover or a total).
       if (moneyFiguresIn(ctx.userText).some((u) => same(u.value, f.value) && u.currency === f.currency)) return;
-      failed = `${f.raw} is printed in none of the evidence the sentence cites`;
+      // V1.2: say precisely why: printed in a cited passage but not under the benefit the sentence names, or not printed.
+      const printedThere = refsForFigure.some((ref) => numbersIn(withoutInstructions(evidenceTextOf(ref))).some((n) => same(n, f.value)));
+      failed = printedThere ? `${f.raw} is printed in the cited passage, but the sentence does not name the benefit as the line printing it words it (give that benefit's name in the sentence and in benefit)` : `${f.raw} is printed in none of the evidence the sentence cites`;
     });
     if (failed) { drop(text, failed); continue; }
     out.figureBindings.push(...bindings); out.computations.push(...records);
@@ -577,7 +590,10 @@ export function attributeHouseholdFigures(text: string, c: Pick<CalcOutcome, "re
 /** Round 8 (F1): the conditions a conditional illustration is stated with (each only when not already said): the rate
  * as amended by an endorsement, the assumption about earlier use of a capped allowance the record made, and the cause
  * limit its own document prints (quoted, cited). Figure-free, so nothing is added the save-time gate would check. */
-export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<Ctx, "state" | "stale" | "policyNames">): { text: string; evidenceIds: string[] } {
+/** V1.2: what is said once per composed answer (an illustration's cause limit). */
+const ONCE = new WeakMap<Composed, { cause?: boolean }>();
+const onceFor = (out: Composed) => { let o = ONCE.get(out); if (!o) { o = {}; ONCE.set(out, o); } return o; };
+export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<Ctx, "state" | "stale" | "policyNames">, once: { cause?: boolean } = {}): { text: string; evidenceIds: string[] } {
   const rec = c.record;
   if (!rec) return { text, evidenceIds: [] };
   const plain = (x: string) => x.toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, " ");
@@ -588,9 +604,12 @@ export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<C
   const names = [...(ctx.policyNames?.values() ?? []), ...Object.values(ctx.state.docNames ?? {}), rec.benefit].filter(Boolean).sort((a, b) => b.length - a.length);
   let bare = text;
   for (const n of names) bare = bare.split(n).join(" ");
-  if (!/\baccident/i.test(bare)) {
+  // V1.2: the cause limit is said once per answer, with its first illustration -- not repeated on every one.
+  if (!/\baccident/i.test(bare) && !once.cause) {
     const own = Object.values(ctx.state.evidence).filter((e) => e.policyId === rec.policyId && !ctx.stale?.has(e.id) && !e.table);
-    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length);
+    // V1.2: a schedule row ("Death due to Accident     100%": laid out in columns, or ending in its percentage) is a
+    // benefit, not a clause limiting cover to accidents.
+    const linesOf = (e: (typeof own)[number]) => withoutInstructions(e.passage.text).split(/(?<=[.;])\s+|\n+/).filter((l) => !/\S {3,}\S|\t/.test(l.trim())).map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l.length >= 20 && l.length <= 200 && /\baccident/i.test(l) && !moneyFiguresIn(l).length && !/\d+(?:\.\d+)?\s*%\s*$/.test(l));
     // The clause that limits cover to accidents ("caused solely by an accident"), else one that says accident only.
     let pick: { e: (typeof own)[number]; line: string } | null = null;
     for (const test of [(l: string) => CAUSE_LIMIT.test(l), (l: string) => /\bonly\b/i.test(l)]) {
@@ -598,8 +617,9 @@ export function illustrationConditions(text: string, c: CalcOutcome, ctx: Pick<C
       if (pick) break;
     }
     if (pick) {
-      add.push(`and only for a stay the insurer accepts as caused by an accident (the policy says “${pick.line.replace(/[;:,.\s]+$/, "")}”)`);
+      add.push(`and only for ${rec.calculator === "hospital_cash" ? "a stay" : "an injury"} the insurer accepts as caused by an accident (the policy says “${pick.line.replace(/[;:,.\s]+$/, "")}”)`);
       ids.push(evidenceIdOf(ctx.state, pick.e));
+      once.cause = true;
     }
   }
   if (!add.length) return { text, evidenceIds: [] };
@@ -645,7 +665,7 @@ function composeCalcSentence(text0: string, c: CalcOutcome & { purpose?: string 
     // Round 8 (F1): a what-if says what else it assumes and what it turns on -- the rate as amended, earlier use of a
     // capped allowance, and the document's cause limit -- so it is never read as the amount for the actual stay.
     let extraIds: string[] = [];
-    if (c.kind === "conditional_illustration") { const w = illustrationConditions(text, c, ctx); text = w.text; extraIds = w.evidenceIds; }
+    if (c.kind === "conditional_illustration") { const w = illustrationConditions(text, c, ctx, onceFor(out)); text = w.text; extraIds = w.evidenceIds; }
     const fig = moneyFiguresIn(text).find((f) => same(f.value, c.amount!) && f.currency === c.currency);
     if (!fig) { drop(text, "does not state the calculation’s result"); return; }
     out.calculations.push({ ...c.record, sentence: partOf(fig.raw) });

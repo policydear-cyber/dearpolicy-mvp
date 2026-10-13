@@ -178,6 +178,7 @@
     "rag2:release-test": "node --import tsx scripts/rag2-release-acceptance.ts",
     "rag2:release-holdout": "node --import tsx scripts/rag2-release-holdout.ts",
     "rag2:v11-test": "node --import tsx scripts/rag2-v11-acceptance.ts",
+    "rag2:scenario-test": "node --import tsx scripts/rag2-scenario-regressions.ts",
     "ingest:live": "node --import tsx scripts/ingest-live/run.ts",
     "ingest:live-check": "node --import tsx scripts/ingest-live/check.ts",
     "ingest:live-checker-test": "node --import tsx scripts/ingest-live/check-regressions.ts",
