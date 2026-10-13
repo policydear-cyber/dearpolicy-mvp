@@ -1,4 +1,4 @@
-# PR #47 actual-model reproduction: status (2026-10-13 23:00 SGT)
+# PR #47 actual-model reproduction: status (2026-10-13 23:00 SGT) -- SUPERSEDED: the run was made at 23:03, see LIVE-RESULT.md
 
 **Result: NOT RUN. Real-model behaviour is unverified.** No model call was made, and the ledger is unchanged.
 

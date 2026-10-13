@@ -185,6 +185,19 @@
       "calls": 26,
       "refused": 0,
       "failed": 0
+    },
+    {
+      "run_id": "s47-live-1",
+      "tested_code_sha": "eaf88a7426d3aee2c66234a02f07e620c5ef54d8",
+      "request_sha": "b13e7c5dab4e5947b33ee5862b281cc765bec0b4",
+      "at": "2026-10-13T15:05:47.387Z",
+      "preflight": false,
+      "run_cap_usd": 0.05,
+      "spent_usd": 0.011071,
+      "reserved_unsettled_usd": 0,
+      "calls": 29,
+      "refused": 0,
+      "failed": 0
     }
   ]
 }
