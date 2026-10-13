@@ -1,0 +1,180 @@
+{
+  "note": "V1.1 small live sample (PR #46): machine checks copied unchanged from EXPECTED.json (Q3, Q4, Q6, Q8) and EXPECTED-q2.json (Q2P). Nothing new authored.",
+  "derived_from": "scripts/ingest-live/sealed/EXPECTED.source.json",
+  "documents": [
+    {
+      "file": "hx-text.pdf",
+      "linked_people": [
+        "Simon Alastair Hartwell",
+        "Leonie Brigitte Hartwell",
+        "Felix Oran Hartwell",
+        "Isla Maren Hartwell"
+      ],
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "MHA-HC-2025-0748213",
+            "S$150,000",
+            "S$40,000",
+            "S$120",
+            "S$80",
+            "S$600",
+            "S$1,500"
+          ]
+        },
+        {
+          "page": 2,
+          "must_contain": [
+            "24 consecutive hours",
+            "Accident-only cover"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "hx-endorsement.pdf",
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "ME-26-0412",
+            "MHA-HC-2025-0748213",
+            "S$110",
+            "01 July 2026"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "hx-scanned.pdf",
+      "linked_people": [
+        "Isla Maren Hartwell"
+      ],
+      "scanned": true,
+      "pages": [
+        {
+          "page": 1,
+          "must_contain": [
+            "KBJ-26-00391",
+            "S$150",
+            "S$500"
+          ]
+        }
+      ]
+    }
+  ],
+  "superseded": [
+    {
+      "old": "S$80 per day",
+      "new": "S$110 per day",
+      "label": "SafeStay child hospital daily allowance (Item B, Child)",
+      "by": "hx-endorsement.pdf",
+      "effective": "01 July 2026",
+      "source_facts": [
+        "F10",
+        "F11",
+        "F12"
+      ]
+    }
+  ],
+  "turns": {
+    "Q2P": {
+      "must_include": [
+        "S$40,000",
+        "S$150,000"
+      ],
+      "citations": [
+        {
+          "file": "hx-text.pdf",
+          "page": 1
+        }
+      ],
+      "ask_follow_up": false,
+      "figures_also": [
+        "S$20,000"
+      ],
+      "forbidden_sentences": [
+        {
+          "pattern": "S\\$20,000",
+          "unless": "JuniorShield|Kestrel",
+          "why": "the JuniorShield child accidental death benefit presented as the Meridian figure without naming the other policy (source Q2 forbidden 3)"
+        },
+        {
+          "pattern": "(?:Isla|her|she)(?:['’]s)?\\s+(?:[\\w’'-]+\\s+){0,6}(?:is|are|of|at|lists|gets|pays|would be)\\s+S\\$150,000",
+          "unless": "\\b(?:not|no|never|isn['’]t|unlike)\\b",
+          "why": "the Adult amount stated as Isla's (source Q2 forbidden 1: S$150,000 stated for Isla)"
+        },
+        {
+          "pattern": "(?:\\byou|\\byour|\\byours|Simon)(?:['’]s)?\\s+(?:[\\w’'-]+\\s+){0,6}(?:is|are|of|at|lists|gets|pays|would be)\\s+S\\$40,000",
+          "unless": "\\b(?:not|no|never|isn['’]t|unlike)\\b",
+          "why": "the Child amount stated as the adult's (source Q2 forbidden 2: S$40,000 stated for Simon)"
+        }
+      ]
+    },
+    "Q3": {
+      "person": "Felix Oran Hartwell",
+      "ask_follow_up": true,
+      "must_not_include": [
+        "S$2,100",
+        "S$2,500"
+      ]
+    },
+    "Q4": {
+      "person": "Felix Oran Hartwell",
+      "must_include": [
+        "S$600"
+      ],
+      "must_not_include": [
+        "S$2,100",
+        "S$2,600"
+      ],
+      "citations": [
+        {
+          "file": "hx-text.pdf",
+          "page": 1
+        }
+      ],
+      "not_reasked": true
+    },
+    "Q6": {
+      "must_include": [
+        "S$110"
+      ],
+      "must_include_any": [
+        [
+          "01 July 2026",
+          "1 July 2026",
+          "1 Jul 2026",
+          "01 Jul 2026"
+        ]
+      ],
+      "version": "hx-endorsement.pdf",
+      "citations": [
+        {
+          "file": "hx-endorsement.pdf",
+          "page": 1
+        }
+      ]
+    },
+    "Q8": {
+      "person": "Isla Maren Hartwell",
+      "must_include_any": [
+        [
+          "4th",
+          "fourth"
+        ]
+      ],
+      "must_not_include": [
+        "S$300",
+        "S$450"
+      ],
+      "citations": [
+        {
+          "file": "hx-scanned.pdf",
+          "page": 1
+        }
+      ]
+    }
+  }
+}
