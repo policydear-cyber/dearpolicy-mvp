@@ -402,6 +402,23 @@ async function main() {
     assert.ok(lit("S$18,000").test(shown) && !/S\$30,000|S\$15,000/.test(shown), "the illustration does not rest on the Group Personal Accident row: " + shown);
   });
 
+  await check("CONTROL fallback after the one repair: only the calculation the reply tried to state is rendered from its record", async () => {
+    const calcs = (v: ScriptView) => lumpCalls(v, D, LEG, "Desmond broke his leg", false);
+    const lowerId = (v: ScriptView) => v.turn.find((o) => o.name === "calculate" && o.ok && /tibia/.test(String(o.args.benefit)))!.result.data.calc_id;
+    const noIf = (v: ScriptView) => [call("final_answer", { subject_id: D, sentences: [S("Desmond's certificate lists a Group Personal Accident sum insured of S$300,000 as of 1 July 2025.", { value_ids: ids(vid(v, "CERT", /Personal Accident/, D)), subject_id: D }), S("On those facts the conditional illustration for the lower leg is S$18,000.", { result_id: lowerId(v), subject_id: D })] })];
+    const t = await run([
+      { steps: [() => [call("resolve_person", { mention: "Desmond" })], () => [call("note_facts", { subject_id: D, facts: [{ key: "injury", value: "broke his leg", words: "Desmond broke his leg" }] }), ...paLookups(D, LEG)], calcs, noIf, noIf] },
+      { steps: [() => [call("note_facts", { subject_id: D, facts: [{ key: "how_it_happened", value: "fell down the stairs", words: "He fell down the stairs" }] }), ...paLookups(D, LEG)], calcs, (v) => [call("final_answer", { subject_id: D, sentences: [S("On the documents, the fracture rows differ by bone.", { evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/)), subject_id: D })] })], (v) => [call("final_answer", { subject_id: D, sentences: [S("On the documents, the fracture rows differ by bone.", { evidence_ids: ids(hit(v, /Fracture of thigh bone|% of Sum Insured/)), subject_id: D })] })]] },
+    ], ["Desmond broke his leg.", "He fell down the stairs."]);
+    const a1 = t[0].answer as any, v1 = visible(t[0].answer);
+    assert.match(v1, /\bIf\b[^.]*S\$18,000(?![\d,]*\d)/, "the attempted lower-leg illustration was not rendered: " + v1);
+    assert.ok(!/S\$30,000|S\$12,000/.test(v1), "an exploratory femur / kneecap illustration was resurrected: " + v1);
+    assert.deepEqual((a1.calculations ?? []).map((r: any) => r.result.value), [18000]);
+    assert.ok(t[0].trace?.incomplete?.some((x: string) => /stated from its own record/.test(x)), "the restored turn is not marked in its trace");
+    // Several resolved calculations and none attempted: nothing is chosen for the household.
+    assert.ok(!((t[1].answer as any).calculations ?? []).length, "an unattempted calculation was chosen among several: " + visible(t[1].answer));
+  });
+
   await check("CONTROL hospital days: two nights under a complete-24-hours rule is not two payable days", () => {
     const p1 = played.get("P1")!;
     const r = (p1.out[2]?.answer as any)?.calculations?.find((x: any) => /Hospital Income/i.test(x.benefit));

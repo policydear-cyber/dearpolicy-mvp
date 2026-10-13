@@ -99,3 +99,7 @@ All of this is in turn 5's tool trace (`run.json` → `conversations[0].loaded.t
    - **Fix b, compose.ts.** When a cited passage is a person row under a product heading (a certificate roster), bind the figure to that heading, never to the sentence's `benefit` field. A sentence that states two benefits then binds each figure correctly.
 
 Both are narrow composer changes covered by the existing regression suites. No other material defect was observed in this run.
+
+## Correction (appended later; the result above is unchanged)
+
+The grade's stage label "calculation" was wrong: the tool calculation succeeded. The first rejection was in **composition** (the illustration's wording), then **verification** (the certificate figure was bound to the roster row's name cell instead of its product heading). See `scenario-grade-CORRECTION.md` in the run directory. The fixes and the replay of this trace are in the next section of the PR description.

@@ -132,6 +132,24 @@ function namedDocs(text: string, ctx: Ctx): string[] {
 const ABSENCE_FILLER = new Set(["uploaded", "document", "documents", "schedule", "certificate", "wording", "policy", "policies", "plan", "plans", "insurance", "cover", "covers", "covered", "coverage", "benefit", "benefits", "state", "states", "stated", "say", "says", "show", "shows", "shown", "mention", "mentions", "mentioned", "list", "lists", "listed", "name", "names", "named", "specify", "include", "print", "how", "many", "much", "when", "whether", "which", "what", "who", "any", "your", "their", "our", "his", "her", "its", "the", "that", "this", "these", "those", "there", "does", "not", "none", "only", "also", "can", "could", "would", "will", "full", "contract", "claim", "claims", "each", "per", "for", "with", "from", "about", "into", "under", "itself", "too"]);
 /** The household's library text, by document (all stored pages of every readable document), when loaded. */
 function libraryDoc(ctx: Ctx, id: string): string | null { return ctx.libraryText?.get(id) ?? null; }
+/** V1.2: the product heading a roster row sits under -- the nearest single-cell, figure-free line above it in the stored
+ * document (the save-time gate reads the same heading the same way). Null when none is printed. */
+export function rosterHeading(ref: EvidenceRef, ctx: Pick<Ctx, "libraryText">): string | null {
+  const text = ctx.libraryText?.get(ref.policyId) ?? null;
+  if (!text) return null;
+  const sq = (x: string) => x.replace(/\s+/g, " ").trim();
+  const lines = text.split(/\n/);
+  const row = sq(ref.passage.text.split(/\n/).find((l) => /\d/.test(l) && (!ref.table?.rowPerson?.text || l.includes(ref.table.rowPerson.text))) ?? ref.passage.text);
+  const at = lines.findIndex((l) => sq(l).includes(row.slice(0, 60)));
+  for (let i = at - 1; i >= 0 && i >= at - 40; i--) {
+    const l = lines[i].trim();
+    if (!l) continue;
+    const cells = l.split(/\t+| {3,}/).filter(Boolean);
+    if (cells.length === 1 && !/[$€£¥]\s?\d|\b(?:SGD|USD)\s?\d/.test(l) && l.length <= 80 && !/[.:]$/.test(l)) return l;
+    if (cells.length >= 2 && !/\d/.test(l)) return null;
+  }
+  return null;
+}
 /** Whether one line of `text` carries every topic word (each word, or a word starting with its first 5 letters). */
 function lineCarries(text: string, words: string[]): boolean {
   return text.split(/\n+/).some((line) => { const have = contentWords(line); return words.every((w) => have.includes(w) || new RegExp("\\b" + w.replace(/[^a-z0-9]/g, ""), "i").test(line) || have.some((h) => h.length >= 5 && w.length >= 5 && h.slice(0, 5) === w.slice(0, 5))); });
@@ -534,7 +552,13 @@ export function composeFinal(args: { sentences: Record<string, unknown>[]; nextS
         // Agent F (D1): the benefit a passage figure is bound to is the passage's OWN label -- its table row, the
         // label a tool gave it, or (for a clause) the model's label only when the line printing the figure says it.
         // A line that is an instruction inside the document is never evidence for a figure.
-        const benefit = (ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "", text);
+        // V1.2: a certificate roster row (one insured person per row under a product heading) is bound to the product
+        // heading it is printed under -- never to a cell of the row (the person's name) or to the sentence's own label.
+        // No heading found: not bound from this passage.
+        const roster = ref.table?.layout === "person_row";
+        const heading = roster ? rosterHeading(ref, ctx) : null;
+        if (roster && !heading) continue;
+        const benefit = heading ?? ((ref.table?.rowLabel ? wordedBenefit(ref.table.rowLabel, evidenceTextOf(ref), ref.table.cell?.text) : "") || (ref as { label?: string | null }).label || passageLabel(evidenceTextOf(ref), f.value, typeof s.benefit === "string" ? s.benefit : "", text));
         const policyText = withoutInstructions(evidenceTextOf(ref));
         const inCell = !!ref.table?.cell && numbersIn(ref.table.cell.text).some((n) => same(n, f.value));
         // A figure printed elsewhere in the row than the selected cell is bound to the row, not to that cell's column.
